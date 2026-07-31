@@ -1,0 +1,2 @@
+- Project: AI Newspaper Studio
+- Stack: Node.js, Express, vanilla JS, CSS, PostgreSQL-ready schema

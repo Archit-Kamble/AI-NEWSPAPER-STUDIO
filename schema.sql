@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS news_items (
   city VARCHAR(120),
   tags TEXT,
   reporter_name VARCHAR(120),
-  image_url VARCHAR(500),
+  image_urls TEXT[] DEFAULT '{}',
   status VARCHAR(20) DEFAULT 'draft',
   created_by INT REFERENCES users(id),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

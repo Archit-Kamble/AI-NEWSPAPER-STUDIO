@@ -28,37 +28,27 @@ async function authenticateUser(email, password) {
   };
 }
 
+const newsRepository = require('./repositories/news.repository');
+
 async function createNews(payload) {
-  const item = {
-    id: memoryNews.length + 1,
-    ...payload,
-    imageUrls: payload.imageUrls || [],
-    imageFiles: payload.imageFiles || [],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  };
-  memoryNews.push(item);
-  return item;
+    return await newsRepository.create(payload);
 }
 
-function updateNews(id, updates) {
-  const item = memoryNews.find(n => n.id === id);
-  if (!item) return null;
-  Object.assign(item, updates, { updatedAt: new Date().toISOString() });
-  return item;
+async function listNews(filter = {}) {
+  return await newsRepository.findAll(filter);
 }
 
-function listNews(filter = {}) {
-  return memoryNews.filter(n => {
-    if (filter.status && n.status !== filter.status) return false;
-    if (filter.language && n.language !== filter.language) return false;
-    if (filter.reporterId && n.reporterId !== filter.reporterId) return false;
-    return true;
-  }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+async function updateNews(id, updates) {
+  return await newsRepository.update(id, updates);
 }
 
-function getNewsByStatus(status) {
-  return listNews({ status });
+async function getNews(id) {
+    return await newsRepository.findById(id);
+}
+
+
+async function getNewsByStatus(status) {
+  return await newsRepository.findByStatus(status);
 }
 
 function createNewspaper(payload) {
@@ -135,6 +125,7 @@ module.exports = {
   createNewspaper,
   updateNewspaper,
   listNewspapers,
+  getNews,
   getLatestNewspaper,
   createPage,
   updatePage,

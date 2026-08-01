@@ -42,7 +42,64 @@ body { margin: 0; font-family: Arial, sans-serif; background: #fff; color: var(-
 
 .form-section { background: white; padding: 20px; border: 1px solid var(--border); border-radius: 6px; }
 .form-section h2 { margin-top: 0; margin-bottom: 20px; color: var(--primary); border-bottom: 2px solid var(--border); padding-bottom: 10px; }
+/* ===========================
+   Newspaper Dashboard
+=========================== */
 
+.dashboard-card{
+    background:#ffffff;
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:24px;
+    margin-bottom:28px;
+}
+
+.dashboard-card h3{
+    margin:0 0 14px;
+    font-size:24px;
+}
+
+.dashboard-grid{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:18px;
+    margin:24px 0;
+}
+
+.dashboard-stat{
+    background:#fafafa;
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:18px;
+    text-align:center;
+}
+
+.dashboard-stat .value{
+    font-size:34px;
+    font-weight:bold;
+    color:var(--primary);
+}
+
+.dashboard-stat .label{
+    margin-top:8px;
+    color:#666;
+}
+
+.newspaper-item{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:18px;
+    border:1px solid var(--border);
+    border-radius:8px;
+    margin-bottom:14px;
+    background:#fff;
+    transition:.2s;
+}
+
+.newspaper-item:hover{
+    box-shadow:0 3px 12px rgba(0,0,0,.08);
+}
 .form-group { margin-bottom: 15px; }
 .form-group label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 13px; }
 .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 4px; font-family: inherit; }
@@ -196,6 +253,8 @@ body { margin: 0; font-family: Arial, sans-serif; background: #fff; color: var(-
   border-radius: 4px;
 }
 
+
+
 @media (max-width: 1200px) {
   .container { grid-template-columns: 180px 1fr; }
   .right-panel { display: none; }
@@ -206,3 +265,4 @@ body { margin: 0; font-family: Arial, sans-serif; background: #fff; color: var(-
   .sidebar { display: none; }
   .form-row { grid-template-columns: 1fr; }
 }
+

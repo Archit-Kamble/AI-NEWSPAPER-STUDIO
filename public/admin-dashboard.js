@@ -27,7 +27,18 @@ async function loadNewspapers() {
 
 async function loadNews() {
   const res = await fetch("/api/news");
-  news = await res.json();
+  const rows = await res.json();
+
+  news = rows.map((item) => ({
+    ...item,
+
+    // Backward compatibility
+    subtitle: item.subtitle ?? item.subheading ?? "",
+    reporterName: item.reporterName ?? item.reporter_name ?? "",
+    imageUrls: item.image_urls ?? [],
+    reporterId: item.reporterId ?? item.created_by ?? null,
+    createdAt: item.createdAt ?? item.created_at,
+  }));
 }
 
 function renderLogin() {
@@ -316,8 +327,6 @@ function openExternalEditor(newsItem) {
   // In production, open the external editor URL and pass the news item ID
 }
 
-
-
 function showReporterNewsList() {
   if (status === "draft") {
     item.addEventListener("click", () => {
@@ -349,7 +358,7 @@ function showReporterNewsList() {
     item.innerHTML = `
       <div>
         <strong>${n.title}</strong>
-        <small>${n.reporterName} • ${n.category}</small>
+        <small>${n.reporterName || n.reporter_name || "Unknown"} • ${n.category}</small>
       </div>
       <button class="small-btn" data-id="${n.id}">Add</button>
     `;

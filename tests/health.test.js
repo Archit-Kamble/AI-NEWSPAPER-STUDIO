@@ -24,10 +24,11 @@ test('reporter can save multiple images to drafts and submitted news', async () 
   const server = app.listen(0);
   const port = server.address().port;
   const createdFiles = [];
+  const testPrefix = `test-${Date.now()}`;
 
   const createNews = async (status) => {
     const formData = new FormData();
-    formData.append('title', `${status} story`);
+    formData.append('title', `${testPrefix} ${status} story`);
     formData.append('reporterId', '2');
     formData.append('reporterName', 'Reporter');
     formData.append('status', status);
@@ -40,9 +41,9 @@ test('reporter can save multiple images to drafts and submitted news', async () 
     });
     assert.equal(response.status, 201);
     const news = await response.json();
-    assert.equal(news.reporterId, 2);
-    assert.equal(news.imageUrls.length, 2);
-    createdFiles.push(...news.imageFiles);
+    assert.equal(news.created_by, 2);
+    assert.equal(news.image_urls.length, 2);
+    createdFiles.push(...news.image_urls.map((url) => path.basename(url)));
   };
 
   try {
@@ -51,8 +52,8 @@ test('reporter can save multiple images to drafts and submitted news', async () 
 
     const drafts = await fetch(`http://127.0.0.1:${port}/api/news?status=draft&reporterId=2`).then((response) => response.json());
     const submitted = await fetch(`http://127.0.0.1:${port}/api/news?status=pending&reporterId=2`).then((response) => response.json());
-    assert.equal(drafts.length, 1);
-    assert.equal(submitted.length, 1);
+    assert.ok(drafts.some((item) => item.title === `${testPrefix} draft story`));
+    assert.ok(submitted.some((item) => item.title === `${testPrefix} pending story`));
   } finally {
     await Promise.all(createdFiles.map((file) => fs.unlink(path.join(__dirname, '..', 'public', 'uploads', file)).catch(() => {})));
     server.close();
@@ -72,14 +73,15 @@ test('admin workflow saves a page section and final Scribus/PDF files', async ()
 
   try {
     const newspaper = await jsonRequest('/api/newspapers', 'POST', { pageCount: 1 }).then((response) => response.json());
-    assert.deepEqual(newspaper.pageSize, { width: 330, height: 530, unit: 'mm' });
-    assert.equal(newspaper.colorMode, 'CMYK');
+    assert.equal(newspaper.page_width_px, 660);
+    assert.equal(newspaper.page_height_px, 1060);
+    assert.equal(newspaper.color_mode, 'CMYK');
 
     const page = await jsonRequest(`/api/newspapers/${newspaper.id}/pages`, 'POST', { pageNumber: 1 }).then((response) => response.json());
     const savedPage = await jsonRequest(`/api/pages/${page.id}/sections/lead`, 'PUT', {
       title: 'Admin written story', description: 'Story text', category: 'Local'
     }).then((response) => response.json());
-    assert.equal(savedPage.articles[0].sectionId, 'lead');
+    assert.equal(savedPage.sections.find((section) => section.section_key === 'lead').headline, 'Admin written story');
 
     const formData = new FormData();
     formData.append('scribusFile', new Blob(['scribus project']), 'edition.sla');

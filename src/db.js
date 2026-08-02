@@ -3,10 +3,6 @@ const userRepository = require('./repositories/user.repository');
 
 
 
-const memoryNews = [];
-const memoryPages = [];
-const memoryNewspapers = [];
-
 async function authenticateUser(email, password) {
   const user = await userRepository.findByEmail(email);
 
@@ -29,6 +25,8 @@ async function authenticateUser(email, password) {
 }
 
 const newsRepository = require('./repositories/news.repository');
+const newspaperRepository = require('./repositories/newspaper.repository');
+const pageRepository = require('./repositories/page.repository');
 
 async function createNews(payload) {
     return await newsRepository.create(payload);
@@ -51,69 +49,51 @@ async function getNewsByStatus(status) {
   return await newsRepository.findByStatus(status);
 }
 
-function createNewspaper(payload) {
-  const newspaper = {
-    id: memoryNewspapers.length + 1,
-    ...payload,
-    createdAt: new Date().toISOString(),
-    pages: []
-  };
-  memoryNewspapers.push(newspaper);
-  return newspaper;
+async function createNewspaper(payload) {
+  return newspaperRepository.create({
+    name: payload.name || 'साहस',
+    publicationDate: payload.date,
+    createdBy: payload.createdBy || null
+  });
 }
 
-function updateNewspaper(id, updates) {
-  const newspaper = memoryNewspapers.find(n => n.id === id);
-  if (!newspaper) return null;
-  Object.assign(newspaper, updates);
-  return newspaper;
+async function updateNewspaper(id, updates) {
+  return newspaperRepository.update(id, updates);
 }
 
-function listNewspapers() {
-  return memoryNewspapers.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+async function listNewspapers() {
+  return newspaperRepository.findAll();
 }
 
-function getLatestNewspaper() {
-  return memoryNewspapers[memoryNewspapers.length - 1] || null;
+async function getNewspaper(id) {
+  return newspaperRepository.findById(id);
 }
 
-function createPage(payload) {
-  const page = {
-    id: memoryPages.length + 1,
-    ...payload,
-    articles: [],
-    createdAt: new Date().toISOString()
-  };
-  memoryPages.push(page);
-  return page;
+async function getLatestNewspaper() {
+  const newspapers = await newspaperRepository.findAll();
+  return newspapers[0] || null;
 }
 
-function updatePage(id, updates) {
-  const page = memoryPages.find(p => p.id === id);
-  if (!page) return null;
-  Object.assign(page, updates);
-  return page;
+async function createPage(payload) {
+  return pageRepository.create(payload.newspaperId, payload.pageNumber, payload.templateKey || payload.template || 'front');
 }
 
-function listPages(newspaperId) {
-  return memoryPages.filter(p => p.newspaperId === newspaperId);
+async function updatePage(id, updates) {
+  if (!updates.templateKey && !updates.template) return pageRepository.findById(id);
+  return pageRepository.updateTemplate(id, updates.templateKey || updates.template);
 }
 
-function addArticleToPage(pageId, article) {
-  const page = memoryPages.find(p => p.id === pageId);
-  if (!page) return null;
-  page.articles.push(article);
-  return page;
+async function listPages(newspaperId) {
+  return pageRepository.findByNewspaper(newspaperId);
 }
 
-function savePageSection(pageId, sectionId, article) {
-  const page = memoryPages.find(p => p.id === pageId);
-  if (!page) return null;
-  const index = page.articles.findIndex(item => item.sectionId === sectionId);
-  const savedArticle = { ...article, sectionId, updatedAt: new Date().toISOString() };
-  if (index === -1) page.articles.push(savedArticle);
-  else page.articles[index] = { ...page.articles[index], ...savedArticle };
-  return page;
+async function addArticleToPage() {
+  throw new Error('Use savePageSection with a section key');
+}
+
+async function savePageSection(pageId, sectionId, article) {
+  await pageRepository.saveSection(pageId, sectionId, article);
+  return pageRepository.findById(pageId);
 }
 
 module.exports = {
@@ -125,6 +105,7 @@ module.exports = {
   createNewspaper,
   updateNewspaper,
   listNewspapers,
+  getNewspaper,
   getNews,
   getLatestNewspaper,
   createPage,

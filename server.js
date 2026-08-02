@@ -6,6 +6,8 @@ const dotenv = require("dotenv");
 const multer = require("multer");
 const fs = require("fs");
 const crypto = require("crypto");
+const publicationRepository = require('./src/repositories/publication.repository');
+const { templates } = require('./src/layout/templates');
 const {
   authenticateUser,
   createNews,
@@ -15,6 +17,7 @@ const {
   createNewspaper,
   updateNewspaper,
   listNewspapers,
+  getNewspaper,
   getNews,
   getLatestNewspaper,
   createPage,
@@ -106,7 +109,6 @@ function createApp() {
   });
 
   // News API
-  // News API
   app.post("/api/news", upload.array("images"), async (req, res) => {
     try {
       const payload = req.body;
@@ -118,11 +120,6 @@ function createApp() {
       const imageUrls = Array.isArray(req.files)
         ? req.files.map((file) => `/uploads/${file.filename}`)
         : [];
-
-      console.log("========== CREATE NEWS ==========");
-      console.log("req.files =", req.files);
-      console.log("imageUrls =", imageUrls);
-      console.log("payload =", payload);
 
       const item = await createNews({
         newspaper_id: null,
@@ -136,10 +133,8 @@ function createApp() {
         reporter_name: payload.reporterName || req.session.user?.name || "",
         image_urls: imageUrls,
         status: payload.status || "draft",
-        created_by: req.session.user?.id ?? null,
+        created_by: req.session.user?.id || Number.parseInt(payload.reporterId, 10) || null,
       });
-      console.log("saved =", item);
-      console.log("===============================");
 
       res.status(201).json(item);
     } catch (err) {
@@ -203,12 +198,14 @@ function createApp() {
     res.json(item);
   });
 
-  app.patch("/api/news/:id/status", (req, res) => {
+  app.patch("/api/news/:id/status", async (req, res) => {
     const status = req.body.status;
     if (!["draft", "pending", "approved", "rejected"].includes(status)) {
       return res.status(400).json({ error: "Invalid news status" });
     }
-    const item = updateNews(parseInt(req.params.id, 10), { status });
+    const existing = await getNews(parseInt(req.params.id, 10));
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    const item = await updateNews(parseInt(req.params.id, 10), { ...existing, status });
     if (!item) return res.status(404).json({ error: "Not found" });
     res.json(item);
   });
@@ -222,9 +219,9 @@ function createApp() {
   });
 
   // Newspaper API
-  app.post("/api/newspapers", (req, res) => {
+  app.post("/api/newspapers", async (req, res) => {
     const today = new Date().toISOString().split("T")[0];
-    const newspaper = createNewspaper({
+    const newspaper = await createNewspaper({
       name: req.body.name || "साहस",
       date: req.body.date || today,
       language: req.body.language || "mr",
@@ -234,68 +231,92 @@ function createApp() {
       liveArea: req.body.liveArea || { width: 310, height: 510, unit: "mm" },
       colorMode: "CMYK",
       status: "draft",
+      createdBy: req.session.user?.id,
     });
     res.status(201).json(newspaper);
   });
 
-  app.get("/api/newspapers", (req, res) => {
-    res.json(listNewspapers());
+  app.get("/api/newspapers", async (req, res) => {
+    res.json(await listNewspapers());
   });
 
-  app.get("/api/newspapers/latest", (req, res) => {
-    const newspaper = getLatestNewspaper();
+  app.get("/api/newspapers/latest", async (req, res) => {
+    const newspaper = await getLatestNewspaper();
     res.json(newspaper || null);
   });
 
-  app.get("/api/newspapers/:id", (req, res) => {
-    const newspaper = listNewspapers().find(
-      (n) => n.id === parseInt(req.params.id),
-    );
+  async function withPublicationFiles(newspaper) {
+    if (!newspaper) return null;
+    const files = await publicationRepository.latestByNewspaper(newspaper.id);
+    return files.reduce((result, file) => {
+      if (file.file_type === 'scribus_project') result.scribusFile = file.storage_path;
+      if (file.file_type === 'print_pdf') result.printPdf = file.storage_path;
+      return result;
+    }, { ...newspaper });
+  }
+
+  app.get("/api/newspapers/:id", async (req, res) => {
+    const newspaper = await withPublicationFiles(await getNewspaper(parseInt(req.params.id, 10)));
     if (!newspaper) return res.status(404).json({ error: "Not found" });
     res.json(newspaper);
   });
 
-  app.patch("/api/newspapers/:id", (req, res) => {
-    const newspaper = updateNewspaper(parseInt(req.params.id), req.body);
+
+
+  app.patch("/api/newspapers/:id", async (req, res) => {
+    const newspaper = await updateNewspaper(parseInt(req.params.id, 10), req.body);
     if (!newspaper) return res.status(404).json({ error: "Not found" });
     res.json(newspaper);
+  });
+
+  // Templates API
+  app.get("/api/templates", (req, res) => {
+    res.json(Object.values(templates));
   });
 
   // Page API
-  app.post("/api/newspapers/:newspaperId/pages", (req, res) => {
-    const page = createPage({
+  app.post("/api/newspapers/:newspaperId/pages", async (req, res) => {
+    const page = await createPage({
       newspaperId: parseInt(req.params.newspaperId),
       pageNumber: req.body.pageNumber || 1,
       sectionName: req.body.sectionName || "Page 1",
       language: req.body.language || "mr",
-      template: req.body.template || "standard",
+      templateKey: req.body.templateKey || req.body.template || "front",
     });
     res.status(201).json(page);
   });
 
-  app.get("/api/newspapers/:newspaperId/pages", (req, res) => {
-    const pages = listPages(parseInt(req.params.newspaperId));
+  app.get("/api/newspapers/:newspaperId/pages", async (req, res) => {
+    const pages = await listPages(parseInt(req.params.newspaperId, 10));
     res.json(pages);
   });
 
-  app.patch("/api/pages/:pageId", (req, res) => {
-    const page = updatePage(parseInt(req.params.pageId), req.body);
+  app.patch("/api/pages/:pageId", async (req, res) => {
+    const page = await updatePage(parseInt(req.params.pageId, 10), req.body);
     if (!page) return res.status(404).json({ error: "Not found" });
     res.json(page);
   });
 
-  app.put("/api/pages/:pageId/sections/:sectionId", (req, res) => {
-    const page = savePageSection(
+  app.put("/api/pages/:pageId/sections/:sectionId", async (req, res) => {
+    const payload = req.body;
+    const page = await savePageSection(
       parseInt(req.params.pageId, 10),
       req.params.sectionId,
-      req.body,
+      {
+        newsItemId: payload.newsItemId || payload.sourceNewsId,
+        headline: payload.headline || payload.title,
+        headlineFontPx: payload.headlineFontPx,
+        subheading: payload.subheading || payload.subtitle,
+        subheadingFontPx: payload.subheadingFontPx,
+        body: payload.body || payload.description,
+        bodyFontPx: payload.bodyFontPx,
+        category: payload.category,
+        location: payload.location,
+        tags: payload.tags,
+        reporterName: payload.reporterName,
+        aiNotes: payload.aiNotes,
+      },
     );
-    if (!page) return res.status(404).json({ error: "Not found" });
-    res.json(page);
-  });
-
-  app.post("/api/pages/:pageId/articles", (req, res) => {
-    const page = addArticleToPage(parseInt(req.params.pageId), req.body);
     if (!page) return res.status(404).json({ error: "Not found" });
     res.json(page);
   });
@@ -306,21 +327,27 @@ function createApp() {
       { name: "scribusFile", maxCount: 1 },
       { name: "printPdf", maxCount: 1 },
     ]),
-    (req, res) => {
+    async (req, res) => {
       const files = req.files || {};
-      const updates = {};
-      if (files.scribusFile?.[0])
-        updates.scribusFile = `/uploads/${files.scribusFile[0].filename}`;
-      if (files.printPdf?.[0])
-        updates.printPdf = `/uploads/${files.printPdf[0].filename}`;
-      if (!Object.keys(updates).length)
+      if (!files.scribusFile?.[0] && !files.printPdf?.[0])
         return res
           .status(400)
           .json({ error: "Choose a Scribus .sla file or final PDF" });
-      updates.status = files.printPdf?.[0] ? "finalised" : "draft";
-      const newspaper = updateNewspaper(parseInt(req.params.id, 10), updates);
+      const newspaperId = parseInt(req.params.id, 10);
+      const newspaper = await getNewspaper(newspaperId);
       if (!newspaper) return res.status(404).json({ error: "Not found" });
-      res.json(newspaper);
+      const response = { ...newspaper };
+      if (files.scribusFile?.[0]) {
+        const file = await publicationRepository.save(newspaperId, 'scribus_project', `/uploads/${files.scribusFile[0].filename}`, req.session.user?.id);
+        response.scribusFile = file.storage_path;
+      }
+      if (files.printPdf?.[0]) {
+        const file = await publicationRepository.save(newspaperId, 'print_pdf', `/uploads/${files.printPdf[0].filename}`, req.session.user?.id);
+        response.printPdf = file.storage_path;
+        response.status = 'finalised';
+        await updateNewspaper(newspaperId, { status: 'finalised' });
+      }
+      res.json(response);
     },
   );
 

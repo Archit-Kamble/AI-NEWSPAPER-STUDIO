@@ -36,9 +36,6 @@ async function create(news) {
     news.status,
     news.created_by,
   ];
-  console.log("VALUES SENT TO POSTGRES:");
-  console.log(values);
-
   const { rows } = await pool.query(query, values);
   return rows[0];
 }

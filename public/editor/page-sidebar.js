@@ -12,7 +12,7 @@ export function renderPageSidebar(pages, currentPage, onSelectPage) {
       btn.classList.add("active");
     }
 
-    btn.textContent = page.pageNumber;
+    btn.textContent = page.page_number;
     btn.onclick = () => onSelectPage(page.id);
 
     container.appendChild(btn);

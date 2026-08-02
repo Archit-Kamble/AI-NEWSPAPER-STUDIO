@@ -4,6 +4,7 @@ import { renderLayoutSidebar } from "./layout-sidebar.js";
 import { renderInspector, applyStoryToInspector } from "./inspector.js";
 import { renderStoryPicker } from "./story-picker.js";
 import { renderToolbar } from "./toolbar.js";
+import { renderExternalEditor } from "./external-editor.js";
 import { showPublicationFiles } from "./publication.js";
 
 // The single source of truth for editor state. Nothing outside this module
@@ -144,6 +145,24 @@ function openPublish() {
   showPublicationFiles(state.newspaper.id);
 }
 
+function extPlaceholder(action) {
+  return (section) => {
+    console.log(`[External Editor] ${action}`, section?.section_key || "(no section)");
+  };
+}
+
+const externalEditorHandlers = {
+  onUploadImage: extPlaceholder("Upload Image"),
+  onReporterImages: extPlaceholder("Reporter Images"),
+  onRemoveBackground: extPlaceholder("Remove Background"),
+  onAdditionalAiInstructions: extPlaceholder("Additional AI Instructions"),
+  onGenerateLayout: extPlaceholder("Generate Layout"),
+  onPreview: extPlaceholder("Preview"),
+  onAccept: extPlaceholder("Accept"),
+  onCancel: extPlaceholder("Cancel"),
+  onSaveSection: () => triggerSave(),
+};
+
 function render() {
   const content = document.getElementById("content");
 
@@ -174,7 +193,10 @@ function render() {
           </div>
           <div id="canvas" class="canvas-scroll${state.canvasZoom === "full" ? " zoom-full" : ""}"></div>
         </main>
-        <aside class="workspace-inspector" id="inspector"></aside>
+        <div class="workspace-right">
+          <aside class="workspace-inspector" id="inspector"></aside>
+          <aside class="workspace-external-editor" id="externalEditorPanel"></aside>
+        </div>
       </div>
     </div>
     <div class="modal-root" id="modalRoot"></div>
@@ -194,6 +216,7 @@ function render() {
   renderPageNavigator(state.pages, state.currentPage, state.newspaper, selectPage);
   renderLayoutSidebar(state.currentPage, applyTemplate);
   renderZoomToggle();
-  renderCanvas(state.currentPage, state.newspaper, state.selectedSection, selectSection);
+  renderCanvas(state.currentPage, state.newspaper, state.selectedSection, state.reporterNews, selectSection);
   renderInspector(state.currentPage, state.selectedSection, state.reporterNews, saveSection);
+  renderExternalEditor(state.currentPage, state.selectedSection, externalEditorHandlers);
 }

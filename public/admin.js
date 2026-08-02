@@ -7,45 +7,6 @@ let editingDraftId = null;
 let currentDraft = null;
 let selectedReporterImages = [];
 
-const newspaperTemplates = {
-  front: {
-    name: "Front page",
-    description: "Lead story with four supporting news blocks.",
-    grid: '"lead lead side" "lead lead side" "bottom1 bottom2 bottom2"',
-    slots: ["lead", "side", "bottom1", "bottom2"],
-  },
-  local: {
-    name: "Local news",
-    description: "Six balanced local-news sections.",
-    grid: '"top top top" "left centre right" "left lower lower"',
-    slots: ["top", "left", "centre", "right", "lower"],
-  },
-  feature: {
-    name: "Feature page",
-    description: "Large feature story with supporting briefs.",
-    grid: '"feature feature brief1" "feature feature brief2" "footer footer footer"',
-    slots: ["feature", "brief1", "brief2", "footer"],
-  },
-  opinion: {
-    name: "Opinion",
-    description: "Editorial and three opinion columns.",
-    grid: '"editorial editorial editorial" "opinion1 opinion2 opinion3"',
-    slots: ["editorial", "opinion1", "opinion2", "opinion3"],
-  },
-  gallery: {
-    name: "Photo story",
-    description: "Image-led sections with captions and a lead.",
-    grid: '"hero hero photo1" "hero hero photo2" "caption caption caption"',
-    slots: ["hero", "photo1", "photo2", "caption"],
-  },
-  custom: {
-    name: "Custom starter",
-    description: "Six equal sections to customise later in Scribus.",
-    grid: '"one two three" "four five six"',
-    slots: ["one", "two", "three", "four", "five", "six"],
-  },
-};
-
 async function init() {
   const res = await fetch("/api/auth/me");
   const data = await res.json();
@@ -473,7 +434,6 @@ function showSettings() {
 }
 
 async function createNewNewspaper() {
-
   const content = document.getElementById("content");
   const rightPanel = document.getElementById("rightPanel");
 
@@ -547,375 +507,64 @@ async function createNewNewspaper() {
   `;
 
   document
-      .getElementById("cancelBtn")
-      .addEventListener("click",showPastNewspapers);
+    .getElementById("cancelBtn")
+    .addEventListener("click", showPastNewspapers);
 
   document
-      .getElementById("createEditionBtn")
-      .addEventListener("click",createEdition);
-
+    .getElementById("createEditionBtn")
+    .addEventListener("click", createEdition);
 }
 
-async function createEdition(){
+async function createEdition() {
+  const pageCount = Number(document.getElementById("pageCount").value);
 
-    const pageCount=
-        Number(document.getElementById("pageCount").value);
+  const editionName = document.getElementById("editionName").value;
 
-    const editionName=
-        document.getElementById("editionName").value;
+  const response = await fetch("/api/newspapers", {
+    method: "POST",
 
-    const response=
-        await fetch("/api/newspapers",{
+    headers: {
+      "Content-Type": "application/json",
+    },
 
-            method:"POST",
+    body: JSON.stringify({
+      name: editionName,
 
-            headers:{
-                "Content-Type":"application/json"
-            },
+      pageCount,
 
-            body:JSON.stringify({
+      status: "draft",
 
-                name:editionName,
-
-                pageCount,
-
-                status:"draft",
-
-                pageSize:{
-                    width:330,
-                    height:530,
-                    unit:"mm"
-                },
-
-                liveArea:{
-                    width:310,
-                    height:510,
-                    unit:"mm"
-                }
-
-            })
-
-        });
-
-    currentNewspaper=
-        await response.json();
-
-    for(let i=1;i<=pageCount;i++){
-
-        await fetch(
-            `/api/newspapers/${currentNewspaper.id}/pages`,
-            {
-
-                method:"POST",
-
-                headers:{
-                    "Content-Type":"application/json"
-                },
-
-                body:JSON.stringify({
-
-                    pageNumber:i
-
-                })
-
-            });
-
-    }
-
-    editNewspaper(currentNewspaper.id);
-
-}
-
-async function selectPageTemplates() {
-  const content = document.getElementById("content");
-  const rightPanel = document.getElementById("rightPanel");
-  const pages = await fetch(
-    `/api/newspapers/${currentNewspaper.id}/pages`,
-  ).then((r) => r.json());
-
-  if (!currentPage || !pages.some((page) => page.id === currentPage.id))
-    currentPage = pages[0];
-
-  rightPanel.innerHTML = `
-    <h3>Page ${currentPage.pageNumber}</h3>
-    <div class="page-list" id="pageList"></div>
-  `;
-
-  const pageList = document.getElementById("pageList");
-  pages.forEach((page) => {
-    const btn = document.createElement("button");
-    btn.className = "page-btn" + (currentPage.id === page.id ? " active" : "");
-    btn.textContent = `Page ${page.pageNumber}`;
-    btn.addEventListener("click", () => {
-      currentPage = page;
-      selectPageTemplates();
-    });
-    pageList.appendChild(btn);
-  });
-
-  content.innerHTML = `
-    <div class="form-section">
-      <h2>SELECT TEMPLATE FOR PAGE ${currentPage.pageNumber}</h2>
-      <p class="muted">These blank blocks are the real news sections. You will fill them after every page has a template.</p>
-      <div class="page-template-grid" id="templates"></div>
-      <button class="btn-submit" id="confirmBtn">Save Template & Continue</button>
-      <button class="btn-secondary" id="backBtn">Back</button>
-    </div>
-  `;
-
-  const templatesDiv = document.getElementById("templates");
-  Object.entries(newspaperTemplates).forEach(([key, tpl]) => {
-    const btn = document.createElement("div");
-    btn.className =
-      "page-template" +
-      (currentPage.template?.name === tpl.name ? " active" : "");
-    btn.innerHTML = `<strong>${tpl.name}</strong><small>${tpl.description}</small><div class="template-thumb real-page-grid" style="grid-template-areas: ${tpl.grid.replaceAll('"', "&quot;")}">${tpl.slots.map((slot) => `<span style="grid-area:${slot}"></span>`).join("")}</div>`;
-
-    btn.addEventListener("click", () => {
-      document
-        .querySelectorAll(".page-template")
-        .forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      currentPage.template = { key, ...tpl };
-    });
-
-    templatesDiv.appendChild(btn);
-  });
-
-  document.getElementById("backBtn").addEventListener("click", () => {
-    currentNewspaper = null;
-    showPastNewspapers();
-  });
-
-  document.getElementById("confirmBtn").addEventListener("click", async () => {
-    const selected = document.querySelector(".page-template.active");
-    if (!selected) {
-      alert("Select a template");
-      return;
-    }
-    const savedResponse = await fetch(`/api/pages/${currentPage.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ template: currentPage.template }),
-    });
-    currentPage = await savedResponse.json();
-
-    const nextPage = pages.find(
-      (p) => p.pageNumber === currentPage.pageNumber + 1,
-    );
-    if (nextPage) {
-      currentPage = nextPage;
-      selectPageTemplates();
-    } else {
-      editNewspaper(currentNewspaper.id);
-    }
-  });
-}
-
-async function editNewspaper(newspaperId) {
-  currentNewspaper = await fetch(`/api/newspapers/${newspaperId}`).then((r) =>
-    r.json(),
-  );
-  const pages = await fetch(`/api/newspapers/${newspaperId}/pages`).then((r) =>
-    r.json(),
-  );
-  const reporterNews = await fetch("/api/news").then((r) => r.json());
-
-  if (!currentPage || !pages.some((page) => page.id === currentPage.id))
-    currentPage = pages[0];
-
-  const content = document.getElementById("content");
-  const rightPanel = document.getElementById("rightPanel");
-
-  rightPanel.innerHTML = `
-    <h3>Pages</h3>
-    <div class="page-list" id="pageList"></div>
-    <h3 style="margin-top: 20px;">Reporter News</h3>
-    <p class="muted">Click a page section, then choose a story to auto-fill it.</p>
-    <div class="news-list" id="newsList"></div>
-  `;
-
-  const pageList = document.getElementById("pageList");
-  pages.forEach((page) => {
-    const btn = document.createElement("button");
-    btn.className = "page-btn" + (currentPage.id === page.id ? " active" : "");
-    btn.textContent = `Page ${page.pageNumber}`;
-    btn.addEventListener("click", () => {
-      currentPage = page;
-      editNewspaper(newspaperId);
-    });
-    pageList.appendChild(btn);
-  });
-
-  const newsList = document.getElementById("newsList");
-  reporterNews.forEach((newsItem) => {
-    const item = document.createElement("div");
-    item.className = "news-item-small";
-    item.innerHTML = `<div><strong>${newsItem.title}</strong><small>${newsItem.category || "Uncategorised"} · ${newsItem.status}</small></div>`;
-    item.addEventListener("click", () =>
-      alert(
-        "Select a highlighted page section first, then choose this story from its editor.",
-      ),
-    );
-    newsList.appendChild(item);
-  });
-
-  content.innerHTML = `
-    <div class="form-section">
-      <div class="editor-heading"><div><h2>EDIT PAGE ${currentPage.pageNumber}</h2><p>${currentNewspaper.pageSize?.width || 330} × ${currentNewspaper.pageSize?.height || 530} mm · CMYK · matter area ${currentNewspaper.liveArea?.width || 310} × ${currentNewspaper.liveArea?.height || 510} mm</p></div><button class="btn-secondary" id="filesBtn">Scribus / final files</button></div>
-      <h3>Template: ${currentPage.template?.name || "Choose a template first"}</h3>
-      <div class="newspaper-page" id="preview"></div>
-      <div class="section-editor" id="sectionEditor"><p>Click any blank or filled section to write news or auto-fill it from a reporter.</p></div>
-    </div>
-  `;
-
-  const preview = document.getElementById("preview");
-  const template = currentPage.template?.slots
-    ? currentPage.template
-    : newspaperTemplates.custom;
-  preview.style.gridTemplateAreas = template.grid;
-  const sectionArticles = Object.fromEntries(
-    (currentPage.articles || [])
-      .filter((article) => article.sectionId)
-      .map((article) => [article.sectionId, article]),
-  );
-  template.slots.forEach((slot, index) => {
-    const article = sectionArticles[slot];
-    const section = document.createElement("button");
-    section.className = "newspaper-section" + (article ? " filled" : "");
-    section.style.gridArea = slot;
-    section.innerHTML = article
-      ? `<span class="section-label">Section ${index + 1}</span><strong>${article.title || "Untitled story"}</strong><small>${article.category || "News"}</small>`
-      : `<span class="section-label">Section ${index + 1}</span><strong>Blank news section</strong><small>Click to add a story</small>`;
-    section.addEventListener("click", () =>
-      showSectionEditor(newspaperId, slot, article, reporterNews),
-    );
-    preview.appendChild(section);
-  });
-  document
-    .getElementById("filesBtn")
-    .addEventListener("click", () => showPublicationFiles(newspaperId));
-}
-
-function showSectionEditor(
-  newspaperId,
-  sectionId,
-  article = {},
-  reporterNews = [],
-) {
-  const editor = document.getElementById("sectionEditor");
-  editor.innerHTML = `
-    <h3>Section editor</h3>
-    <p class="muted">Section ${sectionId}. Write a new story, or choose a reporter story to auto-fill the fields.</p>
-    <div class="form-group"><label>Auto-fill from reporter</label><select id="reporterStory"><option value="">Write manually</option>${reporterNews.map((story) => `<option value="${story.id}">${story.title} (${story.status})</option>`).join("")}</select></div>
-    <div class="form-group"><label>News heading</label><input id="sectionTitle" value="${article.title || ""}" /></div>
-    <div class="form-group"><label>Small heading / subtitle</label><input id="sectionSubtitle" value="${article.subtitle || ""}" /></div>
-    <div class="form-group"><label>Context / description</label><textarea id="sectionDescription">${article.description || ""}</textarea></div>
-    <div class="form-row"><div class="form-group"><label>Category</label><input id="sectionCategory" value="${article.category || ""}" /></div><div class="form-group"><label>Location</label><input id="sectionLocation" value="${article.location || ""}" /></div></div>
-    <div class="form-row"><div class="form-group"><label>Tags</label><input id="sectionTags" value="${article.tags || ""}" /></div><div class="form-group"><label>Reporter name</label><input id="sectionReporter" value="${article.reporterName || ""}" /></div></div>
-    <div class="form-group"><label>Add images for this section</label><input id="sectionImages" type="file" accept="image/*" multiple /><small class="muted">Reporter images are carried over when you auto-fill a story.</small></div>
-    <button class="btn-submit" id="saveSection">Save section</button>
-  `;
-  document
-    .getElementById("reporterStory")
-    .addEventListener("change", (event) => {
-      const story = reporterNews.find(
-        (item) => item.id === Number(event.target.value),
-      );
-      if (!story) return;
-      document.getElementById("sectionTitle").value = story.title || "";
-      document.getElementById("sectionSubtitle").value = story.subtitle || "";
-      document.getElementById("sectionDescription").value =
-        story.description || "";
-      document.getElementById("sectionCategory").value = story.category || "";
-      document.getElementById("sectionLocation").value = story.location || "";
-      document.getElementById("sectionTags").value = story.tags || "";
-      document.getElementById("sectionReporter").value =
-        story.reporterName || "";
-    });
-  document.getElementById("saveSection").addEventListener("click", async () => {
-    const reporterId =
-      Number(document.getElementById("reporterStory").value) || null;
-    const selectedReporter = reporterNews.find(
-      (item) => item.id === reporterId,
-    );
-    let imageUrls = selectedReporter?.imageUrls || article.imageUrls || [];
-    const imageFiles = document.getElementById("sectionImages").files;
-    if (imageFiles.length) {
-      const imageData = new FormData();
-      Array.from(imageFiles).forEach((file) =>
-        imageData.append("images", file),
-      );
-      const uploadResponse = await fetch("/api/uploads/images", {
-        method: "POST",
-        body: imageData,
-      });
-      const uploadResult = await uploadResponse.json();
-      if (!uploadResponse.ok)
-        return alert(uploadResult.error || "Could not upload section images.");
-      imageUrls = [...imageUrls, ...uploadResult.imageUrls];
-    }
-    const payload = {
-      title: document.getElementById("sectionTitle").value.trim(),
-      subtitle: document.getElementById("sectionSubtitle").value.trim(),
-      description: document.getElementById("sectionDescription").value.trim(),
-      category: document.getElementById("sectionCategory").value.trim(),
-      location: document.getElementById("sectionLocation").value.trim(),
-      tags: document.getElementById("sectionTags").value.trim(),
-      reporterName: document.getElementById("sectionReporter").value.trim(),
-      sourceNewsId: reporterId,
-      imageUrls,
-    };
-    if (!payload.title)
-      return alert("Add a news heading before saving this section.");
-    const response = await fetch(
-      `/api/pages/${currentPage.id}/sections/${sectionId}`,
-      {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+      pageSize: {
+        width: 330,
+        height: 530,
+        unit: "mm",
       },
-    );
-    if (!response.ok) return alert("Could not save this section.");
-    currentPage = await response.json();
-    editNewspaper(newspaperId);
-  });
-}
 
-async function showPublicationFiles(newspaperId) {
-  const newspaper = await fetch(`/api/newspapers/${newspaperId}`).then((r) =>
-    r.json(),
-  );
-  const editor = document.getElementById("sectionEditor");
-  editor.innerHTML = `
-    <h3>Scribus final touch-up</h3>
-    <p class="muted">After finishing the page in Scribus, upload the editable .sla project and the CMYK print PDF here.</p>
-    ${newspaper.scribusFile ? `<p><a href="${newspaper.scribusFile}" download>Download saved Scribus project</a></p>` : ""}
-    ${newspaper.printPdf ? `<p><a href="${newspaper.printPdf}" target="_blank">View final CMYK PDF</a></p>` : ""}
-    <div class="form-group"><label>Scribus project (.sla)</label><input id="scribusFile" type="file" accept=".sla" /></div>
-    <div class="form-group"><label>Final print PDF (CMYK)</label><input id="printPdf" type="file" accept="application/pdf,.pdf" /></div>
-    <button class="btn-submit" id="uploadPublication">Save final files</button>
-  `;
-  document
-    .getElementById("uploadPublication")
-    .addEventListener("click", async () => {
-      const formData = new FormData();
-      const scribusFile = document.getElementById("scribusFile").files[0];
-      const printPdf = document.getElementById("printPdf").files[0];
-      if (scribusFile) formData.append("scribusFile", scribusFile);
-      if (printPdf) formData.append("printPdf", printPdf);
-      if (!scribusFile && !printPdf)
-        return alert("Choose a Scribus .sla file or final PDF.");
-      const response = await fetch(
-        `/api/newspapers/${newspaperId}/final-files`,
-        { method: "POST", body: formData },
-      );
-      const result = await response.json();
-      if (!response.ok)
-        return alert(result.error || "Could not upload final files.");
-      alert("Final files saved.");
-      showPublicationFiles(newspaperId);
+      liveArea: {
+        width: 310,
+        height: 510,
+        unit: "mm",
+      },
+    }),
+  });
+
+  currentNewspaper = await response.json();
+
+  for (let i = 1; i <= pageCount; i++) {
+    await fetch(`/api/newspapers/${currentNewspaper.id}/pages`, {
+      method: "POST",
+
+      headers: {
+        "Content-Type": "application/json",
+      },
+
+      body: JSON.stringify({
+        pageNumber: i,
+      }),
     });
+  }
+
+  editNewspaper(currentNewspaper.id);
 }
 
 async function showReporterCreateNews() {
@@ -1129,6 +778,32 @@ function renderReporterNewsDetails(newsItem) {
     img.className = "draft-thumb";
     imagesDiv.appendChild(img);
   });
+}
+
+async function editNewspaper(newspaperId) {
+  currentNewspaper = await fetch(`/api/newspapers/${newspaperId}`).then((r) =>
+    r.json(),
+  );
+  const pages = await fetch(`/api/newspapers/${newspaperId}/pages`).then((r) =>
+    r.json(),
+  );
+  const reporterNews = await fetch("/api/news").then((r) => r.json());
+
+  if (!currentPage || !pages.some((page) => page.id === currentPage.id))
+    currentPage = pages[0];
+
+  const content = document.getElementById("content");
+  const rightPanel = document.getElementById("rightPanel");
+  if (!currentPage || !pages.some((page) => page.id === currentPage.id))
+    currentPage = pages[0];
+
+  rightPanel.innerHTML = "";
+  window.currentNewspaper = currentNewspaper;
+  window.pages = pages;
+  window.reporterNews = reporterNews;
+  window.currentPage = currentPage;
+
+  renderWorkspace(currentNewspaper, pages, reporterNews);
 }
 
 init();

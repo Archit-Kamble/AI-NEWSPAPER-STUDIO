@@ -20,26 +20,27 @@ This is the **target**, not the current state. See §2.
 
 ## 2. Runtime architecture (what actually executes)
 
-**Updated 2026-08-02 (Prompt 4): mixed state.** News, Newspaper, and Page now follow the target layering; Page Section does not yet — see §9, §10, §11 for what changed and why.
+**Updated 2026-08-02 (Prompt 5): fully layered.** News, Newspaper, Page, and Page Section all now follow the target layering — see §9, §10, §11, §12 for what changed and why. `server.js → src/db.js → repository` no longer exists as a path for any resource.
 
 ```
-News / Newspaper / Page:            Page Section (unchanged):
-server.js                           server.js
-  ↓ app.use('/api/news', ...)         ↓ inline route handler
-  ↓ app.use('/api/newspapers', ...)   ↓ direct call
-  ↓ app.use('/api', pageRoutes)     src/db.js (thin re-export facade, 2 exports)
-src/routes/{news,newspaper,page}.routes.js  ↓
-  ↓                                 src/repositories/page.repository.js
-src/controllers/{news,newspaper,page}.controller.js  ↓
-  ↓                                 PostgreSQL
-src/services/{news,newspaper,page}.service.js
+server.js
+  ↓ app.use('/api/news', ...)
+  ↓ app.use('/api/newspapers', ...)
+  ↓ app.use('/api', pageRoutes)
+src/routes/{news,newspaper,page}.routes.js
+  ↓
+src/controllers/{news,newspaper,page,pageSection}.controller.js
+  ↓
+src/services/{news,newspaper,page,pageSection}.service.js
   ↓
 src/repositories/{news,newspaper,page,publication}.repository.js
   ↓
 PostgreSQL
 ```
 
-`src/db.js` is now down to 2 exports: `authenticateUser` and `savePageSection` (the Page Section write path, deliberately excluded from this migration). Once Page Section is migrated the same way, `src/db.js` should disappear entirely rather than gain a matching new indirection.
+Page Section's controller/service (`pageSection.controller.js`, `pageSection.service.js`) are nested inside the same `page.routes.js` router as Page itself, since both live under the `/api/pages/:pageId/...` URL space that router already owns — see §12.
+
+`src/db.js` is now down to a single export, `authenticateUser` (auth was never in scope for this migration series — see §12's note on why it wasn't deleted). Every other resource has been fully migrated off it.
 
 ### Frontend load path
 
@@ -52,7 +53,7 @@ PostgreSQL
 5. `admin/template-selector.js` (0 bytes — imported but empty)
 6. `admin.js` (813 lines — login, both dashboards, edition creation, news CRUD, and the `editNewspaper()` function that hands off into the workspace)
 
-### Live REST surface (News + Newspaper + Page routes now layered per §9/§10/§11; Page Section/Template routes still defined inline in `server.js`)
+### Live REST surface (all four resources now layered per §9/§10/§11/§12; only Templates/auth/upload remain inline in `server.js`, and those are out of scope for this migration series — see §7/§8)
 
 | Method | Path | Purpose | Layered? |
 |---|---|---|---|
@@ -73,10 +74,10 @@ PostgreSQL
 | PATCH | `/api/newspapers/:id` | update name/status | ✅ |
 | POST | `/api/newspapers/:id/final-files` | upload `.sla` and/or CMYK PDF, marks edition `finalised` | ✅ |
 | GET | `/api/templates` | serves `src/layout/templates.js` to the client | inline (own concern, see §10) |
-| POST | `/api/newspapers/:newspaperId/pages` | create page (applies a template's sections) | ✅ **new this session** |
-| GET | `/api/newspapers/:newspaperId/pages` | list pages, each hydrated with its sections | ✅ **new this session** |
-| PATCH | `/api/pages/:pageId` | change a page's template (re-applies section layout) | ✅ **new this session** |
-| PUT | `/api/pages/:pageId/sections/:sectionId` | write headline/body/etc. into one section | inline (Page Section, out of scope, see §11) |
+| POST | `/api/newspapers/:newspaperId/pages` | create page (applies a template's sections) | ✅ |
+| GET | `/api/newspapers/:newspaperId/pages` | list pages, each hydrated with its sections | ✅ |
+| PATCH | `/api/pages/:pageId` | change a page's template (re-applies section layout) | ✅ |
+| PUT | `/api/pages/:pageId/sections/:sectionId` | write headline/body/etc. into one section | ✅ **new this session** |
 | GET | `*` | SPA fallback to `index.html` | inline |
 
 No versioning, no auth middleware on any route (session is read ad hoc per-handler; nothing blocks a reporter from hitting admin-only endpoints like `PATCH /api/news/:id/status` or the final-files upload — there is no role check anywhere).
@@ -129,12 +130,13 @@ These represent modeled-but-unimplemented features (structured image management,
 - **No authorization layer.** Session presence is checked per-route (`req.session.user`), but role (reporter vs. admin) is never enforced server-side. Any authenticated session — or an unauthenticated one, for GET routes — can call any endpoint.
 - **No input validation layer.** Route handlers trust `req.body` shape directly (e.g. `payload.title`, `req.body.pageCount`) with only ad hoc `if (!payload.title)` checks; no schema validation anywhere.
 - **`px only, mm mentioned but not implemented.`** CLAUDE.md and the edition-creation UI both reference a 330×530mm / 310×510mm print spec, but nothing in the codebase converts between px and mm — the print dimensions are display-only strings in `admin.js`, unconnected to `page_width_px`/`page_height_px` or `src/layout/templates.js`.
-- **`src/db.js` facade adds a layer with no purpose.** Down to 2 exports now (`authenticateUser`, `savePageSection`) after News (§9), Newspaper (§10), and Page (§11) were migrated out of it. Once Page Section is migrated the same way, this file should disappear rather than gain a matching new indirection.
-- **`page.repository.js`'s `updateTemplate` crashes the process on a nonexistent page ID when a template is specified** (confirmed via smoke test during §11 — `PATCH /api/pages/999999` with `{template: "..."}` throws an unhandled Postgres FK-violation error instead of returning 404, because the `UPDATE pages ...` silently matches zero rows and the code proceeds to `INSERT INTO page_sections` anyway). Same class of bug as the News `:id`-crash issue in §9, now confirmed present in Page too. Preserved as-is per this task's rules; a shared "does this ID actually exist before touching child rows" guard is worth adding once all four resources are migrated, not per-resource.
+- **`src/db.js` is now a single function.** All four resources (News, Newspaper, Page, Page Section — §9/§10/§11/§12) have been migrated out of it; only `authenticateUser` remains, because Auth was never in scope for this migration series. It stops being a "facade with no purpose" and starts being an honest, minimal auth module the moment it's renamed/relocated accordingly — see §12 for why it wasn't deleted outright.
+- **`page.repository.js`'s `updateTemplate` crashes the process on a nonexistent page ID when a template is specified** (confirmed via smoke test during §11 — `PATCH /api/pages/999999` with `{template: "..."}` throws an unhandled Postgres FK-violation error instead of returning 404, because the `UPDATE pages ...` silently matches zero rows and the code proceeds to `INSERT INTO page_sections` anyway). Same class of bug as the News `:id`-crash issue in §9. Now that all four resources are migrated, this is the top candidate for an actual fix (a shared "does this ID exist" guard) rather than more deferral.
+- **`page.repository.js`'s `saveSection` silently no-ops on an unknown section key** (confirmed and now covered by a regression test in §12 — `PUT .../sections/bogus-key` returns 200 with the page unchanged, no error surfaced). Not a crash like the above, but still a footgun: a typo'd section key in a future frontend change would silently fail to save with no indication to the user.
 - **No image handling for page sections.** `PUT /api/pages/:pageId/sections/:sectionId` accepts no image fields at all — a section only gets images by linking a `news_item_id`, whose images were uploaded separately via `/api/news`. There is no path to attach a standalone image directly to a page section, despite `media_assets`/`section_images` existing in the schema for exactly this.
 - **Multer upload directory is unbounded and unmanaged.** `public/uploads/` already has 40+ files from testing; there's no cleanup, no per-newspaper/per-story organization, and uploaded filenames leak directly as public static URLs with no access control.
 - **`express-session` uses the default MemoryStore** (no `store` configured) — sessions are lost on every server restart and this is explicitly not production-safe (Express prints a warning about this on boot). Not mentioned anywhere in CLAUDE.md as a known gap.
-- **Test coverage has grown but is still partial.** News, Newspaper, and Page each have some coverage now (§9 notes News was smoke-tested only, not automated; Page got 6 new automated tests in §11). Still no coverage for auth, the templates endpoint, or Page Section — and no negative-path test exists for the crash bug above (deliberately — it would fail the suite).
+- **Test coverage has grown across this migration series but auth and templates remain untested.** News, Newspaper, Page, and Page Section all have some coverage now (Page and Page Section have solid automated coverage — 6 and 6 tests respectively; News/Newspaper were only smoke-tested manually, not automated — worth backfilling). No coverage for `/api/auth/*` or `/api/templates`, and the two crash/no-op bugs above are documented rather than regression-tested (one would crash the suite, the other now IS tested — see previous bullet).
 
 ---
 
@@ -195,6 +197,8 @@ The audit confirms the proposed order is correct: the backend has no service/con
 **Updated 2026-08-02 (Prompt 3):** News and Newspaper are now both layered (§9, §10). Only Page and Page Section remain on the old `server.js → src/db.js → repository` path — `src/db.js` is down to `authenticateUser` + 5 Page functions and should be the next and final target before it's deleted outright.
 
 **Updated 2026-08-02 (Prompt 4):** Page is now layered too (§11). Only Page Section remains on the old path — `src/db.js` is down to exactly 2 exports (`authenticateUser`, `savePageSection`). Migrating Page Section is now the only thing standing between the current state and deleting `src/db.js` entirely.
+
+**Updated 2026-08-02 (Prompt 5):** Page Section is now layered (§12) — the fourth and final resource in this migration series. `src/db.js` is down to exactly `authenticateUser` and was **not** deleted: it's still required by `server.js`'s login route, and Auth was never part of this migration's scope (it has its own untouched empty scaffolding — `src/{controllers,routes,services}/auth.*` — that a future, explicitly-scoped Auth migration would fill in). The Route→Controller→Service→Repository layering CLAUDE.md calls for is now real for every content resource in the system; what's left inline in `server.js` (auth, templates, uploads) is inline by scope decision, not by omission. See §12's "Next recommended migration" for what that Auth migration would look like.
 
 ---
 
@@ -308,3 +312,47 @@ Migrated the Page resource only (create/list/update-template), following the sam
 ### Next recommended migration
 
 **Page Section** (`PUT /api/pages/:pageId/sections/:sectionId`) — the last resource on the old path, and the one with the most inline business logic left in `server.js` (the newsItemId/headline/subheading/body/fontPx field-mapping block). Completing it retires `src/db.js` entirely. It will face the same routing question Page did: Page Section's URL also lives under `/api/pages/:pageId/sections/...`, one segment deeper than what `page.routes.js` already claims (`/pages/:pageId`) — worth deciding whether Page Section gets its own router mounted at `/api` (consistent with this session's approach) or is added as a nested route inside `page.routes.js` itself (arguably more natural now that Page Section is conceptually "under" Page, though the task rules for Page explicitly forbade doing that this time).
+
+---
+
+## 12. Update — Prompt 5: Page Section backend layering (2026-08-02)
+
+### Completed work
+
+Migrated the Page Section resource (`PUT /api/pages/:pageId/sections/:sectionId`) — the fourth and last resource from the original roadmap's "News, then Newspaper, then Page, then Page Section" sequence. `server.js → src/db.js → repository` no longer exists as a path for *any* content resource.
+
+**New files:**
+- `src/services/pageSection.service.js` — the field-mapping logic moved verbatim from the old inline handler (newsItemId/sourceNewsId, headline/title, subheading/subtitle, body/description aliasing, plus the font-px/category/location/tags/reporterName/aiNotes passthroughs), followed by the same "write then re-fetch the whole page" shape `savePageSection` in `src/db.js` used to have. Calls `page.repository.js`'s existing `saveSection`/`findById` directly — no repository changes (rule: reuse existing repository).
+- `src/controllers/pageSection.controller.js` — HTTP layer only, same 404-on-missing-page / 200-with-full-page-on-success shape as before.
+
+**Decision: no separate router, no separate `app.use` call.** Page Section's URL (`/api/pages/:pageId/sections/:sectionId`) is one segment deeper than the `/pages/:pageId` pattern `page.routes.js` already owns (§11 flagged this exact question as open). Rather than mount a third thing at `/api`, `pageSectionController.update` was added as one more route *inside* the existing `page.routes.js` router:
+  ```
+  router.put('/pages/:pageId/sections/:sectionId', pageSectionController.update);
+  ```
+  This answers §11's open question in favor of "nested inside `page.routes.js`" — Page Section is conceptually a sub-resource of Page, they already share a router mounted at the same prefix, and it avoids a fourth `app.use()` line in `server.js` for what would otherwise be a one-route file.
+
+**Removed:**
+- The inline `PUT /api/pages/:pageId/sections/:sectionId` handler in `server.js` (~20 lines) and the `savePageSection` entry from the `require("./src/db")` destructure.
+- `savePageSection` and the `pageRepository` require from `src/db.js`.
+
+**`src/db.js` was evaluated for deletion and kept.** Per the task's conditional instruction ("delete `src/db.js` if it becomes unused"): after removing Page Section, `src/db.js` exports exactly one function, `authenticateUser` — and that function is still imported and called by `server.js`'s `/api/auth/login` route. It did not become unused, so it was not deleted. Confirmed via a repo-wide grep that `require("./src/db")` has exactly one call site (`server.js`). Auth was never in scope for this four-part migration series (the roadmap's Prompt 2 was explicitly "News, Newspapers, Pages, Page Sections" — no Auth), and `src/controllers/auth.controller.js`, `src/routes/auth.routes.js`, `src/services/auth.service.js` remain the empty scaffolding they've been since before this series started, ready for a future, separately-scoped Auth migration.
+
+**Verification:**
+- `npm test`: all 10 pre-existing tests still pass, plus 6 new tests added in `tests/pageSection.test.js` (16/16 total).
+- Manual smoke test of the full Page Section surface: direct field names (headline/subheading/body + all three font-px fields + category/location/tags/reporterName/aiNotes, all round-tripped and individually verified), the title/subtitle/description alias path (matching what the pre-existing integration test already exercised), linking a real reporter news item via `newsItemId` (created a live `news_items` row via `POST /api/news`, linked it, verified `news_item_id` on the section), overwriting an already-saved section, a 404 on a nonexistent page, and the silent no-op on an unknown section key (see below).
+- Explicit boundary verification: `GET .../pages` (list), `PATCH /api/pages/:id` (update template), `GET /api/newspapers/:id`, and `GET /api/newspapers/latest` were all still 200 after adding the nested route to `page.routes.js`; server stayed alive throughout.
+- **Found and locked in with a new regression test** (rather than just documenting) a second pre-existing quirk beyond the §11 crash bug: `pageRepository.saveSection`'s `UPDATE ... WHERE page_id = $1 AND section_key = $2` silently matches zero rows and returns success if the section key doesn't exist on that page — no error, no indication the write did nothing. Confirmed via `git diff`/`git log` that `page.repository.js` was untouched this session (unmodified since the Prompt 3 catch-up commit), so this is pre-existing behavior, not something introduced now. Unlike the §11 crash (which can't be tested without failing the suite), this one *can* be safely tested — added `'saving a section with an unknown section key is a silent no-op'` to lock in the current (if surprising) behavior as a documented contract rather than an untested landmine.
+
+### Remaining technical debt
+
+- **The §11 `updateTemplate` crash bug is now the single loudest piece of debt in the whole backend**, since it's the last surviving "silent landmine" — everything else content-related is now migrated, tested, or both. Worth fixing directly rather than migrating around again.
+- **The newly-confirmed `saveSection` silent-no-op** (previous section) is lower severity than the crash but has the same root cause: neither `saveSection` nor `updateTemplate` verifies its target row(s) exist before acting. A single shared "assert page/section exists" helper in `page.repository.js` would fix both at once.
+- **`src/db.js` is legitimately minimal now but still a slight misnomer** — a one-function file called `db.js` that only handles authentication reads oddly next to `src/repositories/*.js` (the actual DB layer). If/when Auth gets its own migration (`auth.controller.js`/`auth.service.js`/`auth.routes.js`, all already scaffolded and empty), `src/db.js` can be deleted for real and `authenticateUser`'s logic folded into `auth.service.js`.
+- **Test coverage is now uneven across the four migrated resources**: Page and Page Section have solid automated suites (6 tests each) added specifically to close gaps; News and Newspaper were only manually smoke-tested during their respective migrations (§9, §10) and have no dedicated test files. Worth a follow-up pass to bring `tests/news.test.js` and `tests/newspaper.test.js` up to the same standard, purely for consistency — not because anything is currently broken.
+
+### Next recommended migration
+
+With all four content resources layered, the natural next steps are no longer "which resource is left" but architectural cleanup and the pieces intentionally deferred throughout this series:
+1. **Fix the two silent-failure bugs in `page.repository.js`** (`updateTemplate`'s crash, `saveSection`'s no-op) — real bugs now that they're the last ones standing, not migration scope creep.
+2. **Auth**, if it's ever going to move off `src/db.js` — smallest possible migration (one function), and would let `src/db.js` be deleted entirely rather than kept as a permanent one-function file.
+3. Per the original roadmap, **Prompt 3 (database)** and **Prompt 4 (template engine)** are the next un-started items — the layering work this series completed is exactly the prerequisite CLAUDE.md and earlier updates to this document said it was.

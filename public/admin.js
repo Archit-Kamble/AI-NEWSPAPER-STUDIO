@@ -7,6 +7,24 @@ let editingDraftId = null;
 let currentDraft = null;
 let selectedReporterImages = [];
 
+function toggleAppSidebar() {
+  document.querySelector(".sidebar")?.classList.toggle("open");
+  document.querySelector(".sidebar-app-backdrop")?.classList.toggle("open");
+}
+
+function closeAppSidebar() {
+  document.querySelector(".sidebar")?.classList.remove("open");
+  document.querySelector(".sidebar-app-backdrop")?.classList.remove("open");
+}
+
+function wireAppSidebarToggle() {
+  document.getElementById("appSidebarToggle").addEventListener("click", toggleAppSidebar);
+  document.getElementById("sidebarAppBackdrop").addEventListener("click", closeAppSidebar);
+  document.querySelector(".sidebar").addEventListener("click", (event) => {
+    if (event.target.classList.contains("sidebar-btn")) closeAppSidebar();
+  });
+}
+
 async function init() {
   const res = await fetch("/api/auth/me");
   const data = await res.json();
@@ -62,11 +80,15 @@ async function renderReporterDashboard() {
   app.innerHTML = `
     <div class="main-layout">
       <div class="header">
-        <div class="header-left">SAHAS</div>
+        <div class="header-left">
+          <button class="hamburger-btn" id="appSidebarToggle" title="Menu">&#9776;</button>
+          SAHAS
+        </div>
         <div class="header-center">Hi ${currentUser.name}</div>
         <div class="header-right"><button id="logoutBtn">Logout</button></div>
       </div>
       <div class="container">
+        <div class="sidebar-app-backdrop" id="sidebarAppBackdrop"></div>
         <aside class="sidebar">
           <button class="sidebar-btn active" id="createBtn">Create News</button>
           <button class="sidebar-btn" id="draftBtn">My Drafts</button>
@@ -81,6 +103,8 @@ async function renderReporterDashboard() {
       </div>
     </div>
   `;
+
+  wireAppSidebarToggle();
 
   const logout = () => {
     currentUser = null;
@@ -199,11 +223,15 @@ async function renderAdminDashboard() {
   app.innerHTML = `
     <div class="main-layout">
       <div class="header">
-        <div class="header-left">SAHAS</div>
+        <div class="header-left">
+          <button class="hamburger-btn" id="appSidebarToggle" title="Menu">&#9776;</button>
+          SAHAS
+        </div>
         <div class="header-center">Hi Admin</div>
         <div class="header-right"><button id="logoutBtn">Logout</button></div>
       </div>
       <div class="container">
+        <div class="sidebar-app-backdrop" id="sidebarAppBackdrop"></div>
         <aside class="sidebar">
           <button class="sidebar-btn active" id="pastBtn">Past Newspapers</button>
           <button class="sidebar-btn" id="pastNewsBtn">Past News</button>
@@ -216,6 +244,8 @@ async function renderAdminDashboard() {
       </div>
     </div>
   `;
+
+  wireAppSidebarToggle();
 
   const logout = () => {
     currentUser = null;
@@ -789,6 +819,7 @@ function renderReporterNewsDetails(newsItem) {
 
 async function editNewspaper(newspaperId) {
   document.querySelector(".container")?.classList.add("container--workspace");
+  closeAppSidebar();
   const rightPanel = document.getElementById("rightPanel");
   rightPanel.innerHTML = "";
   rightPanel.style.display = "none";

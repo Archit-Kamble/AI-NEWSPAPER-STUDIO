@@ -1,7 +1,10 @@
 import { renderCanvas } from "./canvas.js";
-import { renderPageSidebar } from "./page-sidebar.js";
+import { renderPageNavigator } from "./page-navigator.js";
 import { renderLayoutSidebar } from "./layout-sidebar.js";
-import { renderSectionEditor } from "./section-editor.js";
+import { renderInspector, applyStoryToInspector } from "./inspector.js";
+import { renderSidebarLeft } from "./sidebar-left.js";
+import { renderToolbar } from "./toolbar.js";
+import { showPublicationFiles } from "./publication.js";
 
 // The single source of truth for editor state. Nothing outside this module
 // mutates it directly - child modules receive data and callbacks as
@@ -85,6 +88,25 @@ async function saveSection(sectionKey, payload) {
   return true;
 }
 
+function switchEdition(newspaperId) {
+  if (state.newspaper && newspaperId === state.newspaper.id) return;
+  state.currentPage = null;
+  renderWorkspace(newspaperId);
+}
+
+function selectStoryForSection(story) {
+  applyStoryToInspector(story);
+}
+
+function triggerSave() {
+  document.getElementById("saveSectionBtn")?.click();
+}
+
+function openPublish() {
+  if (!state.newspaper) return;
+  showPublicationFiles(state.newspaper.id);
+}
+
 function render() {
   const content = document.getElementById("content");
 
@@ -94,57 +116,29 @@ function render() {
   }
 
   content.innerHTML = `
-    <div class="workspace">
-
-        <div class="workspace-left">
-
-            <div class="panel">
-
-                <h2>Page Preview</h2>
-
-                <div id="canvas">
-                    Loading...
-                </div>
-
-            </div>
-
-            <div class="panel">
-
-                <h2>Section Editor</h2>
-
-                <div id="editorBody">
-                    Select a section
-                </div>
-
-            </div>
-
-        </div>
-
-        <div class="workspace-right">
-
-            <div class="panel">
-
-                <h3>Pages</h3>
-
-                <div id="pages"></div>
-
-            </div>
-
-            <div class="panel">
-
-                <h3>Layouts</h3>
-
-                <div id="layouts"></div>
-
-            </div>
-
-        </div>
-
+    <div class="workspace-shell">
+      <header class="workspace-toolbar" id="toolbar"></header>
+      <div class="workspace-body">
+        <aside class="workspace-sidebar-left" id="sidebarLeft"></aside>
+        <main class="workspace-canvas-host">
+          <div class="canvas-toolbar" id="layouts"></div>
+          <div id="canvas" class="canvas-scroll"></div>
+        </main>
+        <aside class="workspace-inspector" id="inspector"></aside>
+      </div>
+      <footer class="workspace-page-navigator" id="pageNavigator"></footer>
     </div>
-    `;
+    <div class="modal-root" id="modalRoot"></div>
+  `;
 
-  renderPageSidebar(state.pages, state.currentPage, selectPage);
+  renderToolbar({
+    hasSelection: Boolean(state.selectedSection),
+    onSave: triggerSave,
+    onPublish: openPublish,
+  });
+  renderSidebarLeft(state.newspaper, state.currentPage, state.reporterNews, state.selectedSection, switchEdition, selectStoryForSection);
   renderLayoutSidebar(state.currentPage, applyTemplate);
   renderCanvas(state.currentPage, state.newspaper, state.selectedSection, selectSection);
-  renderSectionEditor(state.currentPage, state.selectedSection, state.reporterNews, saveSection);
+  renderInspector(state.currentPage, state.selectedSection, state.reporterNews, saveSection);
+  renderPageNavigator(state.pages, state.currentPage, state.newspaper, selectPage);
 }

@@ -1,3 +1,5 @@
+import { sectionRect } from "./canvas-geometry.js";
+
 export function renderCanvas(page, newspaper, selectedSectionKey, onSelectSection) {
   const canvas = document.getElementById("canvas");
   if (!canvas) {
@@ -11,7 +13,7 @@ export function renderCanvas(page, newspaper, selectedSectionKey, onSelectSectio
   }
 
   if (!page.sections || !page.sections.length) {
-    canvas.innerHTML = "<h3>This page has no layout yet. Pick a layout on the right.</h3>";
+    canvas.innerHTML = "<h3>This page has no layout yet. Pick a layout above.</h3>";
     return;
   }
 
@@ -21,19 +23,20 @@ export function renderCanvas(page, newspaper, selectedSectionKey, onSelectSectio
   canvas.innerHTML = `
     <div class="newspaper-canvas" style="position:relative;aspect-ratio:${pageWidth}/${pageHeight};border:1px solid #aaa;">
       ${page.sections
-        .map(
-          (section) => `
+        .map((section) => {
+          const rect = sectionRect(section, pageWidth, pageHeight);
+          return `
         <div
           class="newspaper-section${section.headline ? " filled" : ""}${selectedSectionKey === section.section_key ? " active" : ""}"
           data-section-key="${section.section_key}"
-          style="position:absolute;left:${(section.x_px / pageWidth) * 100}%;top:${(section.y_px / pageHeight) * 100}%;width:${(section.width_px / pageWidth) * 100}%;height:${(section.height_px / pageHeight) * 100}%;"
+          style="position:absolute;left:${rect.leftPct}%;top:${rect.topPct}%;width:${rect.widthPct}%;height:${rect.heightPct}%;"
         >
           <span class="section-label">${section.section_key}</span>
           <strong>${section.headline || "Blank section"}</strong>
           <small>${section.headline ? "Click to edit" : "Click to add a story"}</small>
         </div>
-      `,
-        )
+      `;
+        })
         .join("")}
     </div>
   `;

@@ -223,18 +223,25 @@ async function renderAdminDashboard() {
   };
   document.getElementById("logoutBtn").addEventListener("click", logout);
   document.getElementById("logoutBtn2").addEventListener("click", logout);
+
+  const goDashboard = (fn) => () => {
+    document.querySelector(".container")?.classList.remove("container--workspace");
+    const rightPanel = document.getElementById("rightPanel");
+    if (rightPanel) rightPanel.style.display = "";
+    fn();
+  };
   document
     .getElementById("pastBtn")
-    .addEventListener("click", showPastNewspapers);
+    .addEventListener("click", goDashboard(showPastNewspapers));
   document
     .getElementById("pastNewsBtn")
-    .addEventListener("click", showPastNews);
+    .addEventListener("click", goDashboard(showPastNews));
   document
     .getElementById("reportersBtn")
-    .addEventListener("click", showReporters);
+    .addEventListener("click", goDashboard(showReporters));
   document
     .getElementById("settingsBtn")
-    .addEventListener("click", showSettings);
+    .addEventListener("click", goDashboard(showSettings));
 
   showPastNewspapers();
 }
@@ -781,8 +788,10 @@ function renderReporterNewsDetails(newsItem) {
 }
 
 async function editNewspaper(newspaperId) {
+  document.querySelector(".container")?.classList.add("container--workspace");
   const rightPanel = document.getElementById("rightPanel");
   rightPanel.innerHTML = "";
+  rightPanel.style.display = "none";
   await renderWorkspace(newspaperId);
 }
 

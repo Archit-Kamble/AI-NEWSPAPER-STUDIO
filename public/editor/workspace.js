@@ -15,6 +15,7 @@ const state = {
   currentPage: null,
   reporterNews: [],
   selectedSection: null,
+  sidebarOpen: false,
 };
 
 function pickPage(pages, current) {
@@ -98,6 +99,23 @@ function selectStoryForSection(story) {
   applyStoryToInspector(story);
 }
 
+function applySidebarVisibility() {
+  document.getElementById("sidebarLeft")?.classList.toggle("open", state.sidebarOpen);
+  document.getElementById("sidebarBackdrop")?.classList.toggle("open", state.sidebarOpen);
+  document.getElementById("tbSidebarToggle")?.classList.toggle("active", state.sidebarOpen);
+}
+
+function toggleSidebar() {
+  state.sidebarOpen = !state.sidebarOpen;
+  applySidebarVisibility();
+}
+
+function closeSidebar() {
+  if (!state.sidebarOpen) return;
+  state.sidebarOpen = false;
+  applySidebarVisibility();
+}
+
 function triggerSave() {
   document.getElementById("saveSectionBtn")?.click();
 }
@@ -119,14 +137,18 @@ function render() {
     <div class="workspace-shell">
       <header class="workspace-toolbar" id="toolbar"></header>
       <div class="workspace-body">
-        <aside class="workspace-sidebar-left" id="sidebarLeft"></aside>
+        <div class="sidebar-backdrop${state.sidebarOpen ? " open" : ""}" id="sidebarBackdrop"></div>
+        <aside class="workspace-sidebar-left${state.sidebarOpen ? " open" : ""}" id="sidebarLeft"></aside>
         <main class="workspace-canvas-host">
-          <div class="canvas-toolbar" id="layouts"></div>
+          <div class="canvas-toolbar">
+            <div id="pageSwitcher" class="page-switcher"></div>
+            <div class="canvas-toolbar-divider"></div>
+            <div id="layouts" class="layout-switcher"></div>
+          </div>
           <div id="canvas" class="canvas-scroll"></div>
         </main>
         <aside class="workspace-inspector" id="inspector"></aside>
       </div>
-      <footer class="workspace-page-navigator" id="pageNavigator"></footer>
     </div>
     <div class="modal-root" id="modalRoot"></div>
   `;
@@ -134,12 +156,15 @@ function render() {
   renderToolbar({
     newspaper: state.newspaper,
     hasSelection: Boolean(state.selectedSection),
+    sidebarOpen: state.sidebarOpen,
     onSave: triggerSave,
     onPublish: openPublish,
+    onToggleSidebar: toggleSidebar,
   });
+  document.getElementById("sidebarBackdrop").addEventListener("click", closeSidebar);
   renderSidebarLeft(state.newspaper, state.currentPage, state.reporterNews, state.selectedSection, switchEdition, selectStoryForSection);
+  renderPageNavigator(state.pages, state.currentPage, state.newspaper, selectPage);
   renderLayoutSidebar(state.currentPage, applyTemplate);
   renderCanvas(state.currentPage, state.newspaper, state.selectedSection, selectSection);
   renderInspector(state.currentPage, state.selectedSection, state.reporterNews, saveSection);
-  renderPageNavigator(state.pages, state.currentPage, state.newspaper, selectPage);
 }

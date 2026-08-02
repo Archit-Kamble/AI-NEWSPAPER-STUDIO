@@ -1,6 +1,7 @@
 import { formatDate } from "./format.js";
 
 const ICONS = {
+  menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></svg>',
   save: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>',
   undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>',
   redo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5v0A5.5 5.5 0 0 0 9.5 20H13"/></svg>',
@@ -15,14 +16,17 @@ function button(id, icon, label, { disabled = false, primary = false, title = ""
   return `<button id="${id}" class="${classes}" ${disabled ? "disabled" : ""} ${title ? `title="${title}"` : ""}>${ICONS[icon]}<span>${label}</span></button>`;
 }
 
-export function renderToolbar({ newspaper, hasSelection, onSave, onPublish }) {
+export function renderToolbar({ newspaper, hasSelection, sidebarOpen, onSave, onPublish, onToggleSidebar }) {
   const container = document.getElementById("toolbar");
   if (!container) return;
 
   container.innerHTML = `
-    <div class="toolbar-brand">
-      ${newspaper?.name || "Newspaper Workspace"}
-      <small>${formatDate(newspaper?.publication_date)}</small>
+    <div class="toolbar-left">
+      <button id="tbSidebarToggle" class="toolbar-btn toolbar-btn-icon${sidebarOpen ? " active" : ""}" title="Editions & Story Explorer">${ICONS.menu}</button>
+      <div class="toolbar-brand">
+        ${newspaper?.name || "Newspaper Workspace"}
+        <small>${formatDate(newspaper?.publication_date)}</small>
+      </div>
     </div>
     <div class="toolbar-actions">
       ${button("tbSave", "save", "Save", { disabled: !hasSelection })}
@@ -37,4 +41,5 @@ export function renderToolbar({ newspaper, hasSelection, onSave, onPublish }) {
 
   document.getElementById("tbSave").addEventListener("click", onSave);
   document.getElementById("tbPublish").addEventListener("click", onPublish);
+  document.getElementById("tbSidebarToggle").addEventListener("click", onToggleSidebar);
 }

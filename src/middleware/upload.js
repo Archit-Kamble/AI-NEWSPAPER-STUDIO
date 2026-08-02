@@ -27,4 +27,23 @@ const upload = multer({
   },
 });
 
-module.exports = { uploadsDir, storage, upload };
+const publicationUpload = multer({
+  storage,
+  limits: { files: 2, fileSize: 50 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed =
+      file.fieldname === 'scribusFile'
+        ? /\.sla$/i.test(file.originalname)
+        : file.fieldname === 'printPdf' &&
+          (file.mimetype === 'application/pdf' ||
+            /\.pdf$/i.test(file.originalname));
+    cb(
+      allowed
+        ? null
+        : new Error('Upload a Scribus .sla file and/or a PDF file'),
+      allowed,
+    );
+  },
+});
+
+module.exports = { uploadsDir, storage, upload, publicationUpload };

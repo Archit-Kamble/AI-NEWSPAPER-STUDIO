@@ -16,6 +16,7 @@ const state = {
   reporterNews: [],
   selectedSection: null,
   storyPickerOpen: false,
+  canvasZoom: "fit",
 };
 
 function pickPage(pages, current) {
@@ -118,6 +119,26 @@ function triggerSave() {
   document.getElementById("saveSectionBtn")?.click();
 }
 
+function setZoom(mode) {
+  state.canvasZoom = mode;
+  document.getElementById("canvas")?.classList.toggle("zoom-full", mode === "full");
+  document.querySelectorAll(".zoom-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.zoom === mode);
+  });
+}
+
+function renderZoomToggle() {
+  const container = document.getElementById("zoomToggle");
+  if (!container) return;
+  container.innerHTML = `
+    <button data-zoom="fit" class="zoom-btn${state.canvasZoom === "fit" ? " active" : ""}">Fit</button>
+    <button data-zoom="full" class="zoom-btn${state.canvasZoom === "full" ? " active" : ""}">100%</button>
+  `;
+  container.querySelectorAll(".zoom-btn").forEach((btn) => {
+    btn.addEventListener("click", () => setZoom(btn.dataset.zoom));
+  });
+}
+
 function openPublish() {
   if (!state.newspaper) return;
   showPublicationFiles(state.newspaper.id);
@@ -148,8 +169,10 @@ function render() {
             <div id="pageSwitcher" class="page-switcher"></div>
             <div class="canvas-toolbar-divider"></div>
             <div id="layouts" class="layout-switcher"></div>
+            <div class="canvas-toolbar-spacer"></div>
+            <div id="zoomToggle" class="zoom-toggle"></div>
           </div>
-          <div id="canvas" class="canvas-scroll"></div>
+          <div id="canvas" class="canvas-scroll${state.canvasZoom === "full" ? " zoom-full" : ""}"></div>
         </main>
         <aside class="workspace-inspector" id="inspector"></aside>
       </div>
@@ -170,6 +193,7 @@ function render() {
   renderStoryPicker(state.currentPage, state.reporterNews, state.selectedSection, selectStoryForSection);
   renderPageNavigator(state.pages, state.currentPage, state.newspaper, selectPage);
   renderLayoutSidebar(state.currentPage, applyTemplate);
+  renderZoomToggle();
   renderCanvas(state.currentPage, state.newspaper, state.selectedSection, selectSection);
   renderInspector(state.currentPage, state.selectedSection, state.reporterNews, saveSection);
 }

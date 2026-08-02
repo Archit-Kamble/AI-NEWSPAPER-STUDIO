@@ -649,6 +649,26 @@ Fifth round of feedback: even after Follow-up 4's width gains, the canvas (rende
 
 ### Remaining technical debt
 
-- Fit mode's text uses the same `clamp()`-based responsive font sizing as before (`.newspaper-section strong { font-size: clamp(0.7rem, 1.6vw, 1.05rem) }`), which is `vw`-relative (viewport width), not relative to the shrunken canvas's own width — it happened to still look fine in testing (headline/label text stayed readable, no visible overflow) but wasn't specifically re-tuned for the new compact size. Worth a closer look if a template with much smaller/denser sections (e.g. a hypothetical "briefs-heavy" layout with many tiny boxes) surfaces legibility problems Fit mode doesn't currently show.
+- ~~Fit mode's text uses the same `clamp()`-based responsive font sizing as before, which is `vw`-relative (viewport width), not relative to the shrunken canvas's own width~~ — **confirmed broken and fixed, see Follow-up 6.** The predicted risk materialized exactly as flagged: at a real 170%-browser-zoom session, section headline/label text overflowed its box and overlapped neighboring sections.
 - The Fit/100% toggle has exactly two states; no continuous zoom or pan. Fine for "select a section then edit in the Inspector," would need real work (drag-to-pan, scroll-to-zoom) if free-form canvas inspection ever becomes a requirement.
+- Every other item in this document's longer-standing technical-debt list is unchanged by this session.
+
+### Follow-up 6 — fix real text-overflow bug from Follow-up 5, widen the Inspector, remove a pre-existing dead CSS block (2026-08-02, same day)
+
+The `vw`-based font-sizing risk flagged at the end of Follow-up 5 turned up for real: a screenshot at the user's normal 170%-browser-zoom setup showed section headline/label text overflowing its box and visibly overlapping neighboring sections in Fit mode. Separately, the user asked for a wider Inspector panel for more comfortable input.
+
+**Text-overflow fix — switched from viewport-relative to container-relative sizing:**
+- `.newspaper-canvas` (the workspace-specific canvas element, `.canvas-scroll .newspaper-canvas`) got `container-type: inline-size`, turning it into a CSS containment context.
+- `.newspaper-section strong`/`small` and `.section-label` changed from `vw` units (relative to the *browser viewport*, which barely correlates with the canvas's actual rendered size once Fit mode and zoom level are both in play) to `cqw` units (relative to *this specific container's* width — the canvas itself). Text now scales down exactly in proportion to however small the canvas is actually rendered, regardless of zoom level or Fit/100% mode, instead of using a stale approximation that only happened to work when canvas width tracked viewport width roughly 1:1 (true before this redesign, no longer true since Follow-up 3 turned canvas width into a fraction of the workspace's own width, and false again since Follow-up 5's height-driven Fit sizing).
+- Verified live in a browser at a viewport matching the user's reported 170%-zoom scenario (1129×650, approximating their physical 1920px display at that zoom level) — all six section labels/headlines/captions render fully inside their boxes with zero overlap, where the previous build visibly broke.
+
+**Inspector widened:** `.workspace-shell`'s right column went from 312px to 400px, per direct request for more comfortable input fields. Canvas still gets the remaining space via `1fr`, so this didn't reintroduce a width-percentage fight — Fit mode makes the canvas's actual footprint a non-issue for space budgeting regardless of column width.
+
+**Found and removed a pre-existing dead CSS block, unrelated to this session's other work but directly confusing to the fix above:** while editing `.newspaper-section`, `.newspaper-canvas` in `styles.css`, a second, older definition of both classes (plus `.workspace`, `.workspace-left`, `.workspace-right`, `.panel` — an even earlier pre-redesign version of the workspace, predating §13) turned up fully superseded and confirmed zero-referenced via grep across `public/**/*.js`. Removed rather than left as a second copy of the same class names sitting a few hundred lines from the real one — exactly the kind of same-name duplication this document has flagged as a recurring risk pattern (§3, §4) any time two eras of a component's markup/CSS coexist. `.page-card*`, `.page-template`, `.template-thumb*` were also found dead nearby during this same read-through but were **not** removed — unrelated to what this pass was touching, out of scope, noted here rather than acted on.
+
+**Verification:** `npm test` 16/16. Playwright pass at 1129×650 (the zoom-equivalent viewport) confirmed the text-overflow fix visually and via screenshot; the full functional flow (From Reporter → filter → pick story → auto-close → populate → save) re-verified at 1600×900 with zero regressions. Zero console/page errors in both runs.
+
+### Remaining technical debt
+
+- `.page-card*`, `.page-template`, `.template-thumb*` in `styles.css` are confirmed dead (zero references in `public/**/*.js`) but not yet removed — found during this session's cleanup, out of scope for a font-sizing/width fix, flagged for a future pass.
 - Every other item in this document's longer-standing technical-debt list is unchanged by this session.

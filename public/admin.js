@@ -1,7 +1,7 @@
+import { renderWorkspace } from "./editor/workspace.js";
+
 const app = document.getElementById("app");
 let currentUser = null;
-let currentNewspaper = null;
-let currentPage = null;
 let currentLanguage = "mr";
 let editingDraftId = null;
 let currentDraft = null;
@@ -548,10 +548,10 @@ async function createEdition() {
     }),
   });
 
-  currentNewspaper = await response.json();
+  const newspaper = await response.json();
 
   for (let i = 1; i <= pageCount; i++) {
-    await fetch(`/api/newspapers/${currentNewspaper.id}/pages`, {
+    await fetch(`/api/newspapers/${newspaper.id}/pages`, {
       method: "POST",
 
       headers: {
@@ -564,7 +564,7 @@ async function createEdition() {
     });
   }
 
-  editNewspaper(currentNewspaper.id);
+  editNewspaper(newspaper.id);
 }
 
 async function showReporterCreateNews() {
@@ -781,29 +781,9 @@ function renderReporterNewsDetails(newsItem) {
 }
 
 async function editNewspaper(newspaperId) {
-  currentNewspaper = await fetch(`/api/newspapers/${newspaperId}`).then((r) =>
-    r.json(),
-  );
-  const pages = await fetch(`/api/newspapers/${newspaperId}/pages`).then((r) =>
-    r.json(),
-  );
-  const reporterNews = await fetch("/api/news").then((r) => r.json());
-
-  if (!currentPage || !pages.some((page) => page.id === currentPage.id))
-    currentPage = pages[0];
-
-  const content = document.getElementById("content");
   const rightPanel = document.getElementById("rightPanel");
-  if (!currentPage || !pages.some((page) => page.id === currentPage.id))
-    currentPage = pages[0];
-
   rightPanel.innerHTML = "";
-  window.currentNewspaper = currentNewspaper;
-  window.pages = pages;
-  window.reporterNews = reporterNews;
-  window.currentPage = currentPage;
-
-  renderWorkspace(currentNewspaper, pages, reporterNews);
+  await renderWorkspace(newspaperId);
 }
 
 init();

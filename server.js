@@ -8,12 +8,9 @@ const { templates } = require('./src/layout/templates');
 const { upload } = require('./src/middleware/upload');
 const newsRoutes = require('./src/routes/news.routes');
 const newspaperRoutes = require('./src/routes/newspaper.routes');
+const pageRoutes = require('./src/routes/page.routes');
 const {
   authenticateUser,
-  createPage,
-  updatePage,
-  listPages,
-  addArticleToPage,
   savePageSection,
 } = require("./src/db");
 
@@ -75,27 +72,7 @@ function createApp() {
   });
 
   // Page API
-  app.post("/api/newspapers/:newspaperId/pages", async (req, res) => {
-    const page = await createPage({
-      newspaperId: parseInt(req.params.newspaperId),
-      pageNumber: req.body.pageNumber || 1,
-      sectionName: req.body.sectionName || "Page 1",
-      language: req.body.language || "mr",
-      templateKey: req.body.templateKey || req.body.template || "front",
-    });
-    res.status(201).json(page);
-  });
-
-  app.get("/api/newspapers/:newspaperId/pages", async (req, res) => {
-    const pages = await listPages(parseInt(req.params.newspaperId, 10));
-    res.json(pages);
-  });
-
-  app.patch("/api/pages/:pageId", async (req, res) => {
-    const page = await updatePage(parseInt(req.params.pageId, 10), req.body);
-    if (!page) return res.status(404).json({ error: "Not found" });
-    res.json(page);
-  });
+  app.use("/api", pageRoutes);
 
   app.put("/api/pages/:pageId/sections/:sectionId", async (req, res) => {
     const payload = req.body;

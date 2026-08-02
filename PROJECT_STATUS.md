@@ -44,14 +44,16 @@ Page Section's controller/service (`pageSection.controller.js`, `pageSection.ser
 
 ### Frontend load path
 
+**Updated 2026-08-02 (Prompt 6): the Newspaper Workspace editor is now a real module tree with no `window.*` state — see §13.**
+
 `public/index.html` → `/app.js` → dynamic `import()` in this order:
 
-1. `editor/publication.js` (35 lines — final Scribus/PDF upload UI, functional)
-2. `admin/newspaper-workspace.js` (161 lines — functional, owns `renderWorkspace`)
-3. `admin/page-editor.js` (126 lines — functional, owns canvas + section editor)
-4. `admin/reporter-browser.js` (0 bytes — imported but empty)
-5. `admin/template-selector.js` (0 bytes — imported but empty)
-6. `admin.js` (813 lines — login, both dashboards, edition creation, news CRUD, and the `editNewspaper()` function that hands off into the workspace)
+1. `editor/publication.js` (35 lines — final Scribus/PDF upload UI; still dead/unreachable, see §3 — out of scope for §13)
+2. `admin/reporter-browser.js` (0 bytes — imported but empty)
+3. `admin/template-selector.js` (0 bytes — imported but empty)
+4. `admin.js` (now ~780 lines — login, both dashboards, edition creation, news CRUD; `editNewspaper()` now just delegates to the Workspace module below via a real ES `import`, not `window.*`)
+
+`admin.js`'s `import { renderWorkspace } from "./editor/workspace.js"` transitively loads the rest of the editor tree via static ES imports (not side-effect scripts): `editor/workspace.js` (owns the single editor state object, ~140 lines) imports `editor/canvas.js`, `editor/page-sidebar.js`, `editor/layout-sidebar.js`, and `editor/section-editor.js`; `section-editor.js` in turn imports `editor/story-explorer.js`. Six modules, one direction of dependency, zero cycles.
 
 ### Live REST surface (all four resources now layered per §9/§10/§11/§12; only Templates/auth/upload remain inline in `server.js`, and those are out of scope for this migration series — see §7/§8)
 
@@ -95,8 +97,8 @@ Confirmed dead — either literally empty or unreachable from any entry point:
 - `src/middleware/{auth,error}.middleware.js` (still empty; `src/middleware/upload.js` is new and non-empty, see §9/§10)
 - `src/layout/layout.{controller,model,repository,routes,service}.js`
 - `public/admin/dashboard.js`, `public/admin/publication.js`
-- `public/editor/{canvas,section-editor,sidebar,story-explorer,workspace}.js`
 - `public/dashboard.js`
+- `public/editor/publication.js` is non-empty (35 lines) but still dead/unreachable — `showPublicationFiles` is defined and assigned to `window.showPublicationFiles`, but nothing calls it (confirmed via repo-wide grep). It also targets a `#sectionEditor` element that hasn't existed in the workspace markup since before this document's first draft — even if something did call it, it would fail. Left untouched in §13 (Scribus/PDF publication UI is explicitly out of scope for the editor-architecture work — it's Prompt 9 territory).
 
 **Empty but actively imported by `app.js` (imports no-op, harmless today but misleading):**
 - `public/admin/reporter-browser.js`
@@ -121,7 +123,7 @@ These represent modeled-but-unimplemented features (structured image management,
 - **Two dashboard implementations**: `admin.js`'s `renderAdminDashboard`/`showPastNewspapers`/etc. (live) vs. `admin-dashboard.js` (475 lines, dead but present). Same responsibility, only one wired up. This is exactly the "old vs. new parallel implementation" pattern to avoid going forward — it should be deleted, not left as a silent second copy.
 - **Fetch/DOM patterns repeated with no shared helper**: every admin.js function that talks to the API repeats `fetch(...).then(r => r.json())` with no shared request wrapper, no shared error handling, and no shared "render list into container" helper — `showPastNewspapers`, `showPastNews`, `showReporterNewsList` all hand-roll the same list-rendering shape independently.
 - **Two independent auth checks**: `server.js`'s `/api/auth/login` checks `user.role !== role` where `role` is guessed client-side from `email.includes("admin")` (see `admin.js:46`) — a role check driven by string-matching an email address on the client, duplicating (poorly) what should be a single server-side authorization decision.
-- **`window.*` globals as the de facto state layer**: `admin.js` maintains its own module-scoped `currentNewspaper`/`currentPage`/etc. *and* mirrors nearly the same values onto `window.currentNewspaper`/`window.currentPage`/etc. for `newspaper-workspace.js` and `page-editor.js` to read. Two copies of the same state, kept in sync manually in `editNewspaper()`. Not yet a bug (they're reassigned together), but it's a duplicate-state pattern that will drift the moment one call site forgets to update both.
+- ~~**`window.*` globals as the de facto state layer**~~ **Fixed 2026-08-02 (§13).** `admin.js` no longer holds `currentNewspaper`/`currentPage`, and no file in the app sets or reads `window.currentNewspaper`/`window.currentPage`/`window.selectedSection`/`window.pages`/`window.reporterNews`/`window.availableTemplates` anymore (confirmed via grep — the only remaining `window.*` in the whole frontend is the already-dead `editor/publication.js`, see §3). There is now exactly one editor state object, module-scoped inside `editor/workspace.js`, not duplicated anywhere.
 
 ---
 
@@ -137,6 +139,7 @@ These represent modeled-but-unimplemented features (structured image management,
 - **Multer upload directory is unbounded and unmanaged.** `public/uploads/` already has 40+ files from testing; there's no cleanup, no per-newspaper/per-story organization, and uploaded filenames leak directly as public static URLs with no access control.
 - **`express-session` uses the default MemoryStore** (no `store` configured) — sessions are lost on every server restart and this is explicitly not production-safe (Express prints a warning about this on boot). Not mentioned anywhere in CLAUDE.md as a known gap.
 - **Test coverage has grown across this migration series but auth and templates remain untested.** News, Newspaper, Page, and Page Section all have some coverage now (Page and Page Section have solid automated coverage — 6 and 6 tests respectively; News/Newspaper were only smoke-tested manually, not automated — worth backfilling). No coverage for `/api/auth/*` or `/api/templates`, and the two crash/no-op bugs above are documented rather than regression-tested (one would crash the suite, the other now IS tested — see previous bullet).
+- **`editor/page-sidebar.js` renders `page.pageNumber` (camelCase), but the API returns `page_number` (snake_case).** Confirmed live via a real browser smoke test during §13 — every page button in the Pages sidebar renders with empty text (`btn.textContent = undefined` stringifies to `""`... actually coerces via `.textContent =`, confirmed empty in the rendered DOM). This bug predates §13 — it's the exact same line from the old `public/admin/newspaper-workspace.js`, carried over unmodified during the extraction (§13 was an architecture-only move, not a behavior fix, per that task's explicit rules). It's real and worth fixing next: change `page.pageNumber` to `page.page_number` in `editor/page-sidebar.js`.
 
 ---
 
@@ -176,17 +179,17 @@ Also present in `schema.sql` but not in the proposed list, and currently unused 
 
 ## 8. Missing frontend modules
 
+**Updated 2026-08-02 (Prompt 6):** the editor is now genuinely split — `editor/{workspace,canvas,page-sidebar,layout-sidebar,section-editor,story-explorer}.js`, see §13. What's below reflects what's still missing after that split.
+
 Per the current dynamic-import list in `app.js`, these are imported but empty (real gaps, not just naming):
-- `admin/reporter-browser.js` — needed for Prompt 8.
-- `admin/template-selector.js` — partially superseded by the layout picker already built into `newspaper-workspace.js`; needs a decision on whether this becomes its own module or stays folded in.
+- `admin/reporter-browser.js` — a richer, filterable reporter browser (Prompt 8) is still not built. `editor/story-explorer.js` (§13) is deliberately the small version of this — a single-select dropdown, same as before the split — not a replacement for the eventual filtered browse UI this file is scaffolded for.
+- `admin/template-selector.js` — still superseded by `editor/layout-sidebar.js`; still needs an explicit decision on whether this stub gets deleted or repurposed for something Prompt 4's template-engine work will need.
 
 Not imported at all today, but implied by the target modular structure (Prompt 10 — "no admin.js larger than 300 lines"):
-- A dedicated **page list** module (currently inline in `newspaper-workspace.js`'s `renderPagesList`).
-- A dedicated **publication/pipeline** module beyond the current single-purpose `editor/publication.js` (Scribus/PDF upload only — no "Generate," "Publication History," or pipeline-stage UI yet).
-- A **canvas/template renderer** separated from the **section editor** (currently both live together in `page-editor.js`, 126 lines — small today, but conflated responsibilities that will grow).
-- No shared **API client** module — every file (`admin.js`, `newspaper-workspace.js`, `page-editor.js`, `editor/publication.js`) calls `fetch` directly with its own error handling.
+- A dedicated **publication/pipeline** module beyond the current single-purpose (and still dead — see §3) `editor/publication.js`.
+- No shared **API client** module — every editor module (`workspace.js`, `layout-sidebar.js`, `section-editor.js`) still calls `fetch` directly with its own inline error handling; `workspace.js` in particular now owns 5 separate fetch call sites. Worth a thin shared wrapper once a sixth or seventh shows up.
 
-`admin.js` itself (813 lines) still owns: login, both dashboards, edition creation, all news CRUD UI, and the workspace hand-off. This is the concrete gap Prompt 10 targets.
+`admin.js` is down to ~780 lines after §13 removed the window-syncing code from `editNewspaper()`, but still owns: login, both dashboards, edition creation, and all news CRUD UI. Still the concrete gap Prompt 10 targets — the editor split didn't touch `admin.js`'s other responsibilities, only how it hands off into the workspace.
 
 ---
 
@@ -199,6 +202,8 @@ The audit confirms the proposed order is correct: the backend has no service/con
 **Updated 2026-08-02 (Prompt 4):** Page is now layered too (§11). Only Page Section remains on the old path — `src/db.js` is down to exactly 2 exports (`authenticateUser`, `savePageSection`). Migrating Page Section is now the only thing standing between the current state and deleting `src/db.js` entirely.
 
 **Updated 2026-08-02 (Prompt 5):** Page Section is now layered (§12) — the fourth and final resource in this migration series. `src/db.js` is down to exactly `authenticateUser` and was **not** deleted: it's still required by `server.js`'s login route, and Auth was never part of this migration's scope (it has its own untouched empty scaffolding — `src/{controllers,routes,services}/auth.*` — that a future, explicitly-scoped Auth migration would fill in). The Route→Controller→Service→Repository layering CLAUDE.md calls for is now real for every content resource in the system; what's left inline in `server.js` (auth, templates, uploads) is inline by scope decision, not by omission. See §12's "Next recommended migration" for what that Auth migration would look like.
+
+**Updated 2026-08-02 (Prompt 6):** the backend series (§9–§12) is done; this session was the first to touch the frontend since the workspace-duplication fix that predates this document. The **stale `window.*`/module-scope double state** flagged above as a risk back at the top of this document is now fixed (§13) — `admin/newspaper-workspace.js` and `admin/page-editor.js` are deleted, replaced by a six-module `editor/*.js` tree with one state object and zero `window.*` reads/writes anywhere in the live app. The **already-present duplicate dashboard** (`admin-dashboard.js`) flagged in that same original risk callout is still present and still not addressed — it wasn't in scope for this session's task (editor architecture only) and remains the next concrete cleanup opportunity alongside Prompt 10's admin.js size target.
 
 ---
 
@@ -356,3 +361,56 @@ With all four content resources layered, the natural next steps are no longer "w
 1. **Fix the two silent-failure bugs in `page.repository.js`** (`updateTemplate`'s crash, `saveSection`'s no-op) — real bugs now that they're the last ones standing, not migration scope creep.
 2. **Auth**, if it's ever going to move off `src/db.js` — smallest possible migration (one function), and would let `src/db.js` be deleted entirely rather than kept as a permanent one-function file.
 3. Per the original roadmap, **Prompt 3 (database)** and **Prompt 4 (template engine)** are the next un-started items — the layering work this series completed is exactly the prerequisite CLAUDE.md and earlier updates to this document said it was.
+
+---
+
+## 13. Update — Prompt 6: Newspaper Editor UI architecture (2026-08-02)
+
+### Completed work
+
+Rebuilt the Newspaper Workspace editor's *internal architecture* — no visual changes, no backend changes, same API calls, same markup/CSS classes. The goal was killing scattered `window.*` state and giving the editor real module boundaries, per the task's explicit six-way split.
+
+**Before:** `public/admin/newspaper-workspace.js` (`renderWorkspace`, page list, layout list) and `public/admin/page-editor.js` (canvas, section editor) communicated by reading and writing `window.currentNewspaper`, `window.currentPage`, `window.selectedSection`, `window.pages`, `window.reporterNews`, and `window.availableTemplates` — six pieces of shared mutable state living on the global object, set by whichever file happened to run last, read by whichever file happened to need them. `admin.js` *also* kept its own parallel copies (module-scoped `currentNewspaper`/`currentPage`) that it manually kept in sync with the `window.*` copies inside `editNewspaper()`. Two copies of the same state, one of them global.
+
+**After — six modules, one state object, zero `window.*`:**
+- `public/editor/workspace.js` — **the single Workspace state.** A module-scoped `state` object (`newspaper`, `pages`, `currentPage`, `reporterNews`, `selectedSection`) that nothing outside this file touches directly. Exports one function, `renderWorkspace(newspaperId)`, which fetches newspaper/pages/reporter-news, populates `state`, and renders. Internally owns the actions that mutate state and re-render (`selectPage`, `selectSection`, `applyTemplate`, `saveSection`) — these are passed *down* to child modules as callback arguments, never imported back by them, so there are zero circular imports in the tree.
+- `public/editor/canvas.js` — **Canvas.** Renders the page preview grid from `page.sections`, same absolute-positioned-div markup as before. Takes `(page, newspaper, selectedSectionKey, onSelectSection)` as arguments; calls `onSelectSection` on click instead of writing `window.selectedSection` directly.
+- `public/editor/page-sidebar.js` — **Page Sidebar** (new file; this responsibility was inline inside the old `newspaper-workspace.js`'s `renderPagesList`). Renders the page-number button list.
+- `public/editor/layout-sidebar.js` — **Layout Sidebar** (new file; was inline as `renderLayouts`/`fetchTemplates`). Renders the template picker; caches the `/api/templates` response in a module-private variable (not `state`, not `window` — a plain HTTP cache, same lifetime/behavior as the old `window.availableTemplates` cache had).
+- `public/editor/section-editor.js` — **Section Editor.** Renders the headline/subheading/body/etc. form. Delegates the reporter-story picker to Story Explorer instead of building it inline.
+- `public/editor/story-explorer.js` — **Story Explorer** (new file, but the *code* existed inline inside the old `page-editor.js`'s `renderSectionEditor` — this session extracted it, didn't invent new behavior). Renders the "Auto-fill from reporter" `<select>` and its change handler. Deliberately still the simple single-dropdown version — a full filterable browser is Prompt 8, not this task.
+
+**Wiring:**
+- `public/app.js` no longer dynamically imports `admin/newspaper-workspace.js` or `admin/page-editor.js` (deleted, see below).
+- `public/admin.js` now has `import { renderWorkspace } from "./editor/workspace.js"` at its top — a real ES import, not a side-effect script load. `editNewspaper(newspaperId)` shrank from ~25 lines (three fetches, two "pick current page or fall back" checks, four `window.*` assignments) to three: clear the right panel, `await renderWorkspace(newspaperId)`. The fetches and page-fallback logic already existed *and were correct* — they just now live in exactly one place (`workspace.js`) instead of being duplicated between `admin.js` and the old `newspaper-workspace.js`.
+- `createEdition()` in `admin.js` no longer assigns to a module-scoped `currentNewspaper` — it's a local variable now, since nothing outside that function needed it once `editNewspaper` stopped reading it.
+
+**Deleted (superseded, not left as parallel dead code):**
+- `public/admin/newspaper-workspace.js`, `public/admin/page-editor.js` — fully replaced by the six modules above.
+- `public/editor/sidebar.js` — was an empty 0-byte stub for a single combined "sidebar" module; superseded by the deliberate two-file split (`page-sidebar.js` + `layout-sidebar.js`) the task asked for. Confirmed empty and unimported before deleting.
+
+**Decisions made:**
+- **Data flows one direction: `workspace.js` → children, via function parameters and callbacks.** Children never import `workspace.js` back. This was a deliberate choice over the alternative (a separate `editor/state.js` that both `workspace.js` and the children import) — that alternative is also cycle-free and arguably more conventional, but it would have meant seven files for a task that named exactly six pieces. Keeping state ownership *inside* `workspace.js` and passing data/actions down as arguments matches "Workspace ... Canvas ... Page Sidebar ... Layout Sidebar ... Story Explorer ... Section Editor" literally, at the cost of `workspace.js` being a bit more of an orchestrator than a thin shell (~140 lines, still small).
+- **`editor/publication.js` was left completely untouched**, including its `window.showPublicationFiles` assignment. It's not one of the six named pieces, it's already dead code unrelated to this refactor (confirmed unreachable before this session too — see §3), and the task said no backend changes and implicitly no scope beyond the six pieces. Its `window.*` usage is the one remaining instance in the whole frontend; flagged, not fixed.
+- **Every markup string, CSS class name, and element ID was copied verbatim** from the code being replaced — including a bug (see Remaining technical debt) that a "no visual redesign" task shouldn't be quietly fixing along the way.
+
+**Verification:**
+- `npm test`: all 16 backend tests still pass, unaffected (no backend files were touched).
+- **Real browser test**, not just a syntax check: started the app, installed `playwright-core` in a scratch directory (pointed at the system's `google-chrome`, no bundled browser download, nothing added to the project's `package.json`), created a temporary throwaway admin user, and drove the actual UI — login → admin dashboard → create edition → workspace renders (page canvas, 4 page buttons, 4 layout buttons, 6 canvas sections for the default Front Page template) → click a canvas section → section editor opens → fill headline + body → save → canvas re-renders showing the section as `.filled` with the new headline → switch to the "Local News" layout → canvas re-renders with that template's 6 sections. Zero console errors, zero page errors, at every step. Screenshots taken and visually reviewed. Temporary admin user and test newspaper deleted afterward.
+- This browser test is also what caught the `pageNumber` bug below — a plain code read wouldn't have surfaced it as clearly as seeing empty buttons in a screenshot.
+
+### Remaining technical debt
+
+- **Found a real, pre-existing bug via the browser test: `editor/page-sidebar.js` renders `page.pageNumber`, but the API field is `page_number`.** Every page button in the sidebar currently renders with empty text. This is not something this session introduced — it's the exact same line from the old `admin/newspaper-workspace.js`, carried over unmodified (an architecture-only task doesn't get to quietly fix bugs it trips over — see §5). One-line fix, flagged for a follow-up.
+- **`editor/publication.js` is still dead code** and still out of scope — same status as before this session, just now the *only* file in the frontend with `window.*` usage.
+- **`admin-dashboard.js` (475 lines, dead duplicate dashboard) is still present and unaddressed** — flagged repeatedly since the very first audit in this document, not this task's scope, still the next concrete cleanup opportunity.
+- **`workspace.js` re-fetches all three resources (newspaper, pages, reporter news) on every `renderWorkspace()` call**, same as the code it replaced — no caching, no incremental updates on `selectPage`/`selectSection` (those don't re-fetch, only `applyTemplate`/`saveSection` do, matching prior behavior exactly). Fine for now; worth revisiting if the workspace ever needs to feel faster on a slow connection.
+- **No automated frontend tests exist for the editor at all** — this session's verification was a one-off manual browser script, not a committed test. `tests/*.test.js` only cover the backend. If a frontend test story ever gets prioritized, this session's `drive.js` script (browser-driven, Playwright-based) is a reasonable starting template, though it wasn't committed to the repo.
+
+### Next recommended migration
+
+Per the original roadmap this document has been tracking, the next items are the ones §9–§13 called out repeatedly without addressing:
+1. **Fix the `page.pageNumber` bug** found this session (trivial, one line, `editor/page-sidebar.js`).
+2. **Delete `admin-dashboard.js`**, the duplicate dashboard flagged since the first audit — now that the editor itself is properly modularized, this is the most visible remaining "second implementation of the same feature" in the codebase.
+3. **Prompt 7 (production Section Editor: images, alignment, crop, more fields)** and **Prompt 8 (real Story Explorer / Reporter Browser with filters)** are the natural next steps for the editor now that its architecture supports adding them cleanly — `section-editor.js` and `story-explorer.js` are now separate files specifically so this kind of feature growth doesn't have to happen inside one 126-line God file again.
+4. Backend-side, **Prompt 3 (database)** and **Prompt 4 (template engine)** remain the next un-started items from the original roadmap, unaffected by this session's frontend work.

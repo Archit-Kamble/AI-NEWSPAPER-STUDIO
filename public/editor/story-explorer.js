@@ -1,21 +1,115 @@
+function uniqueValues(items, key) {
+  return [...new Set(items.map((item) => item[key]).filter(Boolean))].sort();
+}
+
+function formatDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString();
+}
+
+function optionList(values) {
+  return values.map((value) => `<option value="${value}">${value}</option>`).join("");
+}
+
 export function renderStoryExplorerMarkup(reporterNews) {
   return `
-    <div class="form-group">
-      <label>Auto-fill from reporter</label>
-      <select id="reporterStory">
-        <option value="">Write manually</option>
-        ${reporterNews.map((story) => `<option value="${story.id}">${story.title} (${story.status})</option>`).join("")}
-      </select>
+    <div class="story-explorer">
+      <label>Attach a reporter story</label>
+      <input id="storySearch" type="text" placeholder="Search by title..." />
+      <div class="story-explorer-filters">
+        <select id="storyFilterReporter"><option value="">All reporters</option>${optionList(uniqueValues(reporterNews, "reporter_name"))}</select>
+        <select id="storyFilterCategory"><option value="">All categories</option>${optionList(uniqueValues(reporterNews, "category"))}</select>
+        <select id="storyFilterLocation"><option value="">All locations</option>${optionList(uniqueValues(reporterNews, "location"))}</select>
+        <select id="storyFilterStatus"><option value="">All statuses</option>${optionList(uniqueValues(reporterNews, "status"))}</select>
+      </div>
+      <div id="storyExplorerResults" class="story-explorer-results"></div>
     </div>
   `;
 }
 
-export function bindStoryExplorer(reporterNews, onSelectStory) {
-  const select = document.getElementById("reporterStory");
-  if (!select) return;
+function matchesFilters(story, filters) {
+  const title = (story.title || "").toLowerCase();
+  if (filters.search && !title.includes(filters.search)) return false;
+  if (filters.reporter && story.reporter_name !== filters.reporter) return false;
+  if (filters.category && story.category !== filters.category) return false;
+  if (filters.location && story.location !== filters.location) return false;
+  if (filters.status && story.status !== filters.status) return false;
+  return true;
+}
 
-  select.addEventListener("change", (event) => {
-    const story = reporterNews.find((item) => item.id === Number(event.target.value));
-    if (story) onSelectStory(story);
+function renderCards(reporterNews, filters, selectedId, onSelectCard) {
+  const results = document.getElementById("storyExplorerResults");
+  if (!results) return;
+
+  const matches = reporterNews.filter((story) => matchesFilters(story, filters));
+
+  if (!matches.length) {
+    results.innerHTML = `<p class="muted">No stories match these filters.</p>`;
+    return;
+  }
+
+  results.innerHTML = matches
+    .map((story) => {
+      const thumb = story.image_urls?.[0];
+      return `
+        <div class="story-card${story.id === selectedId ? " active" : ""}" data-story-id="${story.id}">
+          ${thumb ? `<img class="story-card-thumb" src="${thumb}" alt="" />` : `<div class="story-card-thumb story-card-thumb-empty"></div>`}
+          <div class="story-card-body">
+            <strong>${story.title}</strong>
+            <small>${story.reporter_name || "Unknown reporter"} &middot; ${story.category || "Uncategorised"}</small>
+            <small class="muted">${formatDate(story.created_at)}</small>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+
+  results.querySelectorAll(".story-card").forEach((card) => {
+    card.addEventListener("click", () => {
+      const story = reporterNews.find((item) => item.id === Number(card.dataset.storyId));
+      if (story) onSelectCard(story);
+    });
   });
+}
+
+export function bindStoryExplorer(reporterNews, onSelectStory, initialSelectedId = null) {
+  const searchInput = document.getElementById("storySearch");
+  const reporterSelect = document.getElementById("storyFilterReporter");
+  const categorySelect = document.getElementById("storyFilterCategory");
+  const locationSelect = document.getElementById("storyFilterLocation");
+  const statusSelect = document.getElementById("storyFilterStatus");
+  if (!searchInput) return;
+
+  const filters = { search: "", reporter: "", category: "", location: "", status: "" };
+  let selectedId = initialSelectedId;
+
+  const update = () => renderCards(reporterNews, filters, selectedId, (story) => {
+    selectedId = story.id;
+    onSelectStory(story);
+    update();
+  });
+
+  searchInput.addEventListener("input", (event) => {
+    filters.search = event.target.value.trim().toLowerCase();
+    update();
+  });
+  reporterSelect.addEventListener("change", (event) => {
+    filters.reporter = event.target.value;
+    update();
+  });
+  categorySelect.addEventListener("change", (event) => {
+    filters.category = event.target.value;
+    update();
+  });
+  locationSelect.addEventListener("change", (event) => {
+    filters.location = event.target.value;
+    update();
+  });
+  statusSelect.addEventListener("change", (event) => {
+    filters.status = event.target.value;
+    update();
+  });
+
+  update();
 }

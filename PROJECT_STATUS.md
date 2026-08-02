@@ -53,7 +53,7 @@ Page Section's controller/service (`pageSection.controller.js`, `pageSection.ser
 3. `admin/template-selector.js` (1 line — `export function renderTemplateSelector() {}`, was `window.renderTemplateSelector = function () {}`)
 4. `admin.js` (~780 lines — login, both dashboards, edition creation, news CRUD; `editNewspaper()` delegates to the Workspace module via a real ES `import`)
 
-`admin.js`'s `import { renderWorkspace } from "./editor/workspace.js"` transitively loads the rest of the editor tree via static ES imports (not side-effect scripts): `editor/workspace.js` (owns the single editor state object, ~140 lines) imports `editor/canvas.js`, `editor/page-sidebar.js`, `editor/layout-sidebar.js`, and `editor/section-editor.js`; `section-editor.js` in turn imports `editor/story-explorer.js`. Six modules, one direction of dependency, zero cycles.
+`admin.js`'s `import { renderWorkspace } from "./editor/workspace.js"` transitively loads the rest of the editor tree via static ES imports (not side-effect scripts): `editor/workspace.js` (owns the single editor state object, ~140 lines) imports `editor/canvas.js`, `editor/page-sidebar.js`, `editor/layout-sidebar.js`, and `editor/section-editor.js`; `section-editor.js` in turn imports `editor/story-explorer.js`. Six modules, one direction of dependency, zero cycles. **Updated 2026-08-02 (§15):** `story-explorer.js` is no longer a single `<select>` — it's now a search+filter+card browser; see §15.
 
 ### Live REST surface (all four resources now layered per §9/§10/§11/§12; only Templates/auth/upload remain inline in `server.js`, and those are out of scope for this migration series — see §7/§8)
 
@@ -103,7 +103,7 @@ Confirmed dead — either literally empty or unreachable from any entry point:
 - `public/admin/dashboard.js`, `public/admin/publication.js`, `public/dashboard.js` — empty (0-byte) stubs, not imported by anything.
 
 **Still empty but actively imported by `app.js` (kept — see below, not the same as the deleted stubs above):**
-- `public/admin/reporter-browser.js`, `public/admin/template-selector.js` — as of §14 these are one-line `export function ... () {}` stubs (previously `window.X = function () {}`) rather than 0-byte files. Kept, not deleted: both are actively imported (unlike the deleted files above), and both are deliberate forward-looking placeholders — `reporter-browser.js` for Prompt 8's filterable Story Explorer, `template-selector.js` pending an explicit decision (already superseded in practice by `editor/layout-sidebar.js`, but nothing has decided to delete it yet).
+- `public/admin/reporter-browser.js`, `public/admin/template-selector.js` — as of §14 these are one-line `export function ... () {}` stubs (previously `window.X = function () {}`) rather than 0-byte files. Kept, not deleted: both are actively imported (unlike the deleted files above). **Updated 2026-08-02 (§15):** `reporter-browser.js`'s originally-assumed purpose ("Prompt 8's filterable Story Explorer") has now been fulfilled — but by `editor/story-explorer.js`, not this file (that's where CLAUDE.md's "reporter-story picker" already lived, wired into `section-editor.js` since §13; `admin/reporter-browser.js` was never actually on that call path). This file is now a genuinely undecided stub with no assigned future task, not a scaffold-in-progress — worth an explicit decision (repurpose as a standalone full-page browser distinct from the inline picker, or delete) rather than continuing to carry it as "not yet built." `template-selector.js` is unchanged: still superseded in practice by `editor/layout-sidebar.js`, still no decision made.
 
 **Unused database tables** — defined in `schema.sql`, created on every boot, but no repository, route, or frontend code ever reads or writes them:
 - `media_assets`
@@ -167,7 +167,7 @@ Also present in `schema.sql` but not in the proposed list, and currently unused 
 
 - No `GET /api/templates/:key` (single-template fetch — currently only the full list is served).
 - No CRUD for `template_sections` (doesn't exist as data yet — see §6).
-- No reporter-filtering API (`GET /api/news` supports `status`/`language`/`reporterId` only — no `category`, `location`, `date`, or full-text `search`, and no pagination — needed for Prompt 8's reporter browser).
+- No reporter-filtering API (`GET /api/news` supports `status`/`language`/`reporterId` only — no `category`, `location`, `date`, or full-text `search`, and no pagination). **Updated 2026-08-02 (§15):** the Story Explorer's search/reporter/category/location/status filtering is now implemented entirely client-side, over the single already-fetched `GET /api/news` array — a deliberate workaround since the task's constraints ruled out backend API changes. This is fine at today's data volume but doesn't scale: every filter keystroke re-scans the full in-memory list, and the client downloads every news item up front regardless of whether it'll ever be shown. A server-side `?search=&category=&location=` querystring plus pagination is still the real fix, and is now a slightly more concrete ask than before this session.
 - No role/permission API or middleware — no `requireAdmin`/`requireReporter` guard exists to hang future authorization on.
 - No `DELETE` on any resource (news, newspapers, pages, sections) — creation and mutation only, no removal path anywhere in the REST surface.
 - No dedicated image-attach-to-section endpoint (see §5).
@@ -179,8 +179,9 @@ Also present in `schema.sql` but not in the proposed list, and currently unused 
 
 **Updated 2026-08-02 (Prompt 6):** the editor is now genuinely split — `editor/{workspace,canvas,page-sidebar,layout-sidebar,section-editor,story-explorer}.js`, see §13. What's below reflects what's still missing after that split.
 
-Per the current dynamic-import list in `app.js`, these are imported but empty (real gaps, not just naming):
-- `admin/reporter-browser.js` — a richer, filterable reporter browser (Prompt 8) is still not built. `editor/story-explorer.js` (§13) is deliberately the small version of this — a single-select dropdown, same as before the split — not a replacement for the eventual filtered browse UI this file is scaffolded for.
+**Updated 2026-08-02 (§15):** ~~`admin/reporter-browser.js` — a richer, filterable reporter browser (Prompt 8) is still not built. `editor/story-explorer.js` (§13) is deliberately the small version of this — a single-select dropdown~~ — **done, see §15**, but landed in `editor/story-explorer.js` (search by title, filter by reporter/category/location/status, story cards with thumbnail/headline/reporter/category/date) rather than in `admin/reporter-browser.js`. `admin/reporter-browser.js` itself is still an empty stub — see the updated note in §3 on why it's now a genuinely undecided placeholder rather than "not yet built."
+
+Per the current dynamic-import list in `app.js`, still imported but empty (real gap, not just naming):
 - `admin/template-selector.js` — still superseded by `editor/layout-sidebar.js`; still needs an explicit decision on whether this stub gets deleted or repurposed for something Prompt 4's template-engine work will need.
 
 Not imported at all today, but implied by the target modular structure (Prompt 10 — "no admin.js larger than 300 lines"):
@@ -204,6 +205,8 @@ The audit confirms the proposed order is correct: the backend has no service/con
 **Updated 2026-08-02 (Prompt 6):** the backend series (§9–§12) is done; this session was the first to touch the frontend since the workspace-duplication fix that predates this document. The **stale `window.*`/module-scope double state** flagged above as a risk back at the top of this document is now fixed (§13) — `admin/newspaper-workspace.js` and `admin/page-editor.js` are deleted, replaced by a six-module `editor/*.js` tree with one state object and zero `window.*` reads/writes anywhere in the live app. The **already-present duplicate dashboard** (`admin-dashboard.js`) flagged in that same original risk callout is still present and still not addressed — it wasn't in scope for this session's task (editor architecture only) and remains the next concrete cleanup opportunity alongside Prompt 10's admin.js size target.
 
 **Updated 2026-08-02 (Prompt 7):** the two loose ends §13 left — `admin-dashboard.js` still present, and `window.*` not fully eliminated — are both closed now (§14). `grep -rn "window\." public/ --include="*.js"` returns nothing; `public/admin-dashboard.js`, `public/admin/dashboard.js`, `public/admin/publication.js`, and `public/dashboard.js` are deleted (all confirmed unreferenced first). The editor cleanup this document has been tracking since §13 is complete: one state object, six modules, zero duplicate implementations, zero dead-file clutter left over from the pre-this-document era.
+
+**Updated 2026-08-02 (Story Explorer):** `editor/story-explorer.js` is now the production-ready filterable browser this document has been calling "Prompt 8" since §8/§13 — search by title, filter by reporter/category/location/status, story cards with thumbnail/headline/reporter/category/created-date, click-to-populate into the selected section (§15). It landed in the file already wired into `section-editor.js` since §13, not in `admin/reporter-browser.js`, which this document had assumed (per CLAUDE.md's own wording) would eventually become this feature — see §3 for the correction. Filtering is entirely client-side over the existing `GET /api/news` response, per this task's "no backend API changes" constraint; §7 now documents that as a real (if currently fine) scaling limit rather than a pure gap.
 
 ---
 
@@ -378,7 +381,7 @@ Rebuilt the Newspaper Workspace editor's *internal architecture* — no visual c
 - `public/editor/page-sidebar.js` — **Page Sidebar** (new file; this responsibility was inline inside the old `newspaper-workspace.js`'s `renderPagesList`). Renders the page-number button list.
 - `public/editor/layout-sidebar.js` — **Layout Sidebar** (new file; was inline as `renderLayouts`/`fetchTemplates`). Renders the template picker; caches the `/api/templates` response in a module-private variable (not `state`, not `window` — a plain HTTP cache, same lifetime/behavior as the old `window.availableTemplates` cache had).
 - `public/editor/section-editor.js` — **Section Editor.** Renders the headline/subheading/body/etc. form. Delegates the reporter-story picker to Story Explorer instead of building it inline.
-- `public/editor/story-explorer.js` — **Story Explorer** (new file, but the *code* existed inline inside the old `page-editor.js`'s `renderSectionEditor` — this session extracted it, didn't invent new behavior). Renders the "Auto-fill from reporter" `<select>` and its change handler. Deliberately still the simple single-dropdown version — a full filterable browser is Prompt 8, not this task.
+- `public/editor/story-explorer.js` — **Story Explorer** (new file, but the *code* existed inline inside the old `page-editor.js`'s `renderSectionEditor` — this session extracted it, didn't invent new behavior). Renders the "Auto-fill from reporter" `<select>` and its change handler. ~~Deliberately still the simple single-dropdown version — a full filterable browser is Prompt 8, not this task.~~ **Rebuilt into the full filterable browser 2026-08-02, see §15.**
 
 **Wiring:**
 - `public/app.js` no longer dynamically imports `admin/newspaper-workspace.js` or `admin/page-editor.js` (deleted, see below).
@@ -410,7 +413,7 @@ Rebuilt the Newspaper Workspace editor's *internal architecture* — no visual c
 ### Next recommended migration
 
 Per the original roadmap this document has been tracking, the two items §9–§13 called out repeatedly are now done (see §14: `page.pageNumber` fixed, `admin-dashboard.js` deleted). What's left:
-1. **Prompt 7 (production Section Editor: images, alignment, crop, more fields)** and **Prompt 8 (real Story Explorer / Reporter Browser with filters)** are the natural next steps for the editor now that its architecture supports adding them cleanly — `section-editor.js` and `story-explorer.js` are separate files specifically so this kind of feature growth doesn't have to happen inside one 126-line God file again.
+1. ~~**Prompt 7 (production Section Editor: images, alignment, crop, more fields)** and **Prompt 8 (real Story Explorer / Reporter Browser with filters)**~~ — editor cleanup landed as §14; the filterable Story Explorer landed as §15. Production Section Editor work beyond the read-only image preview added in §15 (alignment, crop, direct image upload to a section) is still open.
 2. Backend-side, **Prompt 3 (database)** and **Prompt 4 (template engine)** remain the next un-started items from the original roadmap, unaffected by this session's frontend work.
 
 ---
@@ -443,12 +446,50 @@ Not deleted, deliberately: `admin/reporter-browser.js` and `admin/template-selec
 ### Remaining technical debt
 
 - `editor/publication.js` remains dead code with no consumer — same status as §13, just cleaner internally now.
-- `admin/reporter-browser.js` / `admin/template-selector.js` are still one-line no-op stubs. They're intentional placeholders, not urgent, but worth remembering they currently do *nothing* — `app.js` spends two `import()` calls loading files that have no effect yet.
+- `admin/reporter-browser.js` / `admin/template-selector.js` are still one-line no-op stubs. They're intentional placeholders, not urgent, but worth remembering they currently do *nothing* — `app.js` spends two `import()` calls loading files that have no effect yet. **Updated 2026-08-02 (§15):** `reporter-browser.js` in particular no longer has a clearly assigned future — the filterable Story Explorer it was presumed to become was actually built in `editor/story-explorer.js` instead (see §3, §8, §15).
 - Every other item in this document's technical-debt list (no authorization layer, no input validation, `page.repository.js`'s `updateTemplate` crash bug, no image handling for page sections, unmanaged upload directory, default session store, uneven test coverage) is unchanged by this session — all backend/schema concerns, out of scope for an editor-cleanup pass.
 
 ### Next recommended migration
 
 With the editor cleanup complete and the duplicate-dashboard/`window.*` debt this document has tracked since its first draft now fully closed, the codebase has no more "second implementation of the same feature" instances left to find via inspection. The next steps are additive, not corrective:
-1. **Prompt 7 (production Section Editor)** and **Prompt 8 (Story Explorer / Reporter Browser with real filters)** — the two placeholder stubs from this session (`reporter-browser.js`) and the extraction from §13 (`story-explorer.js`, `section-editor.js`) are exactly the files these prompts would fill in.
+1. ~~**Prompt 7 (production Section Editor)** and **Prompt 8 (Story Explorer / Reporter Browser with real filters)**~~ — Story Explorer done, see §15. Production Section Editor (image upload/crop/alignment directly on a section, not just linking a reporter story) is still open.
 2. Backend-side, **Prompt 3 (database)** and **Prompt 4 (template engine)** remain untouched and are the largest remaining pieces of the original roadmap.
 3. **`page.repository.js`'s `updateTemplate` crash** (§11) is still the single highest-severity known bug in the system — worth prioritizing over new features if reliability matters more than scope right now.
+
+---
+
+## 15. Update — Story Explorer (2026-08-02)
+
+### Completed work
+
+Replaced `editor/story-explorer.js`'s single "Auto-fill from reporter" `<select>` (§13's deliberately-minimal placeholder) with a production-ready filterable browser, per the task: search by title, filter by reporter/category/location/status, story cards showing headline/reporter/category/thumbnail/created-date, click-to-populate the selected section's headline/subheading/body/category/location/tags/reporter/images. No backend API changes, no workspace redesign — same panel, same `#editorBody` mount point, same six-module architecture from §13.
+
+**`public/editor/story-explorer.js` (rewritten):**
+- `renderStoryExplorerMarkup(reporterNews)` — renders a search `<input>`, four filter `<select>`s (reporter/category/location/status, options built from `[...new Set(reporterNews.map(...))]` over whatever's actually in the fetched data — no hardcoded option lists), and an empty results container.
+- `bindStoryExplorer(reporterNews, onSelectStory, initialSelectedId)` — owns filter state and the currently-selected story ID in a closure (not `state`, not `window`, matching the "one direction of dependency" rule §13 established); re-renders the card list on every keystroke/filter change; clicking a card calls `onSelectStory(story)` and re-renders with that card highlighted `.active`.
+- Filtering is a plain `.filter()` over the `reporterNews` array `workspace.js` already fetches once via `GET /api/news` on `renderWorkspace()` — no new network calls, no new endpoint. This was a deliberate consequence of "do not modify backend APIs," not an oversight; see §7 for the scaling caveat.
+
+**`public/editor/section-editor.js` (updated, not rewritten):**
+- Replaced the old pattern of reading the selected story off a hidden `<select id="reporterStory">` at save time with a closure variable (`selectedStoryId`), initialized from `section?.news_item_id` (already returned by `GET /api/newspapers/:id/pages` — no backend change needed, that field was already there and simply unused by the frontend before) so reopening an already-linked section shows it pre-selected and highlighted.
+- Added a read-only "Attached images" preview (`renderImagePreview`, a small `<div id="secImages">` populated from `story.image_urls`) — this is how "images" gets populated per the task's field list. Page sections have no image column of their own (`schema.sql`'s `page_sections` table — confirmed, see §6); images live on the linked `news_items` row and are already carried through via `newsItemId` in the existing `PUT /api/pages/:pageId/sections/:sectionId` payload (unchanged, see §12). The preview is display-only, not a new upload path — attaching a *different* image directly to a section (rather than via a reporter story) is still the unbuilt "no image handling for page sections" item in §5.
+- The save payload's `newsItemId` now comes from the closure variable instead of `document.getElementById("reporterStory").value` — same field, same backend contract, just reading from the new source of truth.
+
+**`public/styles.css` (additive only):** new `.story-explorer*`, `.story-card*`, `.story-image-preview` rules, reusing existing CSS custom properties (`--accent`, `--border`, `--secondary`) and the same visual language as the existing `.admin-news-card`/`.page-card` patterns elsewhere in the app — not a new design system, no existing rule changed.
+
+**Verification:**
+- `npm test`: 16/16 pass, unaffected — no backend files touched.
+- **Real browser test**: reused the §13/§14 scratch `playwright-core` + system-Chrome setup (fresh `npm install` — the scratch directory doesn't persist between sessions). Seeded a temporary admin user and four throwaway `news_items` rows (varied reporter/category/location/status, two with a fake image URL) directly via SQL, since there's no UI path to control every one of those fields easily. Drove: login → create edition → click a canvas section → confirm the story explorer renders with the seeded data → search by title (title-only match confirmed) → filter by reporter, then category, then location, then status independently (each filter reduced the card count correctly, cards not matching stayed hidden not just visually blurred) → click a story card with images attached → confirmed every target field populated (`secHeadline`, `secCategory`, `secLocation`, `secReporter`) plus the image preview (`#secImages img` count = 1, matching the seeded `image_urls`) plus the `.story-card.active` highlight moved to the clicked card → save → canvas re-rendered showing the section `.filled` with the new headline → reopened the same section → confirmed the linked story stayed pre-selected/highlighted and its image preview reappeared (this exercises the `section.news_item_id` pre-select path, not just the click-to-populate path). Zero console errors, zero page errors, at every step. Screenshots taken and visually reviewed. Temp admin user, temp news rows, and the test newspaper (with its pages/sections) were all deleted afterward via direct SQL — same test-data hygiene pattern as §13/§14.
+
+### Remaining technical debt
+
+- Filtering is client-side over the full `GET /api/news` response — see the updated §7 entry. Fine today; will need server-side search/filter/pagination before the reporter-story list grows large.
+- The image preview added to the section editor is read-only. There is still no way to attach a standalone image to a page section without going through a reporter story first — same `page_sections` schema gap flagged in §5, unchanged by this session.
+- `admin/reporter-browser.js` is now a stub with no assigned future task (its presumed purpose is fulfilled by `story-explorer.js` instead) — worth an explicit decision (repurpose as a separate full-page browse view, or delete) rather than continuing to import a no-op file on every page load. Not fixed here: deciding and acting on that is a bigger call than "keep the changes small" covers for this task.
+- Every other item in this document's technical-debt list (no authorization layer, no input validation, `page.repository.js`'s `updateTemplate` crash bug, unmanaged upload directory, default session store, uneven test coverage) is unchanged by this session.
+
+### Next recommended migration
+
+1. **Production Section Editor** (direct image upload/crop/alignment on a section, more fields) is now the last named editor-UI item from the original roadmap still open.
+2. Backend-side, **Prompt 3 (database)** and **Prompt 4 (template engine)** remain untouched and are the largest remaining pieces of the original roadmap.
+3. **`page.repository.js`'s `updateTemplate` crash** (§11) is still the single highest-severity known bug in the system.
+4. Deciding `admin/reporter-browser.js`'s fate (repurpose vs. delete) is a small, low-risk cleanup worth bundling into whichever session next touches the editor's frontend module list.

@@ -1,11 +1,7 @@
+import { formatDate } from "./format.js";
+
 function uniqueValues(items, key) {
   return [...new Set(items.map((item) => item[key]).filter(Boolean))].sort();
-}
-
-function formatDate(value) {
-  if (!value) return "";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString();
 }
 
 function optionList(values) {

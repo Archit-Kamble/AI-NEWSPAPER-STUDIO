@@ -1,9 +1,14 @@
-export function renderToolbar({ hasSelection, onSave, onPublish }) {
+import { formatDate } from "./format.js";
+
+export function renderToolbar({ newspaper, hasSelection, onSave, onPublish }) {
   const container = document.getElementById("toolbar");
   if (!container) return;
 
   container.innerHTML = `
-    <div class="toolbar-brand">SAHAS Workspace</div>
+    <div class="toolbar-brand">
+      ${newspaper?.name || "Newspaper Workspace"}
+      <small>${formatDate(newspaper?.publication_date)}</small>
+    </div>
     <div class="toolbar-actions">
       <button id="tbSave" class="toolbar-btn" ${hasSelection ? "" : "disabled"}>Save</button>
       <button id="tbUndo" class="toolbar-btn" disabled title="Coming soon">Undo</button>

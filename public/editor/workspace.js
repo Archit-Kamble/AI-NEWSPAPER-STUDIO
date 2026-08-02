@@ -132,6 +132,7 @@ function render() {
   `;
 
   renderToolbar({
+    newspaper: state.newspaper,
     hasSelection: Boolean(state.selectedSection),
     onSave: triggerSave,
     onPublish: openPublish,

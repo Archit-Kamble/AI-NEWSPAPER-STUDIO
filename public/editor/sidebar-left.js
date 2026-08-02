@@ -1,4 +1,5 @@
 import { renderStoryExplorerMarkup, bindStoryExplorer } from "./story-explorer.js";
+import { formatDate } from "./format.js";
 
 let activeTab = "editions";
 
@@ -15,7 +16,10 @@ async function renderEditionsPanel(panel, newspaper, onSwitchEdition) {
       (edition) => `
         <button class="edition-item${newspaper && edition.id === newspaper.id ? " active" : ""}" data-edition-id="${edition.id}">
           <strong>${edition.name}</strong>
-          <small>${edition.publication_date || ""} &middot; ${edition.status}</small>
+          <small>
+            <span>${formatDate(edition.publication_date)}</span>
+            <span class="status-pill ${edition.status}">${edition.status}</span>
+          </small>
         </button>
       `,
     )

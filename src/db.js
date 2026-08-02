@@ -24,14 +24,6 @@ async function authenticateUser(email, password) {
   };
 }
 
-const pageRepository = require('./repositories/page.repository');
-
-async function savePageSection(pageId, sectionId, article) {
-  await pageRepository.saveSection(pageId, sectionId, article);
-  return pageRepository.findById(pageId);
-}
-
 module.exports = {
   authenticateUser,
-  savePageSection
 };

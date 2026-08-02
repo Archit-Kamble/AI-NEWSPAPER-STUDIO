@@ -11,7 +11,6 @@ const newspaperRoutes = require('./src/routes/newspaper.routes');
 const pageRoutes = require('./src/routes/page.routes');
 const {
   authenticateUser,
-  savePageSection,
 } = require("./src/db");
 
 dotenv.config();
@@ -73,30 +72,6 @@ function createApp() {
 
   // Page API
   app.use("/api", pageRoutes);
-
-  app.put("/api/pages/:pageId/sections/:sectionId", async (req, res) => {
-    const payload = req.body;
-    const page = await savePageSection(
-      parseInt(req.params.pageId, 10),
-      req.params.sectionId,
-      {
-        newsItemId: payload.newsItemId || payload.sourceNewsId,
-        headline: payload.headline || payload.title,
-        headlineFontPx: payload.headlineFontPx,
-        subheading: payload.subheading || payload.subtitle,
-        subheadingFontPx: payload.subheadingFontPx,
-        body: payload.body || payload.description,
-        bodyFontPx: payload.bodyFontPx,
-        category: payload.category,
-        location: payload.location,
-        tags: payload.tags,
-        reporterName: payload.reporterName,
-        aiNotes: payload.aiNotes,
-      },
-    );
-    if (!page) return res.status(404).json({ error: "Not found" });
-    res.json(page);
-  });
 
   app.use((error, req, res, next) => {
     if (error instanceof multer.MulterError) {

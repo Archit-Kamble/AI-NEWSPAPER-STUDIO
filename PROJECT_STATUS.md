@@ -672,3 +672,16 @@ The `vw`-based font-sizing risk flagged at the end of Follow-up 5 turned up for 
 
 - `.page-card*`, `.page-template`, `.template-thumb*` in `styles.css` are confirmed dead (zero references in `public/**/*.js`) but not yet removed — found during this session's cleanup, out of scope for a font-sizing/width fix, flagged for a future pass.
 - Every other item in this document's longer-standing technical-debt list is unchanged by this session.
+
+### Follow-up 7 — widen the Inspector further, shrink the canvas column to match (2026-08-02, same day)
+
+Follow-up 6 widened the Inspector from 312px to 400px, but the user's next screenshot showed the same imbalance one size up: a cramped Metadata/Article-information panel next to a canvas column that still claimed most of the screen. Explicit ask: bigger right sidebar for the info, smaller left/center area for the layout preview — the canvas is a section-selector, not a reading surface (established in Follow-up 5), so it doesn't need the space.
+
+- `.workspace-shell`'s `grid-template-columns` changed from `1fr 400px` to `minmax(320px, 1fr) 480px` — Inspector column widened again (400px → 480px), canvas column keeps taking the remainder but now yields more of it to the Inspector. `minmax(320px, 1fr)` keeps the canvas column from collapsing entirely on narrow viewports.
+- No changes needed in `canvas.js`/`inspector.js` — the canvas's existing height-relative sizing (`height: 100%; width: auto; max-width: 100%`, from Follow-up 5) and the container-query text sizing (from Follow-up 6) both already scale correctly with an arbitrary column width, so this was a pure CSS column-width change.
+
+**Verification:** `npm test` 16/16. Playwright at 1600×900 measured the actual rendered widths post-change (`canvasHost: 1120px, inspector: 480px`, vs. 400px before) and screenshotted a section-selected state — Inspector fields now have visibly more breathing room, canvas remains fully legible at the smaller footprint. Re-ran the full functional flow (From Reporter → filter → pick story → auto-close → populate → save) with zero console/page errors.
+
+### Remaining technical debt
+
+- Unchanged from Follow-up 6: `.page-card*`, `.page-template`, `.template-thumb*` in `styles.css` still confirmed dead, still not removed (out of scope for these width-only passes).

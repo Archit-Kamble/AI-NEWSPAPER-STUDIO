@@ -907,7 +907,7 @@ body {
   height: calc(100vh - 60px);
   display: grid;
   grid-template-rows: 64px 1fr;
-  grid-template-columns: 1fr 400px;
+  grid-template-columns: minmax(320px, 1fr) 480px;
   grid-template-areas:
     "toolbar toolbar"
     "center right";

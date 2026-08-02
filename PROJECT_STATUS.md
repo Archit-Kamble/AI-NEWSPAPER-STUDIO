@@ -20,24 +20,25 @@ This is the **target**, not the current state. See §2.
 
 ## 2. Runtime architecture (what actually executes)
 
-**Updated 2026-08-02 (Prompt 2): mixed state.** The News resource now follows the target layering; Newspaper, Page, and Page Section do not yet — see §9 for what changed and why.
+**Updated 2026-08-02 (Prompt 3): mixed state.** News and Newspaper now follow the target layering; Page and Page Section do not yet — see §9 and §10 for what changed and why.
 
 ```
-News:                           Newspaper / Page / Page Section (unchanged):
+News / Newspaper:               Page / Page Section (unchanged):
 server.js                       server.js
   ↓ app.use('/api/news', ...)     ↓ inline route handler
-src/routes/news.routes.js         ↓ direct call
-  ↓                              src/db.js (thin re-export facade)
-src/controllers/news.controller.js  ↓
-  ↓                              src/repositories/{newspaper,page}.repository.js
-src/services/news.service.js        ↓
-  ↓                              PostgreSQL
-src/repositories/news.repository.js
+  ↓ app.use('/api/newspapers', ...) ↓ direct call
+src/routes/{news,newspaper}.routes.js  src/db.js (thin re-export facade)
+  ↓                                ↓
+src/controllers/{news,newspaper}.controller.js  src/repositories/page.repository.js
+  ↓                                ↓
+src/services/{news,newspaper}.service.js  PostgreSQL
+  ↓
+src/repositories/{news,newspaper,publication}.repository.js
   ↓
 PostgreSQL
 ```
 
-`src/db.js` is still not a real layer for what it has left (Newspaper/Page/auth) — 12 pass-through functions that just call into repositories. It now exists only for those two not-yet-migrated resources; once Prompt 2's remaining resources (Newspapers, Pages, Page Sections) are migrated the same way News was, `src/db.js` should disappear entirely rather than gain a matching new indirection.
+`src/db.js` is still not a real layer for what it has left (Page/auth) — 6 pass-through functions (`authenticateUser` + 5 Page functions). It now exists only for the Page resource; once Page and Page Section are migrated the same way, `src/db.js` should disappear entirely rather than gain a matching new indirection.
 
 ### Frontend load path
 
@@ -50,34 +51,34 @@ PostgreSQL
 5. `admin/template-selector.js` (0 bytes — imported but empty)
 6. `admin.js` (813 lines — login, both dashboards, edition creation, news CRUD, and the `editNewspaper()` function that hands off into the workspace)
 
-### Live REST surface (News routes now layered per §9; Newspaper/Page/Template routes still defined inline in `server.js`)
+### Live REST surface (News + Newspaper routes now layered per §9/§10; Page/Template routes still defined inline in `server.js`)
 
-| Method | Path | Purpose |
-|---|---|---|
-| GET | `/api/health` | liveness |
-| POST | `/api/auth/login` | session login |
-| GET | `/api/auth/me` | current session user |
-| POST | `/api/news` | create news item (multipart, up to 10 images) |
-| GET | `/api/news` | list, filter by `status`/`language`/`reporterId` |
-| GET | `/api/news/status/:status` | list by status |
-| GET | `/api/news/:id` | fetch one |
-| PATCH | `/api/news/:id` | update (multipart, replaces images if new ones sent) |
-| PATCH | `/api/news/:id/status` | approve/reject/etc. |
-| POST | `/api/uploads/images` | standalone image upload, returns URLs |
-| POST | `/api/newspapers` | create edition |
-| GET | `/api/newspapers` | list, with `page_count` |
-| GET | `/api/newspapers/latest` | most recent |
-| GET | `/api/newspapers/:id` | fetch one, merged with latest Scribus/PDF file paths |
-| PATCH | `/api/newspapers/:id` | update name/status |
-| GET | `/api/templates` | **added this session** — serves `src/layout/templates.js` to the client |
-| POST | `/api/newspapers/:newspaperId/pages` | create page (applies a template's sections) |
-| GET | `/api/newspapers/:newspaperId/pages` | list pages, each hydrated with its sections |
-| PATCH | `/api/pages/:pageId` | change a page's template (re-applies section layout) |
-| PUT | `/api/pages/:pageId/sections/:sectionId` | write headline/body/etc. into one section |
-| POST | `/api/newspapers/:id/final-files` | upload `.sla` and/or CMYK PDF, marks edition `finalised` |
-| GET | `*` | SPA fallback to `index.html` |
+| Method | Path | Purpose | Layered? |
+|---|---|---|---|
+| GET | `/api/health` | liveness | inline |
+| POST | `/api/auth/login` | session login | inline |
+| GET | `/api/auth/me` | current session user | inline |
+| POST | `/api/news` | create news item (multipart, up to 10 images) | ✅ |
+| GET | `/api/news` | list, filter by `status`/`language`/`reporterId` | ✅ |
+| GET | `/api/news/status/:status` | list by status | ✅ |
+| GET | `/api/news/:id` | fetch one | ✅ |
+| PATCH | `/api/news/:id` | update (multipart, replaces images if new ones sent) | ✅ |
+| PATCH | `/api/news/:id/status` | approve/reject/etc. | ✅ |
+| POST | `/api/uploads/images` | standalone image upload, returns URLs | inline (see §9) |
+| POST | `/api/newspapers` | create edition | ✅ **new this session** |
+| GET | `/api/newspapers` | list, with `page_count` | ✅ **new this session** |
+| GET | `/api/newspapers/latest` | most recent | ✅ **new this session** |
+| GET | `/api/newspapers/:id` | fetch one, merged with latest Scribus/PDF file paths | ✅ **new this session** |
+| PATCH | `/api/newspapers/:id` | update name/status | ✅ **new this session** |
+| POST | `/api/newspapers/:id/final-files` | upload `.sla` and/or CMYK PDF, marks edition `finalised` | ✅ **new this session** |
+| GET | `/api/templates` | serves `src/layout/templates.js` to the client | inline (own concern, see §10) |
+| POST | `/api/newspapers/:newspaperId/pages` | create page (applies a template's sections) | inline |
+| GET | `/api/newspapers/:newspaperId/pages` | list pages, each hydrated with its sections | inline |
+| PATCH | `/api/pages/:pageId` | change a page's template (re-applies section layout) | inline |
+| PUT | `/api/pages/:pageId/sections/:sectionId` | write headline/body/etc. into one section | inline |
+| GET | `*` | SPA fallback to `index.html` | inline |
 
-No versioning, no auth middleware on any route (session is read ad hoc per-handler; nothing blocks a reporter from hitting admin-only endpoints like `PATCH /api/news/:id/status` or the final-files upload — there is no role check anywhere in `server.js`).
+No versioning, no auth middleware on any route (session is read ad hoc per-handler; nothing blocks a reporter from hitting admin-only endpoints like `PATCH /api/news/:id/status` or the final-files upload — there is no role check anywhere).
 
 ---
 
@@ -86,10 +87,10 @@ No versioning, no auth middleware on any route (session is read ad hoc per-handl
 Confirmed dead — either literally empty or unreachable from any entry point:
 
 **Empty scaffolding (0 bytes), imported nowhere or imported-but-empty:**
-- `src/controllers/{auth,newspaper,page}.controller.js` (`news.controller.js` implemented 2026-08-02, see §9)
-- `src/routes/{auth,newspaper,page}.routes.js` (`news.routes.js` implemented 2026-08-02, see §9)
-- `src/services/{auth,newspaper,page}.service.js` (`news.service.js` implemented 2026-08-02, see §9)
-- `src/middleware/{auth,error}.middleware.js` (still empty; `src/middleware/upload.js` is new and non-empty, see §9)
+- `src/controllers/{auth,page}.controller.js` (`news.controller.js`, `newspaper.controller.js` now implemented, see §9/§10)
+- `src/routes/{auth,page}.routes.js` (`news.routes.js`, `newspaper.routes.js` now implemented, see §9/§10)
+- `src/services/{auth,page}.service.js` (`news.service.js`, `newspaper.service.js` now implemented, see §9/§10)
+- `src/middleware/{auth,error}.middleware.js` (still empty; `src/middleware/upload.js` is new and non-empty, see §9/§10)
 - `src/layout/layout.{controller,model,repository,routes,service}.js`
 - `public/admin/dashboard.js`, `public/admin/publication.js`
 - `public/editor/{canvas,section-editor,sidebar,story-explorer,workspace}.js`
@@ -127,7 +128,7 @@ These represent modeled-but-unimplemented features (structured image management,
 - **No authorization layer.** Session presence is checked per-route (`req.session.user`), but role (reporter vs. admin) is never enforced server-side. Any authenticated session — or an unauthenticated one, for GET routes — can call any endpoint.
 - **No input validation layer.** Route handlers trust `req.body` shape directly (e.g. `payload.title`, `req.body.pageCount`) with only ad hoc `if (!payload.title)` checks; no schema validation anywhere.
 - **`px only, mm mentioned but not implemented.`** CLAUDE.md and the edition-creation UI both reference a 330×530mm / 310×510mm print spec, but nothing in the codebase converts between px and mm — the print dimensions are display-only strings in `admin.js`, unconnected to `page_width_px`/`page_height_px` or `src/layout/templates.js`.
-- **`src/db.js` facade adds a layer with no purpose.** It re-exports repository calls 1:1 under different names (e.g. `getNewspaper` → `newspaperRepository.findById`). Once the controller/service layer is built, this file should disappear rather than gain a matching new indirection.
+- **`src/db.js` facade adds a layer with no purpose.** Down to 6 pass-through functions now (`authenticateUser` + 5 Page functions) after News (§9) and Newspaper (§10) were migrated out of it. Once Page/Page Section are migrated the same way, this file should disappear rather than gain a matching new indirection.
 - **No image handling for page sections.** `PUT /api/pages/:pageId/sections/:sectionId` accepts no image fields at all — a section only gets images by linking a `news_item_id`, whose images were uploaded separately via `/api/news`. There is no path to attach a standalone image directly to a page section, despite `media_assets`/`section_images` existing in the schema for exactly this.
 - **Multer upload directory is unbounded and unmanaged.** `public/uploads/` already has 40+ files from testing; there's no cleanup, no per-newspaper/per-story organization, and uploaded filenames leak directly as public static URLs with no access control.
 - **`express-session` uses the default MemoryStore** (no `store` configured) — sessions are lost on every server restart and this is explicitly not production-safe (Express prints a warning about this on boot). Not mentioned anywhere in CLAUDE.md as a known gap.
@@ -189,6 +190,8 @@ Not imported at all today, but implied by the target modular structure (Prompt 1
 
 The audit confirms the proposed order is correct: the backend has no service/controller layer (Prompt 2), the template system's geometry is code not data (Prompts 3–4 are prerequisites for a real "backend expands templates, frontend never hardcodes" architecture), and the frontend's biggest concrete risk is the **already-present duplicate dashboard** (`admin-dashboard.js`) plus the **stale `window.*`/module-scope double state** — both should be resolved before Prompt 5 adds more surface area to the workspace.
 
+**Updated 2026-08-02 (Prompt 3):** News and Newspaper are now both layered (§9, §10). Only Page and Page Section remain on the old `server.js → src/db.js → repository` path — `src/db.js` is down to `authenticateUser` + 5 Page functions and should be the next and final target before it's deleted outright.
+
 ---
 
 ## 9. Update — Prompt 2: News backend layering (2026-08-02)
@@ -201,7 +204,7 @@ Migrated the News resource only, per the rules given: `server.js → controllers
 - `src/routes/news.routes.js` — Express router; maps the six existing News paths (`POST /`, `GET /`, `GET /status/:status`, `GET /:id`, `PATCH /:id`, `PATCH /:id/status`) onto controller functions. Mounted in `server.js` as `app.use("/api/news", newsRoutes)`, so every URL is byte-identical to before (`/api/news/status/:status` etc. — no path changed).
 - `src/controllers/news.controller.js` — HTTP layer only: reads `req.body`/`req.params`/`req.files`/`req.session.user`, calls the service, maps the service's result to the exact status code and JSON shape the old inline handler produced (200/201/400/404/500, same error message strings).
 - `src/services/news.service.js` — business logic moved verbatim from the old inline handlers: title-required validation, image-URL construction from uploaded files, default field values (`""`, `"draft"`), status whitelist (`draft`/`pending`/`approved`/`rejected`), `created_by` resolution (session user → `reporterId` body field → `null`). Calls `src/repositories/news.repository.js` directly — that repository was already pure SQL and needed no changes.
-- `src/middleware/upload.js` — new shared module. The generic image-upload `multer` instance (disk storage, 10 files / 10MB, image-mimetype filter) was previously defined once in `server.js` and used by three different routes (News create, News update, and the standalone `/api/uploads/images`). Since News routes now live in their own file, that config had to either be duplicated or shared — it's now defined once here and imported by both `news.routes.js` and `server.js` (which still owns `/api/uploads/images` and the Newspaper `final-files` upload, both out of scope for this prompt).
+- `src/middleware/upload.js` — new shared module. The generic image-upload `multer` instance (disk storage, 10 files / 10MB, image-mimetype filter) was previously defined once in `server.js` and used by three different routes (News create, News update, and the standalone `/api/uploads/images`). Since News routes now live in their own file, that config had to either be duplicated or shared — it's now defined once here and imported by both `news.routes.js` and `server.js` (which still owns `/api/uploads/images`, out of scope for this prompt; `publicationUpload` was also here at the time but has since moved into this same module too, see §10).
 
 **Removed:**
 - The six inline News route handlers in `server.js` (~100 lines).
@@ -221,3 +224,42 @@ Migrated the News resource only, per the rules given: `server.js → controllers
 - **No request validation library.** The service layer still does ad hoc `if (!body.title)` / whitelist-array checks rather than schema validation (e.g. a library, or even a small shared validator). Fine for a literal move; will get repetitive across four services if hand-rolled each time.
 - **`src/middleware/upload.js` is now a second thing to keep in sync with `publicationUpload` in `server.js`** — they share `storage` (imported) but have independently-defined `limits`/`fileFilter`. Not a bug (different upload kinds legitimately need different limits), but worth noting since CLAUDE.md flags "duplicated logic" as the exact failure mode to avoid — this is intentionally *not* duplicated (shared `storage`), only the parts that should differ do.
 - **No tests were added for the News module.** Coverage is exactly what existed before (the 3 flows in `tests/health.test.js`); the manual smoke test done for this task was not persisted as an automated test. Worth adding `tests/news.test.js` covering the paths that were only manually verified here (404s, status validation, list-by-status) before Newspaper/Page migrate the same way.
+
+---
+
+## 10. Update — Prompt 3: Newspaper backend layering (2026-08-02)
+
+### Completed work
+
+Migrated the Newspaper resource only, following the same pattern as News (§9): `server.js → controllers → services → repositories → PostgreSQL`. News stayed as §9 left it; Page and Page Section were not touched — both still run through `server.js → src/db.js → src/repositories/page.repository.js`.
+
+**New/filled files:**
+- `src/routes/newspaper.routes.js` — Express router covering all six existing Newspaper paths: `POST /`, `GET /`, `GET /latest`, `GET /:id`, `PATCH /:id`, `POST /:id/final-files`. Mounted in `server.js` as `app.use("/api/newspapers", newspaperRoutes)`. Route order inside the router matches the original registration order (`/latest` before `/:id`) so the literal path `/api/newspapers/latest` still resolves to the `latest` handler rather than being swallowed by `:id`.
+- `src/controllers/newspaper.controller.js` — HTTP layer only: reads `req.body`/`req.params`/`req.files`/`req.session.user`, calls the service, maps results to the exact status codes/response shapes the old inline handlers produced.
+- `src/services/newspaper.service.js` — business logic moved verbatim: create defaults (`name` → `'साहस'`, `date` → today, `createdBy` → session user or `null`), `getNewspaper` merging in the latest Scribus/PDF paths (the `withPublicationFiles` helper, moved out of `server.js` unchanged), and `saveFinalFiles` (validates at least one file present, 404s on missing newspaper, writes to `publication_files` via the existing `publicationRepository`, flips `status` to `finalised` only when a print PDF was uploaded — matching the original's asymmetric behavior exactly: uploading only a `.sla` does *not* finalise the edition). Calls `newspaperRepository` and `publicationRepository` directly — both already pure SQL, neither needed changes (rule: reuse existing repositories).
+- `src/middleware/upload.js` — extended with `publicationUpload` (the Scribus/PDF-specific multer instance: 2 files / 50MB, `.sla`/PDF filename+mimetype filter), moved out of `server.js` and imported by `newspaper.routes.js`. `server.js` no longer defines any multer instance itself.
+
+**Removed:**
+- The six inline Newspaper route handlers in `server.js`, including the `withPublicationFiles` local helper (~85 lines total).
+- The now-dead Newspaper pass-through functions in `src/db.js` (`createNewspaper`, `updateNewspaper`, `listNewspapers`, `getNewspaper`, `getLatestNewspaper`) and the `newspaperRepository` require, per the explicit rule to remove dead Newspaper helpers after migration. Page functions in `src/db.js` are untouched.
+- `publicationRepository`'s direct require in `server.js` (no longer used there — only the newspaper service needs it now).
+
+**`server.js` is now, per rule 10, only:** Express app setup (json/urlencoded/static/session middleware), the multer error-handling middleware, route registration (`app.use` for News/Newspaper routers, inline handlers for the still-unmigrated Page/Template/auth/upload routes), and the SPA fallback. No business logic, no direct repository calls, no multer instance definitions remain in it.
+
+**Decisions made:**
+- Kept `GET /api/templates` inline in `server.js`, not folded into the Newspaper module. It serves `src/layout/templates.js`, not the `newspapers` table — it's a distinct Templates concern (already tracked as its own future migration target, Prompt 4), not Newspaper data.
+- `saveFinalFiles`'s asymmetric finalise-only-on-PDF behavior was preserved exactly rather than "fixed," even though it reads like it could be an oversight (uploading a `.sla` alone leaves status `draft`) — rule 8 forbids introducing new business logic during a pure move, so this stays as-is; flagging it in case it's actually a bug worth a follow-up decision.
+- Verified the router-mounting boundary explicitly: since `app.use('/api/newspapers', newspaperRoutes)` sits before the still-inline `POST/GET /api/newspapers/:newspaperId/pages` handlers, there was a real risk the Newspaper router's `/:id` or `/:id/final-files` patterns could shadow `/:newspaperId/pages`. Confirmed via smoke test (a page-create call under a real newspaper ID succeeded and returned hydrated sections) that Express's exact-segment-count matching means no collision — Page routes need no changes to keep working.
+
+**Verification:** `npm test` (4/4 pass, including the existing final-files integration test), plus a manual smoke test of every Newspaper endpoint not covered by the suite (create, list, latest, get-by-id, both 404 paths, update, final-files 400/404 paths, and the Page-route boundary check above) — all status codes and response bodies identical to the pre-refactor server. Smoke-test data (one newspaper row, three uploaded files) was cleaned up afterward.
+
+### Remaining technical debt (Newspaper module, and backend layering generally)
+
+- **Page and Page Section are the last resources on the old path.** `src/db.js` is now just `authenticateUser` + 5 Page functions (`createPage`, `updatePage`, `listPages`, `addArticleToPage`, `savePageSection`) — migrating Page the same way would let `src/db.js` be deleted entirely rather than shrink further.
+- **The `addArticleToPage` function is dead code that will need a decision, not a migration.** It's exported from `src/db.js` but nothing in `server.js` calls it — it just `throw`s "Use savePageSection with a section key". Worth confirming it's genuinely unreferenced (frontend included) before dropping it when Page is migrated, rather than mechanically porting a function that exists only to throw.
+- **Same pre-existing gaps as §9 apply here too**, now confirmed present in Newspaper's routes as well: no auth/role enforcement (any session can finalise any edition or rename it), no request validation beyond ad hoc checks, and no automated test coverage beyond what already existed (this session's smoke test was manual only, not persisted as `tests/newspaper.test.js`).
+- **`withPublicationFiles` and `saveFinalFiles` both duplicate the "merge latest Scribus/PDF paths onto a newspaper" shape in spirit** — `getNewspaper` calls `withPublicationFiles` to attach existing files, while `saveFinalFiles` builds `response = { ...newspaper }` and attaches new files field-by-field separately. Not literal code duplication (different inputs: reading vs. just-uploaded), but the same conceptual shape twice in one service file — worth a small shared helper if a third call site for "newspaper + its files" ever shows up; not worth doing for two call sites.
+
+### Next recommended migration
+
+**Page and Page Section**, in that order (Page section-editing logic already depends on Page existing). This is explicitly the next step per the roadmap and is now the only thing keeping `src/db.js` alive — after it, `src/db.js` can be deleted outright rather than migrated down to zero functions and left as an empty file. It's also the largest remaining resource: `PUT /api/pages/:pageId/sections/:sectionId`'s field-mapping block in `server.js` (newsItemId/headline/subheading/body/fontPx fields, etc.) is the single largest inline handler left, so budget for it accordingly.

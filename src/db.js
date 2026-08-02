@@ -24,30 +24,8 @@ async function authenticateUser(email, password) {
   };
 }
 
-const newsRepository = require('./repositories/news.repository');
 const newspaperRepository = require('./repositories/newspaper.repository');
 const pageRepository = require('./repositories/page.repository');
-
-async function createNews(payload) {
-    return await newsRepository.create(payload);
-}
-
-async function listNews(filter = {}) {
-  return await newsRepository.findAll(filter);
-}
-
-async function updateNews(id, updates) {
-  return await newsRepository.update(id, updates);
-}
-
-async function getNews(id) {
-    return await newsRepository.findById(id);
-}
-
-
-async function getNewsByStatus(status) {
-  return await newsRepository.findByStatus(status);
-}
 
 async function createNewspaper(payload) {
   return newspaperRepository.create({
@@ -98,15 +76,10 @@ async function savePageSection(pageId, sectionId, article) {
 
 module.exports = {
   authenticateUser,
-  createNews,
-  updateNews,
-  listNews,
-  getNewsByStatus,
   createNewspaper,
   updateNewspaper,
   listNewspapers,
   getNewspaper,
-  getNews,
   getLatestNewspaper,
   createPage,
   updatePage,

@@ -4,21 +4,16 @@ const path = require("path");
 const session = require("express-session");
 const dotenv = require("dotenv");
 const multer = require("multer");
-const fs = require("fs");
-const crypto = require("crypto");
 const publicationRepository = require('./src/repositories/publication.repository');
 const { templates } = require('./src/layout/templates');
+const { storage, upload } = require('./src/middleware/upload');
+const newsRoutes = require('./src/routes/news.routes');
 const {
   authenticateUser,
-  createNews,
-  updateNews,
-  listNews,
-  getNewsByStatus,
   createNewspaper,
   updateNewspaper,
   listNewspapers,
   getNewspaper,
-  getNews,
   getLatestNewspaper,
   createPage,
   updatePage,
@@ -28,30 +23,6 @@ const {
 } = require("./src/db");
 
 dotenv.config();
-
-const uploadsDir = path.join(__dirname, "public/uploads");
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    // Do not let two files selected in the same upload overwrite each other.
-    const extension = path.extname(file.originalname);
-    cb(null, `${Date.now()}-${crypto.randomUUID()}${extension}`);
-  },
-});
-
-const upload = multer({
-  storage,
-  limits: { files: 10, fileSize: 10 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    cb(null, file.mimetype.startsWith("image/"));
-  },
-});
 
 const publicationUpload = multer({
   storage,
@@ -109,106 +80,7 @@ function createApp() {
   });
 
   // News API
-  app.post("/api/news", upload.array("images"), async (req, res) => {
-    try {
-      const payload = req.body;
-
-      if (!payload.title) {
-        return res.status(400).json({ error: "Title required" });
-      }
-
-      const imageUrls = Array.isArray(req.files)
-        ? req.files.map((file) => `/uploads/${file.filename}`)
-        : [];
-
-      const item = await createNews({
-        newspaper_id: null,
-        title: payload.title || "",
-        subheading: payload.subheading || payload.subtitle || "",
-        description: payload.description || "",
-        category: payload.category || "",
-        location: payload.location || "",
-        city: payload.city || "",
-        tags: payload.tags || "",
-        reporter_name: payload.reporterName || req.session.user?.name || "",
-        image_urls: imageUrls,
-        status: payload.status || "draft",
-        created_by: req.session.user?.id || Number.parseInt(payload.reporterId, 10) || null,
-      });
-
-      res.status(201).json(item);
-    } catch (err) {
-      console.error("Create News Error:", err);
-      res.status(500).json({ error: "Failed to create news" });
-    }
-  });
-
-  app.get("/api/news", async (req, res) => {
-    const { status, language, reporterId } = req.query;
-    const filter = {};
-    if (status) filter.status = status;
-    if (language) filter.language = language;
-    if (reporterId) filter.created_by = parseInt(reporterId, 10);
-    const news = await listNews(filter);
-    res.json(news);
-  });
-
-  app.get("/api/news/status/:status", async (req, res) => {
-    res.json(await getNewsByStatus(req.params.status));
-  });
-
-  app.get("/api/news/:id", async (req, res) => {
-    const item = await getNews(parseInt(req.params.id, 10));
-
-    if (!item) {
-      return res.status(404).json({ error: "Not found" });
-    }
-
-    res.json(item);
-  });
-
-  app.patch("/api/news/:id", upload.array("images"), async (req, res) => {
-    const payload = req.body;
-    const existing = await getNews(parseInt(req.params.id, 10));
-
-    if (!existing) {
-      return res.status(404).json({ error: "Not found" });
-    }
-    const updates = {
-      newspaper_id: existing.newspaper_id,
-      title: payload.title,
-      subheading: payload.subheading || payload.subtitle || "",
-      description: payload.description || "",
-      category: payload.category || "",
-      location: payload.location || "",
-      city: payload.city || "",
-      tags: payload.tags || "",
-      reporter_name: payload.reporterName || "",
-      image_urls: existing.image_urls || [],
-      status: payload.status || "draft",
-      created_by: existing.created_by,
-    };
-
-    if (req.files && req.files.length) {
-      updates.image_urls = req.files.map((file) => "/uploads/" + file.filename);
-    }
-
-    const item = await updateNews(parseInt(req.params.id, 10), updates);
-    if (!item) return res.status(404).json({ error: "Not found" });
-    res.json(item);
-  });
-
-  app.patch("/api/news/:id/status", async (req, res) => {
-    const status = req.body.status;
-    if (!["draft", "pending", "approved", "rejected"].includes(status)) {
-      return res.status(400).json({ error: "Invalid news status" });
-    }
-    const existing = await getNews(parseInt(req.params.id, 10));
-    if (!existing) return res.status(404).json({ error: "Not found" });
-    const item = await updateNews(parseInt(req.params.id, 10), { ...existing, status });
-    if (!item) return res.status(404).json({ error: "Not found" });
-    res.json(item);
-  });
+  app.use("/api/news", newsRoutes);
 
   app.post("/api/uploads/images", upload.array("images"), (req, res) => {
     const files = req.files || [];

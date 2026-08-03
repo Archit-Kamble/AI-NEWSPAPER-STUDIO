@@ -17,7 +17,7 @@ import { renderMiniMap, configure as configureCanvasView, applyTransform } from 
 import { zoomControlMarkup, bindZoomControl, syncZoomControl, pageIndicatorMarkup } from "./canvas/canvas-toolbar.js";
 import { renderPageNavigator } from "./page-navigator.js";
 import { renderLayoutSidebar } from "./layout-sidebar.js";
-import { renderInspector, refreshInspectorReadouts, refreshInspectorSavedAt } from "./inspector.js";
+import { renderInspector, refreshInspectorReadouts, refreshInspectorSavedAt, configureInspector } from "./inspector.js";
 import { renderStoryPicker } from "./story-picker.js";
 import { renderToolbar, refreshHistoryButtons, refreshSaveIndicator, refreshToolbarSelection } from "./toolbar.js";
 import {
@@ -224,6 +224,25 @@ async function saveNow() {
   await autosave.flush();
 }
 
+function scrollTo(elementId, notice) {
+  document.getElementById(elementId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  if (notice) showNotice(notice);
+}
+
+// Step 4 of the flow: the story is written, so hand off to the dock, where the
+// image and the AI fit are done.
+async function saveAndCompose() {
+  await saveNow();
+  setActiveTab("images");
+  scrollTo("externalEditorPanel", "Saved. Compose the image and fit below.");
+}
+
+// Step 8: composition is done, so go back up to the page with the block filled.
+async function saveAndReturn() {
+  await saveNow();
+  scrollTo("workspaceTop");
+}
+
 // ------------------------------------------------------------- page/layout ---
 
 function selectPage(pageId) {
@@ -275,7 +294,7 @@ function renderShell() {
     <div class="workspace-shell">
       <header class="workspace-toolbar" id="toolbar"></header>
 
-      <div class="workspace-top">
+      <div class="workspace-top" id="workspaceTop">
         <main class="workspace-canvas-host">
           <div class="canvas-toolbar">
             <div id="pageSwitcher" class="page-switcher"></div>
@@ -292,8 +311,8 @@ function renderShell() {
         <aside class="workspace-inspector" id="inspector"></aside>
       </div>
 
-      <div class="splitter splitter-h" id="editorResizer" role="separator"
-           aria-orientation="horizontal" tabindex="0" title="Drag to resize the editor"></div>
+      <div class="splitter splitter-h" id="canvasResizer" role="separator"
+           aria-orientation="horizontal" tabindex="0" title="Drag to resize the page area"></div>
       <section class="workspace-external-editor" id="externalEditorPanel"></section>
 
       <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
@@ -311,6 +330,7 @@ function renderShell() {
   const shell = content.querySelector(".workspace-shell");
   applyStoredLayout(shell);
   bindResizers(shell);
+  configureInspector({ onChooseStory: chooseStory });
 
   renderToolbar({
     newspaper: store.getState().newspaper,
@@ -350,17 +370,25 @@ function renderSidePanels() {
   const view = currentView();
   const story = currentStory();
 
-  renderInspector(section, view, story, patchDraft);
+  const inspectorCallbacks = {
+    onPatch: patchDraft,
+    onChooseStory: chooseStory,
+    onSave: saveAndCompose,
+    onRevert: cancelEdits,
+  };
+  configureInspector(inspectorCallbacks);
+  renderInspector(section, view, story, inspectorCallbacks);
   renderExternalEditor(section, view, story, store.getState().reporterNews, {
     onPatch: patchDraft,
     onChooseStory: chooseStory,
-    onSave: saveNow,
+    onSave: saveAndReturn,
     onCancel: cancelEdits,
     onUndo: undo,
     onRedo: redo,
     onJumpHistory: jumpHistory,
     onToggleDock: toggleDock,
     getView: currentView,
+    getSection: () => store.getSelectedSection(),
   });
 }
 

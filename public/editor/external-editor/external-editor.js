@@ -9,11 +9,10 @@
 import { escapeHtml } from "../format.js";
 import { statusOf, statusLabel, statusClass } from "../status/section-status.js";
 import { TABS, tabStripMarkup, tabPanelsMarkup, bindTabs, getActiveTab, setActiveTab } from "./tabs.js";
-import { storyPanelMarkup, bindStoryPanel, refreshStoryPanel } from "./story-panel.js";
 import { imagesPanelMarkup, bindImagesPanel, refreshImagesPanel } from "./images-panel.js";
 import { typographyPanelMarkup, bindTypographyPanel, refreshTypographyPanel } from "./typography-panel.js";
 import { layoutPanelMarkup, refreshLayoutPanel } from "./layout-panel.js";
-import { aiPanelMarkup, bindAiPanel, refreshAiPanel } from "./ai-panel.js";
+import { aiPanelMarkup, bindAiPanel, refreshAiPanel, refreshFitBrief } from "./ai-panel.js";
 import { assetsPanelMarkup, bindAssetsPanel, refreshAssetsPanel } from "./assets-panel.js";
 import { historyPanelMarkup, bindHistoryPanel, refreshHistoryPanel } from "./history-panel.js";
 
@@ -51,17 +50,16 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
       <span class="ext-editor-notice" id="edNotice"></span>
       <div class="ext-editor-header-actions">
         <button type="button" class="ext-editor-btn" id="edCancel">Revert</button>
-        <button type="button" class="ext-editor-btn ext-editor-btn-primary" id="edSaveSection">Save Section</button>
+        <button type="button" class="ext-editor-btn ext-editor-btn-primary" id="edSaveSection">Save &amp; back to page ↑</button>
         <button type="button" class="ext-icon-btn" id="edToggleDock" title="Collapse editor">▾</button>
       </div>
     </div>
     <div class="ext-editor-body">
       ${tabPanelsMarkup({
-        story: storyPanelMarkup(view, story),
         images: imagesPanelMarkup(view),
         typography: typographyPanelMarkup(view),
         layout: layoutPanelMarkup(section, view),
-        ai: aiPanelMarkup(view),
+        ai: aiPanelMarkup(view, section),
         assets: assetsPanelMarkup(view, reporterNews),
         history: historyPanelMarkup(),
       })}
@@ -76,10 +74,9 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
   const notify = showNotice;
 
   bindTabs(() => refreshVolatileTabs(section, currentViewFrom(callbacks), callbacks));
-  bindStoryPanel(callbacks.onPatch, callbacks.onChooseStory);
   bindImagesPanel(callbacks.getView, reporterNews, callbacks.onPatch, notify);
   bindTypographyPanel(callbacks.getView, callbacks.onPatch);
-  bindAiPanel(callbacks.getView, callbacks.onPatch, notify);
+  bindAiPanel(callbacks.getView, callbacks.getSection, callbacks.onPatch, notify);
   bindAssetsPanel(callbacks.onPatch, notify);
   bindHistoryPanel(historyHandlers(callbacks));
   bindDockToggle(callbacks);
@@ -120,13 +117,12 @@ export function refreshExternalEditor(section, view, story, source) {
     badge.className = `section-status-badge ${statusClass(status)}`;
   }
 
-  refreshStoryPanel(view, source);
   refreshImagesPanel(view);
+  refreshFitBrief(section, view);
   refreshTypographyPanel(view, source);
   refreshAssetsPanel(view);
   refreshAiPanel(view, source);
   refreshVolatileTabs(section, view, activeCallbacks);
-  refreshStoryLinkBar(view, story);
 }
 
 // Layout and History are pure read-outs, so they are rebuilt wholesale - but
@@ -140,37 +136,6 @@ function refreshVolatileTabs(section, view, callbacks) {
 export function refreshHistoryTab() {
   if (getActiveTab() === "history" && activeCallbacks) {
     refreshHistoryPanel(historyHandlers(activeCallbacks));
-  }
-}
-
-function refreshStoryLinkBar(view, story) {
-  const bar = document.querySelector(".story-link-bar");
-  if (!bar) return;
-
-  const linked = Boolean(view.newsItemId);
-  if (linked === bar.classList.contains("linked")) {
-    if (linked) {
-      const label = bar.querySelector("strong");
-      if (label) label.textContent = story?.title || "reporter story";
-    }
-    return;
-  }
-
-  // Replacing the bar drops its listener with the old node, so it is rebound.
-  bar.outerHTML = linked
-    ? `<div class="story-link-bar linked">
-         <span>Linked to <strong>${escapeHtml(story?.title || "reporter story")}</strong></span>
-         <button type="button" class="ext-editor-btn" id="edChangeStory">Change</button>
-       </div>`
-    : `<div class="story-link-bar">
-         <span class="muted">No story attached</span>
-         <button type="button" class="ext-editor-btn ext-editor-btn-primary" id="edChooseStory">Choose Reporter Story</button>
-       </div>`;
-
-  const chooseStory = activeCallbacks?.onChooseStory;
-  if (chooseStory) {
-    document.getElementById("edChooseStory")?.addEventListener("click", chooseStory);
-    document.getElementById("edChangeStory")?.addEventListener("click", chooseStory);
   }
 }
 

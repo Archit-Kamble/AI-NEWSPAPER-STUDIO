@@ -884,3 +884,66 @@ This is measured, not asserted. A dedicated script installs `MutationObserver`s 
 3. **An assets API** over `media_assets`, which turns three empty shelves into real ones and gives the drag payloads somewhere to land.
 4. Fix the two `admin.js` dashboard bugs and update CLAUDE.md's "Current reality".
 5. `page.repository.js`'s `updateTemplate` crash (§11) is still the highest-severity known bug.
+
+## 20. Update — Five corrections and the real production flow (2026-08-03)
+
+Five things were wrong after §19. All five are fixed, and the workflow they were getting in the way of is now built end to end. This entry records what was misunderstood, because the misunderstandings are the useful part.
+
+### What was wrong, and what it should have been
+
+1. **The Layout tab did not scroll.** Its panel was an inner scroller inside a fixed-height dock inside a fixed-height shell - three nested constraints, and the innermost one lost. Fixed by removing the trap entirely (see 3).
+2. **Headline/subheading inputs had been removed from the top panel.** In §18 the article text was deliberately moved out of the Inspector into the dock, to avoid two inputs bound to one field. That reasoning was sound but the placement was wrong: **the top panel is where the story gets written.** The text fields are back in the Inspector, and the dock no longer has a Story tab - so there is still exactly one input per field, just in the right place.
+3. **The whole application should scroll.** Everything had been packed into `100vh` with `overflow: hidden`, which is what made it congested and what broke the Layout tab. The shell is now ordinary document flow: page preview and Inspector at a comfortable size, dock below at its natural height, browser scrolls the lot. The workspace toolbar is `position: sticky` so Save/Undo stay reachable. Measured: 2040px document against a 900px window, and it scrolls.
+4. **Sections must not pre-allocate space for image and text.** The thumbnails were drawing a fixed image box plus skeleton text lines into every empty block - deciding the composition before anyone had composed anything. An empty block now shows **only its label and status**. Once content exists it renders what is actually there, in normal flow; an image sizes itself from its own width and is clipped to its box so a rotation can never bleed over the headline.
+5. **The flow itself** was never wired. It is now.
+
+### The production flow
+
+```
+pick layout → click a section
+   ↓
+Inspector (top right): write the story, or take it from a reporter
+   ↓  Save & compose below ↓        (scrolls to the dock, opens Images)
+External Editor (full-width, bottom): image work → measure remaining area
+   → Fill remaining area with AI  →  Additional details for AI  →  Optimize
+   ↓  Save & back to page ↑         (scrolls back up)
+the block on the page shows the finished content
+```
+
+Both hand-offs are real: the Inspector's Save persists, switches the dock to Images and scrolls it into view; the dock's Save persists and scrolls back to the page. The **remaining area is genuinely calculated** - block size, what the image takes, remaining height, and roughly how many words will fit - and that measurement is attached to every AI request. Only the AI call itself is a stub, per instruction ("we will do it later"): each button builds and displays the exact request that would be sent.
+
+### Structural changes
+
+- `inspector.js` - now the story-writing panel: headline/subheading/body/caption with live counters and word/reading stats, reporter picker, details, editorial status, space read-out, and the `Save & compose below ↓` hand-off.
+- `external-editor/story-panel.js` - **deleted**; its job moved to the Inspector. Tabs are now Images, Typography, Fit & Layout, AI, Assets, History.
+- `ai-panel.js` - gained `fitBrief()` (the real measurement), a **Fill remaining area** action and an **Optimize with these details** action reading the "Additional details for AI" box.
+- `canvas/section-thumb.js` - empty blocks render label + status only; filled blocks render content in flow, image clipped to its own box.
+- `layout/resizer.js` - the height splitter now sizes the **page preview** rather than the dock, since the dock grows with its content now.
+- `styles.css` - shell moved out of the `100vh` grid; `.container--workspace .content` no longer clips; panels grow instead of trapping their content.
+
+### Verification
+
+`npm test` 16/16. A flow suite drives all five corrections plus the whole pipeline: page genuinely scrolls (2040 vs 900) with a sticky toolbar; empty blocks contain zero content areas; all four story inputs live in the Inspector and zero duplicates exist in the dock; typing updates the block live; Save scrolls down and opens Images; the reporter image library places an image; rotation persists; the fit brief shows remaining height and word estimate; fill and optimize carry the measurement and the extra details; the Fit & Layout tab has real height and is not internally clipped; Save scrolls back up with the block filled; and everything survives a reload. **Zero failures, zero console errors, zero page errors.**
+
+### A note on the test fixture
+
+One test run failed to log in with a 401 until the fixture email was renamed. `admin.js` infers the user's role from whether the **email string contains "admin"** (`email.includes("admin") ? "admin" : "reporter"`) rather than from the account. That is fragile - a legitimate admin whose address does not contain the word cannot log in - and it belongs on the list below.
+
+### Remaining technical debt
+
+- **Role is inferred from the email string** in `admin.js`, not from the user record. Newly recorded, and the most user-facing of the known issues.
+- AI is not connected; every action is a stub that displays its request. Crop, brightness, contrast and background removal likewise.
+- Selection resize handles are still visual only.
+- GrapesJS is still not integrated; `#external-editor` remains an empty mount under Fit & Layout.
+- Asset shelves other than reporter photographs have no backing store.
+- Layout metrics are px estimates from character counts, not real text measurement.
+- The two `admin.js` dashboard bugs from §18 (Past Newspapers listed oldest-first; `undefined` date and page count) are still unfixed.
+- CLAUDE.md's "Current reality" section still describes an architecture the repository no longer has (§18).
+- `.page-card*`, `.page-template`, `.template-thumb*` remain confirmed-dead and unremoved.
+
+### Next recommended migration
+
+1. **Connect the AI step.** The fit brief and request shape are already the contract; `ai_generated` and its lifecycle state are already plumbed to the badge.
+2. **GrapesJS into `#external-editor`.**
+3. Fix role inference, then the two dashboard bugs, then update CLAUDE.md.
+4. `page.repository.js`'s `updateTemplate` crash (§11) remains the highest-severity known bug.

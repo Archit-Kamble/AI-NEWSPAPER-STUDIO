@@ -43,22 +43,26 @@ export function sectionType(sectionKey = "") {
   return "article";
 }
 
-// The placeholder sits under the image, so a missing *or dead* URL degrades to
-// the newspaper placeholder instead of a broken-image glyph.
-function imageMarkup(view) {
-  const placeholder = `<span class="thumb-image-placeholder">${ICONS.placeholder}</span>`;
-  if (!view.imageUrl) return placeholder;
-  return `${placeholder}<img src="${escapeHtml(view.imageUrl)}" alt="" onerror="this.remove()"
-    style="object-fit:${escapeHtml(view.imageFit || "cover")};${imageTransformCss(view)}" />`;
-}
+// An empty block shows nothing but its name and status - the split between
+// image and text is decided later, in the editor and by the AI fit, not
+// pre-drawn here. Once content exists the block shows what is actually there,
+// in normal flow, with no reserved areas.
+function contentMarkup(view) {
+  const hasImage = Boolean(view.imageUrl);
+  const hasText = Boolean(view.headline || view.body);
+  if (!hasImage && !hasText) return "";
 
-function bodyMarkup(view) {
-  if (view.body) return `<p class="thumb-body-preview">${escapeHtml(view.body)}</p>`;
   return `
-    <div class="thumb-body-lines">
-      <span class="thumb-line w-80"></span>
-      <span class="thumb-line w-60"></span>
-      <span class="thumb-line w-40"></span>
+    <div class="section-content">
+      ${
+        hasImage
+          ? `<span class="section-image-box"><img class="section-image" src="${escapeHtml(view.imageUrl)}" alt=""
+               onerror="this.closest('.section-image-box').remove()"
+               style="object-fit:${escapeHtml(view.imageFit || "cover")};${imageTransformCss(view)}" /></span>`
+          : ""
+      }
+      ${view.headline ? `<div class="section-headline">${escapeHtml(view.headline)}</div>` : ""}
+      ${view.body ? `<p class="section-body">${escapeHtml(view.body)}</p>` : ""}
     </div>
   `;
 }
@@ -80,13 +84,7 @@ export function sectionInnerHtml(section, view, { dirty = false, selected = fals
       </span>
       <span class="section-status-badge ${statusClass(status)}">${statusLabel(status)}</span>
     </div>
-    <div class="section-thumb">
-      <div class="thumb-image">${imageMarkup(view)}</div>
-      <div class="thumb-text">
-        <div class="thumb-headline">${escapeHtml(view.headline)}</div>
-        ${bodyMarkup(view)}
-      </div>
-    </div>
+    ${contentMarkup(view)}
     <div class="section-hover-toolbar">
       <button type="button" class="section-hover-btn" data-section-action="story" title="Attach a reporter story">Story</button>
       <button type="button" class="section-hover-btn" data-section-action="image" title="Open the image workspace">Image</button>

@@ -1,13 +1,16 @@
-// Part 2: draggable splitters for the three regions whose size an editor cares
-// about - the inspector's width and the bottom editor dock's height. Sizes live
-// in CSS custom properties on the shell and are remembered in localStorage, so
-// a desk keeps its layout between sessions.
+// Draggable splitters for the two sizes an editor cares about: how wide the
+// Inspector is, and how much room the page preview gets. The dock below grows
+// with its own content and the whole page scrolls, so it needs no fixed height.
+// Sizes live in CSS custom properties and are remembered in localStorage, so a
+// desk keeps its layout between sessions.
 
 const STORAGE_KEY = "sahas.workspace.layout";
 
 const LIMITS = {
   inspectorWidth: { min: 260, max: 720, fallback: 380, prop: "--inspector-width" },
-  editorHeight: { min: 140, max: 900, fallback: 340, prop: "--editor-height" },
+  // The dock now grows with its content and the page scrolls, so what is worth
+  // resizing is how much room the page preview gets.
+  canvasHeight: { min: 320, max: 1200, fallback: 620, prop: "--canvas-height" },
 };
 
 function readStored() {
@@ -37,7 +40,7 @@ export function applyStoredLayout(shell) {
   const stored = readStored();
   sizes = {
     inspectorWidth: clamp("inspectorWidth", stored.inspectorWidth || LIMITS.inspectorWidth.fallback),
-    editorHeight: clamp("editorHeight", stored.editorHeight || LIMITS.editorHeight.fallback),
+    canvasHeight: clamp("canvasHeight", stored.canvasHeight || LIMITS.canvasHeight.fallback),
     editorCollapsed: stored.editorCollapsed === true,
   };
   Object.entries(LIMITS).forEach(([key, { prop }]) => {
@@ -113,5 +116,5 @@ function bindSplitter(shell, handle, key, axis, invert) {
 
 export function bindResizers(shell) {
   bindSplitter(shell, document.getElementById("inspectorResizer"), "inspectorWidth", "x", true);
-  bindSplitter(shell, document.getElementById("editorResizer"), "editorHeight", "y", true);
+  bindSplitter(shell, document.getElementById("canvasResizer"), "canvasHeight", "y", false);
 }

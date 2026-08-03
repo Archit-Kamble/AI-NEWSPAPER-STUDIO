@@ -5,11 +5,13 @@
 // and each tab's own scroll position and transient UI state survive being
 // switched away from - panels are rendered once and hidden, never destroyed.
 
+// The story text is written in the Inspector, above - this dock is where the
+// image, the fit and the AI composition happen, which is the second half of the
+// production flow (write -> save -> compose -> save -> back to the page).
 export const TABS = [
-  { key: "story", label: "Story" },
   { key: "images", label: "Images" },
   { key: "typography", label: "Typography" },
-  { key: "layout", label: "Layout" },
+  { key: "layout", label: "Fit & Layout" },
   { key: "ai", label: "AI" },
   { key: "assets", label: "Assets" },
   { key: "history", label: "History" },
@@ -23,9 +25,9 @@ const scrollPositions = new Map();
 function readStoredTab() {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    return TABS.some((t) => t.key === stored) ? stored : "story";
+    return TABS.some((t) => t.key === stored) ? stored : "images";
   } catch {
-    return "story";
+    return "images";
   }
 }
 

@@ -802,17 +802,6 @@ body {
   background: #e8a33d;
   box-shadow: 0 0 0 1.5px white;
 }
-.section-hover-controls {
-  position: absolute;
-  right: 4px;
-  bottom: 4px;
-  display: none;
-  gap: 4px;
-  z-index: 4;
-}
-.newspaper-section:hover .section-hover-controls {
-  display: flex;
-}
 .section-hover-btn {
   padding: 2px 6px;
   font-size: clamp(0.38rem, 1.9cqw, 0.62rem);
@@ -1130,17 +1119,69 @@ body {
   grid-template-columns: 1fr;
 }
 
+/* Toolbar across the top, canvas + inspector in the middle, and the External
+   Editor docked full width along the bottom - a terminal under VS Code, a
+   timeline under Premiere. Both splitters drive the two custom properties, which
+   layout/resizer.js persists. */
 .workspace-shell {
+  --inspector-width: 380px;
+  --editor-height: 340px;
   height: calc(100vh - 60px);
   display: grid;
-  grid-template-rows: 64px 1fr;
-  grid-template-columns: minmax(320px, 460px) 1fr;
+  grid-template-rows: 64px minmax(0, 1fr) 6px var(--editor-height);
   grid-template-areas:
-    "toolbar toolbar"
-    "center right";
+    "toolbar"
+    "top"
+    "editor-splitter"
+    "editor";
   background: #f6f6f7;
   overflow: hidden;
   font-size: 0.95rem;
+}
+.workspace-shell.editor-collapsed {
+  grid-template-rows: 64px minmax(0, 1fr) 6px 46px;
+}
+
+.workspace-top {
+  grid-area: top;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 6px var(--inspector-width);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.splitter {
+  background: #ececed;
+  position: relative;
+  transition: background 0.15s ease;
+}
+.splitter::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+}
+.splitter:hover,
+.splitter.dragging,
+.splitter:focus-visible {
+  background: var(--accent);
+  outline: none;
+}
+.splitter-v {
+  cursor: col-resize;
+}
+.splitter-h {
+  grid-area: editor-splitter;
+  cursor: row-resize;
+}
+body.resizing-x,
+body.resizing-x * {
+  cursor: col-resize !important;
+  user-select: none;
+}
+body.resizing-y,
+body.resizing-y * {
+  cursor: row-resize !important;
+  user-select: none;
 }
 
 .workspace-toolbar {
@@ -1233,10 +1274,6 @@ body {
   border-color: #a81830;
 }
 
-.workspace-body {
-  display: contents;
-}
-
 .sidebar-backdrop {
   display: none;
   position: fixed;
@@ -1253,7 +1290,7 @@ body {
 
 .workspace-sidebar-left {
   position: fixed;
-  top: 124px;
+  top: 124px; /* below the app header + workspace toolbar */
   left: 0;
   bottom: 0;
   width: 320px;
@@ -1304,7 +1341,6 @@ body {
 }
 
 .workspace-canvas-host {
-  grid-area: center;
   display: grid;
   grid-template-rows: auto 1fr;
   min-height: 0;
@@ -1326,29 +1362,6 @@ body {
 }
 .canvas-toolbar-spacer {
   flex: 1;
-}
-.zoom-toggle {
-  display: flex;
-  gap: 2px;
-  padding: 2px;
-  background: #f0f0f2;
-  border-radius: 8px;
-}
-.zoom-btn {
-  padding: 6px 12px;
-  font-size: 0.78rem;
-  font-weight: 700;
-  font-family: inherit;
-  border: none;
-  border-radius: 6px;
-  background: none;
-  color: #6a6a72;
-  cursor: pointer;
-}
-.zoom-btn.active {
-  background: white;
-  color: var(--primary);
-  box-shadow: 0 1px 2px rgba(20, 20, 30, 0.1);
 }
 .page-switcher,
 .layout-switcher {
@@ -1409,54 +1422,148 @@ body {
   color: white;
   border-color: var(--primary);
 }
-.canvas-scroll {
-  overflow: auto;
-  padding: 24px;
+/* The stage holds the viewport and the minimap. The page itself is scaled with
+   a real transform, so proportions are identical at every zoom level. */
+.canvas-stage {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+}
+.canvas-viewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
   display: flex;
-  justify-content: center;
   align-items: center;
+  justify-content: center;
   background-image: radial-gradient(#dfdfe3 1px, transparent 1px);
   background-size: 22px 22px;
 }
-.canvas-scroll .newspaper-canvas {
+.canvas-viewport.space-held {
+  cursor: grab;
+}
+.canvas-viewport.panning {
+  cursor: grabbing;
+}
+.canvas-viewport .newspaper-canvas {
   position: relative;
+  flex-shrink: 0;
+  transform-origin: center center;
   border: 1px solid #aaa;
-  height: 100%;
-  width: auto;
-  max-width: 100%;
   background: white;
   box-shadow: 0 1px 3px rgba(20, 20, 30, 0.06), 0 12px 32px rgba(20, 20, 30, 0.1);
-  flex-shrink: 0;
   container-type: inline-size;
+  will-change: transform;
 }
-.canvas-scroll.zoom-full {
-  align-items: flex-start;
+.canvas-empty {
+  margin: auto;
+  padding: 40px;
+  text-align: center;
 }
-.canvas-scroll.zoom-full .newspaper-canvas {
-  height: auto;
+.canvas-minimap {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  width: 78px;
+  padding: 5px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid #e4e4e7;
+  box-shadow: 0 4px 14px rgba(20, 20, 30, 0.12);
+  pointer-events: none;
+}
+.minimap-page {
+  position: relative;
   width: 100%;
-  max-width: 760px;
+  background: white;
+  border: 1px solid #ececed;
 }
-
-.workspace-right {
-  grid-area: right;
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
-  min-height: 0;
-  border-left: 1px solid #ececed;
+.minimap-block {
+  position: absolute;
+  background: #e4e4e8;
+  border-radius: 1px;
+}
+.minimap-block.filled {
+  background: #b9bcc4;
+}
+.minimap-block.active {
+  background: var(--accent);
+}
+.page-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: #6a6a72;
+  white-space: nowrap;
+}
+.zoom-readout {
+  min-width: 42px;
+  font-weight: 700;
+  color: var(--primary);
+}
+.zoom-control {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px;
+  background: #f0f0f2;
+  border-radius: 8px;
+}
+.zoom-step {
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: #45454f;
+  font-size: 0.9rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+.zoom-step:hover {
   background: white;
 }
+.zoom-select {
+  height: 26px;
+  padding: 0 4px;
+  border: none;
+  border-radius: 6px;
+  background: white;
+  color: var(--primary);
+  font-size: 0.76rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+}
+
 .workspace-inspector {
-  padding: 22px 24px;
+  padding: 20px 22px;
   overflow-y: auto;
   min-height: 0;
-  border-bottom: 1px solid #ececed;
+  background: white;
+  border-left: 1px solid #ececed;
 }
+/* The dock: full application width, below everything above it. */
 .workspace-external-editor {
+  grid-area: editor;
   display: flex;
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+  background: white;
+  border-top: 1px solid #ececed;
+  box-shadow: 0 -2px 12px rgba(20, 20, 30, 0.05);
+}
+.editor-collapsed .ext-editor-body {
+  display: none;
+}
+.editor-collapsed .ext-tabs {
+  opacity: 0.5;
+  pointer-events: none;
+}
+.editor-collapsed #edToggleDock {
+  transform: rotate(180deg);
 }
 .ext-editor-header {
   display: flex;
@@ -1795,4 +1902,527 @@ body {
   font-size: 1.4rem;
   cursor: pointer;
   color: var(--secondary);
+}
+
+/* ============ External Editor dock: tabs and panels ============ */
+
+.ext-editor-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  height: 46px;
+  flex-shrink: 0;
+  border-bottom: 1px solid #ececed;
+  background: #fbfbfc;
+}
+.ext-editor-header h3 {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--accent);
+  white-space: nowrap;
+}
+.ext-editor-section-name {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--primary);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.ext-editor-notice {
+  font-size: 0.72rem;
+  color: var(--accent);
+  margin-left: auto;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ext-editor-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.ext-icon-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #e4e4e7;
+  border-radius: 7px;
+  background: white;
+  color: #6a6a72;
+  cursor: pointer;
+  font-size: 0.8rem;
+  line-height: 1;
+  transition: background 0.15s ease, transform 0.2s ease;
+}
+.ext-icon-btn:hover {
+  background: #f2f2f4;
+}
+
+.ext-tabs {
+  display: flex;
+  gap: 2px;
+  margin-left: 8px;
+  padding: 2px;
+  background: #ececee;
+  border-radius: 8px;
+  overflow-x: auto;
+}
+.ext-tab {
+  padding: 5px 13px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: #6a6a72;
+  font-size: 0.76rem;
+  font-weight: 700;
+  font-family: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.ext-tab:hover {
+  color: var(--primary);
+}
+.ext-tab.active {
+  background: white;
+  color: var(--primary);
+  box-shadow: 0 1px 2px rgba(20, 20, 30, 0.12);
+}
+
+.ext-editor-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.ext-tab-panel {
+  display: none;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+.ext-tab-panel.active {
+  display: block;
+  animation: panel-in 0.16s ease-out;
+}
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: none; }
+}
+.ext-mount-strip {
+  display: none;
+}
+.ext-tab-panel[data-tab-panel="layout"].active ~ .ext-mount-strip {
+  display: block;
+  padding: 0 20px 16px;
+}
+
+/* Full width means real columns rather than one long scroll. */
+.ext-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
+  align-items: start;
+}
+.ext-column {
+  min-width: 0;
+}
+.ext-column-wide {
+  grid-column: span 2;
+}
+@media (max-width: 1100px) {
+  .ext-column-wide { grid-column: span 1; }
+}
+.ext-column .form-group {
+  margin-bottom: 12px;
+}
+.ext-column .form-group textarea {
+  min-height: 0;
+}
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0 12px;
+}
+.preview-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #9a9aa2;
+}
+.ext-note {
+  font-size: 0.74rem;
+  margin: 8px 0 0;
+}
+.ext-editor-btn.is-placeholder {
+  border-style: dashed;
+  color: #8a8a92;
+}
+
+.field-counter {
+  float: right;
+  font-weight: 600;
+  color: #9a9aa2;
+}
+.field-counter.over {
+  color: var(--accent);
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.stat {
+  padding: 8px;
+  border: 1px solid #ececed;
+  border-radius: 8px;
+  text-align: center;
+  background: #fbfbfc;
+}
+.stat span {
+  display: block;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+.stat small {
+  color: #9a9aa2;
+  font-size: 0.68rem;
+}
+
+.warning-list {
+  display: grid;
+  gap: 5px;
+}
+.warning-item {
+  margin: 0;
+  padding: 6px 9px;
+  border-radius: 6px;
+  background: #fdf0dc;
+  color: #8a5a09;
+  font-size: 0.75rem;
+}
+.warning-item.level-error {
+  background: #fbe0e4;
+  color: var(--accent);
+}
+.warning-item.level-info {
+  background: #ececee;
+  color: #6a6a72;
+}
+.warning-ok {
+  margin: 0;
+  padding: 6px 9px;
+  border-radius: 6px;
+  background: #dff3e6;
+  color: #1f8a4c;
+  font-size: 0.75rem;
+}
+
+.segmented {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: #f0f0f2;
+  border-radius: 8px;
+}
+.segment {
+  flex: 1;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: #6a6a72;
+  font-size: 0.74rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+.segment.active {
+  background: white;
+  color: var(--primary);
+  box-shadow: 0 1px 2px rgba(20, 20, 30, 0.1);
+}
+.toggle-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 12px 0;
+}
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.toggle input {
+  margin: 0;
+}
+
+.type-preview {
+  border: 1px solid #ececed;
+  border-radius: 8px;
+  background: white;
+  padding: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.type-preview-body.drop-cap::first-letter {
+  float: left;
+  font-size: 2.8em;
+  line-height: 0.85;
+  padding: 4px 6px 0 0;
+  font-weight: 700;
+}
+
+.ext-image-preview.large {
+  height: 240px;
+}
+.ai-request {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid #ececed;
+  border-radius: 8px;
+  background: #fbfbfc;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.asset-shelves {
+  display: grid;
+  gap: 16px;
+}
+.asset-shelf h4 {
+  margin: 0 0 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+}
+.asset-count {
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #ececee;
+  color: #6a6a72;
+  font-size: 0.68rem;
+}
+.asset-shelf.is-empty h4 {
+  color: #9a9aa2;
+}
+.asset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 10px;
+}
+.asset-tile {
+  padding: 4px;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: #fbfbfc;
+  cursor: grab;
+  font-family: inherit;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.asset-tile:hover {
+  transform: translateY(-2px);
+  border-color: #d9d9dd;
+}
+.asset-tile.active {
+  border-color: var(--accent);
+}
+.asset-tile img {
+  width: 100%;
+  height: 62px;
+  object-fit: cover;
+  border-radius: 5px;
+  display: block;
+}
+.asset-tile small {
+  display: block;
+  padding-top: 4px;
+  font-size: 0.66rem;
+  color: #8a8a92;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.history-jump {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 6px 9px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  font-family: inherit;
+  font-size: 0.77rem;
+  color: #6a6a72;
+  cursor: pointer;
+  text-align: left;
+}
+.history-jump:hover {
+  background: #f4f4f5;
+}
+.history-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #d9d9dd;
+  flex-shrink: 0;
+}
+.history-entry.state-current .history-jump {
+  background: #f0f4fb;
+  color: var(--primary);
+  font-weight: 700;
+}
+.history-entry.state-current .history-dot {
+  background: var(--accent);
+}
+.history-entry.state-future .history-jump {
+  opacity: 0.55;
+}
+.history-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.history-time {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.7rem;
+  color: #9a9aa2;
+}
+.history-saved-tag {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #dff3e6;
+  color: #1f8a4c;
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+/* ============ Section selection chrome (Part 4) ============ */
+
+.section-handle {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  background: white;
+  border: 1.5px solid #2f6fd6;
+  border-radius: 1px;
+  z-index: 5;
+}
+.handle-nw { top: -4px; left: -4px; cursor: nwse-resize; }
+.handle-n  { top: -4px; left: 50%; margin-left: -3.5px; cursor: ns-resize; }
+.handle-ne { top: -4px; right: -4px; cursor: nesw-resize; }
+.handle-e  { top: 50%; right: -4px; margin-top: -3.5px; cursor: ew-resize; }
+.handle-se { bottom: -4px; right: -4px; cursor: nwse-resize; }
+.handle-s  { bottom: -4px; left: 50%; margin-left: -3.5px; cursor: ns-resize; }
+.handle-sw { bottom: -4px; left: -4px; cursor: nesw-resize; }
+.handle-w  { top: 50%; left: -4px; margin-top: -3.5px; cursor: ew-resize; }
+
+.section-selected-label {
+  position: absolute;
+  top: -18px;
+  left: -1px;
+  padding: 1px 7px;
+  border-radius: 3px 3px 0 0;
+  background: #2f6fd6;
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  z-index: 5;
+}
+.section-hover-toolbar {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  display: none;
+  gap: 3px;
+  z-index: 6;
+}
+.newspaper-section:hover .section-hover-toolbar {
+  display: flex;
+}
+.flag-overflow {
+  color: var(--accent);
+}
+.newspaper-section.overflowing {
+  box-shadow: inset 0 0 0 2px rgba(196, 30, 58, 0.28);
+}
+
+.context-menu {
+  position: fixed;
+  z-index: 1200;
+  min-width: 218px;
+  padding: 5px;
+  border: 1px solid #e4e4e7;
+  border-radius: 9px;
+  background: white;
+  box-shadow: 0 10px 34px rgba(20, 20, 30, 0.18);
+}
+.context-item {
+  display: block;
+  width: 100%;
+  padding: 7px 11px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: #45454f;
+  font-family: inherit;
+  font-size: 0.8rem;
+  text-align: left;
+  cursor: pointer;
+}
+.context-item:hover:not(:disabled) {
+  background: #f2f2f4;
+}
+.context-item:disabled {
+  color: #c6c6cc;
+  cursor: not-allowed;
+}
+.context-item.danger {
+  color: var(--accent);
+}
+.context-item.danger:hover {
+  background: #fdeef1;
+}
+.context-separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: #ececed;
+}
+
+.fill-meter.large {
+  height: 10px;
 }

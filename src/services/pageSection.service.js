@@ -22,6 +22,20 @@ async function saveSection(pageId, sectionKey, body) {
     imageRotation: body.imageRotation,
     imageZoom: body.imageZoom,
     imageFit: body.imageFit,
+    imageFlipH: body.imageFlipH,
+    imageFlipV: body.imageFlipV,
+    fontFamily: body.fontFamily,
+    fontWeight: body.fontWeight,
+    fontItalic: body.fontItalic,
+    fontUnderline: body.fontUnderline,
+    textAlign: body.textAlign,
+    columnCount: body.columnCount,
+    marginPx: body.marginPx,
+    lineHeight: body.lineHeight,
+    letterSpacingPx: body.letterSpacingPx,
+    paragraphSpacingPx: body.paragraphSpacingPx,
+    listStyle: body.listStyle,
+    dropCap: body.dropCap,
   };
 
   await pageRepository.saveSection(parseInt(pageId, 10), sectionKey, article);

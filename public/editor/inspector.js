@@ -22,6 +22,17 @@ const FONT_FIELDS = [
   { id: "insBodyFont", field: "bodyFontPx", label: "Body size (px)" },
 ];
 
+function formatSavedAt(value) {
+  return value ? new Date(value).toLocaleString() : "—";
+}
+
+// Called after a save lands. The save changed exactly one visible fact on this
+// panel, so exactly that one is updated rather than re-rendering the Inspector.
+export function refreshInspectorSavedAt(section) {
+  const element = document.getElementById("insSavedAt");
+  if (element) element.textContent = formatSavedAt(section?.updated_at);
+}
+
 function metricRow(label, value) {
   return `<div class="inspector-row"><span>${label}</span><strong>${value}</strong></div>`;
 }
@@ -60,7 +71,7 @@ export function renderInspector(section, view, story, onPatch) {
       <div class="inspector-row"><span>Section</span><strong>${escapeHtml(section.section_key)}</strong></div>
       <div class="inspector-row"><span>Linked story</span><strong id="insLinkedStory">${story ? escapeHtml(story.title) : "None"}</strong></div>
       <div class="inspector-row"><span>Status</span><strong><span id="insStatusBadge" class="section-status-badge ${statusClass(status)}">${statusLabel(status)}</span></strong></div>
-      <div class="inspector-row"><span>Last saved</span><strong>${section.updated_at ? new Date(section.updated_at).toLocaleString() : "—"}</strong></div>
+      <div class="inspector-row"><span>Last saved</span><strong id="insSavedAt">${formatSavedAt(section.updated_at)}</strong></div>
       <div class="form-group">
         <label>Editorial status</label>
         <select id="insStatusSelect">

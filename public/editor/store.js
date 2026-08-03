@@ -10,7 +10,8 @@
 
 export const TOPICS = {
   EDITION: "edition", // newspaper + page list identity
-  PAGE: "page", // which page is open / its sections changed
+  PAGE: "page", // the open page changed structurally (switched page, new template)
+  PAGE_SYNC: "pageSync", // same page, fresher rows - e.g. what a save returned
   SELECTION: "selection", // which section is selected
   DRAFT: "draft", // live edits to the selected section
   SAVE: "save", // save lifecycle (dirty / saving / saved / error)
@@ -90,9 +91,13 @@ export function setEdition({ newspaper, pages, reporterNews }) {
   emit(TOPICS.EDITION);
 }
 
-export function replacePage(page) {
+// `structural` means the page's shape changed - a different template, a
+// different page. A save is NOT structural: it returns the same layout with
+// fresher rows, and re-rendering the workspace for it would throw away panel
+// state, scroll positions and the caret on every autosave.
+export function replacePage(page, { structural = false } = {}) {
   state.pages = state.pages.map((p) => (p.id === page.id ? page : p));
-  emit(TOPICS.PAGE);
+  emit(structural ? TOPICS.PAGE : TOPICS.PAGE_SYNC);
 }
 
 export function setCurrentPage(pageId) {

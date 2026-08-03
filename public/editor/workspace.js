@@ -1,23 +1,33 @@
 // The workspace orchestrator.
 //
+// Layout, top to bottom:
+//   Header (app chrome)  ·  Toolbar
+//   Top workspace:  Canvas (left)  |  Inspector (right)
+//   Bottom dock:    External Editor, full width
+//
+// The dock spans the entire width the way a terminal does under VS Code -
+// composing a story is a horizontal job, so the editor gets the whole width and
+// the canvas and Inspector stay visible above it.
+//
 // This is the only module that talks to the section API and the only one that
-// subscribes to the store on behalf of the views. Views never import each other
-// and never hold their own copy of a section - they are handed a view object and
-// a callback, exactly as in the previous architecture, just now driven by
-// store.js instead of a local `state` object (Phase 10).
+// subscribes to the store on behalf of the views. Views never import each other.
 
 import { renderCanvas, refreshSection, refreshSelection } from "./canvas/canvas.js";
+import { renderMiniMap, configure as configureCanvasView, applyTransform } from "./canvas/canvas-view.js";
+import { zoomControlMarkup, bindZoomControl, syncZoomControl, pageIndicatorMarkup } from "./canvas/canvas-toolbar.js";
 import { renderPageNavigator } from "./page-navigator.js";
 import { renderLayoutSidebar } from "./layout-sidebar.js";
-import { renderInspector, refreshInspectorReadouts } from "./inspector.js";
+import { renderInspector, refreshInspectorReadouts, refreshInspectorSavedAt } from "./inspector.js";
 import { renderStoryPicker } from "./story-picker.js";
+import { renderToolbar, refreshHistoryButtons, refreshSaveIndicator, refreshToolbarSelection } from "./toolbar.js";
 import {
-  renderToolbar,
-  refreshHistoryButtons,
-  refreshSaveIndicator,
-  refreshToolbarSelection,
-} from "./toolbar.js";
-import { renderExternalEditor, refreshExternalEditor, showNotice } from "./external-editor/external-editor.js";
+  renderExternalEditor,
+  refreshExternalEditor,
+  refreshHistoryTab,
+  showNotice,
+  setActiveTab,
+} from "./external-editor/external-editor.js";
+import { applyStoredLayout, bindResizers, setEditorCollapsed, getSizes } from "./layout/resizer.js";
 import { showPublicationFiles } from "./publication.js";
 import * as store from "./store.js";
 import * as history from "./history/history.js";
@@ -34,7 +44,11 @@ export async function renderWorkspace(newspaperId) {
 
   store.setEdition({ newspaper, pages, reporterNews });
   autosave.configure({ save: persistDraft, onStateChange: onAutosaveState });
-  history.configure(() => refreshHistoryButtons(history.canUndo(), history.canRedo()));
+  history.configure(() => {
+    refreshHistoryButtons(history.canUndo(), history.canRedo());
+    refreshHistoryTab();
+  });
+  configureCanvasView(syncZoomControl);
   renderShell();
 }
 
@@ -57,8 +71,8 @@ function selectSection(sectionKey) {
   const state = store.getState();
   if (state.selectedSectionKey === sectionKey) return;
 
-  // Leaving a section with unsaved work must not lose it - the debounce timer
-  // is not given the chance to expire after the draft has been swapped out.
+  // Leaving a section with unsaved work must not lose it: the debounce timer is
+  // never given the chance to expire after the draft has been swapped out.
   const leaving = state.selectedSectionKey;
   if (leaving && state.dirty) autosave.flush();
 
@@ -67,9 +81,10 @@ function selectSection(sectionKey) {
 
   const draft = draftFromSection(section);
   store.setSelectedSection(sectionKey, draft);
-  history.reset(draft);
+  history.reset(draft, `Opened ${sectionKey}`);
 
-  refreshSelection(leaving, sectionKey);
+  refreshSelection(leaving, sectionKey, store.getCurrentPage()?.sections, draft);
+  renderMiniMap(store.getCurrentPage(), state.newspaper, sectionKey);
   renderSidePanels();
   refreshToolbarSelection(true, store.getState().storyPickerOpen);
 }
@@ -77,18 +92,33 @@ function selectSection(sectionKey) {
 function patchDraft(patch, source) {
   const draft = store.getDraft();
   // Editing the article's words advances the lifecycle, unless an editor has
-  // already made an explicit call (needs review / ready / published) or the text
-  // came from AI - neither should be silently downgraded to "editing".
+  // already made an explicit call or the text came from AI - neither should be
+  // silently downgraded to "editing".
   const advances =
-    draft &&
-    isContentEdit(patch) &&
-    !isExplicit(draft.status) &&
-    !draft.aiGenerated &&
-    draft.status !== "editing";
+    draft && isContentEdit(patch) && !isExplicit(draft.status) && !draft.aiGenerated && draft.status !== "editing";
 
   store.updateDraft(advances ? { ...patch, status: "editing" } : patch, source);
-  history.record(store.getDraft());
+  history.record(store.getDraft(), { label: describePatch(patch) });
   autosave.schedule();
+}
+
+function describePatch(patch) {
+  const keys = Object.keys(patch).filter((k) => k !== "status");
+  if (!keys.length) return "Edit";
+  const labels = {
+    headline: "Headline",
+    subheading: "Subheadline",
+    body: "Body",
+    caption: "Caption",
+    author: "Reporter",
+    imageUrl: "Image",
+    imageRotation: "Image rotation",
+    imageZoom: "Image zoom",
+    imageFit: "Image fit",
+    imageFlipH: "Image flip",
+    imageFlipV: "Image flip",
+  };
+  return labels[keys[0]] || `${keys[0]} changed`;
 }
 
 function chooseStory() {
@@ -100,7 +130,7 @@ function selectStoryForSection(story) {
   const draft = store.getDraft();
   if (!draft) return;
   store.replaceDraft(draftFromStory(draft, story), "story-picker");
-  history.record(store.getDraft(), { coalesce: false });
+  history.record(store.getDraft(), { coalesce: false, label: `Linked "${story.title}"`, kind: "link" });
   autosave.schedule();
   store.setStoryPickerOpen(false);
 }
@@ -110,30 +140,27 @@ function clearSection(sectionKey) {
   const draft = store.getDraft();
   if (!draft) return;
   store.replaceDraft(
-    {
-      ...draft,
-      newsItemId: null,
-      headline: "",
-      subheading: "",
-      body: "",
-      caption: "",
-      imageUrl: "",
-      aiGenerated: false,
-      status: "empty",
-    },
+    { ...draft, newsItemId: null, headline: "", subheading: "", body: "", caption: "", imageUrl: "", aiGenerated: false, status: "empty" },
     "canvas",
   );
-  history.record(store.getDraft(), { coalesce: false });
+  history.record(store.getDraft(), { coalesce: false, label: "Cleared section", kind: "clear" });
   autosave.schedule();
 }
 
+function setSectionStatus(statusKey) {
+  if (!store.getDraft()) return;
+  patchDraft({ status: statusKey }, "canvas");
+}
+
 function onSectionAction(sectionKey, action) {
-  if (action === "story") {
-    selectSection(sectionKey);
-    chooseStory();
-    return;
-  }
-  if (action === "clear") clearSection(sectionKey);
+  if (action === "clear") return clearSection(sectionKey);
+
+  selectSection(sectionKey);
+  if (action === "story") return chooseStory();
+  if (action === "image") return setActiveTab("images");
+  if (action === "typography") return setActiveTab("typography");
+  if (action === "mark-ready") return setSectionStatus("ready");
+  if (action === "mark-review") return setSectionStatus("needs_review");
 }
 
 function undo() {
@@ -150,13 +177,20 @@ function redo() {
   autosave.schedule();
 }
 
+function jumpHistory(index) {
+  const draft = history.jumpTo(index);
+  if (!draft) return;
+  store.replaceDraft(draft, "history");
+  autosave.schedule();
+}
+
 function cancelEdits() {
   const section = store.getSelectedSection();
   if (!section) return;
   const draft = draftFromSection(section);
   store.replaceDraft(draft, "cancel");
   store.setSaveState("idle");
-  history.reset(draft);
+  history.reset(draft, "Reverted to saved");
   autosave.cancel();
   showNotice("Reverted to the last saved version.");
 }
@@ -176,8 +210,8 @@ async function persistDraft() {
   });
   if (!response.ok) return false;
 
-  const updatedPage = await response.json();
-  store.replacePage(updatedPage);
+  store.replacePage(await response.json());
+  history.markSaved();
   return true;
 }
 
@@ -207,8 +241,7 @@ async function applyTemplate(templateKey) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ template: templateKey }),
   });
-  const updatedPage = await response.json();
-  store.replacePage(updatedPage);
+  store.replacePage(await response.json(), { structural: true });
   store.clearSelection();
   renderPageArea();
   renderSidePanels();
@@ -218,6 +251,13 @@ function toggleStoryPicker() {
   const state = store.getState();
   if (!state.selectedSectionKey) return;
   store.setStoryPickerOpen(!state.storyPickerOpen);
+}
+
+function toggleDock() {
+  const shell = document.querySelector(".workspace-shell");
+  if (!shell) return;
+  setEditorCollapsed(shell, !getSizes().editorCollapsed);
+  applyTransform();
 }
 
 function openPublish() {
@@ -234,33 +274,43 @@ function renderShell() {
   content.innerHTML = `
     <div class="workspace-shell">
       <header class="workspace-toolbar" id="toolbar"></header>
-      <div class="workspace-body">
-        <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
-        <aside class="workspace-sidebar-left" id="sidebarLeft">
-          <div class="sidebar-drawer-header">
-            <h3>Story Explorer</h3>
-            <button class="sidebar-drawer-close" id="sidebarDrawerClose">&times;</button>
-          </div>
-          <div class="sidebar-panel" id="sidebarPanel"></div>
-        </aside>
+
+      <div class="workspace-top">
         <main class="workspace-canvas-host">
           <div class="canvas-toolbar">
             <div id="pageSwitcher" class="page-switcher"></div>
             <div class="canvas-toolbar-divider"></div>
             <div id="layouts" class="layout-switcher"></div>
             <div class="canvas-toolbar-spacer"></div>
-            <div id="zoomToggle" class="zoom-toggle"></div>
+            <div id="pageIndicator"></div>
+            ${zoomControlMarkup()}
           </div>
-          <div id="canvas" class="canvas-scroll"></div>
+          <div id="canvas" class="canvas-stage"></div>
         </main>
-        <div class="workspace-right">
-          <aside class="workspace-inspector" id="inspector"></aside>
-          <aside class="workspace-external-editor" id="externalEditorPanel"></aside>
-        </div>
+        <div class="splitter splitter-v" id="inspectorResizer" role="separator"
+             aria-orientation="vertical" tabindex="0" title="Drag to resize the inspector"></div>
+        <aside class="workspace-inspector" id="inspector"></aside>
       </div>
+
+      <div class="splitter splitter-h" id="editorResizer" role="separator"
+           aria-orientation="horizontal" tabindex="0" title="Drag to resize the editor"></div>
+      <section class="workspace-external-editor" id="externalEditorPanel"></section>
+
+      <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+      <aside class="workspace-sidebar-left" id="sidebarLeft">
+        <div class="sidebar-drawer-header">
+          <h3>Story Explorer</h3>
+          <button class="sidebar-drawer-close" id="sidebarDrawerClose">&times;</button>
+        </div>
+        <div class="sidebar-panel" id="sidebarPanel"></div>
+      </aside>
     </div>
     <div class="modal-root" id="modalRoot"></div>
   `;
+
+  const shell = content.querySelector(".workspace-shell");
+  applyStoredLayout(shell);
+  bindResizers(shell);
 
   renderToolbar({
     newspaper: store.getState().newspaper,
@@ -272,11 +322,16 @@ function renderShell() {
   document.getElementById("sidebarBackdrop").addEventListener("click", () => store.setStoryPickerOpen(false));
   document.getElementById("sidebarDrawerClose").addEventListener("click", () => store.setStoryPickerOpen(false));
 
-  renderZoomToggle();
+  bindZoomControl();
   renderPageArea();
   renderSidePanels();
   renderStoryPickerPanel();
   subscribeViews();
+
+  // Fit mode is derived from the container, so it has to be recomputed whenever
+  // the container changes size - a window resize or a splitter drag.
+  window.addEventListener("resize", applyTransform);
+  window.addEventListener("workspace-resized", applyTransform);
 }
 
 function renderPageArea() {
@@ -285,7 +340,9 @@ function renderPageArea() {
   renderCanvas(page, state.newspaper, state, { onSelectSection: selectSection, onSectionAction });
   renderPageNavigator(state.pages, page, state.newspaper, selectPage);
   renderLayoutSidebar(page, applyTemplate);
-  applyZoomClass();
+  const indicator = document.getElementById("pageIndicator");
+  if (indicator) indicator.innerHTML = pageIndicatorMarkup(page, state.pages);
+  syncZoomControl();
 }
 
 function renderSidePanels() {
@@ -299,6 +356,10 @@ function renderSidePanels() {
     onChooseStory: chooseStory,
     onSave: saveNow,
     onCancel: cancelEdits,
+    onUndo: undo,
+    onRedo: redo,
+    onJumpHistory: jumpHistory,
+    onToggleDock: toggleDock,
     getView: currentView,
   });
 }
@@ -308,39 +369,18 @@ function renderStoryPickerPanel() {
   renderStoryPicker(store.getCurrentPage(), state.reporterNews, state.selectedSectionKey, selectStoryForSection);
 }
 
-function renderZoomToggle() {
-  const container = document.getElementById("zoomToggle");
-  if (!container) return;
-  const { canvasZoom } = store.getState();
-  container.innerHTML = `
-    <button data-zoom="fit" class="zoom-btn${canvasZoom === "fit" ? " active" : ""}">Fit</button>
-    <button data-zoom="full" class="zoom-btn${canvasZoom === "full" ? " active" : ""}">100%</button>
-  `;
-  container.querySelectorAll(".zoom-btn").forEach((btn) => {
-    btn.addEventListener("click", () => store.setZoom(btn.dataset.zoom));
-  });
-}
-
-function applyZoomClass() {
-  const { canvasZoom } = store.getState();
-  document.getElementById("canvas")?.classList.toggle("zoom-full", canvasZoom === "full");
-  document.querySelectorAll(".zoom-btn").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.zoom === canvasZoom);
-  });
-}
-
 // ------------------------------------------------------------ subscriptions ---
 
 function subscribeViews() {
-  // Phase 3 + 11: a keystroke repaints one canvas box and the read-only parts
-  // of the two side panels. Nothing else re-renders.
+  // Part 14: a keystroke repaints one canvas box and the read-only parts of the
+  // side panels. Nothing else re-renders.
   store.subscribe(store.TOPICS.DRAFT, ({ source }) => {
     const section = store.getSelectedSection();
     const view = currentView();
     if (!section || !view) return;
     refreshSection(section, view, { selected: true, dirty: store.isDirty() });
     refreshInspectorReadouts(section, view, currentStory(), source);
-    refreshExternalEditor(view, currentStory(), source);
+    refreshExternalEditor(section, view, currentStory(), source);
   });
 
   store.subscribe(store.TOPICS.SAVE, () => {
@@ -349,6 +389,17 @@ function subscribeViews() {
     const section = store.getSelectedSection();
     const view = currentView();
     if (section && view) refreshSection(section, view, { selected: true, dirty });
+  });
+
+  // A save returns the same layout with fresher rows. Only the things a save can
+  // change are touched - never the panels the editor is working in.
+  store.subscribe(store.TOPICS.PAGE_SYNC, () => {
+    const state = store.getState();
+    const page = store.getCurrentPage();
+    renderPageNavigator(state.pages, page, state.newspaper, selectPage);
+    renderMiniMap(page, state.newspaper, state.selectedSectionKey);
+    const section = store.getSelectedSection();
+    if (section) refreshInspectorSavedAt(section);
   });
 
   store.subscribe(store.TOPICS.PAGE, () => {
@@ -364,6 +415,4 @@ function subscribeViews() {
     document.getElementById("sidebarBackdrop")?.classList.toggle("open", open);
     document.getElementById("tbFromReporter")?.classList.toggle("active", open);
   });
-
-  store.subscribe(store.TOPICS.ZOOM, applyZoomClass);
 }

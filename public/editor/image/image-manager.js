@@ -43,6 +43,18 @@ export function rotate(view, degrees) {
   return { imageRotation: (((view.imageRotation || 0) + degrees) % 360 + 360) % 360 };
 }
 
+export function flip(view, axis) {
+  return axis === "h" ? { imageFlipH: !view.imageFlipH } : { imageFlipV: !view.imageFlipV };
+}
+
+// One place builds the transform, so the canvas thumbnail, the editor preview
+// and the eventual print export can never drift apart on what a rotation means.
+export function imageTransformCss(view) {
+  const scaleX = (Number(view.imageZoom) || 1) * (view.imageFlipH ? -1 : 1);
+  const scaleY = (Number(view.imageZoom) || 1) * (view.imageFlipV ? -1 : 1);
+  return `transform:rotate(${view.imageRotation || 0}deg) scale(${scaleX}, ${scaleY});`;
+}
+
 export function zoom(view, delta) {
   const next = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, (Number(view.imageZoom) || 1) + delta));
   return { imageZoom: Math.round(next * 100) / 100 };
@@ -62,11 +74,11 @@ export function setFit(fit) {
 
 // "Fit" resets the transform so the image sits square in its box again.
 export function resetTransform() {
-  return { imageRotation: 0, imageZoom: 1, imageFit: "cover" };
+  return { imageRotation: 0, imageZoom: 1, imageFit: "cover", imageFlipH: false, imageFlipV: false };
 }
 
 export function clearImage() {
-  return { imageUrl: "", imageRotation: 0, imageZoom: 1, imageFit: "cover" };
+  return { imageUrl: "", ...resetTransform() };
 }
 
 export function imageMetadata(view) {
@@ -77,5 +89,7 @@ export function imageMetadata(view) {
     rotation: view.imageRotation || 0,
     zoom: Number(view.imageZoom) || 1,
     fit: view.imageFit || "cover",
+    flipH: view.imageFlipH === true,
+    flipV: view.imageFlipV === true,
   };
 }

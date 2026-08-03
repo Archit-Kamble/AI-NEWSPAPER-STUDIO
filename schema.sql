@@ -120,6 +120,25 @@ ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS image_rotation INTEGER NOT NU
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS image_zoom NUMERIC(5,2) NOT NULL DEFAULT 1;
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS image_fit VARCHAR(20) NOT NULL DEFAULT 'cover';
 
+-- Typography. Print composition needs each of these as its own column rather
+-- than a JSON blob: the Scribus/PDF export will map them one-to-one onto frame
+-- and paragraph-style properties. Sizes stay in px here (editor space) and are
+-- converted to mm at export - never mixed silently.
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS font_family VARCHAR(80);
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS font_weight VARCHAR(20) NOT NULL DEFAULT 'normal';
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS font_italic BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS font_underline BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS text_align VARCHAR(10) NOT NULL DEFAULT 'left';
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS column_count INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS margin_px INTEGER NOT NULL DEFAULT 12;
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS line_height NUMERIC(4,2) NOT NULL DEFAULT 1.25;
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS letter_spacing_px NUMERIC(4,2) NOT NULL DEFAULT 0;
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS paragraph_spacing_px INTEGER NOT NULL DEFAULT 8;
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS list_style VARCHAR(10) NOT NULL DEFAULT 'none';
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS drop_cap BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS image_flip_h BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS image_flip_v BOOLEAN NOT NULL DEFAULT FALSE;
+
 CREATE TABLE IF NOT EXISTS media_assets (
   id SERIAL PRIMARY KEY,
   original_filename VARCHAR(500) NOT NULL,

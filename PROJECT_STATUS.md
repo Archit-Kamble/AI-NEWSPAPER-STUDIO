@@ -817,3 +817,70 @@ Thumbnails now carry a real headline, a body preview or skeleton lines, an image
 3. **Fix the two `admin.js` dashboard bugs** reported above - small, self-contained, and user-visible.
 4. **Update CLAUDE.md's "Current reality" section** to match the repository, as recorded at the top of this entry.
 5. `page.repository.js`'s `updateTemplate` crash (§11) is still the highest-severity known bug in the system.
+
+## 19. Update — Bottom editor dock + professional editor (2026-08-03)
+
+### The layout correction that drove this
+
+The previous milestone put the External Editor in the right-hand column, under the Inspector. That was wrong. It is now a **full-width dock across the bottom of the application** - a terminal under VS Code, a timeline under Premiere - with the canvas and Inspector side by side above it and both still visible:
+
+```
+Header · Toolbar
+Canvas            |  Inspector
+------------------------------------- (drag)
+External Editor (100% width)
+```
+
+The reason is not cosmetic. Composing a story is a horizontal job: seven tabs of controls, a typography preview beside its settings, an image workspace beside its library. A 380px column forces all of that into one narrow scroll; the full width lets each tab lay out in real columns (`.ext-columns`, auto-fit grid). The shell is now a three-row grid whose middle row splits into canvas + inspector, with both splitters driving CSS custom properties.
+
+### Parts 1-16
+
+- **Tabs (1)** - Story, Images, Typography, Layout, AI, Assets, History. State is preserved in both senses that matter: the active tab lives in `tabs.js` and `localStorage`, not in re-rendered DOM, and every panel is rendered once and *hidden* rather than destroyed, so scroll position and transient UI survive switching away. Verified across a full page reload.
+- **Resizing (2)** - `layout/resizer.js`. Inspector width and dock height drag, clamp, persist to `localStorage`, and are keyboard-accessible (arrow keys, shift for coarse steps). The dock also collapses to its header. "Fit" zoom is recomputed on every resize, so the page never ends up cropped after a drag.
+- **Canvas (3)** - `canvas/canvas-view.js`. Zoom is a **real scale transform** on the page element, not a width trick, so proportions at 300% are the proportions that print. Presets 25-300%, Fit, ctrl/⌘+wheel zoom anchored on the cursor, middle-mouse pan, spacebar pan, minimap, page indicator and live zoom read-out. Spacebar pan is suppressed while typing.
+- **Selection (4)** - eight resize handles, a section label tab, a three-button hover toolbar, and a right-click menu whose every item routes to an action the workspace already exposes - a faster route, not a second implementation.
+- **Story (5)** - live character counters with over-limit state, word count, reading time, and editorial warnings a sub-editor would otherwise catch by eye (missing headline, all-caps headline, thin body, uncaptioned image, uncredited reporter).
+- **Typography (6)** - family, weight, italic, underline, alignment, columns, margins, line/letter/paragraph spacing, bullets, numbering, drop cap, and a live preview that applies the real settings to the real text.
+- **Images (7)** - large preview, library, upload, rotate, flip H/V, zoom, fit modes. Crop, brightness, contrast and background removal are placeholders that say so and are styled as such (`is-placeholder`).
+- **Layout (8)** - the metrics plus the two warnings a page designer acts on: content that will not fit, and boxes left half empty.
+- **AI (9)** - eleven actions, all stubs. Each builds the exact request an integration would send and **displays it** rather than sending it, so the contract is visible and testable before any provider exists.
+- **Assets (10)** - reporter photographs are real and placeable. Icons, logos, advertisements and saved graphics render as **empty shelves**, because `media_assets` has no API yet; showing fake contents would have been a lie. Every tile is already drag-enabled with its payload in `dataTransfer`, so future drop targets need a drop handler and nothing here changes.
+- **History (11)** - timeline with labelled entries ("Headline", "Linked …", "Image zoom"), undo/redo stacks, click-to-jump, and a `saved` marker showing which states actually reached the database.
+- **Thumbnails (12)** - headline, body preview, image, status, reporter icon, AI badge, unsaved dot, **overflow indicator**, hover toolbar.
+- **Animations (13)** - short functional transitions only (panel fade, selection ring, splitter highlight), all respecting `prefers-reduced-motion`.
+- **Files (15)** - `canvas/`, `external-editor/`, `image/`, `history/`, `layout/`, `status/`, `autosave/`. Largest file is `workspace.js` at 418 lines; every other file is under 225.
+
+### Schema
+
+Fourteen more additive columns on `page_sections`: the twelve typography properties plus `image_flip_h/v`. Discrete columns rather than a JSON blob because the Scribus/PDF export will map them one-to-one onto frame and paragraph-style properties. Sizes stay px in editor space and convert to mm at export - the conversion stays explicit, per CLAUDE.md.
+
+### Performance bug found and fixed (Part 14)
+
+The Playwright suite caught a real one. Every autosave called `store.replacePage()`, which emitted the `PAGE` topic - and the `PAGE` subscriber re-renders the canvas, both side panels and the story picker. So **every autosave rebuilt the entire workspace**, throwing away panel state, scroll position and any transient UI. It surfaced as the AI tab's request preview being blank in the full run while passing in isolation: an autosave had landed between the click and the assertion and rebuilt the panel.
+
+Fixed by splitting the topic: `PAGE` now means *structural* change (different page, new template) and `PAGE_SYNC` means *same layout, fresher rows*. A save is not structural, so it now refreshes only what a save can actually change - the page navigator's filled dots, the minimap, and the Inspector's "Last saved" row.
+
+This is measured, not asserted. A dedicated script installs `MutationObserver`s per region: **one keystroke produces 1 mutation on the selected section, 0 on every other section, 0 canvas rebuilds and 0 editor-panel rebuilds**; an autosave landing produces 0 canvas and 0 panel rebuilds.
+
+### Verification (Part 16)
+
+`npm test` 16/16 throughout. The production suite covers, in one run: dock geometry (editor width equals shell width, starts below the top workspace, canvas left of inspector), zoom presets and transform, ctrl+wheel zoom, minimap, page indicator, 8 selection handles, hover toolbar, context menu driving a status change, all 7 tabs, state preserved across tab switches, character counters, story stats and warnings, typography controls with live preview, story linking, image rotate/flip, layout metrics, 11 AI stubs building a request, assets shelves, autosave, history timeline with saved markers, undo/redo, both splitters resizing and persisting, **reload** restoring sizes, active tab, typography, image transform and content, layout switching, page navigation, and dock collapse. **Zero failures, zero console errors, zero page errors.** Separate scripts cover the mutation counts above, autosave retry against an injected HTTP 500, and the dead-image fallback.
+
+### Remaining technical debt
+
+- Resize handles on a selected section are **visual only** - they mark the selection the way a design tool does, but dragging them does not yet resize the block. Section geometry still comes from the template. This is deliberate: the original brief forbade drag/resize work, and moving a block is a template-level decision.
+- GrapesJS is still not integrated; `#external-editor` remains an empty mount, now living under the Layout tab.
+- All AI actions, Crop, Brightness, Contrast and Background removal are stubs by instruction.
+- Asset categories other than reporter photographs have no backing store; `media_assets` exists in the schema with no API.
+- Layout metrics are px estimates from character counts, not real text measurement.
+- The two `admin.js` dashboard bugs reported in §18 (Past Newspapers listed oldest-first; `undefined` date and page count) are still unfixed - still outside the brief, still cheap.
+- CLAUDE.md's "Current reality" section still describes an architecture the repository no longer has - see §18.
+- `.page-card*`, `.page-template`, `.template-thumb*` in `styles.css` remain confirmed-dead and unremoved.
+
+### Next recommended migration
+
+1. **GrapesJS into `#external-editor`** under the Layout tab, reading and writing the same draft every other panel uses.
+2. **Wire the AI panel to a provider** - the request each stub displays is already the contract.
+3. **An assets API** over `media_assets`, which turns three empty shelves into real ones and gives the drag payloads somewhere to land.
+4. Fix the two `admin.js` dashboard bugs and update CLAUDE.md's "Current reality".
+5. `page.repository.js`'s `updateTemplate` crash (§11) is still the highest-severity known bug.

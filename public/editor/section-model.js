@@ -30,6 +30,20 @@ export const DRAFT_FIELDS = [
   "headlineFontPx",
   "subheadingFontPx",
   "bodyFontPx",
+  "imageFlipH",
+  "imageFlipV",
+  "fontFamily",
+  "fontWeight",
+  "fontItalic",
+  "fontUnderline",
+  "textAlign",
+  "columnCount",
+  "marginPx",
+  "lineHeight",
+  "letterSpacingPx",
+  "paragraphSpacingPx",
+  "listStyle",
+  "dropCap",
 ];
 
 export function draftFromSection(section) {
@@ -56,6 +70,20 @@ export function draftFromSection(section) {
     headlineFontPx: Number(section.headline_font_px) || 34,
     subheadingFontPx: Number(section.subheading_font_px) || 20,
     bodyFontPx: Number(section.body_font_px) || 16,
+    imageFlipH: section.image_flip_h === true,
+    imageFlipV: section.image_flip_v === true,
+    fontFamily: section.font_family || "",
+    fontWeight: section.font_weight || "normal",
+    fontItalic: section.font_italic === true,
+    fontUnderline: section.font_underline === true,
+    textAlign: section.text_align || "left",
+    columnCount: Number(section.column_count) || 1,
+    marginPx: Number.isFinite(Number(section.margin_px)) ? Number(section.margin_px) : 12,
+    lineHeight: Number(section.line_height) || 1.25,
+    letterSpacingPx: Number(section.letter_spacing_px) || 0,
+    paragraphSpacingPx: Number.isFinite(Number(section.paragraph_spacing_px)) ? Number(section.paragraph_spacing_px) : 8,
+    listStyle: section.list_style || "none",
+    dropCap: section.drop_cap === true,
   };
 }
 
@@ -104,6 +132,20 @@ export function payloadFromDraft(draft) {
     headlineFontPx: draft.headlineFontPx,
     subheadingFontPx: draft.subheadingFontPx,
     bodyFontPx: draft.bodyFontPx,
+    imageFlipH: draft.imageFlipH,
+    imageFlipV: draft.imageFlipV,
+    fontFamily: draft.fontFamily,
+    fontWeight: draft.fontWeight,
+    fontItalic: draft.fontItalic,
+    fontUnderline: draft.fontUnderline,
+    textAlign: draft.textAlign,
+    columnCount: draft.columnCount,
+    marginPx: draft.marginPx,
+    lineHeight: draft.lineHeight,
+    letterSpacingPx: draft.letterSpacingPx,
+    paragraphSpacingPx: draft.paragraphSpacingPx,
+    listStyle: draft.listStyle,
+    dropCap: draft.dropCap,
   };
 }
 

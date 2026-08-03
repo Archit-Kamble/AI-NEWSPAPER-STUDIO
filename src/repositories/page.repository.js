@@ -88,6 +88,10 @@ async function saveSection(pageId, sectionKey, updates) {
          body = $8, body_font_px = $9, category = $10, location = $11, tags = $12, reporter_name = $13,
          ai_notes = $14, caption = $15, language = $16, status = $17, ai_generated = $18,
          image_url = $19, image_rotation = $20, image_zoom = $21, image_fit = $22,
+         image_flip_h = $23, image_flip_v = $24,
+         font_family = $25, font_weight = $26, font_italic = $27, font_underline = $28,
+         text_align = $29, column_count = $30, margin_px = $31, line_height = $32,
+         letter_spacing_px = $33, paragraph_spacing_px = $34, list_style = $35, drop_cap = $36,
          updated_at = CURRENT_TIMESTAMP
      WHERE page_id = $1 AND section_key = $2 RETURNING *`,
     [pageId, sectionKey, updates.newsItemId || null, updates.headline || null, updates.headlineFontPx || 34,
@@ -95,7 +99,14 @@ async function saveSection(pageId, sectionKey, updates) {
       updates.category || null, updates.location || null, updates.tags || null, updates.reporterName || null,
       updates.aiNotes || null, updates.caption || null, updates.language || null, updates.status || 'empty',
       updates.aiGenerated === true, updates.imageUrl || null, updates.imageRotation || 0,
-      updates.imageZoom || 1, updates.imageFit || 'cover']
+      updates.imageZoom || 1, updates.imageFit || 'cover',
+      updates.imageFlipH === true, updates.imageFlipV === true,
+      updates.fontFamily || null, updates.fontWeight || 'normal', updates.fontItalic === true,
+      updates.fontUnderline === true, updates.textAlign || 'left', updates.columnCount || 1,
+      Number.isFinite(updates.marginPx) ? updates.marginPx : 12, updates.lineHeight || 1.25,
+      Number.isFinite(updates.letterSpacingPx) ? updates.letterSpacingPx : 0,
+      Number.isFinite(updates.paragraphSpacingPx) ? updates.paragraphSpacingPx : 8,
+      updates.listStyle || 'none', updates.dropCap === true]
   );
   return rows[0] || null;
 }

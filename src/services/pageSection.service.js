@@ -14,6 +14,14 @@ async function saveSection(pageId, sectionKey, body) {
     tags: body.tags,
     reporterName: body.reporterName,
     aiNotes: body.aiNotes,
+    caption: body.caption,
+    language: body.language,
+    status: body.status,
+    aiGenerated: body.aiGenerated,
+    imageUrl: body.imageUrl,
+    imageRotation: body.imageRotation,
+    imageZoom: body.imageZoom,
+    imageFit: body.imageFit,
   };
 
   await pageRepository.saveSection(parseInt(pageId, 10), sectionKey, article);

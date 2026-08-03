@@ -735,3 +735,85 @@ Two related, explicitly architecture-only asks: (a) replace the canvas's text pl
 
 1. **GrapesJS integration itself**: `grapesjs.init()` targeting `#external-editor`, with the Upload Image / Reporter Images / Remove Background / Generate Layout toolbar buttons wired to real handlers instead of placeholders — this file (`external-editor.js`) and its `TOOLBAR_BUTTONS` handler map is the intended integration point, matching how §16 flagged `canvas.js`'s `renderCanvas` signature as the integration point for a production layout engine.
 2. Everything else already listed under §16's "Next recommended migration" is unchanged and still applies.
+
+## 18. Update — Production newspaper workflow (2026-08-03)
+
+The editor stopped being a form over a table and became the production workspace the pipeline actually needs: pick a section, attach a reporter story, edit it with live preview, manage its image, watch the status advance, and have the work saved without thinking about it. Thirteen phases were specified; all thirteen landed. GrapesJS, AI providers, background removal, PDF and Scribus export were explicitly out of scope and remain unimplemented.
+
+### Correction to this document
+
+§"Current reality" in CLAUDE.md states that `server.js` defines every route inline, that it calls straight into `src/db.js`, and that `src/controllers/`, `src/routes/`, `src/services/` and `src/middleware/` are all 0-byte scaffolding. **The repository no longer matches that.** The Route→Controller→Service→Repository migration has in fact been done for news, newspapers, pages and page sections: `server.js` is 101 lines that mount `src/routes/{news,newspaper,page}.routes.js`, and each of those resolves through a controller and a service to a repository. Only `auth` is still inline in `server.js`, and only the auth/error middleware and `src/layout/layout.*.js` files are still empty. Per CLAUDE.md's own rule ("if this doc and the repository conflict, trust the repository, and say so explicitly"), the repository was trusted and this correction is recorded here rather than silently worked around. **CLAUDE.md's "Current reality" section should be updated** - it is now actively misleading about the layering, the entry point's size, and which scaffolding is real.
+
+### Data layer (Phases 1, 10)
+
+`public/editor/store.js` is the single source of truth. Canvas, Inspector, External Editor and Toolbar all read the same object and write through the same actions; none of them holds its own copy of a section and none imports another view module. Views subscribe to named topics (`draft`, `selection`, `save`, `page`, …) rather than "any change", which is what makes Phase 11 possible.
+
+`public/editor/section-model.js` owns all three shapes a section takes - the persisted `page_sections` row, the camelCase editor draft, and the PUT payload - in one file, so the draft's field list cannot drift from what actually persists. That drift is the exact failure mode CLAUDE.md records for the duplicated template catalog.
+
+Everything the user types lives in the draft object, never in the DOM. That single decision is what makes undo, autosave and live preview possible at all: all three need to read the in-progress edit, and reading it back out of input elements would have made each of them a special case.
+
+### Schema (additive, follows the documented `IF NOT EXISTS` pattern)
+
+Eight columns on `page_sections`: `caption`, `language`, `status`, `ai_generated`, `image_url`, `image_rotation`, `image_zoom`, `image_fit`. Each is required by a phase that has to survive a reload - Phase 13 tests reload explicitly, so a client-only field would have been a hole, not a simplification. `saveSection` in the repository and the service passthrough were extended to match. Applied to the live database and verified; all 16 backend tests pass unchanged, before and after.
+
+Multi-image galleries deliberately still belong to the existing `section_images` / `media_assets` tables. What was added here is the section's *one primary image*, which is what the Images panel edits - no JSON blobs, scalar columns only, per CLAUDE.md.
+
+### Story pipeline (Phase 1)
+
+A section with nothing attached says "No story attached" and offers one button. Linking a story fills headline, subheading, body, author, image, category, location, tags and language, and resets the lifecycle to `story_linked`. Fields a story does not carry (caption, font sizes, AI notes) are left alone rather than blanked, so existing editorial work is not silently discarded.
+
+### External Editor (Phase 2)
+
+Four collapsible panels in `public/editor/external-editor/`: **Story** (headline/subheading/body/caption/author), **Images**, **AI**, and **Layout editor**, which still contains the untouched empty `#external-editor` div for GrapesJS. All ten AI actions are stubs that log the request they *would* send and say on screen that nothing was sent - visible, testable wiring rather than dead buttons.
+
+**One deliberate de-duplication:** the article text is editable *only* in the Story panel, and classification metadata (category/location/tags/language) *only* in the Inspector. The previous Inspector had its own Headline/Subheading/Body inputs; keeping those alongside Phase 2's Story panel would have meant two live-bound inputs for one draft field - precisely what Phase 10 forbids. The Inspector keeps a live read-only view of everything instead.
+
+### Live preview and performance (Phases 3, 11)
+
+Typing updates the canvas thumbnail, the Inspector read-outs and the status badges immediately, with no Save. One keystroke repaints exactly one section box - `refreshSection` rewrites a single element's `innerHTML` - and updates read-only text nodes elsewhere. Nothing re-renders the workspace. Panels that own an input skip repainting that input (`source` is threaded through every draft update), so the caret is never moved out from under the user.
+
+### Section lifecycle (Phase 5)
+
+`empty → story_linked → editing → ai_generated → needs_review → ready → published`. The first four are derived from content; the last three are explicit editorial decisions and persist. Derivation never overwrites an explicit call. **A bug was caught here by the Playwright suite:** the first implementation inferred "editing" from a heuristic (does the section have a caption?) that never fired, so a section stayed `story_linked` no matter how much its text was rewritten. Replaced with an explicit transition recorded on the draft when a *content* field changes - classification and typography edits correctly do not advance the lifecycle.
+
+### Undo, autosave, images, metrics (Phases 6, 7, 8, 9)
+
+- **History** (`history/history.js`): per-section stacks, reset on selection change so Undo can never rewrite a section the editor has navigated away from. Keystrokes within 500ms coalesce into one step.
+- **Autosave** (`autosave/autosave.js`): 1s debounce, visible `Unsaved changes → Saving... → Saved` indicator, two retries with backoff on failure. Flushes immediately when leaving a section or switching page/template, so a pending debounce can never be lost. Verified against an injected HTTP 500: it reports "Save failed, retrying in 2s" and recovers on its own once the server returns, with no reload.
+- **Images** (`image/image-manager.js`): upload through the existing `/api/uploads/images` endpoint (no new backend surface), a reporter-image library built from stories already loaded, and real rotate/zoom/fit that persist. Crop and background removal are explicit placeholders that say so.
+- **Layout metrics** (`layout/layout-metrics.js`): headline/body/caption heights, image ratio, used and remaining area, and a fill meter in the Inspector. Deliberately *not* persisted - they derive from content that changes every keystroke, so a stored copy would be stale immediately. They are estimates in px; print will need real measurement in mm (CLAUDE.md: never mix px and mm silently).
+
+### Canvas (Phase 4)
+
+Thumbnails now carry a real headline, a body preview or skeleton lines, an image thumbnail, a section-type icon inferred from the template's own section key, a status badge, a linked-reporter icon, an unsaved dot, an AI-generated mark, hover controls (Story / Clear) and an animated selection state that respects `prefers-reduced-motion`. A missing **or dead** image URL degrades to the newspaper placeholder rather than a broken-image glyph - verified by aborting every `/uploads/**` request and confirming the placeholder appears.
+
+### Code layout (Phase 12)
+
+`editor/` now has `canvas/`, `external-editor/`, `image/`, `history/`, `autosave/`, `status/`, `layout/`. Largest file is `workspace.js` at 369 lines; everything else is under 210. Two superseded files were deleted after confirming zero references: the old flat `canvas.js` and the previous milestone's `external-editor.js`. The long-dead `.newspaper-page` CSS block was removed too - it was the grid parent that gave `.newspaper-section` its positioning before the redesign, and leaving it while `.newspaper-section` became absolutely positioned would have left two contradictory definitions of the same layout.
+
+### Verification (Phase 13)
+
+`npm test`: 16/16, unchanged throughout. A new Playwright suite drives the full production flow end to end: create edition → thumbnail chrome present → select section → "no story attached" state → link story via the editor → auto-populate → live preview while typing → status advances to Editing → unsaved indicator → autosave fires unprompted → undo → redo → explicit Save → image rotate/zoom → AI stubs report correctly → **reload** → headline, caption, status and image rotation all persisted → layout switch → page navigation. **Zero failures, zero console errors, zero page errors.** Two further scripts cover autosave retry/recovery and the broken-image fallback. Test fixtures were cleaned up by exact ID and `created_by` match, per the standing rule.
+
+### Bug found in existing code, reported not fixed
+
+`renderNewspaperList` in `public/admin.js` calls `.reverse()` on a response the API already sorts newest-first (`ORDER BY n.created_at DESC` in `newspaper.repository.js`), so **"Past Newspapers" lists oldest first** and today's edition is at the bottom of a 50-row list. The same rows render `undefined` for both the date and the page count (`np.date` and the page count field do not exist on the API response). Both are outside the thirteen phases and in dashboard code this task was told not to rewrite, so they were left alone - but they are real, user-visible, and cheap to fix.
+
+### Remaining technical debt
+
+- GrapesJS is still not integrated; `#external-editor` is still an empty mount point, by instruction.
+- All ten AI actions, plus Crop and Remove Background, are stubs by instruction.
+- Layout metrics are px estimates from character counts, not real text measurement - adequate for ranking layouts, not for typesetting.
+- `news.service.js`'s `listNews` accepts a `language` filter that `news.repository.js` silently ignores (`news_items` has no `language` column). Pre-existing; the section-level `language` added here is separate.
+- The Inspector still needs internal scrolling on short viewports - expected, and the page itself does not scroll.
+- Undo/redo is scoped to one section at a time and resets on selection change - a deliberate safety choice, but it means there is no cross-section undo.
+- `.page-card*`, `.page-template`, `.template-thumb*` in `styles.css` remain confirmed-dead and unremoved.
+- Everything else in this document's longer-standing debt list is unchanged.
+
+### Next recommended migration
+
+1. **GrapesJS into `#external-editor`**, reading and writing the same draft object every other panel uses - the store makes this a mount, not a rewrite.
+2. **Wire the AI panel to a real provider.** The request shape each stub logs is already the contract; `ai_generated` and the `ai_generated` lifecycle state are already plumbed through to the badge.
+3. **Fix the two `admin.js` dashboard bugs** reported above - small, self-contained, and user-visible.
+4. **Update CLAUDE.md's "Current reality" section** to match the repository, as recorded at the top of this entry.
+5. `page.repository.js`'s `updateTemplate` crash (§11) is still the highest-severity known bug in the system.

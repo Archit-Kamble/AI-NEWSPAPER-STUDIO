@@ -86,11 +86,16 @@ async function saveSection(pageId, sectionKey, updates) {
     `UPDATE page_sections
      SET news_item_id = $3, headline = $4, headline_font_px = $5, subheading = $6, subheading_font_px = $7,
          body = $8, body_font_px = $9, category = $10, location = $11, tags = $12, reporter_name = $13,
-         ai_notes = $14, updated_at = CURRENT_TIMESTAMP
+         ai_notes = $14, caption = $15, language = $16, status = $17, ai_generated = $18,
+         image_url = $19, image_rotation = $20, image_zoom = $21, image_fit = $22,
+         updated_at = CURRENT_TIMESTAMP
      WHERE page_id = $1 AND section_key = $2 RETURNING *`,
     [pageId, sectionKey, updates.newsItemId || null, updates.headline || null, updates.headlineFontPx || 34,
       updates.subheading || null, updates.subheadingFontPx || 20, updates.body || null, updates.bodyFontPx || 16,
-      updates.category || null, updates.location || null, updates.tags || null, updates.reporterName || null, updates.aiNotes || null]
+      updates.category || null, updates.location || null, updates.tags || null, updates.reporterName || null,
+      updates.aiNotes || null, updates.caption || null, updates.language || null, updates.status || 'empty',
+      updates.aiGenerated === true, updates.imageUrl || null, updates.imageRotation || 0,
+      updates.imageZoom || 1, updates.imageFit || 'cover']
   );
   return rows[0] || null;
 }

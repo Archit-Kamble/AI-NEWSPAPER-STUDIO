@@ -703,20 +703,8 @@ body {
   margin: 0;
   white-space: nowrap;
 }
-.newspaper-page {
-  width: min(100%, 620px);
-  aspect-ratio: 330 / 530;
-  margin: 18px auto;
-  padding: 18px;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: repeat(3, 1fr);
-  gap: 10px;
-  border: 1px solid #565656;
-  background: #fff;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
-}
 .newspaper-section {
+  position: absolute;
   min-width: 0;
   overflow: hidden;
   display: flex;
@@ -728,26 +716,128 @@ body {
   border: 1px dashed #8d8d8d;
   cursor: pointer;
   text-align: left;
+  transition: outline-color 0.15s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 .newspaper-section:hover {
   outline: 3px solid #e6b4be;
   outline-offset: -3px;
+  z-index: 2;
 }
+/* Phase 4: selection is a state, not a hover artefact - it animates in and
+   stays put once the pointer moves away. */
 .newspaper-section.active {
   outline: 3px solid var(--accent);
   outline-offset: -3px;
+  box-shadow: 0 0 0 4px rgba(196, 30, 58, 0.14);
+  z-index: 3;
+  animation: section-select 0.22s ease-out;
+}
+@keyframes section-select {
+  from {
+    box-shadow: 0 0 0 0 rgba(196, 30, 58, 0.35);
+  }
+  to {
+    box-shadow: 0 0 0 4px rgba(196, 30, 58, 0.14);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .newspaper-section {
+    transition: none;
+  }
+  .newspaper-section.active {
+    animation: none;
+  }
 }
 .newspaper-section.filled {
   color: #202020;
   background: white;
   border: 2px solid var(--accent);
 }
+.newspaper-section.unsaved {
+  border-style: dashed;
+}
+.section-chrome,
 .section-header-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 6px;
+  gap: 4px;
   flex-shrink: 0;
+  min-width: 0;
+}
+.section-type-icon {
+  display: inline-flex;
+  color: #9a9aa2;
+  width: clamp(7px, 3cqw, 13px);
+  height: clamp(7px, 3cqw, 13px);
+  flex-shrink: 0;
+}
+.section-type-icon svg {
+  width: 100%;
+  height: 100%;
+}
+.section-flags {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.section-flag {
+  display: inline-flex;
+  width: clamp(6px, 2.6cqw, 12px);
+  height: clamp(6px, 2.6cqw, 12px);
+}
+.section-flag svg {
+  width: 100%;
+  height: 100%;
+}
+.flag-reporter {
+  color: #2f5fd6;
+}
+.flag-ai {
+  color: #7b4fd6;
+}
+.flag-unsaved {
+  border-radius: 50%;
+  background: #e8a33d;
+  box-shadow: 0 0 0 1.5px white;
+}
+.section-hover-controls {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  display: none;
+  gap: 4px;
+  z-index: 4;
+}
+.newspaper-section:hover .section-hover-controls {
+  display: flex;
+}
+.section-hover-btn {
+  padding: 2px 6px;
+  font-size: clamp(0.38rem, 1.9cqw, 0.62rem);
+  font-family: inherit;
+  font-weight: 700;
+  color: #45454f;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid #d9d9dd;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.section-hover-btn:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+.thumb-image-placeholder {
+  display: inline-flex;
+  width: 34%;
+  height: 34%;
+  color: #b7b7bd;
+}
+.thumb-image-placeholder svg {
+  width: 100%;
+  height: 100%;
 }
 .section-label {
   color: var(--accent);
@@ -768,9 +858,35 @@ body {
   white-space: nowrap;
   flex-shrink: 0;
 }
+/* Section lifecycle (Phase 5). The reporter-side news_item statuses
+   (draft/pending/approved) keep their own colours where they are still shown. */
 .status-empty {
   background: #ececee;
   color: #8a8a92;
+}
+.status-story-linked {
+  background: #e5eefc;
+  color: #2f5fd6;
+}
+.status-editing {
+  background: #fdf0dc;
+  color: #b9740a;
+}
+.status-ai-generated {
+  background: #efe6fb;
+  color: #6b3fc4;
+}
+.status-needs-review {
+  background: #fce4d6;
+  color: #c25b1f;
+}
+.status-ready {
+  background: #dff3e6;
+  color: #1f8a4c;
+}
+.status-published {
+  background: #1f8a4c;
+  color: white;
 }
 .status-filled {
   background: #e5eefc;
@@ -796,6 +912,7 @@ body {
   gap: 4px;
 }
 .thumb-image {
+  position: relative;
   flex: 1 1 auto;
   min-height: 8px;
   background: #e4e4e8;
@@ -805,6 +922,10 @@ body {
   justify-content: center;
   overflow: hidden;
   color: #b7b7bd;
+}
+.thumb-image img {
+  position: absolute;
+  inset: 0;
 }
 .thumb-image svg {
   width: 30%;
@@ -1298,6 +1419,8 @@ body {
   background-size: 22px 22px;
 }
 .canvas-scroll .newspaper-canvas {
+  position: relative;
+  border: 1px solid #aaa;
   height: 100%;
   width: auto;
   max-width: 100%;
@@ -1337,11 +1460,11 @@ body {
 }
 .ext-editor-header {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 16px 24px 12px;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 24px 10px;
   flex-shrink: 0;
+  border-bottom: 1px solid #f0f0f1;
 }
 .ext-editor-header h3 {
   margin: 0;
@@ -1357,14 +1480,174 @@ body {
   color: var(--primary);
   text-transform: uppercase;
 }
+.ext-editor-notice {
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: var(--accent);
+  text-align: right;
+}
 .ext-editor-empty {
   padding: 0 24px 16px;
+}
+.ext-editor-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+.ext-editor-section {
+  border-bottom: 1px solid #f0f0f1;
+}
+.ext-editor-section > summary {
+  padding: 11px 24px;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--accent);
+  list-style: none;
+}
+.ext-editor-section > summary::-webkit-details-marker {
+  display: none;
+}
+.ext-editor-section > summary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 7px;
+  color: #b7b7bd;
+  transition: transform 0.15s ease;
+}
+.ext-editor-section[open] > summary::before {
+  transform: rotate(90deg);
+}
+.ext-editor-section > summary:hover {
+  background: #fafafb;
+}
+.ext-editor-section-body {
+  padding: 0 24px 16px;
+}
+.ext-editor-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 24px;
+  border-top: 1px solid #ececed;
+  background: #fbfbfc;
+  flex-shrink: 0;
+}
+.story-link-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  border: 1px dashed #d9d9dd;
+  border-radius: 8px;
+  background: #fbfbfc;
+  font-size: 0.82rem;
+}
+.story-link-bar.linked {
+  border-style: solid;
+  border-color: #cfe0fa;
+  background: #f4f8ff;
+}
+.ext-image-preview {
+  height: 170px;
+  margin-bottom: 10px;
+  border: 1px solid #ececed;
+  border-radius: 8px;
+  background: #f4f4f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.ext-image-preview img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.ext-image-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+  font-size: 0.74rem;
+  color: #6a6a72;
+}
+.ext-image-meta span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ext-image-fit-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.ext-chip {
+  padding: 4px 12px;
+  border: 1px solid #e4e4e7;
+  border-radius: 999px;
+  background: white;
+  color: #6a6a72;
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+.ext-chip.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+}
+.ext-image-library {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #ececed;
+  border-radius: 8px;
+  background: #fbfbfc;
+}
+.ext-library-item {
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+  overflow: hidden;
+  font-family: inherit;
+}
+.ext-library-item.active {
+  border-color: var(--accent);
+}
+.ext-library-item img {
+  width: 100%;
+  height: 52px;
+  object-fit: cover;
+  display: block;
+  border-radius: 4px;
+}
+.ext-library-item small {
+  display: block;
+  padding: 3px 2px 0;
+  font-size: 0.64rem;
+  color: #8a8a92;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ext-ai-note {
+  margin: 4px 0 0;
+  font-size: 0.74rem;
 }
 .ext-editor-toolbar {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 0 24px 14px;
+  padding: 0 0 12px;
   flex-shrink: 0;
 }
 .ext-editor-btn {
@@ -1392,18 +1675,62 @@ body {
   background: #ffe9eb;
 }
 .ext-editor-mount {
-  flex: 1 1 auto;
-  min-height: 0;
-  margin: 0 24px 20px;
+  min-height: 120px;
   border: 1px dashed #d9d9dd;
   border-radius: 8px;
   background: #fbfbfc;
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow-y: auto;
   text-align: center;
   padding: 16px;
+}
+/* Phase 7's visible half - the save state is always on screen. */
+.save-indicator {
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.save-indicator:empty {
+  display: none;
+}
+.save-indicator.state-dirty {
+  background: #fdf0dc;
+  color: #b9740a;
+}
+.save-indicator.state-saving {
+  background: #ececee;
+  color: #6a6a72;
+}
+.save-indicator.state-saved {
+  background: #dff3e6;
+  color: #1f8a4c;
+}
+.save-indicator.state-error {
+  background: #fbe0e4;
+  color: var(--accent);
+}
+/* Phase 9's read-out: how full the section box is. */
+.fill-meter {
+  height: 6px;
+  margin-top: 10px;
+  border-radius: 999px;
+  background: #ececee;
+  overflow: hidden;
+}
+.fill-meter span {
+  display: block;
+  height: 100%;
+  background: #1f8a4c;
+}
+.fill-meter.overflowing span {
+  background: var(--accent);
+}
+.metrics-note {
+  margin: 6px 0 0;
+  font-size: 0.74rem;
 }
 .inspector-group {
   margin-bottom: 22px;

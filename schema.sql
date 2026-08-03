@@ -105,6 +105,21 @@ CREATE TABLE IF NOT EXISTS page_sections (
   UNIQUE (page_id, section_key)
 );
 
+-- Production workspace fields. The editor's Story panel adds a caption and a
+-- language; the section lifecycle (empty -> story_linked -> editing ->
+-- ai_generated -> needs_review -> ready -> published) needs a status of its own,
+-- separate from the linked news_item's reporter-side status; and a section can
+-- carry one primary image chosen directly in the editor rather than inherited
+-- from the linked story. Multi-image galleries remain the job of section_images.
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS caption TEXT;
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS language VARCHAR(20);
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS status VARCHAR(30) NOT NULL DEFAULT 'empty';
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS ai_generated BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS image_rotation INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS image_zoom NUMERIC(5,2) NOT NULL DEFAULT 1;
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS image_fit VARCHAR(20) NOT NULL DEFAULT 'cover';
+
 CREATE TABLE IF NOT EXISTS media_assets (
   id SERIAL PRIMARY KEY,
   original_filename VARCHAR(500) NOT NULL,

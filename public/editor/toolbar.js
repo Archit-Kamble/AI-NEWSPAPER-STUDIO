@@ -11,12 +11,20 @@ const ICONS = {
   publish: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7Z"/></svg>',
 };
 
+const SAVE_LABELS = {
+  idle: "",
+  dirty: "Unsaved changes",
+  saving: "Saving...",
+  saved: "Saved",
+  error: "Save failed",
+};
+
 function button(id, icon, label, { disabled = false, primary = false, active = false, title = "" } = {}) {
   const classes = `toolbar-btn${primary ? " toolbar-btn-primary" : ""}${active ? " active" : ""}`;
   return `<button id="${id}" class="${classes}" ${disabled ? "disabled" : ""} ${title ? `title="${title}"` : ""}>${ICONS[icon]}<span>${label}</span></button>`;
 }
 
-export function renderToolbar({ newspaper, hasSelection, storyPickerOpen, onSave, onPublish, onToggleStoryPicker }) {
+export function renderToolbar({ newspaper, hasSelection, storyPickerOpen, handlers }) {
   const container = document.getElementById("toolbar");
   if (!container) return;
 
@@ -26,6 +34,7 @@ export function renderToolbar({ newspaper, hasSelection, storyPickerOpen, onSave
         ${newspaper?.name || "Newspaper Workspace"}
         <small>${formatDate(newspaper?.publication_date)}</small>
       </div>
+      <span class="save-indicator" id="saveIndicator"></span>
     </div>
     <div class="toolbar-actions">
       ${button("tbFromReporter", "search", "From Reporter", {
@@ -34,8 +43,8 @@ export function renderToolbar({ newspaper, hasSelection, storyPickerOpen, onSave
         title: hasSelection ? "Attach a reporter story to the selected section" : "Select a section first",
       })}
       ${button("tbSave", "save", "Save", { disabled: !hasSelection })}
-      ${button("tbUndo", "undo", "Undo", { disabled: true, title: "Coming soon" })}
-      ${button("tbRedo", "redo", "Redo", { disabled: true, title: "Coming soon" })}
+      ${button("tbUndo", "undo", "Undo", { disabled: true })}
+      ${button("tbRedo", "redo", "Redo", { disabled: true })}
       ${button("tbPreview", "preview", "Preview", { disabled: true, title: "Coming soon" })}
       ${button("tbExport", "export", "Export", { disabled: true, title: "Coming soon" })}
       ${button("tbAI", "ai", "AI", { disabled: true, title: "Coming soon" })}
@@ -43,7 +52,39 @@ export function renderToolbar({ newspaper, hasSelection, storyPickerOpen, onSave
     </div>
   `;
 
-  document.getElementById("tbSave").addEventListener("click", onSave);
-  document.getElementById("tbPublish").addEventListener("click", onPublish);
-  document.getElementById("tbFromReporter").addEventListener("click", onToggleStoryPicker);
+  document.getElementById("tbSave").addEventListener("click", handlers.onSave);
+  document.getElementById("tbPublish").addEventListener("click", handlers.onPublish);
+  document.getElementById("tbFromReporter").addEventListener("click", handlers.onToggleStoryPicker);
+  document.getElementById("tbUndo").addEventListener("click", handlers.onUndo);
+  document.getElementById("tbRedo").addEventListener("click", handlers.onRedo);
+}
+
+export function refreshHistoryButtons(canUndo, canRedo) {
+  const undoBtn = document.getElementById("tbUndo");
+  const redoBtn = document.getElementById("tbRedo");
+  if (undoBtn) undoBtn.disabled = !canUndo;
+  if (redoBtn) redoBtn.disabled = !canRedo;
+}
+
+// Phase 7's visible half: the editor always knows whether their work is safe.
+export function refreshSaveIndicator(saveState, dirty, message) {
+  const indicator = document.getElementById("saveIndicator");
+  if (!indicator) return;
+
+  const key = saveState === "idle" && dirty ? "dirty" : saveState;
+  indicator.textContent = message || SAVE_LABELS[key] || "";
+  indicator.className = `save-indicator state-${key}`;
+}
+
+export function refreshToolbarSelection(hasSelection, storyPickerOpen) {
+  const fromReporter = document.getElementById("tbFromReporter");
+  const save = document.getElementById("tbSave");
+  if (fromReporter) {
+    fromReporter.disabled = !hasSelection;
+    fromReporter.classList.toggle("active", storyPickerOpen);
+    fromReporter.title = hasSelection
+      ? "Attach a reporter story to the selected section"
+      : "Select a section first";
+  }
+  if (save) save.disabled = !hasSelection;
 }

@@ -362,10 +362,12 @@ body {
 }
 .story-explorer-results {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
 }
 .story-card {
   display: flex;
+  min-width: 0;
   gap: 10px;
   padding: 10px;
   border: 1px solid #ececed;
@@ -1599,10 +1601,7 @@ body.resizing-y * {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  position: sticky;
-  bottom: 0;
-  padding: 12px 0 4px;
-  background: linear-gradient(to bottom, rgba(255,255,255,0), white 24%);
+  padding: 4px 0 8px;
 }
 .inspector-actions .btn-submit {
   margin: 0;

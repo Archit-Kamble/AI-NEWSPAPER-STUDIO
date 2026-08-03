@@ -48,9 +48,16 @@ function renderCards(reporterNews, filters, selectedId, onSelectCard) {
   results.innerHTML = matches
     .map((story) => {
       const thumb = story.image_urls?.[0];
+      // Most of this archive's uploads no longer exist on disk, so a thumbnail
+      // that fails to load falls back to the empty style instead of showing a
+      // broken-image glyph. The 1x1 transparent GIF keeps the box its size.
+      const onError =
+        "this.classList.add('story-card-thumb-empty');" +
+        "this.src='data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';" +
+        "this.onerror=null";
       return `
         <div class="story-card${story.id === selectedId ? " active" : ""}" data-story-id="${story.id}">
-          ${thumb ? `<img class="story-card-thumb" src="${thumb}" alt="" />` : `<div class="story-card-thumb story-card-thumb-empty"></div>`}
+          ${thumb ? `<img class="story-card-thumb" src="${thumb}" alt="" onerror="${onError}" />` : `<div class="story-card-thumb story-card-thumb-empty"></div>`}
           <div class="story-card-body">
             <strong>${story.title}</strong>
             <small>${story.reporter_name || "Unknown reporter"} &middot; ${story.category || "Uncategorised"}</small>

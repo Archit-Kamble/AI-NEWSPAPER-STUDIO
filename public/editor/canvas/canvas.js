@@ -62,6 +62,7 @@ export function renderCanvas(page, newspaper, selection, callbacks = {}) {
            id="canvasSurface" style="width:${pageWidth}px;height:${pageHeight}px;">
         ${monoWarningMarkup(page, geometry)}
         ${gridOverlayMarkup()}
+        <div class="align-guides" id="alignGuides"></div>
         ${mastheadMarkup(newspaper, page, geometry)}
         ${folioMarkup(newspaper, page, geometry)}
         ${pageFootMarkup(newspaper, page, geometry)}

@@ -1491,7 +1491,12 @@ body.resizing-y * {
   position: absolute;
   inset: 0;
   overflow: auto;
-  overscroll-behavior: contain;
+  /* Scroll chaining is left ON deliberately. `overscroll-behavior: contain`
+     was tried here to stop the page bouncing past the canvas edge, and it
+     swallowed the wheel entirely: at Fit the canvas has nothing to scroll, so
+     the wheel did nothing at all - over the one part of the screen where a page
+     designer keeps their mouse. Chaining means the canvas scrolls while there
+     is canvas left, then the page scrolls, which is what everyone expects. */
   display: flex;
   background-image: radial-gradient(#dfdfe3 1px, transparent 1px);
   background-size: 22px 22px;
@@ -3512,4 +3517,85 @@ body.print-view .mono-forme-warning { display: none; }
   border-radius: 7px;
   font: inherit;
   background: white;
+}
+
+/* Alignment guides. The grid stops a block landing off-column; these say
+   whether it is level with the block beside it, which is the thing a designer
+   is actually looking at. Drawn in the page's own pixel space, so they scale
+   with the canvas and stay one hairline wide at any zoom. */
+.align-guides {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 30;
+}
+.align-guide {
+  position: absolute;
+  background: var(--accent, #d81f3f);
+  box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.6);
+}
+.align-guide-v {
+  width: 1px;
+  margin-left: -0.5px;
+}
+.align-guide-h {
+  height: 1px;
+  margin-top: -0.5px;
+}
+
+/* The small layout, beside the block being composed.
+   When the dock is open the page is usually scrolled out of sight, and a block
+   on its own does not say whether it is the lead or a filler at the foot of
+   page four. This says where you are, what is left, and what is next. */
+.page-map {
+  margin-top: 14px;
+  padding: 10px;
+  border: 1px solid #e8e8ec;
+  border-radius: 9px;
+  background: #fbfbfc;
+}
+.page-map-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.76rem;
+  color: #6a6a72;
+  margin-bottom: 8px;
+}
+.page-map-sheet {
+  position: relative;
+  width: 100%;
+  max-width: 190px;
+  margin: 0 auto;
+  background: white;
+  border: 1px solid #dcdce2;
+  box-shadow: 0 1px 4px rgba(20, 20, 30, 0.08);
+}
+.page-map-block {
+  position: absolute;
+  padding: 0;
+  border: none;
+  border-radius: 1px;
+  background: #e6e6ea;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.page-map-block.filled { background: #b4b7c0; }
+.page-map-block.is-advert { background: #ded3b8; }
+.page-map-block.is-photo { background: #c6d3e0; }
+.page-map-block.is-feature { background: #d8cbe0; }
+.page-map-block:hover { background: #8e8e98; }
+.page-map-block.active {
+  /* The accent, not --primary: --primary is #333, and a near-black block reads
+     as "this one is heavy", not as "you are here". */
+  background: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+  z-index: 2;
+}
+.page-map-hint {
+  margin: 8px 0 0;
+  font-size: 0.7rem;
+  color: #8a8a92;
+  text-align: center;
 }

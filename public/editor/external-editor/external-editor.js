@@ -21,6 +21,7 @@ import { spacePanelMarkup, refreshSpacePanel } from "./layout-panel.js";
 import { aiPanelMarkup, bindAiPanel, refreshAiPanel } from "./ai-panel.js";
 import { assetsPanelMarkup, bindAssetsPanel, refreshAssetsPanel } from "./assets-panel.js";
 import { historyPanelMarkup, bindHistoryPanel, refreshHistoryPanel } from "./history-panel.js";
+import { pageMapMarkup, bindPageMap } from "./page-map.js";
 
 // The three steps of the lifecycle, in order. Anything not on this path lives
 // in a collapsed <details> below them.
@@ -95,6 +96,7 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
     <div class="ext-editor-stage">
       <div class="ext-preview-col">
         ${composeCanvasMarkup()}
+        ${pageMapMarkup(callbacks.getPage?.(), callbacks.getNewspaper?.(), section.section_key)}
       </div>
 
       <div class="ext-controls-col">
@@ -138,6 +140,8 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
     onNotify: notify,
   });
   bindPicturesPanel({ ...callbacks, onSelectImage: selectImageById });
+  // The small layout is a way through the page, not only a picture of it.
+  bindPageMap((sectionKey) => callbacks.onSelectSection?.(sectionKey));
   bindTypographyPanel(callbacks.getView, callbacks.onPatch);
   bindAiPanel(callbacks.getView, callbacks.getSection, callbacks.onPatch, notify, callbacks.getImages);
   bindAssetsPanel(callbacks.onPatch, notify);

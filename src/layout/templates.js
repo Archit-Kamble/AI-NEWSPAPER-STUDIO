@@ -27,9 +27,20 @@ const PAGE_HEIGHT = G.pageHeightPx;
 // therefore starts below it. Inside pages carry a slim folio, drawn the same
 // way, so they start only a little lower than the matter's top edge.
 const MASTHEAD_HEIGHT = 136;
-const MASTHEAD_BOTTOM = G.marginYPx + MASTHEAD_HEIGHT + 8;
-const INSIDE_TOP = G.marginYPx + 40;
 const MATTER_BOTTOM = G.marginYPx + G.matterHeightPx;
+
+// Where content starts, snapped UP to the baseline.
+//
+// This matters more than it looks. The matter's bottom edge is a whole number
+// of baselines from the top of the page, so if content starts on a baseline
+// too, then the depth available to fill is also a whole number of baselines -
+// and bands divide into it exactly. Starting four pixels off the grid instead
+// left a remainder in every division, and the remainder came out as a fatter
+// gap above the last band on the page. That is where the uneven spacing was
+// coming from.
+const up = (px) => Math.ceil(px / G.baselinePx) * G.baselinePx;
+const MASTHEAD_BOTTOM = up(G.marginYPx + MASTHEAD_HEIGHT + 8);
+const INSIDE_TOP = up(G.marginYPx + 40);
 
 // x of a block starting at column `col`, and the width of a block spanning
 // `span` columns. Rounding happens once, at the edge, so a full-width span is
@@ -48,6 +59,67 @@ function colW(col, span) {
 // blocks and a block never grows past the space the layout allotted it.
 function baseline(px) {
   return Math.max(G.baselinePx, Math.floor(px / G.baselinePx) * G.baselinePx);
+}
+
+// The gap between blocks — ONE number, used on both axes.
+//
+// Horizontally the gap has always been right, because it is the column gutter
+// and the grid enforces it. Vertically it was typed by hand into every
+// template, and had drifted to seven different values: 8, 10, 11, 12, 13, 14
+// and 16px, sometimes three of them on one page. A reader does not consciously
+// measure the white between two stories, but an uneven one is why a page looks
+// homemade - the eye reads inconsistent space as a mistake even when it cannot
+// name it.
+//
+// It is a whole baseline, so the rhythm survives: every block still starts and
+// ends on the same 4mm grid the text lines up to, and the gap is the same 4mm
+// everywhere. Nothing below types a y-coordinate any more; `row()` computes it.
+const GAP = G.baselinePx;
+
+/**
+ * Stacks bands down a page from a starting edge, with one gap between each.
+ *
+ * `rows(top, [h1, h2, ...])` returns `{ y, height, end }` per band, so a
+ * template says how DEEP its bands are and never where they start. That is the
+ * whole point: a hand-typed offset can be wrong by two pixels and nobody
+ * notices for a year.
+ *
+ * `height` is the SNAPPED height and `end` is the real bottom edge - both
+ * matter, because block() snaps a height down to the baseline and a template
+ * that then measured from its own un-snapped number left a gap a few pixels
+ * too wide. That was two of the seven gap sizes on its own.
+ */
+function rows(top, heights) {
+  const out = [];
+  let y = top;
+  for (const declared of heights) {
+    const height = baseline(declared);
+    out.push({ y, height, end: y + height });
+    y += height + GAP;
+  }
+  return out;
+}
+
+/**
+ * Divides the depth from `top` to `bottom` into `count` bands with one gap
+ * between each, filling it EXACTLY.
+ *
+ * The last band takes whatever the division left over, so the stack always
+ * reaches the bottom edge. Handing every band the same rounded-down height
+ * instead leaves a few pixels of slack at the foot, which shows up as a wider
+ * gap above the last band - one of the three uneven gaps this replaced.
+ */
+function split(top, bottom, count) {
+  const available = bottom - top - GAP * (count - 1);
+  const each = baseline(available / count);
+  const bands = [];
+  let y = top;
+  for (let index = 0; index < count; index += 1) {
+    const height = index === count - 1 ? available - each * (count - 1) : each;
+    bands.push({ y, height });
+    y += height + GAP;
+  }
+  return bands;
 }
 
 // A block: which column it starts at, how many columns it spans, its top edge
@@ -74,6 +146,12 @@ function block(key, col, span, y, height, options = {}) {
   };
 }
 
+// The bands of each page, top to bottom. A template declares how DEEP its
+// bands are; `rows()` works out where they start, so the gap between them is
+// the same everywhere and no y-coordinate is typed by hand.
+const FRONT = rows(MASTHEAD_BOTTOM, [248, 264, 168, 172]);
+const INSIDE_BOTTOM = MATTER_BOTTOM;
+
 const templates = {
   // Page one, laid out the way a Marathi broadsheet daily lays out page one:
   // a lead package across the top under the nameplate with its own picture
@@ -85,73 +163,94 @@ const templates = {
     key: 'front',
     name: 'Front Page',
     description: 'Nameplate band, a lead package with its picture strip, a display advert and eleven reports.',
-    sections: [
-      // Band one - the day's lead, flanked by pictures, with an advert ear.
-      block('lead-pictures', 0, 2, MASTHEAD_BOTTOM, 248, { type: 'photo' }),
-      block('lead', 2, 7, MASTHEAD_BOTTOM, 248, { headline: 'accent' }),
-      block('lead-side', 9, 2, MASTHEAD_BOTTOM, 248, { type: 'photo' }),
-      block('top-advert', 11, 5, MASTHEAD_BOTTOM, 248, { type: 'advert', border: 'box' }),
+    sections: (() => {
+      // The right-hand column runs from the top of band two to the foot of the
+      // page, carrying the anchor over a display advert - so it ends level with
+      // the four bands of news beside it rather than stopping short.
+      const [anchor, advert] = split(FRONT[1].y, FRONT[3].end, 2);
+      return [
+        // Band one - the day's lead, flanked by pictures, with an advert ear.
+        block('lead-pictures', 0, 2, FRONT[0].y, FRONT[0].height, { type: 'photo' }),
+        block('lead', 2, 7, FRONT[0].y, FRONT[0].height, { headline: 'accent' }),
+        block('lead-side', 9, 2, FRONT[0].y, FRONT[0].height, { type: 'photo' }),
+        block('top-advert', 11, 5, FRONT[0].y, FRONT[0].height, { type: 'advert', border: 'box' }),
 
-      // Band two - two heavy stories, and the right-hand column above the
-      // display advert.
-      block('second-lead', 0, 5, MASTHEAD_BOTTOM + 256, 264, { headline: 'accent' }),
-      block('third-lead', 5, 4, MASTHEAD_BOTTOM + 256, 264),
-      block('anchor', 9, 7, MASTHEAD_BOTTOM + 256, 128),
-      block('display-advert', 9, 7, MASTHEAD_BOTTOM + 392, 500, { type: 'advert', border: 'box' }),
+        // Band two - two heavy stories.
+        block('second-lead', 0, 5, FRONT[1].y, FRONT[1].height, { headline: 'accent' }),
+        block('third-lead', 5, 4, FRONT[1].y, FRONT[1].height),
+        block('anchor', 9, 7, anchor.y, anchor.height),
+        block('display-advert', 9, 7, advert.y, advert.height, { type: 'advert', border: 'box' }),
 
-      // Band three - the day's reports.
-      block('report-one', 0, 3, MASTHEAD_BOTTOM + 528, 168),
-      block('report-two', 3, 3, MASTHEAD_BOTTOM + 528, 168),
-      block('report-three', 6, 3, MASTHEAD_BOTTOM + 528, 168),
+        // Band three - the day's reports.
+        block('report-one', 0, 3, FRONT[2].y, FRONT[2].height),
+        block('report-two', 3, 3, FRONT[2].y, FRONT[2].height),
+        block('report-three', 6, 3, FRONT[2].y, FRONT[2].height),
 
-      // Band four - short items along the foot.
-      block('brief-one', 0, 3, MASTHEAD_BOTTOM + 704, 172),
-      block('brief-two', 3, 3, MASTHEAD_BOTTOM + 704, 172),
-      block('short-news', 6, 3, MASTHEAD_BOTTOM + 704, 172, { type: 'briefs', border: 'box' }),
-    ],
+        // Band four - short items along the foot.
+        block('brief-one', 0, 3, FRONT[3].y, FRONT[3].height),
+        block('brief-two', 3, 3, FRONT[3].y, FRONT[3].height),
+        block('short-news', 6, 3, FRONT[3].y, FRONT[3].height, { type: 'briefs', border: 'box' }),
+      ];
+    })(),
   },
 
   local: {
     key: 'local',
     name: 'Local News',
     description: 'Full-width banner over three news columns and a footer strip.',
-    sections: [
+    sections: (() => {
       // The banner is a story, not a strapline: a wide headline over an intro
       // that carries the top of the page. At 170px it was too shallow to hold
       // both - the headline consumed it and the block's character budget came
-      // out at zero. It gets the depth an intro needs, and the columns below
-      // move down to meet it.
-      block('banner', 0, 16, INSIDE_TOP, 225),
-      block('left-column', 0, 6, INSIDE_TOP + 235, 480),
-      block('centre-column', 6, 6, INSIDE_TOP + 235, 480),
-      block('right-top', 12, 4, INSIDE_TOP + 235, 235),
-      block('right-bottom', 12, 4, INSIDE_TOP + 480, 235),
-      block('footer', 0, 16, INSIDE_TOP + 725, 235),
-    ],
+      // out at zero.
+      const band = rows(INSIDE_TOP, [225, 480]);
+      const footer = band[1].end + GAP;
+      // The right-hand pair fills the same depth as the columns beside it, so
+      // all three end level.
+      const [top, bottom] = split(band[1].y, band[1].end, 2);
+      return [
+        block('banner', 0, 16, band[0].y, band[0].height),
+        block('left-column', 0, 6, band[1].y, band[1].height),
+        block('centre-column', 6, 6, band[1].y, band[1].height),
+        block('right-top', 12, 4, top.y, top.height),
+        block('right-bottom', 12, 4, bottom.y, bottom.height),
+        block('footer', 0, 16, footer, INSIDE_BOTTOM - footer),
+      ];
+    })(),
   },
 
   opinion: {
     key: 'opinion',
     name: 'Opinion',
     description: 'Leader across the top, three signed columns beneath.',
-    sections: [
-      block('editorial', 0, 16, INSIDE_TOP, 270),
-      block('opinion-one', 0, 6, INSIDE_TOP + 280, 645),
-      block('opinion-two', 6, 6, INSIDE_TOP + 280, 645),
-      block('opinion-three', 12, 4, INSIDE_TOP + 280, 645),
-    ],
+    sections: (() => {
+      const band = rows(INSIDE_TOP, [270]);
+      const columnsTop = band[0].end + GAP;
+      return [
+        block('editorial', 0, 16, band[0].y, band[0].height),
+        block('opinion-one', 0, 6, columnsTop, INSIDE_BOTTOM - columnsTop),
+        block('opinion-two', 6, 6, columnsTop, INSIDE_BOTTOM - columnsTop),
+        block('opinion-three', 12, 4, columnsTop, INSIDE_BOTTOM - columnsTop),
+      ];
+    })(),
   },
 
   photo: {
     key: 'photo',
     name: 'Photo Feature',
     description: 'One dominant picture, two supporting pictures, a story below.',
-    sections: [
-      block('photo-lead', 0, 10, INSIDE_TOP, 500),
-      block('photo-top', 10, 6, INSIDE_TOP, 240),
-      block('photo-bottom', 10, 6, INSIDE_TOP + 250, 250),
-      block('caption-story', 0, 16, INSIDE_TOP + 510, 415),
-    ],
+    sections: (() => {
+      const band = rows(INSIDE_TOP, [500]);
+      const storyTop = band[0].end + GAP;
+      // The two supporting pictures fill the dominant one's depth between them.
+      const [top, bottom] = split(band[0].y, band[0].end, 2);
+      return [
+        block('photo-lead', 0, 10, band[0].y, band[0].height, { type: 'photo' }),
+        block('photo-top', 10, 6, top.y, top.height, { type: 'photo' }),
+        block('photo-bottom', 10, 6, bottom.y, bottom.height, { type: 'photo' }),
+        block('caption-story', 0, 16, storyTop, INSIDE_BOTTOM - storyTop),
+      ];
+    })(),
   },
 
   // A real inside page carries far more than six items. This is the dense
@@ -161,27 +260,35 @@ const templates = {
     key: 'dense',
     name: 'Dense Inside Page',
     description: 'Sixteen blocks for a page of short local reports.',
-    sections: [
-      block('anchor', 0, 8, INSIDE_TOP, 300),
-      block('second-lead', 8, 8, INSIDE_TOP, 180),
-      // 90px was too shallow to be a story slot at all: a headline filled it
-      // and the block held no copy. The pair still adds up to the anchor's
-      // depth beside it, so the page still lines up across the grid.
-      block('shoulder', 8, 8, INSIDE_TOP + 190, 110),
-      block('col-one-a', 0, 4, INSIDE_TOP + 310, 180),
-      block('col-one-b', 0, 4, INSIDE_TOP + 500, 180),
-      block('col-two-a', 4, 4, INSIDE_TOP + 310, 180),
-      block('col-two-b', 4, 4, INSIDE_TOP + 500, 180),
-      block('col-three-a', 8, 4, INSIDE_TOP + 310, 180),
-      block('col-three-b', 8, 4, INSIDE_TOP + 500, 180),
-      block('col-four-a', 12, 4, INSIDE_TOP + 310, 180),
-      block('col-four-b', 12, 4, INSIDE_TOP + 500, 180),
-      block('strip-left', 0, 6, INSIDE_TOP + 690, 120),
-      block('strip-centre', 6, 6, INSIDE_TOP + 690, 120),
-      block('strip-right', 12, 4, INSIDE_TOP + 690, 120),
-      block('foot-left', 0, 8, INSIDE_TOP + 820, 105),
-      block('foot-right', 8, 8, INSIDE_TOP + 820, 105),
-    ],
+    sections: (() => {
+      const band = rows(INSIDE_TOP, [300, 180, 180, 120]);
+      const foot = band[3].end + GAP;
+      // The second-lead and the shoulder beside the anchor split its depth, so
+      // the two halves of the top band end level. 90px was too shallow to be a
+      // story slot at all - a headline filled it and no copy fitted.
+      const [lead, shoulder] = split(band[0].y, band[0].end, 2);
+      return [
+        block('anchor', 0, 8, band[0].y, band[0].height),
+        block('second-lead', 8, 8, lead.y, lead.height),
+        block('shoulder', 8, 8, shoulder.y, shoulder.height),
+
+        block('col-one-a', 0, 4, band[1].y, band[1].height),
+        block('col-one-b', 0, 4, band[2].y, band[2].height),
+        block('col-two-a', 4, 4, band[1].y, band[1].height),
+        block('col-two-b', 4, 4, band[2].y, band[2].height),
+        block('col-three-a', 8, 4, band[1].y, band[1].height),
+        block('col-three-b', 8, 4, band[2].y, band[2].height),
+        block('col-four-a', 12, 4, band[1].y, band[1].height),
+        block('col-four-b', 12, 4, band[2].y, band[2].height),
+
+        block('strip-left', 0, 6, band[3].y, band[3].height),
+        block('strip-centre', 6, 6, band[3].y, band[3].height),
+        block('strip-right', 12, 4, band[3].y, band[3].height),
+
+        block('foot-left', 0, 8, foot, INSIDE_BOTTOM - foot),
+        block('foot-right', 8, 8, foot, INSIDE_BOTTOM - foot),
+      ];
+    })(),
   },
 
   // The features page. Every Marathi daily runs one: राशिभविष्य, the almanac
@@ -193,16 +300,23 @@ const templates = {
     key: 'features',
     name: 'Daily Features',
     description: 'राशिभविष्य, the almanac box, दिनविशेष and a thought for the day.',
-    sections: [
-      block('rashi', 0, 8, INSIDE_TOP, 640, { type: 'feature', border: 'box', feature: 'rashi' }),
-      block('panchang', 8, 4, INSIDE_TOP, 200, { type: 'feature', border: 'box', feature: 'panchang' }),
-      block('dinvishesh', 12, 4, INSIDE_TOP, 200, { type: 'feature', border: 'box', feature: 'dinvishesh' }),
-      block('suvichar', 8, 8, INSIDE_TOP + 210, 120, { type: 'feature', border: 'box', feature: 'suvichar' }),
-      block('feature-one', 8, 8, INSIDE_TOP + 340, 300, { headline: 'accent' }),
-      block('feature-advert', 8, 8, INSIDE_TOP + 650, 275, { type: 'advert', border: 'box' }),
-      block('feature-two', 0, 4, INSIDE_TOP + 650, 275),
-      block('feature-three', 4, 4, INSIDE_TOP + 650, 275),
-    ],
+    sections: (() => {
+      const right = rows(INSIDE_TOP, [200, 120, 296]);
+      const bottom = right[2].end + GAP;
+      // The horoscope runs the full depth of the three boxes beside it.
+      const rashiDepth = bottom - GAP - INSIDE_TOP;
+      return [
+        block('rashi', 0, 8, INSIDE_TOP, rashiDepth, { type: 'feature', border: 'box', feature: 'rashi' }),
+        block('panchang', 8, 4, right[0].y, right[0].height, { type: 'feature', border: 'box', feature: 'panchang' }),
+        block('dinvishesh', 12, 4, right[0].y, right[0].height, { type: 'feature', border: 'box', feature: 'dinvishesh' }),
+        block('suvichar', 8, 8, right[1].y, right[1].height, { type: 'feature', border: 'box', feature: 'suvichar' }),
+        block('feature-one', 8, 8, right[2].y, right[2].height, { headline: 'accent' }),
+
+        block('feature-two', 0, 4, bottom, INSIDE_BOTTOM - bottom),
+        block('feature-three', 4, 4, bottom, INSIDE_BOTTOM - bottom),
+        block('feature-advert', 8, 8, bottom, INSIDE_BOTTOM - bottom, { type: 'advert', border: 'box' }),
+      ];
+    })(),
   },
 };
 

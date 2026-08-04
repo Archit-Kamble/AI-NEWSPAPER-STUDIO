@@ -886,6 +886,10 @@ function renderSidePanels() {
     getView: currentView,
     getSection: () => store.getSelectedSection(),
     getImages: () => sectionImages,
+    // The small layout in the dock needs the whole page, not just this block.
+    getPage: () => store.getCurrentPage(),
+    getNewspaper: () => store.getState().newspaper,
+    onSelectSection: selectSection,
     onAddImage: addSectionImage,
     onPatchImage: patchSectionImage,
     onRemoveImage: removeSectionImage,

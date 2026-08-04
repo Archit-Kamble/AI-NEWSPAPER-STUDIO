@@ -205,3 +205,64 @@ test('sizing type down for a short block never makes it bigger', () => {
   // A shallow block of the same width gets less, never more.
   assert.ok(typeScaleFor(620, 90).headlineFontPx < typeScaleFor(620, 600).headlineFontPx);
 });
+
+// --- one gap, everywhere -----------------------------------------------------
+//
+// Horizontally the gap was always right, because it is the column gutter and
+// the grid enforces it. Vertically it was typed by hand into every template and
+// had drifted to seven different values - 8, 10, 11, 12, 13, 14 and 16px,
+// sometimes three of them on one page. A reader never measures the white
+// between two stories, but uneven white is why a page looks homemade.
+
+test('every layout uses exactly one vertical gap between blocks', () => {
+  const { templates } = require('../src/layout/templates');
+  const { geometryOf } = require('../src/layout/geometry');
+  const expected = geometryOf({}).baselinePx;
+
+  const offenders = [];
+  for (const template of Object.values(templates)) {
+    const found = new Set();
+    for (const a of template.sections) {
+      for (const b of template.sections) {
+        if (a === b) continue;
+        // Only blocks that share a column can have a gap between them.
+        const sharedColumns = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+        if (sharedColumns <= 0) continue;
+        const gap = b.y - (a.y + a.height);
+        if (gap >= 0 && gap < 80) found.add(gap);
+      }
+    }
+    const gaps = [...found].sort((x, y) => x - y);
+    if (gaps.length !== 1 || gaps[0] !== expected) {
+      offenders.push(`${template.key}: ${gaps.join(', ') || 'none'}`);
+    }
+  }
+
+  assert.deepEqual(offenders, [], `every gap should be ${expected}px`);
+});
+
+test('the vertical gap is the same measure as the column gutter is wide', () => {
+  const { geometryOf } = require('../src/layout/geometry');
+  const g = geometryOf({});
+  // 8px vertical against a 6px gutter - both 3-4mm, both a whole number of
+  // baselines apart. The vertical one is a baseline so the text rhythm holds.
+  assert.equal(g.baselinePx % 2, 0);
+  assert.ok(Math.abs(g.baselinePx - g.gutterPx) <= g.baselinePx / 2,
+    'the two gaps should read as the same amount of white');
+});
+
+test('content starts on the baseline, so bands divide into the page exactly', () => {
+  const { templates } = require('../src/layout/templates');
+  const { geometryOf } = require('../src/layout/geometry');
+  const g = geometryOf({});
+  const bottom = g.marginYPx + g.matterHeightPx;
+
+  for (const template of Object.values(templates)) {
+    const top = Math.min(...template.sections.map((s) => s.y));
+    assert.equal(
+      (bottom - top) % g.baselinePx, 0,
+      `${template.key}: the depth available must be a whole number of baselines, or the ` +
+      'remainder comes out as a fatter gap above the last band',
+    );
+  }
+});

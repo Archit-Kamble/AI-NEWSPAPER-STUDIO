@@ -9,6 +9,7 @@
 // The block follows the pointer live; the write happens once, on release.
 
 import { snapRect, matterBox, minWidthPx, minHeightPx, getGeometry } from "./grid.js";
+import { findAlignments, drawGuides, clearGuides } from "./align-guides.js";
 
 let onCommit = null;
 let active = null;
@@ -79,9 +80,18 @@ function beginDrag(event, element, handle) {
   event.stopPropagation();
 
   const scale = surfaceScale(surface);
+  // Every other block on the page, measured once. Measuring them on each
+  // pointermove would be re-reading the whole page sixty times a second.
+  const others = [...surface.querySelectorAll(".newspaper-section")]
+    .filter((el) => el !== element)
+    .map((el) => ({
+      x: el.offsetLeft, y: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight,
+    }));
+
   active = {
     element,
     handle,
+    others,
     sectionKey: element.dataset.sectionKey,
     startX: event.clientX,
     startY: event.clientY,
@@ -117,7 +127,29 @@ function onPointerMove(event) {
     rect.y = Math.min(box.bottom - rect.height, Math.max(box.top, rect.y));
   }
 
-  applyRect(active.element, snapRect(rect));
+  // Snap to the grid first, then look for a neighbour to line up with. The grid
+  // is the hard rule - a block must cover whole columns - and alignment is the
+  // refinement inside it, so it can only ever move the block by a few pixels
+  // and never off the column it just landed on.
+  const snapped = snapRect(rect);
+  const { adjustX, adjustY, guides } = findAlignments(snapped, active.others, {
+    resizing: Boolean(active.handle),
+  });
+
+  if (active.handle) {
+    // Resizing moves the edge under the hand, not the whole block.
+    const edges = HANDLE_EDGES[active.handle] || {};
+    if (edges.left) { snapped.x += adjustX; snapped.width -= adjustX; }
+    else if (edges.right) snapped.width += adjustX;
+    if (edges.top) { snapped.y += adjustY; snapped.height -= adjustY; }
+    else if (edges.bottom) snapped.height += adjustY;
+  } else {
+    snapped.x += adjustX;
+    snapped.y += adjustY;
+  }
+
+  drawGuides(guides);
+  applyRect(active.element, snapped);
 }
 
 function endDrag(event) {
@@ -126,6 +158,7 @@ function endDrag(event) {
   element.releasePointerCapture?.(event.pointerId);
   element.classList.remove("dragging");
   showGrid(false);
+  clearGuides();
 
   const rect = {
     x: element.offsetLeft,

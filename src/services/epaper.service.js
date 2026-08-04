@@ -19,6 +19,8 @@
 // edition that reads correctly with no page images at all.
 
 const pool = require('../config/db');
+// The e-paper is read by the public: it must show the story, never its markup.
+const { strip: plainText, load: loadPlainText } = require('../layout/plain-text');
 const { identityFor, dateLine, devanagari } = require('../layout/identity');
 const districtEditions = require('./districtEdition.service');
 
@@ -42,6 +44,7 @@ const isReadable = (section) =>
  * a phone-sized JPEG, or nothing at all.
  */
 async function buildEdition(newspaperId) {
+  await loadPlainText();
   const { rows: papers } = await pool.query('SELECT * FROM newspapers WHERE id = $1', [newspaperId]);
   const paper = papers[0];
   if (!paper) return null;
@@ -107,7 +110,7 @@ function renderHtml(edition) {
   const article = (item, pageNumber) => `
       <article class="story" id="p${pageNumber}-${escapeHtml(item.sectionKey)}">
         ${item.kicker ? `<p class="kicker">${escapeHtml(item.kicker)}</p>` : ''}
-        <h3>${escapeHtml(item.headline)}</h3>
+        <h3>${escapeHtml(plainText(item.headline))}</h3>
         ${item.subheading ? `<p class="deck">${escapeHtml(item.subheading)}</p>` : ''}
         ${
           [item.location, item.reporter].filter(Boolean).length
@@ -122,7 +125,7 @@ function renderHtml(edition) {
               }</figure>`,
           )
           .join('')}
-        ${String(item.body)
+        ${plainText(item.body)
           .split(/\n{2,}/)
           .filter(Boolean)
           .map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`)

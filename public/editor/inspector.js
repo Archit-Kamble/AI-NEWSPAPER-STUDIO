@@ -6,6 +6,7 @@
 // here and nowhere else, so no field has two inputs bound to it.
 
 import { escapeHtml } from "./format.js";
+import { plainText } from "./layout/rich-text.js";
 import { statusOf, statusLabel, statusClass, explicitStatusOptions, isExplicit } from "./status/section-status.js";
 
 const STORY_FIELDS = [
@@ -29,10 +30,12 @@ const META_FIELDS = [
 const WORDS_PER_MINUTE = 200;
 
 function storyStats(view) {
-  const words = (view.body || "").trim() ? view.body.trim().split(/\s+/).length : 0;
+  // The words a reader counts, not the tags. `<b>` is not a word.
+  const text = plainText(view.body);
+  const words = text.trim() ? text.trim().split(/\s+/).length : 0;
   return {
     words,
-    characters: (view.body || "").length,
+    characters: text.length,
     readingMinutes: words ? Math.max(1, Math.round(words / WORDS_PER_MINUTE)) : 0,
   };
 }

@@ -9,6 +9,7 @@ import { statusOf, statusLabel, statusClass } from "../status/section-status.js"
 import { computeMetrics } from "../layout/layout-metrics.js";
 import { imageTransformCss } from "../image/image-manager.js";
 import { buildFlowMap, CELL, flowRuns, bandSpan, pourIntoRuns, flowImageFromRow } from "../layout/text-flow.js";
+import { textWithMarks, markRun, plainText } from "../layout/rich-text.js";
 
 const ICONS = {
   article:
@@ -97,7 +98,10 @@ function placedImagesMarkup(section) {
 function headlineMarkup(view) {
   if (!view.headline) return "";
   const accent = escapeHtml(view.accentColor || "#c8102e");
-  const text = String(view.headline);
+  // Plain, because a headline is set as one line of display type - the marks a
+  // body takes do not belong in it, and a stray tag from a paste must never
+  // print as literal angle brackets.
+  const text = plainText(view.headline);
 
   const size = `style="font-size:${view.headlineFontPx}px"`;
 
@@ -155,7 +159,7 @@ function contentMarkup(section, view) {
     <div class="section-content" style="font-size:${view.bodyFontPx}px;line-height:${view.lineHeight || 1.25}">
       ${view.kicker ? `<div class="section-kicker" style="font-size:${Math.round(view.bodyFontPx * 1.05)}px">${escapeHtml(view.kicker)}</div>` : ""}
       ${headlineMarkup(view)}
-      ${view.subheading ? `<div class="section-subheading" style="font-size:${view.subheadingFontPx}px">${escapeHtml(view.subheading)}</div>` : ""}
+      ${view.subheading ? `<div class="section-subheading" style="font-size:${view.subheadingFontPx}px">${escapeHtml(plainText(view.subheading))}</div>` : ""}
       ${
         hasImage
           ? `<span class="section-image-box"><img class="section-image" src="${escapeHtml(view.imageUrl)}" alt=""
@@ -167,11 +171,21 @@ function contentMarkup(section, view) {
       }
       ${
         view.body
-          ? `<p class="section-body" style="column-count:${columns}">${datelineMarkup(view)}${escapeHtml(view.body)}</p>`
+          ? `<p class="section-body" style="column-count:${columns}">${datelineMarkup(view)}${bodyMarkup(view)}</p>`
           : ""
       }
     </div>
   `;
+}
+
+// The body for a block with no picture in it: set as ordinary columns rather
+// than poured cell by cell. The marks a sub-editor applied are put back, and
+// everything else is escaped - so a story containing a literal "<" prints the
+// character, and a story containing <b> prints in bold, and neither prints as
+// angle brackets on the page.
+function bodyMarkup(view) {
+  const { text, marks } = textWithMarks(view.body);
+  return markRun(text, 0, marks, escapeHtml);
 }
 
 // Copy poured into the cells the pictures leave free - the same calculation the
@@ -221,17 +235,26 @@ function flowedTextMarkup(section, view) {
   if (view.subheading && subheadingHeight > 0) {
     const box = band(CELL.SUBHEADING, pad);
     pieces.push(
-      `<div class="section-flowed section-flowed-band" style="left:${box.left}px;top:${bandTop + headlineHeight}px;width:${box.width}px;height:${subheadingHeight}px"><div class="section-subheading" style="font-size:${view.subheadingFontPx}px">${escapeHtml(view.subheading)}</div></div>`,
+      `<div class="section-flowed section-flowed-band" style="left:${box.left}px;top:${bandTop + headlineHeight}px;width:${box.width}px;height:${subheadingHeight}px"><div class="section-subheading" style="font-size:${view.subheadingFontPx}px">${escapeHtml(plainText(view.subheading))}</div></div>`,
     );
   }
 
   // The body is what actually flows round the picture, line by line, which is
   // the whole point of the grid.
   const dateline = [view.location, view.author].map((p) => String(p || "").trim()).filter(Boolean).join(", ");
-  const body = view.body ? `${dateline ? `■ ${dateline} ` : ""}${view.body}` : "";
+  // The copy is poured as PLAIN text, because the grid measures and places
+  // characters - a tag has no width. The bold and italic ranges are carried
+  // separately and put back on each run afterwards, so what a sub-editor marked
+  // is what appears on the page.
+  const { text: bodyText, marks } = textWithMarks(view.body);
+  const prefix = dateline ? `■ ${dateline} ` : "";
+  const body = bodyText ? `${prefix}${bodyText}` : "";
+  const offset = prefix.length;
+
   pourIntoRuns(flowRuns(map, CELL.TEXT), body).forEach((run) => {
+    const marked = markRun(run.text, (run.at || 0) - offset, marks, escapeHtml);
     pieces.push(
-      `<span class="section-flowed" style="left:${pad + run.col * map.cellWidth}px;top:${pad + run.row * map.cellHeight}px;width:${run.length * map.cellWidth + 2}px;font-size:${view.bodyFontPx}px;line-height:${map.cellHeight}px">${escapeHtml(run.text)}</span>`,
+      `<span class="section-flowed" style="left:${pad + run.col * map.cellWidth}px;top:${pad + run.row * map.cellHeight}px;width:${run.length * map.cellWidth + 2}px;font-size:${view.bodyFontPx}px;line-height:${map.cellHeight}px">${marked}</span>`,
     );
   });
   return pieces.join("");

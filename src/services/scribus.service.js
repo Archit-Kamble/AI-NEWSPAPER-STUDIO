@@ -20,6 +20,9 @@
 // forbids mixing the two silently, so px→mm happens once, here, at the boundary.
 
 const { geometryOf, pxToMm } = require('../layout/geometry');
+// A story is stored with the marks a printer can set; a text frame takes the
+// text. Without this a page goes to press with "<b>" set in type.
+const { strip } = require('../layout/plain-text');
 const { identityFor, dateLine } = require('../layout/identity');
 
 const escapeXml = (value) =>
@@ -110,7 +113,7 @@ function blockFrames(section, publicDir) {
     const h = mm(Number(section.body_font_px) * 1.6);
     parts.push(textFrame({
       xMm: innerX, yMm: advance(h), widthMm: innerWidth, heightMm: h,
-      text: section.kicker, fontPt: pxToPt(section.body_font_px), font: HEAD_FONT,
+      text: strip(section.kicker), fontPt: pxToPt(section.body_font_px), font: HEAD_FONT,
     }));
   }
 
@@ -118,11 +121,11 @@ function blockFrames(section, publicDir) {
     // The painted word is marked with asterisks in the workspace. Scribus takes
     // a separate colour per run, so the marks come out and the whole headline is
     // set in the accent when the layout asked for it.
-    const accented = section.headline.includes('*') || section.headline_style === 'accent';
+    const accented = strip(section.headline).includes('*') || section.headline_style === 'accent';
     const h = mm(Number(section.headline_font_px) * 2.6);
     parts.push(textFrame({
       xMm: innerX, yMm: advance(h), widthMm: innerWidth, heightMm: h,
-      text: section.headline.replace(/\*/g, ''),
+      text: strip(section.headline).replace(/\*/g, ''),
       fontPt: pxToPt(section.headline_font_px), font: HEAD_FONT,
       colour: accented ? 'SahasRed' : 'Black',
     }));
@@ -132,7 +135,7 @@ function blockFrames(section, publicDir) {
     const h = mm(Number(section.subheading_font_px) * 2.4);
     parts.push(textFrame({
       xMm: innerX, yMm: advance(h), widthMm: innerWidth, heightMm: h,
-      text: section.subheading, fontPt: pxToPt(section.subheading_font_px), font: HEAD_FONT,
+      text: strip(section.subheading), fontPt: pxToPt(section.subheading_font_px), font: HEAD_FONT,
     }));
   }
 
@@ -144,7 +147,7 @@ function blockFrames(section, publicDir) {
     const dateline = [section.location, section.reporter_name].filter(Boolean).join(', ');
     parts.push(textFrame({
       xMm: innerX, yMm: cursor, widthMm: innerWidth, heightMm: remaining,
-      text: `${dateline ? `■ ${dateline} ` : ''}${section.body}`,
+      text: `${dateline ? `■ ${dateline} ` : ''}${strip(section.body)}`,
       fontPt: pxToPt(section.body_font_px), font: BODY_FONT,
       align: 3, // justified, as a newspaper sets body copy
       columns,

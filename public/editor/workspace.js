@@ -39,6 +39,7 @@ import * as history from "./history/history.js";
 import * as autosave from "./autosave/autosave.js";
 import { draftFromSection, draftFromStory, payloadFromDraft, viewOfSection } from "./section-model.js";
 import { isContentEdit, isExplicit } from "./status/section-status.js";
+import { buildFlowMap, flowImageFromRow } from "./layout/text-flow.js";
 
 export async function renderWorkspace(newspaperId) {
   const [newspaper, pages, reporterNews] = await Promise.all([
@@ -886,6 +887,15 @@ function renderSidePanels() {
     getView: currentView,
     getSection: () => store.getSelectedSection(),
     getImages: () => sectionImages,
+    // The story editor shows the block's real character budget under the box.
+    getBudget: () => {
+      const section = store.getSelectedSection();
+      const view = currentView();
+      if (!section || !view) return 0;
+      // The same character grid the Space panel and preflight use - never a
+      // second measurement that could quietly disagree with them.
+      return buildFlowMap(section, view, sectionImages.map(flowImageFromRow)).bodyCharBudget;
+    },
     // The small layout in the dock needs the whole page, not just this block.
     getPage: () => store.getCurrentPage(),
     getNewspaper: () => store.getState().newspaper,

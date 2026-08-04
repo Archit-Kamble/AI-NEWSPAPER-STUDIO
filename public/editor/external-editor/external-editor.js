@@ -22,6 +22,7 @@ import { aiPanelMarkup, bindAiPanel, refreshAiPanel } from "./ai-panel.js";
 import { assetsPanelMarkup, bindAssetsPanel, refreshAssetsPanel } from "./assets-panel.js";
 import { historyPanelMarkup, bindHistoryPanel, refreshHistoryPanel } from "./history-panel.js";
 import { pageMapMarkup, bindPageMap } from "./page-map.js";
+import { storyEditorMarkup, bindStoryEditor, refreshStoryEditor, refreshStoryCount } from "./story-editor.js";
 
 // The three steps of the lifecycle, in order. Anything not on this path lives
 // in a collapsed <details> below them.
@@ -100,7 +101,11 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
       </div>
 
       <div class="ext-controls-col">
-        ${group("image", "1 · Pictures", `
+        ${group("story", "1 · Write the story", storyEditorMarkup(view, {
+          budget: callbacks.getBudget ? callbacks.getBudget() : 0,
+        }))}
+
+        ${group("image", "2 · Pictures", `
           ${picturesPanelMarkup(callbacks.getImages?.() || [])}
           <details class="ext-more">
             <summary>Choose from the reporter's pictures</summary>
@@ -108,9 +113,9 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
           </details>
         `)}
 
-        ${group("space", "2 · Space", `<div id="edSpaceGroup">${spacePanelMarkup(section, view, callbacks.getImages?.() || [])}</div>`)}
+        ${group("space", "3 · Space", `<div id="edSpaceGroup">${spacePanelMarkup(section, view, callbacks.getImages?.() || [])}</div>`)}
 
-        ${group("ai", "3 · Write with AI", aiPanelMarkup(view))}
+        ${group("ai", "4 · Help from AI", aiPanelMarkup(view))}
 
         <details class="ext-aside">
           <summary>Typography</summary>
@@ -140,6 +145,9 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
     onNotify: notify,
   });
   bindPicturesPanel({ ...callbacks, onSelectImage: selectImageById });
+  // The writing surface. Every keystroke goes down the same channel as the
+  // Inspector's fields always did - draft, live canvas repaint, autosave.
+  bindStoryEditor({ onPatch: callbacks.onPatch, getBudget: callbacks.getBudget });
   // The small layout is a way through the page, not only a picture of it.
   bindPageMap((sectionKey) => callbacks.onSelectSection?.(sectionKey));
   bindTypographyPanel(callbacks.getView, callbacks.onPatch);
@@ -195,6 +203,11 @@ export function refreshExternalEditor(section, view, story, source) {
   refreshTypographyPanel(view, source);
   refreshAssetsPanel(view);
   refreshAiPanel(view, source);
+  // Not when the change came from the editor itself - rewriting the box a
+  // person has a cursor in throws the cursor back to the start, which is the
+  // classic way a rich editor becomes unusable.
+  if (source !== "story-editor") refreshStoryEditor(view);
+  else refreshStoryCount();
 }
 
 export function refreshHistoryTab() {

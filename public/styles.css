@@ -3599,3 +3599,150 @@ body.print-view .mono-forme-warning { display: none; }
   color: #8a8a92;
   text-align: center;
 }
+
+/* --- The writing surface (public/editor/external-editor/story-editor.js) ----
+   The dock had no text fields at all: pictures, a space read-out and an AI
+   panel, and nowhere to type a word. This is where the story is written. */
+.story-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.story-editor-head {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.story-editor-head label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #55555e;
+}
+.story-headline-input,
+.story-subheading-input {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid #d8d8de;
+  border-radius: 7px;
+  font: inherit;
+}
+.story-headline-input {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.story-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px;
+  border: 1px solid #d8d8de;
+  border-bottom: none;
+  border-radius: 7px 7px 0 0;
+  background: #f6f6f8;
+}
+.rt-btn {
+  min-width: 30px;
+  height: 28px;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: #33333a;
+  font-size: 0.86rem;
+  cursor: pointer;
+  line-height: 1;
+}
+.rt-btn:hover {
+  background: #e6e6ea;
+}
+.rt-btn.active {
+  background: white;
+  border-color: #c9c9d2;
+  color: var(--accent);
+}
+.rt-bold { font-weight: 800; }
+.rt-italic { font-style: italic; font-family: Georgia, serif; }
+.rt-underline { text-decoration: underline; }
+.rt-sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: #d8d8de;
+}
+.rt-spacer { flex: 1; }
+.rt-count {
+  font-size: 0.74rem;
+  color: #7a7a84;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.rt-count.over {
+  color: var(--accent);
+  font-weight: 700;
+}
+.story-editor-body {
+  min-height: 260px;
+  max-height: 46vh;
+  overflow: auto;
+  padding: 14px 16px;
+  border: 1px solid #d8d8de;
+  border-radius: 0 0 7px 7px;
+  background: white;
+  font-size: 0.95rem;
+  line-height: 1.7;
+  outline: none;
+}
+.story-editor-body:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(196, 30, 58, 0.12);
+}
+.story-editor-body:empty::before {
+  content: attr(data-placeholder);
+  color: #a0a0a8;
+}
+.story-editor-body p { margin: 0 0 0.7em; }
+.story-editor-body p:last-child { margin-bottom: 0; }
+.story-editor-body ul,
+.story-editor-body ol { margin: 0 0 0.7em; padding-left: 1.4em; }
+.story-editor-note {
+  margin: 0;
+  font-size: 0.72rem;
+  color: #8a8a92;
+}
+
+/* The owner and office line under the nameplate, as the printed paper sets it. */
+.masthead-owner {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 3px;
+  border-top: 1px solid #d0d0d6;
+  font-size: 5.5px;
+  color: #33333a;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* The printer's declaration at the foot of page two. A legal statement under
+   the Press and Registration of Books Act, drawn from identity.js so it can
+   never be mistyped - and set in the smallest type on the page, which is
+   exactly where a newspaper puts it. */
+.page-imprint {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-top: 3px;
+  border-top: 1px solid #b8b8be;
+  font-size: 4.6px;
+  line-height: 1.5;
+  color: #2a2a30;
+  text-align: justify;
+  z-index: 3;
+}
+.page-imprint .imprint-en {
+  font-family: Arial, sans-serif;
+}
+body.print-view .page-imprint {
+  border-top-color: #333;
+}

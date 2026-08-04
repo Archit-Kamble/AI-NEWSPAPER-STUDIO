@@ -52,8 +52,13 @@ const identity = {
   ],
 
   // The strip above the nameplate.
-  strapline: 'सदैव सत्याच्या बाजूने',
-  editions: 'मुंबई, ठाणे, पुणे, नाशिक, नागपूर, औरंगाबाद, सोलापूर, कोल्हापूर',
+  // Read off the printed nameplate of 4 August 2026, not invented.
+  strapline: 'मराठी, हिंदी, इंग्रजी भाषेत प्रसिद्ध होणारे दैनिक',
+  editions: 'मुंबई, ठाणे, पुणे, नाशिक, नागपूर, छत्रपती संभाजीनगर, सोलापूर, कोल्हापूर',
+  owner: 'मालक - संपादक : श्री. श्रीकांत शिवनाथ मुळे',
+  office: 'ऑफिस : ३११/अ, म.न.पा.च.४, वाढे, सातारा - ४१५००२',
+  phone: '८४०९४९४९४९',
+  email: 'sahasnews@gmail.com',
 
   // The paper's first edition. Everything about volume and issue numbering
   // follows from this date and the edition's own date - see numberingFor().
@@ -64,15 +69,37 @@ const identity = {
   // server's timezone and certainly not UTC.
   timezone: 'Asia/Kolkata',
 
-  price: 'मूल्य ₹ ३.००',
-  placeOfPublication: 'मुंबई',
+  price: 'किंमत - २ रू',
+  placeOfPublication: 'सातारा',
 
   // The printline at the foot of the page. This is a legal requirement on an
   // Indian newspaper, not decoration, and it is identical in every edition -
   // exactly the kind of thing that should never be re-keyed.
   printline:
     'मुद्रक, प्रकाशक व मालक श्री. श्रीकांत शिवनाथ मुळे यांनी दैनिक साहस वार्ता साठी प्रकाशित केले. ' +
-    'संपादक : श्री. श्रीकांत शिवनाथ मुळे. सर्व वाद मुंबई न्यायकक्षेत.',
+    'संपादक : श्री. श्रीकांत शिवनाथ मुळे. सर्व वाद सातारा न्यायकक्षेत.',
+
+  // The full printer's declaration. Every Indian newspaper carries one, and
+  // this paper carries it at the FOOT OF PAGE TWO rather than on every page -
+  // which is why it is separate from the short printline above. It is a legal
+  // statement under the Press and Registration of Books Act; not one word of it
+  // should ever be re-keyed by a desk.
+  imprint:
+    'साहस वार्ता हे दैनिक प्रकाशक, मालक, संपादक श्रीकांत शिवनाथ मुळे यांनी प्रिंटर अश्विनी मुळे, ' +
+    'साहस प्रिंट्स, नर्मदा, ६७/बी, रामनगर पवार कॉलनी, शाहूपुरी, सातारा (महाराष्ट्र) ४१५००२ येथे मुद्रित ' +
+    'करून साहस वार्ता कार्यालय, नर्मदा, ६७/बी, रामनगर पवार कॉलनी, शाहूपुरी, सातारा (महाराष्ट्र) ' +
+    '४१५००२ येथून प्रकाशित केले. (सर्व वाद सातारा न्यायकक्षेत) संपादक श्रीकांत शिवनाथ मुळे ' +
+    '(प्रे. आ. अ‍ॅक्ट अंतर्गत जबाबदार) संपर्क क्र. ८४०९४९४९४९, ई-मेल : sahasvarta@gmail.com',
+  imprintEnglish:
+    'Sahas Varta is printed by Owner, Publisher, Editor SHRIKANT SHIVNATH MULE at Printer ' +
+    'Ashwini Mule, Sahas Prints, Narmada, 67/B, Ramnagar Pawar Colony, Shahupuri, Satara ' +
+    '(Maharashtra) - 415002 & Published from Sahas Varta office, Narmada, 67/B, Ramnagar Pawar ' +
+    'Colony, Shahupuri, Satara (Maharashtra) - 415002. (All disputes subject to Satara ' +
+    'jurisdiction) Editor SHRIKANT SHIVNATH MULE (Responsible under PRB Act). ' +
+    'Contact No. 8409494949, E-mail: sahasvarta@gmail.com',
+
+  // Which page the declaration prints on. The paper puts it on page two.
+  imprintPage: 2,
 };
 
 // --- Marathi date line -------------------------------------------------------

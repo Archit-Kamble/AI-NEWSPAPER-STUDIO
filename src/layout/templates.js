@@ -150,6 +150,22 @@ function block(key, col, span, y, height, options = {}) {
 // bands are; `rows()` works out where they start, so the gap between them is
 // the same everywhere and no y-coordinate is typed by hand.
 const FRONT = rows(MASTHEAD_BOTTOM, [248, 264, 168, 172]);
+
+// The top-left corner of page one is sold.
+//
+// In the printed paper an advertisement sits beside the nameplate, and it is
+// not furniture - it is bought space, it is priced by the column-centimetre
+// like any other advert, and a desk has to be able to put artwork in it. So it
+// is a BLOCK, in the masthead band, and the nameplate is drawn beside it.
+// Its top is snapped to the baseline like everything else, and its foot sits
+// one gap above the first band - so the sold corner keeps the page's rhythm
+// rather than being the one thing on page one that ignores it.
+const MASTHEAD_ADVERT = {
+  col: 0,
+  span: 4,
+  y: up(G.marginYPx),
+  height: MASTHEAD_BOTTOM - GAP - up(G.marginYPx),
+};
 const INSIDE_BOTTOM = MATTER_BOTTOM;
 
 const templates = {
@@ -169,6 +185,10 @@ const templates = {
       // the four bands of news beside it rather than stopping short.
       const [anchor, advert] = split(FRONT[1].y, FRONT[3].end, 2);
       return [
+        // The sold corner of page one, beside the nameplate.
+        block('masthead-advert', MASTHEAD_ADVERT.col, MASTHEAD_ADVERT.span,
+          MASTHEAD_ADVERT.y, MASTHEAD_ADVERT.height, { type: 'advert', border: 'box' }),
+
         // Band one - the day's lead, flanked by pictures, with an advert ear.
         block('lead-pictures', 0, 2, FRONT[0].y, FRONT[0].height, { type: 'photo' }),
         block('lead', 2, 7, FRONT[0].y, FRONT[0].height, { headline: 'accent' }),

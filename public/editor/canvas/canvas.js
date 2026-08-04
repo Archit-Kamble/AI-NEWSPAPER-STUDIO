@@ -5,7 +5,7 @@ import { sectionInnerHtml, sectionClassName } from "./section-thumb.js";
 import { menuMarkup, bindContextMenu, showContextMenu, hideContextMenu } from "./context-menu.js";
 import { bindViewport, bindSpacebarPan, applyTransform, renderMiniMap } from "./canvas-view.js";
 import { gridOverlayMarkup, getGeometry } from "./grid.js";
-import { mastheadMarkup, folioMarkup, pageFootMarkup, registrationMarkup } from "./masthead.js";
+import { mastheadMarkup, folioMarkup, pageFootMarkup, registrationMarkup, imprintMarkup } from "./masthead.js";
 import { bindSectionDrag } from "./section-drag.js";
 import { viewOfSection } from "../section-model.js";
 import { computeMetrics } from "../layout/layout-metrics.js";
@@ -63,9 +63,15 @@ export function renderCanvas(page, newspaper, selection, callbacks = {}) {
         ${monoWarningMarkup(page, geometry)}
         ${gridOverlayMarkup()}
         <div class="align-guides" id="alignGuides"></div>
-        ${mastheadMarkup(newspaper, page, geometry)}
+        ${mastheadMarkup(newspaper, page, geometry, {
+          // The nameplate starts where the sold corner ends.
+          advertWidthPx: (page.sections || []).find((s) => s.section_key === "masthead-advert")
+            ? (page.sections.find((s) => s.section_key === "masthead-advert").width_px || 0) + 6
+            : 0,
+        })}
         ${folioMarkup(newspaper, page, geometry)}
         ${pageFootMarkup(newspaper, page, geometry)}
+        ${imprintMarkup(newspaper, page, geometry)}
         ${registrationMarkup(geometry)}
         ${page.sections
           .map((section) => {

@@ -30,6 +30,8 @@ const AVG_CHAR_WIDTH_RATIO = 0.5;
 // the shirorekha (ि े ै ो ं) and below the baseline (ु ृ), so a 1.25 line box
 // crops them: "शेतकऱ्यांसाठी" sets as "शतकऱ्यासाठा". This is a property of the
 // script, not a taste setting, so it is a floor rather than a default.
+import { plainText } from "./rich-text.js";
+
 const MIN_LINE_HEIGHT = 1.45;
 
 export const CELL = { HEADLINE: "H", SUBHEADING: "S", TEXT: "T", IMAGE: "I", EMPTY: "." };
@@ -138,11 +140,13 @@ export function buildFlowMap(section, view, images = []) {
 
   // The headline and subheading claim whole rows off the top - they are set
   // across the measure, not wrapped around the picture.
-  const headlineRows = view.headline
-    ? rowsFor(estimateHeight(view.headline, view.headlineFontPx, contentWidth), cellHeight)
+  const headlineText = plainText(view.headline);
+  const subheadingText = plainText(view.subheading);
+  const headlineRows = headlineText
+    ? rowsFor(estimateHeight(headlineText, view.headlineFontPx, contentWidth), cellHeight)
     : 0;
-  const subheadingRows = view.subheading
-    ? rowsFor(estimateHeight(view.subheading, view.subheadingFontPx, contentWidth), cellHeight)
+  const subheadingRows = subheadingText
+    ? rowsFor(estimateHeight(subheadingText, view.subheadingFontPx, contentWidth), cellHeight)
     : 0;
 
   const grid = [];
@@ -190,7 +194,9 @@ export function buildFlowMap(section, view, images = []) {
     bodyCharBudget: textCells,
     // Marathi averages roughly six characters a word including the space.
     bodyWordBudget: Math.round(textCells / 6),
-    usedChars: (view.body || "").length,
+    // What the copy will SET, not how it is marked up. Two words in bold take
+    // exactly as much room as two words that are not.
+    usedChars: plainText(view.body).length,
   };
 }
 
@@ -299,6 +305,7 @@ export function pourIntoRuns(runs, text) {
   const words = String(text || "").split(/(\s+)/).filter((piece) => piece !== "");
   const filled = [];
   let buffer = "";
+  let poured = 0;
 
   // The widest run there is. A word is only ever broken if it cannot fit even
   // there; anywhere else it waits for the next line. Breaking a word merely
@@ -330,7 +337,11 @@ export function pourIntoRuns(runs, text) {
       line += next;
     }
     const trimmed = line.replace(/\s+$/, "");
-    if (trimmed) filled.push({ ...run, text: trimmed });
+    // Where this run's text began in the source. The canvas needs it to put
+    // bold and italic back on the right words after the pour has broken the
+    // copy into cell-aligned pieces (see rich-text.js).
+    if (trimmed) filled.push({ ...run, text: trimmed, at: poured });
+    poured += line.length;
     if (!words.length && !buffer) break;
   }
   return filled;

@@ -14,6 +14,7 @@ const jump = require('./src/services/jump.service');
 const districtEditions = require('./src/services/districtEdition.service');
 const epaper = require('./src/services/epaper.service');
 const scribus = require('./src/services/scribus.service');
+const plainTextModule = require('./src/layout/plain-text');
 const preflight = require('./src/services/preflight.service');
 const worklist = require('./src/services/worklist.service');
 const fit = require('./src/services/fit.service');
@@ -301,6 +302,7 @@ function createApp() {
     const { rows } = await pool.query("SELECT * FROM newspapers WHERE id = $1", [parseInt(req.params.id, 10)]);
     if (!rows[0]) return res.status(404).json({ error: "No such edition." });
     const pages = await districtEditions.pagesOf(rows[0].id);
+    await plainTextModule.load();
     const sla = scribus.buildDocument(rows[0], pages);
 
     await signoff.record(rows[0].id, req.session.user?.id, "Scribus document generated");
@@ -319,6 +321,7 @@ function createApp() {
     if (!rows[0]) return res.status(404).json({ error: "No such edition." });
 
     const pages = await districtEditions.pagesOf(rows[0].id);
+    await plainTextModule.load();
     const sla = scribus.buildDocument(rows[0], pages);
     const { zip, pictures, missing } = await pressPackage.build(rows[0], pages, sla);
 

@@ -69,13 +69,19 @@ function dateParts(isoDate) {
  * The masthead band for page one. Returns "" until the identity has loaded, or
  * for any page other than the first — inside pages get the folio instead.
  */
-export function mastheadMarkup(newspaper, page, geometry) {
+export function mastheadMarkup(newspaper, page, geometry, { advertWidthPx = 0 } = {}) {
   if (!identity || !page || Number(page.page_number) !== 1) return "";
 
   const date = dateParts(newspaper?.publication_date);
-  const left = geometry?.marginXPx ?? 20;
+  const matterLeft = geometry?.marginXPx ?? 20;
   const top = geometry?.marginYPx ?? 20;
-  const width = geometry?.matterWidthPx ?? 620;
+  const matterWidth = geometry?.matterWidthPx ?? 620;
+
+  // The paper sells the top-left corner of page one. That is an ADVERT BLOCK on
+  // the page, not furniture, so the nameplate begins where the advert ends -
+  // exactly as it does in the printed edition.
+  const left = matterLeft + advertWidthPx;
+  const width = matterWidth - advertWidthPx;
 
   return `
     <div class="page-masthead" style="left:${left}px;top:${top}px;width:${width}px;">
@@ -100,6 +106,10 @@ export function mastheadMarkup(newspaper, page, geometry) {
           <span class="masthead-editor">${escapeHtml(identity.editor || "")}</span>
           <span class="masthead-web">${escapeHtml(identity.epaper || "")}</span>
         </div>
+      </div>
+      <div class="masthead-owner">
+        <span>${escapeHtml(identity.owner || "")}</span>
+        <span>${escapeHtml(identity.office || "")} · ${escapeHtml(identity.phone || "")} · ${escapeHtml(identity.email || "")}</span>
       </div>
     </div>
   `;
@@ -159,6 +169,31 @@ export function pageFootMarkup(newspaper, page, geometry) {
     <div class="page-foot ${verso ? "foot-verso" : "foot-recto"}" style="left:${left}px;top:${top}px;width:${width}px;">
       <span class="foot-printline">${escapeHtml(identity.printline || "")}</span>
       <span class="foot-page">${escapeHtml(identity.title || "")} । ${escapeHtml(dateText)} । पृष्ठ ${escapeHtml(devanagari(page.page_number))}</span>
+    </div>
+  `;
+}
+
+/**
+ * The printer's declaration, at the foot of the page the paper carries it on.
+ *
+ * Every Indian newspaper must print one under the Press and Registration of
+ * Books Act, and this paper prints it at the foot of PAGE TWO rather than on
+ * every page. It is drawn from src/layout/identity.js, so a desk can never
+ * mistype the address of the press it is printed at - which is a legal
+ * statement, not a caption.
+ */
+export function imprintMarkup(newspaper, page, geometry) {
+  if (!identity || !page) return "";
+  if (Number(page.page_number) !== Number(identity.imprintPage || 2)) return "";
+
+  const left = geometry?.marginXPx ?? 20;
+  const width = geometry?.matterWidthPx ?? 620;
+  const bottom = (geometry?.marginYPx ?? 20) + (geometry?.matterHeightPx ?? 1020);
+
+  return `
+    <div class="page-imprint" style="left:${left}px;width:${width}px;top:${bottom - 34}px;">
+      <span class="imprint-mr">${escapeHtml(identity.imprint || "")}</span>
+      <span class="imprint-en">${escapeHtml(identity.imprintEnglish || "")}</span>
     </div>
   `;
 }

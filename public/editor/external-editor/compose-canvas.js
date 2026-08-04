@@ -10,6 +10,7 @@
 // that layout/text-flow.js turns into the character grid the AI is briefed with.
 
 import { buildFlowMap, CELL, flowImageFromRow, flowRuns, pourIntoRuns } from "../layout/text-flow.js";
+import { plainText } from "../layout/rich-text.js";
 import * as surface from "./fabric-surface.js";
 
 let state = {
@@ -182,9 +183,12 @@ function drawText(view, map, width, height) {
     });
   };
 
-  pour(CELL.HEADLINE, view.headline, Number(view.headlineFontPx) || 34, "700", "headline");
-  pour(CELL.SUBHEADING, view.subheading, Number(view.subheadingFontPx) || 20, "400", "subheading");
-  pour(CELL.TEXT, view.body, Number(view.bodyFontPx) || 16, "400", "body");
+  pour(CELL.HEADLINE, plainText(view.headline), Number(view.headlineFontPx) || 34, "700", "headline");
+  pour(CELL.SUBHEADING, plainText(view.subheading), Number(view.subheadingFontPx) || 20, "400", "subheading");
+  // The plain text: this canvas draws with Fabric, which sets characters, not
+  // markup. Handing it the stored HTML printed "<b>" on the composition preview
+  // as if it were part of the story.
+  pour(CELL.TEXT, plainText(view.body), Number(view.bodyFontPx) || 16, "400", "body");
 
   if (!view.headline && !view.subheading && !view.body && !state.images.length) {
     const hint = surface.addTextObject({

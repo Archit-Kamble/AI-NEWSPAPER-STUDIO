@@ -1,5 +1,10 @@
 # SAHAS — AI Newspaper Production System
 
+> **Read [`VISION.md`](VISION.md) first.** It is the project's constitution — it defines the
+> product, the production workflow, and the design and AI philosophy. Where this document and
+> `VISION.md` disagree, `VISION.md` wins. This file describes *how the code is built*;
+> `VISION.md` describes *what we are building and why*, and the workflow is the product.
+
 ## What this is, and isn't
 
 SAHAS is a complete AI-assisted **newspaper production system**, built for a real customer (**SAHAS VARTA**) who will run it daily. It is NOT a CMS, a blog platform, a page builder, or a generic template editor.
@@ -45,6 +50,26 @@ Route → Controller → Service → Repository → PostgreSQL
 
 Several other `public/**/*.js` files are 0-byte stubs not yet built out (`dashboard.js`, `admin/dashboard.js`, `admin/publication.js`, `editor/canvas.js`, `editor/sidebar.js`, `editor/story-explorer.js`, `editor/workspace.js`). Treat these as placeholders for planned features (reporter browsing with filters, template engine UI, etc.) described below — not confirmed-dead code. Don't delete without checking they're truly unused first.
 
+> **This section has drifted from the repository and the repository wins.** `src/controllers/`, `src/routes/`, `src/services/` and `src/middleware/` are no longer empty — they hold real code, and `server.js` mounts them. The workspace now lives under `public/editor/` (`workspace.js` and the `canvas/`, `external-editor/`, `layout/` folders), not `admin/newspaper-workspace.js`. Verify against the tree before relying on the paragraphs above.
+
+### Starting an edition
+
+`POST /api/newspapers/start` is how a day's paper begins, and it is **idempotent per date**: one paper per publication date, so pressing the button twice opens the existing edition rather than making a second one. (Before this existed the database reached 116 editions, most of them empty, and editors could not find the one holding their work.)
+
+Starting an edition also:
+
+- builds the **page ladder** from the page count (`src/layout/ladder.js`) — page one is the front, page two is city news, the last page is the back page, and there is exactly one features page. Never four front pages.
+- **carries the booked adverts forward** from the previous edition (`src/services/editionStart.service.js`), and never carries news. An advert is booked for a run of days; a story is not.
+- **fills the standing daily features** for the edition's own date.
+
+Asking for more pages adds them at their proper rung. Asking for fewer never removes a page — there may be work on it.
+
+### Type sizes are derived, and fractional
+
+`typeScaleFor()` in `src/layout/geometry.js` sets a block's default type from its size, and the headline may never take more than half the block's usable height at two lines. A rule with a cliff in it (the old "cap at 18px below 160px tall") gives a full-width banner a headline that consumes the whole block, leaving a character budget of **zero** — a hole nothing can be written into. `tests/layout.test.js` holds this: no article block in any layout may be born unable to carry a sentence.
+
+`headline_font_px`, `subheading_font_px` and `body_font_px` are `NUMERIC(5,1)`, not integers — a printer sets type in half points. They therefore arrive over the wire as strings, like the page's mm dimensions; every reader coerces with `Number()`.
+
 ### The Newspaper Workspace — single source of truth for templates
 
 The Newspaper Workspace is the heart of SAHAS. Never redirect away from it; everything (page preview, page list, layout picker, editorial editor) happens inside this one screen (`renderWorkspace` in `admin/newspaper-workspace.js`, canvas + section editor in `admin/page-editor.js`).
@@ -64,6 +89,16 @@ Each editorial block (`page_sections` row) currently carries: headline, subheadi
 ## Reporter workflow
 
 Editors never search a dropdown of thousands of stories. The section editor lists a reporter-story picker (filterable by reporter/category/location/status/date in the eventual full implementation — `admin/reporter-browser.js` is the stub for this). Selecting a story auto-fills the editorial block; everything stays editable afterward.
+
+## Fitting copy to the hole
+
+Copy never arrives the right length, and a sub-editor has exactly three moves. All three exist:
+
+- **Cut it** — the worklist and preflight both say by how many characters.
+- **Set it tighter** — `POST /api/pages/:pageId/sections/:sectionKey/fit` finds the smallest type change that makes it fit. `GET` on the same path answers what it *would* do without doing it, because changing a block's type is a design decision. It never goes below 6.5 pt (what preflight fails a page for) and never shrinks a headline to buy room for its own body unless the body alone cannot do it — a headline is the page's hierarchy.
+- **Carry it over** — `jump.service.js`, with the two lines a reader follows.
+
+`GET /api/newspapers/:id/worklist` answers "what is left?": every unfinished block in page order, with **the exact number of characters it holds**. That number is knowable before a word is written, and quoting it only after the copy has already run over is the thing this replaces. Never duplicate the measurement — the server imports `public/editor/layout/text-flow.js`, the one character grid, exactly as `editionFeatures`, `jump` and `preflight` do.
 
 ## Scribus / PDF export (not yet built)
 

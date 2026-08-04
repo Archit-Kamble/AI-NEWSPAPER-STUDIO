@@ -947,3 +947,195 @@ One test run failed to log in with a 401 until the fixture email was renamed. `a
 2. **GrapesJS into `#external-editor`.**
 3. Fix role inference, then the two dashboard bugs, then update CLAUDE.md.
 4. `page.repository.js`'s `updateTemplate` crash (§11) remains the highest-severity known bug.
+
+---
+
+## 17. The layout engine (2026-08-03)
+
+`VISION.md` is now the project's constitution and outranks `CLAUDE.md`; a pointer
+at the top of `CLAUDE.md` says so.
+
+### Print geometry is declared, not implied
+
+`src/layout/geometry.js` is the single place the editor's pixel scale is written
+down: **2 px per mm**, from the customer's real page — 330 × 530 mm with a
+310 × 510 mm matter box, CMYK. That is where 660 × 1060 px and 620 × 1020 px
+came from all along, but nothing said so; changing `page_width_px` would have
+silently broken every template. The millimetres, bleed, DPI, column count and
+gutter are now columns on `newspapers`, and `GET /api/geometry` serves the
+derived numbers to the browser so the grid exists in exactly one place.
+
+At 300 DPI the printed page is 3898 × 6260 px. The editor's 660 px canvas is a
+~51 DPI design proxy and must never be scaled up for print — export has to
+generate from the millimetres.
+
+### Templates sit on a column grid
+
+8 columns across the matter, 5 mm gutters, 4 mm baseline. Every block in
+`src/layout/templates.js` is now expressed as a column span rather than a
+freehand rectangle, so text lines up across the page. A new `dense` layout
+carries **16 blocks** for a real inside page of short reports.
+
+### Blocks are drawn freely
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/api/pages/:pageId/sections` | draw a new block (snapped) |
+| DELETE | `/api/pages/:pageId/sections/:sectionId` | remove a block |
+| PATCH | `/api/pages/:pageId/sections/:sectionId/geometry` | move or resize |
+
+Blocks are dragged and resized on the canvas, snapping horizontally to column
+edges and vertically to the baseline. A block's left edge lands on a column
+*start* and its right edge on a column *end*, so it always covers whole
+columns — snapping both to the nearest edge of either kind let a block begin
+inside a gutter. Snapping is enforced on the server too, so a page is printable
+whatever sent the request.
+
+### Two production bugs fixed on the way
+
+- **Async route rejections crashed the whole server.** Express 4 does not catch
+  them, and on modern Node an unhandled rejection kills the process — one
+  malformed template key took the server down. `src/middleware/asyncRoute.js`
+  wraps every page/section handler.
+- **The template catalog existed twice.** `schema.sql` seeded four rows into
+  `templates`, which `pages.template_key` references; a layout added to
+  `templates.js` alone could not be used. `src/layout/syncTemplates.js` now
+  mirrors `templates.js` into the table at boot and the hardcoded seed is gone.
+
+### Still not built
+
+Rich text (coloured keywords), cut-out images with text runaround, the Gemini
+integration, and the Scribus/CMYK export. See the closing assessment in the
+session notes: SAHAS can now *lay out* a national-quality page, but it cannot
+yet *print* one.
+
+### 18. The blank dock, and a real story editor (2026-08-03)
+
+**The External Editor looked broken because nothing was open in it.** With no
+block selected the dock rendered a 47px header over blank white. Two fixes:
+opening a page now opens its first block, so there is always something loaded;
+and the empty state, if it is ever reached, explains what the stage is for and
+offers a way in. The live preview also fills its column (up to 2x) instead of
+sitting at 100% in a 750px column with a large white void beside it - it labels
+the zoom so nobody reads a headline as bigger than it prints.
+
+**Story copy is now rich text.** Quill 2 is vendored under `public/vendor/quill`
+- no CDN (a newsroom that cannot lay out its paper because someone else's CDN is
+down is not a production system) and no bundler, per CLAUDE.md's stack. The
+toolbar is deliberately narrow: bold, italic, underline, colour, highlight,
+lists, align, link, blockquote. No font picker - typography is set per block, not
+per word.
+
+Two shapes are stored on every edit:
+
+- `page_sections.body` - the plain text, unchanged, so the fit estimate, the AI
+  brief and search all keep working exactly as before.
+- `page_sections.body_rich` (JSONB) - the Quill Delta, a list of runs with
+  attributes. Deltas rather than HTML because a Delta maps one-to-one onto
+  Scribus character styles at export; HTML would have to be re-parsed and
+  guessed at.
+
+`public/editor/rich-text.js` also renders a Delta to HTML for the two previews,
+deliberately narrowly: it supports exactly the attributes the toolbar produces
+and escapes everything else, so arbitrary markup can never reach the page.
+
+### 19. The character grid (2026-08-03)
+
+The composition model changed shape. The block is now cut into a grid of cells,
+each one body-character wide and one line tall. Pictures mark the cells they
+cover; the headline takes the top rows, the subheading the next, and every free
+cell left over is body text:
+
+```
+H H H H H H H H H H H H H
+H H H H H H H I I I I I I
+S S S S S S S I I I I I I
+T T T T T T T I I I I I I
+T T T T T T T T T T T T T
+```
+
+Counting the T cells gives a real character budget that already knows where the
+picture is, so the AI is briefed with the map and an exact number rather than
+"about 400 words". Text runaround is not a separate feature: a ragged cut-out
+produces ragged rows, and an oval frees the corners a box would have taken.
+`public/editor/layout/text-flow.js` is the whole of it, and one converter
+(`flowImageFromRow`) feeds the canvas, the Space read-out and the AI brief so
+the three can never disagree.
+
+**The live preview became a composition canvas.** Pictures are added, dragged,
+sized, rotated and shaped (box / oval / cut-out) directly on the block at its
+real size. `section_images` and `media_assets` - modelled since the first schema
+and never used - now carry the placements, with new columns for position, shape
+and stand-off. New endpoints under
+`/api/pages/:pageId/sections/:sectionId/images`.
+
+**Rich text removed.** The body is a plain textarea again: the editor writes a
+short brief and the software composes, so hand-formatting had no place. Quill,
+its vendored files, the `body_rich` column and the dead CSS are gone.
+
+**Language is a dropdown, Marathi by default**, at both the column default and
+the draft.
+
+**Known duplication to resolve next:** `page_sections.image_url` (one image per
+block, used by the page canvas) now coexists with `section_images` (many, placed).
+The single-image path should fold into the placement model.
+
+### 20. Fabric.js, the missing Remove buttons, and background removal (2026-08-03)
+
+**The composition surface is now Fabric.js** (MIT), vendored under
+`public/vendor/fabric` - no CDN. The page designer gets drag, rotate by handle,
+scale from any corner, flip, layering, multi-select and free transform from the
+library rather than from hand-rolled pointer code. `fabric-surface.js` wraps it;
+`compose-canvas.js` keeps only what is newspaper-specific - the block is a fixed
+printable rectangle, pictures are clamped inside it, copy is drawn but locked,
+and every move writes back a placement the character grid reads.
+
+Fitting the block to the column uses **Fabric's own zoom, not a CSS transform**.
+A transform on an ancestor moves the canvas visually but not as far as Fabric's
+pointer maths is concerned, so nothing could be selected or dragged. This cost a
+debugging pass and is worth not repeating.
+
+**Two missing controls added**: a visible `− Block` button in the page toolbar
+(previously only in the right-click menu), and `Remove picture` on the selected
+image, plus the Delete key. Removing a block auto-selects the next one, so the
+dock never falls back to empty.
+
+**Background removal - the instruction was "use both if both are free".**
+Neither of the obvious two is:
+
+| | Cost | Licence | Verdict |
+|---|---|---|---|
+| remove.bg | paid after ~50 preview credits/month | commercial | rejected: a running per-image cost |
+| @imgly/background-removal | free of charge | **AGPL-3.0** | rejected: obliges SAHAS to publish its own source |
+| **BiRefNet** | free | MIT | **chosen**: self-hosted, no cost, no obligation |
+
+`src/services/backgroundRemoval.service.js` calls a BiRefNet service at
+`BIREFNET_URL`. Until that is set the button says so plainly rather than failing
+silently. The returned cut-out replaces the picture as a new asset (the original
+is kept) and its alpha is sampled into a coarse occupancy mask, which is what
+lets copy wrap the subject instead of its box.
+
+### 21. What logging in found (2026-08-03)
+
+Passing tests were not the same as a usable editor. Driving the real workspace
+as an editor would surfaced three defects the assertions had missed:
+
+1. **A picture landed unselected.** Fabric only shows handles and only fills the
+   toolbar for the active object, so adding a picture produced a rectangle with
+   no handles and no controls - Remove background included - and no hint that
+   clicking it would reveal them. A newly added picture is now selected.
+2. **The picture's controls were below an 850px canvas**, off the bottom of the
+   screen. They now sit directly above the block.
+3. **The "place a picture" hint stayed on screen after a picture was placed**,
+   because the empty state only tested for text.
+
+And one correctness defect the screenshot made obvious:
+
+4. **Copy was drawn underneath the picture rather than around it.** The grid had
+   the wrap right and the AI brief was correct, but the canvas drew a single
+   text box behind the image. Text is now poured into the free cells run by run
+   (`flowRuns` / `pourIntoRuns` in `layout/text-flow.js`), breaking on spaces, so
+   what is composed on screen is exactly what the AI was briefed to fill.
+
+A wider sweep - every visible button wired, page switching, undo, save
+round-trip, typography, the story explorer, zoom - found nothing else.

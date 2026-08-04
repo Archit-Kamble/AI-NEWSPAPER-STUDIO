@@ -2,11 +2,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createApp } = require('../server');
 const pool = require('../src/config/db');
+const { signIn } = require('./helpers/desk');
 
-async function createNewspaper(port, name) {
-  const response = await fetch(`http://127.0.0.1:${port}/api/newspapers`, {
+async function createNewspaper(desk, name) {
+  const response = await desk('/api/newspapers', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name }),
   });
   return response.json();
@@ -20,15 +20,15 @@ test('creating a page applies the requested template and its sections', async ()
   const app = createApp();
   const server = app.listen(0);
   const port = server.address().port;
+  const desk = await signIn(port);
   let newspaper;
 
   try {
-    newspaper = await createNewspaper(port, 'Page test - create');
+    newspaper = await createNewspaper(desk, 'Page test - create');
 
-    const response = await fetch(`http://127.0.0.1:${port}/api/newspapers/${newspaper.id}/pages`, {
+    const response = await desk(`/api/newspapers/${newspaper.id}/pages`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pageNumber: 1, templateKey: 'opinion' }),
+            body: JSON.stringify({ pageNumber: 1, templateKey: 'opinion' }),
     });
     assert.equal(response.status, 201);
 
@@ -51,15 +51,15 @@ test('creating a page without a template defaults to front', async () => {
   const app = createApp();
   const server = app.listen(0);
   const port = server.address().port;
+  const desk = await signIn(port);
   let newspaper;
 
   try {
-    newspaper = await createNewspaper(port, 'Page test - default template');
+    newspaper = await createNewspaper(desk, 'Page test - default template');
 
-    const page = await fetch(`http://127.0.0.1:${port}/api/newspapers/${newspaper.id}/pages`, {
+    const page = await desk(`/api/newspapers/${newspaper.id}/pages`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pageNumber: 1 }),
+            body: JSON.stringify({ pageNumber: 1 }),
     }).then((response) => response.json());
 
     assert.equal(page.template_key, 'front');
@@ -73,23 +73,22 @@ test('listing pages for a newspaper returns every page created for it', async ()
   const app = createApp();
   const server = app.listen(0);
   const port = server.address().port;
+  const desk = await signIn(port);
   let newspaper;
 
   try {
-    newspaper = await createNewspaper(port, 'Page test - list');
+    newspaper = await createNewspaper(desk, 'Page test - list');
 
-    await fetch(`http://127.0.0.1:${port}/api/newspapers/${newspaper.id}/pages`, {
+    await desk(`/api/newspapers/${newspaper.id}/pages`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pageNumber: 1, templateKey: 'front' }),
+            body: JSON.stringify({ pageNumber: 1, templateKey: 'front' }),
     });
-    await fetch(`http://127.0.0.1:${port}/api/newspapers/${newspaper.id}/pages`, {
+    await desk(`/api/newspapers/${newspaper.id}/pages`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pageNumber: 2, templateKey: 'local' }),
+            body: JSON.stringify({ pageNumber: 2, templateKey: 'local' }),
     });
 
-    const response = await fetch(`http://127.0.0.1:${port}/api/newspapers/${newspaper.id}/pages`);
+    const response = await desk(`/api/newspapers/${newspaper.id}/pages`);
     assert.equal(response.status, 200);
     const pages = await response.json();
 
@@ -112,22 +111,21 @@ test('updating a page template replaces its sections with the new template layou
   const app = createApp();
   const server = app.listen(0);
   const port = server.address().port;
+  const desk = await signIn(port);
   let newspaper;
 
   try {
-    newspaper = await createNewspaper(port, 'Page test - update template');
+    newspaper = await createNewspaper(desk, 'Page test - update template');
 
-    const page = await fetch(`http://127.0.0.1:${port}/api/newspapers/${newspaper.id}/pages`, {
+    const page = await desk(`/api/newspapers/${newspaper.id}/pages`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pageNumber: 1, templateKey: 'front' }),
+            body: JSON.stringify({ pageNumber: 1, templateKey: 'front' }),
     }).then((response) => response.json());
     assert.equal(page.template_key, 'front');
 
-    const response = await fetch(`http://127.0.0.1:${port}/api/pages/${page.id}`, {
+    const response = await desk(`/api/pages/${page.id}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ template: 'photo' }),
+            body: JSON.stringify({ template: 'photo' }),
     });
     assert.equal(response.status, 200);
 
@@ -147,21 +145,20 @@ test('updating a page with no template field leaves it unchanged', async () => {
   const app = createApp();
   const server = app.listen(0);
   const port = server.address().port;
+  const desk = await signIn(port);
   let newspaper;
 
   try {
-    newspaper = await createNewspaper(port, 'Page test - noop update');
+    newspaper = await createNewspaper(desk, 'Page test - noop update');
 
-    const page = await fetch(`http://127.0.0.1:${port}/api/newspapers/${newspaper.id}/pages`, {
+    const page = await desk(`/api/newspapers/${newspaper.id}/pages`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pageNumber: 1, templateKey: 'local' }),
+            body: JSON.stringify({ pageNumber: 1, templateKey: 'local' }),
     }).then((response) => response.json());
 
-    const response = await fetch(`http://127.0.0.1:${port}/api/pages/${page.id}`, {
+    const response = await desk(`/api/pages/${page.id}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
+            body: JSON.stringify({}),
     });
     assert.equal(response.status, 200);
 
@@ -181,12 +178,12 @@ test('updating a nonexistent page with no template field returns 404', async () 
   const app = createApp();
   const server = app.listen(0);
   const port = server.address().port;
+  const desk = await signIn(port);
 
   try {
-    const response = await fetch(`http://127.0.0.1:${port}/api/pages/999999999`, {
+    const response = await desk(`/api/pages/999999999`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
+            body: JSON.stringify({}),
     });
     assert.equal(response.status, 404);
     const body = await response.json();

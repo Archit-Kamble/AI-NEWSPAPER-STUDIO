@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { createApp } = require('../server');
+const { signIn } = require('./helpers/desk');
 
 test('health endpoint returns ok', async () => {
   const app = createApp();
@@ -25,6 +26,9 @@ test('reporter can save multiple images to drafts and submitted news', async () 
   const port = server.address().port;
   const createdFiles = [];
   const testPrefix = `test-${Date.now()}`;
+  const reporter = await signIn(port, {
+    email: 'reporter@esahas.com', password: 'reporter123', role: 'reporter',
+  });
 
   const createNews = async (status) => {
     const formData = new FormData();
@@ -37,6 +41,7 @@ test('reporter can save multiple images to drafts and submitted news', async () 
 
     const response = await fetch(`http://127.0.0.1:${port}/api/news`, {
       method: 'POST',
+      headers: { Cookie: reporter.cookie },
       body: formData
     });
     assert.equal(response.status, 201);
@@ -50,8 +55,8 @@ test('reporter can save multiple images to drafts and submitted news', async () 
     await createNews('draft');
     await createNews('pending');
 
-    const drafts = await fetch(`http://127.0.0.1:${port}/api/news?status=draft&reporterId=2`).then((response) => response.json());
-    const submitted = await fetch(`http://127.0.0.1:${port}/api/news?status=pending&reporterId=2`).then((response) => response.json());
+    const drafts = await reporter('/api/news?status=draft&reporterId=2').then((response) => response.json());
+    const submitted = await reporter('/api/news?status=pending&reporterId=2').then((response) => response.json());
     assert.ok(drafts.some((item) => item.title === `${testPrefix} draft story`));
     assert.ok(submitted.some((item) => item.title === `${testPrefix} pending story`));
   } finally {
@@ -65,11 +70,8 @@ test('admin workflow saves a page section and final Scribus/PDF files', async ()
   const server = app.listen(0);
   const port = server.address().port;
   const createdFiles = [];
-  const jsonRequest = (pathName, method, body) => fetch(`http://127.0.0.1:${port}${pathName}`, {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
+  const desk = await signIn(port);
+  const jsonRequest = (pathName, method, body) => desk(pathName, { method, body: JSON.stringify(body) });
 
   try {
     const newspaper = await jsonRequest('/api/newspapers', 'POST', { pageCount: 1 }).then((response) => response.json());
@@ -86,7 +88,9 @@ test('admin workflow saves a page section and final Scribus/PDF files', async ()
     const formData = new FormData();
     formData.append('scribusFile', new Blob(['scribus project']), 'edition.sla');
     formData.append('printPdf', new Blob(['pdf output'], { type: 'application/pdf' }), 'edition.pdf');
-    const uploadResponse = await fetch(`http://127.0.0.1:${port}/api/newspapers/${newspaper.id}/final-files`, { method: 'POST', body: formData });
+    const uploadResponse = await fetch(`http://127.0.0.1:${port}/api/newspapers/${newspaper.id}/final-files`, {
+      method: 'POST', headers: { Cookie: desk.cookie }, body: formData,
+    });
     assert.equal(uploadResponse.status, 200);
     const finalised = await uploadResponse.json();
     assert.equal(finalised.status, 'finalised');

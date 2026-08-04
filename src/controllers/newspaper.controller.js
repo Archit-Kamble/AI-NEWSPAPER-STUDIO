@@ -1,8 +1,24 @@
 const newspaperService = require('../services/newspaper.service');
+const editionStartService = require('../services/editionStart.service');
+const { ladderFor } = require('../layout/ladder');
 
 async function create(req, res) {
   const newspaper = await newspaperService.createNewspaper(req.body, req.session.user);
   res.status(201).json(newspaper);
+}
+
+// Start an edition: open the one for the date if it exists, otherwise make it,
+// build its page ladder, carry the booked adverts forward and fill the day's
+// standing features. One call, because it is one decision.
+async function start(req, res) {
+  const result = await editionStartService.startEdition(req.body, req.session.user);
+  res.status(result.created ? 201 : 200).json(result);
+}
+
+// What a given page count would produce, so the desk can see the ladder before
+// committing to it rather than after.
+async function ladder(req, res) {
+  res.json(ladderFor(req.query.pages));
 }
 
 async function list(req, res) {
@@ -37,4 +53,4 @@ async function saveFinalFiles(req, res) {
   res.json(result.item);
 }
 
-module.exports = { create, list, latest, getOne, update, saveFinalFiles };
+module.exports = { create, start, ladder, list, latest, getOne, update, saveFinalFiles };

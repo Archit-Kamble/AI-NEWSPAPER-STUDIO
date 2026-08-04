@@ -5,6 +5,9 @@ const { publicationUpload } = require('../middleware/upload');
 const router = express.Router();
 
 router.post('/', newspaperController.create);
+// Both must be declared before '/:id', or "start" and "ladder" are read as ids.
+router.post('/start', newspaperController.start);
+router.get('/ladder', newspaperController.ladder);
 router.get('/', newspaperController.list);
 router.get('/latest', newspaperController.latest);
 router.get('/:id', newspaperController.getOne);

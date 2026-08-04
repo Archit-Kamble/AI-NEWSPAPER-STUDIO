@@ -71,12 +71,11 @@ CREATE TABLE IF NOT EXISTS pages (
   UNIQUE (newspaper_id, page_number)
 );
 
-INSERT INTO templates (template_key, name) VALUES
-  ('front', 'Front Page'),
-  ('local', 'Local News'),
-  ('opinion', 'Opinion'),
-  ('photo', 'Photo Feature')
-ON CONFLICT (template_key) DO NOTHING;
+-- Template rows are NOT seeded here. src/layout/templates.js is the single
+-- source of truth for layouts and src/layout/syncTemplates.js mirrors it into
+-- this table at boot, because pages.template_key has a foreign key onto it.
+-- Listing layouts in both places is what let a template exist in JavaScript but
+-- not in the database, which crashed page creation.
 
 CREATE TABLE IF NOT EXISTS page_sections (
   id SERIAL PRIMARY KEY,
@@ -182,3 +181,189 @@ CREATE INDEX IF NOT EXISTS idx_news_items_status ON news_items(status);
 CREATE INDEX IF NOT EXISTS idx_news_items_created_by ON news_items(created_by);
 CREATE INDEX IF NOT EXISTS idx_pages_newspaper ON pages(newspaper_id, page_number);
 CREATE INDEX IF NOT EXISTS idx_page_sections_page ON page_sections(page_id, z_index);
+
+-- ---------------------------------------------------------------------------
+-- Print geometry, declared rather than implied.
+--
+-- SAHAS VARTA prints a 330 x 530 mm page with a 310 x 510 mm matter box (a
+-- uniform 10 mm margin), in CMYK. The editor works at exactly 2 px per mm, so
+-- 660 x 1060 px page / 620 x 1020 px matter - the px columns above are those
+-- same measurements, and src/layout/geometry.js is the one place that scale is
+-- written down. Storing the millimetres alongside them means the print export
+-- never has to infer a scale, and a page of a different size cannot silently
+-- break every template.
+--
+-- The column grid is what separates a national daily from a freehand page:
+-- blocks snap to columns, so text lines up across the page.
+ALTER TABLE newspapers ADD COLUMN IF NOT EXISTS page_width_mm NUMERIC(6,2) NOT NULL DEFAULT 330;
+ALTER TABLE newspapers ADD COLUMN IF NOT EXISTS page_height_mm NUMERIC(6,2) NOT NULL DEFAULT 530;
+ALTER TABLE newspapers ADD COLUMN IF NOT EXISTS matter_width_mm NUMERIC(6,2) NOT NULL DEFAULT 310;
+ALTER TABLE newspapers ADD COLUMN IF NOT EXISTS matter_height_mm NUMERIC(6,2) NOT NULL DEFAULT 510;
+ALTER TABLE newspapers ADD COLUMN IF NOT EXISTS bleed_mm NUMERIC(4,2) NOT NULL DEFAULT 3;
+ALTER TABLE newspapers ADD COLUMN IF NOT EXISTS print_dpi INTEGER NOT NULL DEFAULT 300;
+ALTER TABLE newspapers ADD COLUMN IF NOT EXISTS grid_columns INTEGER NOT NULL DEFAULT 16;
+ALTER TABLE newspapers ADD COLUMN IF NOT EXISTS grid_gutter_mm NUMERIC(4,2) NOT NULL DEFAULT 3;
+
+-- Block decoration. Borders, rules and headline treatments are a large part of
+-- why a printed page reads as a newspaper rather than a web page; they are per
+-- block, and they map onto Scribus frame and paragraph properties at export.
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS border_style VARCHAR(20) NOT NULL DEFAULT 'none';
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS border_width_px NUMERIC(4,2) NOT NULL DEFAULT 1;
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS border_color VARCHAR(20) NOT NULL DEFAULT '#111111';
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS headline_style VARCHAR(20) NOT NULL DEFAULT 'plain';
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS accent_color VARCHAR(20) NOT NULL DEFAULT '#c8102e';
+
+-- Blocks are now drawn freely on the page rather than only coming from a
+-- template, so a page can carry the 5-20 items a real inside page has. A
+-- free-drawn block records that it is not part of the template layout.
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS is_custom BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Rich story text. `body` keeps the plain text every existing consumer reads
+-- (fit estimates, the AI brief, search); `body_rich` holds the Quill Delta -
+-- a list of runs with attributes - which is what carries coloured keywords and
+-- inline emphasis, and what maps onto Scribus character styles at export.
+-- Deltas, not HTML: HTML would have to be re-parsed and guessed at for print.
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS body_rich JSONB;
+
+-- ---------------------------------------------------------------------------
+-- Image placement inside a block.
+--
+-- A block can hold several pictures, each placed where the page designer wants
+-- it, at whatever size and shape. `section_images` already modelled the link
+-- and the crop; these add where the picture actually sits within the block, in
+-- the same editor pixels as the block itself.
+--
+-- `shape` is what makes text wrap work for cut-outs: a rectangle occupies the
+-- cells its box covers, an ellipse only the cells inside the ellipse, and
+-- `cutout` follows the alpha of a background-removed PNG. See
+-- public/editor/layout/text-flow.js - occupancy is what the character grid is
+-- built from, and the character grid is what the AI is briefed with.
+ALTER TABLE section_images ADD COLUMN IF NOT EXISTS x_px INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE section_images ADD COLUMN IF NOT EXISTS y_px INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE section_images ADD COLUMN IF NOT EXISTS width_px INTEGER NOT NULL DEFAULT 120;
+ALTER TABLE section_images ADD COLUMN IF NOT EXISTS height_px INTEGER NOT NULL DEFAULT 90;
+ALTER TABLE section_images ADD COLUMN IF NOT EXISTS rotation INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE section_images ADD COLUMN IF NOT EXISTS flip_h BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE section_images ADD COLUMN IF NOT EXISTS flip_v BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE section_images ADD COLUMN IF NOT EXISTS z_index INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE section_images ADD COLUMN IF NOT EXISTS shape VARCHAR(20) NOT NULL DEFAULT 'rect';
+ALTER TABLE section_images ADD COLUMN IF NOT EXISTS stand_off_px INTEGER NOT NULL DEFAULT 6;
+ALTER TABLE section_images ADD COLUMN IF NOT EXISTS caption TEXT;
+
+-- media_assets gains the URL the browser actually loads. Uploads already land
+-- in public/uploads; this is the row that lets a picture be reused across
+-- blocks and editions rather than being re-uploaded each time.
+ALTER TABLE media_assets ADD COLUMN IF NOT EXISTS url TEXT;
+ALTER TABLE media_assets ADD COLUMN IF NOT EXISTS width_px INTEGER;
+ALTER TABLE media_assets ADD COLUMN IF NOT EXISTS height_px INTEGER;
+
+-- The body is written plainly by the editor and composed by the software; it is
+-- not hand-formatted, so the rich-text column added earlier has no consumer.
+ALTER TABLE page_sections DROP COLUMN IF EXISTS body_rich;
+
+-- Marathi is the language this paper prints in; nothing should have to type it.
+ALTER TABLE page_sections ALTER COLUMN language SET DEFAULT 'Marathi';
+
+-- A finer grid: 16 columns rather than 8, so a block can be placed and sized in
+-- half-column steps. The gutter narrows to 3 mm so the gutters still only take
+-- 45 mm of the 310 mm matter rather than a quarter of the page.
+ALTER TABLE newspapers ALTER COLUMN grid_columns SET DEFAULT 16;
+ALTER TABLE newspapers ALTER COLUMN grid_gutter_mm SET DEFAULT 3;
+UPDATE newspapers SET grid_columns = 16, grid_gutter_mm = 3 WHERE grid_columns = 8;
+
+-- The occupancy mask of a cut-out, sampled from its alpha. This is what lets
+-- copy wrap the subject rather than its bounding box - see
+-- public/editor/layout/text-flow.js.
+ALTER TABLE section_images ADD COLUMN IF NOT EXISTS mask JSONB;
+
+-- The kicker: the short line that sits above a headline in a Marathi daily and
+-- tells the reader what the story is before the headline shouts it - "पंतप्रधान
+-- मोदी यांचे तरुणांना आवाहन" over "ड्रग्जपासून दूर राहा". It is not the
+-- subheading, which sits below and elaborates; it reads as a different piece of
+-- furniture and is set in a different size, so it needs its own field.
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS kicker TEXT;
+
+-- Standing daily features. A block can be marked as one of them - राशिभविष्य,
+-- सूर्योदय-सूर्यास्त, दिनविशेष, सुविचार - and the software fills it for the
+-- edition's date instead of a reporter filing it. What lands in the block is
+-- ordinary copy in the ordinary fields, so it is measured, edited, saved and
+-- printed by exactly the same machinery as a news story; only where it came
+-- from is different. See src/features/index.js.
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS feature_key VARCHAR(40);
+
+-- ---------------------------------------------------------------------------
+-- Jump lines.
+--
+-- No story is cut short because its block ran out of room; it continues on
+-- another page, with "(उर्वरित पान ४ वर)" at the foot of the first part and
+-- "(पान १ वरून)" at the head of the second. The continuation block records
+-- where it came from; the forward direction is derived, so the two can never
+-- point at different things.
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS continued_from_section_id INTEGER
+  REFERENCES page_sections(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS page_sections_continued_from_idx
+  ON page_sections (continued_from_section_id);
+
+-- ---------------------------------------------------------------------------
+-- District editions.
+--
+-- A district daily is not many papers, it is one paper with some pages swapped.
+-- A child edition owns only the pages that differ; every other page is served
+-- from its parent, so page one is made up once and every district gets it.
+ALTER TABLE newspapers ADD COLUMN IF NOT EXISTS parent_edition_id INTEGER
+  REFERENCES newspapers(id) ON DELETE CASCADE;
+ALTER TABLE newspapers ADD COLUMN IF NOT EXISTS district VARCHAR(80);
+CREATE INDEX IF NOT EXISTS newspapers_parent_idx ON newspapers (parent_edition_id);
+
+-- ---------------------------------------------------------------------------
+-- Colour formes.
+--
+-- Not every page prints in colour - a web press lays colour on the outer forme
+-- and the centre spread, and the rest runs black only. Which pages those are is
+-- a press fact, so it is stored per page, defaulted from the page number, and
+-- shown honestly: a colour photograph placed on a mono page previews in grey
+-- and is flagged, because on the press it will print grey.
+ALTER TABLE pages ADD COLUMN IF NOT EXISTS prints_colour BOOLEAN NOT NULL DEFAULT TRUE;
+-- Once a desk says "we bought colour on page 5 this week", adding a page must
+-- not quietly take it away again. Defaults are recomputed as an edition grows;
+-- an explicit choice is not.
+ALTER TABLE pages ADD COLUMN IF NOT EXISTS colour_overridden BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- ---------------------------------------------------------------------------
+-- Passing a page for press.
+--
+-- A page is not finished when its last block is filled; it is finished when a
+-- named person passes it, at a known time. Preflight has to be clean before
+-- that can happen - the point of preflight is that it runs before the plate.
+-- edition_history already existed for the audit trail; these three columns are
+-- the state itself.
+ALTER TABLE pages ADD COLUMN IF NOT EXISTS production_state VARCHAR(20) NOT NULL DEFAULT 'making_up';
+ALTER TABLE pages ADD COLUMN IF NOT EXISTS state_changed_at TIMESTAMPTZ;
+ALTER TABLE pages ADD COLUMN IF NOT EXISTS state_changed_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
+
+-- ---------------------------------------------------------------------------
+-- Carrying an advertisement forward.
+--
+-- An advert is booked for a run of days, so yesterday's advert in a slot is
+-- very likely today's advert in that slot. Starting an edition copies those
+-- blocks forward (never news - see src/services/editionStart.service.js), and
+-- records where each one came from. The provenance matters: a desk looking at a
+-- filled advert box must be able to tell "this was booked today" from "this was
+-- carried from yesterday and nobody has checked it".
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS carried_from_section_id INTEGER
+  REFERENCES page_sections(id) ON DELETE SET NULL;
+
+-- ---------------------------------------------------------------------------
+-- Type sizes are fractional.
+--
+-- These began as INTEGER, which is a screen assumption, not a print one. A
+-- printer sets type in half and quarter points, Scribus takes a fractional
+-- point size, and the px-to-pt conversion here produces one anyway (1 px is
+-- about 1.42 pt at 2 px per mm). Whole-pixel steps meant the smallest available
+-- adjustment to a story that would not fit was about a point and a half - a
+-- visible jump, where a sub-editor wants half of one.
+--
+-- INTEGER converts to NUMERIC losslessly, so every existing size is unchanged.
+ALTER TABLE page_sections ALTER COLUMN headline_font_px TYPE NUMERIC(5,1);
+ALTER TABLE page_sections ALTER COLUMN subheading_font_px TYPE NUMERIC(5,1);
+ALTER TABLE page_sections ALTER COLUMN body_font_px TYPE NUMERIC(5,1);

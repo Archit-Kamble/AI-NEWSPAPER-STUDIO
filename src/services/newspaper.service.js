@@ -1,5 +1,6 @@
 const newspaperRepository = require('../repositories/newspaper.repository');
 const publicationRepository = require('../repositories/publication.repository');
+const { identity } = require('../layout/identity');
 
 function withPublicationFiles(newspaper, files) {
   return files.reduce((result, file) => {
@@ -9,11 +10,33 @@ function withPublicationFiles(newspaper, files) {
   }, { ...newspaper });
 }
 
+// Today, where the paper is printed.
+//
+// `new Date().toISOString()` is UTC, and India is five and a half hours ahead
+// of it: between midnight and half past five every morning - which is exactly
+// when a daily paper is being made up - UTC is still on yesterday. An edition
+// created at 3 a.m. for that morning's paper was being dated the day before.
+//
+// The date on page one is the edition's identity and the key its archive is
+// indexed by, so it is worked out in the paper's own timezone.
+function todayWhereWePrint() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: identity.timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
 async function createNewspaper(body, sessionUser) {
-  const today = new Date().toISOString().split('T')[0];
+  // `publicationDate` is what every caller in this application sends - the
+  // workspace, the tests and the API docs. This used to read only `body.date`,
+  // so the date the caller asked for was silently dropped and every edition was
+  // dated today. Both spellings are accepted now; neither is ignored.
+  const requested = body.publicationDate || body.date;
   return newspaperRepository.create({
     name: body.name || 'साहस',
-    publicationDate: body.date || today,
+    publicationDate: requested || todayWhereWePrint(),
     createdBy: sessionUser?.id || null,
   });
 }

@@ -31,6 +31,7 @@ const tiers = require('./tiers');
 const PROVIDERS = {
   sarvam: require('./providers/sarvam'),
   gemini: require('./providers/gemini'),
+  anthropic: require('./providers/anthropic'),
   openai: require('./providers/openai-compatible'),
 };
 
@@ -38,16 +39,27 @@ const DEFAULT_PROVIDER = 'sarvam';
 const timeoutMs = () => Number(process.env.AI_TIMEOUT_MS) || 60000;
 
 function providerNamed(name) {
-  return PROVIDERS[String(name || '').toLowerCase()] || null;
+  return PROVIDERS[String(name || '').toLowerCase().trim()] || null;
 }
 
-/** The provider that writes, and the one that covers for it. */
+/**
+ * The provider that writes, and the ones that cover for it in order.
+ *
+ * `AI_FALLBACK_PROVIDER` takes a comma-separated list, so a newsroom running
+ * three providers can say "Sarvam, then Gemini, then Claude" rather than being
+ * limited to a single understudy. The order is the order they are tried.
+ */
 function chain() {
   const primary = providerNamed(process.env.AI_PROVIDER) || PROVIDERS[DEFAULT_PROVIDER];
-  const fallback = providerNamed(process.env.AI_FALLBACK_PROVIDER);
-  const ordered = [primary, fallback].filter(Boolean);
-  // Only providers that actually have a key. An unconfigured fallback is not a
-  // fallback, and finding that out at 2 a.m. is not the moment.
+  const fallbacks = String(process.env.AI_FALLBACK_PROVIDER || '')
+    .split(',')
+    .map(providerNamed)
+    .filter(Boolean);
+
+  const ordered = [primary, ...fallbacks].filter(Boolean);
+  // Only providers that actually have a key, and each only once. An
+  // unconfigured fallback is not a fallback, and finding that out at 2 a.m. is
+  // not the moment.
   return ordered.filter((p, index) => p.isConfigured() && ordered.indexOf(p) === index);
 }
 
@@ -61,15 +73,25 @@ function isConfigured() {
  */
 function status() {
   const primary = providerNamed(process.env.AI_PROVIDER) || PROVIDERS[DEFAULT_PROVIDER];
-  const fallback = providerNamed(process.env.AI_FALLBACK_PROVIDER);
+  const fallbacks = String(process.env.AI_FALLBACK_PROVIDER || '')
+    .split(',')
+    .map(providerNamed)
+    .filter(Boolean)
+    .filter((p) => p !== primary);
+
   return {
     configured: isConfigured(),
     provider: primary
       ? { key: primary.key, name: primary.name, ready: primary.isConfigured(), supportsTiers: primary.supportsTiers }
       : null,
-    fallback: fallback
-      ? { key: fallback.key, name: fallback.name, ready: fallback.isConfigured() }
-      : null,
+    // Every understudy, in the order they would be tried - so a desk can see at
+    // a glance which of the three are actually reachable tonight.
+    fallbacks: fallbacks.map((p) => ({ key: p.key, name: p.name, ready: p.isConfigured() })),
+    // Kept for the editor's status line, which names the first one that could
+    // actually answer rather than the first one listed.
+    fallback: fallbacks.find((p) => p.isConfigured())
+      ? (() => { const p = fallbacks.find((f) => f.isConfigured()); return { key: p.key, name: p.name, ready: true }; })()
+      : (fallbacks[0] ? { key: fallbacks[0].key, name: fallbacks[0].name, ready: false } : null),
     tiers: tiers.list(),
     // If the provider in use has no effort dial, the dropdown should say so
     // rather than offer three choices that do the same thing.

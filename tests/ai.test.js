@@ -36,6 +36,7 @@ const NO_KEYS = {
   GEMINI_API_KEY: undefined,
   GOOGLE_API_KEY: undefined,
   OPENAI_API_KEY: undefined,
+  ANTHROPIC_API_KEY: undefined,
 };
 
 // --- the tiers ---------------------------------------------------------------
@@ -68,6 +69,34 @@ test('an unknown or missing tier falls back to basic rather than throwing', () =
   assert.equal(tiers.tierFor('ULTRA').key, 'ultra', 'and the name is not case-sensitive');
 });
 
+// A provider that answers with whatever the test hands it, so the layer's own
+// promises can be checked without a network or a key.
+function fakeProvider(key, reply) {
+  return {
+    key,
+    name: key,
+    supportsTiers: true,
+    isConfigured: () => true,
+    configHint: '',
+    calls: [],
+    async askForJson(prompt, schema, tier) {
+      this.calls.push({ tier: tier.key, effort: tier.effort });
+      return typeof reply === 'function' ? reply() : reply;
+    },
+  };
+}
+
+function withProviders(map, run) {
+  const saved = { ...ai.PROVIDERS };
+  Object.assign(ai.PROVIDERS, map);
+  try {
+    return run();
+  } finally {
+    for (const key of Object.keys(ai.PROVIDERS)) delete ai.PROVIDERS[key];
+    Object.assign(ai.PROVIDERS, saved);
+  }
+}
+
 // --- being provider-agnostic -------------------------------------------------
 
 test('with no key at all it says so, and never invents content', async () => {
@@ -93,6 +122,61 @@ test('Sarvam is the default provider when nothing is named', () => {
   withEnv({ ...NO_KEYS, AI_PROVIDER: undefined, SARVAM_API_KEY: 'test-key' }, () => {
     assert.equal(ai.status().provider.key, 'sarvam');
   });
+});
+
+test('three providers can be chained, and are tried in the order given', async () => {
+  const first = fakeProvider('first', { error: 'down' });
+  const second = fakeProvider('second', { error: 'also down' });
+  const third = fakeProvider('third', {
+    data: { rashi: Array.from({ length: 12 }, () => ({ key: 'mesh' })), suvichar: { text: 'x' } },
+  });
+
+  await withProviders({ first, second, third }, () =>
+    withEnv({ ...NO_KEYS, AI_PROVIDER: 'first', AI_FALLBACK_PROVIDER: 'second,third' }, async () => {
+      const result = await ai.askForJson('p', SCHEMA, {});
+      assert.equal(result.provider, 'third', 'it worked down the whole chain');
+      assert.equal(first.calls.length, 1);
+      assert.equal(second.calls.length, 1);
+      assert.equal(third.calls.length, 1);
+    }));
+});
+
+test('a provider named twice in the chain is only tried once', async () => {
+  const only = fakeProvider('only', { error: 'down' });
+  await withProviders({ only }, () =>
+    withEnv({ ...NO_KEYS, AI_PROVIDER: 'only', AI_FALLBACK_PROVIDER: 'only,only' }, async () => {
+      await ai.askForJson('p', SCHEMA, {});
+      assert.equal(only.calls.length, 1, 'no point asking the same dead API three times');
+    }));
+});
+
+test('the status lists every understudy in the order they would be tried', () => {
+  withEnv(
+    { ...NO_KEYS, AI_PROVIDER: 'sarvam', SARVAM_API_KEY: 'k', AI_FALLBACK_PROVIDER: 'gemini,anthropic' },
+    () => {
+      const status = ai.status();
+      assert.deepEqual(status.fallbacks.map((f) => f.key), ['gemini', 'anthropic']);
+      assert.equal(status.fallbacks.every((f) => f.ready === false), true, 'neither has a key here');
+    },
+  );
+});
+
+test('the status line names the first understudy that could actually answer', () => {
+  withEnv(
+    {
+      ...NO_KEYS,
+      AI_PROVIDER: 'sarvam',
+      SARVAM_API_KEY: 'k',
+      AI_FALLBACK_PROVIDER: 'gemini,anthropic',
+      ANTHROPIC_API_KEY: 'k',
+    },
+    () => {
+      // Gemini is listed first but has no key, so it is not the one that would
+      // answer - saying "falling back to Gemini" would be a lie.
+      assert.equal(ai.status().fallback.key, 'anthropic');
+      assert.equal(ai.status().fallback.ready, true);
+    },
+  );
 });
 
 test('a fallback with no key is not reported as ready', () => {
@@ -122,34 +206,6 @@ const SCHEMA = {
   },
   required: ['rashi', 'suvichar'],
 };
-
-// A provider that answers with whatever the test hands it, so the layer's own
-// promises can be checked without a network or a key.
-function fakeProvider(key, reply) {
-  return {
-    key,
-    name: key,
-    supportsTiers: true,
-    isConfigured: () => true,
-    configHint: '',
-    calls: [],
-    async askForJson(prompt, schema, tier) {
-      this.calls.push({ tier: tier.key, effort: tier.effort });
-      return typeof reply === 'function' ? reply() : reply;
-    },
-  };
-}
-
-function withProviders(map, run) {
-  const saved = { ...ai.PROVIDERS };
-  Object.assign(ai.PROVIDERS, map);
-  try {
-    return run();
-  } finally {
-    for (const key of Object.keys(ai.PROVIDERS)) delete ai.PROVIDERS[key];
-    Object.assign(ai.PROVIDERS, saved);
-  }
-}
 
 test('an answer in the wrong shape is rejected, even if the provider claimed success', async () => {
   const liar = fakeProvider('liar', { data: { rashi: [{ key: 'mesh' }], suvichar: { text: 'x' } } });

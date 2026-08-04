@@ -34,11 +34,16 @@ Copy `.env.example` to `.env` and fill in a key. **`.env` is gitignored and must
 never be committed.**
 
 ```bash
-AI_PROVIDER=sarvam            # who writes the copy that gets printed
-AI_FALLBACK_PROVIDER=gemini   # who covers when that one is down
+AI_PROVIDER=sarvam                        # who writes the copy that gets printed
+AI_FALLBACK_PROVIDER=gemini,anthropic     # who covers, in order
 SARVAM_API_KEY=...
 GEMINI_API_KEY=...
+ANTHROPIC_API_KEY=...
 ```
+
+`AI_FALLBACK_PROVIDER` is a comma-separated chain, tried in order. A provider
+with no key is skipped rather than counted — an unconfigured fallback is not a
+fallback, and 2 a.m. is not the moment to find that out.
 
 Nothing else needs changing. `GET /api/ai/status` reports what is configured,
 and the editor's AI panel describes the real setup rather than a fixed list of
@@ -48,12 +53,19 @@ names.
 
 ## The providers
 
-| | `sarvam` | `gemini` | `openai` |
-|---|---|---|---|
-| Role | writes the Marathi | fallback | optional |
-| Marathi | native | good, slightly translated | varies |
-| Strict JSON schema | ✅ | ✅ (own dialect) | ✅ |
-| Effort dial | ✅ `reasoning_effort` | ✗ | depends |
+| | `sarvam` | `gemini` | `anthropic` | `openai` |
+|---|---|---|---|---|
+| Role | writes the Marathi | first understudy | second understudy | optional |
+| Marathi | native | good, slightly translated | good, translated | varies |
+| Structured output | `json_schema` `strict` | own schema dialect | forced tool call | `json_schema` `strict` |
+| Effort dial | ✅ `reasoning_effort` | ✗ | ✗ (see below) | depends |
+| Tokens per Marathi word | ~2 | ~8 | ~8 | ~8 |
+
+**Claude has extended thinking**, which is the obvious equivalent of Sarvam's
+effort dial — but it does not combine with a *forced* tool call, and the forced
+tool call is what makes the answer's shape safe. A malformed horoscope on a
+printed page is worse than a slightly less considered one, so the schema wins
+and `supportsTiers` is `false` there.
 
 **Sarvam is the default** because it is built for Indian languages, and the
 difference is structural rather than a matter of taste: a global tokenizer
@@ -121,17 +133,27 @@ leaving anyone guessing.
 
 ## What it costs
 
-Measured against this paper's real workload — one call a day for the standing
-features, plus per-block help on a 4-page paper of ~44 blocks:
+Measured against this paper's real workload: one features call a day, plus AI
+help on 15 blocks a day — about **117,600 words in and 54,000 words out per
+month**. Each row is that provider doing *all* of it.
 
-| | per month | per year |
-|---|---|---|
-| Basic | ~₹4–5 | **~₹55** |
-| Ultra | ~₹15–20 | ~₹220 |
+| Provider | tokens/mo | per month | per year |
+|---|---|---|---|
+| **Sarvam 105B** | 0.34M | **₹3** | **₹32** |
+| Gemini 3.6 Flash | 1.37M | ₹409 | ₹4,912 |
+| Claude Sonnet 5 — intro, to 31 Aug 2026 | 1.37M | ₹546 | ₹6,549 |
+| Claude Sonnet 5 — standard, from 1 Sep | 1.37M | ₹819 | ₹9,823 |
 
-**Sarvam's ₹100 free credit covers well over a year at Basic.** Cost is
-formally a non-issue at this scale, which is the right outcome: it means tiers
-and providers can be chosen on quality alone.
+At ₹88/USD. The 4× gap is the tokenizer, not the price list: Sarvam bills 0.34M
+tokens for work the others bill 1.37M for.
+
+**In the configured setup Sarvam does nearly all of it and the other two only
+cover outages, so the real blended bill is a few rupees a month.** Sarvam's ₹100
+free credit covers years at that rate. Gemini's free tier likely covers its
+share outright.
+
+Ultra multiplies Sarvam's output tokens by roughly 3–5× (reasoning is billed as
+output), which takes ₹3/month to ₹10–15. Still not a number worth optimising.
 
 Be sceptical of published comparisons. Every third-party estimate this project
 was shown assumed **10,000–100,000 articles** — between six years and six

@@ -1,0 +1,166 @@
+// Who the paper is — the standing furniture of every edition.
+//
+// There are three kinds of ink on a newspaper page, and only one of them is
+// anybody's daily work:
+//
+//   1. Standing furniture   never changes: the nameplate, the strapline, the
+//                           editions line, the RNI number, the editor's name,
+//                           the cover price, the printline at the foot.
+//   2. Edition variables    change once a day but are DERIVABLE: the date line,
+//                           the volume and issue number, the page numbers.
+//   3. The day's file       the stories, the pictures, the advertisements.
+//
+// Everything in (1) and (2) is drawn by the software and cannot be typed into.
+// A desk that has to key the issue number every morning will eventually key it
+// wrong, and a wrong issue number is a wrong archive. So (2) is computed here
+// from the edition's date, not stored and incremented - nothing to drift.
+//
+// A front page is not a grid of stories with a logo on top. Look at any Marathi
+// daily: the nameplate sits between an ear on the left carrying the date, the
+// place of publication, the volume, the page count and the cover price, and an
+// ear on the right carrying a teaser. Above it runs a hairline strip with the
+// paper's line and the editions it prints. None of that is decoration — it is
+// the legal and commercial identity of the edition, and a page without it is
+// not a newspaper.
+//
+// The nameplate artwork and the values below are SAHAS VARTA's own, read off
+// their masthead at esahas.com. The few that are genuinely per-edition
+// commercial facts — volume, page count, cover price — are marked; the desk
+// sets them once and they ride every edition after that.
+
+const NAMEPLATE = '/assets/masthead/sahas-nameplate.png';
+
+const identity = {
+  // The nameplate is set artwork, not type. Redrawing "साहस वार्ता" in a web
+  // font would not be their masthead — it would be a lookalike.
+  nameplateUrl: NAMEPLATE,
+  nameplateAspect: 1600 / 300,
+
+  title: 'दैनिक साहस वार्ता',
+  titleEnglish: 'Dainik Sahas Varta',
+
+  // Read off the printed masthead.
+  rni: 'RNI No. MAHMUL/2015/67123',
+  editor: 'संपादक : श्री. श्रीकांत शिवनाथ मुळे',
+  website: 'www.esahas.com',
+  epaper: 'esahas.com/epaper',
+  socials: [
+    { icon: 'facebook', handle: '/sahasvarta01' },
+    { icon: 'instagram', handle: '/sahasvarta' },
+    { icon: 'youtube', handle: '/sahasvarta' },
+    { icon: 'whatsapp', handle: '8409494949' },
+  ],
+
+  // The strip above the nameplate.
+  strapline: 'सदैव सत्याच्या बाजूने',
+  editions: 'मुंबई, ठाणे, पुणे, नाशिक, नागपूर, औरंगाबाद, सोलापूर, कोल्हापूर',
+
+  // The paper's first edition. Everything about volume and issue numbering
+  // follows from this date and the edition's own date - see numberingFor().
+  // Taken from the RNI registration on the masthead.
+  foundedOn: '2015-01-01',
+
+  // Where the paper is printed, which is what "today" means to it. Not the
+  // server's timezone and certainly not UTC.
+  timezone: 'Asia/Kolkata',
+
+  price: 'मूल्य ₹ ३.००',
+  placeOfPublication: 'मुंबई',
+
+  // The printline at the foot of the page. This is a legal requirement on an
+  // Indian newspaper, not decoration, and it is identical in every edition -
+  // exactly the kind of thing that should never be re-keyed.
+  printline:
+    'मुद्रक, प्रकाशक व मालक श्री. श्रीकांत शिवनाथ मुळे यांनी दैनिक साहस वार्ता साठी प्रकाशित केले. ' +
+    'संपादक : श्री. श्रीकांत शिवनाथ मुळे. सर्व वाद मुंबई न्यायकक्षेत.',
+};
+
+// --- Marathi date line -------------------------------------------------------
+// The date is the loudest thing in the left ear of a Marathi front page: a
+// numeral two or three times the size of anything near it. It has to be set in
+// Devanagari numerals and Marathi month names, not localised at render time by
+// whatever the browser happens to support.
+
+const DIGITS = ['०', '१', '२', '३', '४', '५', '६', '७', '८', '९'];
+const WEEKDAYS = ['रविवार', 'सोमवार', 'मंगळवार', 'बुधवार', 'गुरुवार', 'शुक्रवार', 'शनिवार'];
+const MONTHS = [
+  'जानेवारी', 'फेब्रुवारी', 'मार्च', 'एप्रिल', 'मे', 'जून',
+  'जुलै', 'ऑगस्ट', 'सप्टेंबर', 'ऑक्टोबर', 'नोव्हेंबर', 'डिसेंबर',
+];
+
+function devanagari(value) {
+  return String(value).replace(/\d/g, (d) => DIGITS[Number(d)]);
+}
+
+/**
+ * The three lines of the date ear, from an ISO date.
+ * Parsed as parts rather than through the local timezone, so an edition dated
+ * the 3rd never prints as the 2nd on a machine set west of UTC.
+ */
+function dateLine(isoDate) {
+  const [year, month, day] = String(isoDate || '').split('T')[0].split('-').map(Number);
+  if (!year || !month || !day) return { day: '', weekday: '', monthYear: '' };
+  const weekday = WEEKDAYS[new Date(Date.UTC(year, month - 1, day)).getUTCDay()];
+  return {
+    day: devanagari(day),
+    weekday,
+    monthYear: `${MONTHS[month - 1]} ${devanagari(year)}`,
+  };
+}
+
+// --- edition numbering -------------------------------------------------------
+// "वर्ष ११ । अंक २१२" — the volume is which year of publication this is, the
+// issue is which edition of that year. Both fall straight out of two dates, so
+// they are computed rather than stored: no counter to advance, nothing to
+// forget on a day the paper does not print, and a back edition opened a year
+// from now still shows the number it went to press with.
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const atUtcMidnight = (iso) => {
+  const [y, m, d] = String(iso || '').split('T')[0].split('-').map(Number);
+  return y && m && d ? Date.UTC(y, m - 1, d) : null;
+};
+
+function numberingFor(isoDate, founded = identity.foundedOn) {
+  const day = atUtcMidnight(isoDate);
+  const start = atUtcMidnight(founded);
+  if (!day || !start || day < start) return { volume: null, issue: null, line: '' };
+
+  const from = new Date(start);
+  const to = new Date(day);
+  // Volume turns over on the anniversary of the first edition.
+  let volume = to.getUTCFullYear() - from.getUTCFullYear() + 1;
+  const anniversary = Date.UTC(to.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate());
+  if (day < anniversary) volume -= 1;
+
+  const volumeStart = Date.UTC(
+    day < anniversary ? to.getUTCFullYear() - 1 : to.getUTCFullYear(),
+    from.getUTCMonth(),
+    from.getUTCDate(),
+  );
+  const issue = Math.round((day - volumeStart) / DAY_MS) + 1;
+
+  return {
+    volume,
+    issue,
+    line: `वर्ष ${devanagari(volume)} । अंक ${devanagari(issue)}`,
+  };
+}
+
+/**
+ * The identity as page one needs it for one particular edition: the standing
+ * facts, plus the numbers derived from that edition's date.
+ */
+function identityFor(isoDate, pageCount) {
+  const numbering = numberingFor(isoDate);
+  return {
+    ...identity,
+    volumeLine: numbering.line,
+    volume: numbering.volume,
+    issue: numbering.issue,
+    pageCountLabel: pageCount ? `पृष्ठे ${devanagari(pageCount)}` : '',
+  };
+}
+
+module.exports = { identity, identityFor, numberingFor, dateLine, devanagari, WEEKDAYS, MONTHS };

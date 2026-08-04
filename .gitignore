@@ -1,0 +1,22 @@
+# Secrets. .env holds the database password and the AI provider keys, and it
+# must never be committed - see .env.example for the shape of it.
+.env
+.env.*
+!.env.example
+
+# Dependencies. These are reinstalled from package-lock.json; 2,937 of them were
+# tracked here, which made every `npm install` look like a source change.
+node_modules/
+
+# Photographs and finished editions the newsroom uploads at runtime. These are
+# the paper's own files, not the application's.
+public/uploads/
+uploads/
+
+# Model weights fetched at first run.
+models/
+
+# Local noise
+*.log
+npm-debug.log*
+.DS_Store

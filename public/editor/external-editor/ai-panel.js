@@ -4,7 +4,7 @@
 // before any provider exists.
 
 import { escapeHtml } from "../format.js";
-import { computeMetrics } from "../layout/layout-metrics.js";
+import { buildFlowMap, flowAscii, flowFit, flowImageFromRow } from "../layout/text-flow.js";
 
 export const AI_ACTIONS = [
   { id: "aiGenerateLayout", label: "Generate Layout", intent: "layout" },
@@ -35,69 +35,122 @@ export function buildAiRequest(intent, view) {
   };
 }
 
-// Step 6 of the flow: measure what is left in the block, then ask AI to write
-// text that fits it. The measurement is real; the generation is the stub.
-export function fitBrief(section, view) {
-  const m = computeMetrics(section, view);
+// Step 6 of the flow, and the heart of it.
+//
+// The AI is not asked for "about 400 words". It is handed the block as a
+// character grid - H for headline, S for subheading, T for copy, I for where
+// the picture sits - and a character budget that already accounts for the
+// picture's shape. A ragged cut-out produces ragged rows, so text runaround is
+// part of the same brief rather than a separate problem.
+export function fitBrief(section, view, images = []) {
+  const map = buildFlowMap(section, view, images.map(flowImageFromRow));
+  const fit = flowFit(map);
+
   return {
     sectionKey: view.sectionKey,
-    blockPx: { width: m.widthPx, height: m.heightPx },
-    imageHeightPx: m.imageHeightPx,
-    remainingHeightPx: m.remainingHeightPx,
-    remainingAreaPx: m.remainingAreaPx,
+    blockPx: { width: Number(section?.width_px) || 0, height: Number(section?.height_px) || 0 },
+    blockMm: {
+      width: Math.round((Number(section?.width_px) || 0) / 2),
+      height: Math.round((Number(section?.height_px) || 0) / 2),
+    },
+    grid: { cols: map.cols, rows: map.rows, cellWidthPx: map.cellWidth, cellHeightPx: map.cellHeight },
+    // The map, exactly as a compositor would sketch it.
+    map: flowAscii(map),
+    legend: { H: "headline", S: "subheading", T: "body text", I: "image" },
+    bodyCharBudget: map.bodyCharBudget,
+    bodyWordBudget: map.bodyWordBudget,
+    charsUsed: fit.used,
+    charsRemaining: fit.remaining,
+    overflowing: fit.overflowing,
     bodyFontPx: view.bodyFontPx,
-    columns: view.columnCount,
-    approxWordsThatFit: Math.max(0, Math.round((m.remainingAreaPx / (view.bodyFontPx * view.bodyFontPx * 0.42)) || 0)),
-    overflowing: m.overflowing,
+    language: view.language || "Marathi",
   };
 }
 
-export function aiPanelMarkup(view, section) {
-  const brief = section ? fitBrief(section, view) : null;
+// How hard the model should think. Three tiers rather than three models,
+// because the provider that writes this paper's Marathi ships exactly one chat
+// model - what it has is an effort dial, and that is the thing worth exposing.
+// The list is fetched from /api/ai/status so the menu describes the newsroom
+// that is actually configured; this is the fallback if that has not loaded yet.
+let AI_TIERS = [
+  { key: "basic", name: "Basic", hint: "Quick — for fillers, captions and briefs" },
+  { key: "plus", name: "Plus", hint: "Considered — for reworking a story to its measure" },
+  { key: "ultra", name: "Ultra", hint: "Best — for the lead. Slower, and a few paise more" },
+];
+let aiStatus = null;
+
+/** Called once when the workspace loads; keeps the menu honest about the setup. */
+export async function loadAiStatus() {
+  try {
+    const status = await fetch("/api/ai/status").then((r) => (r.ok ? r.json() : null));
+    if (!status) return null;
+    aiStatus = status;
+    if (Array.isArray(status.tiers) && status.tiers.length) AI_TIERS = status.tiers;
+    return status;
+  } catch {
+    return null;
+  }
+}
+
+export function getAiTier() {
+  return document.getElementById("edAiTier")?.value || "basic";
+}
+
+function tierSelectMarkup() {
+  // If the configured provider has no effort dial, say so rather than offering
+  // three choices that quietly do the same work at the same price.
+  const meaningless = aiStatus && aiStatus.configured && !aiStatus.tiersMeaningful;
   return `
-    <div class="ext-columns">
-      <div class="ext-column ext-column-wide">
-        <div class="fit-brief" id="edFitBrief">${brief ? fitBriefMarkup(brief) : ""}</div>
-        <button type="button" class="btn-submit is-placeholder" id="aiFillRemaining">Fill remaining area with AI</button>
-        <div class="form-group">
-          <label>Additional details for AI</label>
-          <textarea id="edAiPrompt" rows="4" placeholder="Extra instructions - tone, angle, must-mention facts...">${escapeHtml(view.aiNotes)}</textarea>
-        </div>
-        <div class="ext-editor-toolbar">
-          <button type="button" class="ext-editor-btn is-placeholder" id="aiOptimize">Optimize with these details</button>
-        </div>
-        <div class="ext-editor-toolbar">
-          ${AI_ACTIONS.map(
-            (a) => `<button type="button" class="ext-editor-btn is-placeholder" id="${a.id}" data-ai-intent="${a.intent}">${a.label}</button>`,
-          ).join("")}
-        </div>
-        <p class="muted ext-note" id="edAiStatus">No AI provider is connected yet - these actions are stubs.</p>
-      </div>
-      <div class="ext-column ext-column-wide">
-        <label class="preview-label">Request preview</label>
-        <pre class="ai-request" id="edAiRequest">Choose an action to see the request that would be sent.</pre>
-      </div>
+    <label class="ai-tier">
+      <span>Effort</span>
+      <select id="edAiTier" title="${meaningless
+        ? "The configured provider has no effort setting, so these behave the same"
+        : "How hard the model should think about this block"}">
+        ${AI_TIERS.map(
+          (tier, index) =>
+            `<option value="${escapeHtml(tier.key)}"${index === 0 ? " selected" : ""}>${escapeHtml(
+              tier.name,
+            )} — ${escapeHtml(tier.hint || "")}</option>`,
+        ).join("")}
+      </select>
+    </label>`;
+}
+
+function aiStatusLine() {
+  if (!aiStatus) return "No AI provider is connected yet - these actions are stubs.";
+  if (!aiStatus.configured) {
+    return aiStatus.hint || "No AI provider is configured. Add a key to .env.";
+  }
+  const fallback = aiStatus.fallback?.ready ? `, falling back to ${aiStatus.fallback.name}` : "";
+  return `Writing with ${aiStatus.provider?.name}${fallback}.`;
+}
+
+export function aiPanelMarkup(view) {
+  return `
+    ${tierSelectMarkup()}
+    <button type="button" class="btn-submit is-placeholder" id="aiFillRemaining">Fill remaining area with AI</button>
+    <div class="form-group">
+      <label for="edAiPrompt">Additional details for AI</label>
+      <textarea id="edAiPrompt" rows="3" placeholder="Extra instructions - tone, angle, must-mention facts...">${escapeHtml(view.aiNotes)}</textarea>
     </div>
+    <div class="ext-editor-toolbar">
+      <button type="button" class="ext-editor-btn is-placeholder" id="aiOptimize">Optimize with these details</button>
+    </div>
+    <details class="ext-more">
+      <summary>More AI actions</summary>
+      <div class="ext-editor-toolbar">
+        ${AI_ACTIONS.map(
+          (a) => `<button type="button" class="ext-editor-btn is-placeholder" id="${a.id}" data-ai-intent="${a.intent}">${a.label}</button>`,
+        ).join("")}
+      </div>
+      <label class="preview-label">Request preview</label>
+      <pre class="ai-request" id="edAiRequest">Choose an action to see the request that would be sent.</pre>
+    </details>
+    <p class="muted ext-note" id="edAiStatus">${escapeHtml(aiStatusLine())}</p>
   `;
 }
 
-export function fitBriefMarkup(brief) {
-  return `
-    <label class="preview-label">Space to fill</label>
-    <div class="inspector-row"><span>Block</span><strong>${brief.blockPx.width} × ${brief.blockPx.height} px</strong></div>
-    <div class="inspector-row"><span>Image takes</span><strong>${brief.imageHeightPx} px</strong></div>
-    <div class="inspector-row"><span>Remaining height</span><strong>${brief.remainingHeightPx} px</strong></div>
-    <div class="inspector-row"><span>Roughly fits</span><strong>~${brief.approxWordsThatFit} words</strong></div>
-    ${brief.overflowing ? `<p class="warning-item level-error">Content already overflows - shorten before filling.</p>` : ""}
-  `;
-}
-
-export function refreshFitBrief(section, view) {
-  const box = document.getElementById("edFitBrief");
-  if (box && section) box.innerHTML = fitBriefMarkup(fitBrief(section, view));
-}
-
-export function bindAiPanel(getView, getSection, onPatch, onNotify) {
+export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages) {
   document.getElementById("edAiPrompt")?.addEventListener("input", (event) => {
     onPatch({ aiNotes: event.target.value }, "ai-panel");
   });
@@ -105,7 +158,14 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify) {
   const runStub = (label, intent) => {
     const view = getView();
     const section = getSection();
-    const request = { ...buildAiRequest(intent, view), fit: section ? fitBrief(section, view) : null };
+    const images = getImages ? getImages() : [];
+    // The tier rides with the request, so the preview shows exactly what would
+    // be sent - including how hard the model was asked to think.
+    const request = {
+      ...buildAiRequest(intent, view),
+      tier: getAiTier(),
+      fit: section ? fitBrief(section, view, images) : null,
+    };
     const preview = document.getElementById("edAiRequest");
     if (preview) preview.textContent = JSON.stringify(request, null, 2);
     const status = document.getElementById("edAiStatus");

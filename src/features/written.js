@@ -1,0 +1,146 @@
+// The daily features a model writes: आजचे राशिभविष्य, आजचा सुविचार, शब्दकोडे.
+//
+// The economics are the whole point. A paper that asked the model once per
+// zodiac sign would make twelve calls a day for one box; asked once per box, it
+// would make three or four. This makes ONE call for the whole day's standing
+// features, because they share a date, a language and a house style and none of
+// them depends on another's answer. Same output, a third of the tokens, one
+// round trip - and one place where the paper's voice is set.
+//
+// What may be written this way and what may not:
+//
+//   MAY   राशिभविष्य, सुविचार, कोडी - writing that is understood to be
+//         entertainment or reflection. Nobody is misled by a generated
+//         horoscope; that is what a horoscope is.
+//
+//   MAY NOT  anything that asserts a fact about the world: gold rates, market
+//         closes, mandi prices, weather numbers, "on this day in history".
+//         Those come from a source or they do not run. A model asked for
+//         yesterday's gold rate will produce a number, and it will be wrong,
+//         and it will be printed under this paper's masthead.
+
+const ai = require('../services/ai.service');
+
+// The twelve signs, in the order every Marathi almanac prints them, with the
+// Sanskrit-derived names a reader looks for.
+const RASHIS = [
+  { key: 'mesh', name: 'मेष', english: 'Aries' },
+  { key: 'vrishabh', name: 'वृषभ', english: 'Taurus' },
+  { key: 'mithun', name: 'मिथुन', english: 'Gemini' },
+  { key: 'kark', name: 'कर्क', english: 'Cancer' },
+  { key: 'sinh', name: 'सिंह', english: 'Leo' },
+  { key: 'kanya', name: 'कन्या', english: 'Virgo' },
+  { key: 'tula', name: 'तूळ', english: 'Libra' },
+  { key: 'vrischik', name: 'वृश्चिक', english: 'Scorpio' },
+  { key: 'dhanu', name: 'धनु', english: 'Sagittarius' },
+  { key: 'makar', name: 'मकर', english: 'Capricorn' },
+  { key: 'kumbh', name: 'कुंभ', english: 'Aquarius' },
+  { key: 'meen', name: 'मीन', english: 'Pisces' },
+];
+
+const SCHEMA = {
+  type: 'object',
+  properties: {
+    rashi: {
+      type: 'array',
+      description: 'Exactly twelve entries, in the order given, one per sign.',
+      items: {
+        type: 'object',
+        properties: {
+          key: { type: 'string' },
+          text: { type: 'string' },
+          lucky_number: { type: 'integer' },
+          lucky_colour: { type: 'string' },
+        },
+        required: ['key', 'text', 'lucky_number', 'lucky_colour'],
+      },
+    },
+    suvichar: {
+      type: 'object',
+      properties: {
+        text: { type: 'string' },
+        attribution: { type: 'string' },
+      },
+      required: ['text', 'attribution'],
+    },
+  },
+  required: ['rashi', 'suvichar'],
+};
+
+// The brief. It carries the house style, the measure each entry has to fit and
+// the things a newspaper must not say - a horoscope that promises a cure or
+// predicts a death is a liability, not a feature.
+function promptFor(isoDate, weekday, charsPerSign) {
+  return [
+    'तुम्ही "दैनिक साहस वार्ता" या मराठी दैनिकाचे उपसंपादक आहात.',
+    `${isoDate} (${weekday}) या दिवसाच्या अंकासाठी खालील सदरे लिहा. सर्व मजकूर मराठीत, देवनागरी लिपीत.`,
+    '',
+    '१) आजचे राशिभविष्य — बारा राशींसाठी, दिलेल्या क्रमाने आणि दिलेल्या key सह.',
+    `   प्रत्येक राशीचा मजकूर जास्तीत जास्त ${charsPerSign} अक्षरांचा. एक किंवा दोन वाक्ये.`,
+    '   विषय: कामकाज, आर्थिक बाबी, कुटुंब, आरोग्य यांपैकी एखादा. सकारात्मक पण संयत भाषा.',
+    '   प्रत्येक राशीसाठी शुभ अंक (१-९) आणि शुभ रंग द्या.',
+    '',
+    '२) आजचा सुविचार — एक ओळीचा विचार आणि तो कोणाचा आहे ते नाव.',
+    '',
+    'बंधने:',
+    '- आजार बरा होईल, अपघात होईल, मृत्यू, गर्भधारणा अशी कोणतीही भाकिते करू नका.',
+    '- गुंतवणुकीचा किंवा वैद्यकीय सल्ला देऊ नका.',
+    '- कोणत्याही व्यक्ती, जात, धर्म किंवा पक्षाचा उल्लेख करू नका.',
+    '- अक्षरमर्यादा काटेकोरपणे पाळा; मजकूर ठराविक जागेत छापला जातो.',
+    '',
+    'राशींचा क्रम आणि key:',
+    RASHIS.map((r, i) => `${i + 1}. ${r.name} (key: ${r.key})`).join('\n'),
+  ].join('\n');
+}
+
+const WEEKDAYS = ['रविवार', 'सोमवार', 'मंगळवार', 'बुधवार', 'गुरुवार', 'शुक्रवार', 'शनिवार'];
+
+function weekdayOf(isoDate) {
+  const [y, m, d] = String(isoDate).split('T')[0].split('-').map(Number);
+  return WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+}
+
+/**
+ * Writes every model-written feature for one day, in a single call.
+ *
+ * `charsPerSign` comes from the block the horoscope is going into - the same
+ * character grid that measures a news block measures this one, so the copy
+ * comes back already fitting the space rather than being trimmed afterwards.
+ */
+async function buildAll(isoDate, { charsPerSign = 90, tier } = {}) {
+  const prompt = promptFor(isoDate, weekdayOf(isoDate), charsPerSign);
+  // The tier is how hard the model is asked to think. The standing features are
+  // short, formulaic and read for pleasure rather than for fact, so they do not
+  // need the expensive setting - `basic` is the default and is right here.
+  const result = await ai.askForJson(prompt, SCHEMA, { tier });
+  if (result.error) return result;
+
+  const byKey = new Map((result.data.rashi || []).map((row) => [row.key, row]));
+  const missing = RASHIS.filter((r) => !byKey.has(r.key)).map((r) => r.name);
+  if (missing.length) {
+    return { error: `The model left these signs out: ${missing.join(', ')}` };
+  }
+
+  return {
+    // Which provider actually answered, and at what effort. If the fallback
+    // wrote tonight's horoscope the desk should be able to see that.
+    writtenBy: { provider: result.provider, tier: result.tier, fellBackTo: result.fellBackTo },
+    rashi: {
+      title: 'आजचे राशिभविष्य',
+      items: RASHIS.map((sign) => {
+        const row = byKey.get(sign.key);
+        return {
+          label: sign.name,
+          text: row.text,
+          note: `शुभ अंक ${row.lucky_number} । शुभ रंग ${row.lucky_colour}`,
+        };
+      }),
+    },
+    suvichar: {
+      title: 'आजचा सुविचार',
+      items: [{ text: result.data.suvichar.text, note: result.data.suvichar.attribution }],
+    },
+  };
+}
+
+module.exports = { buildAll, promptFor, RASHIS, SCHEMA };

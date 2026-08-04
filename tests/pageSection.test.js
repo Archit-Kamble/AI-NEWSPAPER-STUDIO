@@ -2,27 +2,27 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createApp } = require('../server');
 const pool = require('../src/config/db');
+const { signIn } = require('./helpers/desk');
+
+// Making up the paper requires a desk sign-in, so the tests hold one too.
+let desk = null;
 
 async function setup(port, newspaperName) {
-  const newspaper = await fetch(`http://127.0.0.1:${port}/api/newspapers`, {
+  desk = await signIn(port);
+  const newspaper = await desk.json('/api/newspapers', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name: newspaperName }),
-  }).then((response) => response.json());
-
-  const page = await fetch(`http://127.0.0.1:${port}/api/newspapers/${newspaper.id}/pages`, {
+  });
+  const page = await desk.json(`/api/newspapers/${newspaper.id}/pages`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ pageNumber: 1, templateKey: 'front' }),
-  }).then((response) => response.json());
-
+  });
   return { newspaper, page };
 }
 
 async function putSection(port, pageId, sectionKey, body) {
-  return fetch(`http://127.0.0.1:${port}/api/pages/${pageId}/sections/${sectionKey}`, {
+  return desk(`/api/pages/${pageId}/sections/${sectionKey}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
 }
@@ -42,7 +42,7 @@ test('saving a section with direct field names persists every field', async () =
     newspaper = setupResult.newspaper;
     const page = setupResult.page;
 
-    const response = await putSection(port, page.id, 'top-side', {
+    const response = await putSection(port, page.id, 'anchor', {
       headline: 'Direct Headline',
       subheading: 'Direct Sub',
       body: 'Direct Body',
@@ -58,13 +58,16 @@ test('saving a section with direct field names persists every field', async () =
     assert.equal(response.status, 200);
 
     const updated = await response.json();
-    const section = updated.sections.find((s) => s.section_key === 'top-side');
+    const section = updated.sections.find((s) => s.section_key === 'anchor');
     assert.equal(section.headline, 'Direct Headline');
     assert.equal(section.subheading, 'Direct Sub');
     assert.equal(section.body, 'Direct Body');
-    assert.equal(section.headline_font_px, 40);
-    assert.equal(section.subheading_font_px, 22);
-    assert.equal(section.body_font_px, 18);
+    // Type sizes are NUMERIC now, because a printer sets type in half points -
+    // so these come back over the wire as strings, the same as the page's mm
+    // dimensions always have. Every reader in the application coerces.
+    assert.equal(Number(section.headline_font_px), 40);
+    assert.equal(Number(section.subheading_font_px), 22);
+    assert.equal(Number(section.body_font_px), 18);
     assert.equal(section.category, 'Politics');
     assert.equal(section.location, 'Pune');
     assert.equal(section.tags, 'a,b');
@@ -120,20 +123,23 @@ test('saving a section links a reporter news item via newsItemId', async () => {
     const newsFormData = new FormData();
     newsFormData.append('title', 'Linked reporter story');
     newsFormData.append('description', 'story body');
+    // Filing a story needs a signed-in reporter; multipart carries the session
+    // cookie by hand because FormData sets its own content type.
     const news = await fetch(`http://127.0.0.1:${port}/api/news`, {
       method: 'POST',
+      headers: { Cookie: desk.cookie },
       body: newsFormData,
     }).then((response) => response.json());
     newsId = news.id;
 
-    const response = await putSection(port, page.id, 'mid-side', {
+    const response = await putSection(port, page.id, 'report-one', {
       newsItemId: newsId,
       headline: 'Linked',
     });
     assert.equal(response.status, 200);
 
     const updated = await response.json();
-    const section = updated.sections.find((s) => s.section_key === 'mid-side');
+    const section = updated.sections.find((s) => s.section_key === 'report-one');
     assert.equal(section.news_item_id, newsId);
   } finally {
     if (newsId) await pool.query('DELETE FROM news_items WHERE id = $1', [newsId]);
@@ -170,6 +176,7 @@ test('saving a section on a nonexistent page returns 404', async () => {
   const app = createApp();
   const server = app.listen(0);
   const port = server.address().port;
+  desk = await signIn(port);
 
   try {
     const response = await putSection(port, 999999999, 'lead', { headline: 'x' });

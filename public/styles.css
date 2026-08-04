@@ -129,12 +129,19 @@ body {
   display: grid;
 
   grid-template-columns:
-    minmax(900px, 1fr)
+    minmax(0, 1fr)
     360px;
 
   gap: 0;
 
   min-height: calc(100vh - 60px);
+}
+
+/* Below this the newsroom rail folds away rather than forcing the page to
+   scroll sideways - which is what happened at high browser zoom. */
+@media (max-width: 1180px) {
+  .container { grid-template-columns: minmax(0, 1fr); }
+  .container .right-panel { display: none; }
 }
 
 .sidebar-app-backdrop {
@@ -935,14 +942,15 @@ body {
 .section-headline {
   font-weight: 700;
   font-size: clamp(0.5rem, 4.2cqw, 1.05rem);
-  line-height: 1.2;
+  /* Devanagari stacks marks above and below; 1.2 makes lines collide. */
+  line-height: 1.28;
   color: #202020;
   overflow-wrap: anywhere;
 }
 .section-body {
   margin: 0;
   font-size: clamp(0.42rem, 2.4cqw, 0.72rem);
-  line-height: 1.25;
+  line-height: 1.45;
   color: #5a5a62;
   overflow-wrap: anywhere;
   overflow: hidden;
@@ -1458,6 +1466,12 @@ body.resizing-y * {
 .canvas-toolbar .layout-btn:hover {
   background: #f7f7f8;
 }
+/* Switching layout on a page that already has filled blocks is consequential -
+   it reads that way, and it asks first. See layout-sidebar.js. */
+.canvas-toolbar .layout-btn-guarded {
+  border-style: dashed;
+  color: #74747e;
+}
 .canvas-toolbar .layout-btn.active {
   background: var(--primary);
   color: white;
@@ -1469,15 +1483,49 @@ body.resizing-y * {
   position: relative;
   overflow: hidden;
 }
+/* The viewport SCROLLS. A transform does not affect layout, so a scaled page
+   can never produce a scrollbar on its own - which is why zooming in used to
+   clip the top and bottom of the page away with no way to reach them. The
+   scaled size is carried by .canvas-sizer below, and this scrolls over that. */
 .canvas-viewport {
   position: absolute;
   inset: 0;
-  overflow: hidden;
+  overflow: auto;
+  overscroll-behavior: contain;
   display: flex;
-  align-items: center;
-  justify-content: center;
   background-image: radial-gradient(#dfdfe3 1px, transparent 1px);
   background-size: 22px 22px;
+}
+/* `margin: auto` centres the page while it is smaller than the viewport and,
+   unlike `align-items: center`, still lets you scroll to the top and left edges
+   once it is bigger - the classic overflowing-centred-flex-item trap. */
+.canvas-sizer {
+  position: relative;
+  margin: auto;
+  flex: none;
+}
+/* Scrollbars are drawn rather than left as overlays: on a zoomed page they are
+   the only thing telling the desk there is more page below the fold. */
+.canvas-viewport::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+.canvas-viewport::-webkit-scrollbar-thumb {
+  background: #b8b8c0;
+  border: 3px solid transparent;
+  border-radius: 8px;
+  background-clip: content-box;
+}
+.canvas-viewport::-webkit-scrollbar-thumb:hover {
+  background: #8e8e98;
+  background-clip: content-box;
+}
+.canvas-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+.canvas-viewport {
+  scrollbar-width: thin;
+  scrollbar-color: #b8b8c0 transparent;
 }
 .canvas-viewport.space-held {
   cursor: grab;
@@ -1486,9 +1534,13 @@ body.resizing-y * {
   cursor: grabbing;
 }
 .canvas-viewport .newspaper-canvas {
-  position: relative;
+  position: absolute;
+  top: 0;
+  left: 0;
   flex-shrink: 0;
-  transform-origin: center center;
+  /* Scaled from the top-left, so the sizer's box and the drawn page start at
+     the same point and the scroll offsets mean what they say. */
+  transform-origin: top left;
   border: 1px solid #aaa;
   background: white;
   box-shadow: 0 1px 3px rgba(20, 20, 30, 0.06), 0 12px 32px rgba(20, 20, 30, 0.1);
@@ -1614,23 +1666,11 @@ body.resizing-y * {
   border-top: 1px solid #ececed;
   box-shadow: 0 -2px 12px rgba(20, 20, 30, 0.05);
 }
-.editor-collapsed .ext-editor-body {
+.editor-collapsed .ext-editor-stage {
   display: none;
-}
-.editor-collapsed .ext-tabs {
-  opacity: 0.5;
-  pointer-events: none;
 }
 .editor-collapsed #edToggleDock {
   transform: rotate(180deg);
-}
-.ext-editor-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 14px 24px 10px;
-  flex-shrink: 0;
-  border-bottom: 1px solid #f0f0f1;
 }
 .ext-editor-header h3 {
   margin: 0;
@@ -1965,10 +2005,12 @@ body.resizing-y * {
 
 /* ============ External Editor dock: tabs and panels ============ */
 
+/* NOT sticky. There is exactly one sticky bar on this page - the toolbar, which
+   carries Save, Undo and Publish and is needed everywhere. A second pinned bar
+   permanently ate 46px of the viewport and every control that scrolled under it
+   (Rotate, Flip H, Flip V...) disappeared behind it. VISION.md: the page scrolls
+   naturally; this is a section heading, not a chrome bar. */
 .ext-editor-header {
-  position: sticky;
-  top: 64px;
-  z-index: 30;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -2025,60 +2067,132 @@ body.resizing-y * {
   background: #f2f2f4;
 }
 
-.ext-tabs {
-  display: flex;
-  gap: 2px;
-  margin-left: 8px;
-  padding: 2px;
-  background: #ececee;
-  border-radius: 8px;
-  overflow-x: auto;
+/* The dock: live newspaper preview on the left, one continuous control column
+   on the right, in lifecycle order. No tabs - see external-editor.js. */
+.ext-editor-stage {
+  display: grid;
+  /* The controls column gives ground before the layout collapses - a browser at
+     170% zoom on a normal monitor reports ~1090 CSS px, which used to stack the
+     whole dock. */
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 430px);
+  gap: 24px;
+  padding: 18px 20px 28px;
+  align-items: start;
 }
-.ext-tab {
-  padding: 5px 13px;
-  border: none;
-  border-radius: 6px;
-  background: none;
+@media (max-width: 1000px) {
+  .ext-editor-stage { grid-template-columns: minmax(0, 1fr); }
+}
+
+.ext-preview-col {
+  min-width: 0;
+}
+/* Sticky only where there is a second column beside it to scroll. Stacked, a
+   sticky preview pins itself and leaves a screen-high hole under it. */
+@media (min-width: 1000px) {
+  .ext-preview-col {
+    position: sticky;
+    top: 72px;
+  }
+}
+.ext-controls-col {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.live-preview-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.live-preview-size { font-size: 0.72rem; }
+.live-preview-frame {
+  display: flex;
+  justify-content: center;
+  padding: 12px;
+  background: white;
+  border: 1px solid #dcdce2;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(20, 20, 30, 0.08);
+  overflow: hidden;
+}
+.live-preview-block {
+  flex: none;
+  transform-origin: top center;
+  background: white;
+  overflow: hidden;
+}
+.live-preview-inner {
+  box-sizing: border-box;
+  height: 100%;
+  overflow: hidden;
+}
+.live-preview-figure { margin: 0 0 8px; }
+.live-preview-figure img { display: block; width: 100%; }
+.live-preview-figure figcaption { margin-top: 4px; color: #5c5c66; }
+.live-preview-body { white-space: pre-wrap; }
+.live-preview-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 20px;
+  color: #8a8a94;
+  font-size: 13px;
+  text-align: center;
+}
+
+/* The three lifecycle steps. Always rendered, always in order. */
+.ext-group {
+  background: white;
+  border: 1px solid #e4e4ea;
+  border-radius: 10px;
+}
+.ext-group-title {
+  margin: 0;
+  padding: 10px 14px;
+  border-bottom: 1px solid #eeeef2;
   color: #6a6a72;
   font-size: 0.76rem;
   font-weight: 700;
-  font-family: inherit;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
-.ext-tab:hover {
-  color: var(--primary);
-}
-.ext-tab.active {
-  background: white;
-  color: var(--primary);
-  box-shadow: 0 1px 2px rgba(20, 20, 30, 0.12);
-}
+.ext-group-body { padding: 14px; }
 
-.ext-editor-body {
-  display: flex;
-  flex-direction: column;
+/* Everything off the lifecycle path: available, never in the way. */
+.ext-more,
+.ext-aside {
+  background: white;
+  border: 1px solid #e4e4ea;
+  border-radius: 10px;
 }
-.ext-tab-panel {
-  display: none;
-  padding: 16px 20px 24px;
+.ext-more { margin-top: 12px; background: #fafafb; }
+.ext-more > summary,
+.ext-aside > summary {
+  padding: 10px 14px;
+  color: #5c5c66;
+  font-size: 0.8rem;
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
 }
-.ext-tab-panel.active {
-  display: block;
-  animation: panel-in 0.16s ease-out;
-}
-@keyframes panel-in {
-  from { opacity: 0; transform: translateY(3px); }
-  to { opacity: 1; transform: none; }
-}
-.ext-mount-strip {
-  display: none;
-}
-.ext-tab-panel[data-tab-panel="layout"].active ~ .ext-mount-strip {
-  display: block;
-  padding: 0 20px 16px;
-}
+.ext-more > summary::-webkit-details-marker,
+.ext-aside > summary::-webkit-details-marker { display: none; }
+.ext-more > summary::before,
+.ext-aside > summary::before { content: "▸"; margin-right: 8px; }
+.ext-more[open] > summary::before,
+.ext-aside[open] > summary::before { content: "▾"; }
+.ext-more > *:not(summary),
+.ext-aside > *:not(summary) { padding: 0 14px 14px; }
+
+.ext-mount-strip { display: none; }
+
+/* Sub-panels written for the full-width dock stack inside the control column. */
+.ext-controls-col .ext-columns { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.ext-controls-col .ext-column-wide { grid-column: span 1; }
 
 /* Full width means real columns rather than one long scroll. */
 .ext-columns {
@@ -2491,4 +2605,911 @@ body.resizing-y * {
 }
 .container--workspace {
   min-height: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   The column grid.
+
+   Guides appear only while a block is being dragged, so the page reads as a
+   page the rest of the time. Column positions come from GET /api/geometry -
+   see public/editor/canvas/grid.js. */
+.canvas-grid {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  pointer-events: none;
+  z-index: 0;
+}
+.canvas-grid.visible { opacity: 1; }
+.grid-matter {
+  position: absolute;
+  border: 1px dashed rgba(200, 16, 46, 0.45);
+}
+.grid-column {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(60, 120, 220, 0.07);
+  border-left: 1px solid rgba(60, 120, 220, 0.22);
+  border-right: 1px solid rgba(60, 120, 220, 0.22);
+}
+
+/* A selected block is draggable; the pointer says so. */
+.newspaper-section.active { cursor: move; }
+.newspaper-section.dragging {
+  z-index: 30;
+  opacity: 0.92;
+  box-shadow: 0 10px 28px rgba(20, 20, 30, 0.28);
+  transition: none;
+}
+body.dragging-block { user-select: none; }
+body.dragging-block .section-hover-toolbar { display: none !important; }
+
+/* Resize handles now actually resize. They need to be grabbable at any zoom,
+   so they sit slightly outside the block's edge. */
+.section-handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: white;
+  border: 1.5px solid var(--primary, #c8102e);
+  border-radius: 2px;
+  z-index: 12;
+}
+.handle-nw { left: -5px; top: -5px; cursor: nwse-resize; }
+.handle-n  { left: calc(50% - 5px); top: -5px; cursor: ns-resize; }
+.handle-ne { right: -5px; top: -5px; cursor: nesw-resize; }
+.handle-e  { right: -5px; top: calc(50% - 5px); cursor: ew-resize; }
+.handle-se { right: -5px; bottom: -5px; cursor: nwse-resize; }
+.handle-s  { left: calc(50% - 5px); bottom: -5px; cursor: ns-resize; }
+.handle-sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
+.handle-w  { left: -5px; top: calc(50% - 5px); cursor: ew-resize; }
+
+/* A selected block must not clip its own resize handles. The handles straddle
+   the block's edge, and `overflow: hidden` on the block was swallowing the
+   outer half - pointerdown then landed on the block itself and dragged it
+   instead of resizing. Text still clips: .section-content has its own
+   `overflow: hidden`, which is what stopped stories bleeding into neighbours. */
+.newspaper-section.active {
+  overflow: visible;
+}
+
+/* The dock with nothing open. It used to be a 47px header over blank white,
+   which reads as a broken page rather than an empty one. */
+.ext-editor-idle {
+  max-width: 640px;
+  padding: 28px 20px 36px;
+}
+.ext-editor-idle h4 {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+}
+.ext-editor-idle p {
+  margin: 0 0 16px;
+  color: #6a6a72;
+}
+.ext-idle-steps {
+  margin: 0 0 20px;
+  padding-left: 20px;
+  color: #6a6a72;
+  line-height: 1.9;
+}
+.ext-idle-steps strong { color: #35353d; }
+.ext-editor-idle .btn-submit { width: auto; padding: 10px 18px; }
+
+
+/* ---------------------------------------------------------------------------
+   The composition canvas. Not a preview - the surface the page designer works
+   on. Pictures are dragged and sized here, and where they land decides the
+   character grid the AI is briefed with. */
+.compose-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.compose-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.compose-size { font-size: 0.72rem; }
+
+.compose-frame {
+  display: flex;
+  justify-content: center;
+  padding: 12px;
+  background: white;
+  border: 1px solid #dcdce2;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(20, 20, 30, 0.08);
+  overflow: hidden;
+}
+.compose-block {
+  position: relative;
+  flex: none;
+  transform-origin: top center;
+  background: white;
+  overflow: hidden;
+}
+
+/* Copy sits under the pictures; pictures are what the designer grabs. */
+.compose-text {
+  position: absolute;
+  overflow: hidden;
+}
+.compose-headline { font-weight: 700; line-height: 1.15; margin-bottom: 6px; }
+.compose-subheading { font-weight: 400; line-height: 1.2; margin-bottom: 10px; }
+.compose-body { white-space: pre-wrap; }
+.compose-hint { margin: 0; color: #9a9aa2; font-size: 12px; }
+
+/* The grid, shown on demand. This is exactly what goes to the AI. */
+.compose-flow { position: absolute; pointer-events: none; }
+.flow-cell { position: absolute; }
+.flow-H { background: rgba(200, 16, 46, 0.14); }
+.flow-S { background: rgba(230, 130, 30, 0.14); }
+.flow-T { background: rgba(60, 120, 220, 0.10); }
+
+.compose-image {
+  position: absolute;
+  cursor: move;
+  outline: 1px solid transparent;
+}
+.compose-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+.compose-image.shape-ellipse img { border-radius: 50%; }
+.compose-image.selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  z-index: 20 !important;
+}
+.compose-image.broken {
+  background: repeating-linear-gradient(45deg, #f4f4f6, #f4f4f6 6px, #ececee 6px, #ececee 12px);
+}
+.compose-handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: white;
+  border: 1.5px solid var(--accent);
+  border-radius: 2px;
+}
+.compose-handle.handle-nw { left: -5px; top: -5px; cursor: nwse-resize; }
+.compose-handle.handle-ne { right: -5px; top: -5px; cursor: nesw-resize; }
+.compose-handle.handle-se { right: -5px; bottom: -5px; cursor: nwse-resize; }
+.compose-handle.handle-sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
+
+.compose-selected {
+  margin-top: 14px;
+  padding: 14px;
+  background: white;
+  border: 1px solid #e4e4ea;
+  border-radius: 10px;
+}
+.compose-selected-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.compose-selected input[type="range"] { width: 100%; }
+
+/* What is placed on the block. The controls live on the canvas, not here. */
+.picture-list { margin: 0 0 12px; padding: 0; list-style: none; display: grid; gap: 8px; }
+.picture-item {
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid #ececed;
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+}
+.picture-item img {
+  width: 56px;
+  height: 42px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex: none;
+}
+.picture-item img.broken { background: #f0f0f2; }
+.picture-item-body { min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+.picture-item-body strong, .picture-item-body small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Fabric draws the block at print size; the surface is scaled to the column. */
+.compose-surface { position: relative; flex: none; }
+.compose-surface .canvas-container { position: absolute !important; inset: 0; }
+.compose-grid { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 2; }
+.compose-grid .compose-flow { position: absolute; }
+
+.layout-btn.danger { color: var(--accent); border-color: #f0c9cf; }
+.layout-btn.danger:disabled { opacity: 0.4; cursor: not-allowed; color: #9a9aa2; border-color: #e4e4e7; }
+.ext-editor-btn.danger { color: var(--accent); border-color: #f0c9cf; }
+
+/* The picture's controls sit directly above the block, not below 800px of
+   canvas where nobody would find them. */
+.compose-selected { margin: 0 0 12px; }
+.compose-selected .segmented { margin-bottom: 10px; }
+
+/* Pictures placed inside a block, shown on the page canvas exactly where the
+   composition editor put them. */
+.section-placed-image {
+  position: absolute;
+  object-fit: cover;
+  pointer-events: none;
+}
+.section-placed-image.oval { border-radius: 50%; }
+
+/* Copy poured around the pictures on the page canvas, cell by cell. */
+/* A line of copy set on one run of free cells.
+   `overflow: hidden` used to be here, and it cropped every Marathi vowel sign
+   that rises above the shirorekha - "शेतकऱ्यांसाठी" printed as "शतकऱ्यासाठा".
+   The line box is now tall enough (see MIN_LINE_HEIGHT in text-flow.js) and
+   nothing is clipped. */
+.section-flowed {
+  position: absolute;
+  white-space: nowrap;
+  color: #1a1a1a;
+}
+/* The headline and deck bands, set as wrapped type across the measure rather
+   than poured cell by cell. */
+.section-flowed-band {
+  white-space: normal;
+  overflow: hidden;
+}
+.section-flowed-band .section-headline {
+  line-height: 1.28;
+}
+
+/* ===========================================================================
+   The printed page
+   ===========================================================================
+   Everything below is about making the canvas read as a newspaper rather than
+   as a web layout: the type it is set in, the nameplate band, the furniture
+   round a story, and the print view that takes the editing chrome away.
+   --------------------------------------------------------------------------- */
+
+/* Marathi type, carried with the application rather than assumed to be on the
+   machine. Noto Devanagari is OFL-1.1, so it ships with the product. Without
+   this a page of Marathi falls back to whatever the browser has and the line
+   breaks - and therefore the fit calculation - change from desk to desk. */
+@font-face {
+  font-family: "Sahas Sans";
+  src: url("/assets/fonts/NotoSansDevanagari-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Sahas Sans";
+  src: url("/assets/fonts/NotoSansDevanagari-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Sahas Serif";
+  src: url("/assets/fonts/NotoSerifDevanagari-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Sahas Serif";
+  src: url("/assets/fonts/NotoSerifDevanagari-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-display: swap;
+}
+
+/* Headlines in the sans, body in the serif - the split every Marathi broadsheet
+   uses, and the reason their pages read as dense but not grey. */
+.newspaper-canvas {
+  font-family: "Sahas Serif", "Noto Serif Devanagari", Georgia, serif;
+}
+.section-headline,
+.section-kicker,
+.section-subheading {
+  font-family: "Sahas Sans", "Noto Sans Devanagari", Arial, sans-serif;
+}
+
+/* --- the nameplate band ------------------------------------------------- */
+
+.page-masthead {
+  position: absolute;
+  z-index: 4;
+  pointer-events: none;
+  border-bottom: 3px solid #111;
+  padding-bottom: 4px;
+  background: #fff;
+}
+.masthead-strip {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #111;
+  padding-bottom: 2px;
+  margin-bottom: 4px;
+  font-family: "Sahas Sans", "Noto Sans Devanagari", Arial, sans-serif;
+  font-size: 7px;
+  color: #222;
+}
+.masthead-strip-editions {
+  text-align: right;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 60%;
+}
+.masthead-body {
+  display: grid;
+  grid-template-columns: 110px 1fr 130px;
+  align-items: center;
+  gap: 8px;
+}
+.masthead-ear {
+  display: flex;
+  flex-direction: column;
+  font-family: "Sahas Sans", "Noto Sans Devanagari", Arial, sans-serif;
+  line-height: 1.15;
+  color: #111;
+}
+.masthead-ear-left {
+  align-items: flex-start;
+}
+.masthead-place {
+  background: #c8102e;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 6px;
+}
+/* The date is the loudest thing in the ear, exactly as it is in print. */
+.masthead-day {
+  font-size: 38px;
+  font-weight: 700;
+  line-height: 0.95;
+  color: #c8102e;
+}
+.masthead-weekday {
+  font-size: 12px;
+  font-weight: 700;
+}
+.masthead-monthyear {
+  font-size: 10px;
+}
+.masthead-plate {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.masthead-plate img {
+  max-width: 100%;
+  max-height: 96px;
+  object-fit: contain;
+}
+.masthead-ear-right {
+  align-items: flex-end;
+  text-align: right;
+  gap: 1px;
+}
+.masthead-rni {
+  font-size: 6.5px;
+  color: #444;
+}
+.masthead-meta {
+  font-size: 8px;
+}
+.masthead-editor {
+  font-size: 8px;
+  font-weight: 700;
+  color: #0a7a3f;
+}
+.masthead-web {
+  font-size: 8px;
+  color: #c8102e;
+}
+
+/* --- the folio on inside pages ------------------------------------------ */
+
+.page-folio {
+  position: absolute;
+  z-index: 4;
+  pointer-events: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  border-bottom: 2px solid #111;
+  padding-bottom: 2px;
+  font-family: "Sahas Sans", "Noto Sans Devanagari", Arial, sans-serif;
+  background: #fff;
+}
+.folio-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #c8102e;
+}
+.folio-date,
+.folio-page {
+  font-size: 9px;
+  color: #222;
+}
+
+/* --- press registration marks ------------------------------------------- */
+
+.page-registration {
+  position: absolute;
+  z-index: 4;
+  pointer-events: none;
+  display: flex;
+  gap: 3px;
+  justify-content: center;
+}
+.page-registration span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+/* --- story furniture ----------------------------------------------------- */
+
+.section-kicker {
+  font-weight: 700;
+  color: #111;
+  line-height: 1.15;
+  border-bottom: 1px solid #bbb;
+  padding-bottom: 2px;
+  margin-bottom: 2px;
+}
+.section-subheading {
+  font-weight: 400;
+  color: #333;
+  line-height: 1.2;
+}
+.section-dateline {
+  font-weight: 700;
+  color: #111;
+  white-space: nowrap;
+}
+.section-caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.88);
+  font-size: 8px;
+  line-height: 1.15;
+  padding: 1px 3px;
+  color: #222;
+}
+/* Newspaper copy is justified and set in a narrow measure, with the columns
+   ruled apart the way a printed page rules them. */
+.section-body {
+  text-align: justify;
+  hyphens: auto;
+  column-gap: 10px;
+  column-rule: 1px solid #ccc;
+}
+
+/* Rules a layout asked for. `box` is a boxed item, `rule` a hairline under the
+   block - both are how a printed page separates one story from the next. */
+.newspaper-section.ruled-box {
+  border: 1.5px solid #111;
+}
+.newspaper-section.ruled-rule {
+  border-bottom: 1px solid #111;
+}
+
+/* ===========================================================================
+   Print view
+   ===========================================================================
+   One toggle, not a separate screen: the same canvas with the editing chrome
+   taken off, so the desk can see what comes off the press without leaving the
+   workspace. */
+
+body.print-view .grid-overlay,
+body.print-view .section-chrome,
+body.print-view .section-hover-toolbar,
+body.print-view .section-handle,
+body.print-view .section-selected-label,
+body.print-view .canvas-minimap {
+  display: none !important;
+}
+body.print-view .newspaper-section {
+  background: transparent;
+  border: none;
+  outline: none !important;
+  box-shadow: none !important;
+  color: #000;
+  padding: 4px 6px;
+  animation: none;
+}
+body.print-view .newspaper-section.ruled-box {
+  border: 1.5px solid #111;
+}
+body.print-view .newspaper-section.ruled-rule {
+  border-bottom: 1px solid #111;
+}
+body.print-view .newspaper-section:hover {
+  outline: none;
+}
+body.print-view .section-body {
+  color: #000;
+}
+body.print-view .section-headline,
+body.print-view .section-kicker,
+body.print-view .section-subheading {
+  color: #000;
+}
+/* The painted word survives: its colour is set inline, which outranks the
+   rules above - it is ink, not chrome. */
+body.print-view .newspaper-canvas {
+  background: #fff;
+  box-shadow: 0 2px 24px rgba(0, 0, 0, 0.25);
+}
+
+/* Caption under a placed photograph. */
+.section-placed-caption {
+  position: absolute;
+  font-family: "Sahas Sans", "Noto Sans Devanagari", Arial, sans-serif;
+  font-size: 7.5px;
+  line-height: 1.35;
+  color: #333;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 1px 2px;
+}
+
+/* Rules between stories.
+   A printed page separates one story from the next with a hairline; without
+   them a dense page reads as one grey mass. The rules are drawn in print view
+   only - in the editing view the block outlines already do that job, and two
+   sets of lines at once would be noise. */
+body.print-view .newspaper-section.block-article,
+body.print-view .newspaper-section.block-briefs,
+body.print-view .newspaper-section.block-photo {
+  border-right: 1px solid #c9c9c9;
+  border-bottom: 1px solid #111;
+  padding: 5px 8px 7px 6px;
+}
+/* A block that runs to the right edge of the matter has nothing to be ruled
+   off from. */
+body.print-view .newspaper-section.at-right-edge {
+  border-right: none;
+}
+
+/* The page foot: the printline the law requires, plus the paper, date and page
+   number. Standing furniture, drawn by the software, never typed. */
+.page-foot {
+  position: absolute;
+  z-index: 4;
+  pointer-events: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  border-top: 1px solid #111;
+  padding-top: 2px;
+  font-family: "Sahas Sans", "Noto Sans Devanagari", Arial, sans-serif;
+  background: #fff;
+}
+.foot-printline {
+  font-size: 6px;
+  line-height: 1.2;
+  color: #444;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.foot-page {
+  font-size: 7px;
+  font-weight: 700;
+  color: #111;
+  white-space: nowrap;
+}
+
+/* Verso and recto. The page number sits on the OUTER edge of the spread - left
+   on an even page, right on an odd one - so a reader flicking through finds it
+   in the same place their thumb already is. */
+.page-folio.folio-verso .folio-title,
+.page-folio.folio-recto .folio-page {
+  text-align: right;
+}
+.page-foot.foot-verso {
+  flex-direction: row-reverse;
+}
+
+/* A page that prints black only. The photographs are previewed in grey because
+   that is how the press will lay them down - showing them in colour would be
+   showing the desk something that is not going to happen. */
+body.print-view .newspaper-canvas.mono-forme .section-placed-image,
+body.print-view .newspaper-canvas.mono-forme .section-image {
+  filter: grayscale(1);
+}
+.mono-forme-warning {
+  position: absolute;
+  z-index: 6;
+  pointer-events: none;
+  background: #fff3cd;
+  border: 1px solid #d9a441;
+  color: #6b4c00;
+  font-family: Arial, sans-serif;
+  font-size: 9px;
+  padding: 2px 6px;
+  text-align: center;
+}
+body.print-view .mono-forme-warning { display: none; }
+
+/* A page shared from the parent edition. A district desk may look at it but it
+   belongs to the core edition - editing it would change every district. */
+.newspaper-canvas.common-page::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 3px rgba(60, 110, 200, 0.35);
+}
+
+/* Preflight findings. A list against the blocks they are on, not a report to
+   read: clicking one opens that block so it can be fixed. */
+.preflight-panel {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  width: min(460px, 90vw);
+  max-height: 55vh;
+  overflow: auto;
+  z-index: 60;
+  background: #fff;
+  border: 1px solid #c9c9c9;
+  border-radius: 6px;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.22);
+  font-family: Arial, sans-serif;
+  font-size: 0.82rem;
+}
+.preflight-panel header {
+  position: sticky;
+  top: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: #f4f4f6;
+  border-bottom: 1px solid #ddd;
+}
+.preflight-panel header button {
+  border: none;
+  background: none;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  color: #666;
+}
+.preflight-panel ul { list-style: none; margin: 0; padding: 0; }
+.preflight-row {
+  display: grid;
+  grid-template-columns: 8.5rem 1fr;
+  gap: 10px;
+  padding: 7px 12px;
+  border-bottom: 1px solid #eee;
+  border-left: 4px solid transparent;
+  cursor: pointer;
+}
+.preflight-row:hover { background: #f7f9ff; }
+.preflight-where { color: #555; font-variant-numeric: tabular-nums; }
+.preflight-error { border-left-color: #c8102e; }
+.preflight-warning { border-left-color: #d9a441; }
+.preflight-note { border-left-color: #9aa0a6; }
+
+/* --- The editions panel (public/admin/editions.js) -------------------------
+   A row has to answer three questions at a glance: which date is this, how
+   much of it is made up, and can I open it. The fill bar is the one that was
+   missing - without it an empty edition and a finished one look identical, and
+   an editor opening the wrong one concludes their work did not save. */
+.editions-title {
+  font-size: 2.4rem;
+  margin-bottom: 2px;
+}
+.editions-sub {
+  color: #6a6a72;
+  margin-bottom: 22px;
+}
+.editions-heading {
+  margin: 30px 0 10px;
+}
+.edition-today {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 22px;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+.edition-today-main {
+  flex: 1 1 260px;
+}
+.edition-today-main p {
+  color: #55555e;
+  margin-top: 4px;
+}
+.edition-today-form {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.edition-today-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #55555e;
+}
+.edition-today-form input {
+  padding: 8px 10px;
+  border: 1px solid #d8d8de;
+  border-radius: 7px;
+  font: inherit;
+}
+.edition-today-form input[type="number"] {
+  width: 76px;
+}
+.edition-ladder {
+  margin: 12px 2px 0;
+  font-size: 0.82rem;
+  color: #6a6a72;
+}
+.edition-search {
+  width: 100%;
+  padding: 9px 12px;
+  margin-bottom: 12px;
+  border: 1px solid #d8d8de;
+  border-radius: 7px;
+  font: inherit;
+}
+.edition-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.1fr) minmax(160px, 1.4fr) 90px auto auto;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid #e8e8ec;
+  border-radius: 9px;
+  margin-bottom: 8px;
+  background: white;
+}
+.edition-row:hover {
+  border-color: #cfcfd6;
+}
+.edition-row--today {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary) inset;
+}
+.edition-row-date strong,
+.edition-row-name {
+  display: block;
+  font-size: 0.92rem;
+}
+.edition-row-date small,
+.edition-row-name small {
+  display: block;
+  color: #7a7a84;
+  font-size: 0.75rem;
+  margin-top: 2px;
+}
+.edition-empty {
+  color: #a2263c;
+}
+.edition-row-fill {
+  height: 6px;
+  border-radius: 999px;
+  background: #ececf0;
+  overflow: hidden;
+}
+.edition-row-fill span {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+}
+.edition-more {
+  margin-top: 8px;
+}
+@media (max-width: 760px) {
+  .edition-row {
+    grid-template-columns: 1fr auto;
+  }
+  .edition-row-fill {
+    grid-column: 1 / -1;
+  }
+}
+
+/* --- "What's left" (public/editor/worklist-panel.js) -----------------------
+   Shares the preflight panel's shell deliberately: preflight says what is
+   wrong, this says what is not done yet, and a desk should not have to learn
+   two different panels for two halves of the same question. */
+.worklist-panel {
+  right: 18px;
+  bottom: 18px;
+  max-height: 70vh;
+}
+.worklist-summary {
+  margin: 0;
+  padding: 8px 12px;
+  color: #55555e;
+  border-bottom: 1px solid #eee;
+  background: #fbfbfc;
+}
+.worklist-page {
+  padding: 7px 12px;
+  font-weight: 700;
+  background: #f4f4f6;
+  border-bottom: 1px solid #e6e6ea;
+}
+.worklist-clear {
+  padding: 16px 12px;
+  color: #176b3a;
+}
+.worklist-row {
+  display: grid;
+  grid-template-columns: 8.5rem 1fr auto;
+  gap: 10px;
+  align-items: baseline;
+  padding: 7px 12px;
+  border-bottom: 1px solid #eee;
+  border-left: 4px solid transparent;
+  cursor: pointer;
+}
+.worklist-row:hover {
+  background: #f7f9ff;
+}
+.worklist-where {
+  color: #6a6a72;
+  font-variant-numeric: tabular-nums;
+}
+.worklist-what small {
+  display: block;
+  color: #7a7a84;
+  font-size: 0.74rem;
+  margin-top: 2px;
+}
+.worklist-state {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: #7a7a84;
+  white-space: nowrap;
+}
+.worklist-empty { border-left-color: #c9ccd4; }
+.worklist-started { border-left-color: #e0a800; }
+.worklist-needs-caption { border-left-color: #3a7bd5; }
+.worklist-overset { border-left-color: var(--primary); }
+.worklist-overset .worklist-state,
+.worklist-over { color: var(--primary); font-weight: 700; }
+
+/* The effort tier. Sits above the AI actions because it qualifies all of them:
+   it is not another action, it is how hard the model should think about the
+   one you are about to press. */
+.ai-tier {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #55555e;
+}
+.ai-tier select {
+  flex: 1;
+  padding: 7px 9px;
+  border: 1px solid #d8d8de;
+  border-radius: 7px;
+  font: inherit;
+  background: white;
 }

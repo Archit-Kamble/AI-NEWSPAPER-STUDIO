@@ -37,7 +37,24 @@ export function syncZoomControl() {
 
   if (select) {
     const exact = ZOOM_LEVELS.find((level) => Math.abs(level - scale) < 0.001);
-    select.value = mode === "fit" ? "fit" : exact !== undefined ? String(exact) : "fit";
+    if (mode === "fit") {
+      select.value = "fit";
+    } else if (exact !== undefined) {
+      select.value = String(exact);
+    } else {
+      // Wheel-zoom and the + / − buttons land between the listed levels. The
+      // control used to fall back to "Fit", so it read "Fit" while the page was
+      // at 132% and plainly not fitted. Show the level it is actually at.
+      let custom = select.querySelector("option[data-custom]");
+      if (!custom) {
+        custom = document.createElement("option");
+        custom.dataset.custom = "true";
+        select.appendChild(custom);
+      }
+      custom.value = String(scale);
+      custom.textContent = `${Math.round(scale * 100)}%`;
+      select.value = custom.value;
+    }
   }
   if (readout) readout.textContent = `${Math.round(scale * 100)}%`;
 }

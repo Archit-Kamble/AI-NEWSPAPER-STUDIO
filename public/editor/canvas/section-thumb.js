@@ -8,6 +8,7 @@ import { escapeHtml } from "../format.js";
 import { statusOf, statusLabel, statusClass } from "../status/section-status.js";
 import { computeMetrics } from "../layout/layout-metrics.js";
 import { imageTransformCss } from "../image/image-manager.js";
+import { buildFlowMap, CELL, flowRuns, bandSpan, pourIntoRuns, flowImageFromRow } from "../layout/text-flow.js";
 
 const ICONS = {
   article:
@@ -47,30 +48,200 @@ export function sectionType(sectionKey = "") {
 // image and text is decided later, in the editor and by the AI fit, not
 // pre-drawn here. Once content exists the block shows what is actually there,
 // in normal flow, with no reserved areas.
-function contentMarkup(view) {
+// Pictures placed in the block, drawn where they actually sit. The page canvas
+// and the composition canvas therefore show the same page.
+function placedImagesMarkup(section) {
+  const images = section?.images || [];
+  if (!images.length) return "";
+  return images
+    .map((image) => {
+      const transform = [
+        image.rotation ? `rotate(${image.rotation}deg)` : "",
+        image.flip_h ? "scaleX(-1)" : "",
+        image.flip_v ? "scaleY(-1)" : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      const frame = `left:${image.x_px}px;top:${image.y_px}px;width:${image.width_px}px;height:${image.height_px}px;`;
+      const picture = `<img class="section-placed-image${image.shape === "ellipse" ? " oval" : ""}"
+                   src="${escapeHtml(image.url)}" alt=""
+                   onerror="this.remove()"
+                   style="${frame}${transform ? `transform:${transform};` : ""}z-index:${image.z_index || 1}" />`;
+      // A photograph in a newspaper is captioned. The caption is set under the
+      // picture, in the picture's own measure, not in the story's.
+      if (!image.caption) return picture;
+      return `${picture}<span class="section-placed-caption"
+                   style="left:${image.x_px}px;top:${image.y_px + image.height_px}px;width:${image.width_px}px;z-index:${(image.z_index || 1) + 1}">${escapeHtml(image.caption)}</span>`;
+    })
+    .join("");
+}
+
+// --------------------------------------------------------- newspaper craft ---
+//
+// The furniture that makes a block read as a newspaper story rather than as a
+// web card. All of it is what the reference pages actually do:
+//
+//   kicker    the small line above the headline that says what the story is
+//             before the headline shouts it
+//   accent    one word of the headline painted in the paper's colour - the
+//             single most recognisable thing about a Marathi front page
+//   dateline  "■ मुंबई, वृत्तसंस्था" opening the body, not sitting apart from it
+//   measure   a wide block sets its copy in several narrow columns, because a
+//             620-pixel line of 11-point type is unreadable and no paper prints
+//             one
+
+// The painted word. An editor marks it explicitly by wrapping it in asterisks -
+// "ड्रग्जपासून *दूर राहा*" - which is deliberate: the software must never guess
+// which word matters. Failing that, a block whose layout asked for the accent
+// treatment paints its last word, which is the commonest choice in print.
+function headlineMarkup(view) {
+  if (!view.headline) return "";
+  const accent = escapeHtml(view.accentColor || "#c8102e");
+  const text = String(view.headline);
+
+  const size = `style="font-size:${view.headlineFontPx}px"`;
+
+  if (text.includes("*")) {
+    const parts = text.split(/\*([^*]+)\*/g);
+    const html = parts
+      .map((part, index) =>
+        index % 2
+          ? `<span style="color:${accent}">${escapeHtml(part)}</span>`
+          : escapeHtml(part),
+      )
+      .join("");
+    return `<div class="section-headline" ${size}>${html}</div>`;
+  }
+
+  if (view.headlineStyle === "accent") {
+    const words = text.trim().split(/\s+/);
+    if (words.length > 1) {
+      const last = words.pop();
+      return `<div class="section-headline" ${size}>${escapeHtml(words.join(" "))} <span style="color:${accent}">${escapeHtml(last)}</span></div>`;
+    }
+  }
+  return `<div class="section-headline" ${size}>${escapeHtml(text)}</div>`;
+}
+
+// "■ मुंबई, वृत्तसंस्था" — place first, then who filed. It opens the body text,
+// which is where every paper puts it, so it is built into the body rather than
+// being a line of its own.
+function datelineMarkup(view) {
+  const parts = [view.location, view.author].map((p) => String(p || "").trim()).filter(Boolean);
+  if (!parts.length) return "";
+  return `<span class="section-dateline">■ ${escapeHtml(parts.join(", "))}</span> `;
+}
+
+// How many columns the copy is set in. A newspaper column is about 40 mm; at 2
+// px/mm that is 80 px, and a block three or four grid columns wide carries one
+// text column, a seven-column lead carries three.
+function measureColumns(view, widthPx) {
+  if (Number(view.columnCount) > 1) return Number(view.columnCount);
+  const usable = Math.max(0, widthPx - 2 * (Number(view.marginPx) || 12));
+  return Math.max(1, Math.min(4, Math.floor(usable / 150)));
+}
+
+function contentMarkup(section, view) {
   const hasImage = Boolean(view.imageUrl);
-  const hasText = Boolean(view.headline || view.body);
+  const hasText = Boolean(view.kicker || view.headline || view.body);
   if (!hasImage && !hasText) return "";
 
+  const columns = measureColumns(view, Number(section.width_px) || 0);
+
+  // The type sizes are the block's own, the same ones the character grid uses
+  // to work out how much copy fits. Sizing the canvas differently from the
+  // budget would mean the page you see is not the page that was measured.
   return `
-    <div class="section-content">
+    <div class="section-content" style="font-size:${view.bodyFontPx}px;line-height:${view.lineHeight || 1.25}">
+      ${view.kicker ? `<div class="section-kicker" style="font-size:${Math.round(view.bodyFontPx * 1.05)}px">${escapeHtml(view.kicker)}</div>` : ""}
+      ${headlineMarkup(view)}
+      ${view.subheading ? `<div class="section-subheading" style="font-size:${view.subheadingFontPx}px">${escapeHtml(view.subheading)}</div>` : ""}
       ${
         hasImage
           ? `<span class="section-image-box"><img class="section-image" src="${escapeHtml(view.imageUrl)}" alt=""
                onerror="this.closest('.section-image-box').remove()"
-               style="object-fit:${escapeHtml(view.imageFit || "cover")};${imageTransformCss(view)}" /></span>`
+               style="object-fit:${escapeHtml(view.imageFit || "cover")};${imageTransformCss(view)}" />${
+                 view.caption ? `<span class="section-caption">${escapeHtml(view.caption)}</span>` : ""
+               }</span>`
           : ""
       }
-      ${view.headline ? `<div class="section-headline">${escapeHtml(view.headline)}</div>` : ""}
-      ${view.body ? `<p class="section-body">${escapeHtml(view.body)}</p>` : ""}
+      ${
+        view.body
+          ? `<p class="section-body" style="column-count:${columns}">${datelineMarkup(view)}${escapeHtml(view.body)}</p>`
+          : ""
+      }
     </div>
   `;
+}
+
+// Copy poured into the cells the pictures leave free - the same calculation the
+// composition canvas and the AI brief use, so the page shows the page.
+function flowedTextMarkup(section, view) {
+  const images = (section?.images || []).map(flowImageFromRow);
+  if (!images.length) return null;
+
+  const map = buildFlowMap(section, view, images);
+  if (!map.cols || !map.rows) return null;
+
+  const pad = Number(view.marginPx) || 12;
+  const measure = map.cols * map.cellWidth;
+  const pieces = [];
+
+  // The headline and the deck are set across the measure, as whole wrapped
+  // lines, in the rows the grid reserved for them. They are deliberately NOT
+  // poured through the character cells: a headline broken cell by cell cannot
+  // wrap, cannot carry the painted word, and clips its own vowel signs. The
+  // grid's job for these two is to reserve the space, which it still does.
+  const bandTop = pad;
+  const headlineHeight = map.headlineRows * map.cellHeight;
+  const subheadingHeight = map.subheadingRows * map.cellHeight;
+
+  // The band keeps clear of any picture standing in it, the same way the body
+  // does - a headline set straight over a photograph is the mistake this
+  // avoids.
+  // If dodging the picture would leave the band less than half the measure, the
+  // picture is in the wrong place, not the headline: squeezing a headline into
+  // a third of the column reads far worse than letting the designer see the
+  // clash and move the photograph.
+  const MIN_BAND_SHARE = 0.5;
+  const band = (kind, fallbackLeft) => {
+    const span = bandSpan(map, kind);
+    if (!span || span.length * map.cellWidth < measure * MIN_BAND_SHARE) {
+      return { left: fallbackLeft, width: measure };
+    }
+    return { left: pad + span.col * map.cellWidth, width: span.length * map.cellWidth };
+  };
+
+  if (view.headline && headlineHeight > 0) {
+    const box = band(CELL.HEADLINE, pad);
+    pieces.push(
+      `<div class="section-flowed section-flowed-band" style="left:${box.left}px;top:${bandTop}px;width:${box.width}px;height:${headlineHeight}px">${headlineMarkup(view)}</div>`,
+    );
+  }
+  if (view.subheading && subheadingHeight > 0) {
+    const box = band(CELL.SUBHEADING, pad);
+    pieces.push(
+      `<div class="section-flowed section-flowed-band" style="left:${box.left}px;top:${bandTop + headlineHeight}px;width:${box.width}px;height:${subheadingHeight}px"><div class="section-subheading" style="font-size:${view.subheadingFontPx}px">${escapeHtml(view.subheading)}</div></div>`,
+    );
+  }
+
+  // The body is what actually flows round the picture, line by line, which is
+  // the whole point of the grid.
+  const dateline = [view.location, view.author].map((p) => String(p || "").trim()).filter(Boolean).join(", ");
+  const body = view.body ? `${dateline ? `■ ${dateline} ` : ""}${view.body}` : "";
+  pourIntoRuns(flowRuns(map, CELL.TEXT), body).forEach((run) => {
+    pieces.push(
+      `<span class="section-flowed" style="left:${pad + run.col * map.cellWidth}px;top:${pad + run.row * map.cellHeight}px;width:${run.length * map.cellWidth + 2}px;font-size:${view.bodyFontPx}px;line-height:${map.cellHeight}px">${escapeHtml(run.text)}</span>`,
+    );
+  });
+  return pieces.join("");
 }
 
 export function sectionInnerHtml(section, view, { dirty = false, selected = false } = {}) {
   const status = statusOf(view);
   const type = sectionType(section.section_key);
   const metrics = computeMetrics(section, view);
+  const flowed = flowedTextMarkup(section, view);
 
   return `
     <div class="section-chrome">
@@ -84,7 +255,8 @@ export function sectionInnerHtml(section, view, { dirty = false, selected = fals
       </span>
       <span class="section-status-badge ${statusClass(status)}">${statusLabel(status)}</span>
     </div>
-    ${contentMarkup(view)}
+    ${flowed === null ? contentMarkup(section, view) : flowed}
+    ${placedImagesMarkup(section)}
     <div class="section-hover-toolbar">
       <button type="button" class="section-hover-btn" data-section-action="story" title="Attach a reporter story">Story</button>
       <button type="button" class="section-hover-btn" data-section-action="image" title="Open the image workspace">Image</button>
@@ -95,9 +267,23 @@ export function sectionInnerHtml(section, view, { dirty = false, selected = fals
   `;
 }
 
-export function sectionClassName(view, { selected = false, dirty = false, overflowing = false } = {}) {
+export function sectionClassName(view, { selected = false, dirty = false, overflowing = false, atRightEdge = false } = {}) {
   const filled = Boolean(view.headline || view.body || view.imageUrl);
-  return ["newspaper-section", filled ? "filled" : "", selected ? "active" : "", dirty ? "unsaved" : "", overflowing ? "overflowing" : ""]
+  return [
+    "newspaper-section",
+    // What the layout decided this block is, and how it is ruled off. Both are
+    // print decisions, so they belong on the element rather than being inferred
+    // from the section key.
+    `block-${view.blockType || "article"}`,
+    view.borderStyle && view.borderStyle !== "none" ? `ruled-${view.borderStyle}` : "",
+    // A block against the right edge of the matter has nothing to its right to
+    // be ruled off from.
+    atRightEdge ? "at-right-edge" : "",
+    filled ? "filled" : "",
+    selected ? "active" : "",
+    dirty ? "unsaved" : "",
+    overflowing ? "overflowing" : "",
+  ]
     .filter(Boolean)
     .join(" ");
 }

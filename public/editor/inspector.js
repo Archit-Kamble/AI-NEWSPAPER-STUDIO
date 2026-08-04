@@ -7,21 +7,23 @@
 
 import { escapeHtml } from "./format.js";
 import { statusOf, statusLabel, statusClass, explicitStatusOptions, isExplicit } from "./status/section-status.js";
-import { computeMetrics } from "./layout/layout-metrics.js";
 
 const STORY_FIELDS = [
   { id: "insHeadline", field: "headline", label: "Headline", type: "input", limit: 90 },
   { id: "insSubheading", field: "subheading", label: "Subheading", type: "input", limit: 140 },
-  { id: "insBody", field: "body", label: "Body", type: "textarea", rows: 8 },
+  { id: "insBody", field: "body", label: "Body", type: "textarea", rows: 6 },
   { id: "insCaption", field: "caption", label: "Caption", type: "input", limit: 160 },
 ];
+
+// This paper prints in Marathi; nobody should have to type that every time.
+const LANGUAGES = ["Marathi", "Hindi", "English"];
 
 const META_FIELDS = [
   { id: "insAuthor", field: "author", label: "Reporter" },
   { id: "insCategory", field: "category", label: "Category" },
   { id: "insLocation", field: "location", label: "Location" },
   { id: "insTags", field: "tags", label: "Tags" },
-  { id: "insLanguage", field: "language", label: "Language" },
+  { id: "insLanguage", field: "language", label: "Language", type: "select", options: LANGUAGES },
 ];
 
 const WORDS_PER_MINUTE = 200;
@@ -40,9 +42,13 @@ function fieldMarkup(f, view) {
     ? `<span class="field-counter" id="${f.id}Counter">${(view[f.field] || "").length}/${f.limit}</span>`
     : "";
   const control =
-    f.type === "textarea"
-      ? `<textarea id="${f.id}" rows="${f.rows}">${escapeHtml(view[f.field])}</textarea>`
-      : `<input id="${f.id}" value="${escapeHtml(view[f.field])}" />`;
+    f.type === "select"
+      ? `<select id="${f.id}">${f.options
+          .map((o) => `<option value="${o}"${view[f.field] === o ? " selected" : ""}>${o}</option>`)
+          .join("")}</select>`
+      : f.type === "textarea"
+        ? `<textarea id="${f.id}" rows="${f.rows}">${escapeHtml(view[f.field])}</textarea>`
+        : `<input id="${f.id}" value="${escapeHtml(view[f.field])}" />`;
   return `<div class="form-group"><label>${f.label}${counter}</label>${control}</div>`;
 }
 
@@ -74,7 +80,6 @@ export function renderInspector(section, view, story, callbacks) {
   }
 
   const status = statusOf(view);
-  const metrics = computeMetrics(section, view);
 
   body.innerHTML = `
     <div class="inspector-head">
@@ -103,9 +108,7 @@ export function renderInspector(section, view, story, callbacks) {
 
     <div class="inspector-group">
       <h4>Details</h4>
-      ${META_FIELDS.map(
-        (f) => `<div class="form-group"><label>${f.label}</label><input id="${f.id}" value="${escapeHtml(view[f.field])}" /></div>`,
-      ).join("")}
+      ${META_FIELDS.map((f) => fieldMarkup(f, view)).join("")}
       <div class="form-group">
         <label>Editorial status</label>
         <select id="insStatusSelect">
@@ -116,15 +119,6 @@ export function renderInspector(section, view, story, callbacks) {
         </select>
       </div>
       <div class="inspector-row"><span>Last saved</span><strong id="insSavedAt">${formatSavedAt(section.updated_at)}</strong></div>
-      <div class="inspector-row"><span>Image</span><strong id="insImageName">${view.imageUrl ? escapeHtml(view.imageUrl.split("/").pop()) : "None"}</strong></div>
-      <div class="inspector-row"><span>Rotation</span><strong id="insImageRotation">${view.imageRotation}°</strong></div>
-      <div class="inspector-row"><span>Zoom</span><strong id="insImageZoom">${Number(view.imageZoom).toFixed(2)}×</strong></div>
-      <div class="inspector-row"><span>Fit</span><strong id="insImageFit">${escapeHtml(view.imageFit)}</strong></div>
-    </div>
-
-    <div class="inspector-group" id="insMetrics">
-      <h4>Space</h4>
-      ${spaceMarkup(metrics)}
     </div>
 
     <div class="inspector-actions">
@@ -136,20 +130,10 @@ export function renderInspector(section, view, story, callbacks) {
   bindInspector(callbacks);
 }
 
-function spaceMarkup(metrics) {
-  return `
-    <div class="inspector-row"><span>Available</span><strong>${Math.round(metrics.availableAreaPx / 1000)}k px²</strong></div>
-    <div class="inspector-row"><span>Remaining</span><strong>${Math.round(metrics.remainingAreaPx / 1000)}k px²</strong></div>
-    <div class="fill-meter${metrics.overflowing ? " overflowing" : ""}">
-      <span style="width:${Math.min(100, Math.round(metrics.fillRatio * 100))}%"></span>
-    </div>
-    <p class="muted metrics-note">${metrics.overflowing ? "Content overflows this block." : `${Math.round(metrics.fillRatio * 100)}% filled`}</p>
-  `;
-}
-
 function bindInspector({ onPatch, onChooseStory, onSave, onRevert }) {
   [...STORY_FIELDS, ...META_FIELDS].forEach((f) => {
-    document.getElementById(f.id)?.addEventListener("input", (event) => {
+    const el = document.getElementById(f.id);
+    el?.addEventListener(f.type === "select" ? "change" : "input", (event) => {
       onPatch({ [f.field]: event.target.value }, "inspector");
     });
   });
@@ -188,18 +172,8 @@ export function refreshInspectorReadouts(section, view, story, source) {
   const stats = document.getElementById("insStoryStats");
   if (stats) stats.innerHTML = statsMarkup(view);
 
-  const setText = (id, value) => {
-    const element = document.getElementById(id);
-    if (element) element.textContent = value;
-  };
-  setText("insImageName", view.imageUrl ? view.imageUrl.split("/").pop() : "None");
-  setText("insImageRotation", `${view.imageRotation}°`);
-  setText("insImageZoom", `${Number(view.imageZoom).toFixed(2)}×`);
-  setText("insImageFit", view.imageFit);
-
-  const metricsGroup = document.getElementById("insMetrics");
-  if (metricsGroup) metricsGroup.innerHTML = `<h4>Space</h4>${spaceMarkup(computeMetrics(section, view))}`;
-
+  // The image and the space read-outs belong to the External Editor below -
+  // showing them twice is the repeated information VISION.md rules out.
   refreshStoryBar(view, story);
   if (source !== "inspector") repaintInputs(view);
 }

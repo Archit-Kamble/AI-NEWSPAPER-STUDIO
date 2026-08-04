@@ -1,23 +1,46 @@
-// The External Editor: a full-width dock across the bottom of the workspace,
-// the way a terminal sits under VS Code or a timeline under Premiere. The canvas
-// and Inspector stay visible above it; this panel gets the full width because
-// composing a story is a horizontal job.
+// The External Editor: the second stage of newspaper production, a full-width
+// dock below the page and the Inspector. The page scrolls naturally; this panel
+// is not squeezed into a viewport (VISION.md, "External Editor").
 //
-// It is still the GrapesJS host - the Layout tab keeps the untouched empty
-// #external-editor div, and nothing here assumes what will live in it.
+// No tabs. VISION.md is explicit that tabs must not be added just because they
+// look organised, and the section lifecycle it defines runs in one direction:
+//
+//     work on image -> AI measures the space left -> AI fills it -> review -> save
+//
+// So the dock is two columns. Left is the live newspaper preview, exactly as it
+// will print. Right is one continuous control column in that same order, with
+// typography and history folded away underneath - present when wanted, never in
+// the path. An editor arriving here never has to choose a tab before starting.
 
 import { escapeHtml } from "../format.js";
 import { statusOf, statusLabel, statusClass } from "../status/section-status.js";
-import { TABS, tabStripMarkup, tabPanelsMarkup, bindTabs, getActiveTab, setActiveTab } from "./tabs.js";
-import { imagesPanelMarkup, bindImagesPanel, refreshImagesPanel } from "./images-panel.js";
+import { composeCanvasMarkup, renderComposeCanvas, scaleComposeCanvas, bindComposeCanvas, selectImageById } from "./compose-canvas.js";
+import { picturesPanelMarkup, bindPicturesPanel, refreshPicturesPanel } from "./pictures-panel.js";
 import { typographyPanelMarkup, bindTypographyPanel, refreshTypographyPanel } from "./typography-panel.js";
-import { layoutPanelMarkup, refreshLayoutPanel } from "./layout-panel.js";
-import { aiPanelMarkup, bindAiPanel, refreshAiPanel, refreshFitBrief } from "./ai-panel.js";
+import { spacePanelMarkup, refreshSpacePanel } from "./layout-panel.js";
+import { aiPanelMarkup, bindAiPanel, refreshAiPanel } from "./ai-panel.js";
 import { assetsPanelMarkup, bindAssetsPanel, refreshAssetsPanel } from "./assets-panel.js";
 import { historyPanelMarkup, bindHistoryPanel, refreshHistoryPanel } from "./history-panel.js";
 
+// The three steps of the lifecycle, in order. Anything not on this path lives
+// in a collapsed <details> below them.
+export const GROUPS = [
+  { key: "image", label: "1 · Pictures" },
+  { key: "space", label: "2 · Space" },
+  { key: "ai", label: "3 · Write with AI" },
+];
+
 let notifyTimer = null;
 let activeCallbacks = null;
+
+function group(key, label, body) {
+  return `
+    <section class="ext-group" data-group="${key}" id="edGroup-${key}">
+      <h4 class="ext-group-title">${label}</h4>
+      <div class="ext-group-body" id="edGroupBody-${key}">${body}</div>
+    </section>
+  `;
+}
 
 export function renderExternalEditor(section, view, story, reporterNews, callbacks) {
   const container = document.getElementById("externalEditorPanel");
@@ -26,16 +49,31 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
   activeCallbacks = callbacks;
 
   if (!section || !view) {
+    // Never a bare strip of white. If an editor scrolls down here before
+    // picking a block, the dock says what this stage is for and how to start -
+    // VISION.md: the editor should never wonder where to go next.
     container.innerHTML = `
       <div class="ext-editor-header">
         <h3>External Editor</h3>
-        <span class="muted">Select a section on the page to open it here.</span>
+        <span class="muted">Nothing open yet</span>
         <div class="ext-editor-header-actions">
           <button type="button" class="ext-icon-btn" id="edToggleDock" title="Collapse editor">▾</button>
         </div>
       </div>
+      <div class="ext-editor-idle">
+        <h4>This is where a story is composed.</h4>
+        <p>Pick a block on the page above and it opens here: place its pictures, see how many
+           characters are left around them, and let the AI fill exactly that.</p>
+        <ol class="ext-idle-steps">
+          <li><strong>Pictures</strong> — place, size and shape them on the block</li>
+          <li><strong>Space</strong> — how many characters the copy has room for</li>
+          <li><strong>Write with AI</strong> — fill exactly those characters</li>
+        </ol>
+        <button type="button" class="btn-submit" id="edPickBlock">Choose a block ↑</button>
+      </div>
     `;
     bindDockToggle(callbacks);
+    document.getElementById("edPickBlock")?.addEventListener("click", () => callbacks.onPickBlock?.());
     return;
   }
 
@@ -46,7 +84,6 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
       <h3>External Editor</h3>
       <span class="ext-editor-section-name">${escapeHtml(section.section_key)}</span>
       <span id="edStatusBadge" class="section-status-badge ${statusClass(status)}">${statusLabel(status)}</span>
-      ${tabStripMarkup()}
       <span class="ext-editor-notice" id="edNotice"></span>
       <div class="ext-editor-header-actions">
         <button type="button" class="ext-editor-btn" id="edCancel">Revert</button>
@@ -54,18 +91,37 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
         <button type="button" class="ext-icon-btn" id="edToggleDock" title="Collapse editor">▾</button>
       </div>
     </div>
-    <div class="ext-editor-body">
-      ${tabPanelsMarkup({
-        images: imagesPanelMarkup(view),
-        typography: typographyPanelMarkup(view),
-        layout: layoutPanelMarkup(section, view),
-        ai: aiPanelMarkup(view, section),
-        assets: assetsPanelMarkup(view, reporterNews),
-        history: historyPanelMarkup(),
-      })}
-      <div class="ext-mount-strip">
-        <div id="external-editor" class="ext-editor-mount">
-          <p class="muted">The embedded layout editor will mount here.</p>
+
+    <div class="ext-editor-stage">
+      <div class="ext-preview-col">
+        ${composeCanvasMarkup()}
+      </div>
+
+      <div class="ext-controls-col">
+        ${group("image", "1 · Pictures", `
+          ${picturesPanelMarkup(callbacks.getImages?.() || [])}
+          <details class="ext-more">
+            <summary>Choose from the reporter's pictures</summary>
+            ${assetsPanelMarkup(view, reporterNews)}
+          </details>
+        `)}
+
+        ${group("space", "2 · Space", `<div id="edSpaceGroup">${spacePanelMarkup(section, view, callbacks.getImages?.() || [])}</div>`)}
+
+        ${group("ai", "3 · Write with AI", aiPanelMarkup(view))}
+
+        <details class="ext-aside">
+          <summary>Typography</summary>
+          ${typographyPanelMarkup(view)}
+        </details>
+
+        <details class="ext-aside">
+          <summary>History</summary>
+          <div id="edHistoryAside">${historyPanelMarkup()}</div>
+        </details>
+
+        <div class="ext-mount-strip">
+          <div id="external-editor" class="ext-editor-mount"></div>
         </div>
       </div>
     </div>
@@ -73,20 +129,25 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
 
   const notify = showNotice;
 
-  bindTabs(() => refreshVolatileTabs(section, currentViewFrom(callbacks), callbacks));
-  bindImagesPanel(callbacks.getView, reporterNews, callbacks.onPatch, notify);
+  bindComposeCanvas({
+    onPatch: callbacks.onPatch,
+    onAddImage: callbacks.onAddImage,
+    onPatchImage: callbacks.onPatchImage,
+    onRemoveImage: callbacks.onRemoveImage,
+    onRemoveBackground: callbacks.onRemoveBackground,
+    onNotify: notify,
+  });
+  bindPicturesPanel({ ...callbacks, onSelectImage: selectImageById });
   bindTypographyPanel(callbacks.getView, callbacks.onPatch);
-  bindAiPanel(callbacks.getView, callbacks.getSection, callbacks.onPatch, notify);
+  bindAiPanel(callbacks.getView, callbacks.getSection, callbacks.onPatch, notify, callbacks.getImages);
   bindAssetsPanel(callbacks.onPatch, notify);
   bindHistoryPanel(historyHandlers(callbacks));
   bindDockToggle(callbacks);
 
   document.getElementById("edCancel").addEventListener("click", callbacks.onCancel);
   document.getElementById("edSaveSection").addEventListener("click", callbacks.onSave);
-}
 
-function currentViewFrom(callbacks) {
-  return callbacks?.getView?.() || null;
+  renderComposeCanvas(section, view, callbacks.getImages?.() || [], null);
 }
 
 function historyHandlers(callbacks) {
@@ -107,8 +168,14 @@ function showNotice(message) {
   }, 4000);
 }
 
-// Live sync. Panels update themselves in place - nothing is rebuilt, so the
-// active tab, scroll positions and caret all survive every keystroke.
+// Brings one step of the lifecycle into view. Replaces the old tab switch - the
+// group is always rendered, so this only scrolls, and nothing is hidden.
+export function focusGroup(groupKey) {
+  document.getElementById(`edGroup-${groupKey}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+// Live sync. Panels update themselves in place - nothing is rebuilt, so scroll
+// positions and the caret survive every keystroke.
 export function refreshExternalEditor(section, view, story, source) {
   const badge = document.getElementById("edStatusBadge");
   if (badge) {
@@ -117,26 +184,19 @@ export function refreshExternalEditor(section, view, story, source) {
     badge.className = `section-status-badge ${statusClass(status)}`;
   }
 
-  refreshImagesPanel(view);
-  refreshFitBrief(section, view);
+  const images = activeCallbacks?.getImages?.() || [];
+  renderComposeCanvas(section, view, images);
+  refreshPicturesPanel(images);
+  refreshSpacePanel(section, view, activeCallbacks?.getImages?.() || []);
   refreshTypographyPanel(view, source);
   refreshAssetsPanel(view);
   refreshAiPanel(view, source);
-  refreshVolatileTabs(section, view, activeCallbacks);
-}
-
-// Layout and History are pure read-outs, so they are rebuilt wholesale - but
-// only when their own tab is on screen, which keeps typing cheap (Part 14).
-function refreshVolatileTabs(section, view, callbacks) {
-  const active = getActiveTab();
-  if (active === "layout" && section && view) refreshLayoutPanel(section, view);
-  if (active === "history" && callbacks) refreshHistoryPanel(historyHandlers(callbacks));
 }
 
 export function refreshHistoryTab() {
-  if (getActiveTab() === "history" && activeCallbacks) {
+  if (document.getElementById("edHistoryAside") && activeCallbacks) {
     refreshHistoryPanel(historyHandlers(activeCallbacks));
   }
 }
 
-export { showNotice, setActiveTab, TABS };
+export { showNotice, scaleComposeCanvas };

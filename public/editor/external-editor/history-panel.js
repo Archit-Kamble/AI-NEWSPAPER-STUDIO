@@ -58,7 +58,7 @@ export function bindHistoryPanel({ onUndo, onRedo, onJump }) {
 }
 
 export function refreshHistoryPanel(handlers) {
-  const panel = document.querySelector('[data-tab-panel="history"]');
+  const panel = document.getElementById("edHistoryAside");
   if (!panel) return;
   panel.innerHTML = historyPanelMarkup();
   bindHistoryPanel(handlers);

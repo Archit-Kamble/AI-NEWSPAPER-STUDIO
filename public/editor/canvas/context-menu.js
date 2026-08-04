@@ -6,13 +6,13 @@
 const ITEMS = [
   { action: "story", label: "Attach reporter story…" },
   { action: "image", label: "Open image workspace" },
-  { action: "typography", label: "Open typography" },
   { separator: true },
-  { action: "duplicate-story", label: "Copy story to another section…", disabled: true },
+  { action: "add-block", label: "Add a block to this page" },
   { action: "mark-ready", label: "Mark ready" },
   { action: "mark-review", label: "Mark needs review" },
   { separator: true },
-  { action: "clear", label: "Clear section", danger: true },
+  { action: "clear", label: "Clear block", danger: true },
+  { action: "delete-block", label: "Delete this block", danger: true },
 ];
 
 let handler = null;

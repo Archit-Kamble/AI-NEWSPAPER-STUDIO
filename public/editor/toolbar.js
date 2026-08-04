@@ -45,8 +45,12 @@ export function renderToolbar({ newspaper, hasSelection, storyPickerOpen, handle
       ${button("tbSave", "save", "Save", { disabled: !hasSelection })}
       ${button("tbUndo", "undo", "Undo", { disabled: true })}
       ${button("tbRedo", "redo", "Redo", { disabled: true })}
-      ${button("tbPreview", "preview", "Preview", { disabled: true, title: "Coming soon" })}
-      ${button("tbExport", "export", "Export", { disabled: true, title: "Coming soon" })}
+      ${button("tbPreflight", "preview", "Preflight", {
+        title: "Check the edition before it goes to the plate",
+      })}
+      ${button("tbExport", "export", "Press file", {
+        title: "Generate the Scribus document for this edition",
+      })}
       ${button("tbAI", "ai", "AI", { disabled: true, title: "Coming soon" })}
       ${button("tbPublish", "publish", "Publish", { primary: true })}
     </div>
@@ -57,6 +61,8 @@ export function renderToolbar({ newspaper, hasSelection, storyPickerOpen, handle
   document.getElementById("tbFromReporter").addEventListener("click", handlers.onToggleStoryPicker);
   document.getElementById("tbUndo").addEventListener("click", handlers.onUndo);
   document.getElementById("tbRedo").addEventListener("click", handlers.onRedo);
+  document.getElementById("tbPreflight").addEventListener("click", handlers.onPreflight);
+  document.getElementById("tbExport").addEventListener("click", handlers.onPressFile);
 }
 
 export function refreshHistoryButtons(canUndo, canRedo) {

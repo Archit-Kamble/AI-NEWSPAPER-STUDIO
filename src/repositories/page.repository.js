@@ -1,5 +1,28 @@
 const pool = require('../config/db');
 const { getTemplate } = require('../layout/templates');
+const { typeScaleFor } = require('../layout/geometry');
+const { printsColourByDefault } = require('../layout/formes');
+
+// Creating a block from a template happens in two places - a new page and a
+// layout change - and the two must not drift apart, so the statement and its
+// values are written once. A template decides the block's kind and its rule
+// treatment as well as its rectangle: an advert slot is not an article, and a
+// boxed brief is boxed from the moment the page exists.
+const insertSectionSql = `
+  INSERT INTO page_sections (page_id, section_key, x_px, y_px, width_px, height_px, z_index,
+                             headline_font_px, subheading_font_px, body_font_px,
+                             block_type, border_style, headline_style, feature_key)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`;
+
+function insertSectionValues(pageId, section, index) {
+  const type = typeScaleFor(section.width, section.height);
+  return [
+    pageId, section.key, section.x, section.y, section.width, section.height, index,
+    type.headlineFontPx, type.subheadingFontPx, type.bodyFontPx,
+    section.blockType || 'article', section.borderStyle || 'none', section.headlineStyle || 'plain',
+    section.featureKey || null,
+  ];
+}
 
 async function create(newspaperId, pageNumber, templateKey = 'front') {
   const template = getTemplate(templateKey);
@@ -13,12 +36,9 @@ async function create(newspaperId, pageNumber, templateKey = 'front') {
     const page = rows[0];
     for (let index = 0; index < template.sections.length; index += 1) {
       const section = template.sections[index];
-      await client.query(
-        `INSERT INTO page_sections (page_id, section_key, x_px, y_px, width_px, height_px, z_index)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [page.id, section.key, section.x, section.y, section.width, section.height, index]
-      );
+      await client.query(insertSectionSql, insertSectionValues(page.id, section, index));
     }
+    await refreshFormes(newspaperId, client);
     await client.query('COMMIT');
     return findById(page.id);
   } catch (error) {
@@ -27,6 +47,33 @@ async function create(newspaperId, pageNumber, templateKey = 'front') {
   } finally {
     client.release();
   }
+}
+
+// Colour is bought a forme at a time, and which pages a forme covers depends on
+// how many pages the edition has. So the defaults are recomputed whenever the
+// edition grows or shrinks - except on pages where the desk has said otherwise.
+async function refreshFormes(newspaperId, client = pool) {
+  const { rows } = await client.query(
+    'SELECT id, page_number FROM pages WHERE newspaper_id = $1 ORDER BY page_number',
+    [newspaperId],
+  );
+  const total = rows.length;
+  for (const page of rows) {
+    await client.query(
+      'UPDATE pages SET prints_colour = $2 WHERE id = $1 AND colour_overridden = FALSE',
+      [page.id, printsColourByDefault(page.page_number, total)],
+    );
+  }
+  return total;
+}
+
+async function setColourForme(pageId, printsColour) {
+  const { rows } = await pool.query(
+    `UPDATE pages SET prints_colour = $2, colour_overridden = TRUE, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $1 RETURNING *`,
+    [pageId, printsColour === true],
+  );
+  return rows[0] || null;
 }
 
 async function findByNewspaper(newspaperId) {
@@ -43,7 +90,23 @@ async function hydrate(page) {
   const { rows: sections } = await pool.query(
     `SELECT * FROM page_sections WHERE page_id = $1 ORDER BY z_index, id`, [page.id]
   );
-  return { ...page, sections };
+  // Pictures placed in a block are layout, not an attachment: the page canvas
+  // has to draw them or a composed page looks empty of photographs.
+  const { rows: images } = await pool.query(
+    `SELECT si.*, ma.url
+       FROM section_images si
+       JOIN media_assets ma ON ma.id = si.media_asset_id
+       JOIN page_sections ps ON ps.id = si.page_section_id
+      WHERE ps.page_id = $1
+      ORDER BY si.z_index, si.id`,
+    [page.id],
+  );
+  const bySection = new Map();
+  for (const image of images) {
+    if (!bySection.has(image.page_section_id)) bySection.set(image.page_section_id, []);
+    bySection.get(image.page_section_id).push(image);
+  }
+  return { ...page, sections: sections.map((s) => ({ ...s, images: bySection.get(s.id) || [] })) };
 }
 
 async function updateTemplate(pageId, templateKey) {
@@ -52,23 +115,39 @@ async function updateTemplate(pageId, templateKey) {
   try {
     await client.query('BEGIN');
     await client.query('UPDATE pages SET template_key = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1', [pageId, template.key]);
-    await client.query('DELETE FROM page_sections WHERE page_id = $1 AND news_item_id IS NULL', [pageId]);
+    // Changing a page's layout must never destroy an editor's work. Only blocks
+    // that are genuinely empty - no linked story and nothing written into them -
+    // are cleared out to make room for the new template. Anything carrying
+    // content survives at its current position; the editor can see it on the
+    // canvas and decide whether to move or delete it.
+    await client.query(
+      `DELETE FROM page_sections
+        WHERE page_id = $1
+          AND news_item_id IS NULL
+          AND COALESCE(headline, '') = ''
+          AND COALESCE(subheading, '') = ''
+          AND COALESCE(body, '') = ''
+          AND COALESCE(caption, '') = ''
+          AND COALESCE(image_url, '') = ''`,
+      [pageId],
+    );
     const { rows: existing } = await client.query('SELECT section_key FROM page_sections WHERE page_id = $1', [pageId]);
     const existingKeys = new Set(existing.map((section) => section.section_key));
     for (let index = 0; index < template.sections.length; index += 1) {
       const section = template.sections[index];
       if (existingKeys.has(section.key)) {
         await client.query(
-          `UPDATE page_sections SET x_px = $3, y_px = $4, width_px = $5, height_px = $6, z_index = $7, updated_at = CURRENT_TIMESTAMP
+          `UPDATE page_sections
+              SET x_px = $3, y_px = $4, width_px = $5, height_px = $6, z_index = $7,
+                  block_type = $8, border_style = $9, headline_style = $10, feature_key = $11,
+                  updated_at = CURRENT_TIMESTAMP
            WHERE page_id = $1 AND section_key = $2`,
-          [pageId, section.key, section.x, section.y, section.width, section.height, index]
+          [pageId, section.key, section.x, section.y, section.width, section.height, index,
+           section.blockType || 'article', section.borderStyle || 'none', section.headlineStyle || 'plain',
+           section.featureKey || null]
         );
       } else {
-        await client.query(
-          `INSERT INTO page_sections (page_id, section_key, x_px, y_px, width_px, height_px, z_index)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-          [pageId, section.key, section.x, section.y, section.width, section.height, index]
-        );
+        await client.query(insertSectionSql, insertSectionValues(pageId, section, index));
       }
     }
     await client.query('COMMIT');
@@ -81,34 +160,135 @@ async function updateTemplate(pageId, templateKey) {
   }
 }
 
+// Blocks drawn by hand on the canvas. A page is no longer limited to whatever
+// its template declared - a dense inside page needs fifteen or twenty items,
+// and an editor adds them where the page needs them.
+async function createSection(pageId, geometry) {
+  const { rows: existing } = await pool.query(
+    `SELECT section_key FROM page_sections WHERE page_id = $1 AND section_key LIKE 'block-%'`,
+    [pageId],
+  );
+  // Keys stay unique per page and stable once assigned, so the numbering picks
+  // up after the highest one ever used rather than reusing a deleted key.
+  const highest = existing.reduce((max, row) => {
+    const n = parseInt(String(row.section_key).replace('block-', ''), 10);
+    return Number.isFinite(n) && n > max ? n : max;
+  }, 0);
+  const sectionKey = `block-${highest + 1}`;
+
+  const { rows: zRows } = await pool.query(
+    'SELECT COALESCE(MAX(z_index), 0) + 1 AS z FROM page_sections WHERE page_id = $1',
+    [pageId],
+  );
+
+  const type = typeScaleFor(geometry.width, geometry.height);
+  const { rows } = await pool.query(
+    `INSERT INTO page_sections (page_id, section_key, x_px, y_px, width_px, height_px, z_index, is_custom,
+                                headline_font_px, subheading_font_px, body_font_px)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, $8, $9, $10) RETURNING *`,
+    [pageId, sectionKey, geometry.x, geometry.y, geometry.width, geometry.height, zRows[0].z,
+     type.headlineFontPx, type.subheadingFontPx, type.bodyFontPx],
+  );
+  return rows[0];
+}
+
+async function deleteSection(pageId, sectionKey) {
+  const { rowCount } = await pool.query('DELETE FROM page_sections WHERE page_id = $1 AND section_key = $2', [
+    pageId,
+    sectionKey,
+  ]);
+  return rowCount > 0;
+}
+
+// Moving and resizing a block is a separate write from editing its story: it
+// happens on every drag frame, so it touches four columns and nothing else.
+async function saveSectionGeometry(pageId, sectionKey, geometry) {
+  const { rows } = await pool.query(
+    `UPDATE page_sections
+        SET x_px = $3, y_px = $4, width_px = $5, height_px = $6, updated_at = CURRENT_TIMESTAMP
+      WHERE page_id = $1 AND section_key = $2 RETURNING *`,
+    [pageId, sectionKey, geometry.x, geometry.y, geometry.width, geometry.height],
+  );
+  return rows[0] || null;
+}
+
+// Saving a section must not throw away what it was not asked about.
+//
+// This used to write `updates.headlineFontPx || 34` and so on, so any save that
+// did not carry the presentational fields silently reset them: a block sized to
+// its measure by typeScaleFor went back to a 34px headline the first time
+// anything else about it was saved, and its character budget collapsed with it.
+//
+// Content columns keep the old behaviour, because for them a missing value
+// genuinely does mean "clear it" - an editor deleting a headline must delete it.
+// Presentational columns have no meaningful empty state, so a value that was not
+// sent leaves the column alone.
+// Saving a section must not throw away what it was not asked about.
+//
+// This used to write `updates.headlineFontPx || 34` and so on, so any save that
+// did not carry the presentational fields silently reset them: a block sized to
+// its measure by typeScaleFor went back to a 34px headline the first time
+// anything else about it was saved, and its character budget collapsed with it.
+//
+// Content columns keep the old behaviour, because for them a missing value
+// genuinely does mean "clear it" - an editor deleting a headline must delete it.
+// Presentational columns have no meaningful empty state, so a value that was not
+// sent leaves the column alone.
 async function saveSection(pageId, sectionKey, updates) {
   const { rows } = await pool.query(
     `UPDATE page_sections
-     SET news_item_id = $3, headline = $4, headline_font_px = $5, subheading = $6, subheading_font_px = $7,
-         body = $8, body_font_px = $9, category = $10, location = $11, tags = $12, reporter_name = $13,
+     SET news_item_id = $3, headline = $4, headline_font_px = COALESCE($5, headline_font_px),
+         subheading = $6, subheading_font_px = COALESCE($7, subheading_font_px),
+         body = $8, body_font_px = COALESCE($9, body_font_px),
+         category = $10, location = $11, tags = $12, reporter_name = $13,
          ai_notes = $14, caption = $15, language = $16, status = $17, ai_generated = $18,
          image_url = $19, image_rotation = $20, image_zoom = $21, image_fit = $22,
          image_flip_h = $23, image_flip_v = $24,
-         font_family = $25, font_weight = $26, font_italic = $27, font_underline = $28,
-         text_align = $29, column_count = $30, margin_px = $31, line_height = $32,
-         letter_spacing_px = $33, paragraph_spacing_px = $34, list_style = $35, drop_cap = $36,
+         font_family = $25, font_weight = COALESCE($26, font_weight), font_italic = $27, font_underline = $28,
+         text_align = COALESCE($29, text_align), column_count = COALESCE($30, column_count),
+         margin_px = COALESCE($31, margin_px), line_height = COALESCE($32, line_height),
+         letter_spacing_px = COALESCE($33, letter_spacing_px),
+         paragraph_spacing_px = COALESCE($34, paragraph_spacing_px),
+         list_style = COALESCE($35, list_style), drop_cap = $36,
+         border_style = COALESCE($37, border_style), border_width_px = COALESCE($38, border_width_px),
+         border_color = COALESCE($39, border_color),
+         headline_style = COALESCE($40, headline_style), accent_color = COALESCE($41, accent_color),
+         kicker = $42,
          updated_at = CURRENT_TIMESTAMP
      WHERE page_id = $1 AND section_key = $2 RETURNING *`,
-    [pageId, sectionKey, updates.newsItemId || null, updates.headline || null, updates.headlineFontPx || 34,
-      updates.subheading || null, updates.subheadingFontPx || 20, updates.body || null, updates.bodyFontPx || 16,
+    [pageId, sectionKey, updates.newsItemId || null, updates.headline || null, updates.headlineFontPx || null,
+      updates.subheading || null, updates.subheadingFontPx || null, updates.body || null, updates.bodyFontPx || null,
       updates.category || null, updates.location || null, updates.tags || null, updates.reporterName || null,
       updates.aiNotes || null, updates.caption || null, updates.language || null, updates.status || 'empty',
       updates.aiGenerated === true, updates.imageUrl || null, updates.imageRotation || 0,
       updates.imageZoom || 1, updates.imageFit || 'cover',
       updates.imageFlipH === true, updates.imageFlipV === true,
-      updates.fontFamily || null, updates.fontWeight || 'normal', updates.fontItalic === true,
-      updates.fontUnderline === true, updates.textAlign || 'left', updates.columnCount || 1,
-      Number.isFinite(updates.marginPx) ? updates.marginPx : 12, updates.lineHeight || 1.25,
-      Number.isFinite(updates.letterSpacingPx) ? updates.letterSpacingPx : 0,
-      Number.isFinite(updates.paragraphSpacingPx) ? updates.paragraphSpacingPx : 8,
-      updates.listStyle || 'none', updates.dropCap === true]
+      updates.fontFamily || null, updates.fontWeight || null, updates.fontItalic === true,
+      updates.fontUnderline === true, updates.textAlign || null, updates.columnCount || null,
+      Number.isFinite(updates.marginPx) ? updates.marginPx : null,
+      updates.lineHeight || null,
+      Number.isFinite(updates.letterSpacingPx) ? updates.letterSpacingPx : null,
+      Number.isFinite(updates.paragraphSpacingPx) ? updates.paragraphSpacingPx : null,
+      updates.listStyle || null, updates.dropCap === true,
+      updates.borderStyle || null,
+      Number.isFinite(updates.borderWidthPx) ? updates.borderWidthPx : null,
+      updates.borderColor || null,
+      updates.headlineStyle || null,
+      updates.accentColor || null,
+      updates.kicker || null]
   );
   return rows[0] || null;
 }
 
-module.exports = { create, findByNewspaper, findById, updateTemplate, saveSection };
+module.exports = {
+  create,
+  refreshFormes,
+  setColourForme,
+  findByNewspaper,
+  findById,
+  updateTemplate,
+  saveSection,
+  createSection,
+  deleteSection,
+  saveSectionGeometry,
+};

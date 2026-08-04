@@ -11,6 +11,7 @@ import { isExplicit } from "./status/section-status.js";
 
 export const DRAFT_FIELDS = [
   "newsItemId",
+  "kicker",
   "headline",
   "subheading",
   "body",
@@ -44,6 +45,14 @@ export const DRAFT_FIELDS = [
   "paragraphSpacingPx",
   "listStyle",
   "dropCap",
+  // Block decoration. These persist on the row, so they have to travel with the
+  // draft as well - a template that boxes the advert slot would otherwise have
+  // its box wiped by the first save of that block.
+  "borderStyle",
+  "borderWidthPx",
+  "borderColor",
+  "headlineStyle",
+  "accentColor",
 ];
 
 export function draftFromSection(section) {
@@ -51,6 +60,13 @@ export function draftFromSection(section) {
   return {
     sectionKey: section.section_key,
     newsItemId: section.news_item_id || null,
+    // What kind of block this is comes from the layout, not the desk: an advert
+    // slot stays an advert slot however it is filled. Read-only in the draft.
+    blockType: section.block_type || "article",
+    // Which standing daily feature fills this block, if any. Set by the layout,
+    // not by the desk - read-only in the draft.
+    featureKey: section.feature_key || null,
+    kicker: section.kicker || "",
     headline: section.headline || "",
     subheading: section.subheading || "",
     body: section.body || "",
@@ -61,7 +77,7 @@ export function draftFromSection(section) {
     imageZoom: Number(section.image_zoom) || 1,
     imageFit: section.image_fit || "cover",
     status: section.status || "empty",
-    language: section.language || "",
+    language: section.language || "Marathi",
     tags: section.tags || "",
     category: section.category || "",
     location: section.location || "",
@@ -84,6 +100,11 @@ export function draftFromSection(section) {
     paragraphSpacingPx: Number.isFinite(Number(section.paragraph_spacing_px)) ? Number(section.paragraph_spacing_px) : 8,
     listStyle: section.list_style || "none",
     dropCap: section.drop_cap === true,
+    borderStyle: section.border_style || "none",
+    borderWidthPx: Number(section.border_width_px) || 1,
+    borderColor: section.border_color || "#111111",
+    headlineStyle: section.headline_style || "plain",
+    accentColor: section.accent_color || "#c8102e",
   };
 }
 
@@ -113,6 +134,7 @@ export function draftFromStory(draft, story) {
 export function payloadFromDraft(draft) {
   return {
     newsItemId: draft.newsItemId,
+    kicker: draft.kicker,
     headline: draft.headline,
     subheading: draft.subheading,
     body: draft.body,
@@ -146,6 +168,11 @@ export function payloadFromDraft(draft) {
     paragraphSpacingPx: draft.paragraphSpacingPx,
     listStyle: draft.listStyle,
     dropCap: draft.dropCap,
+    borderStyle: draft.borderStyle,
+    borderWidthPx: draft.borderWidthPx,
+    borderColor: draft.borderColor,
+    headlineStyle: draft.headlineStyle,
+    accentColor: draft.accentColor,
   };
 }
 

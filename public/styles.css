@@ -3709,6 +3709,10 @@ body.print-view .mono-forme-warning { display: none; }
   font-size: 0.72rem;
   color: #8a8a92;
 }
+.story-details-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0 12px; }
+.story-details-grid .form-group:first-child { grid-column: 1 / -1; }
+.inspector-story-origin { margin: 0 0 12px; color: #666670; font-size: .8rem; }
+.inspector-write { width: 100%; margin-top: 2px; }
 
 /* The writing surface is intentionally familiar: a compact ribbon above a
    calm paper sheet. It has no font-colour free-for-all because those are page

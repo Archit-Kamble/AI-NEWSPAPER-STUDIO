@@ -441,7 +441,11 @@ function cancelEdits() {
   if (!section) return;
   const draft = draftFromSection(section);
   store.replaceDraft(draft, "cancel");
-  store.setSaveState("idle");
+  // `replaceDraft` intentionally marks every replacement dirty for undo and
+  // story-link operations. A Revert is different: it has just restored the
+  // persisted row, so leaving it dirty would make a later block switch flush a
+  // needless save and leave the toolbar claiming there is unsaved work.
+  store.setSaveState("saved");
   history.reset(draft, "Reverted to saved");
   autosave.cancel();
   showNotice("Reverted to the last saved version.");
@@ -900,18 +904,13 @@ function renderSidePanels() {
   const view = currentView();
   const story = currentStory();
 
-  const inspectorCallbacks = {
-    onPatch: patchDraft,
-    onChooseStory: chooseStory,
-    onSave: saveAndCompose,
-    onRevert: cancelEdits,
-  };
+  const inspectorCallbacks = { onOpenWriter: () => scrollTo("externalEditorPanel") };
   configureInspector(inspectorCallbacks);
   renderInspector(section, view, story, inspectorCallbacks);
   renderExternalEditor(section, view, story, store.getState().reporterNews, {
     onPatch: patchDraft,
     onChooseStory: chooseStory,
-    onSave: saveAndReturn,
+    onReturnToPage: saveAndReturn,
     onCancel: cancelEdits,
     onUndo: undo,
     onRedo: redo,

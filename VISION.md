@@ -103,15 +103,13 @@ Never force unnecessary navigation.
 Every section follows exactly this lifecycle.
 
 ```
-Click empty section
+Click a section
+  ↓
+The composition dock opens the only story editor
   ↓
 Choose reporter story  OR  Write manually
   ↓
-Save
-  ↓
-Automatically open External Editor
-  ↓
-Work on image
+Work on copy, image and Smart Cards in that same dock
   ↓
 Background removal
   ↓
@@ -127,7 +125,7 @@ AI generates article
   ↓
 User reviews
   ↓
-Save
+Autosave keeps the draft safe
   ↓
 Return to layout
   ↓
@@ -142,11 +140,11 @@ The software should naturally guide the workflow.
 
 ---
 
-## External Editor
+## Composition dock
 
-The External Editor is NOT another page.
+The composition dock is NOT another page or a second copy editor.
 
-It is the **second stage of newspaper production**.
+It is the **single editing surface for the selected newspaper block**.
 
 It should appear below the page. The page scrolls naturally.
 
@@ -155,10 +153,28 @@ Page
   ↓
 Inspector
   ↓
-External Editor
+Composition dock (the only editor)
   ↓
 End of page
 ```
+
+The Inspector is context for the selected block (size, status and reading
+statistics). It is not a second place to edit headline, subheading, body,
+caption or metadata. The dock holds the sole editing controls: reporter-story
+selection, a Word-style writing surface, image tools, AI, Smart Cards and the
+folded story-details controls.
+
+The rich editor supports headline, subheading, rich body copy, bold, italic,
+underline, lists, undo, redo, clean paste, keyboard shortcuts, source
+inspection and focus mode. It continuously reports the block's character
+capacity, while every change updates the page preview and autosaves through the
+shared section draft.
+
+Smart Cards are ordinary editable proposals made for the selected block's
+available space. Panchang, Dinविशेष and Sudoku are computed or curated;
+Rashi-bhavishya and Suvichar are AI drafts that require editorial review.
+Weather, rates and other factual feeds stay unavailable until a trustworthy
+source is connected.
 
 Do not try to fit everything into one screen.
 

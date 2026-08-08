@@ -4,6 +4,38 @@ Architectural audit only. No code was changed to produce this document. Reflects
 
 ---
 
+## 0. Update — single-story dock and Smart Cards (2026-08-08)
+
+The workspace now has one editing surface for a selected story: the composition
+dock under the page preview. The Inspector is deliberately read-only context;
+it reports the selected block, status, language, reading statistics and save
+time, but has no headline, subheading, body, caption, metadata or save form.
+
+The dock owns all editable story functions: reporter-story selection; headline,
+subheading and a Word-style rich text body; caption, reporter, category,
+location, tags, language and editorial status; placed-image, background-
+removal, space, AI, typography and history tools; and measured Smart Cards.
+Panchang and Sudoku are computed, Dinविशेष is curated, and Rashi plus Suvichar
+are review-required AI drafts. Weather remains unavailable without a verified
+feed.
+
+All views use the existing workspace draft, history and autosave channels. A
+keystroke refreshes the selected page thumbnail and live proof without
+rebuilding the workspace; switching blocks flushes a dirty draft.
+
+**Verification:** static syntax checks for changed modules; `npm test` (112
+passing); real headless-Chrome check of the logged-in workspace confirmed one
+rich editor, no legacy Inspector inputs, live thumbnail updates, Rashi coverage
+controls, details controls and no browser exceptions. Test content was reverted
+before autosave.
+
+**Known limitation:** Smart Cards use the existing `/api/features` endpoint.
+The browser uses the same character grid as the Space panel; press preflight
+remains the production authority. Moving the fit calculation server-side is a
+future hardening step, not a reason to create another layout model.
+
+---
+
 ## 1. Current architecture (as documented in CLAUDE.md)
 
 CLAUDE.md commits the project to:

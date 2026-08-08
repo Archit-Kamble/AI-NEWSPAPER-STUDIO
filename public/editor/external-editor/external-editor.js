@@ -24,6 +24,7 @@ import { historyPanelMarkup, bindHistoryPanel, refreshHistoryPanel } from "./his
 import { pageMapMarkup, bindPageMap } from "./page-map.js";
 import { storyEditorMarkup, bindStoryEditor, refreshStoryEditor, refreshStoryCount } from "./story-editor.js";
 import { smartCardMarkup, bindSmartCard } from "./smart-card-panel.js";
+import { storyDetailsMarkup, bindStoryDetails, refreshStoryDetails } from "./story-details-panel.js";
 
 // The three steps of the lifecycle, in order. Anything not on this path lives
 // in a collapsed <details> below them.
@@ -43,6 +44,27 @@ function group(key, label, body) {
       <div class="ext-group-body" id="edGroupBody-${key}">${body}</div>
     </section>
   `;
+}
+
+function storySourceMarkup(view, story) {
+  return `<div class="story-link-bar${view.newsItemId ? " linked" : ""}" id="edStoryBar">${view.newsItemId
+    ? `<span>From <strong>${escapeHtml(story?.title || "reporter story")}</strong></span><button type="button" class="ext-editor-btn" id="edChangeStory">Change</button>`
+    : `<span class="muted">Writing directly</span><button type="button" class="ext-editor-btn ext-editor-btn-primary" id="edChooseStory">Take from Reporter</button>`
+  }</div>`;
+}
+
+function bindStorySource(callbacks) {
+  document.getElementById("edChooseStory")?.addEventListener("click", callbacks.onChooseStory);
+  document.getElementById("edChangeStory")?.addEventListener("click", callbacks.onChooseStory);
+}
+
+function refreshStorySource(view, story) {
+  const bar = document.getElementById("edStoryBar");
+  if (!bar || !activeCallbacks) return;
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = storySourceMarkup(view, story);
+  bar.replaceWith(wrapper.firstElementChild);
+  bindStorySource(activeCallbacks);
 }
 
 export function renderExternalEditor(section, view, story, reporterNews, callbacks) {
@@ -90,7 +112,7 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
       <span class="ext-editor-notice" id="edNotice"></span>
       <div class="ext-editor-header-actions">
         <button type="button" class="ext-editor-btn" id="edCancel">Revert</button>
-        <button type="button" class="ext-editor-btn ext-editor-btn-primary" id="edSaveSection">Save &amp; back to page ↑</button>
+        <button type="button" class="ext-editor-btn ext-editor-btn-primary" id="edReturnToPage">Back to page ↑</button>
         <button type="button" class="ext-icon-btn" id="edToggleDock" title="Collapse editor">▾</button>
       </div>
     </div>
@@ -102,9 +124,9 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
       </div>
 
       <div class="ext-controls-col">
-        ${group("story", "1 · Write the story", storyEditorMarkup(view, {
+        ${group("story", "1 · Write the story", `${storySourceMarkup(view, story)}${storyEditorMarkup(view, {
           budget: callbacks.getBudget ? callbacks.getBudget() : 0,
-        }))}
+        })}`)}
 
         ${group("card", "Smart Cards", smartCardMarkup())}
 
@@ -123,6 +145,11 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
         <details class="ext-aside">
           <summary>Typography</summary>
           ${typographyPanelMarkup(view)}
+        </details>
+
+        <details class="ext-aside">
+          <summary>Story details</summary>
+          ${storyDetailsMarkup(view)}
         </details>
 
         <details class="ext-aside">
@@ -149,19 +176,21 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
   });
   bindPicturesPanel({ ...callbacks, onSelectImage: selectImageById });
   bindSmartCard(callbacks.onRequestSmartCard, callbacks.onPatch, notify);
+  bindStorySource(callbacks);
   // The writing surface. Every keystroke goes down the same channel as the
   // Inspector's fields always did - draft, live canvas repaint, autosave.
   bindStoryEditor({ onPatch: callbacks.onPatch, getBudget: callbacks.getBudget });
   // The small layout is a way through the page, not only a picture of it.
   bindPageMap((sectionKey) => callbacks.onSelectSection?.(sectionKey));
   bindTypographyPanel(callbacks.getView, callbacks.onPatch);
+  bindStoryDetails(callbacks.onPatch);
   bindAiPanel(callbacks.getView, callbacks.getSection, callbacks.onPatch, notify, callbacks.getImages);
   bindAssetsPanel(callbacks.onPatch, notify);
   bindHistoryPanel(historyHandlers(callbacks));
   bindDockToggle(callbacks);
 
   document.getElementById("edCancel").addEventListener("click", callbacks.onCancel);
-  document.getElementById("edSaveSection").addEventListener("click", callbacks.onSave);
+  document.getElementById("edReturnToPage").addEventListener("click", callbacks.onReturnToPage);
 
   renderComposeCanvas(section, view, callbacks.getImages?.() || [], null);
 }
@@ -205,8 +234,10 @@ export function refreshExternalEditor(section, view, story, source) {
   refreshPicturesPanel(images);
   refreshSpacePanel(section, view, activeCallbacks?.getImages?.() || []);
   refreshTypographyPanel(view, source);
+  refreshStoryDetails(view, source);
   refreshAssetsPanel(view);
   refreshAiPanel(view, source);
+  refreshStorySource(view, story);
   // Not when the change came from the editor itself - rewriting the box a
   // person has a cursor in throws the cursor back to the start, which is the
   // classic way a rich editor becomes unusable.

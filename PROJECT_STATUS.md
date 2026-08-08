@@ -34,6 +34,13 @@ The browser uses the same character grid as the Space panel; press preflight
 remains the production authority. Moving the fit calculation server-side is a
 future hardening step, not a reason to create another layout model.
 
+**Compatibility correction:** the live desk still requires the immediate
+Inspector headline, subheading, body, caption, metadata and save/revert inputs.
+They remain restored while the dock evolves. Both surfaces bind to the same
+workspace draft and autosave channel; no separate section state was introduced.
+The Inspector form must not be removed again until its dock replacement is
+visually accepted in the logged-in workflow.
+
 ---
 
 ## 1. Current architecture (as documented in CLAUDE.md)

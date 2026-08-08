@@ -904,7 +904,12 @@ function renderSidePanels() {
   const view = currentView();
   const story = currentStory();
 
-  const inspectorCallbacks = { onOpenWriter: () => scrollTo("externalEditorPanel") };
+  const inspectorCallbacks = {
+    onPatch: patchDraft,
+    onChooseStory: chooseStory,
+    onSave: saveAndCompose,
+    onRevert: cancelEdits,
+  };
   configureInspector(inspectorCallbacks);
   renderInspector(section, view, story, inspectorCallbacks);
   renderExternalEditor(section, view, story, store.getState().reporterNews, {

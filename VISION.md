@@ -158,11 +158,12 @@ Composition dock (the only editor)
 End of page
 ```
 
-The Inspector is context for the selected block (size, status and reading
-statistics). It is not a second place to edit headline, subheading, body,
-caption or metadata. The dock holds the sole editing controls: reporter-story
-selection, a Word-style writing surface, image tools, AI, Smart Cards and the
-folded story-details controls.
+The Inspector remains the immediately visible section form while the dock is
+being expanded: headline, subheading, body, caption and editorial facts must
+always be available there without a scroll. The dock mirrors that shared draft
+and adds the Word-style writing surface, image tools, AI and Smart Cards. Do
+not remove an Inspector control until its replacement has been explicitly
+accepted in the live workflow.
 
 The rich editor supports headline, subheading, rich body copy, bold, italic,
 underline, lists, undo, redo, clean paste, keyboard shortcuts, source

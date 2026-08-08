@@ -1,8 +1,10 @@
 # The single-story editor
 
-SAHAS has one editor for one selected newspaper block: the composition dock
-below the page preview. The Inspector is context only. It never duplicates the
-headline, subheading, body, caption or metadata inputs.
+SAHAS is currently migrating toward one editor for one selected newspaper block.
+Until the dock replacement has been accepted in the live workflow, the
+Inspector keeps the immediately visible editable headline, subheading, body,
+caption and metadata form. The composition dock reads and writes the same
+workspace draft and provides the richer writing, image, AI and Smart Card tools.
 
 ## What happens when a block is selected
 
@@ -14,9 +16,11 @@ headline, subheading, body, caption or metadata inputs.
    autosave together.
 4. Moving to another block flushes a dirty autosave before the draft changes.
 
-There is no section form followed by a second editor. Reporter selection is in
-the dock's story-source bar, and caption, reporter, category, location, tags,
-language and editorial status are in its folded **Story details** section.
+Reporter selection, caption, reporter, category, location, tags, language and
+editorial status are available in both the immediate Inspector form and the
+dock's folded **Story details** section during this compatibility stage. They
+stay synchronised through the one workspace draft; neither surface keeps its
+own story copy.
 
 ## The writing surface
 

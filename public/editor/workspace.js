@@ -179,6 +179,39 @@ async function removeSectionImage(imageId) {
   redrawCompose();
 }
 
+// Smart cards use the existing, classified daily-feature service. The only
+// client-side calculation is the selected block's available character budget;
+// it is the same grid used by the Space panel and press preflight.
+async function requestSmartCard({ key, variant }) {
+  const newspaper = store.getState().newspaper;
+  const section = store.getSelectedSection();
+  const view = currentView();
+  if (!newspaper || !section || !view) return { error: "Choose a block first." };
+
+  const budget = buildFlowMap(section, { ...view, body: "" }, sectionImages.map(flowImageFromRow)).bodyCharBudget;
+  const smartVariant = key === "rashi" && variant === "auto"
+    ? (budget < 180 ? "one" : budget < 520 ? "three" : "all")
+    : variant;
+  const signs = smartVariant === "one" ? 1 : smartVariant === "three" ? 3 : 12;
+  const response = await fetch(`/api/features/${encodeURIComponent(key)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ date: newspaper.publication_date, charsPerSign: Math.max(30, Math.floor(budget / signs)), tier: getAiTier() }),
+  });
+  const result = await response.json().catch(() => ({ error: "The Smart Card could not be built." }));
+  if (!response.ok) return result;
+
+  let items = Array.isArray(result.items) ? result.items : [];
+  if (key === "rashi") items = items.slice(0, smartVariant === "one" ? 1 : smartVariant === "three" ? 3 : 12);
+  const body = items.map((item) => `${item.label ? `${item.label} : ` : ""}${item.text || ""}${item.note ? ` (${item.note})` : ""}`).join("\n");
+  const charsUsed = body.length;
+  return {
+    proposal: { headline: result.title || "", subheading: result.subtitle || "", body },
+    source: result.writtenBy ? "written" : key === "dinvishesh" ? "curated" : "computed",
+    fit: { bodyCharBudget: budget, charsUsed, charsRemaining: Math.max(0, budget - charsUsed) },
+  };
+}
+
 // ----------------------------------------------------------------- actions ---
 
 function selectSection(sectionKey) {
@@ -904,6 +937,7 @@ function renderSidePanels() {
     onPatchImage: patchSectionImage,
     onRemoveImage: removeSectionImage,
     onRemoveBackground: removeImageBackground,
+    onRequestSmartCard: requestSmartCard,
     onPickBlock: () => {
       selectFirstSection();
       scrollTo("workspaceTop");

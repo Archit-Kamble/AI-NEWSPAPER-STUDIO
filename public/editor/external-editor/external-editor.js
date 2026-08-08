@@ -23,6 +23,7 @@ import { assetsPanelMarkup, bindAssetsPanel, refreshAssetsPanel } from "./assets
 import { historyPanelMarkup, bindHistoryPanel, refreshHistoryPanel } from "./history-panel.js";
 import { pageMapMarkup, bindPageMap } from "./page-map.js";
 import { storyEditorMarkup, bindStoryEditor, refreshStoryEditor, refreshStoryCount } from "./story-editor.js";
+import { smartCardMarkup, bindSmartCard } from "./smart-card-panel.js";
 
 // The three steps of the lifecycle, in order. Anything not on this path lives
 // in a collapsed <details> below them.
@@ -105,6 +106,8 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
           budget: callbacks.getBudget ? callbacks.getBudget() : 0,
         }))}
 
+        ${group("card", "Smart Cards", smartCardMarkup())}
+
         ${group("image", "2 · Pictures", `
           ${picturesPanelMarkup(callbacks.getImages?.() || [])}
           <details class="ext-more">
@@ -145,6 +148,7 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
     onNotify: notify,
   });
   bindPicturesPanel({ ...callbacks, onSelectImage: selectImageById });
+  bindSmartCard(callbacks.onRequestSmartCard, callbacks.onPatch, notify);
   // The writing surface. Every keystroke goes down the same channel as the
   // Inspector's fields always did - draft, live canvas repaint, autosave.
   bindStoryEditor({ onPatch: callbacks.onPatch, getBudget: callbacks.getBudget });

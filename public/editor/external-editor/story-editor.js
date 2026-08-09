@@ -180,8 +180,8 @@ export function storyEditorMarkup(view, { budget = 0, tools = "", block = "", pi
              away, not a second place to edit the story. Every precise control
              a page designer needs (shape, gap, rotate, flip, layering,
              cut-out, the character grid) is still here. -->
-        <details class="story-proof" id="edPrintProof">
-          <summary>See it set as it will print</summary>
+        <details class="story-proof" id="edPrintProof" open>
+          <summary>The block as it will print — its real shape, set larger</summary>
           ${block}
         </details>
       </section>` : ""}

@@ -4068,7 +4068,9 @@ body.print-view .page-imprint {
 /* Not a floating card: the printable rectangle sits on the sheet with a
    hairline, so it reads as part of this editor rather than a second one. */
 .story-block .compose-frame {
-  padding: 0;
+  /* 12px each side: scaleSurface() sizes the block to `clientWidth - 24`, so
+     changing this makes the proof smaller than the room it has. */
+  padding: 12px;
   border: 1px solid #e2e2e9;
   border-radius: 8px;
   box-shadow: none;

@@ -22,7 +22,7 @@ import { aiPanelMarkup, bindAiPanel, refreshAiPanel } from "./ai-panel.js";
 import { assetsPanelMarkup, bindAssetsPanel, refreshAssetsPanel } from "./assets-panel.js";
 import { historyPanelMarkup, bindHistoryPanel, refreshHistoryPanel } from "./history-panel.js";
 import { pageMapMarkup, bindPageMap } from "./page-map.js";
-import { storyEditorMarkup, bindStoryEditor, refreshStoryEditor, refreshStoryCount, refreshStoryStats } from "./story-editor.js";
+import { storyEditorMarkup, bindStoryEditor, refreshStoryEditor, refreshStoryCount, refreshStoryStats, refreshStoryPictures } from "./story-editor.js";
 import { smartCardMarkup, bindSmartCard } from "./smart-card-panel.js";
 import { storyDetailsMarkup, bindStoryDetails, refreshStoryDetails } from "./story-details-panel.js";
 
@@ -140,11 +140,11 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
             tools: composeToolsMarkup(),
             block: composeCanvasMarkup(),
             pictures: `
-              ${picturesPanelMarkup(callbacks.getImages?.() || [])}
               <details class="ext-more">
                 <summary>Choose from the reporter's pictures</summary>
                 ${assetsPanelMarkup(view, reporterNews)}
-              </details>`,
+              </details>
+              ${picturesPanelMarkup(callbacks.getImages?.() || [])}`,
           })}
         `)}
 
@@ -195,7 +195,18 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
   bindStorySource(callbacks);
   // The writing surface. Every keystroke goes down the same channel as the
   // Inspector's fields always did - draft, live canvas repaint, autosave.
-  bindStoryEditor({ onPatch: callbacks.onPatch, getBudget: callbacks.getBudget });
+  // The pictures are part of the writing surface, so it is given what it needs
+  // to turn a drag on the sheet into a placement on the block.
+  bindStoryEditor({
+    onPatch: callbacks.onPatch,
+    getBudget: callbacks.getBudget,
+    getSection: callbacks.getSection,
+    getView: callbacks.getView,
+    getImages: callbacks.getImages,
+    onPatchImage: callbacks.onPatchImage,
+    onRemoveImage: callbacks.onRemoveImage,
+    onSelectImage: selectImageById,
+  });
   // The small layout is a way through the page, not only a picture of it.
   bindPageMap((sectionKey) => callbacks.onSelectSection?.(sectionKey));
   bindTypographyPanel(callbacks.getView, callbacks.onPatch);
@@ -210,6 +221,13 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
   document.getElementById("edReturnToPage").addEventListener("click", callbacks.onReturnToPage);
 
   renderComposeCanvas(section, view, callbacks.getImages?.() || [], null);
+
+  // The proof is folded away, so it has no width to be scaled into until it is
+  // opened. Drawing it then is what keeps it from opening blank.
+  document.getElementById("edPrintProof")?.addEventListener("toggle", (event) => {
+    if (!event.target.open) return;
+    renderComposeCanvas(section, view, callbacks.getImages?.() || [], null);
+  });
 }
 
 function historyHandlers(callbacks) {
@@ -258,6 +276,9 @@ export function refreshExternalEditor(section, view, story, source) {
   // Not when the change came from the editor itself - rewriting the box a
   // person has a cursor in throws the cursor back to the start, which is the
   // classic way a rich editor becomes unusable.
+  // The pictures stand in the copy, so they follow every change to the block -
+  // one added, one dragged, one taken off.
+  refreshStoryPictures();
   if (source !== "story-editor") refreshStoryEditor(view);
   else {
     refreshStoryCount();

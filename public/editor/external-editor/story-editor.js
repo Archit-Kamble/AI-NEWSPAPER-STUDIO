@@ -8,6 +8,7 @@
 // reading-time read-outs - was moved here before it was deleted.
 
 import { sanitise, plainText, fromPlainText } from "../layout/rich-text.js";
+import { buildFlowMap } from "../layout/text-flow.js";
 import { FONT_FAMILIES, ALIGNMENTS } from "./typography-panel.js";
 
 // The editorial limits, not the storage limits.
@@ -49,6 +50,9 @@ let budgetOf = null;
 let patchBlock = null;
 let escapeBound = false;
 let savedRange = null;
+// Everything the picture layer needs to turn a drag on this sheet into a
+// placement on the block. Set by bindStoryEditor.
+let picture = {};
 
 const escapeAttribute = (value) =>
   String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -170,15 +174,231 @@ export function storyEditorMarkup(view, { budget = 0, tools = "", block = "", pi
 
       ${block || pictures ? `
       <section class="story-block">
-        <div class="story-block-head">
-          <span class="story-block-title">The block itself</span>
-          <span class="story-block-note">Drag a picture where the story wants it — the copy runs around it,
-            and the character count above follows.</span>
-        </div>
-        ${block}
         ${pictures}
+        <!-- The pictures are IN the sheet above, where they are written around.
+             This is the same block set as it will print - the proof, folded
+             away, not a second place to edit the story. Every precise control
+             a page designer needs (shape, gap, rotate, flip, layering,
+             cut-out, the character grid) is still here. -->
+        <details class="story-proof" id="edPrintProof">
+          <summary>See it set as it will print</summary>
+          ${block}
+        </details>
       </section>` : ""}
     </article>`;
+}
+
+// ------------------------------------------------------- pictures, in the copy ---
+//
+// A photograph belongs IN the story, not in a panel beside it. It sits in this
+// sheet, floated, with the copy running around it, and you drag it the way you
+// drag a picture in a word processor.
+//
+// What it is NOT is part of the text. The story is stored as plain marked-up
+// copy - markup is presentation, text is content (rich-text.js) - and a picture
+// is layout, held in `section_images` with a real position and size in block
+// pixels. So the figures live in this sheet's DOM and are stripped back out
+// before a single character is stored or counted. Drag one and what changes is
+// its PLACEMENT, which is what the character grid, the press file and Scribus
+// all read.
+
+/** The block behind this sheet: its grid, and how sheet pixels map to it. */
+function blockGeometry() {
+  const section = picture.getSection?.();
+  const view = picture.getView?.();
+  const body = document.getElementById("edStoryBody");
+  if (!section || !view || !body) return null;
+
+  const style = getComputedStyle(body);
+  const sheetWidth = Math.max(
+    1,
+    body.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0),
+  );
+  const margin = Number(view.marginPx) || 12;
+  const blockWidth = Math.max(1, Number(section.width_px) - margin * 2);
+
+  return {
+    section,
+    view,
+    margin,
+    // The measure is the same measure: this sheet is the block's text column,
+    // set wider so it can be read and typed into.
+    scale: blockWidth / sheetWidth,
+    sheetWidth,
+    map: buildFlowMap(section, view, []),
+  };
+}
+
+/** The first row of body copy, in block pixels. */
+function copyTop(geometry) {
+  const { map, margin } = geometry;
+  return margin + (map.headlineRows + map.subheadingRows) * map.cellHeight;
+}
+
+/** The story as it is stored: the words, with the pictures taken out. */
+function copyOf(body) {
+  const clone = body.cloneNode(true);
+  clone.querySelectorAll(".story-picture").forEach((figure) => figure.remove());
+  return sanitise(clone.innerHTML);
+}
+
+/**
+ * Puts a picture back where its placement says it belongs.
+ *
+ * Its `y` is a row on the character grid, so the number of characters above it
+ * is `row × columns` - which is the point in the copy the picture is anchored
+ * to. No new column is needed to remember it; the placement already says.
+ */
+function anchor(body, figure, row, geometry) {
+  const lines = Math.max(0, Math.round((Number(row.y_px) - copyTop(geometry)) / (geometry.map.cellHeight || 1)));
+  const wanted = lines * (geometry.map.cols || 1);
+
+  let seen = 0;
+  for (const node of [...body.childNodes]) {
+    if (node.nodeType === Node.ELEMENT_NODE && node.classList?.contains("story-picture")) continue;
+    const length = (node.textContent || "").length;
+    if (seen + length >= wanted) return body.insertBefore(figure, node);
+    seen += length;
+  }
+  body.appendChild(figure);
+}
+
+/** What this figure now says its placement is, in block pixels. */
+function placementOf(body, figure, geometry) {
+  const width = Math.round(figure.offsetWidth * geometry.scale);
+  const height = Math.round(figure.offsetHeight * geometry.scale);
+  const x = figure.dataset.side === "right"
+    ? Math.max(0, Number(geometry.section.width_px) - geometry.margin - width)
+    : geometry.margin;
+
+  let chars = 0;
+  for (const node of body.childNodes) {
+    if (node === figure) break;
+    if (node.nodeType === Node.ELEMENT_NODE && node.classList?.contains("story-picture")) continue;
+    chars += (node.textContent || "").length;
+  }
+  const lines = Math.floor(chars / (geometry.map.cols || 1));
+  return { x, y: Math.round(copyTop(geometry) + lines * geometry.map.cellHeight), width, height };
+}
+
+function figureFor(row) {
+  const figure = document.createElement("figure");
+  figure.className = "story-picture";
+  figure.contentEditable = "false";
+  figure.dataset.imageId = row.id;
+  // The × is drawn in CSS, not typed: anything with text in it here would be
+  // counted as characters of the story.
+  figure.innerHTML = `
+    <img src="${escapeAttribute(row.url)}" alt="" draggable="false">
+    <button type="button" class="story-picture-remove" data-picture-remove aria-label="Take this picture off the block"></button>
+    <span class="story-picture-size" data-picture-size aria-hidden="true"></span>`;
+  return figure;
+}
+
+/** Draws every picture on the block into the sheet, and takes away the rest. */
+export function refreshStoryPictures() {
+  const body = document.getElementById("edStoryBody");
+  const geometry = blockGeometry();
+  if (!body || !geometry) return;
+
+  const images = picture.getImages?.() || [];
+  const kept = new Set();
+
+  for (const row of images) {
+    kept.add(String(row.id));
+    let figure = body.querySelector(`.story-picture[data-image-id="${row.id}"]`);
+    if (!figure) {
+      figure = figureFor(row);
+      anchor(body, figure, row, geometry);
+    }
+    const centre = Number(row.x_px) + Number(row.width_px) / 2;
+    figure.dataset.side = centre > Number(geometry.section.width_px) / 2 ? "right" : "left";
+    figure.dataset.shape = row.shape || "rect";
+    if (!figure.classList.contains("is-dragging")) {
+      figure.style.width = `${Math.round(Number(row.width_px) / geometry.scale)}px`;
+      figure.style.height = `${Math.round(Number(row.height_px) / geometry.scale)}px`;
+    }
+  }
+
+  body.querySelectorAll(".story-picture").forEach((figure) => {
+    if (!kept.has(figure.dataset.imageId)) figure.remove();
+  });
+}
+
+/**
+ * Dragging and sizing, on the sheet.
+ *
+ * Sideways decides which side of the column the picture floats on; up and down
+ * moves it through the copy, so it re-anchors between paragraphs as it passes
+ * them. The corner sizes it, keeping its proportions - a photograph stretched
+ * out of shape is a printing error, not a design.
+ */
+function bindStoryPictures(body) {
+  body.addEventListener("pointerdown", (event) => {
+    const figure = event.target.closest?.(".story-picture");
+    if (!figure) {
+      body.querySelectorAll(".story-picture.is-selected").forEach((f) => f.classList.remove("is-selected"));
+      return;
+    }
+    if (event.target.closest("[data-picture-remove]")) return;
+
+    event.preventDefault();
+    body.querySelectorAll(".story-picture.is-selected").forEach((f) => f.classList.remove("is-selected"));
+    figure.classList.add("is-selected");
+    picture.onSelectImage?.(Number(figure.dataset.imageId));
+
+    const geometry = blockGeometry();
+    if (!geometry) return;
+
+    const sizing = Boolean(event.target.closest("[data-picture-size]"));
+    const startX = event.clientX;
+    const startWidth = figure.offsetWidth;
+    const ratio = figure.offsetHeight / Math.max(1, figure.offsetWidth);
+
+    figure.classList.add("is-dragging");
+    // So the pointer reads what is UNDER the picture and the copy can be
+    // re-anchored as it passes.
+    if (!sizing) figure.style.pointerEvents = "none";
+
+    const move = (moveEvent) => {
+      if (sizing) {
+        const width = Math.min(geometry.sheetWidth, Math.max(48, startWidth + (moveEvent.clientX - startX)));
+        figure.style.width = `${Math.round(width)}px`;
+        figure.style.height = `${Math.round(width * ratio)}px`;
+        return;
+      }
+
+      const middle = body.getBoundingClientRect().left + body.clientWidth / 2;
+      figure.dataset.side = moveEvent.clientX > middle ? "right" : "left";
+
+      const under = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
+      const sibling = [...body.childNodes].find(
+        (node) => node.nodeType === Node.ELEMENT_NODE && node !== figure && node.contains(under),
+      );
+      if (sibling) {
+        const box = sibling.getBoundingClientRect();
+        body.insertBefore(figure, moveEvent.clientY < box.top + box.height / 2 ? sibling : sibling.nextSibling);
+      }
+    };
+
+    const done = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", done);
+      figure.classList.remove("is-dragging");
+      figure.style.pointerEvents = "";
+      picture.onPatchImage?.(Number(figure.dataset.imageId), placementOf(body, figure, geometry));
+    };
+
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", done);
+  });
+
+  body.addEventListener("click", (event) => {
+    const remove = event.target.closest("[data-picture-remove]");
+    if (!remove) return;
+    event.preventDefault();
+    picture.onRemoveImage?.(Number(remove.closest(".story-picture").dataset.imageId));
+  });
 }
 
 /**
@@ -225,7 +445,10 @@ export function refreshStoryCount() {
   const readout = document.getElementById("edStoryCount");
   if (!body || !readout) return;
 
-  const used = plainText(body.innerHTML).length;
+  // The copy, without the pictures standing in it: a photograph is not
+  // characters, and counting the figure markup as text would say a story is
+  // hundreds of characters longer than it is.
+  const used = plainText(copyOf(body)).length;
   const budget = budgetOf ? budgetOf() : 0;
   const over = budget ? used - budget : 0;
   readout.textContent = budget
@@ -234,9 +457,10 @@ export function refreshStoryCount() {
   readout.classList.toggle("over", over > 0);
 }
 
-export function bindStoryEditor({ onPatch, getBudget }) {
+export function bindStoryEditor({ onPatch, getBudget, ...pictures }) {
   budgetOf = getBudget;
   patchBlock = onPatch;
+  picture = pictures;
   const body = document.getElementById("edStoryBody");
   const headline = document.getElementById("edStoryHeadline");
   const subheading = document.getElementById("edStorySubheading");
@@ -244,9 +468,10 @@ export function bindStoryEditor({ onPatch, getBudget }) {
   if (!body) return;
 
   const pushBody = () => {
-    onPatch?.({ body: sanitise(body.innerHTML) }, "story-editor");
+    const copy = copyOf(body);
+    onPatch?.({ body: copy }, "story-editor");
     refreshStoryCount();
-    refreshStoryStats({ body: body.innerHTML });
+    refreshStoryStats({ body: copy });
   };
 
   body.addEventListener("input", pushBody);
@@ -301,6 +526,8 @@ export function bindStoryEditor({ onPatch, getBudget }) {
   });
 
   bindLinkbar(body, pushBody);
+  bindStoryPictures(body);
+  refreshStoryPictures();
 
   ["keyup", "mouseup", "focus"].forEach((type) => body.addEventListener(type, syncToolbar));
   if (!escapeBound) {
@@ -404,7 +631,7 @@ function toggleSource(body, pushBody) {
   const paper = document.getElementById("edStoryPaper");
   if (!source || !paper) return;
   if (source.hidden) {
-    source.value = sanitise(body.innerHTML);
+    source.value = copyOf(body);
     source.hidden = false;
     [...paper.children].forEach((element) => { if (element !== source) element.hidden = true; });
     source.focus();
@@ -413,6 +640,9 @@ function toggleSource(body, pushBody) {
   body.innerHTML = sanitise(source.value);
   source.hidden = true;
   [...paper.children].forEach((element) => { if (element !== source) element.hidden = false; });
+  // Rewriting the copy wiped the figures out of the sheet; put them back where
+  // their placements say they stand.
+  refreshStoryPictures();
   pushBody();
 }
 
@@ -445,7 +675,10 @@ export function refreshStoryEditor(view) {
   if (!body) return;
   if (document.activeElement !== body) {
     const next = fromPlainText(view.body || "");
-    if (body.innerHTML !== next) body.innerHTML = next;
+    if (copyOf(body) !== next) {
+      body.innerHTML = next;
+      refreshStoryPictures();
+    }
   }
   const headline = document.getElementById("edStoryHeadline");
   const subheading = document.getElementById("edStorySubheading");

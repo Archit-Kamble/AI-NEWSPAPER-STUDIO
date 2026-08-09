@@ -3826,12 +3826,66 @@ body.print-view .mono-forme-warning { display: none; }
 .story-editor-ribbon-title small { color: #92929b; font-size: .67rem; font-weight: 500; }
 .story-editor-toolbar { flex-wrap: wrap; min-height: 40px; padding: var(--s1) 8px; border: 0; border-radius: 0; background: transparent; }
 .story-editor-toolbar .rt-btn { min-width: 34px; font-size: .76rem; font-weight: 650; }
-.story-editor-paper { margin: 16px; padding: var(--s5) clamp(var(--s4), 5vw, 56px) 40px; min-height: 430px; border: 1px solid #e2e2e8; box-shadow: 0 3px 14px rgba(28, 28, 38, .08); background: white; }
+.story-editor-paper { margin: 0; padding: var(--s3); min-height: 0; background: white; }
+
+/* THE FIELDS MUST LOOK LIKE FIELDS.
+   These three carried `border: 0; outline: 0` and sat on a white sheet, so the
+   headline, subheading and body rendered as plain text with nothing to show
+   they could be typed into - the report was "the input sections are missing",
+   and they were, as far as anyone looking at the screen could tell.
+   A newspaper page is what the CANVAS is for; this is a form. */
+.story-editor-paper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+}
+.story-editor-paper .story-headline-input,
+.story-editor-paper .story-subheading-input,
+.story-editor-paper .story-editor-body {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid #d3d3db;
+  border-radius: 7px;
+  background: white;
+  font-family: "Noto Serif Devanagari", Georgia, serif;
+}
+.story-editor-paper .story-headline-input {
+  padding: var(--s2) var(--s3);
+  font-size: 1.2rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.story-editor-paper .story-subheading-input {
+  padding: var(--s2) var(--s3);
+  margin-bottom: var(--s2);
+  color: #45454f;
+  font-size: 0.95rem;
+}
+.story-editor-paper .story-editor-body {
+  min-height: 300px;
+  max-height: none;
+  padding: var(--s3);
+  font-size: 1rem;
+  line-height: 1.8;
+}
+/* Focus has to be obvious: this is the one control a desk uses all morning. */
+.story-editor-paper .story-headline-input:focus,
+.story-editor-paper .story-subheading-input:focus,
+.story-editor-paper .story-editor-body:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(196, 30, 58, 0.12);
+  outline: none;
+}
+.story-editor-body:empty::before {
+  content: attr(data-placeholder);
+  color: #a8a8b0;
+}
+
 .story-field-label { display: block; margin-bottom: var(--s1); color: #8a8a94; font-size: .66rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
-.story-editor-paper .story-headline-input, .story-editor-paper .story-subheading-input { box-sizing: border-box; border: 0; border-radius: 0; outline: 0; }
-.story-editor-paper .story-headline-input { padding: 0 0 var(--s2); border-bottom: 1px solid #e2e2e7; font-family: Georgia, 'Noto Serif Devanagari', serif; font-size: clamp(1.45rem, 3vw, 2.15rem); line-height: 1.18; }
-.story-editor-paper .story-subheading-input { padding: 12px 0; color: #60606a; font-family: Georgia, 'Noto Serif Devanagari', serif; font-size: 1.03rem; }
-.story-editor-paper .story-editor-body { min-height: 290px; max-height: none; padding: 12px 0; border: 0; border-top: 1px solid #eeeeF2; border-radius: 0; font-family: Georgia, 'Noto Serif Devanagari', serif; font-size: 1rem; line-height: 1.82; }
+
+
+
+
 .story-editor-paper .story-editor-body:focus { box-shadow: none; border-color: var(--accent); }
 .story-editor-source { box-sizing: border-box; width: 100%; min-height: 330px; padding: 12px; border: 1px solid #d9d9e0; border-radius: 6px; font: .8rem/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; resize: vertical; }
 .story-editor-foot { display: flex; justify-content: space-between; gap: 16px; padding: var(--s2) var(--s3); border-top: 1px solid #dedee5; background: #fafafb; }

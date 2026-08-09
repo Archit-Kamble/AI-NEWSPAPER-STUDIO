@@ -58,7 +58,7 @@ const provider = {
         // Reasoning is billed and counted as output, so the higher tiers are
         // given room to think AND to answer. Without this the Ultra tier can
         // spend its whole budget reasoning and return nothing.
-        max_tokens: Math.round(maxOutputTokens() * tier.outputBudgetShare),
+        max_tokens: maxOutputTokens(),
         // Enforced at the API, not parsed hopefully at this end.
         response_format: {
           type: 'json_schema',

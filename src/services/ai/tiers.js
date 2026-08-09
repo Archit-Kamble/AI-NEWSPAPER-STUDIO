@@ -14,11 +14,20 @@
 // every tier the same way rather than pretending.
 //
 // One warning worth keeping in front of you, because it is a production trap:
-// on Sarvam, REASONING TOKENS ARE BILLED AND COUNTED AS OUTPUT. A high-effort
-// call with a small `max_tokens` can spend the entire budget thinking and
-// return nothing at all - a failure that looks like an outage, on the tier you
-// reach for when a story matters most. So each tier carries its own output
-// budget, not just its own effort level.
+// on Sarvam, REASONING TOKENS ARE BILLED AND COUNTED AS OUTPUT. A call with a
+// small `max_tokens` can spend the entire budget thinking and return nothing at
+// all - and you are billed for the thinking either way.
+//
+// This file used to give the cheap tiers a SMALLER share of the output budget,
+// on the theory that a quick job should be allowed to cost less. That was
+// wrong, and the first real call proved it: Basic asked for a block of Marathi
+// copy, got max_tokens 2048, spent all of it reasoning and returned nothing.
+//
+// `max_tokens` is a CEILING, not a spend. You are billed for the tokens
+// actually produced, so lowering the ceiling saves nothing - it only makes it
+// likelier that a call you have already paid the reasoning for comes back
+// empty. Every tier gets the whole ceiling. The dial that genuinely changes
+// cost and quality is `reasoning_effort`, and that is the one the tiers set.
 
 const TIERS = {
   basic: {
@@ -29,9 +38,6 @@ const TIERS = {
     hint: 'Quick — for fillers, captions and briefs',
     effort: 'low',
     temperature: 0.7,
-    // Multiplier on the provider's configured output budget. A low-effort call
-    // barely reasons, so it does not need headroom.
-    outputBudgetShare: 0.5,
   },
   plus: {
     key: 'plus',
@@ -39,7 +45,6 @@ const TIERS = {
     hint: 'Considered — for reworking a story to its measure',
     effort: 'medium',
     temperature: 0.8,
-    outputBudgetShare: 0.75,
   },
   ultra: {
     key: 'ultra',
@@ -47,9 +52,6 @@ const TIERS = {
     hint: 'Best — for the lead. Slower, and a few paise more',
     effort: 'high',
     temperature: 0.9,
-    // High effort needs the whole budget, because the reasoning comes out of
-    // it before a single printable character does.
-    outputBudgetShare: 1,
   },
 };
 

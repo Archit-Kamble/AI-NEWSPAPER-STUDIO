@@ -127,13 +127,28 @@ function aiStatusLine() {
 
 export function aiPanelMarkup(view) {
   return `
+    <!-- A few words in, a whole block out.
+         The seed is the point: a sub-editor types "जंतरमंतर आंदोलन" and gets a
+         headline, a subheading and body copy measured to the space this block
+         actually has. Everything below it is refinement. -->
+    <div class="ai-seed">
+      <label for="edAiSeed">What is this story about?</label>
+      <input id="edAiSeed" class="ai-seed-input" maxlength="240"
+             placeholder="जंतरमंतर आंदोलन · Jantar Mantar protest · a few words is enough"
+             value="">
+      <button type="button" class="btn-submit" id="aiWriteStory">Write this block</button>
+      <p class="ai-seed-note" id="edAiSeedNote">It is written to fit — the character grid says how much room this block has.</p>
+    </div>
+
+    <section class="ai-proposal" id="aiStoryProposal" hidden></section>
+
     ${tierSelectMarkup()}
-    <button type="button" class="btn-submit is-placeholder" id="aiFillRemaining">Fill remaining area with AI</button>
     <div class="form-group">
       <label for="edAiPrompt">Additional details for AI</label>
       <textarea id="edAiPrompt" rows="3" placeholder="Extra instructions - tone, angle, must-mention facts...">${escapeHtml(view.aiNotes)}</textarea>
     </div>
     <div class="ext-editor-toolbar">
+      <button type="button" class="ext-editor-btn is-placeholder" id="aiFillRemaining">Fill remaining area with AI</button>
       <button type="button" class="ext-editor-btn is-placeholder" id="aiOptimize">Optimize with these details</button>
     </div>
     <details class="ext-more">
@@ -150,7 +165,83 @@ export function aiPanelMarkup(view) {
   `;
 }
 
-export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages) {
+/** The proposal, with what it costs the block stated before it is accepted. */
+function proposalMarkup(result) {
+  const { proposal, fit } = result;
+  const over = fit.overflowing;
+  return `
+    <h4>Written by ${escapeHtml(result.provider || "AI")}${result.fellBackTo ? " (fallback)" : ""}
+      <span class="muted">review before accepting</span></h4>
+    <p class="ai-proposal-headline">${escapeHtml(proposal.headline)}</p>
+    ${proposal.subheading ? `<p class="ai-proposal-sub">${escapeHtml(proposal.subheading)}</p>` : ""}
+    <p class="ai-proposal-fit${over ? " over" : ""}">
+      ${fit.charsUsed} of ${fit.bodyCharBudget} characters${over ? ` — ${fit.charsUsed - fit.bodyCharBudget} too many, this will not fit` : ` · ${fit.charsRemaining} left`}
+    </p>
+    <div class="ai-proposal-body">${escapeHtml(proposal.body).replace(/\n{2,}/g, "</p><p>").replace(/\n/g, "<br>")}</div>
+    <div class="ext-editor-toolbar">
+      <button type="button" class="ext-editor-btn ext-editor-btn-primary" id="aiAcceptStory">Accept into the block</button>
+      <button type="button" class="ext-editor-btn" id="aiDiscardStory">Discard</button>
+    </div>
+    <p class="ai-proposal-warn">The desk must check every fact before this is printed. It enters the block as
+       <strong>needs review</strong>.</p>`;
+}
+
+export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, getPage) {
+  const seed = document.getElementById("edAiSeed");
+  const write = document.getElementById("aiWriteStory");
+  const host = document.getElementById("aiStoryProposal");
+
+  // The seed is deliberately NOT patched into the draft. It is a note to the
+  // model, not part of the story, and putting an unknown field on the draft
+  // would mark the block dirty and set autosave running for something that is
+  // never stored.
+
+  write?.addEventListener("click", async () => {
+    const page = getPage?.();
+    const section = getSection();
+    const view = getView();
+    if (!page || !section) return onNotify("Choose a block first.");
+    if (!seed?.value.trim()) {
+      seed?.focus();
+      return onNotify("Say what the story is about first — a few words is enough.");
+    }
+
+    const label = write.textContent;
+    write.disabled = true;
+    write.textContent = "Writing to the measure…";
+    try {
+      const response = await fetch(
+        `/api/pages/${page.id}/sections/${encodeURIComponent(section.section_key)}/write`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            seed: seed.value.trim(),
+            notes: document.getElementById("edAiPrompt")?.value || "",
+            tier: getAiTier(),
+            language: view?.language,
+          }),
+        },
+      );
+      const result = await response.json().catch(() => ({ error: "The AI did not answer." }));
+      if (!response.ok || result.error) return onNotify(result.error || "The AI could not write this block.");
+
+      host.hidden = false;
+      host.innerHTML = proposalMarkup(result);
+      document.getElementById("aiAcceptStory")?.addEventListener("click", () => {
+        // A proposal becomes a draft, never a saved story: it lands in the same
+        // editable draft as typed copy and is marked for review.
+        onPatch({ ...result.proposal, aiGenerated: true, status: "needs_review" }, "ai-panel");
+        host.hidden = true;
+        onNotify("Written into the block. Check every fact before it prints.");
+      });
+      document.getElementById("aiDiscardStory")?.addEventListener("click", () => { host.hidden = true; });
+    } finally {
+      write.disabled = false;
+      write.textContent = label;
+    }
+  });
+
   document.getElementById("edAiPrompt")?.addEventListener("input", (event) => {
     onPatch({ aiNotes: event.target.value }, "ai-panel");
   });

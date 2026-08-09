@@ -49,7 +49,7 @@ const provider = {
       },
       body: JSON.stringify({
         model: model(),
-        max_tokens: Math.round(maxOutputTokens() * tier.outputBudgetShare),
+        max_tokens: maxOutputTokens(),
         temperature: tier.temperature,
         messages: [{ role: 'user', content: prompt }],
         // One tool, whose input schema is the answer's shape. Forcing it is

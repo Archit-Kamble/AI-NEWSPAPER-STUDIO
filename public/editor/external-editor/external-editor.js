@@ -199,7 +199,7 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
   bindPageMap((sectionKey) => callbacks.onSelectSection?.(sectionKey));
   bindTypographyPanel(callbacks.getView, callbacks.onPatch);
   bindStoryDetails(callbacks.onPatch);
-  bindAiPanel(callbacks.getView, callbacks.getSection, callbacks.onPatch, notify, callbacks.getImages);
+  bindAiPanel(callbacks.getView, callbacks.getSection, callbacks.onPatch, notify, callbacks.getImages, callbacks.getPage);
   bindAssetsPanel(callbacks.onPatch, notify);
   bindHistoryPanel(historyHandlers(callbacks));
   bindDockToggle(callbacks);

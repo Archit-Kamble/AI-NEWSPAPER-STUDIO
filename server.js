@@ -9,6 +9,7 @@ const { geometryOf } = require('./src/layout/geometry');
 const { identityFor } = require('./src/layout/identity');
 const features = require('./src/features');
 const ai = require('./src/services/ai');
+const storyWriter = require('./src/services/storyWriter.service');
 const editionFeatures = require('./src/services/editionFeatures.service');
 const jump = require('./src/services/jump.service');
 const districtEditions = require('./src/services/districtEdition.service');
@@ -149,6 +150,29 @@ function createApp() {
   app.get("/api/ai/status", requireDesk, (req, res) => {
     res.json(ai.status());
   });
+
+  // Write a story into one block from a few words.
+  //
+  // The desk types "जंतरमंतर आंदोलन" and gets back a headline, a subheading and
+  // body copy measured to the space that block actually has - the character
+  // grid does the measuring, the same grid the worklist, the fit action and
+  // preflight use. It returns a PROPOSAL and writes nothing: AI assists, it
+  // never owns (VISION.md), so the desk accepts it and the block it lands in is
+  // marked needs_review.
+  app.post("/api/pages/:pageId/sections/:sectionKey/write", requireDesk, asyncRoute(async (req, res) => {
+    const result = await storyWriter.write(
+      parseInt(req.params.pageId, 10),
+      req.params.sectionKey,
+      {
+        seed: req.body?.seed,
+        notes: req.body?.notes,
+        tier: req.body?.tier,
+        language: req.body?.language,
+      },
+    );
+    if (result.error) return res.status(result.unconfigured ? 503 : 400).json(result);
+    res.json(result);
+  }));
 
   // Everything buildable for a date, with the model-written boxes done in a
   // single call rather than one per box.

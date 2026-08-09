@@ -46,7 +46,7 @@ const provider = {
         messages: [{ role: 'user', content: prompt }],
         temperature: tier.temperature,
         reasoning_effort: tier.effort,
-        max_tokens: Math.round(maxOutputTokens() * tier.outputBudgetShare),
+        max_tokens: maxOutputTokens(),
         response_format: {
           type: 'json_schema',
           json_schema: { name: 'sahas_response', schema, strict: true },

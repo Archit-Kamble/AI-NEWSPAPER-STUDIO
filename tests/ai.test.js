@@ -55,12 +55,25 @@ test('every tier carries a hint, because "Basic" alone tells a sub-editor nothin
   }
 });
 
-test('a higher tier gets a bigger output budget, because reasoning is billed out of it', () => {
-  const basic = tiers.tierFor('basic').outputBudgetShare;
-  const plus = tiers.tierFor('plus').outputBudgetShare;
-  const ultra = tiers.tierFor('ultra').outputBudgetShare;
-  assert.ok(basic < plus && plus < ultra, `${basic} < ${plus} < ${ultra}`);
-  assert.equal(ultra, 1, 'the top tier gets the whole budget to think and answer in');
+test('every tier gets the whole output ceiling, and the dial is effort alone', () => {
+  // This test used to assert the opposite - that cheap tiers get a smaller
+  // share of max_tokens - and the first real call disproved it: Basic asked
+  // for a block of Marathi copy, was given max_tokens 2048, spent all of it
+  // reasoning and returned nothing.
+  //
+  // max_tokens is a CEILING, not a spend. Providers bill the tokens actually
+  // produced, so a lower ceiling saves nothing and only makes it likelier that
+  // a call you have already paid the reasoning for comes back empty.
+  // list() is the menu the desk sees; tierFor() is the full tier.
+  for (const key of ['basic', 'plus', 'ultra']) {
+    assert.equal(tiers.tierFor(key).outputBudgetShare, undefined,
+      `${key} must not carry an output share - the ceiling is not the dial`);
+  }
+  assert.deepEqual(
+    ['basic', 'plus', 'ultra'].map((key) => tiers.tierFor(key).effort),
+    ['low', 'medium', 'high'],
+    'the tiers differ by how hard the model thinks, which is what actually costs money',
+  );
 });
 
 test('an unknown or missing tier falls back to basic rather than throwing', () => {

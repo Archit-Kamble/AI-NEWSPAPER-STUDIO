@@ -588,12 +588,21 @@ function renderShell() {
             <div id="pageIndicator"></div>
             ${zoomControlMarkup()}
           </div>
+          <div class="splitter splitter-h" id="canvasResizer" role="separator"
+               aria-orientation="horizontal" tabindex="0" title="Drag to resize the page area"></div>
         </main>
-      </div>
 
-      <div class="splitter splitter-h" id="canvasResizer" role="separator"
-           aria-orientation="horizontal" tabindex="0" title="Drag to resize the page area"></div>
-      <section class="workspace-external-editor" id="externalEditorPanel"></section>
+        <div class="splitter splitter-v" id="editorResizer" role="separator"
+             aria-orientation="vertical" tabindex="0" title="Drag to resize the editor"></div>
+
+        <!-- The editor sits BESIDE the page, in the column the Inspector used
+             to hold. It was moved down to a full-width dock under the page, and
+             once the Inspector was deleted that left the only place to type
+             1091px below the fold: opening a block showed a page and no way to
+             write on it. An editor that has to be scrolled to is an editor that
+             is not there. -->
+        <section class="workspace-external-editor" id="externalEditorPanel"></section>
+      </div>
 
       <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
       <aside class="workspace-sidebar-left" id="sidebarLeft">

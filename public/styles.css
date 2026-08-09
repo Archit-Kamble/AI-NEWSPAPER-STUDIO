@@ -1202,18 +1202,34 @@ body {
    them at its natural height, and the browser scrolls the lot. */
 .workspace-shell {
   --canvas-height: 620px;
+  --editor-width: 520px;
   background: #f6f6f7;
   font-size: 0.95rem;
 }
 
-/* The page, full width. The Inspector that used to sit beside it was a second
-   editor bound to the same story; everything it did was moved into the dock
-   and it was deleted, so there is nothing left to split the row with. */
+/* The page, and the ONE editor beside it.
+   The Inspector that used to hold this column was a second editor bound to the
+   same story. Everything it did moved into the External Editor, and the
+   External Editor moved up here - because when it sat as a full-width dock
+   under the page, deleting the Inspector left the only place to type 1091px
+   below the fold. An editor that has to be scrolled to is an editor that is
+   not there. */
 .workspace-top {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 6px var(--editor-width);
   align-items: start;
 }
+/* Collapsed, the editor gives its whole column back to the page. */
+.editor-collapsed .workspace-top {
+  grid-template-columns: minmax(0, 1fr);
+}
+.editor-collapsed #editorResizer {
+  display: none;
+}
+/* Too narrow for two columns, so they stack - and the page gives up height so
+   that the editor under it is still on the first screen. Stacking at the full
+   620px page height put the headline field below the fold again, which is the
+   whole failure this layout exists to fix. */
 @media (max-width: 1024px) {
   .workspace-top { grid-template-columns: 1fr; }
   .workspace-top .splitter-v { display: none; }
@@ -1423,6 +1439,13 @@ body.resizing-y * {
   grid-template-rows: auto var(--canvas-height);
   min-width: 0;
   background: #f6f6f7;
+}
+/* Stacked, the page gives up height so the editor under it is still on the
+   first screen. Declared AFTER the base rule, not before it: two rules of equal
+   specificity and the later one wins, which is why the same override higher up
+   the file did nothing. */
+@media (max-width: 1024px) {
+  .workspace-canvas-host { grid-template-rows: auto min(var(--canvas-height), 260px); }
 }
 /* The view's own controls, floating in the grey beside the sheet. */
 .canvas-view-controls {
@@ -1732,9 +1755,13 @@ body.print-view .canvas-view-controls {
 .workspace-external-editor {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   background: white;
-  border-top: 1px solid #ececed;
-  box-shadow: 0 -2px 12px rgba(20, 20, 30, 0.05);
+  border-left: 1px solid #ececed;
+}
+/* Collapsed, it is gone rather than a white stripe. */
+.editor-collapsed .workspace-external-editor {
+  display: none;
 }
 .editor-collapsed .ext-editor-stage {
   display: none;
@@ -2064,15 +2091,22 @@ body.print-view .canvas-view-controls {
    permanently ate 46px of the viewport and every control that scrolled under it
    (Rotate, Flip H, Flip V...) disappeared behind it. VISION.md: the page scrolls
    naturally; this is a section heading, not a chrome bar. */
+/* Built for a full-width dock; it is a 520px rail now, where the four actions
+   ran 324px past the edge and took the whole page with them. It wraps, and
+   nothing in it has a fixed height any more. */
 .ext-editor-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--s2);
-  padding: 0 16px;
-  height: 46px;
+  gap: var(--s1) var(--s2);
+  padding: var(--s2) var(--s3);
+  min-width: 0;
   flex-shrink: 0;
   border-bottom: 1px solid #ececed;
   background: #fbfbfc;
+}
+.ext-editor-header h3 {
+  flex-shrink: 0;
 }
 .ext-editor-header h3 {
   margin: 0;
@@ -2101,9 +2135,25 @@ body.print-view .canvas-view-controls {
 }
 .ext-editor-header-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--s1);
-  flex-shrink: 0;
+  margin-left: auto;
+  min-width: 0;
+}
+/* The last-saved time is the first thing to give way when the rail is narrow -
+   it is a reassurance, not a control. */
+.ext-editor-saved {
+  font-size: 0.7rem;
+  color: #8a8a92;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ext-editor-section-size {
+  font-size: 0.72rem;
+  color: #8a8a92;
+  white-space: nowrap;
 }
 .ext-icon-btn {
   width: 28px;
@@ -2121,23 +2171,16 @@ body.print-view .canvas-view-controls {
   background: #f2f2f4;
 }
 
-/* The dock: live newspaper preview on the left, one continuous control column
-   on the right, in lifecycle order. No tabs - see external-editor.js. */
+/* The editor is a rail beside the page, so its panels stack in one column and
+   the writing surface is the first thing in it. One column ALWAYS, not below a
+   viewport breakpoint: a 520px rail is narrow on a 1920px screen, and a media
+   query cannot see that. No tabs - see external-editor.js. */
 .ext-editor-stage {
   display: grid;
-  /* The WRITING column takes the free space, the preview is capped.
-     It was the other way round - the proof of the block got 1fr (about 640px
-     at a 1129px viewport) and the place a sub-editor actually types got 430px.
-     The preview is a thing to glance at; the story is the work. A browser at
-     170% zoom on a normal monitor reports ~1090 CSS px, so this has to hold at
-     that width, not only on a wide desk monitor. */
-  grid-template-columns: minmax(240px, 340px) minmax(0, 1fr);
-  gap: var(--s5);
-  padding: var(--s4) var(--s4) var(--s5);
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s4);
+  padding: var(--s3);
   align-items: start;
-}
-@media (max-width: 1000px) {
-  .ext-editor-stage { grid-template-columns: minmax(0, 1fr); }
 }
 
 .ext-preview-col {

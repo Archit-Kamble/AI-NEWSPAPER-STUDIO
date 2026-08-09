@@ -1,15 +1,16 @@
-// Draggable splitters for the two sizes an editor cares about: how wide the
-// Inspector is, and how much room the page preview gets. The dock below grows
-// with its own content and the whole page scrolls, so it needs no fixed height.
-// Sizes live in CSS custom properties and are remembered in localStorage, so a
-// desk keeps its layout between sessions.
+// Draggable splitters for the two sizes a desk cares about: how much room the
+// page gets, and how wide the editor beside it is. Sizes live in CSS custom
+// properties and are remembered in localStorage, so a desk keeps its layout
+// between sessions.
 
 const STORAGE_KEY = "sahas.workspace.layout";
 
 const LIMITS = {
-  // The dock now grows with its content and the page scrolls, so what is worth
-  // resizing is how much room the page preview gets.
   canvasHeight: { min: 320, max: 1200, fallback: 620, prop: "--canvas-height" },
+  // The editor is a column beside the page now, so its width is the second
+  // thing worth dragging. The floor is high on purpose: below about 380px the
+  // writing surface stops being somewhere a story can be written.
+  editorWidth: { min: 380, max: 900, fallback: 520, prop: "--editor-width" },
 };
 
 function readStored() {
@@ -39,6 +40,7 @@ export function applyStoredLayout(shell) {
   const stored = readStored();
   sizes = {
     canvasHeight: clamp("canvasHeight", stored.canvasHeight || LIMITS.canvasHeight.fallback),
+    editorWidth: clamp("editorWidth", stored.editorWidth || LIMITS.editorWidth.fallback),
     editorCollapsed: stored.editorCollapsed === true,
   };
   Object.entries(LIMITS).forEach(([key, { prop }]) => {
@@ -114,4 +116,7 @@ function bindSplitter(shell, handle, key, axis, invert) {
 
 export function bindResizers(shell) {
   bindSplitter(shell, document.getElementById("canvasResizer"), "canvasHeight", "y", false);
+  // Inverted: the editor grows as the pointer moves LEFT, because it is the
+  // right-hand column.
+  bindSplitter(shell, document.getElementById("editorResizer"), "editorWidth", "x", true);
 }

@@ -126,25 +126,29 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
     </div>
 
     <div class="ext-editor-stage">
-      <div class="ext-preview-col">
-        ${composeCanvasMarkup()}
-        ${pageMapMarkup(callbacks.getPage?.(), callbacks.getNewspaper?.(), section.section_key)}
-      </div>
-
       <div class="ext-controls-col">
+        <!-- The writing surface is FIRST, and nothing is allowed above it.
+             Selecting a block has to put a cursor within reach; anything that
+             pushes the headline field down the rail is a block a desk cannot
+             immediately write on. -->
         ${group("story", "1 · Write the story", `${storySourceMarkup(view, story)}${storyEditorMarkup(view, {
           budget: callbacks.getBudget ? callbacks.getBudget() : 0,
         })}`)}
 
-        ${group("card", "Smart Cards", smartCardMarkup())}
-
+        <!-- The composition proof lives WITH the pictures, because placing them
+             is the only thing it is used for - the printed page itself is now
+             on screen beside this rail. -->
         ${group("image", "2 · Pictures", `
+          ${composeCanvasMarkup()}
           ${picturesPanelMarkup(callbacks.getImages?.() || [])}
           <details class="ext-more">
             <summary>Choose from the reporter's pictures</summary>
             ${assetsPanelMarkup(view, reporterNews)}
           </details>
+          ${pageMapMarkup(callbacks.getPage?.(), callbacks.getNewspaper?.(), section.section_key)}
         `)}
+
+        ${group("card", "Smart Cards", smartCardMarkup())}
 
         ${group("space", "3 · Space", `<div id="edSpaceGroup">${spacePanelMarkup(section, view, callbacks.getImages?.() || [])}</div>`)}
 

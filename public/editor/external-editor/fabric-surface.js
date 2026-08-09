@@ -341,8 +341,13 @@ export function currentPlacements() {
 export function scaleSurface(frame, wrapper) {
   if (!canvas || !frame || !wrapper || !blockSize.width) return 1;
 
+  // Fitted to the frame's width AND to a share of the window's height. Width
+  // alone let a small block fill half a screen: a 268 x 248px block in a 640px
+  // column came out 536px tall, so the proof of the block was the biggest thing
+  // in the dock and the story was squeezed beside it.
   const available = frame.clientWidth - 24;
-  const scale = Math.min(2, available / blockSize.width);
+  const roomToShow = Math.max(220, Math.min(420, window.innerHeight * 0.45));
+  const scale = Math.min(2, available / blockSize.width, roomToShow / blockSize.height);
 
   canvas.setZoom(scale);
   canvas.setDimensions({

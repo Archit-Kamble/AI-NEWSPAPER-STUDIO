@@ -4,6 +4,25 @@
   --accent: #c41e3a;
   --border: #ddd;
   --bg-light: #f5f5f5;
+
+  /* ONE SPACING SCALE.
+     The app chrome had grown seventeen different vertical paddings - 1, 2, 3,
+     4, 5, 6, 7, 8, 9, 10, 12, 14, 15, 16, 18, 20 and 28px - and thirteen
+     different gaps. Nothing was wrong with any single one of them, and the
+     result was still that some panels felt cramped and others empty: with no
+     shared rhythm, "a bit more room here" is decided afresh every time.
+     Six steps. Everything in the chrome comes from these.
+
+     The NEWSPAPER CANVAS is deliberately not on this scale. Its measurements
+     are print geometry - millimetres at 2px/mm, gutters, the baseline grid (see
+     src/layout/geometry.js) - and must never be nudged to make a screen look
+     tidier. Type sizes are not on it either; they are a type scale. */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 24px;
+  --s6: 32px;
 }
 
 * {
@@ -38,25 +57,25 @@ body {
 .login-box h1 {
   text-align: center;
   font-size: 2rem;
-  margin: 0 0 10px;
+  margin: 0 0 var(--s2);
   color: var(--accent);
 }
 .login-box p {
   text-align: center;
   color: var(--secondary);
-  margin-bottom: 30px;
+  margin-bottom: var(--s6);
 }
 .login-box .form-group {
-  margin-bottom: 15px;
+  margin-bottom: var(--s3);
 }
 .login-box label {
   display: block;
   font-weight: bold;
-  margin-bottom: 5px;
+  margin-bottom: var(--s1);
 }
 .login-box input {
   width: 100%;
-  padding: 10px;
+  padding: var(--s2);
   border: 1px solid var(--border);
   border-radius: 4px;
 }
@@ -69,13 +88,13 @@ body {
   border-radius: 4px;
   cursor: pointer;
   font-weight: bold;
-  margin-top: 20px;
+  margin-top: var(--s4);
 }
 .login-box .version {
   text-align: center;
   font-size: 12px;
   color: var(--secondary);
-  margin-top: 20px;
+  margin-top: var(--s4);
 }
 
 .main-layout {
@@ -88,7 +107,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 15px 20px;
+  padding: var(--s4) var(--s4);
   background: var(--primary);
   color: white;
   border-bottom: 2px solid var(--accent);
@@ -96,7 +115,7 @@ body {
 .header-left {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: var(--s3);
   font-weight: bold;
   font-size: 1.2rem;
 }
@@ -117,7 +136,7 @@ body {
   background: rgba(255, 255, 255, 0.16);
 }
 .header-right button {
-  padding: 8px 15px;
+  padding: 8px var(--s4);
   background: var(--accent);
   color: white;
   border: none;
@@ -230,16 +249,16 @@ body {
 
 .form-section {
   background: white;
-  padding: 20px;
+  padding: var(--s4);
   border: 1px solid var(--border);
   border-radius: 6px;
 }
 .form-section h2 {
   margin-top: 0;
-  margin-bottom: 20px;
+  margin-bottom: var(--s4);
   color: var(--primary);
   border-bottom: 2px solid var(--border);
-  padding-bottom: 10px;
+  padding-bottom: var(--s2);
 }
 /* ===========================
    Newspaper Dashboard
@@ -250,18 +269,18 @@ body {
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 24px;
-  margin-bottom: 28px;
+  margin-bottom: var(--s5);
 }
 
 .dashboard-card h3 {
-  margin: 0 0 14px;
+  margin: 0 0 var(--s3);
   font-size: 24px;
 }
 
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 18px;
+  gap: var(--s4);
   margin: 24px 0;
 }
 
@@ -269,7 +288,7 @@ body {
   background: #fafafa;
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 18px;
+  padding: var(--s4);
   text-align: center;
 }
 
@@ -300,19 +319,19 @@ body {
   box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08);
 }
 .form-group {
-  margin-bottom: 15px;
+  margin-bottom: var(--s3);
 }
 .form-group label {
   display: block;
   font-weight: bold;
-  margin-bottom: 5px;
+  margin-bottom: var(--s1);
   font-size: 13px;
 }
 .form-group input,
 .form-group select,
 .form-group textarea {
   width: 100%;
-  padding: 10px;
+  padding: var(--s2);
   border: 1px solid var(--border);
   border-radius: 4px;
   font-family: inherit;
@@ -325,11 +344,11 @@ body {
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 15px;
+  gap: var(--s4);
 }
 
 .story-explorer {
-  margin-bottom: 15px;
+  margin-bottom: var(--s3);
 }
 .story-explorer label {
   display: block;
@@ -342,7 +361,7 @@ body {
 }
 .story-explorer input,
 .story-explorer select {
-  padding: 9px 10px;
+  padding: var(--s2) var(--s2);
   border: 1px solid #e4e4e7;
   border-radius: 7px;
   font-family: inherit;
@@ -362,7 +381,7 @@ body {
   display: grid;
   grid-template-columns: 1fr;
   gap: 8px;
-  margin-bottom: 14px;
+  margin-bottom: var(--s3);
 }
 .story-explorer-filters select {
   width: 100%;
@@ -375,8 +394,8 @@ body {
 .story-card {
   display: flex;
   min-width: 0;
-  gap: 10px;
-  padding: 10px;
+  gap: var(--s2);
+  padding: var(--s2);
   border: 1px solid #ececed;
   border-radius: 9px;
   background: white;
@@ -418,7 +437,7 @@ body {
 .story-image-preview {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--s1);
 }
 .story-image-preview .story-card-thumb {
   width: 56px;
@@ -434,33 +453,33 @@ body {
   border-radius: 4px;
   cursor: pointer;
   font-weight: bold;
-  margin-top: 15px;
+  margin-top: var(--s4);
 }
 .btn-secondary {
   width: 100%;
-  padding: 10px;
+  padding: var(--s2);
   background: white;
   color: var(--primary);
   border: 1px solid var(--border);
   border-radius: 4px;
   cursor: pointer;
   font-weight: bold;
-  margin-bottom: 10px;
+  margin-bottom: var(--s2);
 }
 
 .upload-area {
   border: 2px dashed var(--border);
-  padding: 30px;
+  padding: var(--s6);
   text-align: center;
   border-radius: 4px;
   background: var(--bg-light);
   cursor: pointer;
-  margin-top: 10px;
+  margin-top: var(--s2);
 }
 
 .news-list {
   display: grid;
-  gap: 10px;
+  gap: var(--s2);
 }
 .news-item {
   padding: 12px;
@@ -474,13 +493,13 @@ body {
 }
 .news-item strong {
   display: block;
-  margin-bottom: 5px;
+  margin-bottom: var(--s1);
 }
 .news-item small {
   display: block;
   color: var(--secondary);
   font-size: 12px;
-  margin-top: 5px;
+  margin-top: var(--s1);
 }
 
 .newspaper-item,
@@ -520,11 +539,11 @@ body {
 .template-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 15px;
-  margin-bottom: 20px;
+  gap: var(--s4);
+  margin-bottom: var(--s4);
 }
 .template-btn {
-  padding: 20px;
+  padding: var(--s4);
   background: white;
   border: 2px solid var(--border);
   border-radius: 6px;
@@ -564,7 +583,7 @@ body {
   width: 100%;
   min-height: 340px;
   display: grid;
-  gap: 10px;
+  gap: var(--s2);
   padding: 12px;
   background: white;
   border: 1px solid var(--border);
@@ -587,7 +606,7 @@ body {
 .draft-thumb {
   max-width: 100%;
   border-radius: 6px;
-  margin-top: 10px;
+  margin-top: var(--s2);
   display: block;
 }
 
@@ -618,14 +637,14 @@ body {
   display: grid;
   gap: 4px;
   padding: 12px;
-  margin-bottom: 18px;
+  margin-bottom: var(--s4);
   border-left: 4px solid var(--accent);
   background: #fff5f5;
 }
 .admin-news-card {
   display: flex;
   justify-content: space-between;
-  gap: 18px;
+  gap: var(--s4);
   padding: 16px;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -638,7 +657,7 @@ body {
 }
 .admin-news-card small {
   display: block;
-  margin-top: 5px;
+  margin-top: var(--s1);
   color: var(--secondary);
 }
 .status-actions {
@@ -649,7 +668,7 @@ body {
 }
 .status-actions .btn-secondary {
   margin: 0;
-  padding: 7px;
+  padding: var(--s2);
 }
 .status-pill {
   display: inline-block;
@@ -686,7 +705,7 @@ body {
   grid-template-columns: repeat(3, 1fr);
   grid-template-rows: repeat(3, minmax(34px, 1fr));
   min-height: 150px;
-  gap: 5px;
+  gap: var(--s1);
 }
 .real-page-grid span {
   display: block;
@@ -696,11 +715,11 @@ body {
 .editor-heading {
   display: flex;
   justify-content: space-between;
-  gap: 15px;
+  gap: var(--s4);
   align-items: start;
 }
 .editor-heading h2 {
-  margin-bottom: 6px;
+  margin-bottom: var(--s1);
 }
 .editor-heading p {
   margin: 0;
@@ -1073,7 +1092,7 @@ body {
 .template-thumb-row {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 6px;
+  gap: var(--s1);
 }
 
 .template-thumb-cell {
@@ -1203,11 +1222,18 @@ body {
   position: relative;
   transition: background 0.15s ease;
 }
+/* A grab zone wider than the 6px bar, because a 6px drag target is a fiddle.
+   It grows only ACROSS the axis being dragged, never along it: `inset: -3px`
+   on all four sides made the full-width horizontal splitter 3px wider than the
+   window, and gave every screen in the app a horizontal scrollbar with nothing
+   to scroll to. */
 .splitter::after {
   content: "";
   position: absolute;
-  inset: -3px;
+  inset: 0;
 }
+.splitter-v::after { inset: 0 -3px; }
+.splitter-h::after { inset: -3px 0; }
 .splitter:hover,
 .splitter.dragging,
 .splitter:focus-visible {
@@ -1248,7 +1274,7 @@ body.resizing-y * {
 .toolbar-left {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: var(--s3);
   min-width: 0;
 }
 .toolbar-brand {
@@ -1274,8 +1300,8 @@ body.resizing-y * {
 .toolbar-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
+  gap: var(--s1);
+  padding: 8px var(--s3);
   background: white;
   color: #45454f;
   border: 1px solid #e4e4e7;
@@ -1360,7 +1386,7 @@ body.resizing-y * {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 16px 14px;
+  padding: 16px 16px var(--s3);
   border-bottom: 1px solid #ececed;
 }
 .sidebar-drawer-header h3 {
@@ -1390,20 +1416,86 @@ body.resizing-y * {
 }
 
 .workspace-canvas-host {
+  position: relative;
   display: grid;
   grid-template-rows: auto var(--canvas-height);
   min-width: 0;
   background: #f6f6f7;
 }
+/* The view's own controls, floating in the grey beside the sheet. */
+.canvas-view-controls {
+  position: absolute;
+  left: var(--s3);
+  bottom: var(--s3);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s1) var(--s2);
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 4px 14px rgba(20, 20, 30, 0.1);
+}
+body.print-view .canvas-view-controls {
+  background: white;
+}
+/* The page stays in view while the Inspector scrolls past it.
+   The workspace is one long document - 3779px at a 1129px viewport - so
+   working down the Inspector scrolled the page itself off the top of the
+   screen, and a page designer was editing a block they could no longer see.
+   Pinned only where the Inspector is BESIDE the canvas: below 1024px they
+   stack, and a pinned canvas would then sit on top of the Inspector.
+   The offset is the toolbar's measured height (workspace.js), never a
+   constant - that toolbar wraps to two rows on a narrow window. */
+@media (min-width: 1025px) {
+  .workspace-canvas-host {
+    position: sticky;
+    top: var(--toolbar-h, 36px);
+    align-self: start;
+    z-index: 2;
+  }
+}
 .canvas-toolbar {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 24px;
+  flex-direction: column;
+  gap: var(--s2);
+  padding: var(--s2) var(--s4);
   background: white;
   border-bottom: 1px solid #ececed;
 }
+.canvas-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+  min-width: 0;
+}
+.layout-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+}
+.layout-picker-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a8a92;
+}
+.layout-picker-select {
+  height: 32px;
+  max-width: 190px;
+  padding: 0 var(--s2);
+  border: 1px solid #dcdce2;
+  border-radius: 7px;
+  background: white;
+  color: var(--primary);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.layout-picker-select:hover { border-color: #c2c2cc; }
 .canvas-toolbar-divider {
   width: 1px;
   align-self: stretch;
@@ -1453,7 +1545,7 @@ body.resizing-y * {
   border: 1.5px solid white;
 }
 .canvas-toolbar .layout-btn {
-  padding: 7px 14px;
+  padding: var(--s1) var(--s3);
   font-size: 0.82rem;
   font-weight: 600;
   border-radius: 7px;
@@ -1636,7 +1728,7 @@ body.resizing-y * {
 
 /* Grows with its content - the page scrolls, the panel does not trap it. */
 .workspace-inspector {
-  padding: 20px 22px;
+  padding: var(--s4);
   background: white;
   border-left: 1px solid #ececed;
   min-width: 0;
@@ -1645,8 +1737,8 @@ body.resizing-y * {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 14px;
+  gap: var(--s2);
+  margin-bottom: var(--s3);
 }
 .inspector-head h3 {
   margin: 0;
@@ -1709,7 +1801,7 @@ body.resizing-y * {
   border-bottom: 1px solid #f0f0f1;
 }
 .ext-editor-section > summary {
-  padding: 11px 24px;
+  padding: var(--s3) 24px;
   cursor: pointer;
   font-size: 0.72rem;
   font-weight: 700;
@@ -1724,7 +1816,7 @@ body.resizing-y * {
 .ext-editor-section > summary::before {
   content: "▸";
   display: inline-block;
-  margin-right: 7px;
+  margin-right: var(--s2);
   color: #b7b7bd;
   transition: transform 0.15s ease;
 }
@@ -1750,9 +1842,9 @@ body.resizing-y * {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 10px 12px;
-  margin-bottom: 14px;
+  gap: var(--s2);
+  padding: var(--s2) 12px;
+  margin-bottom: var(--s3);
   border: 1px dashed #d9d9dd;
   border-radius: 8px;
   background: #fbfbfc;
@@ -1765,7 +1857,7 @@ body.resizing-y * {
 }
 .ext-image-preview {
   height: 170px;
-  margin-bottom: 10px;
+  margin-bottom: var(--s2);
   border: 1px solid #ececed;
   border-radius: 8px;
   background: #f4f4f6;
@@ -1782,7 +1874,7 @@ body.resizing-y * {
 .ext-image-meta {
   display: flex;
   justify-content: space-between;
-  gap: 10px;
+  gap: var(--s2);
   margin-bottom: 12px;
   font-size: 0.74rem;
   color: #6a6a72;
@@ -1794,7 +1886,7 @@ body.resizing-y * {
 }
 .ext-image-fit-row {
   display: flex;
-  gap: 6px;
+  gap: var(--s1);
   margin-bottom: 12px;
 }
 .ext-chip {
@@ -1817,7 +1909,7 @@ body.resizing-y * {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
   gap: 8px;
-  padding: 10px;
+  padding: var(--s2);
   border: 1px solid #ececed;
   border-radius: 8px;
   background: #fbfbfc;
@@ -1857,12 +1949,12 @@ body.resizing-y * {
 .ext-editor-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--s1);
   padding: 0 0 12px;
   flex-shrink: 0;
 }
 .ext-editor-btn {
-  padding: 6px 11px;
+  padding: var(--s1) var(--s3);
   background: white;
   color: #45454f;
   border: 1px solid #e4e4e7;
@@ -1900,7 +1992,7 @@ body.resizing-y * {
 .save-indicator {
   font-size: 0.74rem;
   font-weight: 600;
-  padding: 3px 9px;
+  padding: 3px var(--s2);
   border-radius: 999px;
   white-space: nowrap;
 }
@@ -1926,7 +2018,7 @@ body.resizing-y * {
 /* Phase 9's read-out: how full the section box is. */
 .fill-meter {
   height: 6px;
-  margin-top: 10px;
+  margin-top: var(--s2);
   border-radius: 999px;
   background: #ececee;
   overflow: hidden;
@@ -1940,13 +2032,18 @@ body.resizing-y * {
   background: var(--accent);
 }
 .metrics-note {
-  margin: 6px 0 0;
+  margin: var(--s1) 0 0;
   font-size: 0.74rem;
 }
 .inspector-group {
-  margin-bottom: 22px;
-  padding-bottom: 20px;
+  margin-bottom: var(--s4);
+  padding-bottom: var(--s4);
   border-bottom: 1px solid #f0f0f1;
+}
+.inspector-group:last-of-type {
+  margin-bottom: var(--s2);
+  padding-bottom: 0;
+  border-bottom: none;
 }
 .inspector-group:last-of-type {
   border-bottom: none;
@@ -1964,7 +2061,7 @@ body.resizing-y * {
   justify-content: space-between;
   gap: 12px;
   font-size: 0.85rem;
-  padding: 5px 0;
+  padding: var(--s1) 0;
 }
 .inspector-row span {
   color: #9a9aa2;
@@ -1990,7 +2087,7 @@ body.resizing-y * {
   position: relative;
   background: white;
   border-radius: 10px;
-  padding: 28px;
+  padding: var(--s5);
   width: 440px;
   max-width: 90vw;
   max-height: 85vh;
@@ -2018,7 +2115,7 @@ body.resizing-y * {
 .ext-editor-header {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--s2);
   padding: 0 16px;
   height: 46px;
   flex-shrink: 0;
@@ -2053,7 +2150,7 @@ body.resizing-y * {
 .ext-editor-header-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--s1);
   flex-shrink: 0;
 }
 .ext-icon-btn {
@@ -2076,12 +2173,15 @@ body.resizing-y * {
    on the right, in lifecycle order. No tabs - see external-editor.js. */
 .ext-editor-stage {
   display: grid;
-  /* The controls column gives ground before the layout collapses - a browser at
-     170% zoom on a normal monitor reports ~1090 CSS px, which used to stack the
-     whole dock. */
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 430px);
-  gap: 24px;
-  padding: 18px 20px 28px;
+  /* The WRITING column takes the free space, the preview is capped.
+     It was the other way round - the proof of the block got 1fr (about 640px
+     at a 1129px viewport) and the place a sub-editor actually types got 430px.
+     The preview is a thing to glance at; the story is the work. A browser at
+     170% zoom on a normal monitor reports ~1090 CSS px, so this has to hold at
+     that width, not only on a wide desk monitor. */
+  grid-template-columns: minmax(240px, 340px) minmax(0, 1fr);
+  gap: var(--s5);
+  padding: var(--s4) var(--s4) var(--s5);
   align-items: start;
 }
 @media (max-width: 1000px) {
@@ -2157,7 +2257,7 @@ body.resizing-y * {
 }
 .ext-group-title {
   margin: 0;
-  padding: 10px 14px;
+  padding: var(--s2) var(--s3);
   border-bottom: 1px solid #eeeef2;
   color: #6a6a72;
   font-size: 0.76rem;
@@ -2165,7 +2265,7 @@ body.resizing-y * {
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
-.ext-group-body { padding: 14px; }
+.ext-group-body { padding: var(--s3); }
 
 /* Everything off the lifecycle path: available, never in the way. */
 .ext-more,
@@ -2177,7 +2277,7 @@ body.resizing-y * {
 .ext-more { margin-top: 12px; background: #fafafb; }
 .ext-more > summary,
 .ext-aside > summary {
-  padding: 10px 14px;
+  padding: var(--s2) var(--s3);
   color: #5c5c66;
   font-size: 0.8rem;
   font-weight: 600;
@@ -2191,19 +2291,19 @@ body.resizing-y * {
 .ext-more[open] > summary::before,
 .ext-aside[open] > summary::before { content: "▾"; }
 .ext-more > *:not(summary),
-.ext-aside > *:not(summary) { padding: 0 14px 14px; }
+.ext-aside > *:not(summary) { padding: 0 var(--s3) var(--s3); }
 
 .ext-mount-strip { display: none; }
 
 /* Sub-panels written for the full-width dock stack inside the control column. */
-.ext-controls-col .ext-columns { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.ext-controls-col .ext-columns { grid-template-columns: minmax(0, 1fr); gap: var(--s3); }
 .ext-controls-col .ext-column-wide { grid-column: span 1; }
 
 /* Full width means real columns rather than one long scroll. */
 .ext-columns {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 20px;
+  gap: var(--s4);
   align-items: start;
 }
 .ext-column {
@@ -2279,11 +2379,11 @@ body.resizing-y * {
 
 .warning-list {
   display: grid;
-  gap: 5px;
+  gap: var(--s1);
 }
 .warning-item {
   margin: 0;
-  padding: 6px 9px;
+  padding: var(--s1) var(--s2);
   border-radius: 6px;
   background: #fdf0dc;
   color: #8a5a09;
@@ -2299,7 +2399,7 @@ body.resizing-y * {
 }
 .warning-ok {
   margin: 0;
-  padding: 6px 9px;
+  padding: var(--s1) var(--s2);
   border-radius: 6px;
   background: #dff3e6;
   color: #1f8a4c;
@@ -2315,7 +2415,7 @@ body.resizing-y * {
 }
 .segment {
   flex: 1;
-  padding: 6px 8px;
+  padding: var(--s1) 8px;
   border: none;
   border-radius: 6px;
   background: none;
@@ -2333,13 +2433,13 @@ body.resizing-y * {
 .toggle-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 14px;
+  gap: var(--s3);
   margin: 12px 0;
 }
 .toggle {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--s1);
   font-size: 0.8rem;
   cursor: pointer;
 }
@@ -2392,8 +2492,8 @@ body.resizing-y * {
   color: var(--accent);
 }
 .asset-count {
-  margin-left: 6px;
-  padding: 1px 7px;
+  margin-left: var(--s1);
+  padding: 1px var(--s2);
   border-radius: 999px;
   background: #ececee;
   color: #6a6a72;
@@ -2405,7 +2505,7 @@ body.resizing-y * {
 .asset-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
-  gap: 10px;
+  gap: var(--s2);
 }
 .asset-tile {
   padding: 4px;
@@ -2450,9 +2550,9 @@ body.resizing-y * {
 .history-jump {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: var(--s2);
   width: 100%;
-  padding: 6px 9px;
+  padding: var(--s1) var(--s2);
   border: none;
   border-radius: 7px;
   background: none;
@@ -2495,7 +2595,7 @@ body.resizing-y * {
   color: #9a9aa2;
 }
 .history-saved-tag {
-  padding: 1px 6px;
+  padding: 1px var(--s1);
   border-radius: 999px;
   background: #dff3e6;
   color: #1f8a4c;
@@ -2560,7 +2660,7 @@ body.resizing-y * {
   position: fixed;
   z-index: 1200;
   min-width: 218px;
-  padding: 5px;
+  padding: var(--s1);
   border: 1px solid #e4e4e7;
   border-radius: 9px;
   background: white;
@@ -2569,7 +2669,7 @@ body.resizing-y * {
 .context-item {
   display: block;
   width: 100%;
-  padding: 7px 11px;
+  padding: var(--s2) var(--s3);
   border: none;
   border-radius: 6px;
   background: none;
@@ -2594,7 +2694,7 @@ body.resizing-y * {
 }
 .context-separator {
   height: 1px;
-  margin: 4px 6px;
+  margin: 4px var(--s1);
   background: #ececed;
 }
 
@@ -2684,7 +2784,7 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
    which reads as a broken page rather than an empty one. */
 .ext-editor-idle {
   max-width: 640px;
-  padding: 28px 20px 36px;
+  padding: var(--s5) var(--s4) var(--s6);
 }
 .ext-editor-idle h4 {
   margin: 0 0 8px;
@@ -2695,13 +2795,13 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   color: #6a6a72;
 }
 .ext-idle-steps {
-  margin: 0 0 20px;
-  padding-left: 20px;
+  margin: 0 0 var(--s4);
+  padding-left: var(--s4);
   color: #6a6a72;
   line-height: 1.9;
 }
 .ext-idle-steps strong { color: #35353d; }
-.ext-editor-idle .btn-submit { width: auto; padding: 10px 18px; }
+.ext-editor-idle .btn-submit { width: auto; padding: var(--s2) var(--s4); }
 
 
 /* ---------------------------------------------------------------------------
@@ -2812,7 +2912,7 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 .picture-list { margin: 0 0 12px; padding: 0; list-style: none; display: grid; gap: 8px; }
 .picture-item {
   display: flex;
-  gap: 10px;
+  gap: var(--s2);
   min-width: 0;
   padding: 8px;
   border: 1px solid #ececed;
@@ -3246,7 +3346,7 @@ body.print-view .newspaper-canvas.mono-forme .section-image {
   color: #6b4c00;
   font-family: Arial, sans-serif;
   font-size: 9px;
-  padding: 2px 6px;
+  padding: 2px var(--s1);
   text-align: center;
 }
 body.print-view .mono-forme-warning { display: none; }
@@ -3301,8 +3401,8 @@ body.print-view .mono-forme-warning { display: none; }
 .preflight-row {
   display: grid;
   grid-template-columns: 8.5rem 1fr;
-  gap: 10px;
-  padding: 7px 12px;
+  gap: var(--s2);
+  padding: var(--s2) 12px;
   border-bottom: 1px solid #eee;
   border-left: 4px solid transparent;
   cursor: pointer;
@@ -3324,15 +3424,15 @@ body.print-view .mono-forme-warning { display: none; }
 }
 .editions-sub {
   color: #6a6a72;
-  margin-bottom: 22px;
+  margin-bottom: var(--s5);
 }
 .editions-heading {
-  margin: 30px 0 10px;
+  margin: var(--s6) 0 var(--s2);
 }
 .edition-today {
   display: flex;
   flex-wrap: wrap;
-  gap: 22px;
+  gap: var(--s5);
   align-items: flex-end;
   justify-content: space-between;
 }
@@ -3345,7 +3445,7 @@ body.print-view .mono-forme-warning { display: none; }
 }
 .edition-today-form {
   display: flex;
-  gap: 10px;
+  gap: var(--s2);
   align-items: flex-end;
   flex-wrap: wrap;
 }
@@ -3358,7 +3458,7 @@ body.print-view .mono-forme-warning { display: none; }
   color: #55555e;
 }
 .edition-today-form input {
-  padding: 8px 10px;
+  padding: 8px var(--s2);
   border: 1px solid #d8d8de;
   border-radius: 7px;
   font: inherit;
@@ -3373,7 +3473,7 @@ body.print-view .mono-forme-warning { display: none; }
 }
 .edition-search {
   width: 100%;
-  padding: 9px 12px;
+  padding: var(--s2) 12px;
   margin-bottom: 12px;
   border: 1px solid #d8d8de;
   border-radius: 7px;
@@ -3382,9 +3482,9 @@ body.print-view .mono-forme-warning { display: none; }
 .edition-row {
   display: grid;
   grid-template-columns: minmax(160px, 1.1fr) minmax(160px, 1.4fr) 90px auto auto;
-  gap: 14px;
+  gap: var(--s3);
   align-items: center;
-  padding: 12px 14px;
+  padding: 12px var(--s3);
   border: 1px solid #e8e8ec;
   border-radius: 9px;
   margin-bottom: 8px;
@@ -3452,7 +3552,7 @@ body.print-view .mono-forme-warning { display: none; }
   background: #fbfbfc;
 }
 .worklist-page {
-  padding: 7px 12px;
+  padding: var(--s2) 12px;
   font-weight: 700;
   background: #f4f4f6;
   border-bottom: 1px solid #e6e6ea;
@@ -3464,9 +3564,9 @@ body.print-view .mono-forme-warning { display: none; }
 .worklist-row {
   display: grid;
   grid-template-columns: 8.5rem 1fr auto;
-  gap: 10px;
+  gap: var(--s2);
   align-items: baseline;
-  padding: 7px 12px;
+  padding: var(--s2) 12px;
   border-bottom: 1px solid #eee;
   border-left: 4px solid transparent;
   cursor: pointer;
@@ -3504,15 +3604,23 @@ body.print-view .mono-forme-warning { display: none; }
 .ai-tier {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
+  gap: var(--s2);
+  margin-bottom: var(--s2);
+  min-width: 0;
   font-size: 0.78rem;
   font-weight: 600;
   color: #55555e;
 }
+/* A <select> is sized by its LONGEST option, not by its box, and "Basic —
+   Quick — for fillers, captions and briefs" is a long option. Without a zero
+   minimum it pushed its own column 29px wider than the rail, which pushed the
+   whole document 3px wider than the window - so every screen in the app had a
+   horizontal scrollbar with nothing to scroll to. A page must never scroll
+   sideways. */
 .ai-tier select {
   flex: 1;
-  padding: 7px 9px;
+  min-width: 0;
+  padding: var(--s1) var(--s2);
   border: 1px solid #d8d8de;
   border-radius: 7px;
   font: inherit;
@@ -3566,7 +3674,10 @@ body.print-view .mono-forme-warning { display: none; }
 .page-map-sheet {
   position: relative;
   width: 100%;
-  max-width: 190px;
+  /* The size of the canvas minimap, not a postcard: it answers "where on the
+     page am I" at a glance, and at 190px it pushed the block being worked on
+     down the screen for no gain. */
+  max-width: 104px;
   margin: 0 auto;
   background: white;
   border: 1px solid #dcdce2;
@@ -3606,12 +3717,12 @@ body.print-view .mono-forme-warning { display: none; }
 .story-editor {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--s2);
 }
 .story-editor-head {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: var(--s2);
 }
 .story-editor-head label {
   font-size: 0.75rem;
@@ -3621,7 +3732,7 @@ body.print-view .mono-forme-warning { display: none; }
 .story-headline-input,
 .story-subheading-input {
   width: 100%;
-  padding: 9px 11px;
+  padding: var(--s2) var(--s3);
   border: 1px solid #d8d8de;
   border-radius: 7px;
   font: inherit;
@@ -3634,7 +3745,7 @@ body.print-view .mono-forme-warning { display: none; }
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 5px 6px;
+  padding: var(--s1) var(--s1);
   border: 1px solid #d8d8de;
   border-bottom: none;
   border-radius: 7px 7px 0 0;
@@ -3643,7 +3754,7 @@ body.print-view .mono-forme-warning { display: none; }
 .rt-btn {
   min-width: 30px;
   height: 28px;
-  padding: 0 7px;
+  padding: 0 var(--s2);
   border: 1px solid transparent;
   border-radius: 5px;
   background: transparent;
@@ -3684,7 +3795,7 @@ body.print-view .mono-forme-warning { display: none; }
   min-height: 260px;
   max-height: 46vh;
   overflow: auto;
-  padding: 14px 16px;
+  padding: var(--s3) 16px;
   border: 1px solid #d8d8de;
   border-radius: 0 0 7px 7px;
   background: white;
@@ -3721,20 +3832,20 @@ body.print-view .mono-forme-warning { display: none; }
 .story-editor-ribbon { border-bottom: 1px solid #d9d9e0; background: #f8f8fa; }
 .story-editor-ribbon-title { display: flex; align-items: baseline; justify-content: space-between; padding: 8px 12px 4px; color: #5e5e68; font-size: .76rem; font-weight: 750; }
 .story-editor-ribbon-title small { color: #92929b; font-size: .67rem; font-weight: 500; }
-.story-editor-toolbar { flex-wrap: wrap; min-height: 40px; padding: 6px 8px; border: 0; border-radius: 0; background: transparent; }
+.story-editor-toolbar { flex-wrap: wrap; min-height: 40px; padding: var(--s1) 8px; border: 0; border-radius: 0; background: transparent; }
 .story-editor-toolbar .rt-btn { min-width: 34px; font-size: .76rem; font-weight: 650; }
-.story-editor-paper { margin: 16px; padding: 28px clamp(18px, 5vw, 56px) 40px; min-height: 430px; border: 1px solid #e2e2e8; box-shadow: 0 3px 14px rgba(28, 28, 38, .08); background: white; }
-.story-field-label { display: block; margin-bottom: 5px; color: #8a8a94; font-size: .66rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+.story-editor-paper { margin: 16px; padding: var(--s5) clamp(var(--s4), 5vw, 56px) 40px; min-height: 430px; border: 1px solid #e2e2e8; box-shadow: 0 3px 14px rgba(28, 28, 38, .08); background: white; }
+.story-field-label { display: block; margin-bottom: var(--s1); color: #8a8a94; font-size: .66rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
 .story-editor-paper .story-headline-input, .story-editor-paper .story-subheading-input { box-sizing: border-box; border: 0; border-radius: 0; outline: 0; }
-.story-editor-paper .story-headline-input { padding: 0 0 9px; border-bottom: 1px solid #e2e2e7; font-family: Georgia, 'Noto Serif Devanagari', serif; font-size: clamp(1.45rem, 3vw, 2.15rem); line-height: 1.18; }
+.story-editor-paper .story-headline-input { padding: 0 0 var(--s2); border-bottom: 1px solid #e2e2e7; font-family: Georgia, 'Noto Serif Devanagari', serif; font-size: clamp(1.45rem, 3vw, 2.15rem); line-height: 1.18; }
 .story-editor-paper .story-subheading-input { padding: 12px 0; color: #60606a; font-family: Georgia, 'Noto Serif Devanagari', serif; font-size: 1.03rem; }
 .story-editor-paper .story-editor-body { min-height: 290px; max-height: none; padding: 12px 0; border: 0; border-top: 1px solid #eeeeF2; border-radius: 0; font-family: Georgia, 'Noto Serif Devanagari', serif; font-size: 1rem; line-height: 1.82; }
 .story-editor-paper .story-editor-body:focus { box-shadow: none; border-color: var(--accent); }
 .story-editor-source { box-sizing: border-box; width: 100%; min-height: 330px; padding: 12px; border: 1px solid #d9d9e0; border-radius: 6px; font: .8rem/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; resize: vertical; }
-.story-editor-foot { display: flex; justify-content: space-between; gap: 16px; padding: 9px 14px; border-top: 1px solid #dedee5; background: #fafafb; }
+.story-editor-foot { display: flex; justify-content: space-between; gap: 16px; padding: var(--s2) var(--s3); border-top: 1px solid #dedee5; background: #fafafb; }
 .rt-foot-note { color: #8a8a94; font-size: .7rem; text-align: right; }
 .story-editor.is-fullscreen { position: fixed; inset: 0; z-index: 1100; overflow: auto; border: 0; border-radius: 0; }
-.story-editor.is-fullscreen .story-editor-paper { max-width: 920px; margin: 20px auto; min-height: calc(100vh - 140px); }
+.story-editor.is-fullscreen .story-editor-paper { max-width: 920px; margin: var(--s4) auto; min-height: calc(100vh - 140px); }
 body.story-fullscreen { overflow: hidden; }
 
 /* Smart Cards are small enough to scan, but always make their provenance and
@@ -3749,8 +3860,8 @@ body.story-fullscreen { overflow: hidden; }
 .smart-card-icon { display: grid; width: 28px; height: 28px; place-items: center; grid-row: span 2; border-radius: 7px; background: #f2edef; color: var(--accent); }
 .smart-card-choice-copy { min-width: 0; display: grid; gap: 2px; }.smart-card-choice-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .77rem; }.smart-card-choice-copy small { overflow: hidden; color: #72727c; font-size: .66rem; line-height: 1.22; }
 .smart-card-source { grid-column: 2; color: #8a6b72; font-size: .61rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
-.smart-card-rashi-options { margin: 0; padding: 10px; border: 1px solid #ead9dd; border-radius: 8px; background: #fffafb; }.smart-card-rashi-options[hidden] { display: none; }.smart-card-rashi-options legend { padding: 0 4px; color: #6a454d; font-size: .72rem; font-weight: 700; }.smart-card-rashi-options p { margin: 0 0 8px; color: #6d6265; font-size: .7rem; line-height: 1.35; }
-.smart-card-pills { display: flex; flex-wrap: wrap; gap: 6px; }.smart-card-pills button { padding: 5px 7px; border: 1px solid #dbdbe1; border-radius: 999px; background: white; color: #55555f; cursor: pointer; font-size: .67rem; font-weight: 650; }.smart-card-pills button.is-selected { border-color: var(--accent); background: var(--accent); color: white; }
+.smart-card-rashi-options { margin: 0; padding: var(--s2); border: 1px solid #ead9dd; border-radius: 8px; background: #fffafb; }.smart-card-rashi-options[hidden] { display: none; }.smart-card-rashi-options legend { padding: 0 4px; color: #6a454d; font-size: .72rem; font-weight: 700; }.smart-card-rashi-options p { margin: 0 0 8px; color: #6d6265; font-size: .7rem; line-height: 1.35; }
+.smart-card-pills { display: flex; flex-wrap: wrap; gap: var(--s1); }.smart-card-pills button { padding: var(--s1) var(--s2); border: 1px solid #dbdbe1; border-radius: 999px; background: white; color: #55555f; cursor: pointer; font-size: .67rem; font-weight: 650; }.smart-card-pills button.is-selected { border-color: var(--accent); background: var(--accent); color: white; }
 .smart-card-footer { display: grid; gap: 8px; }.smart-card-footer .ext-editor-btn { width: 100%; }.smart-card-fit-note { color: #3d7258; font-size: .7rem; font-weight: 650; }.smart-card-fit-note::before { content: '✓ '; }.smart-card-proposal { margin-top: 12px; }.smart-card-proposal h4 { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }.smart-card-proposal h4 .muted { font-size: .65rem; font-weight: 600; white-space: nowrap; }.smart-card-subtitle { color: #666670; font-weight: 600; }
 @media (max-width: 560px) { .story-editor-paper { margin: 8px; }.smart-card-grid { grid-template-columns: minmax(0, 1fr); }.story-editor-foot { flex-direction: column; }.rt-foot-note { text-align: left; } }
 

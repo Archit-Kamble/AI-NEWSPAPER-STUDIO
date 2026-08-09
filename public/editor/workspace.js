@@ -555,27 +555,43 @@ function renderShell() {
 
       <div class="workspace-top" id="workspaceTop">
         <main class="workspace-canvas-host">
+          <!-- Two rows, and the split is a real one: the first says WHICH page
+               and WHAT SHAPE it is, the second says what to DO with it. Twelve
+               controls in one wrapping row re-flowed into two, three or four
+               rows depending on the window - 186px of chrome at a 1129px
+               viewport, taken straight out of the page's own room. Two declared
+               rows are shorter than four accidental ones and always in the
+               same place. -->
           <div class="canvas-toolbar">
-            <div id="pageSwitcher" class="page-switcher"></div>
-            <div class="canvas-toolbar-divider"></div>
-            <div id="layouts" class="layout-switcher"></div>
-            <button type="button" class="layout-btn" id="addBlockBtn" title="Add a block to this page">+ Block</button>
-            <button type="button" class="layout-btn danger" id="removeBlockBtn" title="Remove the selected block">− Block</button>
-            <div class="canvas-toolbar-spacer"></div>
-            <button type="button" class="layout-btn" id="worklistBtn"
-                    title="Every block on this edition that is not finished, and how much copy each one holds">What's left</button>
-            <button type="button" class="layout-btn" id="fitBtn"
-                    title="Set the selected block a notch tighter so its copy fits">Make it fit</button>
-            <button type="button" class="layout-btn" id="carryOverBtn"
-                    title="Carry what does not fit onto a later page, with a jump line">Carry over</button>
-            <button type="button" class="layout-btn" id="fillFeaturesBtn"
-                    title="Fill राशिभविष्य, सूर्योदय-सूर्यास्त, दिनविशेष and सुविचार for this edition's date">Fill features</button>
-            <button type="button" class="layout-btn" id="printViewBtn"
-                    title="See the page as it prints - no block chrome, no grid">Print view</button>
+            <div class="canvas-toolbar-row">
+              <div id="pageSwitcher" class="page-switcher"></div>
+              <div class="canvas-toolbar-divider"></div>
+              <div id="layouts" class="layout-switcher"></div>
+              <button type="button" class="layout-btn" id="addBlockBtn" title="Add a block to this page">+ Block</button>
+              <button type="button" class="layout-btn danger" id="removeBlockBtn" title="Remove the selected block">− Block</button>
+            </div>
+            <div class="canvas-toolbar-row">
+              <button type="button" class="layout-btn" id="worklistBtn"
+                      title="Every block on this edition that is not finished, and how much copy each one holds">What's left</button>
+              <button type="button" class="layout-btn" id="fitBtn"
+                      title="Set the selected block a notch tighter so its copy fits">Make it fit</button>
+              <button type="button" class="layout-btn" id="carryOverBtn"
+                      title="Carry what does not fit onto a later page, with a jump line">Carry over</button>
+              <button type="button" class="layout-btn" id="fillFeaturesBtn"
+                      title="Fill राशिभविष्य, सूर्योदय-सूर्यास्त, दिनविशेष and सुविचार for this edition's date">Fill features</button>
+              <button type="button" class="layout-btn" id="printViewBtn"
+                      title="See the page as it prints - no block chrome, no grid">Print view</button>
+            </div>
+          </div>
+          <div id="canvas" class="canvas-stage"></div>
+          <!-- Zoom and "page 1 of 4" are controls for the VIEW, so they sit on
+               the view - in the empty grey beside the sheet, opposite the
+               minimap - rather than taking the tail of a toolbar row and
+               wrapping it onto a third line. -->
+          <div class="canvas-view-controls">
             <div id="pageIndicator"></div>
             ${zoomControlMarkup()}
           </div>
-          <div id="canvas" class="canvas-stage"></div>
         </main>
         <div class="splitter splitter-v" id="inspectorResizer" role="separator"
              aria-orientation="vertical" tabindex="0" title="Drag to resize the inspector"></div>
@@ -666,6 +682,7 @@ function renderShell() {
 
   // Fit mode is derived from the container, so it has to be recomputed whenever
   // the container changes size - a window resize or a splitter drag.
+  measureToolbar();
   window.addEventListener("resize", onWorkspaceResized);
   window.addEventListener("workspace-resized", onWorkspaceResized);
 }
@@ -673,8 +690,25 @@ function renderShell() {
 // Both the page canvas and the live preview are scaled to their containers, so
 // both have to be re-fitted whenever those containers change size.
 function onWorkspaceResized() {
+  measureToolbar();
   applyTransform();
   scaleComposeCanvas();
+}
+
+/**
+ * Publishes the workspace toolbar's real height as a CSS variable.
+ *
+ * The page canvas pins itself under that toolbar so the page stays in view
+ * while the Inspector and the dock scroll past it. The offset cannot be a
+ * constant: the toolbar carries Save, Preflight, Press file and Publish, and it
+ * wraps to two rows on a narrow window - a hard-coded 36px would then hide the
+ * top of the page behind it.
+ */
+function measureToolbar() {
+  const toolbar = document.getElementById("toolbar");
+  const shell = document.querySelector(".workspace-shell");
+  if (!toolbar || !shell) return;
+  shell.style.setProperty("--toolbar-h", `${Math.round(toolbar.getBoundingClientRect().height)}px`);
 }
 
 // Preflight, and passing a page for press.

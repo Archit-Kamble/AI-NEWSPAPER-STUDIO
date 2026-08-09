@@ -3890,13 +3890,22 @@ body.print-view .page-imprint {
 }
 .story-picture[data-side="right"] { float: right; margin: 4px 0 var(--s2) var(--s3); }
 .story-picture img {
-  display: block;
-  width: 100%;
-  height: 100%;
+  /* Centred and turned about its own middle, so a quarter turn spins the
+     picture inside its box instead of stretching it into the new one. */
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   border-radius: 3px;
-  object-fit: cover;
+  /* `contain`, not `cover`: a photograph placed at its own proportions is
+     never cropped, and one that has been resized is letterboxed rather than
+     silently having its edges cut off. */
+  object-fit: contain;
   pointer-events: none;
 }
+/* A cut-out has no box to draw - its own alpha is the shape. */
+.story-picture[data-shape="cutout"] { shape-image-threshold: 0.5; }
+.story-picture[data-shape="cutout"] img { border-radius: 0; }
 /* An oval picture is set as an oval and the copy runs round the oval, which is
    what `shape` means on the block. */
 .story-picture[data-shape="ellipse"] { shape-outside: ellipse(50% 50%); }

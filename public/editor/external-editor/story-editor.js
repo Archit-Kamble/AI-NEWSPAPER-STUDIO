@@ -281,6 +281,40 @@ function figureFor(row) {
   return figure;
 }
 
+/**
+ * Everything about a picture that is not its box: which file it is now, which
+ * way up it is, and what the copy runs around.
+ *
+ * All three were being ignored, so the sheet showed a stale picture the right
+ * way up in a box that had been turned. Taking the background out replaces the
+ * photograph with a NEW file - that is how the original survives - and the
+ * sheet went on drawing the old one, which is why the button looked dead.
+ */
+function paintFigure(figure, row) {
+  const image = figure.querySelector("img");
+  if (!image) return;
+
+  // The cut-out is a different file from the photograph it came from.
+  const url = String(row.url || "");
+  if (image.getAttribute("src") !== url) image.setAttribute("src", url);
+
+  const turn = (((Number(row.rotation) || 0) % 360) + 360) % 360;
+  const quarter = turn % 180 !== 0;
+  const width = figure.style.width;
+  const height = figure.style.height;
+
+  // A quarter turn swaps the box, so the picture inside it is set to the box's
+  // other way round and then turned into place.
+  image.style.width = quarter ? height : "100%";
+  image.style.height = quarter ? width : "100%";
+  image.style.transform = `translate(-50%, -50%) rotate(${turn}deg)`
+    + (row.flip_h ? " scaleX(-1)" : "") + (row.flip_v ? " scaleY(-1)" : "");
+
+  // A cut-out's own alpha is the shape the copy runs around - the same alpha
+  // the character grid samples its mask from, so the screen and the page agree.
+  figure.style.shapeOutside = row.shape === "cutout" ? `url("${url}")` : "";
+}
+
 /** Draws every picture on the block into the sheet, and takes away the rest. */
 export function refreshStoryPictures() {
   const body = document.getElementById("edStoryBody");
@@ -304,6 +338,7 @@ export function refreshStoryPictures() {
       figure.style.width = `${Math.round(Number(row.width_px) / geometry.scale)}px`;
       figure.style.height = `${Math.round(Number(row.height_px) / geometry.scale)}px`;
     }
+    paintFigure(figure, row);
   }
 
   body.querySelectorAll(".story-picture").forEach((figure) => {

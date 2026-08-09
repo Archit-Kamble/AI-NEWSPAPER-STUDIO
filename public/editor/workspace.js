@@ -120,16 +120,42 @@ async function addSectionImage(file) {
   const url = uploaded?.imageUrls?.[0];
   if (!url) return showNotice("The picture could not be uploaded.");
 
+  // At the picture's OWN proportions. The default placement was half the
+  // block's width by a third of its height whatever the photograph was, so an
+  // upright portrait was placed in a landscape box and the top and bottom of it
+  // were simply cut off. The block decides how WIDE a picture may be; the
+  // picture decides how tall that makes it.
+  const shape = await naturalShape(url);
+  const section = page.sections?.find((row) => row.section_key === key);
+  const width = section ? Math.round(Number(section.width_px) / 2) : 0;
+
   const response = await fetch(`/api/pages/${page.id}/sections/${encodeURIComponent(key)}/images`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url, filename: file.name, mimeType: file.type }),
+    body: JSON.stringify({
+      url,
+      filename: file.name,
+      mimeType: file.type,
+      ...(width && shape ? { width, height: Math.max(20, Math.round(width / shape)) } : {}),
+    }),
   });
   if (!response.ok) return showNotice("The picture could not be placed.");
 
   sectionImages = await response.json();
   redrawCompose();
   showNotice("Picture placed. Drag it where the story wants it.");
+}
+
+/** The picture's own width ÷ height, or null if the browser cannot read it. */
+function naturalShape(url) {
+  return new Promise((resolve) => {
+    const probe = new Image();
+    probe.onload = () => resolve(probe.naturalWidth && probe.naturalHeight
+      ? probe.naturalWidth / probe.naturalHeight
+      : null);
+    probe.onerror = () => resolve(null);
+    probe.src = url;
+  });
 }
 
 async function patchSectionImage(imageId, patch) {

@@ -103,12 +103,20 @@ async function move(pageId, sectionKey, imageId, body) {
   if (!section) return null;
 
   const patch = { ...body };
-  if (body.x !== undefined || body.width !== undefined) {
+  if (['x', 'y', 'width', 'height'].some((key) => body[key] !== undefined)) {
+    // Against what the picture IS, not against zero. A patch that only changes
+    // the size - which is what "Bigger" and "Smaller" send - used to fall back
+    // to x: 0, y: 0, so making a picture slightly larger also threw it into the
+    // top-left corner of the block, away from the copy it had been placed in.
+    const current = (await repo.listBySection(section.id))
+      .find((image) => image.id === parseInt(imageId, 10));
+    if (!current) return null;
+
     Object.assign(patch, clampToBlock(section, {
-      x: body.x ?? 0,
-      y: body.y ?? 0,
-      width: body.width,
-      height: body.height,
+      x: body.x ?? Number(current.x_px),
+      y: body.y ?? Number(current.y_px),
+      width: body.width ?? Number(current.width_px),
+      height: body.height ?? Number(current.height_px),
     }));
   }
 

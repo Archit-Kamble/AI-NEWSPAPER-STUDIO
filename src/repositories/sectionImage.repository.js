@@ -63,12 +63,12 @@ async function update(imageId, patch) {
             stand_off_px = COALESCE($10, stand_off_px), caption = COALESCE($11, caption),
             crop_x_px = COALESCE($12, crop_x_px), crop_y_px = COALESCE($13, crop_y_px),
             crop_width_px = COALESCE($14, crop_width_px), crop_height_px = COALESCE($15, crop_height_px),
-            mask = COALESCE($16, mask)
+            mask = COALESCE($16, mask), z_index = COALESCE($17, z_index)
       WHERE id = $1 RETURNING *`,
     [imageId, patch.x, patch.y, patch.width, patch.height, patch.rotation,
      patch.flipH, patch.flipV, patch.shape, patch.standOffPx, patch.caption,
      patch.cropX, patch.cropY, patch.cropWidth, patch.cropHeight,
-     patch.mask ? JSON.stringify(patch.mask) : null],
+     patch.mask ? JSON.stringify(patch.mask) : null, patch.zIndex],
   );
   return rows[0] || null;
 }

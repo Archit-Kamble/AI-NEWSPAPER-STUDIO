@@ -33,7 +33,6 @@ import {
   refreshHistoryTab,
   showNotice,
   focusGroup,
-  scaleComposeCanvas,
 } from "./external-editor/external-editor.js";
 import { applyStoredLayout, bindResizers, setEditorCollapsed, getSizes } from "./layout/resizer.js";
 import { showPublicationFiles } from "./publication.js";
@@ -693,7 +692,6 @@ function renderShell() {
 function onWorkspaceResized() {
   measureToolbar();
   applyTransform();
-  scaleComposeCanvas();
 }
 
 /**

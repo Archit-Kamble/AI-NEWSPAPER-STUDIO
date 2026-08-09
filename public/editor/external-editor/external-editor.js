@@ -14,7 +14,7 @@
 
 import { escapeHtml } from "../format.js";
 import { statusOf, statusLabel, statusClass } from "../status/section-status.js";
-import { composeCanvasMarkup, composeToolsMarkup, renderComposeCanvas, scaleComposeCanvas, bindComposeCanvas, selectImageById } from "./compose-canvas.js";
+import { pictureControlsMarkup, renderPictureControls, bindPictureControls, selectPicture } from "./picture-controls.js";
 import { picturesPanelMarkup, bindPicturesPanel, refreshPicturesPanel } from "./pictures-panel.js";
 import { typographyPanelMarkup, bindTypographyPanel, refreshTypographyPanel } from "./typography-panel.js";
 import { spacePanelMarkup, refreshSpacePanel } from "./layout-panel.js";
@@ -137,9 +137,10 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
           ${storySourceMarkup(view, story)}
           ${storyEditorMarkup(view, {
             budget: callbacks.getBudget ? callbacks.getBudget() : 0,
-            tools: composeToolsMarkup(),
-            block: composeCanvasMarkup(),
+            tools: `<button type="button" class="rt-btn rt-picture" id="cmpAddImage"
+                       title="Put a picture on this block">▣ Picture</button>`,
             pictures: `
+              ${pictureControlsMarkup()}
               <details class="ext-more">
                 <summary>Choose from the reporter's pictures</summary>
                 ${assetsPanelMarkup(view, reporterNews)}
@@ -182,15 +183,14 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
 
   const notify = showNotice;
 
-  bindComposeCanvas({
-    onPatch: callbacks.onPatch,
+  bindPictureControls({
     onAddImage: callbacks.onAddImage,
     onPatchImage: callbacks.onPatchImage,
     onRemoveImage: callbacks.onRemoveImage,
     onRemoveBackground: callbacks.onRemoveBackground,
-    onNotify: notify,
   });
-  bindPicturesPanel({ ...callbacks, onSelectImage: selectImageById });
+  renderPictureControls(callbacks.getImages?.() || []);
+  bindPicturesPanel({ ...callbacks, onSelectImage: selectPicture });
   bindSmartCard(callbacks.onRequestSmartCard, callbacks.onPatch, notify);
   bindStorySource(callbacks);
   // The writing surface. Every keystroke goes down the same channel as the
@@ -205,7 +205,7 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
     getImages: callbacks.getImages,
     onPatchImage: callbacks.onPatchImage,
     onRemoveImage: callbacks.onRemoveImage,
-    onSelectImage: selectImageById,
+    onSelectImage: selectPicture,
   });
   // The small layout is a way through the page, not only a picture of it.
   bindPageMap((sectionKey) => callbacks.onSelectSection?.(sectionKey));
@@ -220,14 +220,6 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
   document.getElementById("edSaveNow")?.addEventListener("click", callbacks.onSave);
   document.getElementById("edReturnToPage").addEventListener("click", callbacks.onReturnToPage);
 
-  renderComposeCanvas(section, view, callbacks.getImages?.() || [], null);
-
-  // The proof is folded away, so it has no width to be scaled into until it is
-  // opened. Drawing it then is what keeps it from opening blank.
-  document.getElementById("edPrintProof")?.addEventListener("toggle", (event) => {
-    if (!event.target.open) return;
-    renderComposeCanvas(section, view, callbacks.getImages?.() || [], null);
-  });
 }
 
 function historyHandlers(callbacks) {
@@ -265,7 +257,7 @@ export function refreshExternalEditor(section, view, story, source) {
   }
 
   const images = activeCallbacks?.getImages?.() || [];
-  renderComposeCanvas(section, view, images);
+  renderPictureControls(images);
   refreshPicturesPanel(images);
   refreshSpacePanel(section, view, activeCallbacks?.getImages?.() || []);
   refreshTypographyPanel(view, source);
@@ -309,4 +301,4 @@ export function refreshHistoryTab() {
   }
 }
 
-export { showNotice, scaleComposeCanvas };
+export { showNotice };

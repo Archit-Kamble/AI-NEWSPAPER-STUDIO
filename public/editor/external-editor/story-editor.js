@@ -95,14 +95,12 @@ function alignIcon(align) {
 /**
  * The one editor for a block: its words and its pictures.
  *
- * `tools`, `block` and `pictures` are handed in by the External Editor rather
- * than built here - the picture markup belongs beside the code that binds it -
- * but they render INSIDE this sheet. They used to be a second card below it,
- * which is why the desk read this screen as two editors, one for text and one
- * for images. A story's words and its pictures are one thing: the copy has to
- * run around the picture, so you cannot place one without seeing the other.
+ * `tools` and `pictures` are handed in by the External Editor rather than built
+ * here - the picture markup belongs beside the code that binds it - but they
+ * render INSIDE this sheet. There is no second surface: a story's words and its
+ * pictures are one thing, because the copy has to run around the picture.
  */
-export function storyEditorMarkup(view, { budget = 0, tools = "", block = "", pictures = "" } = {}) {
+export function storyEditorMarkup(view, { budget = 0, tools = "", pictures = "" } = {}) {
   const used = plainText(view.body).length;
   return `
     <article class="story-editor" id="storyEditor" aria-label="Story editor">
@@ -172,19 +170,7 @@ export function storyEditorMarkup(view, { budget = 0, tools = "", block = "", pi
 
       <div class="stat-grid" id="edStoryStats">${statsMarkup(view)}</div>
 
-      ${block || pictures ? `
-      <section class="story-block">
-        ${pictures}
-        <!-- The pictures are IN the sheet above, where they are written around.
-             This is the same block set as it will print - the proof, folded
-             away, not a second place to edit the story. Every precise control
-             a page designer needs (shape, gap, rotate, flip, layering,
-             cut-out, the character grid) is still here. -->
-        <details class="story-proof" id="edPrintProof" open>
-          <summary>The block as it will print — its real shape, set larger</summary>
-          ${block}
-        </details>
-      </section>` : ""}
+      ${pictures ? `<section class="story-block">${pictures}</section>` : ""}
     </article>`;
 }
 

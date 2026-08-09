@@ -271,3 +271,46 @@ test('a new picture lands in the copy, not on the headline, and takes room from 
     server.close();
   }
 });
+
+// Resizing a picture must not move it, and the order pictures are stacked in
+// has to survive a reload. Neither was true: a size-only patch fell back to
+// x: 0, y: 0, and z-order was restacked inside the old canvas and thrown away.
+test('a picture stays where it is when it is resized, and its order is kept', async () => {
+  const app = createApp();
+  const server = app.listen(0);
+  const port = server.address().port;
+  let newspaper;
+
+  try {
+    const setupResult = await setup(port, 'Page section test - picture placement');
+    newspaper = setupResult.newspaper;
+    const page = setupResult.page;
+
+    const placed = await desk.json(`/api/pages/${page.id}/sections/lead/images`, {
+      method: 'POST',
+      body: JSON.stringify({ url: '/uploads/placement-test.png', filename: 'p.png', x: 40, y: 60, width: 80, height: 60 }),
+    });
+    const picture = placed[0];
+    assert.equal(Number(picture.x_px), 40);
+
+    const patch = (body) => desk.json(
+      `/api/pages/${page.id}/sections/lead/images/${picture.id}`,
+      { method: 'PATCH', body: JSON.stringify(body) },
+    ).then((rows) => rows.find((row) => row.id === picture.id));
+
+    const bigger = await patch({ width: 88, height: 66 });
+    assert.equal(Number(bigger.width_px), 88, 'it did get bigger');
+    assert.equal(Number(bigger.x_px), 40, 'and it did NOT move');
+    assert.equal(Number(bigger.y_px), 60);
+
+    const raised = await patch({ zIndex: 5 });
+    assert.equal(Number(raised.z_index), 5, 'bring forward is stored, not just drawn');
+
+    // And it is still 5 when the block is read back from the database.
+    const reread = await desk.json(`/api/pages/${page.id}/sections/lead/images`);
+    assert.equal(Number(reread.find((row) => row.id === picture.id).z_index), 5);
+  } finally {
+    if (newspaper) await cleanupNewspaper(newspaper.id);
+    server.close();
+  }
+});

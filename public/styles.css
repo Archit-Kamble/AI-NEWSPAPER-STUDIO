@@ -2816,108 +2816,20 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 
 
 /* ---------------------------------------------------------------------------
-   The composition canvas. Not a preview - the surface the page designer works
-   on. Pictures are dragged and sized here, and where they land decides the
-   character grid the AI is briefed with. */
-.compose-head {
+   The selected picture's controls. The canvas they used to sit under is gone -
+   the picture is placed in the writing sheet, where the copy it displaces is
+   visible - and these are the things about it that cannot be done by dragging. */
+.picture-controls { display: grid; gap: var(--s2); }
+.picture-controls:empty { display: none; }
+.picture-controls-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 8px;
-  flex-wrap: wrap;
+  gap: var(--s2);
+  min-width: 0;
 }
-.compose-tools {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.compose-size { font-size: 0.72rem; }
-
-.compose-frame {
-  display: flex;
-  justify-content: center;
-  padding: 12px;
-  background: white;
-  border: 1px solid #dcdce2;
-  border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(20, 20, 30, 0.08);
-  overflow: hidden;
-}
-.compose-block {
-  position: relative;
-  flex: none;
-  transform-origin: top center;
-  background: white;
-  overflow: hidden;
-}
-
-/* Copy sits under the pictures; pictures are what the designer grabs. */
-.compose-text {
-  position: absolute;
-  overflow: hidden;
-}
-.compose-headline { font-weight: 700; line-height: 1.15; margin-bottom: 6px; }
-.compose-subheading { font-weight: 400; line-height: 1.2; margin-bottom: 10px; }
-.compose-body { white-space: pre-wrap; }
-.compose-hint { margin: 0; color: #9a9aa2; font-size: 12px; }
-
-/* The grid, shown on demand. This is exactly what goes to the AI. */
-.compose-flow { position: absolute; pointer-events: none; }
-.flow-cell { position: absolute; }
-.flow-H { background: rgba(200, 16, 46, 0.14); }
-.flow-S { background: rgba(230, 130, 30, 0.14); }
-.flow-T { background: rgba(60, 120, 220, 0.10); }
-
-.compose-image {
-  position: absolute;
-  cursor: move;
-  outline: 1px solid transparent;
-}
-.compose-image img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  pointer-events: none;
-}
-.compose-image.shape-ellipse img { border-radius: 50%; }
-.compose-image.selected {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-  z-index: 20 !important;
-}
-.compose-image.broken {
-  background: repeating-linear-gradient(45deg, #f4f4f6, #f4f4f6 6px, #ececee 6px, #ececee 12px);
-}
-.compose-handle {
-  position: absolute;
-  width: 10px;
-  height: 10px;
-  background: white;
-  border: 1.5px solid var(--accent);
-  border-radius: 2px;
-}
-.compose-handle.handle-nw { left: -5px; top: -5px; cursor: nwse-resize; }
-.compose-handle.handle-ne { right: -5px; top: -5px; cursor: nesw-resize; }
-.compose-handle.handle-se { right: -5px; bottom: -5px; cursor: nwse-resize; }
-.compose-handle.handle-sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
-
-.compose-selected {
-  margin-top: 14px;
-  padding: 14px;
-  background: white;
-  border: 1px solid #e4e4ea;
-  border-radius: 10px;
-}
-.compose-selected-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-.compose-selected input[type="range"] { width: 100%; }
+.picture-controls-head strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picture-controls input[type="range"] { width: 100%; }
 
 /* What is placed on the block. The controls live on the canvas, not here. */
 .picture-list { margin: 0 0 12px; padding: 0; list-style: none; display: grid; gap: 8px; }
@@ -2942,20 +2854,9 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 .picture-item-body { min-width: 0; display: flex; flex-direction: column; justify-content: center; }
 .picture-item-body strong, .picture-item-body small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Fabric draws the block at print size; the surface is scaled to the column. */
-.compose-surface { position: relative; flex: none; }
-.compose-surface .canvas-container { position: absolute !important; inset: 0; }
-.compose-grid { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 2; }
-.compose-grid .compose-flow { position: absolute; }
-
 .layout-btn.danger { color: var(--accent); border-color: #f0c9cf; }
 .layout-btn.danger:disabled { opacity: 0.4; cursor: not-allowed; color: #9a9aa2; border-color: #e4e4e7; }
 .ext-editor-btn.danger { color: var(--accent); border-color: #f0c9cf; }
-
-/* The picture's controls sit directly above the block, not below 800px of
-   canvas where nobody would find them. */
-.compose-selected { margin: 0 0 12px; }
-.compose-selected .segmented { margin-bottom: 10px; }
 
 /* Pictures placed inside a block, shown on the page canvas exactly where the
    composition editor put them. */
@@ -4042,16 +3943,6 @@ body.print-view .page-imprint {
 .story-picture.is-selected .story-picture-size,
 .story-picture.is-selected .story-picture-remove { opacity: 1; }
 
-/* The proof: the same block set as it will print. Folded, because it is a
-   thing to look at, not a second place to write the story. */
-.story-proof > summary {
-  cursor: pointer;
-  color: #6a6a74;
-  font-size: 0.72rem;
-  font-weight: 700;
-}
-.story-proof[open] > summary { margin-bottom: var(--s2); }
-
 /* The block, inside the writing sheet rather than in a card of its own.
    The words and the pictures of a story ARE the story: placing one while the
    copy it has to run around is a screen away is how a block ends up with a
@@ -4065,18 +3956,6 @@ body.print-view .page-imprint {
   border-top: 1px solid #dedee5;
   background: #fbfbfc;
 }
-/* Not a floating card: the printable rectangle sits on the sheet with a
-   hairline, so it reads as part of this editor rather than a second one. */
-.story-block .compose-frame {
-  /* 12px each side: scaleSurface() sizes the block to `clientWidth - 24`, so
-     changing this makes the proof smaller than the room it has. */
-  padding: 12px;
-  border: 1px solid #e2e2e9;
-  border-radius: 8px;
-  box-shadow: none;
-}
-.story-block .compose-size { margin: 0; font-size: 0.7rem; }
-.story-block .compose-selected:empty { display: none; }
 /* The picture actions live in the writing toolbar now - one editor, one bar. */
 .rt-picture { font-weight: 700; }
 /* Scoped to the grid toggle alone - `.rt-btn.active` already means "this mark

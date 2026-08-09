@@ -71,12 +71,20 @@ async function loadBlock(pageId, sectionKey) {
  *
  * Measured with the body EMPTY: the question is "how much room is there", not
  * "how much room is left after what is already written".
+ *
+ * `headline` and `subheading` override what the block currently carries. That
+ * matters more than it sounds: writing from a seed starts on an EMPTY block, so
+ * measuring what is there measures a block with no headline at all - and a
+ * headline takes whole rows off the top. The budget quoted to the model was
+ * therefore always for a block with no headline on it, and the model's own
+ * headline then ate the room its body had been promised. Planning reserves the
+ * headline it is about to be asked for.
  */
-async function measure(section, images) {
+async function measure(section, images, over = {}) {
   const { buildFlowMap, flowImageFromRow } = await textFlow();
   const view = {
-    headline: section.headline || '',
-    subheading: section.subheading || '',
+    headline: over.headline ?? (section.headline || ''),
+    subheading: over.subheading ?? (section.subheading || ''),
     body: '',
     marginPx: Number(section.margin_px) || 12,
     columnCount: Number(section.column_count) || 1,
@@ -97,6 +105,36 @@ async function measure(section, images) {
 
 const LANGUAGE_NAMES = { Marathi: 'Marathi (मराठी)', Hindi: 'Hindi (हिंदी)', English: 'English' };
 
+// How long a headline may be, in characters, for a block this wide. A headline
+// is set across the measure at headline size, so it is roughly one line of body
+// characters less the larger type.
+function headlineLimit(cols) {
+  return Math.max(24, Math.min(90, Math.round(cols * 0.9)));
+}
+
+// A deck is one line. Never longer than the measure, never a paragraph.
+function subheadingLimit(cols) {
+  return Math.max(40, Math.min(140, cols * 2));
+}
+
+/**
+ * The budget with room kept for the headline and deck the model has not
+ * written yet.
+ *
+ * Stand-ins of the right LENGTH are enough: the grid turns a string into rows
+ * from its length and its type size, so a placeholder of the limit reserves
+ * exactly the rows a headline of the limit will take.
+ */
+async function planningFit(section, images) {
+  const room = await measure(section, images);
+  const cols = room.cols || 1;
+  const placeholder = (length) => 'क'.repeat(Math.max(0, length));
+  return measure(section, images, {
+    headline: placeholder(headlineLimit(cols)),
+    subheading: placeholder(Math.round(subheadingLimit(cols) * 0.7)),
+  });
+}
+
 /**
  * The brief.
  *
@@ -105,7 +143,11 @@ const LANGUAGE_NAMES = { Marathi: 'Marathi (मराठी)', Hindi: 'Hindi (�
  */
 function briefFor({ seed, notes, fit, section, language, isLead }) {
   const languageName = LANGUAGE_NAMES[language] || LANGUAGE_NAMES.Marathi;
-  const headlineChars = Math.max(24, Math.min(90, Math.round(fit.cols * 0.9)));
+  const headlineChars = headlineLimit(fit.cols);
+  const deckChars = subheadingLimit(fit.cols);
+  // A floor, not just a ceiling. Copy that fills three quarters of a block
+  // leaves a white hole on the page that somebody has to fill at 11pm.
+  const floor = Math.round(fit.bodyCharBudget * 0.92);
 
   return [
     `You are a sub-editor on a Marathi daily newspaper. Write one news item in ${languageName}.`,
@@ -114,11 +156,16 @@ function briefFor({ seed, notes, fit, section, language, isLead }) {
     notes ? `THE DESK ALSO ASKS: ${notes}` : '',
     '',
     'FIT — this is the part that matters most:',
-    `  * The body must be between ${Math.round(fit.bodyCharBudget * 0.85)} and ${fit.bodyCharBudget} characters.`,
-    `    That is the exact space left on the block${fit.hasPictures ? ' after its pictures are placed' : ''}.`,
-    `    Copy longer than ${fit.bodyCharBudget} characters does not fit on the page and will be cut.`,
+    `  * The body must be between ${floor} and ${fit.bodyCharBudget} characters.`,
+    `    That is the exact space left on the block${fit.hasPictures ? ' after its pictures are placed' : ''},`,
+    '    with room already kept for the headline and the subheading below.',
+    `    Shorter than ${floor} leaves a white hole on the page. Longer than`,
+    `    ${fit.bodyCharBudget} does not fit and will be cut. Count as you write, and`,
+    '    keep adding detail about the subject until you are inside that range.',
     `  * The headline must be at most ${headlineChars} characters.`,
-    '  * The subheading is one line, at most 140 characters. Leave it empty if the story does not need one.',
+    `  * The subheading is REQUIRED: one line of ${Math.round(deckChars * 0.5)} to ${deckChars}`,
+    '    characters that carries the story forward rather than repeating the headline.',
+    '    It is a deck, not a label, and it is never empty.',
     '',
     'HOW TO WRITE IT:',
     `  * ${isLead ? 'This is a lead story: open with the most important fact.' : 'Open with the most important fact.'}`,
@@ -138,6 +185,46 @@ function briefFor({ seed, notes, fit, section, language, isLead }) {
   ].filter((line) => line !== '').join('\n');
 }
 
+const BODY_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['body'],
+  properties: { body: { type: 'string', description: 'The story, resized to fit.' } },
+};
+
+/**
+ * The second pass: the same story, cut or carried on until it fills the hole.
+ *
+ * Deliberately not "write it again" - a rewrite loses the copy the desk may
+ * already have read. This asks for the same story at a different length, and
+ * says which way to go.
+ */
+function resizeBriefFor({ proposal, used, budget, language }) {
+  const languageName = LANGUAGE_NAMES[language] || LANGUAGE_NAMES.Marathi;
+  const short = used < budget;
+
+  return [
+    `You are a sub-editor on a Marathi daily newspaper, working in ${languageName}.`,
+    '',
+    'This copy is the right story but the wrong length for the space it has to fill.',
+    `It is ${used} characters. The block holds ${budget}.`,
+    short
+      ? `Carry it on to between ${Math.round(budget * 0.95)} and ${budget} characters: keep every sentence`
+        + ' that is there, in the same order, and add further paragraphs of context and background'
+        + ' about the same subject.'
+      : `Cut it to at most ${budget} characters: take out the least important sentences and tighten`
+        + ' the rest. Keep the opening.',
+    '',
+    'The same rules as before: no invented casualty figures, rupee amounts, dates, times,',
+    'crowd sizes, named officials or quotations. Where you do not know a specific, write',
+    'the sentence generally. Plain newspaper prose, short paragraphs separated by a blank',
+    'line, no markdown.',
+    '',
+    'THE COPY:',
+    proposal.body,
+  ].join('\n');
+}
+
 /**
  * Writes a proposal for one block from a short seed.
  *
@@ -155,7 +242,9 @@ async function write(pageId, sectionKey, { seed, notes, tier, language } = {}) {
   if (!loaded) return { error: 'That block no longer exists.' };
   const { section, images } = loaded;
 
-  const fit = await measure(section, images);
+  // Planned with the headline and deck reserved, so the body is asked for the
+  // room it will actually have rather than the room an empty block has.
+  const fit = await planningFit(section, images);
   if (!fit.bodyCharBudget) {
     return { error: 'This block has no room for copy — it is filled by its pictures, or it is too small.' };
   }
@@ -175,22 +264,49 @@ async function write(pageId, sectionKey, { seed, notes, tier, language } = {}) {
   if (result.error) return { error: result.error, unconfigured: result.unconfigured };
 
   const { plainText } = await textFlow().then(() => require('../layout/plain-text'));
-  const body = String(result.data.body || '').trim();
-  const used = (await plainText(body)).length;
+  const proposal = {
+    headline: String(result.data.headline || '').trim(),
+    subheading: String(result.data.subheading || '').trim(),
+    body: String(result.data.body || '').trim(),
+  };
+
+  // Now measure against the headline and deck it actually wrote - the real
+  // hole, not the planned one - and if the copy misses it, say so once and let
+  // it fix its own work. A model asked for 500 characters returns 360 often
+  // enough that accepting the first answer is what leaves blocks three quarters
+  // full.
+  const real = await measure(section, images, {
+    headline: proposal.headline,
+    subheading: proposal.subheading,
+  });
+  let used = (await plainText(proposal.body)).length;
+
+  if (real.bodyCharBudget && (used < real.bodyCharBudget * 0.9 || used > real.bodyCharBudget)) {
+    const repaired = await ai.askForJson(
+      resizeBriefFor({ proposal, used, budget: real.bodyCharBudget, language: language || section.language }),
+      BODY_SCHEMA,
+      { tier },
+    );
+    if (!repaired.error && repaired.data?.body) {
+      const next = String(repaired.data.body).trim();
+      const nextUsed = (await plainText(next)).length;
+      // Only if it is genuinely closer. A second attempt is allowed to fail.
+      if (Math.abs(nextUsed - real.bodyCharBudget) < Math.abs(used - real.bodyCharBudget)) {
+        proposal.body = next;
+        used = nextUsed;
+      }
+    }
+  }
 
   return {
-    proposal: {
-      headline: String(result.data.headline || '').trim(),
-      subheading: String(result.data.subheading || '').trim(),
-      body,
-    },
+    proposal,
     // Measured, not promised. A model asked for 800 characters routinely
     // returns 950, and the desk should be told before it accepts.
     fit: {
-      bodyCharBudget: fit.bodyCharBudget,
+      bodyCharBudget: real.bodyCharBudget,
       charsUsed: used,
-      charsRemaining: fit.bodyCharBudget - used,
-      overflowing: used > fit.bodyCharBudget,
+      charsRemaining: real.bodyCharBudget - used,
+      overflowing: used > real.bodyCharBudget,
     },
     provider: result.provider,
     tier: result.tier,
@@ -198,4 +314,4 @@ async function write(pageId, sectionKey, { seed, notes, tier, language } = {}) {
   };
 }
 
-module.exports = { write, measure, briefFor, STORY_SCHEMA };
+module.exports = { write, measure, planningFit, briefFor, resizeBriefFor, STORY_SCHEMA, BODY_SCHEMA };

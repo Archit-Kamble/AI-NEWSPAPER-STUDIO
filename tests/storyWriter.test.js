@@ -23,8 +23,9 @@ test('the brief carries the block\'s real character budget, not a word count', (
   assert.match(brief, /812 characters/, 'the exact budget is stated');
   assert.match(brief, /जंतरमंतर आंदोलन/, 'the seed is the subject');
   assert.match(brief, /Marathi/, 'the language is named');
-  // A floor as well as a ceiling: copy that fills half a block leaves a hole.
-  assert.match(brief, /between 690 and 812/, 'a range, so the block is actually filled');
+  // A floor as well as a ceiling, and a tight one: copy that fills three
+  // quarters of a block leaves a white hole for somebody to fill at 11pm.
+  assert.match(brief, /between 747 and 812/, 'a range, so the block is actually filled');
   assert.doesNotMatch(brief, /\babout \d+ words\b/i, 'never a vague word count');
 });
 
@@ -125,4 +126,67 @@ test('pictures on the block reduce the budget the AI is given', async () => {
   assert.ok(withPicture.bodyCharBudget < empty.bodyCharBudget,
     'a picture takes cells, so there is less room for copy');
   assert.equal(withPicture.hasPictures, true);
+});
+
+// Filling the block accurately is the whole job. Three things were wrong: the
+// budget was measured on a block with no headline on it, the deck was optional
+// so it came back empty, and a body that came back short was accepted.
+
+test('the budget reserves the headline the model has not written yet', async () => {
+  const section = {
+    width_px: 268, height_px: 304, margin_px: 12, column_count: 1,
+    line_height: 1.45, headline_font_px: 24, subheading_font_px: 14, body_font_px: 10,
+    headline: '', subheading: '', body: '',
+  };
+
+  const empty = await writer.measure(section, []);
+  const planned = await writer.planningFit(section, []);
+
+  assert.ok(
+    planned.bodyCharBudget < empty.bodyCharBudget,
+    `an empty block is not the hole the body gets: ${empty.bodyCharBudget} vs ${planned.bodyCharBudget}`,
+  );
+  assert.ok(planned.bodyCharBudget > 0, 'but there is still a story to write');
+});
+
+test('the deck is required, and the body has a floor as well as a ceiling', () => {
+  const brief = writer.briefFor({
+    seed: 'जंतरमंतर आंदोलन',
+    notes: '',
+    fit: { bodyCharBudget: 500, bodyWordBudget: 83, cols: 48, rows: 19, hasPictures: false },
+    section: { width_px: 268, height_px: 304 },
+    language: 'Marathi',
+    isLead: false,
+  });
+
+  assert.match(brief, /subheading is REQUIRED/i, 'the deck is not optional');
+  assert.match(brief, /never empty/i);
+  assert.doesNotMatch(brief, /Leave it empty/i, 'the old escape hatch is gone');
+  assert.match(brief, /between 460 and 500 characters/, 'a floor close to the ceiling');
+  assert.match(brief, /white hole/i, 'and it says why underfilling is a problem');
+});
+
+test('short copy is asked to carry on; long copy is asked to be cut', () => {
+  const proposal = { headline: 'H', subheading: 'S', body: 'एक ओळ.' };
+
+  const short = writer.resizeBriefFor({ proposal, used: 300, budget: 500, language: 'Marathi' });
+  assert.match(short, /Carry it on/i);
+  assert.match(short, /keep every sentence/i, 'a resize is not a rewrite');
+  assert.match(short, /300 characters/);
+  assert.match(short, /holds 500/);
+
+  const long = writer.resizeBriefFor({ proposal, used: 700, budget: 500, language: 'Marathi' });
+  assert.match(long, /Cut it/i);
+  assert.match(long, /Keep the opening/i);
+
+  // The rule that matters most survives the second pass.
+  for (const forbidden of [/casualty figures/i, /rupee amounts/i, /quotations/i]) {
+    assert.match(short, forbidden);
+    assert.match(long, forbidden);
+  }
+});
+
+test('the resize schema returns copy and nothing else', () => {
+  assert.deepEqual(Object.keys(writer.BODY_SCHEMA.properties), ['body']);
+  assert.equal(writer.BODY_SCHEMA.additionalProperties, false);
 });

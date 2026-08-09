@@ -315,11 +315,72 @@ function paintFigure(figure, row) {
   figure.style.shapeOutside = row.shape === "cutout" ? `url("${url}")` : "";
 }
 
+/**
+ * Gives the sheet the shape of the block it is writing.
+ *
+ * The writing area is the block's own text area, magnified: same proportions,
+ * same number of columns, and the body set at the block's type times the same
+ * magnification. So copy that fills this box is copy that fills the block, and
+ * copy that runs past the bottom of it is copy that will not fit - visible
+ * while it is being written rather than counted afterwards.
+ *
+ * The character count stays the authority. This is the shape of the hole; the
+ * grid is the size of it.
+ */
+function shapeSheetToBlock(geometry) {
+  const body = document.getElementById("edStoryBody");
+  const paper = document.getElementById("edStoryPaper");
+  if (!body || !paper || !geometry) return;
+
+  const { section, view, scale } = geometry;
+
+  // The sheet IS the block: the three fields together have the block's
+  // proportions, set larger so it can be read and typed into, and each field
+  // takes the share of it the character grid says it takes on the page.
+  //
+  // The labels and counters are chrome - they are not part of the block - so
+  // their height is added on top rather than taken out of the fields. Setting
+  // the paper to the block's aspect ratio and leaving them inside it was what
+  // squeezed the body of a big-headline block down to a strip.
+  const rowsFor = (rows) => Math.max(28, Math.round((rows * geometry.map.cellHeight) / scale));
+  const headline = document.getElementById("edStoryHeadline");
+  const subheading = document.getElementById("edStorySubheading");
+  const headlineHeight = rowsFor(Math.max(1, geometry.map.headlineRows));
+  const subheadingHeight = rowsFor(Math.max(1, geometry.map.subheadingRows));
+  if (headline) headline.style.height = `${headlineHeight}px`;
+  if (subheading) subheading.style.height = `${subheadingHeight}px`;
+
+  const style = getComputedStyle(paper);
+  const chrome = [...paper.querySelectorAll(".story-field-label")]
+    .reduce((total, label) => total + label.offsetHeight, 0)
+    + (parseFloat(style.rowGap) || 0) * 4
+    + (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
+
+  const blockHeight = Math.max(0, Number(section.height_px) - geometry.margin * 2);
+  paper.style.aspectRatio = "auto";
+  paper.style.height = `${Math.round(blockHeight / scale + chrome)}px`;
+
+  // The body takes what is left of the block, and is set in the block's own
+  // type at the same magnification - so copy that fills this box is copy that
+  // fills the block, and copy past the bottom is copy that will not fit.
+  body.style.flex = "1";
+  body.style.minHeight = "0";
+  body.style.overflowY = "auto";
+  body.style.fontSize = `${(Number(view.bodyFontPx) || 10) / scale}px`;
+  body.style.lineHeight = String(Math.max(1.45, Number(view.lineHeight) || 1.45));
+  body.style.columnCount = String(Math.max(1, Number(view.columnCount) || 1));
+  body.style.columnGap = `${Math.round(14 / scale)}px`;
+  body.style.textAlign = view.textAlign || "left";
+  if (view.fontFamily) body.style.fontFamily = view.fontFamily;
+}
+
 /** Draws every picture on the block into the sheet, and takes away the rest. */
 export function refreshStoryPictures() {
   const body = document.getElementById("edStoryBody");
   const geometry = blockGeometry();
   if (!body || !geometry) return;
+
+  shapeSheetToBlock(geometry);
 
   const images = picture.getImages?.() || [];
   const kept = new Set();

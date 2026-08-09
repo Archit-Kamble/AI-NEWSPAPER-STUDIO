@@ -1,13 +1,15 @@
-// The composition canvas: the left half of the External Editor.
+// The proof: this block, at its own proportions, set the way it will print.
 //
-// This is not a preview. It is a real object editor - Fabric.js, vendored under
-// public/vendor/fabric - so the page designer gets drag, rotate-by-handle,
-// scale from any corner, flip, layering and multi-select for free rather than
-// hand-rolled. See fabric-surface.js for the engine wrapper.
+// It WAS an object editor - drag the picture here, double-click the copy and
+// type - and that is exactly what the desk kept reporting as "two editors".
+// There is one place a story is written: the sheet above, where the picture
+// stands in the copy it displaces. This shows what that will look like on
+// newsprint, and it is not typed into or dragged on.
 //
-// What is newspaper-specific lives here: the block is a fixed printable
-// rectangle, copy is drawn but locked, and every move writes back a placement
-// that layout/text-flow.js turns into the character grid the AI is briefed with.
+// Drawn with Fabric (vendored under public/vendor/fabric) because the block is
+// a printable rectangle at a real scale and the copy has to be poured into the
+// cells the character grid leaves free - the same cells layout/text-flow.js
+// gives the AI. What is drawn here and what is counted cannot drift apart.
 
 import { buildFlowMap, CELL, flowImageFromRow, flowRuns, pourIntoRuns } from "../layout/text-flow.js";
 import { plainText } from "../layout/rich-text.js";
@@ -141,21 +143,16 @@ export async function renderComposeCanvas(section, view, images, callbacks) {
       state.selectedId = id;
       renderSelectedBar();
     },
-    // Typing on the canvas writes back to the same draft the Inspector edits,
-    // so the two never hold different versions of the story.
-    onTextEdited: (field, text) => {
-      if (!field) return;
-      state.callbacks.onPatch?.({ [field]: text }, "compose-canvas");
-    },
   });
 
   // Pictures first: where they sit decides which cells the copy may use.
   for (const row of state.images) await surface.addImageObject(row);
   drawText(view, currentMap(), width, height);
 
-  // Selecting the picture is what reveals its handles and its controls. A
-  // picture that lands unselected looks inert - the editor sees it appear and
-  // has nothing to do to it.
+  // Selecting the picture is what puts its shape, gap, rotation and layering
+  // controls on screen. Nothing on this surface can be clicked, so the
+  // selection is made here and by the sheet above - a picture that lands with
+  // nothing selected leaves the desk with a photograph and no controls.
   const stillThere = state.images.some((i) => i.id === state.selectedId);
   const target = stillThere ? state.selectedId : state.images[state.images.length - 1]?.id;
   if (target != null) {
@@ -223,8 +220,8 @@ function renderSelectedBar() {
   const image = state.images.find((i) => i.id === state.selectedId);
   if (!image) {
     bar.innerHTML = state.images.length
-      ? `<p class="muted">Click a picture on the block to shape it.</p>`
-      : `<p class="muted">No picture on this block yet — use <strong>+ Add image</strong> above.</p>`;
+      ? `<p class="muted">Click a picture in the story above to shape it.</p>`
+      : `<p class="muted">No picture on this block yet — use <strong>Picture</strong> on the toolbar.</p>`;
     return;
   }
 
@@ -265,7 +262,7 @@ function renderSelectedBar() {
       <button type="button" class="ext-editor-btn" data-image-action="backward">Send back</button>
       <button type="button" class="ext-editor-btn" data-image-action="cutout">Remove background</button>
     </div>
-    <p class="muted ext-note">Drag the picture to move it, the corners to size it, and the handle above it to rotate.</p>
+    <p class="muted ext-note">Move and size it in the story above — this is the proof of how it prints.</p>
   `;
 
   bar.querySelectorAll("[data-shape]").forEach((btn) =>
@@ -358,3 +355,6 @@ export function selectImageById(id) {
   surface.selectImage(id);
   renderSelectedBar();
 }
+
+// For the regression net: nothing on the proof may be typed into or dragged.
+export const proofIsReadOnly = () => surface.editableCount();

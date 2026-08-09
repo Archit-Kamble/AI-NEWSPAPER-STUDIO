@@ -50,7 +50,8 @@ export async function initSurface(canvasEl, { width, height }, callbacks = {}) {
     height,
     backgroundColor: "#ffffff",
     preserveObjectStacking: true,
-    selection: true,
+    // No rubber-band, nothing to grab: a proof, not a drawing board.
+    selection: false,
   });
 
   // Newspaper handles: square, red, and big enough to grab at any zoom.
@@ -186,6 +187,23 @@ export async function addImageObject(row) {
           flipY: Boolean(row.flip_v),
           scaleX: width / (image.width || width),
           scaleY: height / (image.height || height),
+          // Looked at, not handled. This surface is the PROOF of the block -
+          // the one place a story is edited is the writing sheet, where the
+          // picture stands in the copy it displaces. A second surface you can
+          // drag the same picture on is a second editor, however it is
+          // labelled. It is still selected programmatically, so the shape,
+          // gap, rotate, flip and layering controls act on whichever picture
+          // the desk picked upstairs.
+          selectable: true,
+          evented: false,
+          hasControls: false,
+          hasBorders: true,
+          lockMovementX: true,
+          lockMovementY: true,
+          lockScalingX: true,
+          lockScalingY: true,
+          lockRotation: true,
+          hoverCursor: "default",
           data: { kind: "image", id: row.id, shape: row.shape || "rect" },
         });
 
@@ -209,10 +227,13 @@ export async function addImageObject(row) {
   });
 }
 
-// Copy is drawn on the canvas and can be edited there: double-click a piece and
-// type. It is not draggable - where copy sits is decided by the character grid,
-// not by hand - but the words themselves are the editor's to change, and the
-// change goes straight back into the draft.
+// Copy is DRAWN here, never typed here.
+//
+// It used to be editable on the canvas - double-click a piece and type - and
+// that is precisely what made this a second editor: the same story, two places
+// to write it, and no way to tell which one the desk had just changed. The
+// story is written in the sheet above. This shows what that copy will look like
+// when it is set.
 export function addTextObject({ text, left = 0, top, fontSize, weight, width, align = "left", field }) {
   if (!canvas || !text) return null;
   const object = new window.fabric.Textbox(text, {
@@ -224,31 +245,13 @@ export function addTextObject({ text, left = 0, top, fontSize, weight, width, al
     fontFamily: "Noto Sans Devanagari, Arial, sans-serif",
     textAlign: align,
     fill: "#111111",
-    // Editable, but pinned: moving and scaling are off, so copy cannot be
-    // dragged out of the cells the grid assigned it.
-    selectable: true,
-    evented: true,
-    editable: true,
-    lockMovementX: true,
-    lockMovementY: true,
-    lockScalingX: true,
-    lockScalingY: true,
-    lockRotation: true,
+    selectable: false,
+    evented: false,
+    editable: false,
     hasControls: false,
     hasBorders: false,
-    hoverCursor: "text",
+    hoverCursor: "default",
     data: { kind: "text", field },
-  });
-
-  object.on("editing:exited", () => {
-    // A field is drawn in several pieces when it flows round a picture, so the
-    // whole field is reassembled from its pieces before it is saved.
-    const pieces = canvas
-      .getObjects()
-      .filter((o) => o.data?.kind === "text" && o.data.field === field)
-      .map((o) => o.text.trim())
-      .filter(Boolean);
-    listeners.onTextEdited?.(field, pieces.join(" "));
   });
 
   canvas.add(object);
@@ -386,15 +389,20 @@ export function canvasText() {
     .join("\n");
 }
 
-// Whether copy on the canvas can be typed into, and whether it is still pinned
-// where the grid put it. Both matter: editable but draggable would let a
-// compositor pull a headline out of its cells.
-export function textEditability() {
-  if (!canvas) return { editable: 0, locked: 0 };
-  const texts = canvas.getObjects().filter((o) => o.data?.kind === "text");
+/**
+ * What on this surface can be edited by hand. The answer must be: nothing.
+ *
+ * A proof that can be typed into or dragged on is a second editor, and two
+ * editors for one story is the fault this software keeps coming back to. Read
+ * off the live objects, because that is where the truth is - a flag set in one
+ * of two places would look right in the source and be wrong on the screen.
+ */
+export function editableCount() {
+  if (!canvas) return { text: 0, pictures: 0 };
+  const objects = canvas.getObjects();
   return {
-    editable: texts.filter((o) => o.editable && o.selectable).length,
-    locked: texts.filter((o) => o.lockMovementX && o.lockMovementY).length,
+    text: objects.filter((o) => o.data?.kind === "text" && (o.editable || o.evented)).length,
+    pictures: objects.filter((o) => o.data?.kind === "image" && o.evented).length,
   };
 }
 

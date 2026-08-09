@@ -2819,8 +2819,15 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
    The selected picture's controls. The canvas they used to sit under is gone -
    the picture is placed in the writing sheet, where the copy it displaces is
    visible - and these are the things about it that cannot be done by dragging. */
+.story-block-title {
+  margin: 0;
+  color: #8a8a94;
+  font-size: 0.66rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
 .picture-controls { display: grid; gap: var(--s2); }
-.picture-controls:empty { display: none; }
 .picture-controls-head {
   display: flex;
   align-items: center;

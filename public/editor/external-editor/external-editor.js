@@ -140,12 +140,13 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
             tools: `<button type="button" class="rt-btn rt-picture" id="cmpAddImage"
                        title="Put a picture on this block">▣ Picture</button>`,
             pictures: `
+              <h5 class="story-block-title">Pictures on this block</h5>
+              ${picturesPanelMarkup(callbacks.getImages?.() || [])}
               ${pictureControlsMarkup()}
               <details class="ext-more">
                 <summary>Choose from the reporter's pictures</summary>
                 ${assetsPanelMarkup(view, reporterNews)}
-              </details>
-              ${picturesPanelMarkup(callbacks.getImages?.() || [])}`,
+              </details>`,
           })}
         `)}
 

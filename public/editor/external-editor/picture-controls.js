@@ -49,9 +49,14 @@ export function renderPictureControls(images, selectedId) {
 
   const image = selected();
   if (!image) {
+    // Never blank. A panel that is empty until something is selected reads as
+    // a panel that does nothing - the desk added a picture and could not see
+    // that it could be shaped, turned or cut out at all. Say what is here.
     host.innerHTML = state.images.length
-      ? `<p class="muted">Click a picture in the story to change how the copy runs round it.</p>`
-      : "";
+      ? `<p class="muted">Click a picture in the story to shape it, turn it, or take its background out.</p>`
+      : `<p class="muted">Add a picture and the copy will run around it. You can then choose how it
+           wraps — box, oval or cut-out — set the gap around it, rotate or flip it, size it, order it,
+           or take its background out.</p>`;
     return;
   }
 

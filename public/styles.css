@@ -1759,6 +1759,22 @@ body.print-view .canvas-view-controls {
   background: white;
   border-left: 1px solid #ececed;
 }
+/* The rail carries its own scrollbar, pinned under the toolbar.
+   It is a tall column - the writing surface, the pictures, the cards, the
+   space read-out, the AI panel and three folded panels - and when the whole
+   document scrolled to reach the bottom of it, the page went with it and the
+   scroll never seemed to end. Now the page stays exactly where it is and only
+   the rail moves, which is how an editor beside a document behaves.
+   Only where it is a column: stacked, it is just part of the page. */
+@media (min-width: 1025px) {
+  .workspace-external-editor {
+    position: sticky;
+    top: var(--toolbar-h, 36px);
+    height: calc(100vh - var(--toolbar-h, 36px));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
 /* Collapsed, it is gone rather than a white stripe. */
 .editor-collapsed .workspace-external-editor {
   display: none;
@@ -3947,3 +3963,72 @@ body.story-fullscreen { overflow: hidden; }
 body.print-view .page-imprint {
   border-top-color: #333;
 }
+
+/* The pictures, inside the writing panel rather than a panel of their own.
+   The words and the pictures of a story ARE the story: placing one while the
+   copy it has to run around is a screen away is how a block ends up with a
+   picture that fits and copy that does not. */
+.story-pictures {
+  margin-top: var(--s4);
+  padding-top: var(--s3);
+  border-top: 1px solid #ececf1;
+}
+.story-pictures-title {
+  margin: 0 0 var(--s2);
+  color: #8a8a94;
+  font-size: 0.66rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* The writing toolbar's two rows. Row one is the BLOCK's type, row two marks
+   the selected words - see story-editor.js for why that split is not cosmetic. */
+.story-editor-toolbar { display: flex; flex-direction: column; gap: var(--s1); }
+.rt-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1); min-width: 0; }
+.rt-row-type { padding-bottom: var(--s1); border-bottom: 1px solid #e8e8ee; }
+.rt-select {
+  height: 28px;
+  min-width: 0;
+  max-width: 150px;
+  padding: 0 var(--s1);
+  border: 1px solid #d8d8de;
+  border-radius: 6px;
+  background: white;
+  font: inherit;
+  font-size: 0.74rem;
+  cursor: pointer;
+}
+.rt-select-size { width: 76px; flex: none; }
+.rt-align { display: inline-flex; align-items: center; justify-content: center; }
+.rt-btn svg { display: block; }
+.rt-block-note { margin-left: auto; color: #a0a0a8; font-size: 0.64rem; white-space: nowrap; }
+.rt-strike { text-decoration: line-through; }
+.rt-highlight { font-weight: 700; background: linear-gradient(to top, #ffe680 0 42%, transparent 42%); }
+.rt-source { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.72rem; }
+/* `display: flex` beats the hidden attribute, so without this the link bar is
+   open on every story. */
+.rt-linkbar[hidden] { display: none; }
+.rt-linkbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s1);
+  margin: var(--s2) 0 0;
+  padding: var(--s2);
+  border: 1px solid #d8d8de;
+  border-radius: 7px;
+  background: #f6f6f8;
+  font-size: 0.74rem;
+}
+.rt-linkbar input {
+  flex: 1;
+  min-width: 140px;
+  padding: var(--s1) var(--s2);
+  border: 1px solid #d8d8de;
+  border-radius: 6px;
+  font: inherit;
+}
+/* A highlight looks like a marker pen here and prints as ordinary type. */
+.story-editor-body mark { background: #ffe680; color: inherit; }
+.story-editor-body a { color: #1a5fb4; }

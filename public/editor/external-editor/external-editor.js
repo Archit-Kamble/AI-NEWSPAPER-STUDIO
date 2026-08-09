@@ -127,32 +127,31 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
 
     <div class="ext-editor-stage">
       <div class="ext-controls-col">
-        <!-- The writing surface is FIRST, and nothing is allowed above it.
-             Selecting a block has to put a cursor within reach; anything that
-             pushes the headline field down the rail is a block a desk cannot
-             immediately write on. -->
-        ${group("story", "1 · Write the story", `${storySourceMarkup(view, story)}${storyEditorMarkup(view, {
-          budget: callbacks.getBudget ? callbacks.getBudget() : 0,
-        })}`)}
-
-        <!-- The composition proof lives WITH the pictures, because placing them
-             is the only thing it is used for - the printed page itself is now
-             on screen beside this rail. -->
-        ${group("image", "2 · Pictures", `
-          ${composeCanvasMarkup()}
-          ${picturesPanelMarkup(callbacks.getImages?.() || [])}
-          <details class="ext-more">
-            <summary>Choose from the reporter's pictures</summary>
-            ${assetsPanelMarkup(view, reporterNews)}
-          </details>
-          ${pageMapMarkup(callbacks.getPage?.(), callbacks.getNewspaper?.(), section.section_key)}
+        <!-- ONE editor: the words and the pictures of a story are the story,
+             and they were in two panels a screen apart, so placing a picture
+             meant losing sight of the copy it has to run around. The writing
+             surface is first and nothing may go above it - selecting a block
+             has to put a cursor within reach - and the pictures follow it
+             inside the same panel. -->
+        ${group("story", "Write the story", `
+          ${storySourceMarkup(view, story)}
+          ${storyEditorMarkup(view, { budget: callbacks.getBudget ? callbacks.getBudget() : 0 })}
+          <div class="story-pictures">
+            <h5 class="story-pictures-title">Pictures on this block</h5>
+            ${composeCanvasMarkup()}
+            ${picturesPanelMarkup(callbacks.getImages?.() || [])}
+            <details class="ext-more">
+              <summary>Choose from the reporter's pictures</summary>
+              ${assetsPanelMarkup(view, reporterNews)}
+            </details>
+          </div>
         `)}
 
         ${group("card", "Smart Cards", smartCardMarkup())}
 
-        ${group("space", "3 · Space", `<div id="edSpaceGroup">${spacePanelMarkup(section, view, callbacks.getImages?.() || [])}</div>`)}
+        ${group("space", "Space left", `<div id="edSpaceGroup">${spacePanelMarkup(section, view, callbacks.getImages?.() || [])}</div>`)}
 
-        ${group("ai", "4 · Help from AI", aiPanelMarkup(view))}
+        ${group("ai", "Help from AI", aiPanelMarkup(view))}
 
         <details class="ext-aside">
           <summary>Typography</summary>
@@ -168,6 +167,10 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
           <summary>History</summary>
           <div id="edHistoryAside">${historyPanelMarkup()}</div>
         </details>
+
+        <!-- Where on the page this block is. It travelled with the old Pictures
+             panel; it is small and it is a way THROUGH the page, so it stays. -->
+        ${pageMapMarkup(callbacks.getPage?.(), callbacks.getNewspaper?.(), section.section_key)}
 
         <div class="ext-mount-strip">
           <div id="external-editor" class="ext-editor-mount"></div>

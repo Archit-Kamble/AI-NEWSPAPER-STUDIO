@@ -5,7 +5,12 @@
 // space and convert to mm at export time; the conversion stays explicit, per
 // CLAUDE.md's rule about never mixing the two silently.
 
-const FONT_FAMILIES = [
+// Exported because the writing toolbar offers the same font and the same
+// alignments, and they must be the SAME list. A second copy of a catalog is how
+// the template keys drifted (CLAUDE.md); these set real Scribus properties, so
+// two lists would mean a font offered on screen that the press file has never
+// heard of.
+export const FONT_FAMILIES = [
   { value: "", label: "Theme default" },
   { value: "Georgia, 'Times New Roman', serif", label: "Georgia (serif)" },
   { value: "'Times New Roman', Times, serif", label: "Times New Roman" },
@@ -22,7 +27,7 @@ const WEIGHTS = [
   { value: "800", label: "Black" },
 ];
 
-const ALIGNMENTS = [
+export const ALIGNMENTS = [
   { value: "left", label: "Left" },
   { value: "center", label: "Center" },
   { value: "right", label: "Right" },

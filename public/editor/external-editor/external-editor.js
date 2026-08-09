@@ -22,7 +22,7 @@ import { aiPanelMarkup, bindAiPanel, refreshAiPanel } from "./ai-panel.js";
 import { assetsPanelMarkup, bindAssetsPanel, refreshAssetsPanel } from "./assets-panel.js";
 import { historyPanelMarkup, bindHistoryPanel, refreshHistoryPanel } from "./history-panel.js";
 import { pageMapMarkup, bindPageMap } from "./page-map.js";
-import { storyEditorMarkup, bindStoryEditor, refreshStoryEditor, refreshStoryCount } from "./story-editor.js";
+import { storyEditorMarkup, bindStoryEditor, refreshStoryEditor, refreshStoryCount, refreshStoryStats } from "./story-editor.js";
 import { smartCardMarkup, bindSmartCard } from "./smart-card-panel.js";
 import { storyDetailsMarkup, bindStoryDetails, refreshStoryDetails } from "./story-details-panel.js";
 
@@ -108,10 +108,18 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
     <div class="ext-editor-header">
       <h3>External Editor</h3>
       <span class="ext-editor-section-name">${escapeHtml(section.section_key)}</span>
+      <!-- The block's own size. It was in the Inspector's heading; a desk
+           reads it constantly, because it is what the copy has to fit. -->
+      <span class="ext-editor-section-size" id="edSectionSize">${section.width_px} × ${section.height_px} px</span>
       <span id="edStatusBadge" class="section-status-badge ${statusClass(status)}">${statusLabel(status)}</span>
       <span class="ext-editor-notice" id="edNotice"></span>
       <div class="ext-editor-header-actions">
+        <!-- When the last save happened, and an explicit Save. Both were in the
+             Inspector. Autosave is real, but a desk sending a page to the press
+             wants to be told, not to trust. -->
+        <span class="ext-editor-saved">Saved <strong id="edSavedAt">${formatSavedAt(section.updated_at)}</strong></span>
         <button type="button" class="ext-editor-btn" id="edCancel">Revert</button>
+        <button type="button" class="ext-editor-btn" id="edSaveNow">Save</button>
         <button type="button" class="ext-editor-btn ext-editor-btn-primary" id="edReturnToPage">Back to page ↑</button>
         <button type="button" class="ext-icon-btn" id="edToggleDock" title="Collapse editor">▾</button>
       </div>
@@ -190,6 +198,7 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
   bindDockToggle(callbacks);
 
   document.getElementById("edCancel").addEventListener("click", callbacks.onCancel);
+  document.getElementById("edSaveNow")?.addEventListener("click", callbacks.onSave);
   document.getElementById("edReturnToPage").addEventListener("click", callbacks.onReturnToPage);
 
   renderComposeCanvas(section, view, callbacks.getImages?.() || [], null);
@@ -242,7 +251,27 @@ export function refreshExternalEditor(section, view, story, source) {
   // person has a cursor in throws the cursor back to the start, which is the
   // classic way a rich editor becomes unusable.
   if (source !== "story-editor") refreshStoryEditor(view);
-  else refreshStoryCount();
+  else {
+    refreshStoryCount();
+    // The read-outs still follow every keystroke - only the boxes are left
+    // alone, so the caret never jumps.
+    refreshStoryStats(view);
+  }
+}
+
+/**
+ * When this block was last saved.
+ *
+ * The Inspector carried this; autosave is real, but a desk sending a page to
+ * the press wants to be told rather than to trust.
+ */
+export function refreshDockSavedAt(section) {
+  const element = document.getElementById("edSavedAt");
+  if (element) element.textContent = formatSavedAt(section?.updated_at);
+}
+
+function formatSavedAt(value) {
+  return value ? new Date(value).toLocaleString() : "—";
 }
 
 export function refreshHistoryTab() {

@@ -2,12 +2,17 @@
 //
 // Layout, top to bottom:
 //   Header (app chrome)  ·  Toolbar
-//   Top workspace:  Canvas (left)  |  Inspector (right)
-//   Bottom dock:    External Editor, full width
+//   The page, full width
+//   The dock:  External Editor, full width - the ONLY story editor
 //
-// The dock spans the entire width the way a terminal does under VS Code -
-// composing a story is a horizontal job, so the editor gets the whole width and
-// the canvas and Inspector stay visible above it.
+// There used to be an Inspector beside the page carrying its own headline,
+// subheading and body bound to the same draft. Two editors on one story is how
+// a desk loses work: the plain textarea could only show the rich editor's marks
+// as literal `<p><br></p>`, and every read-out had to be kept in step twice.
+// Everything it did that the dock did not - the 90 and 140 character editorial
+// limits, the words/characters/reading-time read-outs, the block's size, the
+// last-saved time and an explicit Save - was moved into the dock first. Then it
+// was deleted.
 //
 // This is the only module that talks to the section API and the only one that
 // subscribes to the store on behalf of the views. Views never import each other.
@@ -19,12 +24,12 @@ import { loadIdentity } from "./canvas/masthead.js";
 import { zoomControlMarkup, bindZoomControl, syncZoomControl, pageIndicatorMarkup } from "./canvas/canvas-toolbar.js";
 import { renderPageNavigator } from "./page-navigator.js";
 import { renderLayoutSidebar } from "./layout-sidebar.js";
-import { renderInspector, refreshInspectorReadouts, refreshInspectorSavedAt, configureInspector } from "./inspector.js";
 import { renderStoryPicker } from "./story-picker.js";
 import { renderToolbar, refreshHistoryButtons, refreshSaveIndicator, refreshToolbarSelection } from "./toolbar.js";
 import {
   renderExternalEditor,
   refreshExternalEditor,
+  refreshDockSavedAt,
   refreshHistoryTab,
   showNotice,
   focusGroup,
@@ -487,15 +492,6 @@ function scrollTo(elementId, notice) {
 
 // Step 4 of the flow (VISION.md: "Save -> Automatically open External Editor"):
 // the story is written, so the dock opens by itself at step 1, the image.
-async function saveAndCompose() {
-  await saveNow();
-  if (getSizes().editorCollapsed) {
-    setEditorCollapsed(document.querySelector(".workspace-shell"), false);
-  }
-  scrollTo("externalEditorPanel", "Saved. Compose the image and fit below.");
-  focusGroup("image");
-}
-
 // Step 8: composition is done, so go back up to the page with the block filled.
 async function saveAndReturn() {
   await saveNow();
@@ -593,9 +589,6 @@ function renderShell() {
             ${zoomControlMarkup()}
           </div>
         </main>
-        <div class="splitter splitter-v" id="inspectorResizer" role="separator"
-             aria-orientation="vertical" tabindex="0" title="Drag to resize the inspector"></div>
-        <aside class="workspace-inspector" id="inspector"></aside>
       </div>
 
       <div class="splitter splitter-h" id="canvasResizer" role="separator"
@@ -617,7 +610,6 @@ function renderShell() {
   const shell = content.querySelector(".workspace-shell");
   applyStoredLayout(shell);
   bindResizers(shell);
-  configureInspector({ onChooseStory: chooseStory });
 
   renderToolbar({
     newspaper: store.getState().newspaper,
@@ -699,7 +691,7 @@ function onWorkspaceResized() {
  * Publishes the workspace toolbar's real height as a CSS variable.
  *
  * The page canvas pins itself under that toolbar so the page stays in view
- * while the Inspector and the dock scroll past it. The offset cannot be a
+ * while the dock scrolls past it. The offset cannot be a
  * constant: the toolbar carries Save, Preflight, Press file and Publish, and it
  * wraps to two rows on a narrow window - a hard-coded 36px would then hide the
  * top of the page behind it.
@@ -905,7 +897,7 @@ async function fillFeatures() {
   );
 }
 
-// A page with no block selected leaves the Inspector and the dock empty, which
+// A page with no block selected leaves the dock empty, which
 // reads as "nothing here". Opening a page opens its first block, so there is
 // always something loaded to work on (VISION.md: the software guides the flow).
 function selectFirstSection() {
@@ -938,17 +930,10 @@ function renderSidePanels() {
   const view = currentView();
   const story = currentStory();
 
-  const inspectorCallbacks = {
-    onPatch: patchDraft,
-    onChooseStory: chooseStory,
-    onSave: saveAndCompose,
-    onRevert: cancelEdits,
-  };
-  configureInspector(inspectorCallbacks);
-  renderInspector(section, view, story, inspectorCallbacks);
   renderExternalEditor(section, view, story, store.getState().reporterNews, {
     onPatch: patchDraft,
     onChooseStory: chooseStory,
+    onSave: saveNow,
     onReturnToPage: saveAndReturn,
     onCancel: cancelEdits,
     onUndo: undo,
@@ -998,7 +983,6 @@ function subscribeViews() {
     const view = currentView();
     if (!section || !view) return;
     refreshSection(section, view, { selected: true, dirty: store.isDirty() });
-    refreshInspectorReadouts(section, view, currentStory(), source);
     refreshExternalEditor(section, view, currentStory(), source);
   });
 
@@ -1022,7 +1006,7 @@ function subscribeViews() {
     // moment the first block is written.
     renderLayoutSidebar(page, applyTemplate);
     const section = store.getSelectedSection();
-    if (section) refreshInspectorSavedAt(section);
+    if (section) refreshDockSavedAt(section);
   });
 
   store.subscribe(store.TOPICS.PAGE, () => {

@@ -7,7 +7,6 @@
 const STORAGE_KEY = "sahas.workspace.layout";
 
 const LIMITS = {
-  inspectorWidth: { min: 260, max: 720, fallback: 380, prop: "--inspector-width" },
   // The dock now grows with its content and the page scrolls, so what is worth
   // resizing is how much room the page preview gets.
   canvasHeight: { min: 320, max: 1200, fallback: 620, prop: "--canvas-height" },
@@ -39,7 +38,6 @@ let sizes = {};
 export function applyStoredLayout(shell) {
   const stored = readStored();
   sizes = {
-    inspectorWidth: clamp("inspectorWidth", stored.inspectorWidth || LIMITS.inspectorWidth.fallback),
     canvasHeight: clamp("canvasHeight", stored.canvasHeight || LIMITS.canvasHeight.fallback),
     editorCollapsed: stored.editorCollapsed === true,
   };
@@ -115,6 +113,5 @@ function bindSplitter(shell, handle, key, axis, invert) {
 }
 
 export function bindResizers(shell) {
-  bindSplitter(shell, document.getElementById("inspectorResizer"), "inspectorWidth", "x", true);
   bindSplitter(shell, document.getElementById("canvasResizer"), "canvasHeight", "y", false);
 }

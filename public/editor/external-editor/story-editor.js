@@ -1,8 +1,26 @@
 // The only rich-text writing surface for a story.  It deliberately keeps word
 // formatting separate from block typography: font size and columns belong to
 // the newspaper layout, while bold, italic and lists belong to the copy.
+//
+// It is also the only place the story is written. The Inspector used to carry a
+// second headline, subheading and body bound to the same draft; what that form
+// did that this one did not - the editorial length limits, and the words and
+// reading-time read-outs - was moved here before it was deleted.
 
 import { sanitise, plainText, fromPlainText } from "../layout/rich-text.js";
+
+// The editorial limits, not the storage limits.
+//
+// A headline over about 90 characters cannot be set at headline size in a
+// column and stay a headline; the input still ACCEPTS more, because a
+// sub-editor writing long and cutting back is normal, but the count turns and
+// says so. These came from the Inspector's form and are the desk's rules.
+const HEADLINE_LIMIT = 90;
+const SUBHEADING_LIMIT = 140;
+
+// A reading speed for Devanagari prose. Only ever shown as a rounded minute:
+// it is a sense of scale for the desk, never a measurement.
+const WORDS_PER_MINUTE = 200;
 
 const TOOLS = [
   { command: "undo", label: "↶", title: "Undo (Ctrl+Z)" },
@@ -46,9 +64,16 @@ export function storyEditorMarkup(view, { budget = 0 } = {}) {
       </header>
 
       <div class="story-editor-paper" id="edStoryPaper">
-        <label class="story-field-label" for="edStoryHeadline">Headline</label>
+        <label class="story-field-label" for="edStoryHeadline">
+          Headline
+          <span class="field-counter" id="edStoryHeadlineCounter">${plainText(view.headline).length}/${HEADLINE_LIMIT}</span>
+        </label>
         <input id="edStoryHeadline" class="story-headline-input" maxlength="200"
           placeholder="मथळा — the headline as it will print" value="${escapeAttribute(plainText(view.headline))}">
+        <label class="story-field-label" for="edStorySubheading">
+          Subheading
+          <span class="field-counter" id="edStorySubheadingCounter">${plainText(view.subheading).length}/${SUBHEADING_LIMIT}</span>
+        </label>
         <input id="edStorySubheading" class="story-subheading-input" maxlength="300"
           placeholder="उपमथळा — the subheading, if the story has one" value="${escapeAttribute(plainText(view.subheading))}">
         <div class="story-editor-body" id="edStoryBody" contenteditable="true" spellcheck="true"
@@ -61,7 +86,48 @@ export function storyEditorMarkup(view, { budget = 0 } = {}) {
         <span class="rt-count" id="edStoryCount">${used}${budget ? ` of ${budget} characters` : " characters"}</span>
         <span class="rt-foot-note">Formatting is preserved; layout type stays consistent across the page.</span>
       </footer>
+
+      <div class="stat-grid" id="edStoryStats">${statsMarkup(view)}</div>
     </article>`;
+}
+
+/**
+ * Words, characters and reading time.
+ *
+ * Three different questions a desk asks about the same copy: is it long enough
+ * to be a story, will it fit the hole, and how long does it take to read.
+ * Counted on the PLAIN text - `<b>` is not a word - so the numbers say the same
+ * thing as the character grid.
+ */
+function storyStats(view) {
+  const text = plainText(view.body);
+  const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+  return {
+    words,
+    characters: text.length,
+    readingMinutes: words ? Math.max(1, Math.round(words / WORDS_PER_MINUTE)) : 0,
+  };
+}
+
+function statsMarkup(view) {
+  const stats = storyStats(view);
+  return `
+    <div class="stat"><span>${stats.words}</span><small>words</small></div>
+    <div class="stat"><span>${stats.characters}</span><small>characters</small></div>
+    <div class="stat"><span>${stats.readingMinutes || "—"}</span><small>min read</small></div>`;
+}
+
+/** The editorial length read-outs beside the headline and the subheading. */
+function refreshFieldCounters(view) {
+  const set = (id, value, limit) => {
+    const counter = document.getElementById(id);
+    if (!counter) return;
+    const length = plainText(value).length;
+    counter.textContent = `${length}/${limit}`;
+    counter.classList.toggle("over", length > limit);
+  };
+  set("edStoryHeadlineCounter", view.headline, HEADLINE_LIMIT);
+  set("edStorySubheadingCounter", view.subheading, SUBHEADING_LIMIT);
 }
 
 export function refreshStoryCount() {
@@ -89,6 +155,7 @@ export function bindStoryEditor({ onPatch, getBudget }) {
   const pushBody = () => {
     onPatch?.({ body: sanitise(body.innerHTML) }, "story-editor");
     refreshStoryCount();
+    refreshStoryStats({ body: body.innerHTML });
   };
 
   body.addEventListener("input", pushBody);
@@ -101,8 +168,14 @@ export function bindStoryEditor({ onPatch, getBudget }) {
     pushBody();
   });
 
-  headline?.addEventListener("input", () => onPatch?.({ headline: headline.value }, "story-editor"));
-  subheading?.addEventListener("input", () => onPatch?.({ subheading: subheading.value }, "story-editor"));
+  headline?.addEventListener("input", () => {
+    onPatch?.({ headline: headline.value }, "story-editor");
+    refreshFieldCounters({ headline: headline.value, subheading: subheading?.value });
+  });
+  subheading?.addEventListener("input", () => {
+    onPatch?.({ subheading: subheading.value }, "story-editor");
+    refreshFieldCounters({ headline: headline?.value, subheading: subheading.value });
+  });
 
   toolbar?.addEventListener("click", (event) => {
     const action = event.target.closest("[data-action]")?.dataset.action;
@@ -166,6 +239,12 @@ function syncToolbar() {
   });
 }
 
+/** Repaints the words / characters / reading-time read-outs. */
+export function refreshStoryStats(view) {
+  const host = document.getElementById("edStoryStats");
+  if (host) host.innerHTML = statsMarkup(view);
+}
+
 export function refreshStoryEditor(view) {
   const body = document.getElementById("edStoryBody");
   if (!body) return;
@@ -178,4 +257,6 @@ export function refreshStoryEditor(view) {
   if (headline && document.activeElement !== headline) headline.value = plainText(view.headline);
   if (subheading && document.activeElement !== subheading) subheading.value = plainText(view.subheading);
   refreshStoryCount();
+  refreshFieldCounters(view);
+  refreshStoryStats(view);
 }

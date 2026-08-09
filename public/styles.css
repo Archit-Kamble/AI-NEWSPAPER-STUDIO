@@ -1193,7 +1193,7 @@ body {
   grid-template-columns: 1fr;
 }
 
-/* Toolbar across the top, canvas + inspector in the middle, and the External
+/* Toolbar across the top, the page in the middle, and the External
    Editor docked full width along the bottom - a terminal under VS Code, a
    timeline under Premiere. Both splitters drive the two custom properties, which
    layout/resizer.js persists. */
@@ -1201,15 +1201,17 @@ body {
    preview and Inspector sit at a comfortable size, the editor dock is below
    them at its natural height, and the browser scrolls the lot. */
 .workspace-shell {
-  --inspector-width: 380px;
   --canvas-height: 620px;
   background: #f6f6f7;
   font-size: 0.95rem;
 }
 
+/* The page, full width. The Inspector that used to sit beside it was a second
+   editor bound to the same story; everything it did was moved into the dock
+   and it was deleted, so there is nothing left to split the row with. */
 .workspace-top {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 6px var(--inspector-width);
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
 }
 @media (max-width: 1024px) {
@@ -1726,35 +1728,6 @@ body.print-view .canvas-view-controls {
   cursor: pointer;
 }
 
-/* Grows with its content - the page scrolls, the panel does not trap it. */
-.workspace-inspector {
-  padding: var(--s4);
-  background: white;
-  border-left: 1px solid #ececed;
-  min-width: 0;
-}
-.inspector-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--s2);
-  margin-bottom: var(--s3);
-}
-.inspector-head h3 {
-  margin: 0;
-  font-size: 1rem;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-}
-.inspector-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 4px 0 8px;
-}
-.inspector-actions .btn-submit {
-  margin: 0;
-}
 /* The dock: full application width, below everything above it. */
 .workspace-external-editor {
   display: flex;
@@ -2034,27 +2007,6 @@ body.print-view .canvas-view-controls {
 .metrics-note {
   margin: var(--s1) 0 0;
   font-size: 0.74rem;
-}
-.inspector-group {
-  margin-bottom: var(--s4);
-  padding-bottom: var(--s4);
-  border-bottom: 1px solid #f0f0f1;
-}
-.inspector-group:last-of-type {
-  margin-bottom: var(--s2);
-  padding-bottom: 0;
-  border-bottom: none;
-}
-.inspector-group:last-of-type {
-  border-bottom: none;
-}
-.inspector-group h4 {
-  margin: 0 0 12px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--accent);
 }
 .inspector-row {
   display: flex;
@@ -3822,9 +3774,6 @@ body.print-view .mono-forme-warning { display: none; }
 }
 .story-details-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0 12px; }
 .story-details-grid .form-group:first-child { grid-column: 1 / -1; }
-.inspector-story-origin { margin: 0 0 12px; color: #666670; font-size: .8rem; }
-.inspector-write { width: 100%; margin-top: 2px; }
-
 /* The writing surface is intentionally familiar: a compact ribbon above a
    calm paper sheet. It has no font-colour free-for-all because those are page
    decisions, but it has the editing moves a desk reaches for all day. */

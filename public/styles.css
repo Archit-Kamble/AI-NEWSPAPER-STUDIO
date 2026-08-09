@@ -3964,23 +3964,50 @@ body.print-view .page-imprint {
   border-top-color: #333;
 }
 
-/* The pictures, inside the writing panel rather than a panel of their own.
+/* The block, inside the writing sheet rather than in a card of its own.
    The words and the pictures of a story ARE the story: placing one while the
    copy it has to run around is a screen away is how a block ends up with a
-   picture that fits and copy that does not. */
-.story-pictures {
-  margin-top: var(--s4);
-  padding-top: var(--s3);
-  border-top: 1px solid #ececf1;
+   picture that fits and copy that does not. It reads as the foot of the one
+   editor - a hairline, a shared background, no second border - because the
+   desk was reading two stacked cards as two editors. */
+.story-block {
+  display: grid;
+  gap: var(--s2);
+  padding: var(--s3);
+  border-top: 1px solid #dedee5;
+  background: #fbfbfc;
 }
-.story-pictures-title {
-  margin: 0 0 var(--s2);
+.story-block-head {
+  display: grid;
+  gap: 2px;
+}
+.story-block-title {
   color: #8a8a94;
   font-size: 0.66rem;
   font-weight: 750;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
+.story-block-note {
+  color: #8a8a94;
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+/* Not a floating card: the printable rectangle sits on the sheet with a
+   hairline, so it reads as part of this editor rather than a second one. */
+.story-block .compose-frame {
+  padding: 0;
+  border: 1px solid #e2e2e9;
+  border-radius: 8px;
+  box-shadow: none;
+}
+.story-block .compose-size { margin: 0; font-size: 0.7rem; }
+.story-block .compose-selected:empty { display: none; }
+/* The picture actions live in the writing toolbar now - one editor, one bar. */
+.rt-picture { font-weight: 700; }
+/* Scoped to the grid toggle alone - `.rt-btn.active` already means "this mark
+   is on the selection", and widening it would repaint Bold and Italic too. */
+#cmpToggleGrid.active { border-color: var(--accent); background: #fff1f3; color: var(--accent); }
 
 /* The writing toolbar's two rows. Row one is the BLOCK's type, row two marks
    the selected words - see story-editor.js for why that split is not cosmetic. */

@@ -13,6 +13,42 @@ async function sectionRow(pageId, sectionKey) {
   return rows[0] || null;
 }
 
+let flowModule = null;
+async function textFlow() {
+  if (!flowModule) flowModule = await import('../../public/editor/layout/text-flow.js');
+  return flowModule;
+}
+
+/**
+ * Where the copy starts on this block, in block pixels.
+ *
+ * A picture used to land at the block's own top-left corner, which is where the
+ * HEADLINE is set - so it covered the headline, and it took no room away from
+ * the body at all: dropping a picture on a block changed the character budget
+ * by nothing, which is the opposite of what this editor promises. Landing it at
+ * the top of the body puts it in the copy, where a photograph on a news block
+ * actually sits, and the budget moves the moment it lands.
+ *
+ * Measured on the one character grid, so the picture lands on the same rows the
+ * grid will later say it occupies.
+ */
+async function copyStartsAt(section) {
+  const { buildFlowMap } = await textFlow();
+  const padding = Number(section.margin_px) || 12;
+  const map = buildFlowMap(section, {
+    headline: section.headline || '',
+    subheading: section.subheading || '',
+    body: '',
+    marginPx: padding,
+    columnCount: Number(section.column_count) || 1,
+    lineHeight: Number(section.line_height) || 1.45,
+    headlineFontPx: Number(section.headline_font_px) || 24,
+    subheadingFontPx: Number(section.subheading_font_px) || 14,
+    bodyFontPx: Number(section.body_font_px) || 10,
+  }, []);
+  return Math.round(padding + (map.headlineRows + map.subheadingRows) * map.cellHeight);
+}
+
 function clampToBlock(section, placement) {
   const maxW = Number(section.width_px);
   const maxH = Number(section.height_px);
@@ -44,11 +80,12 @@ async function add(pageId, sectionKey, body, ownerId) {
     ownerId,
   });
 
-  // A new picture defaults to half the block's width, placed top-left, so it is
-  // immediately visible and immediately draggable.
+  // A new picture defaults to half the block's width, at the left of the copy -
+  // clear of the headline, and inside the text, so the runaround is real from
+  // the moment it lands. It is still immediately visible and draggable.
   const placement = clampToBlock(section, {
     x: body.x ?? 0,
-    y: body.y ?? 0,
+    y: body.y ?? (await copyStartsAt(section)),
     width: body.width ?? Math.round(Number(section.width_px) / 2),
     height: body.height ?? Math.round(Number(section.height_px) / 3),
     shape: body.shape,

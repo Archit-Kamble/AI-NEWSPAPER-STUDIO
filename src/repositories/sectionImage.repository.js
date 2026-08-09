@@ -88,4 +88,32 @@ async function remove(imageId) {
   return rowCount > 0;
 }
 
-module.exports = { listBySection, findOrCreateAsset, place, update, remove, replaceAsset };
+/**
+ * Every placement in one edition, grouped by the block it sits on.
+ *
+ * The worklist measures every block of a paper in one pass, and asking for each
+ * block's pictures one block at a time would be a query per block. The media
+ * asset is not joined: this answers "what is placed and where", which is what
+ * the character grid needs.
+ */
+async function placementsByEdition(newspaperId) {
+  const { rows } = await pool.query(
+    `SELECT si.page_section_id, si.x_px, si.y_px, si.width_px, si.height_px,
+            si.rotation, si.shape, si.stand_off_px, si.mask
+       FROM section_images si
+       JOIN page_sections s ON s.id = si.page_section_id
+       JOIN pages p ON p.id = s.page_id
+      WHERE p.newspaper_id = $1
+      ORDER BY si.z_index, si.id`,
+    [newspaperId],
+  );
+
+  const bySection = new Map();
+  for (const row of rows) {
+    if (!bySection.has(row.page_section_id)) bySection.set(row.page_section_id, []);
+    bySection.get(row.page_section_id).push(row);
+  }
+  return bySection;
+}
+
+module.exports = { listBySection, placementsByEdition, findOrCreateAsset, place, update, remove, replaceAsset };

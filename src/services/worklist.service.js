@@ -18,6 +18,7 @@
 // budget is knowable before the first keystroke, and this is where it is said.
 
 const pool = require('../config/db');
+const sectionImages = require('../repositories/sectionImage.repository');
 
 // The character grid, from the one module that defines it - the same numbers
 // the editor uses on every keystroke. Never a second copy (see CLAUDE.md).
@@ -81,6 +82,14 @@ async function forEdition(newspaperId) {
     [newspaperId],
   );
 
+  // The pictures, because a block that carries a photograph does not hold as
+  // many characters as its box suggests. This measured with no pictures at all
+  // and quoted the whole box - so "what is left?" told the desk a block with a
+  // half-page photograph on it had room for copy that could never be set there.
+  // Every other measurement in this software (fit, jump, preflight, the AI
+  // brief) already passes its pictures; this one did not.
+  const placements = await sectionImages.placementsByEdition(newspaperId);
+
   const flow = await textFlow();
   const pages = new Map();
   const totals = { blocks: 0, done: 0, empty: 0, started: 0, needsCaption: 0, charactersWanted: 0 };
@@ -118,7 +127,7 @@ async function forEdition(newspaperId) {
         body: row.body || '',
         bodyFontPx: Number(row.body_font_px),
       },
-      [],
+      (placements.get(row.id) || []).map(flow.flowImageFromRow),
     );
     const capacity = map.bodyCharBudget;
     const written = (row.body || '').length;

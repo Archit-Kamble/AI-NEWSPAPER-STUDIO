@@ -28,25 +28,35 @@ function escapeText(value) {
   return div.innerHTML;
 }
 
+/**
+ * The two picture actions, for the writing toolbar.
+ *
+ * They are rendered by the story editor's ribbon rather than over the canvas,
+ * because there is one editor now and it has one toolbar - but the markup stays
+ * owned here, beside the code that binds it, so the ids cannot drift apart.
+ */
+export function composeToolsMarkup() {
+  return `
+    <button type="button" class="rt-btn rt-picture" id="cmpAddImage"
+            title="Put a picture on this block">▣ Picture</button>
+    <button type="button" class="rt-btn" id="cmpToggleGrid"
+            title="Show the character grid the AI is briefed with">Grid</button>
+  `;
+}
+
 export function composeCanvasMarkup() {
   return `
     <div class="compose">
-      <div class="compose-head">
-        <span class="preview-label">Composition</span>
-        <div class="compose-tools">
-          <button type="button" class="ext-editor-btn ext-editor-btn-primary" id="cmpAddImage">+ Add image</button>
-          <button type="button" class="ext-editor-btn" id="cmpToggleGrid"
-                  title="Show the character grid the AI is briefed with">Show grid</button>
-          <span class="muted compose-size" id="cmpSize"></span>
-        </div>
-      </div>
-      <div class="compose-selected" id="cmpSelected"></div>
       <div class="compose-frame" id="cmpFrame">
         <div class="compose-surface" id="cmpSurface">
           <div class="compose-grid" id="cmpGrid" aria-hidden="true"></div>
           <canvas id="cmpCanvas"></canvas>
         </div>
       </div>
+      <p class="compose-size muted" id="cmpSize"></p>
+      <!-- Under the block, not above it: clicking a picture must not push the
+           thing you just clicked down the screen. -->
+      <div class="compose-selected" id="cmpSelected"></div>
       <input type="file" accept="image/*" id="cmpFileInput" hidden />
     </div>
   `;
@@ -320,7 +330,8 @@ export function bindComposeCanvas(callbacks) {
 
   document.getElementById("cmpToggleGrid")?.addEventListener("click", (event) => {
     state.showGrid = !state.showGrid;
-    event.target.textContent = state.showGrid ? "Hide grid" : "Show grid";
+    const button = event.target.closest("#cmpToggleGrid");
+    if (button) button.classList.toggle("active", state.showGrid);
     paintGrid();
   });
 

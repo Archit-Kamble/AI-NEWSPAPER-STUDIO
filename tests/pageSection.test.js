@@ -210,3 +210,64 @@ test('saving a section with an unknown section key is a silent no-op', async () 
     server.close();
   }
 });
+
+// A picture that lands on the headline takes no room from the copy, so
+// dropping one changes the character budget by nothing - the opposite of what
+// the composition editor promises. It has to land in the text.
+test('a new picture lands in the copy, not on the headline, and takes room from it', async () => {
+  const app = createApp();
+  const server = app.listen(0);
+  const port = server.address().port;
+  let newspaper;
+
+  try {
+    const setupResult = await setup(port, 'Page section test - picture lands in the copy');
+    newspaper = setupResult.newspaper;
+    const page = setupResult.page;
+
+    // A headline long enough to take real rows off the top of the block.
+    await putSection(port, page.id, 'lead', {
+      headline: 'सातारा जिल्ह्यात पावसाने उघडीप दिल्याने शेतीकामांना वेग',
+      subheading: 'शेतकऱ्यांनी पेरणीच्या कामांना सुरुवात केली',
+    });
+
+    // What the block holds, measured by the worklist - the one character grid.
+    const capacityOfLead = async () => {
+      const list = await desk.json(`/api/newspapers/${newspaper.id}/worklist`);
+      return list.pages.flatMap((p) => p.blocks).find((b) => b.sectionKey === 'lead')?.capacity;
+    };
+    const before = await capacityOfLead();
+
+    const placed = await desk.json(`/api/pages/${page.id}/sections/lead/images`, {
+      method: 'POST',
+      body: JSON.stringify({ url: '/uploads/does-not-need-to-exist.png', filename: 'p.png' }),
+    });
+
+    const picture = placed[0];
+    assert.ok(picture, 'the picture is placed');
+
+    const { rows } = await pool.query(
+      'SELECT margin_px, headline_font_px, body_font_px FROM page_sections WHERE page_id = $1 AND section_key = $2',
+      [page.id, 'lead'],
+    );
+    const margin = Number(rows[0].margin_px) || 12;
+    assert.ok(
+      Number(picture.y_px) > margin,
+      `a picture at y=${picture.y_px} sits on the headline, which starts at ${margin}`,
+    );
+
+    // The point of landing it there: the copy now has less room.
+    const after = await capacityOfLead();
+    assert.ok(after < before, `the budget should fall when a picture lands: ${before} -> ${after}`);
+
+    // An explicit placement is still obeyed - this is a default, not a rule.
+    const second = await desk.json(`/api/pages/${page.id}/sections/lead/images`, {
+      method: 'POST',
+      body: JSON.stringify({ url: '/uploads/does-not-need-to-exist-2.png', filename: 'q.png', x: 4, y: 2 }),
+    });
+    assert.equal(Number(second.find((i) => i.id !== picture.id).y_px), 2);
+  } finally {
+    if (newspaper) await cleanupNewspaper(newspaper.id);
+    server.close();
+  }
+});

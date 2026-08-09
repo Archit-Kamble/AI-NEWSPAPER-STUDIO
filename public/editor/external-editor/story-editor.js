@@ -88,7 +88,17 @@ function alignIcon(align) {
   return `<svg viewBox="0 0 16 14" width="15" height="13" aria-hidden="true" fill="currentColor">${bars}</svg>`;
 }
 
-export function storyEditorMarkup(view, { budget = 0 } = {}) {
+/**
+ * The one editor for a block: its words and its pictures.
+ *
+ * `tools`, `block` and `pictures` are handed in by the External Editor rather
+ * than built here - the picture markup belongs beside the code that binds it -
+ * but they render INSIDE this sheet. They used to be a second card below it,
+ * which is why the desk read this screen as two editors, one for text and one
+ * for images. A story's words and its pictures are one thing: the copy has to
+ * run around the picture, so you cannot place one without seeing the other.
+ */
+export function storyEditorMarkup(view, { budget = 0, tools = "", block = "", pictures = "" } = {}) {
   const used = plainText(view.body).length;
   return `
     <article class="story-editor" id="storyEditor" aria-label="Story editor">
@@ -116,6 +126,7 @@ export function storyEditorMarkup(view, { budget = 0 } = {}) {
           </div>
           <div class="rt-row rt-row-marks">
             ${TOOLS.map(toolMarkup).join("")}
+            ${tools ? `<span class="rt-sep"></span>${tools}` : ""}
             <span class="rt-spacer"></span>
             <button type="button" class="rt-btn rt-source" data-action="source" title="Edit stored markup">&lt;/&gt;</button>
             <button type="button" class="rt-btn" data-action="fullscreen" title="Focus writing (Esc to exit)">⤢</button>
@@ -156,6 +167,17 @@ export function storyEditorMarkup(view, { budget = 0 } = {}) {
       </footer>
 
       <div class="stat-grid" id="edStoryStats">${statsMarkup(view)}</div>
+
+      ${block || pictures ? `
+      <section class="story-block">
+        <div class="story-block-head">
+          <span class="story-block-title">The block itself</span>
+          <span class="story-block-note">Drag a picture where the story wants it — the copy runs around it,
+            and the character count above follows.</span>
+        </div>
+        ${block}
+        ${pictures}
+      </section>` : ""}
     </article>`;
 }
 

@@ -14,7 +14,7 @@
 
 import { escapeHtml } from "../format.js";
 import { statusOf, statusLabel, statusClass } from "../status/section-status.js";
-import { composeCanvasMarkup, renderComposeCanvas, scaleComposeCanvas, bindComposeCanvas, selectImageById } from "./compose-canvas.js";
+import { composeCanvasMarkup, composeToolsMarkup, renderComposeCanvas, scaleComposeCanvas, bindComposeCanvas, selectImageById } from "./compose-canvas.js";
 import { picturesPanelMarkup, bindPicturesPanel, refreshPicturesPanel } from "./pictures-panel.js";
 import { typographyPanelMarkup, bindTypographyPanel, refreshTypographyPanel } from "./typography-panel.js";
 import { spacePanelMarkup, refreshSpacePanel } from "./layout-panel.js";
@@ -135,16 +135,17 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
              inside the same panel. -->
         ${group("story", "Write the story", `
           ${storySourceMarkup(view, story)}
-          ${storyEditorMarkup(view, { budget: callbacks.getBudget ? callbacks.getBudget() : 0 })}
-          <div class="story-pictures">
-            <h5 class="story-pictures-title">Pictures on this block</h5>
-            ${composeCanvasMarkup()}
-            ${picturesPanelMarkup(callbacks.getImages?.() || [])}
-            <details class="ext-more">
-              <summary>Choose from the reporter's pictures</summary>
-              ${assetsPanelMarkup(view, reporterNews)}
-            </details>
-          </div>
+          ${storyEditorMarkup(view, {
+            budget: callbacks.getBudget ? callbacks.getBudget() : 0,
+            tools: composeToolsMarkup(),
+            block: composeCanvasMarkup(),
+            pictures: `
+              ${picturesPanelMarkup(callbacks.getImages?.() || [])}
+              <details class="ext-more">
+                <summary>Choose from the reporter's pictures</summary>
+                ${assetsPanelMarkup(view, reporterNews)}
+              </details>`,
+          })}
         `)}
 
         ${group("card", "Smart Cards", smartCardMarkup())}

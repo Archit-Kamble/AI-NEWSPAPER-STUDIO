@@ -1475,22 +1475,14 @@ body.resizing-y * {
 body.print-view .canvas-view-controls {
   background: white;
 }
-/* The page stays in view while the Inspector scrolls past it.
-   The workspace is one long document - 3779px at a 1129px viewport - so
-   working down the Inspector scrolled the page itself off the top of the
-   screen, and a page designer was editing a block they could no longer see.
-   Pinned only where the Inspector is BESIDE the canvas: below 1024px they
-   stack, and a pinned canvas would then sit on top of the Inspector.
-   The offset is the toolbar's measured height (workspace.js), never a
-   constant - that toolbar wraps to two rows on a narrow window. */
-@media (min-width: 1025px) {
-  .workspace-canvas-host {
-    position: sticky;
-    top: var(--toolbar-h, 36px);
-    align-self: start;
-    z-index: 2;
-  }
-}
+/* The page is NOT pinned.
+   It was, back when the editor was a column beside it - pinning kept the page
+   in view while that column scrolled. The rule carried its own warning: "below
+   1024px they stack, and a pinned canvas would then sit on top of the
+   Inspector". The editor is below the page at every width now, so that is
+   exactly what a pinned page does: it covers the editor, and clicks meant for
+   the copy land on the canvas toolbar instead. The page scrolls with the
+   document, and the drag handle sets how much of the screen it keeps. */
 .canvas-toolbar {
   display: flex;
   flex-direction: column;
@@ -3894,60 +3886,90 @@ body.print-view .page-imprint {
   border-top-color: #333;
 }
 
-/* A picture standing in the copy, in the sheet you type on.
-   It floats, so the browser runs the words around it exactly as the page will;
-   it is contenteditable="false", so a caret never lands inside it; and it is
-   stripped out before a character is stored, because a photograph is layout,
-   not text. Drag it to move it through the story, the corner to size it. */
-.story-picture {
+/* ---------------------------------------------------------------------------
+   The block as a page of frames.
+
+   The page is the block at its true proportions, fitted to the room the editor
+   has. Everything on it is a frame placed in BLOCK PIXELS: the body copy, and
+   one frame per picture. This replaced floated pictures, which can only touch
+   the left or right edge of a column - which is why a photograph could never be
+   put where the desk wanted it. */
+.block-frame { display: grid; justify-items: center; gap: var(--s2); }
+.frame-page {
   position: relative;
-  float: left;
-  margin: 4px var(--s3) var(--s2) 0;
-  padding: 0;
-  border-radius: 3px;
-  overflow: visible;
+  background: white;
+  border: 1px solid #c8c8d0;
+  box-shadow: 0 10px 30px rgba(20, 20, 30, 0.10);
+  overflow: hidden;
+}
+.frame-note { margin: 0; font-size: 0.7rem; }
+
+.frame { position: absolute; }
+.frame-body { display: flex; flex-direction: column; min-width: 0; }
+.frame-body .ql-container {
+  flex: 1;
+  min-height: 0;
+  border: 0;
+  font-family: "Noto Serif Devanagari", Georgia, serif;
+  overflow: auto;
+}
+.frame-body .ql-editor { padding: 0; }
+.frame-body .ql-editor.ql-blank::before { left: 0; right: 0; font-style: normal; color: #a8a8b0; }
+/* Quill's toolbar belongs to the copy, so it sits with the page rather than in
+   the block's own type bar - marking WORDS and setting the BLOCK are different
+   decisions and a desk should not have to tell them apart in one strip. */
+.frame-toolbar.ql-toolbar.ql-snow {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid #e4e4ea;
+  padding: 2px 0 6px;
+  text-align: center;
+}
+
+/* A picture is a frame on the page: dragged anywhere, sized by its corner. */
+.frame-pictures {
+  /* The layer itself must never swallow a click - only the pictures on it do.
+     Without this the whole page was covered and the copy could not be typed
+     into at all. Clicking a picture still selects it, which is what an object
+     on a page should do. */
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.pic-frame {
+  position: absolute;
+  pointer-events: auto;
+  margin: 0;
   cursor: grab;
   user-select: none;
   -webkit-user-select: none;
 }
-.story-picture[data-side="right"] { float: right; margin: 4px 0 var(--s2) var(--s3); }
-.story-picture img {
-  /* Centred and turned about its own middle, so a quarter turn spins the
-     picture inside its box instead of stretching it into the new one. */
+.pic-frame img {
   position: absolute;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  border-radius: 3px;
-  /* `contain`, not `cover`: a photograph placed at its own proportions is
-     never cropped, and one that has been resized is letterboxed rather than
-     silently having its edges cut off. */
+  /* A photograph is never cropped or stretched: the frame is the picture's own
+     shape, so contain and cover agree. */
   object-fit: contain;
   pointer-events: none;
 }
-/* A cut-out has no box. Its own alpha IS the shape: the copy runs to the
-   subject's outline, and drawing a rectangle around it - the hover outline, the
-   selection ring, the corner - puts the box straight back on a picture whose
-   whole point is not having one. Only the handles show, and only on hover. */
-.story-picture[data-shape="cutout"] { shape-image-threshold: 0.5; }
-.story-picture[data-shape="cutout"] img { border-radius: 0; }
-.story-picture[data-shape="cutout"]::after { display: none; }
-/* An oval picture is set as an oval and the copy runs round the oval, which is
-   what `shape` means on the block. */
-.story-picture[data-shape="ellipse"] { shape-outside: ellipse(50% 50%); }
-.story-picture[data-shape="ellipse"] img { border-radius: 50%; }
-.story-picture::after {
+.pic-frame::after {
   content: "";
   position: absolute;
   inset: 0;
   border: 1px solid transparent;
-  border-radius: 3px;
   pointer-events: none;
 }
-.story-picture:hover::after { border-color: #c9c9d2; }
-.story-picture.is-selected::after { border: 2px solid var(--accent); }
-.story-picture.is-dragging { cursor: grabbing; opacity: 0.75; }
-.story-picture-size {
+.pic-frame:hover::after { border-color: #c9c9d2; }
+.pic-frame.is-selected::after { border: 2px solid var(--accent); }
+.pic-frame.is-dragging { cursor: grabbing; opacity: 0.85; }
+.pic-frame[data-shape="ellipse"] img { border-radius: 50%; }
+/* A cut-out has no box. Its alpha is the shape, and drawing a rectangle round
+   it puts the box back on the one picture whose point is not having one. */
+.pic-frame[data-shape="cutout"]::after { display: none; }
+
+.pic-handle {
   position: absolute;
   right: -6px;
   bottom: -6px;
@@ -3959,7 +3981,7 @@ body.print-view .page-imprint {
   cursor: nwse-resize;
   opacity: 0;
 }
-.story-picture-remove {
+.pic-remove {
   position: absolute;
   top: -8px;
   right: -8px;
@@ -3976,14 +3998,13 @@ body.print-view .page-imprint {
   opacity: 0;
   line-height: 1;
 }
-/* Drawn, not typed: a "×" in the markup would be counted as a character of the
-   story by everything that measures the copy. */
-.story-picture-remove::before { content: "×"; font-size: 15px; }
-.story-picture-remove:hover { border-color: var(--accent); color: var(--accent); }
-.story-picture:hover .story-picture-size,
-.story-picture:hover .story-picture-remove,
-.story-picture.is-selected .story-picture-size,
-.story-picture.is-selected .story-picture-remove { opacity: 1; }
+/* Drawn, not typed: a "×" in the markup would be counted as characters. */
+.pic-remove::before { content: "\00d7"; font-size: 15px; }
+.pic-remove:hover { border-color: var(--accent); color: var(--accent); }
+.pic-frame:hover .pic-handle,
+.pic-frame:hover .pic-remove,
+.pic-frame.is-selected .pic-handle,
+.pic-frame.is-selected .pic-remove { opacity: 1; }
 
 /* The block, inside the writing sheet rather than in a card of its own.
    The words and the pictures of a story ARE the story: placing one while the

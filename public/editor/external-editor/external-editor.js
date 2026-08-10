@@ -21,7 +21,7 @@ import { spacePanelMarkup, refreshSpacePanel } from "./layout-panel.js";
 import { aiPanelMarkup, bindAiPanel, refreshAiPanel } from "./ai-panel.js";
 import { historyPanelMarkup, bindHistoryPanel, refreshHistoryPanel } from "./history-panel.js";
 import { pageMapMarkup, bindPageMap } from "./page-map.js";
-import { storyEditorMarkup, bindStoryEditor, refreshStoryEditor, refreshStoryCount, refreshStoryStats, refreshStoryPictures } from "./story-editor.js";
+import { storyEditorMarkup, bindStoryEditor, refreshStoryEditor, refreshStoryCount, refreshStoryStats, selectPictureFrame } from "./story-editor.js";
 import { smartCardMarkup, bindSmartCard } from "./smart-card-panel.js";
 import { storyDetailsMarkup, bindStoryDetails, refreshStoryDetails } from "./story-details-panel.js";
 
@@ -186,7 +186,7 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
     onRemoveBackground: callbacks.onRemoveBackground,
   });
   renderPictureControls(callbacks.getImages?.() || [], undefined, section);
-  bindPicturesPanel({ ...callbacks, onSelectImage: selectPicture });
+  bindPicturesPanel({ ...callbacks, onSelectImage: (id) => { selectPicture(id); selectPictureFrame(id); } });
   bindSmartCard(callbacks.onRequestSmartCard, callbacks.onPatch, notify);
   bindStorySource(callbacks);
   // The writing surface. Every keystroke goes down the same channel as the
@@ -201,7 +201,7 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
     getImages: callbacks.getImages,
     onPatchImage: callbacks.onPatchImage,
     onRemoveImage: callbacks.onRemoveImage,
-    onSelectImage: selectPicture,
+    onSelectImage: (id) => { selectPicture(id); selectPictureFrame(id); },
   });
   // The small layout is a way through the page, not only a picture of it.
   bindPageMap((sectionKey) => callbacks.onSelectSection?.(sectionKey));
@@ -262,16 +262,9 @@ export function refreshExternalEditor(section, view, story, source) {
   // Not when the change came from the editor itself - rewriting the box a
   // person has a cursor in throws the cursor back to the start, which is the
   // classic way a rich editor becomes unusable.
-  // The pictures stand in the copy, so they follow every change to the block -
-  // one added, one dragged, one taken off.
-  refreshStoryPictures();
-  if (source !== "story-editor") refreshStoryEditor(view);
-  else {
-    refreshStoryCount();
-    // The read-outs still follow every keystroke - only the boxes are left
-    // alone, so the caret never jumps.
-    refreshStoryStats(view);
-  }
+  // The page and everything on it: the frames follow every change to the block
+  // - one picture added, one dragged, one taken off, a type size changed.
+  refreshStoryEditor(view, section, images, source);
 }
 
 /**

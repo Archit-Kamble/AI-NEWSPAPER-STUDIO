@@ -110,6 +110,29 @@ Three things are defined once in `public/editor/layout/` and imported by **both*
 - `block-kinds.js` — what each `block_type` is and what work it wants (article, briefs, photo, advert, feature). The worklist and the block's own heading must say the same thing; `tests/edition.test.js` asserts it.
 - `picture-style.js` — how a placed picture is drawn. The page canvas and the editor read the one rule, or the same photograph looks like two different pictures.
 
+`public/editor/smart-cards/smart-cards.js` is the fourth: one renderer for the structured daily features, drawn by the page canvas, the editor's block page and the proposal preview.
+
+### Smart Cards — structured, never flattened
+
+`page_sections.smart_card_key` + `smart_card_data` (JSONB) hold **what is in a block now**. `feature_key` holds **what the layout reserved the block for** and is read-only to the desk — never use it as the card key.
+
+A card's data is what is stored and what draws. `smartCardText()` renders it to body copy as well, because everything that *measures* a block reads body text (the grid, the worklist, preflight, the fit action) — but the text is a rendering of the data, never its source. A sudoku parsed back out of nine lines of `७ · · ३` cannot carry its solution or its difficulty, and cannot tell a blank square from a printed dot.
+
+Adding a card: give the builder in `src/features/` a `card` payload beside its `items`, and add a renderer to `smart-cards.js`. Both, or the card falls through to prose — which is the deliberate behaviour for anything unrecognised, so a feature can never vanish off the page.
+
+`public/editor/layout/feature-table.js` is the **fallback only**, for rows saved before this existed.
+
+### What the AI may do, and what it costs
+
+Everything the AI produces is a **proposal**. It enters the same editable draft as typed copy, marked `needs_review`, and nothing reaches the database until the desk accepts and autosave carries it. Reporter copy is never overwritten — `fillRemaining` carries it on, word for word, at the front.
+
+Two production traps, both hit for real:
+
+- **Reasoning tokens are billed and counted as output on Sarvam.** A small `max_tokens` can spend the whole budget thinking and return nothing. `SARVAM_MAX_OUTPUT_TOKENS` defaults to 16384; the range is Starter 4096 / Pro 16384 / Business 128000; and the account's real ceiling is *learned* from the 400 the API returns, not configured by hand.
+- **`finish_reason: "length"` gets exactly one retry**, one tier down with twice the room. Never a loop — every attempt is billed. What the desk is finally shown names the two things a sub-editor can do, never an environment variable.
+
+Bulk generation is **one request per block, two at a time** (`bulk-generate.js`). Never send a newspaper in one request: the budget is per request, one failure would lose every block, and each block has its own measured hole.
+
 A second copy of any of these is the failure mode this project has already been bitten by twice (the drifted template keys, and `object-fit: cover` on the page against `contain` in the editor).
 
 ## Page model
@@ -167,4 +190,11 @@ The dev database is full of test fixtures — 221 editions across 13 dates, name
 
 - Read the `.md` files first (`VISION.md`, this file, `PROJECT_STATUS.md`) and **write the changes back into them** when the work lands. The drift warning that used to sit in "Current reality" is what happens when the code moves and the doc does not.
 - Commit in small steps, so a bad change can be walked back.
-- Stop the dev server before finishing. Kill it **by PID** — `pkill -f "node server.js"` exits 144 and takes the shell with it. Relaunch with `setsid nohup node server.js &`.
+- Stop the dev server before finishing, and **kill it by the port it holds**:
+
+  ```bash
+  pid=$(ss -ltnpH "sport = :3000" | grep -o 'pid=[0-9]*' | head -1 | cut -d= -f2)
+  kill "$pid"
+  ```
+
+  Two traps, both hit repeatedly. `pkill -f "node server.js"` matches the shell running it, exits 144 and kills the shell. And the server shows in `ps` with comm **`MainThread`**, not `node`, so `pgrep -x node` does not find it — the old server keeps the port, a relaunch silently fails to bind, and every check afterwards runs against stale code. Three wrong diagnoses in one session came from exactly that. Relaunch with `setsid nohup node server.js &` and verify the boot with `curl` before trusting anything.

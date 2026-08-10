@@ -1218,11 +1218,18 @@ body {
    below the fold. An editor that has to be scrolled to is an editor that is
    not there. */
 .workspace-top {
+  /* The editor is BELOW the page and the full width of the window, and it gets
+     most of the screen - the page above it is a reference, the editor is where
+     the work happens. As a 520px column beside the page it had 26% of a 1920
+     screen to write a newspaper in.
+     The page's height is the draggable one (--canvas-height), so the desk sets
+     the split; the editor takes everything left. */
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 6px var(--editor-width);
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
 }
-/* Collapsed, the editor gives its whole column back to the page. */
+/* The vertical splitter belonged to the side-by-side layout. */
+.workspace-top > .splitter-v { display: none; }
 .editor-collapsed .workspace-top {
   grid-template-columns: minmax(0, 1fr);
 }

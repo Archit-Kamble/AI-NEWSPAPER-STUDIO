@@ -3,10 +3,14 @@
 // properties and are remembered in localStorage, so a desk keeps its layout
 // between sessions.
 
-const STORAGE_KEY = "sahas.workspace.layout";
+// v2: the editor moved below the page, so a stored 620px page height from
+// the side-by-side layout would leave the editor a third of the screen.
+const STORAGE_KEY = "sahas.workspace.layout.v2";
 
 const LIMITS = {
-  canvasHeight: { min: 320, max: 1200, fallback: 620, prop: "--canvas-height" },
+  // The page is the reference above the editor, not the work surface, so it
+  // starts small and the editor below it gets the rest of the screen.
+  canvasHeight: { min: 200, max: 1200, fallback: 300, prop: "--canvas-height" },
   // The editor is a column beside the page now, so its width is the second
   // thing worth dragging. The floor is high on purpose: below about 380px the
   // writing surface stops being somewhere a story can be written.

@@ -348,7 +348,7 @@ function shapeSheetToBlock(geometry) {
   const paper = document.getElementById("edStoryPaper");
   if (!body || !paper || !geometry) return;
 
-  const { section, view, scale } = geometry;
+  const { section, view } = geometry;
 
   // The sheet IS the block: the three fields together have the block's
   // proportions, set larger so it can be read and typed into, and each field
@@ -358,6 +358,24 @@ function shapeSheetToBlock(geometry) {
   // their height is added on top rather than taken out of the fields. Setting
   // the paper to the block's aspect ratio and leaving them inside it was what
   // squeezed the body of a big-headline block down to a strip.
+  // Fitted to the HEIGHT of the room the editor has, the way a page sits in a
+  // word processor - centred, whole, and the same shape as the thing it is.
+  // Fitted to the width instead, a full-width editor gave a 1867 x 1732 sheet:
+  // the right shape and useless.
+  const room = Math.max(360, Math.min(920, window.innerHeight - 300));
+  const ratio = Number(section.width_px) / Number(section.height_px);
+  const host = paper.parentElement?.getBoundingClientRect().width || 900;
+  const width = Math.min(host - 24, Math.round(room * ratio));
+  paper.style.width = `${Math.round(width)}px`;
+  paper.style.marginLeft = "auto";
+  paper.style.marginRight = "auto";
+
+  // The magnification the sheet is now drawn at, measured rather than assumed.
+  const style0 = getComputedStyle(paper);
+  const inner = width - (parseFloat(style0.paddingLeft) || 0) - (parseFloat(style0.paddingRight) || 0)
+    - 32; // the body's own padding
+  const scale = Math.max(0.05, (Number(section.width_px) - geometry.margin * 2) / Math.max(1, inner));
+
   const rowsFor = (rows) => Math.max(28, Math.round((rows * geometry.map.cellHeight) / scale));
   const headline = document.getElementById("edStoryHeadline");
   const subheading = document.getElementById("edStorySubheading");

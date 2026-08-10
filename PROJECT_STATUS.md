@@ -4,7 +4,47 @@ Architectural audit only. No code was changed to produce this document. Reflects
 
 ---
 
-## 0. Update — editor/canvas sync, structured Smart Cards, real AI actions (2026-08-10)
+## 0. Update — the Block Editor, and one page scroll (2026-08-10)
+
+**Terminology.** "External Editor" is gone from everything a person reads. The
+newspaper canvas and the panel below it are two views of one editor over one
+store. `public/editor/external-editor/` keeps its path — eleven modules import
+it — and is documented as the Block Editor at the top of the module.
+
+**Two real bugs, both found by looking at the screen:**
+
+- The Block Editor was `position: sticky; height: calc(100vh - toolbar);
+  overflow-y: auto` — a viewport-tall scroller inside a scrolling document, so
+  there were two full-length scrollbars and the wheel behaved differently
+  depending on where the pointer was. Removed; the document scrolls.
+- The settings rail sat **on top of** the Block Editor when scrolled. A sticky
+  grid item is confined to the whole grid, not its row, and the rail and the
+  Block Editor share one grid since the previous change. It never needed to
+  stick.
+
+**Hierarchy**, as asked: `BLOCK EDITOR / Selected: THIRD-LEAD · Article ·
+150 × 264 px · EMPTY`, then STORY (three separate fields), IMAGES, AI, LAYOUT.
+
+**AI never replaces written copy silently.** "Write this block" overwrites
+headline, deck and body; it now asks first, and only when there is something to
+lose. Two stale lines were removed: the module header claiming all AI actions
+are stubs, and "No AI provider is connected yet".
+
+**Background removal is real, not a stub** — `u2netp.onnx` is present and
+running. Verified on a real photograph: a PNG with an alpha channel, trimmed to
+the subject, 99.2% solid with all four corners transparent, drawn
+`object-fit: contain` on a transparent ground.
+
+**Deliberately left alone:** pictures stay inside the writing surface rather
+than moving to a panel of their own. "IMAGES" is a heading over that region.
+
+**Verification:** `npm test` 171; regression net 111 (rewritten where it
+encoded the old nested-scroll behaviour); the brief's ten browser tests 29/29,
+no console errors, at 1512 / 1280 / 1024 / 900 px.
+
+---
+
+## 0a. Update — editor/canvas sync, structured Smart Cards, real AI actions (2026-08-10)
 
 ### Editor ↔ canvas synchronisation — fixed
 

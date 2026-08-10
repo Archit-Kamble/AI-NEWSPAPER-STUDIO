@@ -78,6 +78,29 @@ Asking for more pages adds them at their proper rung. Asking for fewer never rem
 
 `headline_font_px`, `subheading_font_px` and `body_font_px` are `NUMERIC(5,1)`, not integers — a printer sets type in half points. They therefore arrive over the wire as strings, like the page's mm dimensions; every reader coerces with `Number()`.
 
+### Terminology — there is no external editor
+
+The SAHAS Layout Desk is one editor with two views of the same block:
+
+| say | not |
+|---|---|
+| Newspaper Layout / newspaper canvas | — |
+| **Block Editor** | External Editor |
+| Story, Image, AI, Layout | tabs, panels, dock |
+| Page, Section, Template | — |
+
+`public/editor/external-editor/` still holds the Block Editor. The folder keeps its name because eleven modules import it and renaming it buys nothing but risk — the name a *desk reads* is what mattered. Do not reintroduce "External Editor" in anything a person sees.
+
+The Block Editor is **not** a second application: no iframe, no separate state, no popup, no separate save. One store → one selected block → one draft → newspaper canvas + Block Editor → save → database.
+
+### One page scroll
+
+The document scrolls: toolbar → newspaper → Block Editor → end of page. **Never** put `height: 100vh` + `overflow-y: auto` on the workspace, the Block Editor or the dock — that is a viewport-tall scroller inside a scrolling document, and a desk cannot tell which scrollbar it has hold of. The Block Editor is long; that is fine.
+
+Two bounded exceptions, both sidebars rather than page scrollers: the settings rail (capped to the page's height) and the Story Explorer drawer.
+
+A sticky **grid item** is confined to its whole grid, not its row. `.workspace-tools` was sticky and therefore parked itself over the Block Editor once the two shared a grid. If you make anything in `.workspace-top` sticky again, check it against the row below.
+
 ### The Newspaper Workspace — three places on one screen
 
 The Newspaper Workspace is the heart of SAHAS. Never redirect away from it; everything happens inside this one screen (`renderShell` in `public/editor/workspace.js`).

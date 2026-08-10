@@ -4426,3 +4426,18 @@ body.print-view .page-imprint {
 }
 .ai-proposal-body p { margin: 0 0 0.6em; }
 .ai-proposal-warn { margin: var(--s2) 0 0; color: #8a6b72; font-size: 0.7rem; }
+
+/* What "Write this block" checked before asking a model anything, for a
+   current-event seed. Small on purpose - one line plus an optional expandable
+   list, never a redesign of the panel. */
+.ai-retrieval[hidden] { display: none; }
+.ai-retrieval { margin-bottom: var(--s3); }
+.ai-retrieval-line { margin: 0 0 var(--s1); font-size: 0.76rem; font-weight: 700; }
+.ai-retrieval-verified { color: #3d7258; }
+.ai-retrieval-conflicting,
+.ai-retrieval-insufficient { color: #8a6b3d; }
+.ai-retrieval-unavailable { color: #8a8a94; }
+.ai-retrieval-sources { font-size: 0.72rem; color: #55555e; }
+.ai-retrieval-sources summary { cursor: pointer; color: #55555e; }
+.ai-retrieval-sources ul { margin: var(--s1) 0 0; padding-left: 1.1em; }
+.ai-retrieval-sources li { margin-bottom: 0.3em; }

@@ -7,18 +7,20 @@
 // only three things `storyWriter` does with a non-`verified` status are: stop,
 // tell the desk why, and keep the sources found (if any) for the desk to read.
 
+// In Marathi, deliberately - this is the sentence a sub-editor at SAHAS VARTA
+// reads when the desk asks for today's news and the paper says no. The rest
+// of this application's desk-facing strings are in English; this one isn't,
+// because it is telling a newsroom something about a newspaper it is about
+// to print, not describing a form field.
 const REFUSAL = {
-  insufficient: 'Current information could not be verified from any trusted source. '
-    + 'No article was generated — add a source, or write it yourself in general terms.',
-  unavailable: 'No verified-information source is set up for this newsroom yet, so a '
-    + 'current-event story cannot be written from a seed alone. No article was generated.',
-  conflicting: 'Sources disagree on the current facts, so nothing was written. '
-    + 'Check manually, then write it once the facts are confirmed.',
+  insufficient: 'विश्वसनीय स्रोतांकडून पुरेशी ताजी माहिती मिळाली नाही.',
+  unavailable: 'सध्या कोणताही विश्वसनीय माहिती स्रोत उपलब्ध नाही, त्यामुळे बातमी लिहिली गेली नाही.',
+  conflicting: 'स्रोतांमध्ये महत्त्वाच्या तथ्यांबाबत मतभेद आहेत. बातमी प्रकाशित करण्यापूर्वी पडताळणी करा.',
 };
 
 /** One sentence for the desk, never a status code or a provider's own words. */
 function refusalMessage(status) {
-  return REFUSAL[status] || 'Current information could not be verified. No article was generated.';
+  return REFUSAL[status] || 'सध्याची माहिती पडताळता आली नाही. बातमी लिहिली गेली नाही.';
 }
 
 module.exports = { REFUSAL, refusalMessage };

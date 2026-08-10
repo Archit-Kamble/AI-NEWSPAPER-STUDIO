@@ -200,8 +200,11 @@ function verifiedContextBlock(verifiedContext) {
     'END VERIFIED SOURCE DATA',
     '',
     'Use only the facts above for anything current or specific. Do not add a',
-    'number, name, date or outcome that is not stated above or in the subject',
-    'line below.',
+    'number, name, date, quotation or outcome that is not stated above or in',
+    'the subject line below, and do not add an event, an incident or a',
+    'development that the facts above do not mention. If something a full',
+    'story would normally cover is missing from the facts above, leave it out',
+    'rather than filling it from what you already know.',
   ].join('\n');
 }
 

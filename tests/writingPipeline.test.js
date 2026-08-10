@@ -27,6 +27,7 @@ const { signIn } = require('./helpers/desk');
 const writer = require('../src/services/storyWriter.service');
 const ai = require('../src/services/ai');
 const information = require('../src/services/information');
+const informationConditions = require('../src/services/information/conditions');
 
 function withProviders(t, stubs) {
   const saved = { ...ai.PROVIDERS };
@@ -351,7 +352,7 @@ test('current-event + insufficient: the writer is never called, and the desk is 
   assert.equal(response.status, 400);
   const result = await response.json();
 
-  assert.match(result.error, /No article was generated/i);
+  assert.equal(result.error, informationConditions.REFUSAL.insufficient);
   assert.equal(result.retrieval.status, 'insufficient');
 });
 
@@ -367,7 +368,7 @@ test('current-event + unavailable (nothing configured): the writer is never call
   assert.equal(response.status, 400);
   const result = await response.json();
 
-  assert.match(result.error, /No article was generated/i);
+  assert.equal(result.error, informationConditions.REFUSAL.unavailable);
   assert.equal(result.retrieval.status, 'unavailable');
 });
 
@@ -399,7 +400,7 @@ test('current-event + conflicting: the writer is never called while sources disa
   assert.equal(response.status, 400);
   const result = await response.json();
 
-  assert.match(result.error, /Sources disagree|No article was generated/i);
+  assert.equal(result.error, informationConditions.REFUSAL.conflicting);
   assert.equal(result.retrieval.status, 'conflicting');
 });
 

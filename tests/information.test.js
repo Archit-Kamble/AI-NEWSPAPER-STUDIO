@@ -294,9 +294,12 @@ test('cache: not caching an unconfigured source, so configuring one mid-day take
 // ---------------------------------------------------------- refusal ---
 
 test('refusalMessage: each status gets a desk sentence, never a status code', () => {
+  // Marathi, deliberately (Phase 10) - this is what a sub-editor at SAHAS
+  // VARTA reads, not a form-field error. Checked by non-emptiness and the
+  // absence of a status code, not by matching English wording.
   for (const status of ['insufficient', 'unavailable', 'conflicting']) {
     const message = information.refusalMessage(status);
-    assert.match(message, /No article was generated|nothing was written/i);
+    assert.ok(message.length > 10, `${status} must have a real sentence, not a stub`);
     assert.doesNotMatch(message, /\b[45]\d\d\b/, 'never a raw HTTP status code');
   }
 });

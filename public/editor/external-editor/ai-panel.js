@@ -151,6 +151,7 @@ export function aiPanelMarkup(view) {
       <p class="ai-seed-note" id="edAiSeedNote">It is written to fit — the character grid says how much room this block has.</p>
     </div>
 
+    <section class="ai-retrieval" id="aiRetrievalStatus" hidden></section>
     <section class="ai-proposal" id="aiStoryProposal" hidden></section>
 
     ${tierSelectMarkup()}
@@ -188,6 +189,42 @@ export function aiPanelMarkup(view) {
 function handoverNote(result) {
   if (!result.handover?.note) return "";
   return `<p class="muted ext-note">${escapeHtml(result.handover.note)}</p>`;
+}
+
+// What "Write this block" checked before it asked a model anything, for a
+// current-event seed. `result.retrieval` is only ever present when the seed
+// was classified as needing today's facts (see storyWriter.service.js) - an
+// evergreen or reporter-copy request never sets it, and this stays hidden.
+const RETRIEVAL_ICON = { verified: "✓", conflicting: "⚠", insufficient: "⚠", unavailable: "○" };
+const RETRIEVAL_LABEL = {
+  verified: "Verified from current sources",
+  conflicting: "Sources disagree",
+  insufficient: "Not enough current information",
+  unavailable: "No source configured",
+};
+
+function sourceListMarkup(sources) {
+  if (!sources?.length) return "";
+  const rows = sources.map((s) => {
+    const when = s.publishedAt ? new Date(s.publishedAt).toLocaleString() : "no date";
+    const link = s.url ? `<a href="${escapeHtml(s.url)}" target="_blank" rel="noopener noreferrer">source</a>` : "";
+    return `<li><strong>${escapeHtml(s.publisher || "Unknown")}</strong>
+      <span class="muted">${escapeHtml(s.trust || "UNKNOWN")} · ${escapeHtml(when)}</span> ${link}</li>`;
+  }).join("");
+  // An internal audit trail for the desk - never printed. The article body
+  // itself never carries a citation; this is the only place a source is named.
+  return `<details class="ai-retrieval-sources">
+    <summary>${sources.length} source${sources.length === 1 ? "" : "s"} checked</summary>
+    <ul>${rows}</ul>
+  </details>`;
+}
+
+export function retrievalStatusMarkup(retrieval) {
+  if (!retrieval) return "";
+  const icon = RETRIEVAL_ICON[retrieval.status] || "○";
+  const label = RETRIEVAL_LABEL[retrieval.status] || retrieval.status;
+  return `<p class="ai-retrieval-line ai-retrieval-${escapeHtml(retrieval.status)}">${icon} ${escapeHtml(label)}</p>
+    ${sourceListMarkup(retrieval.sources)}`;
 }
 
 function proposalMarkup(result) {
@@ -264,6 +301,7 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, g
   const seed = document.getElementById("edAiSeed");
   const write = document.getElementById("aiWriteStory");
   const host = document.getElementById("aiStoryProposal");
+  const retrievalHost = document.getElementById("aiRetrievalStatus");
 
   // The seed is deliberately NOT patched into the draft. It is a note to the
   // model, not part of the story, and putting an unknown field on the draft
@@ -283,6 +321,7 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, g
     const label = write.textContent;
     write.disabled = true;
     write.textContent = "Writing to the measure…";
+    if (retrievalHost) { retrievalHost.hidden = true; retrievalHost.innerHTML = ""; }
     try {
       const response = await fetch(
         `/api/pages/${page.id}/sections/${encodeURIComponent(section.section_key)}/write`,
@@ -298,6 +337,17 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, g
         },
       );
       const result = await response.json().catch(() => ({ error: "The AI did not answer." }));
+
+      // Shown whenever the seed was checked against current sources at all -
+      // whether the write went on to succeed or was refused. A current-event
+      // seed that was refused still gets a status line, not just a toast: the
+      // desk should see WHY (insufficient/conflicting/unavailable) without
+      // having to re-read the notification.
+      if (retrievalHost && result.retrieval) {
+        retrievalHost.hidden = false;
+        retrievalHost.innerHTML = retrievalStatusMarkup(result.retrieval);
+      }
+
       if (!response.ok || result.error) return onNotify(result.error || "The AI could not write this block.");
 
       host.hidden = false;

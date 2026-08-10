@@ -10,16 +10,8 @@ const { identityFor } = require('./src/layout/identity');
 const features = require('./src/features');
 const ai = require('./src/services/ai');
 const storyWriter = require('./src/services/storyWriter.service');
-const editionFeatures = require('./src/services/editionFeatures.service');
 const jump = require('./src/services/jump.service');
-const districtEditions = require('./src/services/districtEdition.service');
-const epaper = require('./src/services/epaper.service');
-const scribus = require('./src/services/scribus.service');
-const plainTextModule = require('./src/layout/plain-text');
-const preflight = require('./src/services/preflight.service');
-const worklist = require('./src/services/worklist.service');
 const fit = require('./src/services/fit.service');
-const pressPackage = require('./src/services/pressPackage.service');
 const signoff = require('./src/services/signoff.service');
 const pageRepository = require('./src/repositories/page.repository');
 const pool = require('./src/config/db');
@@ -32,6 +24,7 @@ const newsRoutes = require('./src/routes/news.routes');
 const newspaperRoutes = require('./src/routes/newspaper.routes');
 const pageRoutes = require('./src/routes/page.routes');
 const authRoutes = require('./src/routes/auth.routes');
+const newspaperController = require('./src/controllers/newspaper.controller');
 
 dotenv.config();
 
@@ -181,15 +174,6 @@ function createApp() {
     }));
   }));
 
-  // Fills every block on an edition that the layout marked as a standing
-  // feature, for that edition's own date. One press, one pass, and one model
-  // call for everything a model writes.
-  app.post("/api/newspapers/:id/features", requireDesk, asyncRoute(async (req, res) => {
-    const result = await editionFeatures.fillEdition(parseInt(req.params.id, 10), { tier: req.body?.tier });
-    if (!result) return res.status(404).json({ error: "No such edition." });
-    res.json(result);
-  }));
-
   app.post("/api/features/:key", requireDesk, asyncRoute(async (req, res) => {
     const date = req.body?.date || req.query.date;
     if (!date) return res.status(400).json({ error: "A date is required." });
@@ -230,58 +214,6 @@ function createApp() {
     res.json(quote);
   }));
 
-  // District editions: one paper with some pages swapped, not many papers.
-  app.post("/api/newspapers/:id/district-editions", requireDesk, asyncRoute(async (req, res) => {
-    const result = await districtEditions.createDistrictEdition(parseInt(req.params.id, 10), req.body || {});
-    if (!result) return res.status(404).json({ error: "No such edition." });
-    if (result.error) return res.status(400).json(result);
-    res.status(201).json(result);
-  }));
-
-  app.get("/api/newspapers/:id/district-editions", asyncRoute(async (req, res) => {
-    res.json(await districtEditions.siblingsOf(parseInt(req.params.id, 10)));
-  }));
-
-  // Every page as it will print - a district edition's own pages, with its
-  // parent's filling the numbers it did not take over.
-  app.get("/api/newspapers/:id/printed-pages", asyncRoute(async (req, res) => {
-    const pages = await districtEditions.pagesOf(parseInt(req.params.id, 10));
-    if (!pages) return res.status(404).json({ error: "No such edition." });
-    res.json(pages);
-  }));
-
-  // The e-paper: the edition as structured data with hotspot rectangles, and as
-  // a plain readable page that a search engine can actually index.
-  app.get("/api/newspapers/:id/epaper", asyncRoute(async (req, res) => {
-    const edition = await epaper.buildEdition(parseInt(req.params.id, 10));
-    if (!edition) return res.status(404).json({ error: "No such edition." });
-    res.json(edition);
-  }));
-
-  app.get("/epaper/:id", asyncRoute(async (req, res) => {
-    const edition = await epaper.buildEdition(parseInt(req.params.id, 10));
-    if (!edition) return res.status(404).type("html").send("<h1>No such edition.</h1>");
-    res.type("html").send(epaper.renderHtml(edition));
-  }));
-
-  // Preflight. Everything that must be true before a page reaches the plate:
-  // pictures with enough real resolution for 300 dpi, copy that fits, nothing
-  // outside the matter, nothing overlapping, no jump that leads nowhere.
-  app.get("/api/newspapers/:id/preflight", requireDesk, asyncRoute(async (req, res) => {
-    const report = await preflight.checkEdition(parseInt(req.params.id, 10));
-    if (!report) return res.status(404).json({ error: "No such edition." });
-    res.json(report);
-  }));
-
-  // What this edition still needs: every block that is not finished, in page
-  // order, with the exact number of characters it holds. The question a night
-  // desk asks constantly, answered without clicking through every block.
-  app.get("/api/newspapers/:id/worklist", requireDesk, asyncRoute(async (req, res) => {
-    const list = await worklist.forEdition(parseInt(req.params.id, 10));
-    if (!list) return res.status(404).json({ error: "No such edition." });
-    res.json(list);
-  }));
-
   // Making a story fit. GET answers what would fit it; POST does it. A desk
   // sees the change before it happens rather than after.
   app.get("/api/pages/:pageId/sections/:sectionKey/fit", requireDesk, asyncRoute(async (req, res) => {
@@ -296,18 +228,6 @@ function createApp() {
     res.json(result);
   }));
 
-  // Where the edition stands, and passing a page for press. A page cannot be
-  // passed while preflight still finds errors on it.
-  app.get("/api/newspapers/:id/status", requireDesk, asyncRoute(async (req, res) => {
-    const status = await signoff.editionStatus(parseInt(req.params.id, 10));
-    if (!status) return res.status(404).json({ error: "No such edition." });
-    res.json(status);
-  }));
-
-  app.get("/api/newspapers/:id/history", requireDesk, asyncRoute(async (req, res) => {
-    res.json(await signoff.history(parseInt(req.params.id, 10)));
-  }));
-
   app.patch("/api/pages/:pageId/state", requireDesk, asyncRoute(async (req, res) => {
     const result = await signoff.setPageState(parseInt(req.params.pageId, 10), req.body?.state, req.session.user);
     if (!result) return res.status(404).json({ error: "No such page." });
@@ -315,47 +235,10 @@ function createApp() {
     res.json(result);
   }));
 
-  // The press file. Generates a Scribus document of the whole edition, in
-  // millimetres and CMYK, which the page designer opens, adjusts and exports as
-  // the final PDF - the pipeline CLAUDE.md describes, whose middle was missing.
-  app.get("/api/newspapers/:id/scribus", requireDesk, asyncRoute(async (req, res) => {
-    const { rows } = await pool.query("SELECT * FROM newspapers WHERE id = $1", [parseInt(req.params.id, 10)]);
-    if (!rows[0]) return res.status(404).json({ error: "No such edition." });
-    const pages = await districtEditions.pagesOf(rows[0].id);
-    await plainTextModule.load();
-    const sla = scribus.buildDocument(rows[0], pages);
-
-    await signoff.record(rows[0].id, req.session.user?.id, "Scribus document generated");
-    const date = String(rows[0].publication_date).slice(0, 10);
-    res.type("application/vnd.scribus")
-      .set("Content-Disposition", `attachment; filename="sahas-${date}.sla"`)
-      .send(sla);
-  }));
-
-  // The press package. The .sla alone is not a deliverable - it points at
-  // pictures by path, and those paths mean nothing once the file has been
-  // downloaded. This ships the document and the photographs it uses together,
-  // which is what "package for output" means in every layout application.
-  app.get("/api/newspapers/:id/press-package", requireDesk, asyncRoute(async (req, res) => {
-    const { rows } = await pool.query("SELECT * FROM newspapers WHERE id = $1", [parseInt(req.params.id, 10)]);
-    if (!rows[0]) return res.status(404).json({ error: "No such edition." });
-
-    const pages = await districtEditions.pagesOf(rows[0].id);
-    await plainTextModule.load();
-    const sla = scribus.buildDocument(rows[0], pages);
-    const { zip, pictures, missing } = await pressPackage.build(rows[0], pages, sla);
-
-    await signoff.record(
-      rows[0].id, req.session.user?.id,
-      `Press package generated (${pages.length} pages, ${pictures} pictures${missing.length ? `, ${missing.length} missing` : ""})`,
-    );
-    const date = String(rows[0].publication_date).slice(0, 10);
-    res.type("application/zip")
-      .set("Content-Disposition", `attachment; filename="sahas-${date}-press.zip"`)
-      .set("X-Pictures-Included", String(pictures))
-      .set("X-Pictures-Missing", String(missing.length))
-      .send(zip);
-  }));
+  // The e-paper as a plain readable page a search engine can index. Public,
+  // like the JSON form at GET /api/newspapers/:id/epaper - not part of that
+  // router's mount path, so it stays wired directly here.
+  app.get("/epaper/:id", asyncRoute(newspaperController.epaperHtml));
 
   // Page API
   app.use("/api", deskWrites, pageRoutes);

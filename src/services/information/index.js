@@ -14,6 +14,7 @@ const intent = require('./intent');
 const trust = require('./trust');
 const freshness = require('./freshness');
 const conditions = require('./conditions');
+const routing = require('./routing');
 const rss = require('./providers/rss');
 
 const PROVIDERS = { rss };
@@ -97,6 +98,24 @@ function conflicts(sources) {
   return false;
 }
 
+// Ten items from the same publisher's feed are one voice, not ten. Without
+// this, a single outlet running several stories that happen to match the
+// query could either manufacture a false `conflicting` (its own two articles
+// mention different, unrelated numbers) or inflate confidence in a
+// `verified` that is really one source repeated. Kept deliberately simple -
+// a publisher-name lookup, not a similarity graph: at most one source per
+// publisher survives into the facts/conflict decision. The FULL list is
+// still returned in `sources` for the desk to read; only the verification
+// decision is deduplicated.
+function onePerPublisher(sources) {
+  const seen = new Map();
+  for (const source of sources) {
+    const key = (source.publisher || source.url || '').toLowerCase();
+    if (!seen.has(key)) seen.set(key, source);
+  }
+  return [...seen.values()];
+}
+
 // What the writer may state - short, pre-digested bullets, never the sources'
 // raw text wholesale. Capped at MAX_FACTS so a busy news day cannot balloon a
 // brief the way an uncapped source list would.
@@ -125,7 +144,12 @@ async function fetchContext({ query, category }) {
   const cached = cache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
 
-  const { items } = await PROVIDERS.rss.search(query, { timeoutMs: timeoutMs() });
+  // Which configured feeds are worth asking - a Maharashtra/district query
+  // is not diluted by purely-national headlines and vice versa. Resolves to
+  // the flat legacy list when no scoped feeds are configured at all.
+  const scopes = routing.scopesFor(query);
+  const feeds = PROVIDERS.rss.feedsForScopes(scopes);
+  const { items } = await PROVIDERS.rss.search(query, { timeoutMs: timeoutMs(), feeds });
 
   let value;
   if (!items.length) {
@@ -133,7 +157,7 @@ async function fetchContext({ query, category }) {
   } else {
     const sources = items.map(toSource);
     const trustworthy = sources.filter((s) => trust.CAN_VERIFY_ALONE.has(s.trust));
-    const fresh = trustworthy.filter((s) => !freshness.isStale(s.publishedAt, category));
+    const fresh = onePerPublisher(trustworthy.filter((s) => !freshness.isStale(s.publishedAt, category)));
 
     if (!fresh.length) {
       // Sources exist and are kept for the desk to read - just none of them

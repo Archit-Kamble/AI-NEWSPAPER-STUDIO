@@ -9,15 +9,45 @@
 
 const DEFAULT_TIMEOUT_MS = 8000;
 
-function configuredFeeds() {
-  return String(process.env.INFORMATION_RSS_FEEDS || '')
+function feedsFromEnv(name) {
+  return String(process.env[name] || '')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
 }
 
+// The original, flat list - every configured feed, asked for every query.
+// Kept working exactly as it did before scope routing existed: a newsroom
+// that only ever set this one variable sees no change in behaviour.
+function configuredFeeds() {
+  return feedsFromEnv('INFORMATION_RSS_FEEDS');
+}
+
+function nationalFeeds() {
+  return feedsFromEnv('INFORMATION_RSS_FEEDS_NATIONAL');
+}
+
+function maharashtraFeeds() {
+  return feedsFromEnv('INFORMATION_RSS_FEEDS_MAHARASHTRA');
+}
+
 function isConfigured() {
-  return configuredFeeds().length > 0;
+  return configuredFeeds().length > 0 || nationalFeeds().length > 0 || maharashtraFeeds().length > 0;
+}
+
+/**
+ * The feeds worth asking for these scopes (`routing.scopesFor()`'s output).
+ *
+ * Falls back to the flat legacy list only when NEITHER scoped variable is
+ * set at all - once a newsroom configures scoped feeds, an empty result for
+ * a scope it did not configure means "nothing for that scope" and stays
+ * empty, rather than silently reaching for the flat list.
+ */
+function feedsForScopes(scopes) {
+  const byScope = { national: nationalFeeds, maharashtra: maharashtraFeeds };
+  const named = [...new Set((scopes || []).flatMap((scope) => (byScope[scope] ? byScope[scope]() : [])))];
+  if (named.length || nationalFeeds().length || maharashtraFeeds().length) return named;
+  return configuredFeeds();
 }
 
 // ---- a small RSS/Atom reader, not a general XML parser --------------------
@@ -128,10 +158,41 @@ async function fetchFeed(url, timeoutMs) {
 }
 
 // A real shared WORD, not a substring - a temporal word like "आज" would
-// otherwise match nearly every item in every feed. Devanagari and Latin both
-// split cleanly on non-letter/number boundaries.
+// otherwise match nearly every item in every feed.
+//
+// `\p{M}` (combining mark) has to sit beside `\p{L}` here, or this silently
+// breaks on real Marathi. Devanagari vowels attached to a consonant - ा
+// (U+093E), ि, ी, ् (virama) and the rest - are Unicode category Mn/Mc, not
+// L, so `[^\p{L}\p{N}]+` treats them as WORD BOUNDARIES. Measured directly:
+// "सातारा" split into "स", "त", "र" - three one-character fragments, every
+// one below the 3-character floor, so the query lost its only real word and
+// silently matched everything. This was true from the day this function was
+// written; it surfaced only once real Marathi feeds were connected in Phase
+// 9 and a district query returned 91 unrelated items.
 function significantWords(text) {
-  return String(text || '').split(/[^\p{L}\p{N}]+/u).map((w) => w.trim().toLowerCase()).filter((w) => w.length >= 3);
+  return String(text || '').split(/[^\p{L}\p{M}\p{N}]+/u).map((w) => w.trim().toLowerCase()).filter((w) => w.length >= 3);
+}
+
+// Measured live against real feeds: "सातारा ताज्या बातम्या" (Satara latest
+// news) matched on "ताज्या"/"बातम्या" alone - words that mean "this is news"
+// and appear in nearly every headline about anything - and returned 91
+// items with nothing to do with Satara. The words that actually say WHAT the
+// query is about (the place, the topic) are what should decide a match; the
+// words that only say "this is current news" should not. Reusing
+// intent.js's own NEWS_WORDS/TEMPORAL_WORDS as the exclusion list rather
+// than a second one - the same words that make a seed "about something
+// current" are exactly the ones that carry no content of their own.
+const { NEWS_WORDS, TEMPORAL_WORDS } = require('../intent');
+const NOISE_WORDS = new Set([...NEWS_WORDS, ...TEMPORAL_WORDS].map((w) => w.toLowerCase()));
+
+// If every word in the query happened to be a noise word (rare - the intent
+// classifier already required a content signal to reach retrieval at all),
+// filtering to nothing would match everything indiscriminately, which is
+// worse than matching on the noise words. Fall back to the unfiltered words.
+function queryWordsFor(query) {
+  const words = significantWords(query);
+  const withoutNoise = words.filter((w) => !NOISE_WORDS.has(w));
+  return withoutNoise.length ? withoutNoise : words;
 }
 
 function matchesQuery(item, queryWords) {
@@ -141,18 +202,22 @@ function matchesQuery(item, queryWords) {
 }
 
 /**
- * Fetch every configured feed and keep only items that share a real word with
+ * Fetch every feed in scope and keep only items that share a real word with
  * the query. A feed is not a search engine - there is no query parameter to
  * send it - so the filtering happens here, after the fetch.
+ *
+ * `feeds`, when given, is the explicit list to ask (routing decided it) and
+ * overrides the flat configured list entirely - the caller already resolved
+ * which feeds are worth asking; this function does not second-guess it.
  *
  * Never throws: one feed failing to fetch or parse is dropped and reported in
  * `errors`, not allowed to fail the whole search.
  */
-async function search(query, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
-  const feeds = configuredFeeds();
+async function search(query, { timeoutMs = DEFAULT_TIMEOUT_MS, feeds: explicitFeeds } = {}) {
+  const feeds = explicitFeeds || configuredFeeds();
   if (!feeds.length) return { items: [], errors: [] };
 
-  const queryWords = significantWords(query);
+  const queryWords = queryWordsFor(query);
   const results = await Promise.all(feeds.map((url) => fetchFeed(url, timeoutMs)));
 
   const items = [];
@@ -171,7 +236,7 @@ async function search(query, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
 }
 
 module.exports = {
-  search, isConfigured, configuredFeeds,
+  search, isConfigured, configuredFeeds, nationalFeeds, maharashtraFeeds, feedsForScopes,
   // exported for tests, which parse fixture strings directly
   parseFeed,
 };

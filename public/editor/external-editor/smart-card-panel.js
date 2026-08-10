@@ -1,8 +1,15 @@
 // A Smart Card is generated for the selected block's real capacity. It is a
-// proposal, never an automatic overwrite: the desk accepts it into the same
-// editable draft as ordinary copy.
+// proposal, never an automatic overwrite: the desk sees the card AS A CARD,
+// then accepts it into the same editable draft as ordinary copy.
+//
+// The preview draws with the same renderer the page canvas draws with
+// (public/editor/smart-cards/smart-cards.js), so what is reviewed here is what
+// prints. It used to show the flattened body text - nine lines of "७ · · ३" -
+// which meant the desk approved a wall of dots and found out what it looked
+// like on the page.
 
 import { escapeHtml } from "../format.js";
+import { smartCardMarkup, canRenderSmartCard } from "../smart-cards/smart-cards.js";
 
 const CARDS = [
   { key: "panchang", icon: "☀", label: "पंचांग", detail: "सूर्योदय, सूर्यास्त, राहुकाळ", source: "Calculated" },
@@ -20,8 +27,25 @@ function choice(card, selected) {
     <span class="smart-card-source">${card.source}</span></button>`;
 }
 
-export function smartCardMarkup() {
+/**
+ * What card this block is holding right now, if any.
+ *
+ * Shown at the top of the panel because otherwise the only way to find out is
+ * to look at the page - and the block that a card was put into by mistake is
+ * exactly the one a desk needs to be able to clear.
+ */
+function placedMarkup(view) {
+  if (!view?.smartCardKey || !view?.smartCardData) return "";
+  const card = CARDS.find((c) => c.key === view.smartCardKey);
+  return `<div class="smart-card-placed" id="smartCardPlaced">
+    <span>This block holds <strong>${escapeHtml(card?.label || view.smartCardKey)}</strong></span>
+    <button type="button" class="ext-editor-btn" id="smartCardRemove">Remove card</button>
+  </div>`;
+}
+
+export function smartCardMarkupPanel(view) {
   return `<div class="smart-card-panel">
+    ${placedMarkup(view)}
     <p class="smart-card-intro">Generate a recurring daily feature for this exact block. You review it before it changes the story.</p>
     <div class="smart-card-grid" role="group" aria-label="Smart Card type">${CARDS.map((card, i) => choice(card, i === 0)).join("")}</div>
     <fieldset class="smart-card-rashi-options" id="smartCardRashiOptions" hidden>
@@ -32,13 +56,26 @@ export function smartCardMarkup() {
   </div><section id="smartCardProposal" class="ai-proposal smart-card-proposal" hidden></section>`;
 }
 
+// Kept under the old name as well, because external-editor.js imports it and
+// there is no value in a rename that touches a working caller.
+export { smartCardMarkupPanel as smartCardMarkup };
+
 function proposalMarkup(result) {
   const proposal = result.proposal;
   const source = result.source === "written" ? "AI draft — review required" : result.source === "curated" ? "Checked desk data" : "Calculated in SAHAS";
+
+  // The card, drawn as it will print. Only falls back to the text when there is
+  // no renderer for this key - and a new card must never need that.
+  const drawn = result.smartCardKey && canRenderSmartCard(result.smartCardKey)
+    ? smartCardMarkup(result.smartCardKey, result.smartCardData)
+    : null;
+
   return `<h4>${escapeHtml(proposal.headline)} <span class="muted">${source}</span></h4>
     ${proposal.subheading ? `<p class="smart-card-subtitle">${escapeHtml(proposal.subheading)}</p>` : ""}
     <p class="ai-proposal-fit">${result.fit.charsUsed} of ${result.fit.bodyCharBudget} characters · ${result.fit.charsRemaining} left</p>
-    <p>${escapeHtml(proposal.body).replace(/\n/g, "<br>")}</p>
+    <div class="smart-card-preview" id="smartCardPreview">${
+      drawn || `<p>${escapeHtml(proposal.body).replace(/\n/g, "<br>")}</p>`
+    }</div>
     <div class="ext-editor-toolbar"><button type="button" class="ext-editor-btn ext-editor-btn-primary" id="smartCardAccept">Accept card</button><button type="button" class="ext-editor-btn" id="smartCardDismiss">Discard</button></div>`;
 }
 
@@ -61,6 +98,14 @@ export function bindSmartCard(requestCard, onPatch, onNotify) {
     variant = button.dataset.rashiVariant;
     document.querySelectorAll("[data-rashi-variant]").forEach((choiceButton) => choiceButton.classList.toggle("is-selected", choiceButton === button));
   }));
+
+  // Taking a card back off a block. Both halves go together: a key with no
+  // payload is a block that says it holds a sudoku and cannot draw one.
+  document.getElementById("smartCardRemove")?.addEventListener("click", () => {
+    onPatch({ smartCardKey: null, smartCardData: null }, "smart-card");
+    onNotify("Card removed. The block's copy is editable again.");
+  });
+
   generate?.addEventListener("click", async () => {
     generate.disabled = true;
     const label = generate.textContent;
@@ -73,11 +118,25 @@ export function bindSmartCard(requestCard, onPatch, onNotify) {
       host.hidden = false;
       host.innerHTML = proposalMarkup(result);
       document.getElementById("smartCardAccept")?.addEventListener("click", () => {
-        onPatch({ ...result.proposal, aiGenerated: result.source === "written", status: "needs_review" }, "smart-card");
+        // The DATA goes into the draft, not a picture of it. The body text goes
+        // with it because everything that measures a block reads body text -
+        // the character grid, the worklist, preflight, the fit action - but the
+        // card is what the page and the editor both draw.
+        onPatch({
+          ...result.proposal,
+          smartCardKey: result.smartCardKey || null,
+          smartCardData: result.smartCardData || null,
+          aiGenerated: result.source === "written",
+          status: "needs_review",
+        }, "smart-card");
         host.hidden = true;
         onNotify("Smart Card added to the editable draft.");
       });
-      document.getElementById("smartCardDismiss")?.addEventListener("click", () => { host.hidden = true; });
+      document.getElementById("smartCardDismiss")?.addEventListener("click", () => {
+        // Discard leaves the block exactly as it was. Nothing was written.
+        host.hidden = true;
+        host.innerHTML = "";
+      });
     } finally {
       generate.disabled = false;
       generate.textContent = label;

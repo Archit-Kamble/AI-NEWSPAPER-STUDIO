@@ -239,7 +239,7 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
 
         ${group("space", "Space left in this block", `<div id="edSpaceGroup">${spacePanelMarkup(section, view, callbacks.getImages?.() || [])}</div>`)}
 
-        ${group("card", "Smart cards", smartCardMarkup())}
+        ${group("card", "Smart cards", smartCardMarkup(view))}
       </aside>
     </div>
   `;

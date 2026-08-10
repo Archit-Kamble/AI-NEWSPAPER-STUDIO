@@ -53,6 +53,13 @@ export const DRAFT_FIELDS = [
   "borderColor",
   "headlineStyle",
   "accentColor",
+  // The structured card placed in this block, if any. In the draft like every
+  // other editable field, so it travels down the one channel everything else
+  // does: draft -> DRAFT event -> canvas -> autosave -> database. A second
+  // store for card state is exactly the duplicate state this file exists to
+  // prevent.
+  "smartCardKey",
+  "smartCardData",
 ];
 
 export function draftFromSection(section) {
@@ -105,6 +112,11 @@ export function draftFromSection(section) {
     borderColor: section.border_color || "#111111",
     headlineStyle: section.headline_style || "plain",
     accentColor: section.accent_color || "#c8102e",
+    // A card is only a card when both halves are there. A key with no payload
+    // is a block that says it holds a sudoku and cannot draw one, so it is
+    // read as no card at all and the body text prints instead.
+    smartCardKey: section.smart_card_data ? section.smart_card_key || null : null,
+    smartCardData: section.smart_card_key ? section.smart_card_data || null : null,
   };
 }
 
@@ -125,6 +137,11 @@ export function draftFromStory(draft, story) {
     tags: story.tags || "",
     language: story.language || draft.language || "",
     aiGenerated: false,
+    // A reporter's story replaces whatever was in the block, so a Smart Card
+    // that was there is gone. Leaving the card behind would print a sudoku
+    // over the top of the story that was just linked into the same block.
+    smartCardKey: null,
+    smartCardData: null,
     // Freshly linked content is untouched content - back to `story_linked`,
     // unless an editor has made an explicit lifecycle call already.
     status: isExplicit(draft.status) ? draft.status : "story_linked",
@@ -173,6 +190,8 @@ export function payloadFromDraft(draft) {
     borderColor: draft.borderColor,
     headlineStyle: draft.headlineStyle,
     accentColor: draft.accentColor,
+    smartCardKey: draft.smartCardKey || null,
+    smartCardData: draft.smartCardData || null,
   };
 }
 

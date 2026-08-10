@@ -122,16 +122,22 @@ async function build(isoDate, { place = DEFAULT_PLACE } = {}) {
   const rahu = rahuKaal(isoDate, events);
   const daylight = events.sunset - events.sunrise;
 
+  const items = [
+    { label: 'सूर्योदय', text: clock(events.sunrise) },
+    { label: 'सूर्यास्त', text: clock(events.sunset) },
+    { label: 'दिनमान', text: `${devanagari(Math.floor(daylight / 60))} तास ${devanagari(Math.round(daylight % 60))} मिनिटे` },
+    { label: 'राहुकाळ', text: `${clock(rahu.start)} ते ${clock(rahu.end)}` },
+    { label: 'शके', text: devanagari(shakaYear(isoDate)) },
+  ];
+
   return {
     title: 'सूर्योदय - सूर्यास्त',
     subtitle: place.name,
-    items: [
-      { label: 'सूर्योदय', text: clock(events.sunrise) },
-      { label: 'सूर्यास्त', text: clock(events.sunset) },
-      { label: 'दिनमान', text: `${devanagari(Math.floor(daylight / 60))} तास ${devanagari(Math.round(daylight % 60))} मिनिटे` },
-      { label: 'राहुकाळ', text: `${clock(rahu.start)} ते ${clock(rahu.end)}` },
-      { label: 'शके', text: devanagari(shakaYear(isoDate)) },
-    ],
+    // The Smart Card payload: the same five lines, still as label and value
+    // rather than run together into a paragraph a renderer would have to split
+    // on " : " to get back.
+    card: { place: place.name, items },
+    items,
   };
 }
 

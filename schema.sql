@@ -291,6 +291,28 @@ ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS kicker TEXT;
 -- from is different. See src/features/index.js.
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS feature_key VARCHAR(40);
 
+-- Smart Cards: the structured content actually placed in a block.
+--
+-- `feature_key` above says what the LAYOUT reserved this block for, and it is
+-- read-only to the desk - an almanac box stays an almanac box. These two say
+-- what is IN the block right now, which is a different question with a
+-- different answer: a desk can put today's sudoku into a spare block that the
+-- layout never marked as anything.
+--
+-- The reason this is stored rather than derived is that a sudoku is a GRID.
+-- Flattening it to "७ · · ३ · ·" and parsing it back on the way to the page is
+-- lossy in both directions - it cannot carry a solution, a difficulty or a
+-- lucky colour, and one stray character makes it unreadable. The structured
+-- payload is the truth; the body text stays beside it as printable copy and as
+-- what everything that MEASURES a block already reads.
+--
+-- JSONB rather than a table per feature: the shape differs per card (a grid, a
+-- list of signs, a quote and its attribution), nothing is queried across cards,
+-- and each renderer owns its own shape. This is the one blob in the schema and
+-- it is deliberate - it is content, not a normalised newspaper.
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS smart_card_key VARCHAR(40);
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS smart_card_data JSONB;
+
 -- ---------------------------------------------------------------------------
 -- Jump lines.
 --

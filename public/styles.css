@@ -3038,6 +3038,131 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 }
 .feature-table th { width: 34%; font-weight: 700; white-space: nowrap; }
 
+/* ---------------------------------------------------------------------------
+   Smart Cards, drawn from their own data.
+
+   One set of rules, used by the page canvas and by the editor's preview, so
+   the card a desk approves is the card that prints. Sizes are given in `em` so
+   the same markup can be set at 7px inside a block on the page and at reading
+   size in the editor - the shape of the thing does not change, only its
+   measure. See public/editor/smart-cards/smart-cards.js.
+   --------------------------------------------------------------------------- */
+.smart-card {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+  min-height: 0;
+}
+.smart-card .smart-card-subtitle {
+  margin: 0;
+  font-size: 0.85em;
+  font-weight: 600;
+  color: #5c5c66;
+  text-align: center;
+}
+
+/* The puzzle. Square cells whatever the block's proportions, because a sudoku
+   drawn in rectangles is not a sudoku. */
+.smart-card-grid-table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  font-variant-numeric: tabular-nums;
+}
+.smart-card-grid-table td {
+  border: 0.4px solid #9a9aa2;
+  text-align: center;
+  vertical-align: middle;
+  padding: 0;
+  line-height: 1;
+  font-size: 0.95em;
+}
+.smart-card-grid-table td.box-right { border-right-width: 1.2px; border-right-color: #333; }
+.smart-card-grid-table td.box-bottom { border-bottom-width: 1.2px; border-bottom-color: #333; }
+.smart-card-grid-table td.blank { background: #fcfcfd; }
+
+.smart-card-table { border-collapse: collapse; width: 100%; }
+.smart-card-table th,
+.smart-card-table td {
+  border-bottom: 0.4px solid #d8d8de;
+  padding: 0.15em 0.3em;
+  line-height: var(--devanagari-line);
+  text-align: left;
+  vertical-align: top;
+}
+.smart-card-table th { width: 34%; font-weight: 700; white-space: nowrap; }
+
+/* The twelve signs. Each is its own row: the name, the reading, and the two
+   things a reader looks for kept on their own line rather than welded to the
+   end of the sentence. */
+.smart-card-rashi { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.25em; }
+.smart-card-rashi-sign {
+  display: grid;
+  grid-template-columns: minmax(3.5em, auto) 1fr;
+  gap: 0 0.4em;
+  line-height: var(--devanagari-line);
+  border-bottom: 0.4px solid #eeeef2;
+  padding-bottom: 0.2em;
+}
+.smart-card-rashi-sign .rashi-name { grid-row: 1 / span 2; font-weight: 700; }
+.smart-card-rashi-sign .rashi-luck { color: #6a6a72; font-size: 0.85em; }
+
+.smart-card-quote { margin: 0; display: grid; gap: 0.3em; place-content: center; height: 100%; text-align: center; }
+.smart-card-quote p { margin: 0; font-style: italic; line-height: var(--devanagari-line); }
+.smart-card-quote cite { font-style: normal; font-weight: 600; color: #5c5c66; font-size: 0.9em; }
+
+.smart-card-list { margin: 0; padding-left: 1em; display: grid; gap: 0.2em; line-height: var(--devanagari-line); }
+
+/* On the page a card is set at the block's own small measure. */
+.section-feature .smart-card { font-size: 7px; }
+.section-feature .smart-card-table,
+.section-feature .smart-card-rashi,
+.section-feature .smart-card-list,
+.section-feature .smart-card-quote { font-size: 6.5px; }
+
+/* In the editor's proposal it is read at reading size. */
+.smart-card-preview {
+  margin: var(--s2) 0;
+  padding: var(--s3);
+  border: 1px solid #e4e4ea;
+  border-radius: 8px;
+  background: #fcfcfd;
+  max-height: 420px;
+  overflow: auto;
+}
+.smart-card-preview .smart-card { font-size: 13px; }
+.smart-card-preview .smart-card-grid-table { max-width: 320px; margin: 0 auto; }
+.smart-card-preview .smart-card-grid-table td { height: 30px; font-size: 15px; }
+
+/* What card this block is already holding, and the way to take it back off. */
+/* The card inside the block's own page in the editor. Set at the block's real
+   measure, so what is on screen is the size it prints. */
+.frame-card {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  display: grid;
+  place-items: stretch;
+}
+.frame-card .smart-card { font-size: 9px; }
+
+.smart-card-placed {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+  margin-bottom: var(--s3);
+  padding: var(--s2) var(--s3);
+  border: 1px solid #cfe0f5;
+  border-radius: 8px;
+  background: #f0f6fd;
+  font-size: 0.82rem;
+}
+
 /* Copy poured around the pictures on the page canvas, cell by cell. */
 /* A line of copy set on one run of free cells.
    `overflow: hidden` used to be here, and it cropped every Marathi vowel sign

@@ -42,6 +42,7 @@ import * as store from "./store.js";
 import * as history from "./history/history.js";
 import * as autosave from "./autosave/autosave.js";
 import { draftFromSection, draftFromStory, payloadFromDraft, viewOfSection } from "./section-model.js";
+import { canRenderSmartCard, smartCardText } from "./smart-cards/smart-cards.js";
 import { isContentEdit, isExplicit } from "./status/section-status.js";
 import { buildFlowMap, flowImageFromRow } from "./layout/text-flow.js";
 
@@ -304,11 +305,33 @@ async function requestSmartCard({ key, variant }) {
   const result = await response.json().catch(() => ({ error: "The Smart Card could not be built." }));
   if (!response.ok) return result;
 
+  // The structured payload, if the builder sent one. This is what is stored and
+  // what draws; the body text below is a RENDERING of it, kept because
+  // everything that measures a block reads body text - the character grid, the
+  // worklist, preflight, the fit action.
+  //
+  // A card the desk asked to be shortened is shortened in the DATA, not by
+  // cutting the text afterwards: three signs means three signs in the payload,
+  // so the block on the page and the block in the editor both draw three.
+  let card = result.card || null;
+  if (card && key === "rashi") {
+    const wanted = smartVariant === "one" ? 1 : smartVariant === "three" ? 3 : 12;
+    card = { ...card, signs: (card.signs || []).slice(0, wanted) };
+  }
+
   let items = Array.isArray(result.items) ? result.items : [];
   if (key === "rashi") items = items.slice(0, smartVariant === "one" ? 1 : smartVariant === "three" ? 3 : 12);
-  const body = items.map((item) => `${item.label ? `${item.label} : ` : ""}${item.text || ""}${item.note ? ` (${item.note})` : ""}`).join("\n");
+
+  const body = card && canRenderSmartCard(key)
+    ? smartCardText(key, card)
+    : items.map((item) => `${item.label ? `${item.label} : ` : ""}${item.text || ""}${item.note ? ` (${item.note})` : ""}`).join("\n");
+
   const charsUsed = body.length;
   return {
+    // The card travels with the proposal, so accepting it puts the DATA in the
+    // draft rather than a picture of it.
+    smartCardKey: card && canRenderSmartCard(key) ? key : null,
+    smartCardData: card && canRenderSmartCard(key) ? card : null,
     proposal: { headline: result.title || "", subheading: result.subtitle || "", body },
     source: result.writtenBy ? "written" : key === "dinvishesh" ? "curated" : "computed",
     fit: { bodyCharBudget: budget, charsUsed, charsRemaining: Math.max(0, budget - charsUsed) },
@@ -1124,6 +1147,28 @@ function renderStoryPickerPanel() {
   renderStoryPicker(store.getCurrentPage(), state.reporterNews, state.selectedSectionKey, selectStoryForSection);
 }
 
+/**
+ * Repaints every block on the page from the rows the store now holds.
+ *
+ * The selected block is painted from the DRAFT, not from the row. A save that
+ * lands while somebody is still typing returns the copy as it was when the
+ * request left; painting that row would take the last few characters back off
+ * the page under the writer's hands. `currentView()` layers the draft over the
+ * row, which is the same rule the canvas uses everywhere else.
+ */
+function repaintSections(page) {
+  if (!page?.sections?.length) return;
+  const state = store.getState();
+  const draft = store.getDraft();
+
+  for (const section of page.sections) {
+    const selected = section.section_key === state.selectedSectionKey;
+    const view = selected ? currentView() : viewOfSection(section, draft, state.selectedSectionKey);
+    if (!view) continue;
+    refreshSection(section, view, { selected, dirty: selected && state.dirty });
+  }
+}
+
 // ------------------------------------------------------------ subscriptions ---
 
 function subscribeViews() {
@@ -1156,6 +1201,23 @@ function subscribeViews() {
     // see the blocks a save just filled - otherwise the guard is stale from the
     // moment the first block is written.
     renderLayoutSidebar(page, applyTemplate);
+
+    // THE BLOCKS THEMSELVES. This is what was missing, and it was missing in a
+    // way that hid itself: after a save the canvas usually looked right,
+    // because the DRAFT subscriber had already painted the selected block on
+    // the last keystroke. It was only wrong when the fresher rows carried
+    // something the canvas had never been told - Make it fit changing type
+    // sizes, Carry over moving copy onto a second block, Fill features writing
+    // a dozen blocks at once, a picture endpoint returning a repositioned
+    // block. Each of those replaced the page and left the page LOOKING like it
+    // did before.
+    //
+    // One targeted refreshSection per block, not a workspace re-render: the
+    // panels the editor is working in, the caret and every scroll position
+    // survive, which is the whole reason PAGE_SYNC exists as a topic separate
+    // from PAGE.
+    repaintSections(page);
+
     const section = store.getSelectedSection();
     if (section) refreshDockSavedAt(section);
   });

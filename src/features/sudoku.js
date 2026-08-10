@@ -113,6 +113,12 @@ async function build(isoDate) {
     subtitle: DIFFICULTY[weekday],
     grid: puzzle,
     solution,
+    // The Smart Card payload: the grid as numbers, which is what a renderer
+    // needs and what `items` below cannot carry. `asLines` is a rendering of
+    // this, never the source of it - a grid parsed back out of nine lines of
+    // text cannot carry a solution or a difficulty, and one stray character
+    // makes it unreadable. See public/editor/smart-cards/smart-cards.js.
+    card: { grid: puzzle, solution, difficulty: DIFFICULTY[weekday] },
     items: [{ text: asLines(puzzle) }],
   };
 }
@@ -125,6 +131,8 @@ async function buildSolution(isoDate) {
   if (built.error) return built;
   return {
     title: 'कालच्या सुडोकूचे उत्तर',
+    grid: built.solution,
+    card: { grid: built.solution },
     items: [{ text: asLines(built.solution) }],
   };
 }

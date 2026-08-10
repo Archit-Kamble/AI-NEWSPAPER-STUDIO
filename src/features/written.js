@@ -127,6 +127,23 @@ async function buildAll(isoDate, { charsPerSign = 90, tier } = {}) {
     writtenBy: { provider: result.provider, tier: result.tier, fellBackTo: result.fellBackTo },
     rashi: {
       title: 'आजचे राशिभविष्य',
+      // The Smart Card payload keeps the lucky number and the lucky colour as
+      // their own fields. `items` below glues them into a note because that is
+      // printable copy, and a reader looks for those two - flattening them and
+      // then splitting the string back apart on " । " to draw them is how they
+      // ended up welded to the end of a paragraph.
+      card: {
+        signs: RASHIS.map((sign) => {
+          const row = byKey.get(sign.key);
+          return {
+            key: sign.key,
+            name: sign.name,
+            text: row.text,
+            luckyNumber: row.lucky_number,
+            luckyColour: row.lucky_colour,
+          };
+        }),
+      },
       items: RASHIS.map((sign) => {
         const row = byKey.get(sign.key);
         return {
@@ -138,6 +155,7 @@ async function buildAll(isoDate, { charsPerSign = 90, tier } = {}) {
     },
     suvichar: {
       title: 'आजचा सुविचार',
+      card: { text: result.data.suvichar.text, attribution: result.data.suvichar.attribution },
       items: [{ text: result.data.suvichar.text, note: result.data.suvichar.attribution }],
     },
   };

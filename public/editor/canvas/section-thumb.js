@@ -6,6 +6,7 @@
 
 import { placedPictureStyle } from "../layout/picture-style.js";
 import { featureTableMarkup } from "../layout/feature-table.js";
+import { smartCardMarkup } from "../smart-cards/smart-cards.js";
 import { escapeHtml } from "../format.js";
 import { statusOf, statusLabel, statusClass } from "../status/section-status.js";
 import { computeMetrics } from "../layout/layout-metrics.js";
@@ -180,8 +181,18 @@ function contentMarkup(section, view) {
  * vanish off the page because nobody wrote a renderer for it.
  */
 function bodyOrTableMarkup(section, view, columns) {
+  // A Smart Card first, and from its OWN data. This is the same renderer the
+  // editor's preview draws with, so the block on the page and the card the desk
+  // approved cannot be two different things.
+  const card = smartCardMarkup(view.smartCardKey, view.smartCardData);
+  if (card) return `<div class="section-feature">${card}</div>`;
+
   if (!view.body) return "";
 
+  // The fallback, and only the fallback: blocks saved before Smart Cards
+  // existed hold a sudoku as nine lines of text and nothing else. Parsing that
+  // back into a grid is lossy - it cannot carry a solution or a difficulty -
+  // which is why new cards never take this path.
   const table = featureTableMarkup(section?.feature_key || view.featureKey, view.body);
   if (table) return `<div class="section-feature">${table}</div>`;
 
@@ -274,7 +285,12 @@ export function sectionInnerHtml(section, view, { dirty = false, selected = fals
   const status = statusOf(view);
   const type = sectionType(section.section_key);
   const metrics = computeMetrics(section, view);
-  const flowed = flowedTextMarkup(section, view);
+  // A Smart Card is a grid or a table. It is not copy, so it is not poured
+  // through the character cells around the pictures - a sudoku with a
+  // photograph on the block was drawing as nine lines of text because the
+  // flowed path never asked whether the block held a card at all.
+  const hasCard = Boolean(smartCardMarkup(view.smartCardKey, view.smartCardData));
+  const flowed = hasCard ? null : flowedTextMarkup(section, view);
 
   return `
     <div class="section-chrome">

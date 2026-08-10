@@ -254,6 +254,7 @@ async function saveSection(pageId, sectionKey, updates) {
          border_color = COALESCE($39, border_color),
          headline_style = COALESCE($40, headline_style), accent_color = COALESCE($41, accent_color),
          kicker = $42,
+         smart_card_key = $43, smart_card_data = $44,
          updated_at = CURRENT_TIMESTAMP
      WHERE page_id = $1 AND section_key = $2 RETURNING *`,
     [pageId, sectionKey, updates.newsItemId || null, updates.headline || null, updates.headlineFontPx || null,
@@ -275,7 +276,12 @@ async function saveSection(pageId, sectionKey, updates) {
       updates.borderColor || null,
       updates.headlineStyle || null,
       updates.accentColor || null,
-      updates.kicker || null]
+      updates.kicker || null,
+      // Cleared together or set together: a card key with no payload is a block
+      // that claims to hold a sudoku and cannot draw one. `null` for both is how
+      // a card is discarded.
+      updates.smartCardKey || null,
+      updates.smartCardKey && updates.smartCardData ? JSON.stringify(updates.smartCardData) : null]
   );
   return rows[0] || null;
 }

@@ -20,6 +20,7 @@
 import { sanitise } from "../layout/rich-text.js";
 import { buildFlowMap } from "../layout/text-flow.js";
 import { placedPictureStyle } from "../layout/picture-style.js";
+import { smartCardMarkup } from "../smart-cards/smart-cards.js";
 
 let quill = null;
 let hooks = {};
@@ -78,6 +79,14 @@ export function blockFrameMarkup() {
       <div class="frame-page" id="edFramePage">
         <div class="frame-pictures" id="edFramePictures"></div>
         <div class="frame frame-body" id="edBodyFrame">
+          <!-- A block holding a Smart Card draws the CARD here, not its copy.
+               The card is a grid or a table of twelve signs; typing into it as
+               prose is not an edit anybody wants, and showing the desk the
+               flattened text while the page shows squares is the exact
+               mismatch this whole change exists to remove. Quill stays mounted
+               underneath - the moment the card is removed the block is an
+               ordinary block again. -->
+          <div class="frame-card" id="edFrameCard" hidden></div>
           <div id="edQuill"></div>
         </div>
       </div>
@@ -127,6 +136,24 @@ function layoutPage() {
 // The headline and the deck take whole rows off the top of the block - the
 // character grid decides how many - so the body frame starts where the copy
 // really starts, and is set in the block's own type at the page's scale.
+
+/**
+ * Draws the Smart Card in the body frame, or puts the writing surface back.
+ *
+ * One renderer, shared with the page canvas, so the two cannot disagree about
+ * the same card.
+ */
+function layoutCard() {
+  const host = document.getElementById("edFrameCard");
+  const quill = document.getElementById("edQuill");
+  if (!host) return false;
+
+  const markup = smartCardMarkup(state.view?.smartCardKey, state.view?.smartCardData);
+  host.hidden = !markup;
+  host.innerHTML = markup || "";
+  if (quill) quill.hidden = Boolean(markup);
+  return Boolean(markup);
+}
 
 function layoutBodyFrame() {
   const frame = document.getElementById("edBodyFrame");
@@ -318,6 +345,7 @@ export async function mountFrame(section, view, images, callbacks) {
 
   layoutPage();
   layoutBodyFrame();
+  layoutCard();
   renderPictures(state.images);
   bindPictureFrames();
 
@@ -341,7 +369,13 @@ export function refreshFrame(section, view, images, source) {
   state = { ...state, section, view, images: images || [] };
   layoutPage();
   layoutBodyFrame();
+  const showingCard = layoutCard();
   renderPictures(state.images);
+
+  // A block showing a card has nothing for Quill to hold, and pasting the
+  // card's flattened text back into a hidden editor would only put it back on
+  // the next keystroke.
+  if (showingCard) return;
 
   // Never while the desk is typing: replacing the document under a cursor
   // throws it back to the start, which is how a rich editor becomes unusable.

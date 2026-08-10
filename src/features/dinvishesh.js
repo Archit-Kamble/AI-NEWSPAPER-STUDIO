@@ -48,6 +48,7 @@ async function build(isoDate) {
 
   return {
     title: 'आजचा दिनविशेष',
+    card: { entries: entries.slice() },
     items: entries.map((text) => ({ text })),
   };
 }

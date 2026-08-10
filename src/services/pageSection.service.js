@@ -93,6 +93,11 @@ async function saveSection(pageId, sectionKey, body) {
     borderColor: body.borderColor,
     headlineStyle: body.headlineStyle,
     accentColor: body.accentColor,
+    // What structured card is placed in this block, and its payload. Never
+    // `feature_key`, which is the layout's word for what the block is FOR and
+    // is not the desk's to change.
+    smartCardKey: body.smartCardKey || null,
+    smartCardData: body.smartCardData || null,
   };
 
   await pageRepository.saveSection(parseInt(pageId, 10), sectionKey, article);

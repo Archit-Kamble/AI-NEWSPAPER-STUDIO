@@ -65,8 +65,21 @@ function sudokuMarkup(data) {
 // --------------------------------------------------------------- label/value ---
 
 /** `label : value` down a column - the almanac's five lines. */
+/**
+ * A stored card's list, or an empty one.
+ *
+ * `smart_card_data` is JSONB written months ago by a build that may not be this
+ * one, so "it is an array because the builder makes arrays" is not something to
+ * draw a page on. A renderer that throws does not spoil its own block - it takes
+ * down the whole newspaper canvas, every block on it, because they are drawn in
+ * one pass.
+ */
+function asList(value) {
+  return Array.isArray(value) ? value : [];
+}
+
 function labelledMarkup(items) {
-  const rows = (items || []).filter((item) => item && item.label);
+  const rows = asList(items).filter((item) => item && item.label);
   if (!rows.length) return null;
   return `<table class="smart-card-table">${rows
     .map((item) => `<tr><th>${escapeHtml(item.label)}</th><td>${escapeHtml(item.text ?? "")}</td></tr>`)
@@ -87,6 +100,7 @@ function rashiMarkup(data) {
   if (!signs || !signs.length) return null;
 
   return `<ul class="smart-card-rashi">${signs
+    .filter(Boolean)
     .map((sign) => {
       const luck = [
         sign.luckyNumber != null ? `शुभ अंक ${devanagari(sign.luckyNumber)}` : "",
@@ -114,7 +128,7 @@ function suvicharMarkup(data) {
 // -------------------------------------------------------------- dinvishesh ---
 
 function dinvisheshMarkup(data) {
-  const entries = (data?.entries || []).filter(Boolean);
+  const entries = asList(data?.entries).filter(Boolean);
   if (!entries.length) return null;
   return `<ul class="smart-card-list">${entries
     .map((entry) => `<li>${escapeHtml(typeof entry === "string" ? entry : entry.text || "")}</li>`)
@@ -175,7 +189,8 @@ export function smartCardText(key, data) {
   }
 
   if (key === "rashi") {
-    return (data.signs || [])
+    return asList(data.signs)
+      .filter(Boolean)
       .map((sign) => {
         const luck = [
           sign.luckyNumber != null ? `शुभ अंक ${devanagari(sign.luckyNumber)}` : "",
@@ -191,11 +206,11 @@ export function smartCardText(key, data) {
   }
 
   if (key === "dinvishesh") {
-    return (data.entries || []).map((e) => (typeof e === "string" ? e : e.text || "")).join("\n");
+    return asList(data.entries).map((e) => (typeof e === "string" ? e : e?.text || "")).join("\n");
   }
 
   if (key === "panchang") {
-    return (data.items || []).map((item) => `${item.label} : ${item.text}`).join("\n");
+    return asList(data.items).filter(Boolean).map((item) => `${item.label} : ${item.text}`).join("\n");
   }
 
   return "";

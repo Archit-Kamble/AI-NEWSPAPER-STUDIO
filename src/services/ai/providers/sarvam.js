@@ -33,6 +33,8 @@
 //   max output Starter 4096, Pro 16384, Business 128000 - and reasoning tokens
 //              are counted inside it. See tiers.js.
 
+const conditions = require('../conditions');
+
 const ENDPOINT = 'https://api.sarvam.ai/v1/chat/completions';
 
 // The output budget, and why the default moved.
@@ -156,13 +158,21 @@ const provider = {
         asked = maxOutputTokens(budget);
         response = await send(asked);
       } else {
-        return { error: `Sarvam returned 400. ${detail.slice(0, 200)}` };
+        return {
+          error: 'Sarvam returned 400.',
+          condition: conditions.fromHttpStatus(400, detail),
+          detail: detail.slice(0, 300),
+        };
       }
     }
 
     if (!response.ok) {
       const detail = await response.text().catch(() => '');
-      return { error: `Sarvam returned ${response.status}. ${detail.slice(0, 200)}` };
+      return {
+        error: `Sarvam returned ${response.status}.`,
+        condition: conditions.fromHttpStatus(response.status, detail),
+        detail: detail.slice(0, 300),
+      };
     }
 
     const body = await response.json();
@@ -178,12 +188,13 @@ const provider = {
       if (finish === 'length') {
         return {
           error: 'Sarvam spent its whole output budget reasoning and returned nothing.',
+          condition: 'outputExhausted',
           outputExhausted: true,
           spentTokens: body?.usage?.completion_tokens || null,
           budget: asked,
         };
       }
-      return { error: 'Sarvam returned nothing usable.' };
+      return { error: 'Sarvam returned nothing usable.', condition: 'empty' };
     }
 
     try {
@@ -200,12 +211,13 @@ const provider = {
       if (finish === 'length') {
         return {
           error: 'Sarvam reached its output limit part-way through the answer.',
+          condition: 'outputExhausted',
           outputExhausted: true,
           spentTokens: body?.usage?.completion_tokens || null,
           budget: asked,
         };
       }
-      return { error: 'Sarvam did not answer in the shape that was asked for.' };
+      return { error: 'Sarvam did not answer in the shape that was asked for.', condition: 'badShape' };
     }
   },
 };

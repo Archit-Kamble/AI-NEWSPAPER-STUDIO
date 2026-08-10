@@ -70,6 +70,18 @@ const SCHEMA = {
 // The brief. It carries the house style, the measure each entry has to fit and
 // the things a newspaper must not say - a horoscope that promises a cure or
 // predicts a death is a liability, not a feature.
+//
+// Two things this brief used to get wrong, both about the सुविचार:
+//
+//   It asked for the name of whoever said the thought, and four lines later
+//   forbade mentioning any person at all. A model given contradictory rules
+//   follows one of them, and which one is not something to leave to chance.
+//   The ban belongs to the horoscope, where it was meant.
+//
+//   Nothing stopped an invented attribution. A quotation the model composed
+//   itself, printed under a real person's name over this masthead, is a
+//   falsehood in print - the same class of harm the news brief spends a whole
+//   paragraph forbidding. It may now say अज्ञात, and is told to.
 function promptFor(isoDate, weekday, charsPerSign) {
   return [
     'तुम्ही "दैनिक साहस वार्ता" या मराठी दैनिकाचे उपसंपादक आहात.',
@@ -80,12 +92,15 @@ function promptFor(isoDate, weekday, charsPerSign) {
     '   विषय: कामकाज, आर्थिक बाबी, कुटुंब, आरोग्य यांपैकी एखादा. सकारात्मक पण संयत भाषा.',
     '   प्रत्येक राशीसाठी शुभ अंक (१-९) आणि शुभ रंग द्या.',
     '',
-    '२) आजचा सुविचार — एक ओळीचा विचार आणि तो कोणाचा आहे ते नाव.',
+    '२) आजचा सुविचार — एक ओळीचा विचार.',
+    '   श्रेय (attribution) फक्त तेव्हाच नाव द्या जेव्हा तो विचार खरोखर त्याच व्यक्तीचा आहे',
+    '   याची तुम्हाला खात्री आहे. खात्री नसेल तर श्रेय म्हणून "अज्ञात" असे लिहा.',
+    '   कोणत्याही खऱ्या व्यक्तीच्या नावावर तिने न म्हटलेले वाक्य लावू नका.',
     '',
     'बंधने:',
     '- आजार बरा होईल, अपघात होईल, मृत्यू, गर्भधारणा अशी कोणतीही भाकिते करू नका.',
     '- गुंतवणुकीचा किंवा वैद्यकीय सल्ला देऊ नका.',
-    '- कोणत्याही व्यक्ती, जात, धर्म किंवा पक्षाचा उल्लेख करू नका.',
+    '- राशिभविष्यात कोणत्याही व्यक्ती, जात, धर्म किंवा पक्षाचा उल्लेख करू नका.',
     '- अक्षरमर्यादा काटेकोरपणे पाळा; मजकूर ठराविक जागेत छापला जातो.',
     '',
     'राशींचा क्रम आणि key:',

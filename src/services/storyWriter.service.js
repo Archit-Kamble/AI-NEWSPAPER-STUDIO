@@ -311,6 +311,8 @@ async function write(pageId, sectionKey, { seed, notes, tier, language } = {}) {
     provider: result.provider,
     tier: result.tier,
     fellBackTo: result.fellBackTo,
+    // Why the understudy wrote it, in one sentence, when it did.
+    handover: result.handover || null,
   };
 }
 
@@ -437,6 +439,7 @@ async function fillRemaining(pageId, sectionKey, { notes, tier, language } = {})
     provider: result.provider,
     tier: result.tier,
     fellBackTo: result.fellBackTo,
+    handover: result.handover || null,
     retriedAt: result.retriedAt,
   };
 }

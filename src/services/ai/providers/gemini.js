@@ -31,6 +31,8 @@
 // `thinkingBudget: 0` is rejected outright by gemini-3.6-flash (400), so the
 // cheap tier asks for a little thinking rather than none.
 
+const conditions = require('../conditions');
+
 const BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 const key = () => process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
@@ -136,7 +138,16 @@ const provider = {
 
     if (!response.ok) {
       const detail = await response.text().catch(() => '');
-      return { error: `Gemini returned ${response.status}. ${detail.slice(0, 200)}` };
+      // The status and Google's own words are classified HERE, where they are
+      // understood, and never handed upward as a page of JSON. A daily quota
+      // and a busy minute are both 429 and are not the same situation: one
+      // clears in a moment, the other is done until the clock rolls over.
+      return {
+        error: `Gemini returned ${response.status}.`,
+        condition: conditions.fromHttpStatus(response.status, detail),
+        // Kept for whoever looks after the newsroom, never shown to the desk.
+        detail: detail.slice(0, 300),
+      };
     }
 
     const body = await response.json();
@@ -151,12 +162,16 @@ const provider = {
       if (candidate?.finishReason === 'MAX_TOKENS') {
         return {
           error: 'Gemini reached its output limit before it finished the answer.',
+          condition: 'outputExhausted',
           outputExhausted: true,
           spentTokens: body?.usageMetadata?.thoughtsTokenCount || null,
           budget: answerTokens(budget),
         };
       }
-      return { error: `Gemini returned nothing usable.${candidate?.finishReason ? ` (${candidate.finishReason})` : ''}` };
+      return {
+        error: `Gemini returned nothing usable.${candidate?.finishReason ? ` (${candidate.finishReason})` : ''}`,
+        condition: 'empty',
+      };
     }
 
     try {
@@ -167,11 +182,12 @@ const provider = {
       if (candidate?.finishReason === 'MAX_TOKENS') {
         return {
           error: 'Gemini reached its output limit part-way through the answer.',
+          condition: 'outputExhausted',
           outputExhausted: true,
           budget: answerTokens(budget),
         };
       }
-      return { error: 'Gemini did not answer in the shape that was asked for.' };
+      return { error: 'Gemini did not answer in the shape that was asked for.', condition: 'badShape' };
     }
   },
 };

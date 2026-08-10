@@ -175,6 +175,15 @@ Tiers **ask for** thinking: Basic 1024, Plus 4096, Ultra 12288. The desk's dropd
 
 So the tier does not reliably cap the thinking, and it is not a cost control. What protects the copy is that the wire allowance is the **sum** — the article's room plus the thinking's — so an overrun eats slack rather than the article. Do not build anything that assumes the answer has exactly `GEMINI_MAX_OUTPUT_TOKENS` available, and do not quote the tiers as a spending limit.
 
+**What went wrong is classified, and the classification decides the retry.** `src/services/ai/conditions.js` holds the vocabulary; each adapter maps its own API onto it, and nothing above works from an error string:
+
+| condition | retry the same provider? |
+|---|---|
+| `outputExhausted` | **yes**, exactly once — a different request can fix it |
+| `quotaExhausted`, `auth`, `rateLimit`, `unavailable`, `timeout`, `badShape`, `empty` | no — straight to the understudy |
+
+A used-up daily quota and a busy minute are both HTTP 429 and are not the same situation; asking again is latency the desk waits through and, on a metered account, a second charge. When the understudy does write, the desk is told **why** in one sentence — "Google Gemini's quota is used up for now. Sarvam AI wrote this instead." Status codes and raw JSON bodies never reach a sub-editor; the providers' own words stay in `attempts`.
+
 - **An exhausted budget gets exactly one retry**, one tier down with twice the room. Never a loop — every attempt is billed. What the desk is finally shown names the two things a sub-editor can do, never an environment variable.
 - **One press of "Write this block" is TWO paid calls**, by design: the write, then a pass that re-measures against the headline the model actually wrote and fixes the length. Both are Gemini's slowest work, and they are why the button takes 30–90s rather than the 3s a bare API call takes. Nothing in the app is waiting on anything else — measured at **100%** of the time inside the model.
 - **Google's free tier is 20 requests per day, per model.** That is about ten blocks, after which the whole paper silently comes out of Sarvam — whose Starter plan then truncates a full-page lead. Enable billing before an edition depends on this.

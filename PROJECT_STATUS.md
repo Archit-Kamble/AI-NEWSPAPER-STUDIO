@@ -4,6 +4,57 @@ Architectural audit only. No code was changed to produce this document. Reflects
 
 ---
 
+## 0b. Third pass — production hardening (2026-08-10)
+
+**What went wrong is now a classification, not a string.**
+`src/services/ai/conditions.js` is the vocabulary — `auth`, `rateLimit`,
+`quotaExhausted`, `unavailable`, `timeout`, `outputExhausted`, `badShape`,
+`empty`, `unconfigured`. Each adapter maps its own API onto it; the router
+works from the condition. Only `outputExhausted` is retryable on the same
+provider, because it is the only one a *different request* can fix. A used-up
+daily quota and a busy minute are both 429, and treating them alike meant
+paying twice to be told the same thing.
+
+The desk now reads a sentence about the newspaper instead of a status code.
+Verified in the browser: *"Google Gemini's quota is used up for now. Sarvam AI
+wrote this instead."*
+
+**Claude was the odd one out.** On `stop_reason: max_tokens` it returned prose
+telling the desk to raise `ANTHROPIC_MAX_OUTPUT_TOKENS` — an environment
+variable, mid-edition — and because it was not flagged as a condition, the one
+retry never applied to it. It now reports `outputExhausted` like the other two,
+and honours a retry's larger budget.
+
+**A malformed Smart Card could take down the whole page.** `panchang` called
+`.filter` on `smart_card_data.items` without checking it was a list. The card
+data is JSONB written by a build that may not be this one, and the renderers
+draw every block in one pass — so one bad row from months ago would blank the
+canvas, not just its own block. Guarded with `asList()`; 22 malformed shapes ×
+every card key are now held by `tests/smartCardRobust.test.js`.
+
+**A fact-safety hole in the standing features.** The सुविचार brief asked the
+model to name whoever said the thought, and four lines later forbade mentioning
+any person at all — contradictory instructions, with nothing preventing an
+invented quotation being printed under a real person's name over this masthead.
+The ban now belongs to the horoscope where it was meant, and the attribution
+may be अज्ञात.
+
+**No provider cooldown, and the measurement is why.** A wasted Gemini attempt
+while the quota is gone costs **295ms** — it fails at the HTTP layer, not on a
+timeout. A cooldown would save a third of a second per request and add
+process-local state that lies after a restart. Not worth it. Revisit only if a
+provider starts failing *slowly*.
+
+**Known and NOT changed — the repair pass fires on nearly every block.**
+`briefFor` measures with a placeholder headline at its maximum length, while
+the copy is judged against the headline the model actually wrote. Across the 34
+article blocks of a real edition the two budgets differ on 32 of them, by up to
+5×. So "Write this block" is two model calls almost always, not occasionally.
+This is a fitting-quality decision, not a bug, and it is left for the newsroom
+to rule on — see the report.
+
+---
+
 ## 0a. Second pass — the migration audited against the live account (2026-08-10)
 
 The migration below was re-verified rather than taken on trust. Routing,

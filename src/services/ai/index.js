@@ -27,6 +27,7 @@
 //      from the fallback.
 
 const tiers = require('./tiers');
+const conditions = require('./conditions');
 
 const PROVIDERS = {
   sarvam: require('./providers/sarvam'),
@@ -174,6 +175,28 @@ async function askForJson(prompt, schema, options = {}) {
   const tier = tiers.tierFor(options.tier);
   const attempts = [];
   let exhausted = false;
+  // Why the first choice did not write, kept so a desk that gets the
+  // understudy's copy is told which of the several possible reasons it was.
+  const failures = [];
+  const noteFailure = (provider, result) => {
+    failures.push({
+      provider: provider.key,
+      condition: result.condition || null,
+      // A classified failure becomes a sentence about the newspaper. An
+      // unclassified one keeps the provider's own words - losing detail nobody
+      // has taught this module to read yet would be worse than a clumsy line,
+      // and a desk debugging at 11pm needs whatever there is.
+      // `deskText` wins where the failure already has a sentence worth reading:
+      // "the horoscope is missing सुविचार" tells a sub-editor what to do, and a
+      // generic "answered in the wrong shape" would throw that away.
+      desk: result.deskText
+        || (result.condition ? conditions.deskSentence(result.condition, provider.name) : result.error),
+    });
+  };
+  /** What the desk is told about a handover, in one sentence. */
+  const handover = (writer) => (failures.length
+    ? { from: failures[0].provider, condition: failures[0].condition, note: `${failures[0].desk} ${writer.name} wrote this instead.` }
+    : null);
 
   for (const provider of providers) {
     let result = await callOnce(provider, prompt, schema, tier);
@@ -184,9 +207,16 @@ async function askForJson(prompt, schema, options = {}) {
     // down and doubles the ceiling. Never more than once - a model that cannot
     // answer at Basic with twice the room is not going to on the third try, and
     // a loop here bills the newspaper for every attempt.
-    if (result.outputExhausted) {
+    //
+    // Everything else goes straight to the understudy. A used-up daily quota, a
+    // rejected key and a busy minute are all things the SAME provider will fail
+    // at again in the next half second, and asking twice is latency the desk
+    // waits through and, on a metered account, a second charge.
+    if (result.outputExhausted || conditions.isRetryable(result.condition)) {
       exhausted = true;
       attempts.push(`${provider.name}: ${result.error}`);
+      const wasRetryable = result.outputExhausted || conditions.isRetryable(result.condition);
+      if (!wasRetryable) noteFailure(provider, result);
       const gentler = tiers.lowerThan(tier.key) || tier;
       const roomier = provider.maxOutputTokens
         ? provider.maxOutputTokens(result.budget ? result.budget * 2 : undefined)
@@ -201,12 +231,17 @@ async function askForJson(prompt, schema, options = {}) {
             tier: gentler.key,
             usage: result.usage || null,
             fellBackTo: provider === providers[0] ? null : provider.key,
+            handover: provider === providers[0] ? null : handover(provider),
             // The desk is told its copy was written with less thinking than it
             // asked for, rather than quietly getting a cheaper answer.
             retriedAt: gentler.key !== tier.key ? gentler.key : null,
           };
         }
-        result = { error: `${provider.name} answered in the wrong shape: ${problem}` };
+        result = {
+          error: `${provider.name} answered in the wrong shape: ${problem}`,
+          condition: 'badShape',
+          deskText: `${provider.name} answered in the wrong shape: ${problem}`,
+        };
       }
     }
 
@@ -219,13 +254,20 @@ async function askForJson(prompt, schema, options = {}) {
           tier: tier.key,
           usage: result.usage || null,
           // Named only when it is not the one that was meant to answer, so the
-          // desk knows tonight's copy came from the understudy.
+          // desk knows tonight's copy came from the understudy - and, since the
+          // conditions are classified, WHY.
           fellBackTo: provider === providers[0] ? null : provider.key,
+          handover: provider === providers[0] ? null : handover(provider),
         };
       }
-      result = { error: `${provider.name} answered in the wrong shape: ${problem}` };
+      result = {
+        error: `${provider.name} answered in the wrong shape: ${problem}`,
+        condition: 'badShape',
+        deskText: `${provider.name} answered in the wrong shape: ${problem}`,
+      };
     }
 
+    noteFailure(provider, result);
     attempts.push(result.error);
   }
 
@@ -238,11 +280,22 @@ async function askForJson(prompt, schema, options = {}) {
       error: 'AI could not complete this request within the current output limit. '
         + 'Try Basic or Plus, or generate the story one section at a time.',
       outputExhausted: true,
+      conditions: failures.map((f) => f.condition),
       attempts,
     };
   }
 
-  return { error: attempts.join(' | '), attempts };
+  // Everything is down. The desk gets sentences about the newspaper - "Google
+  // Gemini's quota is used up for now. Sarvam AI is busy." - rather than two
+  // status codes and a page of somebody's JSON. The providers' own words stay
+  // in `attempts` for whoever looks after the newsroom.
+  return {
+    error: failures.length
+      ? `${failures.map((f) => f.desk).join(' ')} Nothing could be written just now.`
+      : attempts.join(' | '),
+    conditions: failures.map((f) => f.condition),
+    attempts,
+  };
 }
 
 /** One call to one provider, with the timeout every provider is held to. */
@@ -252,11 +305,11 @@ async function callOnce(provider, prompt, schema, tier, maxOutputTokens) {
   try {
     return await provider.askForJson(prompt, schema, tier, { signal: controller.signal, maxOutputTokens });
   } catch (error) {
-    return {
-      error: error.name === 'AbortError'
-        ? `${provider.name} timed out after ${Math.round(timeoutMs() / 1000)}s.`
-        : `${provider.name}: ${error.message}`,
-    };
+    // A dead socket and a stopwatch are different situations, and only one of
+    // them says anything about the provider being reachable.
+    return error.name === 'AbortError'
+      ? { error: `${provider.name} timed out after ${Math.round(timeoutMs() / 1000)}s.`, condition: 'timeout' }
+      : { error: `${provider.name}: ${error.message}`, condition: 'unavailable' };
   } finally {
     clearTimeout(timer);
   }

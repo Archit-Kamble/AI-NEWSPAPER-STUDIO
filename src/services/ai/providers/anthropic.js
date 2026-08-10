@@ -20,6 +20,8 @@
 // introductory rate through 31 August 2026, then $3 / $15 from 1 September.
 // Budget for the second pair.
 
+const conditions = require('../conditions');
+
 const ENDPOINT = 'https://api.anthropic.com/v1/messages';
 const API_VERSION = '2023-06-01';
 
@@ -38,7 +40,11 @@ const provider = {
 
   configHint: 'Set ANTHROPIC_API_KEY in .env. A key is issued at console.anthropic.com.',
 
-  async askForJson(prompt, schema, tier, { signal }) {
+  // What this provider will give an answer, so the one retry can ask for more
+  // room after a budget was exhausted - the same handle Gemini and Sarvam offer.
+  maxOutputTokens: (requested) => Math.max(256, Number(requested) || maxOutputTokens()),
+
+  async askForJson(prompt, schema, tier, { signal, maxOutputTokens: budget } = {}) {
     const response = await fetch(ENDPOINT, {
       method: 'POST',
       signal,
@@ -49,7 +55,7 @@ const provider = {
       },
       body: JSON.stringify({
         model: model(),
-        max_tokens: maxOutputTokens(),
+        max_tokens: Math.max(256, Number(budget) || maxOutputTokens()),
         temperature: tier.temperature,
         messages: [{ role: 'user', content: prompt }],
         // One tool, whose input schema is the answer's shape. Forcing it is
@@ -65,21 +71,30 @@ const provider = {
 
     if (!response.ok) {
       const detail = await response.text().catch(() => '');
-      return { error: `Claude returned ${response.status}. ${detail.slice(0, 200)}` };
+      return {
+        error: `Claude returned ${response.status}.`,
+        condition: conditions.fromHttpStatus(response.status, detail),
+        detail: detail.slice(0, 300),
+      };
     }
 
     const body = await response.json();
     const call = (body.content || []).find((part) => part.type === 'tool_use' && part.name === TOOL_NAME);
 
     if (!call) {
+      // The same condition the other two report, in Claude's words. It used to
+      // return prose telling the desk to edit an environment variable, which is
+      // not a thing a sub-editor can do mid-edition - and because it was not
+      // flagged as a condition, the one retry never applied here.
       if (body.stop_reason === 'max_tokens') {
         return {
-          error:
-            'Claude hit its output limit before finishing the answer. ' +
-            'Raise ANTHROPIC_MAX_OUTPUT_TOKENS.',
+          error: 'Claude reached its output limit before it finished the answer.',
+          condition: 'outputExhausted',
+          outputExhausted: true,
+          budget: Math.max(256, Number(budget) || maxOutputTokens()),
         };
       }
-      return { error: 'Claude returned nothing usable.' };
+      return { error: 'Claude returned nothing usable.', condition: 'empty' };
     }
 
     // Already an object - the arguments of the forced tool call, not a string

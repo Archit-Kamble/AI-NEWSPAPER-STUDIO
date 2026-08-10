@@ -179,12 +179,24 @@ export function aiPanelMarkup(view) {
 }
 
 /** The proposal, with what it costs the block stated before it is accepted. */
+/**
+ * Why the understudy wrote this, when it did.
+ *
+ * The desk does not need a status code; it needs to know whether to press the
+ * button again in a minute (busy) or not to bother until tomorrow (quota).
+ */
+function handoverNote(result) {
+  if (!result.handover?.note) return "";
+  return `<p class="muted ext-note">${escapeHtml(result.handover.note)}</p>`;
+}
+
 function proposalMarkup(result) {
   const { proposal, fit } = result;
   const over = fit.overflowing;
   return `
     <h4>Written by ${escapeHtml(result.provider || "AI")}${result.fellBackTo ? " (fallback)" : ""}
       <span class="muted">review before accepting</span></h4>
+    ${handoverNote(result)}
     <p class="ai-proposal-headline">${escapeHtml(proposal.headline)}</p>
     ${proposal.subheading ? `<p class="ai-proposal-sub">${escapeHtml(proposal.subheading)}</p>` : ""}
     <p class="ai-proposal-fit${over ? " over" : ""}">
@@ -212,6 +224,7 @@ function fillProposalMarkup(result) {
   return `
     <h4>Filled by ${escapeHtml(result.provider || "AI")}${result.fellBackTo ? " (fallback)" : ""}
       <span class="muted">review before accepting</span></h4>
+    ${handoverNote(result)}
     <p class="ai-proposal-fit${fit.overflowing ? " over" : ""}">
       ${fit.charsBefore} → ${fit.charsUsed} of ${fit.bodyCharBudget} characters${
         fit.overflowing

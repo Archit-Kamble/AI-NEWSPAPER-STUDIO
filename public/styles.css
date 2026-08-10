@@ -1,4 +1,6 @@
 :root {
+  /* Devanagari's line floor - the same number text-flow.js measures with. */
+  --devanagari-line: 1.45;
   --primary: #333;
   --secondary: #666;
   --accent: #c41e3a;
@@ -961,8 +963,9 @@ body {
 .section-headline {
   font-weight: 700;
   font-size: clamp(0.5rem, 4.2cqw, 1.05rem);
-  /* Devanagari stacks marks above and below; 1.2 makes lines collide. */
-  line-height: 1.28;
+  /* Devanagari stacks marks above the shirorekha and below the baseline.
+     1.28 still clipped them; the floor is the grid's, see :root below. */
+  line-height: var(--devanagari-line);
   color: #202020;
   overflow-wrap: anywhere;
 }
@@ -2892,7 +2895,7 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   overflow: hidden;
 }
 .section-flowed-band .section-headline {
-  line-height: 1.28;
+  line-height: var(--devanagari-line);
 }
 
 /* ===========================================================================
@@ -2981,7 +2984,7 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   display: flex;
   flex-direction: column;
   font-family: "Sahas Sans", "Noto Sans Devanagari", Arial, sans-serif;
-  line-height: 1.15;
+  line-height: var(--devanagari-line);
   color: #111;
 }
 .masthead-ear-left {
@@ -3082,12 +3085,24 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   border-radius: 50%;
 }
 
+
+/* ---------------------------------------------------------------------------
+   Devanagari needs a taller line than Latin, and this is not a taste setting.
+   Marathi stacks vowel signs ABOVE the shirorekha (ि  े  ै  ो  ं) and below the
+   baseline (ु  ृ), so a 1.15 or 1.28 line box crops them: "शेतकऱ्यांसाठी" sets as
+   "शतकऱ्यासाठा" - the matra, velanti and ukar are simply cut off the top.
+
+   text-flow.js has held this as MIN_LINE_HEIGHT = 1.45 since the character grid
+   was written, so the grid has always MEASURED the taller line. The stylesheet
+   that actually draws the page did not, which is why the count was right and
+   the page still lost the tops of its words. One rule, in both places. */
+
 /* --- story furniture ----------------------------------------------------- */
 
 .section-kicker {
   font-weight: 700;
   color: #111;
-  line-height: 1.15;
+  line-height: var(--devanagari-line);
   border-bottom: 1px solid #bbb;
   padding-bottom: 2px;
   margin-bottom: 2px;
@@ -3095,7 +3110,7 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 .section-subheading {
   font-weight: 400;
   color: #333;
-  line-height: 1.2;
+  line-height: var(--devanagari-line);
 }
 .section-dateline {
   font-weight: 700;
@@ -3109,7 +3124,7 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   bottom: 0;
   background: rgba(255, 255, 255, 0.88);
   font-size: 8px;
-  line-height: 1.15;
+  line-height: var(--devanagari-line);
   padding: 1px 3px;
   color: #222;
 }
@@ -3184,7 +3199,7 @@ body.print-view .newspaper-canvas {
   position: absolute;
   font-family: "Sahas Sans", "Noto Sans Devanagari", Arial, sans-serif;
   font-size: 7.5px;
-  line-height: 1.35;
+  line-height: var(--devanagari-line);
   color: #333;
   background: rgba(255, 255, 255, 0.9);
   padding: 1px 2px;
@@ -3777,7 +3792,7 @@ body.print-view .mono-forme-warning { display: none; }
   padding: var(--s2) var(--s3);
   font-size: 1.2rem;
   font-weight: 700;
-  line-height: 1.35;
+  line-height: var(--devanagari-line);
 }
 .story-editor-paper .story-subheading-input {
   padding: var(--s2) var(--s3);
@@ -4068,7 +4083,7 @@ body.print-view .page-imprint {
   font-size: 0.78rem;
 }
 .ai-proposal h4 .muted { font-size: 0.66rem; font-weight: 600; white-space: nowrap; }
-.ai-proposal-headline { margin: 0 0 var(--s1); font-size: 1.05rem; font-weight: 700; line-height: 1.3; }
+.ai-proposal-headline { margin: 0 0 var(--s1); font-size: 1.05rem; font-weight: 700; line-height: var(--devanagari-line); }
 .ai-proposal-sub { margin: 0 0 var(--s2); color: #55555e; font-size: 0.88rem; }
 .ai-proposal-fit { margin: 0 0 var(--s2); color: #3d7258; font-size: 0.72rem; font-weight: 700; }
 .ai-proposal-fit.over { color: var(--accent); }

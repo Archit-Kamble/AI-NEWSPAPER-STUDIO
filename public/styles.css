@@ -279,9 +279,15 @@ body {
   font-size: 24px;
 }
 
+/* The newsroom counts, in the 360px rail beside the dashboard.
+   Four fixed columns did not fit it: `1fr` will not shrink below its content,
+   and a 34px "182" plus its padding is about 92px, so four of them wanted
+   416px of a 328px rail. The fourth count - Rejected - was drawn off the right
+   edge of the window, and a desk had three of the four numbers it needs.
+   Wrapping instead of overflowing puts them two and two. */
 .dashboard-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: var(--s4);
   margin: 24px 0;
 }
@@ -1599,6 +1605,16 @@ body.print-view .canvas-view-controls {
   width: 1px;
   align-self: stretch;
   background: #ececed;
+}
+/* What a run of controls is FOR, set the same way the layout picker labels
+   itself, so the two rows read as two subjects rather than twelve buttons. */
+.canvas-toolbar-label {
+  color: #9a9aa2;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 .canvas-toolbar-spacer {
   flex: 1;

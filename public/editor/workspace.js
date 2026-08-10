@@ -680,21 +680,33 @@ function renderShell() {
                same place. -->
           <div class="canvas-toolbar">
             <div class="canvas-toolbar-row">
+              <!-- "Layout" was labelled and the pages beside it were not, so the
+                   first row read as four numbers and then a labelled control. -->
+              <span class="canvas-toolbar-label">Page</span>
               <div id="pageSwitcher" class="page-switcher"></div>
               <div class="canvas-toolbar-divider"></div>
               <div id="layouts" class="layout-switcher"></div>
               <button type="button" class="layout-btn" id="addBlockBtn" title="Add a block to this page">+ Block</button>
               <button type="button" class="layout-btn danger" id="removeBlockBtn" title="Remove the selected block">− Block</button>
             </div>
+            <!-- Five buttons in a row read as five unrelated buttons. Three of
+                 them are the three moves a sub-editor has when copy does not
+                 fit the hole - cut it, set it tighter, carry it over - and the
+                 dividers say so. The other two are not moves on a story at all:
+                 one fills the day's standing features, one takes the editing
+                 chrome off the page. -->
             <div class="canvas-toolbar-row">
+              <span class="canvas-toolbar-label">Copy</span>
               <button type="button" class="layout-btn" id="worklistBtn"
                       title="Every block on this edition that is not finished, and how much copy each one holds">What's left</button>
               <button type="button" class="layout-btn" id="fitBtn"
                       title="Set the selected block a notch tighter so its copy fits">Make it fit</button>
               <button type="button" class="layout-btn" id="carryOverBtn"
                       title="Carry what does not fit onto a later page, with a jump line">Carry over</button>
+              <div class="canvas-toolbar-divider"></div>
               <button type="button" class="layout-btn" id="fillFeaturesBtn"
                       title="Fill राशिभविष्य, सूर्योदय-सूर्यास्त, दिनविशेष and सुविचार for this edition's date">Fill features</button>
+              <div class="canvas-toolbar-divider"></div>
               <button type="button" class="layout-btn" id="printViewBtn"
                       title="See the page as it prints - no block chrome, no grid">Print view</button>
             </div>

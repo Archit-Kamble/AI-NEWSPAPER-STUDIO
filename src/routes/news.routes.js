@@ -1,6 +1,11 @@
 const express = require('express');
-const newsController = require('../controllers/news.controller');
+const { asyncController } = require('../middleware/asyncRoute');
 const { upload } = require('../middleware/upload');
+
+// Wrapped so a rejected handler reaches the error middleware instead of
+// crashing the process - see src/middleware/asyncRoute.js. Most of these
+// handlers had no try/catch of their own and were registered unwrapped.
+const newsController = asyncController(require('../controllers/news.controller'));
 
 const router = express.Router();
 

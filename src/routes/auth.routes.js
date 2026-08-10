@@ -1,5 +1,10 @@
 const express = require('express');
-const authController = require('../controllers/auth.controller');
+const { asyncController } = require('../middleware/asyncRoute');
+
+// Wrapped so a rejected handler (a DB error inside authService.login, say)
+// reaches the error middleware instead of taking the process down - see
+// src/middleware/asyncRoute.js.
+const authController = asyncController(require('../controllers/auth.controller'));
 
 const router = express.Router();
 

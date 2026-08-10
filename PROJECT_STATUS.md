@@ -4,6 +4,16 @@ Architectural audit only. No code was changed to produce this document. Reflects
 
 ---
 
+## 0k. Twelfth pass — the unwrapped-controller bug audited across every router (2026-08-11)
+
+**Autonomous pass, triggered directly by the previous one.** Having just found `newspaper.routes.js` calling its controller without `asyncController` (Pass 0j), checked whether the same gap existed anywhere else rather than assuming it was a one-off. It did, in two places: `news.routes.js` (pre-existing - `list`, `listByStatus`, `getOne`, `update`, `updateStatus` all `await` a service call with no try/catch and no wrapper) and `auth.routes.js` (written this session, Pass 0i - `login` has the same shape). Both fixed the same one-line way as `newspaper.routes.js`: wrap the required controller in `asyncController` before building the router. `page.routes.js` was already correct and needed no change.
+
+**Why this matters concretely:** a DB error, a bcrypt failure, or any other rejection inside one of these handlers would previously go unhandled and - per `asyncRoute.js`'s own comment, and a real prior incident it documents - take the whole Node process down for every desk using the app, not just return an error to the one request that hit it.
+
+**Verified:** `npm test` 305/305, unchanged; live boot confirmed `/api/health` and `/api/auth/me` still respond correctly through the now-wrapped auth router; `node tests/browser/workspace.browser.js` 49/49, which exercises a real login through the newly-wrapped `auth.routes.js` on every run. Server stopped by port afterward.
+
+---
+
 ## 0j. Eleventh pass — newspaper-scoped production routes migrated off server.js (2026-08-11)
 
 **Autonomous pass, continuing the same migration.** Nine `/api/newspapers/:id/*` routes moved from inline `server.js` handlers into `newspaper.controller.js` / `newspaper.routes.js`: district editions (create + list), printed pages, e-paper (JSON), preflight, worklist, status, history, features, scribus, press-package. Every one already had a dedicated service (`districtEdition`, `epaper`, `preflight`, `worklist`, `signoff`, `editionFeatures`, `scribus`, `pressPackage`) — this pass moved only the HTTP adapter, not business logic, mirroring the exact pattern `newspaper.controller.js` already used for `create`/`start`/`ladder`. The public `/epaper/:id` HTML route stays wired directly in `server.js`, since it sits outside the `/api/newspapers` mount path — it now calls the same controller function (`epaperHtml`) rather than duplicating the lookup.

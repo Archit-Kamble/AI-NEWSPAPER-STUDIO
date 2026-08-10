@@ -148,9 +148,11 @@ export function aiPanelMarkup(view) {
       <textarea id="edAiPrompt" rows="3" placeholder="Extra instructions - tone, angle, must-mention facts...">${escapeHtml(view.aiNotes)}</textarea>
     </div>
     <div class="ext-editor-toolbar">
-      <button type="button" class="ext-editor-btn is-placeholder" id="aiFillRemaining">Fill remaining area with AI</button>
+      <button type="button" class="ext-editor-btn" id="aiFillRemaining"
+              title="Carry the copy on into the space this block has left, without changing a word of what is there">Fill remaining area with AI</button>
       <button type="button" class="ext-editor-btn is-placeholder" id="aiOptimize">Optimize with these details</button>
     </div>
+    <section class="ai-proposal" id="aiFillProposal" hidden></section>
     <details class="ext-more">
       <summary>More AI actions</summary>
       <div class="ext-editor-toolbar">
@@ -181,6 +183,36 @@ function proposalMarkup(result) {
     <div class="ext-editor-toolbar">
       <button type="button" class="ext-editor-btn ext-editor-btn-primary" id="aiAcceptStory">Accept into the block</button>
       <button type="button" class="ext-editor-btn" id="aiDiscardStory">Discard</button>
+    </div>
+    <p class="ai-proposal-warn">The desk must check every fact before this is printed. It enters the block as
+       <strong>needs review</strong>.</p>`;
+}
+
+/**
+ * The filled copy, with what it did to the block stated before it is accepted.
+ *
+ * Shows the whole body as it would stand, not just the addition: the desk is
+ * accepting the whole thing, and the point of the action is that the copy
+ * already there is unchanged - which is only checkable if it is shown.
+ */
+function fillProposalMarkup(result) {
+  const { proposal, fit } = result;
+  const added = fit.charsUsed - fit.charsBefore;
+  return `
+    <h4>Filled by ${escapeHtml(result.provider || "AI")}${result.fellBackTo ? " (fallback)" : ""}
+      <span class="muted">review before accepting</span></h4>
+    <p class="ai-proposal-fit${fit.overflowing ? " over" : ""}">
+      ${fit.charsBefore} → ${fit.charsUsed} of ${fit.bodyCharBudget} characters${
+        fit.overflowing
+          ? ` — ${fit.charsUsed - fit.bodyCharBudget} too many, this will not fit`
+          : ` · added ${added}, ${fit.charsRemaining} left`
+      }
+    </p>
+    ${result.retriedAt ? `<p class="muted ext-note">Written at the ${escapeHtml(result.retriedAt)} tier — the tier you asked for could not finish inside its output limit.</p>` : ""}
+    <div class="ai-proposal-body">${escapeHtml(proposal.body).replace(/\n{2,}/g, "</p><p>").replace(/\n/g, "<br>")}</div>
+    <div class="ext-editor-toolbar">
+      <button type="button" class="ext-editor-btn ext-editor-btn-primary" id="aiAcceptFill">Accept into the block</button>
+      <button type="button" class="ext-editor-btn" id="aiDiscardFill">Discard</button>
     </div>
     <p class="ai-proposal-warn">The desk must check every fact before this is printed. It enters the block as
        <strong>needs review</strong>.</p>`;
@@ -264,9 +296,56 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, g
     onNotify(`${label}: AI is not connected yet.`);
   };
 
-  document.getElementById("aiFillRemaining")?.addEventListener("click", () =>
-    runStub("Fill remaining area", "fill-remaining"),
-  );
+  // Fill remaining area. The first of these that is real: it goes to the same
+  // server-side story writer "Write this block" uses, briefed with the block's
+  // measured room, and comes back as a proposal the desk accepts.
+  const fill = document.getElementById("aiFillRemaining");
+  const fillHost = document.getElementById("aiFillProposal");
+  fill?.addEventListener("click", async () => {
+    const page = getPage?.();
+    const section = getSection();
+    const view = getView();
+    if (!page || !section) return onNotify("Choose a block first.");
+
+    const label = fill.textContent;
+    fill.disabled = true;
+    fill.textContent = "Measuring, then writing…";
+    try {
+      const response = await fetch(
+        `/api/pages/${page.id}/sections/${encodeURIComponent(section.section_key)}/fill`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            notes: document.getElementById("edAiPrompt")?.value || "",
+            tier: getAiTier(),
+            language: view?.language,
+          }),
+        },
+      );
+      const result = await response.json().catch(() => ({ error: "The AI did not answer." }));
+      if (!response.ok || result.error) return onNotify(result.error || "The AI could not fill this block.");
+
+      fillHost.hidden = false;
+      fillHost.innerHTML = fillProposalMarkup(result);
+      document.getElementById("aiAcceptFill")?.addEventListener("click", () => {
+        // Only the body. The headline and the deck the desk wrote are not
+        // touched, and nothing is saved until autosave carries the draft - the
+        // reporter's copy is still in the block's history either way.
+        onPatch({ body: result.proposal.body, aiGenerated: true, status: "needs_review" }, "ai-panel");
+        fillHost.hidden = true;
+        onNotify("Filled. Check every fact before it prints.");
+      });
+      document.getElementById("aiDiscardFill")?.addEventListener("click", () => {
+        fillHost.hidden = true;
+        fillHost.innerHTML = "";
+      });
+    } finally {
+      fill.disabled = false;
+      fill.textContent = label;
+    }
+  });
+
   document.getElementById("aiOptimize")?.addEventListener("click", () => runStub("Optimize", "optimize"));
 
   AI_ACTIONS.forEach((action) => {

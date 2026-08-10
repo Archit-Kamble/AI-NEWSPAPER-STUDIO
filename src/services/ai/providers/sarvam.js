@@ -25,9 +25,43 @@
 
 const ENDPOINT = 'https://api.sarvam.ai/v1/chat/completions';
 
+// The output budget, and why the default moved.
+//
+// It was 4096, which is the Starter plan's ceiling, and it is too small to be a
+// DEFAULT: reasoning tokens are billed and counted as output on Sarvam, so a
+// call at Plus or Ultra effort can spend the whole 4096 thinking and return
+// `finish_reason: "length"` with no content at all. The desk then saw a
+// provider error telling it to edit an environment variable, which is not a
+// thing a sub-editor can do at 11pm.
+//
+// 16384 is the Pro ceiling and a reasonable default for a paper that is paying
+// for reasoning. `max_tokens` is a CEILING, not a spend - you are billed for
+// the tokens actually produced - so raising it costs nothing on calls that
+// finish early, and only stops the ones that would otherwise come back empty
+// after you have already paid for the thinking.
+//
+// SUPPORTED RANGE, from Sarvam's published plan limits:
+//
+//   Starter    up to  4096
+//   Pro        up to 16384
+//   Business   up to 128000
+//
+// Not every account can use the whole range, so this is configuration, not an
+// assumption: set SARVAM_MAX_OUTPUT_TOKENS to your plan's ceiling. Anything
+// outside 256..128000 is clamped rather than sent, because a value the API
+// rejects turns every request into a 400 and looks like an outage.
+const DEFAULT_MAX_OUTPUT_TOKENS = 16384;
+const MIN_MAX_OUTPUT_TOKENS = 256;
+const MAX_MAX_OUTPUT_TOKENS = 128000;
+
 const key = () => process.env.SARVAM_API_KEY || '';
 const model = () => process.env.SARVAM_MODEL || 'sarvam-105b';
-const maxOutputTokens = () => Number(process.env.SARVAM_MAX_OUTPUT_TOKENS) || 4096;
+
+function maxOutputTokens(requested) {
+  const configured = Number(process.env.SARVAM_MAX_OUTPUT_TOKENS) || DEFAULT_MAX_OUTPUT_TOKENS;
+  const wanted = Number(requested) || configured;
+  return Math.max(MIN_MAX_OUTPUT_TOKENS, Math.min(MAX_MAX_OUTPUT_TOKENS, Math.round(wanted)));
+}
 
 const provider = {
   key: 'sarvam',
@@ -41,7 +75,11 @@ const provider = {
     'Set SARVAM_API_KEY in .env. A key is issued at dashboard.sarvam.ai; new ' +
     'accounts get ₹100 of free credit, which is well over a year of this paper.',
 
-  async askForJson(prompt, schema, tier, { signal }) {
+  // How much room this provider will give an answer, so a caller that has just
+  // been told the budget was exhausted can ask for more on the retry.
+  maxOutputTokens,
+
+  async askForJson(prompt, schema, tier, { signal, maxOutputTokens: budget } = {}) {
     const response = await fetch(ENDPOINT, {
       method: 'POST',
       signal,
@@ -58,7 +96,7 @@ const provider = {
         // Reasoning is billed and counted as output, so the higher tiers are
         // given room to think AND to answer. Without this the Ultra tier can
         // spend its whole budget reasoning and return nothing.
-        max_tokens: maxOutputTokens(),
+        max_tokens: maxOutputTokens(budget),
         // Enforced at the API, not parsed hopefully at this end.
         response_format: {
           type: 'json_schema',
@@ -77,12 +115,17 @@ const provider = {
     const finish = body?.choices?.[0]?.finish_reason;
 
     if (!text) {
-      // The specific failure this provider has, named so nobody has to guess.
+      // The specific failure this provider has. Reported as a CONDITION rather
+      // than as advice: what to do about it - try again with less reasoning and
+      // more room - is a policy decision, and it belongs one layer up in
+      // ai/index.js where the retry can actually be made. This used to return
+      // prose telling the desk to edit an environment variable.
       if (finish === 'length') {
         return {
-          error:
-            'Sarvam spent its whole output budget reasoning and returned nothing. ' +
-            'Raise SARVAM_MAX_OUTPUT_TOKENS, or use a lower tier.',
+          error: 'Sarvam spent its whole output budget reasoning and returned nothing.',
+          outputExhausted: true,
+          spentTokens: body?.usage?.completion_tokens || null,
+          budget: maxOutputTokens(budget),
         };
       }
       return { error: 'Sarvam returned nothing usable.' };

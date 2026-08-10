@@ -314,4 +314,135 @@ async function write(pageId, sectionKey, { seed, notes, tier, language } = {}) {
   };
 }
 
-module.exports = { write, measure, planningFit, briefFor, resizeBriefFor, STORY_SCHEMA, BODY_SCHEMA };
+/**
+ * The brief for filling the space a block has LEFT.
+ *
+ * Deliberately not "write this block again". The desk has copy it has already
+ * read - possibly a reporter's - and the request is to carry it on into the
+ * white space underneath, keeping every sentence that is there. A rewrite
+ * would throw away work somebody has already checked.
+ */
+function fillBriefFor({ view, notes, room, language, section }) {
+  const languageName = LANGUAGE_NAMES[language] || LANGUAGE_NAMES.Marathi;
+
+  return [
+    `You are a sub-editor on a Marathi daily newspaper, working in ${languageName}.`,
+    '',
+    'This block is not full. Carry the copy on so that it fills the space, and do it',
+    'without changing a word of what is already there.',
+    '',
+    `HEADLINE: ${view.headline || '(none yet)'}`,
+    view.subheading ? `SUBHEADING: ${view.subheading}` : '',
+    notes ? `THE DESK ALSO ASKS: ${notes}` : '',
+    '',
+    'FIT:',
+    `  * Return the WHOLE body: what is below, unchanged and in the same order,`,
+    `    followed by the new paragraphs.`,
+    `  * The whole thing must be between ${Math.round(room.budget * 0.95)} and ${room.budget} characters.`,
+    `    It is ${room.used} now, so you are adding roughly ${room.remaining} characters.`,
+    '  * Short paragraphs, separated by a blank line. Plain newspaper prose, no markdown.',
+    '',
+    'WHAT YOU MUST NOT DO — read this twice:',
+    '  * Do NOT invent facts. No casualty figures, no rupee amounts, no dates, no times,',
+    '    no crowd sizes, no named officials, and no direct quotations that are not already',
+    '    in the copy below.',
+    '  * You are filling space, and filling space is exactly when a model starts making',
+    '    things up. Where you do not know a specific, write generally: background, context,',
+    '    what happens next, what has been said publicly. A block three quarters full is a',
+    '    problem the desk can fix. An invented figure in print is not.',
+    '  * Do not repeat sentences to reach the length.',
+    '',
+    `Block: ${section.width_px} × ${section.height_px} px, ${room.cols} characters across.`,
+    '',
+    'THE COPY SO FAR:',
+    view.body || '(the block is empty — write it from the headline above)',
+  ].filter((line) => line !== '').join('\n');
+}
+
+/**
+ * Fills the room a block has left, and returns a proposal.
+ *
+ * Never writes. The desk accepts it into the same editable draft as typed copy,
+ * and the block is marked `needs_review` - see VISION.md: AI assists, it never
+ * owns. A reporter's story is not overwritten by this; it is continued, and the
+ * original is still in the draft until the desk accepts.
+ */
+async function fillRemaining(pageId, sectionKey, { notes, tier, language } = {}) {
+  if (!ai.isConfigured()) {
+    const status = ai.status();
+    return { error: status.hint || 'No AI provider is configured. Add a key to .env.', unconfigured: true };
+  }
+
+  const loaded = await loadBlock(pageId, sectionKey);
+  if (!loaded) return { error: 'That block no longer exists.' };
+  const { section, images } = loaded;
+
+  if (section.smart_card_key) {
+    return { error: 'This block holds a Smart Card. Remove the card first, or write in another block.' };
+  }
+
+  // Measured against the headline and deck the block ACTUALLY has - the real
+  // hole, not the one an empty block would have.
+  const room = await measure(section, images, {});
+  const { plainText } = require('../layout/plain-text');
+  const used = (await plainText(section.body || '')).length;
+  const remaining = room.bodyCharBudget - used;
+
+  if (!room.bodyCharBudget) {
+    return { error: 'This block has no room for copy — it is filled by its pictures, or it is too small.' };
+  }
+  if (remaining <= 0) {
+    return {
+      error: used > room.bodyCharBudget
+        ? `This block is already ${used - room.bodyCharBudget} characters over. Cut it, set it tighter, or carry it over.`
+        : 'This block is already full.',
+    };
+  }
+
+  const view = {
+    headline: section.headline || '',
+    subheading: section.subheading || '',
+    body: section.body || '',
+  };
+
+  const result = await ai.askForJson(
+    fillBriefFor({
+      view,
+      notes: String(notes || section.ai_notes || '').trim(),
+      room: { budget: room.bodyCharBudget, used, remaining, cols: room.cols },
+      language: language || section.language,
+      section,
+    }),
+    BODY_SCHEMA,
+    { tier },
+  );
+  if (result.error) return { error: result.error, unconfigured: result.unconfigured, outputExhausted: result.outputExhausted };
+
+  const body = String(result.data.body || '').trim();
+  if (!body) return { error: 'The AI returned nothing to add.' };
+
+  const nowUsed = (await plainText(body)).length;
+  return {
+    // Only the body changes. The headline and the deck the desk wrote stay
+    // exactly as they are - this action fills space, it does not re-edit a
+    // story that has already been read.
+    proposal: { body },
+    fit: {
+      bodyCharBudget: room.bodyCharBudget,
+      charsUsed: nowUsed,
+      charsRemaining: room.bodyCharBudget - nowUsed,
+      charsBefore: used,
+      overflowing: nowUsed > room.bodyCharBudget,
+    },
+    provider: result.provider,
+    tier: result.tier,
+    fellBackTo: result.fellBackTo,
+    retriedAt: result.retriedAt,
+  };
+}
+
+module.exports = {
+  write, fillRemaining, measure, planningFit,
+  briefFor, resizeBriefFor, fillBriefFor,
+  STORY_SCHEMA, BODY_SCHEMA,
+};

@@ -62,9 +62,28 @@ function tierFor(name) {
   return TIERS[key] || TIERS[DEFAULT_TIER];
 }
 
+// From most thinking to least. A call that spent its whole output budget
+// reasoning and returned nothing is retried one step down this ladder: less
+// reasoning leaves more of the budget for the answer, which is the whole
+// problem. `basic` has nothing below it - a retry there gets more room instead.
+const LADDER = ['ultra', 'plus', 'basic'];
+
+/**
+ * The next tier down, or null at the bottom.
+ *
+ * Takes a tier or its key. Passing the object matters: `tierFor` stringifies
+ * what it is given, so an object silently became "[object object]", fell back
+ * to the default, and every retry ran at the tier it was meant to step down
+ * from.
+ */
+function lowerThan(tier) {
+  const at = LADDER.indexOf(tierFor(tier?.key || tier).key);
+  return at >= 0 && at < LADDER.length - 1 ? TIERS[LADDER[at + 1]] : null;
+}
+
 /** The tiers as the editor's dropdown needs them. */
 function list() {
   return Object.values(TIERS).map(({ key, name, hint }) => ({ key, name, hint }));
 }
 
-module.exports = { TIERS, DEFAULT_TIER, tierFor, list };
+module.exports = { TIERS, DEFAULT_TIER, tierFor, list, lowerThan, LADDER };

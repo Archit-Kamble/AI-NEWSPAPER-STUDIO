@@ -174,6 +174,19 @@ function createApp() {
     res.json(result);
   }));
 
+  // Filling the space a block has LEFT. Not a rewrite: what is already written
+  // - possibly a reporter's copy - is kept word for word and carried on into
+  // the white space under it. A proposal, like everything else the AI does.
+  app.post("/api/pages/:pageId/sections/:sectionKey/fill", requireDesk, asyncRoute(async (req, res) => {
+    const result = await storyWriter.fillRemaining(
+      parseInt(req.params.pageId, 10),
+      req.params.sectionKey,
+      { notes: req.body?.notes, tier: req.body?.tier, language: req.body?.language },
+    );
+    if (result.error) return res.status(result.unconfigured ? 503 : 400).json(result);
+    res.json(result);
+  }));
+
   // Everything buildable for a date, with the model-written boxes done in a
   // single call rather than one per box.
   app.post("/api/features/build", requireDesk, asyncRoute(async (req, res) => {

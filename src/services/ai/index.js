@@ -161,22 +161,41 @@ async function askForJson(prompt, schema, options = {}) {
 
   const tier = tiers.tierFor(options.tier);
   const attempts = [];
+  let exhausted = false;
 
   for (const provider of providers) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs());
+    let result = await callOnce(provider, prompt, schema, tier);
 
-    let result;
-    try {
-      result = await provider.askForJson(prompt, schema, tier, { signal: controller.signal });
-    } catch (error) {
-      result = {
-        error: error.name === 'AbortError'
-          ? `${provider.name} timed out after ${Math.round(timeoutMs() / 1000)}s.`
-          : `${provider.name}: ${error.message}`,
-      };
-    } finally {
-      clearTimeout(timer);
+    // One retry, and only for the one failure that a retry can actually fix:
+    // the model spent its whole output budget reasoning and returned nothing.
+    // Less reasoning and more room is the answer, so the retry steps one tier
+    // down and doubles the ceiling. Never more than once - a model that cannot
+    // answer at Basic with twice the room is not going to on the third try, and
+    // a loop here bills the newspaper for every attempt.
+    if (result.outputExhausted) {
+      exhausted = true;
+      attempts.push(`${provider.name}: ${result.error}`);
+      const gentler = tiers.lowerThan(tier.key) || tier;
+      const roomier = provider.maxOutputTokens
+        ? provider.maxOutputTokens(result.budget ? result.budget * 2 : undefined)
+        : undefined;
+      result = await callOnce(provider, prompt, schema, gentler, roomier);
+      if (result.data) {
+        const problem = validate(result.data, schema);
+        if (!problem) {
+          return {
+            data: result.data,
+            provider: provider.key,
+            tier: gentler.key,
+            usage: result.usage || null,
+            fellBackTo: provider === providers[0] ? null : provider.key,
+            // The desk is told its copy was written with less thinking than it
+            // asked for, rather than quietly getting a cheaper answer.
+            retriedAt: gentler.key !== tier.key ? gentler.key : null,
+          };
+        }
+        result = { error: `${provider.name} answered in the wrong shape: ${problem}` };
+      }
     }
 
     if (result.data) {
@@ -198,7 +217,37 @@ async function askForJson(prompt, schema, options = {}) {
     attempts.push(result.error);
   }
 
+  // What the desk reads when nothing worked. When the cause was the output
+  // budget, it says what to DO - the two things a sub-editor can actually do -
+  // rather than naming an environment variable. The provider's own words are
+  // kept in `attempts` for whoever is looking after the newsroom.
+  if (exhausted) {
+    return {
+      error: 'AI could not complete this request within the current output limit. '
+        + 'Try Basic or Plus, or generate the story one section at a time.',
+      outputExhausted: true,
+      attempts,
+    };
+  }
+
   return { error: attempts.join(' | '), attempts };
+}
+
+/** One call to one provider, with the timeout every provider is held to. */
+async function callOnce(provider, prompt, schema, tier, maxOutputTokens) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs());
+  try {
+    return await provider.askForJson(prompt, schema, tier, { signal: controller.signal, maxOutputTokens });
+  } catch (error) {
+    return {
+      error: error.name === 'AbortError'
+        ? `${provider.name} timed out after ${Math.round(timeoutMs() / 1000)}s.`
+        : `${provider.name}: ${error.message}`,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 module.exports = { askForJson, isConfigured, status, tiers, PROVIDERS };

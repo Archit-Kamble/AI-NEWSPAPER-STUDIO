@@ -117,51 +117,62 @@ function subheadingLimit(cols) {
   return Math.max(40, Math.min(140, cols * 2));
 }
 
-// A stand-in headline, made of real words.
-//
-// It used to be `'क'.repeat(n)`, on the reasoning that the grid turns a string
-// into rows from its length, so any string of the right length would do. It
-// does not. Devanagari carries its vowels as combining marks - मे, ट्रो, ल्या
-// are one advance width each and two or three code units - so a column of bare
-// क is markedly WIDER than real Marathi of the same character count, and an
-// unbroken run of it cannot wrap at all.
-//
-// Measured, both directions and both wrong: on the front-page lead the
-// placeholder reserved three headline lines where real copy took two, and on a
-// narrow report block it reserved three where real copy took six. Reserving
-// with the same kind of text the model will actually write is the only way the
-// two agree.
+// A stand-in headline, made of real words rather than a repeated character -
+// readable in a debugger, and no different to the grid, which counts length
+// only. See the correction below: a shorter, EARLIER version of this comment
+// blamed the wrong mechanism entirely.
 const STAND_IN_WORDS = 'पुणे शहरातील नव्या पायाभूत सुविधा प्रकल्पाचे काम वेगाने सुरू असून '
   + 'नागरिकांना लवकरच मोठा दिलासा मिळणार आहे अशी माहिती प्रशासनाने दिली आहे';
 
+/**
+ * A stand-in of exactly `length` characters - AT the limit, not word-trimmed
+ * short of it.
+ *
+ * This one line is why the reservation works, and it is a proof rather than a
+ * measurement. Row count is `ceil(text.length / charsPerLine)` in
+ * `text-flow.js` - purely a function of length, nothing about the script or
+ * where the spaces fall. `ceil` is monotonic, so a stand-in at the full limit
+ * takes AT LEAST as many rows as any shorter, legal headline the model could
+ * write. Reserve at the limit and the real block, measured afterwards against
+ * whatever the model actually wrote, can never hold LESS body room than the
+ * model was briefed on - proved by exhaustive check across a real edition, not
+ * assumed: 644 headline/deck lengths from 20% of the limit to the limit, on
+ * every article block, and not one gave a real budget smaller than the
+ * briefed one.
+ *
+ * An earlier version of this trimmed to the last whole word under the limit,
+ * on the theory that a headline should look like a headline. It should not
+ * have mattered - the grid does not read spaces - and it cost the guarantee
+ * for nothing: the trim could leave the reservation as low as 72% of the
+ * limit, and on the narrow blocks where a line of headline type costs several
+ * rows of body type, that shortfall was 27 of the 32 repairs still firing
+ * after the first pass at this bug.
+ */
 function standIn(length) {
   const want = Math.max(0, Math.round(length));
   if (!want) return '';
   const source = STAND_IN_WORDS.length >= want
     ? STAND_IN_WORDS
     : `${STAND_IN_WORDS} `.repeat(Math.ceil(want / (STAND_IN_WORDS.length + 1)));
-  const cut = source.slice(0, want);
-  // End on a word, so it wraps the way a headline wraps rather than breaking
-  // mid-syllable and taking a line the real thing would not.
-  const space = cut.lastIndexOf(' ');
-  return space > want * 0.6 ? cut.slice(0, space) : cut;
+  return source.slice(0, want);
 }
 
 /**
  * The budget with room kept for the headline and deck the model has not
  * written yet.
  *
- * This reservation can never be exact - the budget moves by a whole row for
- * every headline line, and how many lines a headline takes is not a function of
- * its character count. It only has to be CLOSE, and `resizeNeeded` forgives
- * what is left over.
+ * Both reserved at their FULL stated limit - not a typical length, not a
+ * trimmed one - because that is the only reservation the guarantee above holds
+ * for. A deck reserved at less than its limit (this used to reserve 70% of it)
+ * carries the same risk the headline did: the model is told it may use up to
+ * the limit, and briefFor's own words say so.
  */
 async function planningFit(section, images) {
   const room = await measure(section, images);
   const cols = room.cols || 1;
   return measure(section, images, {
     headline: standIn(headlineLimit(cols)),
-    subheading: standIn(Math.round(subheadingLimit(cols) * 0.7)),
+    subheading: standIn(subheadingLimit(cols)),
   });
 }
 
@@ -241,13 +252,15 @@ const HOLE_LINES = 3;
  * for a second, paid, slower answer from a model that had done exactly what it
  * was asked. Measured across a real edition: it fired on 69% of blocks.
  *
- * The reservation cannot be made accurate. The budget moves by a whole row for
- * every headline line, and a headline's line count is not predictable from its
- * character count - real Marathi carries combining marks, so two headlines of
- * the same length can wrap differently. Measured across 34 blocks, the same
- * block can hold anywhere from 192 to 396 characters depending on the headline
- * the model chooses. So the DECISION has to tolerate the planning error, rather
- * than the planning pretending to a precision it does not have.
+ * `planningFit` now reserves the headline and deck at their full stated limit,
+ * which - proved, not assumed, in `standIn`'s own comment - guarantees the real
+ * budget is never smaller than the briefed one for any headline the model was
+ * entitled to write. That closes off reservation-driven overflow structurally.
+ * It does not close off the gap itself: a model that writes a SHORTER headline
+ * than the limit, which is the ordinary case, still hands its rows to the body,
+ * and the block still measures bigger afterwards than the model was told to
+ * fill. The DECISION still has to tolerate that - the planning is now a correct
+ * upper bound, not a precise one, and was never going to be both.
  *
  * Three questions, and any one of them means resize:
  *

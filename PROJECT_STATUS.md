@@ -4,6 +4,53 @@ Architectural audit only. No code was changed to produce this document. Reflects
 
 ---
 
+## 0d. Fifth pass — overflow made structurally impossible, a decision deferred (2026-08-10)
+
+§0c's fix (the word-trimmed stand-in) traded one failure mode for another rather
+than removing it. Under a fair, non-adversarial headline distribution, measured
+this pass: it produced **overflow on 42% of writes** - the model, entitled by
+its own brief to write a headline up to the stated limit, sometimes did, and
+the word-trimmed reservation (as low as 72% of the limit on narrow blocks) had
+already promised the body more room than that left standing.
+
+**The real mechanism, and an earlier wrong explanation corrected.** Headline
+row count in `text-flow.js` is `ceil(text.length / charsPerLine)` - a function
+of LENGTH ALONE, proved by measuring two headlines of equal length, one bare
+`'क'` repeated and one real Marathi: identical rows, every time. §0c's comment
+blaming Devanagari combining marks for the mismatch was wrong; confirmed by
+reading `estimateHeight` and by direct test. The actual cause was that
+`standIn()` trimmed to the last whole word under the limit for readability,
+which the row math never asked for and which cost the reservation up to 28% of
+its stated length for nothing.
+
+**The fix, and why it is a proof rather than a tuning.** `ceil(x/n)` is
+monotonic, so a stand-in headline/deck at EXACTLY the stated limit takes at
+least as many rows as any shorter, legal one - meaning the real budget,
+measured afterwards against whatever the model actually wrote, can never be
+smaller than what the model was told to write to. Checked exhaustively, not
+sampled: 644 headline/deck lengths from 20% of the limit to the limit, across
+every article block of a real edition, zero violations. `planningFit` now
+reserves both at their full limit; the deck also went from a hard-coded 70% of
+its limit to the same full-limit reservation, for the same reason.
+
+**The trade-off this surfaces, deliberately left unresolved.** A conservative
+reservation removes overflow but, whenever the model's real headline lands
+under the limit (the ordinary case - short, punchy headlines are good
+journalism), leaves more of the block unaccounted-for than a snug reservation
+would. Measured under the SAME realistic distribution: 0% overflow, 41% hole
+(vs. the old reservation's 58% ok / 0% hole / 42% overflow). Total "not
+immediately accepted" rate is about the same either way, but the failure mode
+changed from *content gets cut* to *space gets topped up* - strictly better,
+and the reservation fix is committed on that basis alone.
+
+Whether `HOLE_LINES` (still 3, untouched) should rise now that the reservation
+baseline is more conservative is a genuine, separate, evidenced question - not
+decided here. Sensitivity, same edition: HOLE_LINES 3 → 41% hole rate, 4 → 7%,
+5 → 3%. Left for the next explicit decision; changing it was outside what this
+pass's evidence justified deciding alone.
+
+---
+
 ## 0c. Fourth pass — the second call stops being the default (2026-08-10)
 
 The open item from §0b, now measured and fixed.

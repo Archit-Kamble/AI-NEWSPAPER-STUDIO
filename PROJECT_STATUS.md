@@ -4,6 +4,20 @@ Architectural audit only. No code was changed to produce this document. Reflects
 
 ---
 
+## 0i. Tenth pass — auth migrated to Route → Controller → Service → Repository (2026-08-11)
+
+**Autonomous pass, self-directed after Phase 10.** Inspected the repository for the highest-value unfinished work rather than starting a new AI feature. `CLAUDE.md`'s own "Current reality" section already named the target: `/api/auth/login` and `/api/auth/me` were still defined inline in `server.js`, calling `src/db.js`'s `authenticateUser` directly — the one resource not yet moved onto the Route → Controller → Service → Repository shape the other three (`news`, `newspapers`, `pages`) already use.
+
+**Moved, not rewritten.** `src/services/auth.service.js` (`authenticateUser`, `login`), `src/controllers/auth.controller.js` (`login`, `me`), `src/routes/auth.routes.js` — same logic, same status codes (400 for a missing field, 401 for a bad credential/role match), same session shape (`req.session.user`). `server.js` now mounts `app.use("/api/auth", authRoutes)` in place of the two inline handlers.
+
+**`src/db.js` deleted, not left as a re-export.** It held exactly one function, `authenticateUser`, which was itself a duplicate of `user.repository.js` plus a bcrypt check — confirmed by grep that nothing else in the codebase required it. Keeping it as a compatibility shim would have been a second copy of logic that now lives in `auth.service.js`, which is exactly the drift pattern this project has already been bitten by twice (template keys, `object-fit`).
+
+**Verified, not assumed.** `npm test` (createApp() boot path): 305/305, unchanged — the route move touches no test-visible behaviour. Live boot: server started, `GET /api/health` → `{"status":"ok"}`, `GET /api/auth/me` with no session → `{"user":null}`, `POST /api/auth/login` with a bad credential → 401 `{"error":"Invalid credentials"}`, matching pre-migration behaviour exactly. Server stopped by port afterward, per this project's own housekeeping rule.
+
+**Not touched:** `src/middleware/auth.middleware.js`, `src/middleware/error.middleware.js`, and the five `src/layout/layout.*.js` scaffolding files remain 0-byte — real request auth still runs through `src/middleware/auth.js`, which this pass did not rename or move, since `CLAUDE.md` explicitly flags that as intentional naming, not oversight.
+
+---
+
 ## 0h. Ninth pass — current-news writing connected to the desk (2026-08-11)
 
 **Most of the wiring already existed.** Inspected before touching anything, per this phase's own Part 1: `storyWriter.write()` already classified intent, called `information.fetchContext()` before any AI call, and refused on anything but `verified` — all built in Phase 8. What this pass actually added: the refusal sentence is now in Marathi (below), the current-news hallucination guard names quotations and events explicitly rather than only numbers/dates, and — genuinely new — a desk-facing status indicator and source-inspection UI, which had not been built.

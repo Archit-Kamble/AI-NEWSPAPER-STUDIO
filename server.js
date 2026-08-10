@@ -31,9 +31,7 @@ const { upload } = require('./src/middleware/upload');
 const newsRoutes = require('./src/routes/news.routes');
 const newspaperRoutes = require('./src/routes/newspaper.routes');
 const pageRoutes = require('./src/routes/page.routes');
-const {
-  authenticateUser,
-} = require("./src/db");
+const authRoutes = require('./src/routes/auth.routes');
 
 dotenv.config();
 
@@ -78,22 +76,7 @@ function createApp() {
     res.json({ status: "ok" });
   });
 
-  app.post("/api/auth/login", async (req, res) => {
-    const { email, password, role } = req.body;
-    if (!email || !password)
-      return res.status(400).json({ error: "Email and password required" });
-
-    const user = await authenticateUser(email, password);
-    if (!user || user.role !== role)
-      return res.status(401).json({ error: "Invalid credentials" });
-
-    req.session.user = user;
-    res.json({ user });
-  });
-
-  app.get("/api/auth/me", (req, res) => {
-    res.json({ user: req.session.user || null });
-  });
+  app.use("/api/auth", authRoutes);
 
   // News API
   // Reporters file here, so signing in is enough; the desk-only check is on

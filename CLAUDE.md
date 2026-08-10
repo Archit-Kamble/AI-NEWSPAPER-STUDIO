@@ -39,19 +39,20 @@ Route → Controller → Service → Repository → PostgreSQL
 
 ## Current reality (read this before touching code)
 
-`server.js` is the entry point and still defines many routes inline, but the layering migration is **partly done**. Three resources are mounted from real route modules:
+`server.js` is the entry point and still defines many routes inline, but the layering migration is **partly done**. Four resources are mounted from real route modules:
 
 ```
+app.use("/api/auth",       src/routes/auth.routes.js)
 app.use("/api/news",       requireSignIn, src/routes/news.routes.js)
 app.use("/api/newspapers", deskWrites,    src/routes/newspaper.routes.js)
                                           src/routes/page.routes.js
 ```
 
-Those go Route → Controller (`src/controllers/*.controller.js`) → Service (`src/services/*.service.js`) → Repository (`src/repositories/*.repository.js`) → PostgreSQL, which is the target shape. Everything else is still inline in `server.js` calling `src/db.js` → `src/repositories/*`. When continuing the migration, take one resource at a time, verify boot + `npm test` after each, small commits.
+Those go Route → Controller (`src/controllers/*.controller.js`) → Service (`src/services/*.service.js`) → Repository (`src/repositories/*.repository.js`) → PostgreSQL, which is the target shape. Everything else is still inline in `server.js` calling `src/repositories/*` directly. There is no more `src/db.js` — it held only `authenticateUser`, a duplicate of `user.repository.js` plus a bcrypt check; that logic now lives in `auth.service.js` and the file was deleted rather than kept as a second copy. When continuing the migration, take one resource at a time, verify boot + `npm test` after each, small commits.
 
-`src/services/` is substantial and live: `editionStart`, `editionFeatures`, `worklist`, `fit`, `jump`, `preflight`, `pressPackage`, `scribus`, `epaper`, `signoff`, `storyWriter`, `sectionImage`, `backgroundRemoval`, `cutout`, `segment`, `districtEdition`, plus `src/services/ai/` and `src/services/information/` (verified current-event context — see below).
+`src/services/` is substantial and live: `auth`, `editionStart`, `editionFeatures`, `worklist`, `fit`, `jump`, `preflight`, `pressPackage`, `scribus`, `epaper`, `signoff`, `storyWriter`, `sectionImage`, `backgroundRemoval`, `cutout`, `segment`, `districtEdition`, plus `src/services/ai/` and `src/services/information/` (verified current-event context — see below).
 
-Still 0-byte scaffolding, and only these: `src/controllers/auth.controller.js`, `src/routes/auth.routes.js`, `src/services/auth.service.js`, `src/middleware/auth.middleware.js`, `src/middleware/error.middleware.js`, and all five `src/layout/layout.*.js`. Auth actually runs through `src/middleware/auth.js` (`requireSignIn`, `requireDesk`, `deskWrites`), not the `.middleware.js` file beside it — check which one before editing.
+Still 0-byte scaffolding: `src/middleware/auth.middleware.js`, `src/middleware/error.middleware.js`, and all five `src/layout/layout.*.js`. Auth actually runs through `src/middleware/auth.js` (`requireSignIn`, `requireDesk`, `deskWrites`), not the `.middleware.js` file beside it — check which one before editing.
 
 ### Frontend load path
 

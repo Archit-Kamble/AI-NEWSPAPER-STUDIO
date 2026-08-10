@@ -117,21 +117,51 @@ function subheadingLimit(cols) {
   return Math.max(40, Math.min(140, cols * 2));
 }
 
+// A stand-in headline, made of real words.
+//
+// It used to be `'क'.repeat(n)`, on the reasoning that the grid turns a string
+// into rows from its length, so any string of the right length would do. It
+// does not. Devanagari carries its vowels as combining marks - मे, ट्रो, ल्या
+// are one advance width each and two or three code units - so a column of bare
+// क is markedly WIDER than real Marathi of the same character count, and an
+// unbroken run of it cannot wrap at all.
+//
+// Measured, both directions and both wrong: on the front-page lead the
+// placeholder reserved three headline lines where real copy took two, and on a
+// narrow report block it reserved three where real copy took six. Reserving
+// with the same kind of text the model will actually write is the only way the
+// two agree.
+const STAND_IN_WORDS = 'पुणे शहरातील नव्या पायाभूत सुविधा प्रकल्पाचे काम वेगाने सुरू असून '
+  + 'नागरिकांना लवकरच मोठा दिलासा मिळणार आहे अशी माहिती प्रशासनाने दिली आहे';
+
+function standIn(length) {
+  const want = Math.max(0, Math.round(length));
+  if (!want) return '';
+  const source = STAND_IN_WORDS.length >= want
+    ? STAND_IN_WORDS
+    : `${STAND_IN_WORDS} `.repeat(Math.ceil(want / (STAND_IN_WORDS.length + 1)));
+  const cut = source.slice(0, want);
+  // End on a word, so it wraps the way a headline wraps rather than breaking
+  // mid-syllable and taking a line the real thing would not.
+  const space = cut.lastIndexOf(' ');
+  return space > want * 0.6 ? cut.slice(0, space) : cut;
+}
+
 /**
  * The budget with room kept for the headline and deck the model has not
  * written yet.
  *
- * Stand-ins of the right LENGTH are enough: the grid turns a string into rows
- * from its length and its type size, so a placeholder of the limit reserves
- * exactly the rows a headline of the limit will take.
+ * This reservation can never be exact - the budget moves by a whole row for
+ * every headline line, and how many lines a headline takes is not a function of
+ * its character count. It only has to be CLOSE, and `resizeNeeded` forgives
+ * what is left over.
  */
 async function planningFit(section, images) {
   const room = await measure(section, images);
   const cols = room.cols || 1;
-  const placeholder = (length) => 'क'.repeat(Math.max(0, length));
   return measure(section, images, {
-    headline: placeholder(headlineLimit(cols)),
-    subheading: placeholder(Math.round(subheadingLimit(cols) * 0.7)),
+    headline: standIn(headlineLimit(cols)),
+    subheading: standIn(Math.round(subheadingLimit(cols) * 0.7)),
   });
 }
 
@@ -191,6 +221,61 @@ const BODY_SCHEMA = {
   required: ['body'],
   properties: { body: { type: 'string', description: 'The story, resized to fit.' } },
 };
+
+// How much of the block a hole may take before a reader would notice it. Three
+// body lines - measured in LINES rather than as a percentage, because that is
+// what the page shows: the same 15% is invisible on a full-page lead and is the
+// whole block on a two-line filler.
+const HOLE_LINES = 3;
+
+/**
+ * Should the story be sent back to be resized?
+ *
+ * THE THING THIS EXISTS TO GET RIGHT. The model is briefed on the room a block
+ * has BEFORE it has written the headline, so the headline is reserved at its
+ * maximum length. Whatever headline it then writes is usually shorter, and a
+ * headline that takes one line fewer hands its rows to the body - so the block
+ * measured afterwards routinely holds MORE than the model was told to write.
+ *
+ * The old rule judged the copy against that larger number alone, and so asked
+ * for a second, paid, slower answer from a model that had done exactly what it
+ * was asked. Measured across a real edition: it fired on 69% of blocks.
+ *
+ * The reservation cannot be made accurate. The budget moves by a whole row for
+ * every headline line, and a headline's line count is not predictable from its
+ * character count - real Marathi carries combining marks, so two headlines of
+ * the same length can wrap differently. Measured across 34 blocks, the same
+ * block can hold anywhere from 192 to 396 characters depending on the headline
+ * the model chooses. So the DECISION has to tolerate the planning error, rather
+ * than the planning pretending to a precision it does not have.
+ *
+ * Three questions, and any one of them means resize:
+ *
+ *   Will it fit?          Copy longer than the block is not a judgement call.
+ *   Did it do as asked?   Short of the floor it was given is the model's miss,
+ *                         not the planner's, and no headline explains it.
+ *   Is there a hole?      Whoever is at fault, several empty lines at the foot
+ *                         of a block is a hole somebody has to fill at 11pm.
+ *
+ * @param {number} used     characters of body actually written
+ * @param {object} real     the block measured with the headline it really has
+ * @param {number} briefed  the body budget the model was actually given
+ */
+function resizeNeeded({ used, real, briefed }) {
+  const budget = real?.bodyCharBudget || 0;
+  if (!budget) return false;
+
+  if (used > budget) return { reason: 'overflow' };
+
+  // The floor briefFor actually stated. Below it the model ignored its brief.
+  const floor = Math.round((briefed || budget) * 0.92);
+  if (used < floor) return { reason: 'short' };
+
+  const cols = Math.max(1, real.cols || 1);
+  if ((budget - used) / cols > HOLE_LINES) return { reason: 'hole' };
+
+  return false;
+}
 
 /**
  * The second pass: the same story, cut or carried on until it fills the hole.
@@ -281,7 +366,11 @@ async function write(pageId, sectionKey, { seed, notes, tier, language } = {}) {
   });
   let used = (await plainText(proposal.body)).length;
 
-  if (real.bodyCharBudget && (used < real.bodyCharBudget * 0.9 || used > real.bodyCharBudget)) {
+  // A second call is a second bill and another half minute the desk waits, so
+  // it is spent only when the copy genuinely misses - never merely because the
+  // headline came out shorter than the room reserved for it.
+  const resize = resizeNeeded({ used, real, briefed: fit.bodyCharBudget });
+  if (resize) {
     const repaired = await ai.askForJson(
       resizeBriefFor({ proposal, used, budget: real.bodyCharBudget, language: language || section.language }),
       BODY_SCHEMA,
@@ -307,6 +396,8 @@ async function write(pageId, sectionKey, { seed, notes, tier, language } = {}) {
       charsUsed: used,
       charsRemaining: real.bodyCharBudget - used,
       overflowing: used > real.bodyCharBudget,
+      // Why the second call was spent, or null when one answer was enough.
+      resized: resize ? resize.reason : null,
     },
     provider: result.provider,
     tier: result.tier,
@@ -448,4 +539,6 @@ module.exports = {
   write, fillRemaining, measure, planningFit,
   briefFor, resizeBriefFor, fillBriefFor,
   STORY_SCHEMA, BODY_SCHEMA,
+  // Exported so the rule can be held by tests without calling a model.
+  resizeNeeded,
 };

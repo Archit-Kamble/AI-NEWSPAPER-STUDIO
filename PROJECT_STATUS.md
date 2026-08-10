@@ -4,6 +4,54 @@ Architectural audit only. No code was changed to produce this document. Reflects
 
 ---
 
+## 0c. Fourth pass — the second call stops being the default (2026-08-10)
+
+The open item from §0b, now measured and fixed.
+
+**What was actually wrong.** `planningFit` reserves the headline at its longest,
+because the model has not written one yet. The model then writes a shorter
+headline, a headline one line shorter hands its rows to the body, and the block
+measures *bigger* afterwards than the model was ever told to fill. The old rule
+judged the copy against that larger number alone — so a model that had done
+exactly as it was asked was sent back for a second paid, slower answer.
+
+**Why it cannot be fixed by planning harder.** The budget moves by a whole row
+per headline line, and a headline's line count is not a function of its
+character count. Measured across 34 article blocks, one block holds anywhere
+from **192 to 396** characters depending on which headline the model picks.
+Constraining the headline to a band of lengths that all wrap to the same number
+of lines was tried and predicted the budget on **0 of 34** blocks. The
+reservation can only ever be close.
+
+**So the decision changed, not the planning.** `resizeNeeded()` asks three
+questions, any one of which means resize:
+
+| question | test |
+|---|---|
+| will it fit? | body longer than the block |
+| did it do as asked? | body under the floor the brief actually stated (92%) |
+| is there a hole? | more than three empty body **lines** |
+
+Counted in lines rather than percent because that is what a reader sees: the
+same 15% is invisible on a full-page lead and is the whole of a two-line
+filler.
+
+**One real fault found along the way.** The stand-in headline was
+`'क'.repeat(n)`. Devanagari carries its vowels as combining marks, so a column
+of bare क is markedly wider than real Marathi of the same character count and
+cannot wrap at all — it reserved three headline lines where real copy took two
+on the lead, and three where real copy took six on a narrow report block. Wrong
+in both directions. The stand-in is now made of real words.
+
+**Measured on a real edition, same simulation, model obeying its brief:**
+
+| | repair rate | calls per write |
+|---|---|---|
+| before | 78% | 1.78 |
+| after | **32%** | **1.32** |
+
+---
+
 ## 0b. Third pass — production hardening (2026-08-10)
 
 **What went wrong is now a classification, not a string.**

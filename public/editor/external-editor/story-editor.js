@@ -298,6 +298,22 @@ function paintFigure(figure, row) {
   const url = String(row.url || "");
   if (image.getAttribute("src") !== url) image.setAttribute("src", url);
 
+  // A photograph placed before the editor knew its proportions is stored in a
+  // box of the wrong shape, and `contain` then letterboxes it - white bands
+  // inside a frame bigger than the picture, which is what prints. Snap the box
+  // to the picture, once, so the frame IS the picture.
+  image.onload = () => {
+    if (figure.dataset.fitted || !image.naturalWidth || !image.naturalHeight) return;
+    figure.dataset.fitted = "yes";
+    const natural = image.naturalWidth / image.naturalHeight;
+    const stored = Number(row.width_px) / Math.max(1, Number(row.height_px));
+    const turned = ((((Number(row.rotation) || 0) % 360) + 360) % 360) % 180 !== 0;
+    const wanted = turned ? 1 / natural : natural;
+    if (Math.abs(stored - wanted) / wanted > 0.02) {
+      picture.onPatchImage?.(row.id, { height: Math.max(20, Math.round(Number(row.width_px) / wanted)) });
+    }
+  };
+
   const turn = (((Number(row.rotation) || 0) % 360) + 360) % 360;
   const quarter = turn % 180 !== 0;
   const width = figure.style.width;

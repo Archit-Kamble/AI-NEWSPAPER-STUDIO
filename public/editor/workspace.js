@@ -115,7 +115,7 @@ async function addSectionImage(file) {
   if (!page || !key) return;
 
   const form = new FormData();
-  form.append("images", file);
+  form.append("images", await readableImage(file));
   const uploaded = await fetch("/api/uploads/images", { method: "POST", body: form }).then((r) => r.json());
   const url = uploaded?.imageUrls?.[0];
   if (!url) return showNotice("The picture could not be uploaded.");
@@ -144,6 +144,40 @@ async function addSectionImage(file) {
   sectionImages = await response.json();
   redrawCompose();
   showNotice("Picture placed. Drag it where the story wants it.");
+}
+
+// What the server's image library can actually decode. Everything downstream
+// of the upload reads the file with Jimp - the cut-out model, the flood fill,
+// the alpha mask the copy wraps to, the press package - and Jimp does not
+// decode WebP. A .webp uploaded fine, drew fine in the browser, and then every
+// one of those failed with "that picture could not be read from disk", which is
+// why Remove background looked broken. Phones and Google Images hand out WebP
+// constantly, so this is the normal case, not an edge one.
+const SERVER_CAN_READ = /^image\/(png|jpeg|bmp|gif|tiff)$/;
+
+/**
+ * The same picture in a format the whole pipeline can read.
+ *
+ * The browser decodes WebP, AVIF and HEIC natively, so the conversion happens
+ * here, once, at the moment of upload - rather than adding a native image
+ * library to the server for a job the browser has already done.
+ */
+async function readableImage(file) {
+  if (SERVER_CAN_READ.test(file.type)) return file;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    canvas.getContext("2d").drawImage(bitmap, 0, 0);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!blob) return file;
+    return new File([blob], `${file.name.replace(/\.[^.]+$/, "")}.png`, { type: "image/png" });
+  } catch {
+    // Better to upload what we have and fail loudly later than to lose the
+    // picture at the door.
+    return file;
+  }
 }
 
 /** The picture's own width ÷ height, or null if the browser cannot read it. */

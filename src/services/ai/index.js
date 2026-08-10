@@ -151,6 +151,15 @@ function validate(data, schema, path = '') {
     return null;
   }
 
+  // A headline that comes back as the number 12345 is not a shape a schema
+  // rejects on its own - `additionalProperties`/`required` say nothing about
+  // it - and `String(12345)` turns it into printable text without a complaint
+  // anywhere. Every field this application asks for is prose, so this is the
+  // one primitive type worth checking explicitly.
+  if (schema.type === 'string' && typeof data !== 'string') {
+    return `${path.replace(/\.$/, '') || 'the answer'} is not text`;
+  }
+
   return null;
 }
 

@@ -4,6 +4,55 @@ Architectural audit only. No code was changed to produce this document. Reflects
 
 ---
 
+## 0e. Sixth pass — the writing pipeline audited end to end (2026-08-11)
+
+Mapped the complete path (AI panel → route → `storyWriter.service` → provider
+router → Gemini/Sarvam/Anthropic → validated JSON → measurement → optional
+resize → proposal → accept → draft, `needs_review`) without changing the
+resize algorithm, which this pass confirms is stable: `HOLE_LINES=4`, full
+headline/deck reservation, overflow detection all untouched.
+
+**A real fact-safety gap, closed.** Every prompt forbade an invented casualty
+figure, rupee amount, name or quotation - and said nothing about a model
+asserting what "today's" election, match or weather actually did. That is not
+an invented number; it is training knowledge presented as news, and a
+newspaper cannot tell the two apart once it is printed. All three prompts
+(`briefFor`, `resizeBriefFor`, `fillBriefFor`) now say explicitly: no stating
+an outcome, score or status for a live or developing story from what the model
+already knows - write around it in general terms instead. Existing rules kept,
+not replaced.
+
+**No live-data retrieval exists, and this pass did not add any.** "Write this
+block" gives the model a subject line and nothing else - no search, no news
+API, no verified current facts. For a seed like "बिहार निवडणूक निकाल" the only
+thing standing between the model and a hallucinated result is the instruction
+above. That is a real limitation of the current system, not a bug this pass
+fixes: building retrieval is future work, tracked here rather than attempted.
+
+**A real validation gap, closed.** The shared response validator in
+`src/services/ai/index.js` checked that a required field was PRESENT, never
+that it was the right TYPE. A `body` that came back as the number `12345`
+passed validation and printed as `"12345"` - `validate()` now rejects any
+`type: 'string'` schema field whose value is not a string, for all three
+providers, in the one place that already does this checking.
+
+**Verified, not changed:** headline length instructions do not encourage
+maximum-length headlines (a ceiling only, no "use the room" language); the
+first-write prompt's "keep adding detail... until you are inside that range"
+is scoped by the adjacent no-invention rule and does not read as license to
+pad; character measurement is `.length` (UTF-16 code units) consistently
+between planning and validation - same module, same metric, both sides, so
+there is no mismatch to fix; Fill Remaining never invokes `resizeNeeded` and
+never makes a second call; existing content (including reporter-linked
+blocks) still requires explicit confirmation before "Write this block"
+replaces it; the UI's provider label reads `result.provider`/`fellBackTo`
+directly, never hard-coded; three rapid clicks still send one request.
+
+**Gemini browser E2E: NOT VERIFIED — quota exhausted**, both at the start and
+end of this pass. Not substituted with Sarvam and reported as such.
+
+---
+
 ## 0d. Fifth pass — overflow made structurally impossible, a decision deferred (2026-08-10)
 
 §0c's fix (the word-trimmed stand-in) traded one failure mode for another rather

@@ -4,7 +4,50 @@ Architectural audit only. No code was changed to produce this document. Reflects
 
 ---
 
-## 0. Update — single-story dock and Smart Cards (2026-08-08)
+## 0. Update — the workspace is three places, and a block says what it is (2026-08-10)
+
+The workspace was one column of panels stacked in the order they happened to be
+written, with typography, story details and history folded away at the foot of
+a rail that was already a screen and a half long. A panel now belongs to a
+place by what it is for: the block's settings beside the page, the writing
+surface below at 70% of the width, and the AI, the space read-out and the smart
+cards in the 30% column beside it. Nothing was removed — every panel, button
+and read-out is the same one, opened somewhere a desk can find it.
+
+Two constraints hold the layout together. The settings rail is capped to the
+height of the page beside it (`--page-area-h`, published by `measureToolbar()`)
+because, left to its own content, it was the taller column and pushed the
+headline field below the fold. And under 1024px the three areas **reorder** —
+page, desk, settings — which is why all four are children of one grid.
+
+`block_type` (article, briefs, photo, advert, feature) was recorded on every
+block and used only by the night desk's worklist, so the one screen where the
+work happens was the one screen that did not say what the work was; every block
+was headed "Write the story", including the adverts. The header now carries the
+kind and the panel is headed for it. The words come from
+`public/editor/layout/block-kinds.js`, imported by the server the same way the
+character grid is, and the private `WORK` map in `worklist.service.js` is gone.
+
+Also fixed: the dashboard's Newsroom Status drew four counts in a 360px rail at
+`repeat(4, 1fr)`, so *Rejected* was painted off the right edge of the window;
+and the page toolbar's two rows now carry labels and dividers, so five buttons
+read as the three moves for copy that will not fit, plus two that are not moves
+on a story at all.
+
+**Verification:** `npm test` 132 passing (one new: the worklist describes a
+block in the same words the editor does); a 100-check headless-Chrome
+regression net over the real logged-in workspace at 1512, 1280 and 1024,
+including which side each panel sits on, the 70/30 share, the narrow-window
+order and the picture-parity check; no browser exceptions at any width.
+
+**Known limitation:** the dev database holds 221 editions across 13 dates,
+almost all test fixtures. `POST /api/newspapers/start` is idempotent per date
+and is the only creation path wired to a button; `POST /api/newspapers` is not,
+and is what the fixtures use.
+
+---
+
+## 1. Update — single-story dock and Smart Cards (2026-08-08)
 
 The workspace now has one editing surface for a selected story: the composition
 dock under the page preview. The Inspector is deliberately read-only context;

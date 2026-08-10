@@ -39,18 +39,26 @@ Route → Controller → Service → Repository → PostgreSQL
 
 ## Current reality (read this before touching code)
 
-`server.js` is the **only wired entry point**. It defines every HTTP route inline and calls straight into `src/db.js` (a thin facade) → `src/repositories/*.js` (raw parameterized SQL via the shared `pg.Pool` in `src/config/db.js`). The target Route→Controller→Service→Repository layering is **not implemented**.
+`server.js` is the entry point and still defines many routes inline, but the layering migration is **partly done**. Three resources are mounted from real route modules:
 
-`src/controllers/`, `src/routes/`, `src/services/`, `src/middleware/`, and `src/layout/layout.*.js` are **all empty (0-byte) scaffolding** from an unfinished migration attempt. Don't assume they do anything — they don't exist at runtime. When doing the layering migration, do it one resource at a time (start with `news`), verify boot + tests after each, small commits.
+```
+app.use("/api/news",       requireSignIn, src/routes/news.routes.js)
+app.use("/api/newspapers", deskWrites,    src/routes/newspaper.routes.js)
+                                          src/routes/page.routes.js
+```
+
+Those go Route → Controller (`src/controllers/*.controller.js`) → Service (`src/services/*.service.js`) → Repository (`src/repositories/*.repository.js`) → PostgreSQL, which is the target shape. Everything else is still inline in `server.js` calling `src/db.js` → `src/repositories/*`. When continuing the migration, take one resource at a time, verify boot + `npm test` after each, small commits.
+
+`src/services/` is substantial and live: `editionStart`, `editionFeatures`, `worklist`, `fit`, `jump`, `preflight`, `pressPackage`, `scribus`, `epaper`, `signoff`, `storyWriter`, `sectionImage`, `backgroundRemoval`, `cutout`, `segment`, `districtEdition`, plus `src/services/ai/`.
+
+Still 0-byte scaffolding, and only these: `src/controllers/auth.controller.js`, `src/routes/auth.routes.js`, `src/services/auth.service.js`, `src/middleware/auth.middleware.js`, `src/middleware/error.middleware.js`, and all five `src/layout/layout.*.js`. Auth actually runs through `src/middleware/auth.js` (`requireSignIn`, `requireDesk`, `deskWrites`), not the `.middleware.js` file beside it — check which one before editing.
 
 ### Frontend load path
 
 `public/index.html` loads `/app.js`, which dynamically imports, in order:
-`editor/publication.js` → `admin/newspaper-workspace.js` → `admin/page-editor.js` → `admin/reporter-browser.js` (empty stub) → `admin/template-selector.js` (empty stub) → `admin.js` (the ~800-line workhorse: login, reporter dashboard, admin dashboard, edition creation).
+`editor/publication.js` → `admin/reporter-browser.js` (stub) → `admin/template-selector.js` (stub) → `admin.js` (login, reporter dashboard, admin dashboard).
 
-Several other `public/**/*.js` files are 0-byte stubs not yet built out (`dashboard.js`, `admin/dashboard.js`, `admin/publication.js`, `editor/canvas.js`, `editor/sidebar.js`, `editor/story-explorer.js`, `editor/workspace.js`). Treat these as placeholders for planned features (reporter browsing with filters, template engine UI, etc.) described below — not confirmed-dead code. Don't delete without checking they're truly unused first.
-
-> **This section has drifted from the repository and the repository wins.** `src/controllers/`, `src/routes/`, `src/services/` and `src/middleware/` are no longer empty — they hold real code, and `server.js` mounts them. The workspace now lives under `public/editor/` (`workspace.js` and the `canvas/`, `external-editor/`, `layout/` folders), not `admin/newspaper-workspace.js`. Verify against the tree before relying on the paragraphs above.
+The workspace itself is **not** loaded by `app.js` — `editor/publication.js` pulls in `editor/workspace.js`, which is the real workspace and imports the `editor/canvas/`, `editor/external-editor/`, `editor/layout/`, `editor/history/`, `editor/status/` and `editor/autosave/` folders. There is no `admin/newspaper-workspace.js` or `admin/page-editor.js` any more; do not go looking for them.
 
 ### Starting an edition
 
@@ -70,13 +78,39 @@ Asking for more pages adds them at their proper rung. Asking for fewer never rem
 
 `headline_font_px`, `subheading_font_px` and `body_font_px` are `NUMERIC(5,1)`, not integers — a printer sets type in half points. They therefore arrive over the wire as strings, like the page's mm dimensions; every reader coerces with `Number()`.
 
-### The Newspaper Workspace — single source of truth for templates
+### The Newspaper Workspace — three places on one screen
 
-The Newspaper Workspace is the heart of SAHAS. Never redirect away from it; everything (page preview, page list, layout picker, editorial editor) happens inside this one screen (`renderWorkspace` in `admin/newspaper-workspace.js`, canvas + section editor in `admin/page-editor.js`).
+The Newspaper Workspace is the heart of SAHAS. Never redirect away from it; everything happens inside this one screen (`renderShell` in `public/editor/workspace.js`).
+
+It is one CSS grid (`.workspace-top`) with three areas, and a panel belongs to an area **by what it is for**:
+
+| area | selector | holds |
+|---|---|---|
+| beside the page, left | `#workspaceToolsPanel` | how the block is **set** — Typography (open), Story details, History, the small page layout |
+| the page, right | `.workspace-canvas-host` | the sheet, the page/layout toolbar, zoom, minimap |
+| the desk, left 70% | `.ext-write-col` | where the story is **written** — the copy and its pictures, one panel |
+| the desk, right 30% | `.ext-assist-col` | what **helps** write it — Generate with AI, Space left, Smart cards |
+
+Two rules this layout exists to keep, both learned the hard way:
+
+- **Nothing may push the writing surface below the fold.** The settings rail is capped to the page's height (`--page-area-h`, published by `measureToolbar()`) and scrolls inside itself; left to its own content it was the taller column and set the height of the whole top of the screen.
+- **A narrow window reorders, it does not just stack.** Under 1024px the areas become page → desk → settings. That is why all four are children of one grid — CSS can only reorder siblings.
+
+`renderExternalEditor()` writes **two** hosts in one call: the settings rail and the dock. The rail must never be left showing a block that is no longer open.
 
 **Template definitions live in exactly one place: `src/layout/templates.js`**, served to the client via `GET /api/templates`. Each template has a `key`, `name`, and `sections[]` with `{key, x, y, width, height}` in px (base canvas: 660×1060, matching `newspapers.page_width_px`/`page_height_px`). Do **not** hardcode a second copy of template names/section keys anywhere in frontend JS — a prior drifted duplicate (`admin.js`'s old `newspaperTemplates` object, with invented keys like `side`/`bottom1` that didn't exist in the DB) silently broke every section save except `lead`. It was removed; `newspaper-workspace.js` and `page-editor.js` now fetch `/api/templates` and render from real persisted `page.sections` (which already carry position + content, returned by `GET /api/newspapers/:id/pages`).
 
 When adding a new template, add it to `src/layout/templates.js` only — both the picker UI and the canvas pick it up automatically through `/api/templates` and `page.sections`.
+
+### Catalogs the server and the browser share
+
+Three things are defined once in `public/editor/layout/` and imported by **both** sides — the server reaches them with a dynamic `import()`, exactly as `worklist`, `fit`, `jump`, `preflight` and the AI brief all reach the character grid:
+
+- `text-flow.js` — the character grid. One cell = one body character wide × one line tall. The single source of every measurement.
+- `block-kinds.js` — what each `block_type` is and what work it wants (article, briefs, photo, advert, feature). The worklist and the block's own heading must say the same thing; `tests/edition.test.js` asserts it.
+- `picture-style.js` — how a placed picture is drawn. The page canvas and the editor read the one rule, or the same photograph looks like two different pictures.
+
+A second copy of any of these is the failure mode this project has already been bitten by twice (the drifted template keys, and `object-fit: cover` on the page against `contain` in the editor).
 
 ## Page model
 
@@ -88,7 +122,7 @@ Each editorial block (`page_sections` row) currently carries: headline, subheadi
 
 ## Reporter workflow
 
-Editors never search a dropdown of thousands of stories. The section editor lists a reporter-story picker (filterable by reporter/category/location/status/date in the eventual full implementation — `admin/reporter-browser.js` is the stub for this). Selecting a story auto-fills the editorial block; everything stays editable afterward.
+Editors never search a dropdown of thousands of stories. The writing panel carries a "Take from Reporter" bar that opens the story picker drawer (`public/editor/story-picker.js`, `story-explorer.js`); the fuller filtering by reporter/category/location/status/date is still to come, and `admin/reporter-browser.js` is the stub for it. Selecting a story auto-fills the editorial block; everything stays editable afterward.
 
 ## Fitting copy to the hole
 
@@ -124,3 +158,13 @@ A task is complete only when: it builds/boots (`node server.js` or `npm test`'s 
 ## Testing
 
 `npm test` runs `tests/*.test.js` via `node --test` against a real Postgres instance (`.env` / `DB_*` vars) and a real `createApp()` — not mocks. After any feature change, confirm: app boots, the routes you touched work, DB queries succeed, `npm test` still passes green.
+
+**`npm test` does not see the browser, and most of this product is the browser.** Every UI regression in this project was found by driving the running app, never by reading code. Log in as a desk user, open an edition, click a block, and look at a screenshot. A blank frame is a failure to launch.
+
+The dev database is full of test fixtures — 221 editions across 13 dates, named `साहस`, `ZZ …`, `8/3/2026 Edition`. Tests that create an edition must remove it in `t.after(...)`. `POST /api/newspapers` is **not** idempotent; only `POST /api/newspapers/start` is, and only that one is wired to a button.
+
+### Housekeeping every session
+
+- Read the `.md` files first (`VISION.md`, this file, `PROJECT_STATUS.md`) and **write the changes back into them** when the work lands. The drift warning that used to sit in "Current reality" is what happens when the code moves and the doc does not.
+- Commit in small steps, so a bad change can be walked back.
+- Stop the dev server before finishing. Kill it **by PID** — `pkill -f "node server.js"` exits 144 and takes the shell with it. Relaunch with `setsid nohup node server.js &`.

@@ -5,6 +5,7 @@
 // keystroke (Part 14).
 
 import { placedPictureStyle } from "../layout/picture-style.js";
+import { featureTableMarkup } from "../layout/feature-table.js";
 import { escapeHtml } from "../format.js";
 import { statusOf, statusLabel, statusClass } from "../status/section-status.js";
 import { computeMetrics } from "../layout/layout-metrics.js";
@@ -164,13 +165,27 @@ function contentMarkup(section, view) {
                }</span>`
           : ""
       }
-      ${
-        view.body
-          ? `<p class="section-body" style="column-count:${columns}">${datelineMarkup(view)}${bodyMarkup(view)}</p>`
-          : ""
-      }
+      ${bodyOrTableMarkup(section, view, columns)}
     </div>
   `;
+}
+
+/**
+ * The block's copy - as a TABLE when it is a feature that is read as one.
+ *
+ * A sudoku reached the page as nine lines of "१ २ · · · ४" because a feature's
+ * result becomes a headline and a body like any other block. A reader solves a
+ * grid, so the paper prints squares. Anything the table builder does not
+ * recognise falls straight through to ordinary copy - a feature must never
+ * vanish off the page because nobody wrote a renderer for it.
+ */
+function bodyOrTableMarkup(section, view, columns) {
+  if (!view.body) return "";
+
+  const table = featureTableMarkup(section?.feature_key || view.featureKey, view.body);
+  if (table) return `<div class="section-feature">${table}</div>`;
+
+  return `<p class="section-body" style="column-count:${columns}">${datelineMarkup(view)}${bodyMarkup(view)}</p>`;
 }
 
 // The body for a block with no picture in it: set as ordinary columns rather

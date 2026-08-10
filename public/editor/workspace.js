@@ -3,7 +3,7 @@
 // Layout, top to bottom:
 //   Header (app chrome)  ·  Toolbar
 //   The page, full width
-//   The dock:  External Editor, full width - the ONLY story editor
+//   The Block Editor, full width - the other view of the SAME editor
 //
 // There used to be an Inspector beside the page carrying its own headline,
 // subheading and body bound to the same draft. Two editors on one story is how
@@ -616,7 +616,7 @@ function scrollTo(elementId, notice) {
   if (notice) showNotice(notice);
 }
 
-// Step 4 of the flow (VISION.md: "Save -> Automatically open External Editor"):
+// Step 4 of the flow (VISION.md: "Save -> open the block for editing"):
 // the story is written, so the dock opens by itself at step 1, the image.
 // Step 8: composition is done, so go back up to the page with the block filled.
 async function saveAndReturn() {

@@ -1,6 +1,6 @@
 // The small layout, beside the block being composed.
 //
-// The External Editor is a full-width dock at the foot of the workspace, and
+// The Block Editor is a full-width panel at the foot of the workspace, and
 // when it is open the page above is often scrolled out of sight. That is the
 // right trade for composing - a story wants width - but it costs the one thing
 // a page designer needs constantly: WHERE ON THE PAGE AM I?

@@ -1,6 +1,6 @@
 // The single source of truth for the whole workspace (Phase 10).
 //
-// Canvas, Inspector, External Editor and Toolbar all read from this one object
+// The newspaper canvas, the Block Editor and the toolbar all read from this one object
 // and all write through these actions - none of them keeps its own copy of a
 // section's content, and none of them imports another view module.
 //

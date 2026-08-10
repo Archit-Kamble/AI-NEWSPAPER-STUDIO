@@ -1,10 +1,19 @@
-// Part 9: the AI workspace. Every action is a stub by instruction - no provider
-// is called and no content is written. Each button builds and displays the exact
-// request an integration would send, so the contract is visible and testable
-// before any provider exists.
+// The AI panel. AI ASSISTS - it never owns, and it never writes.
+//
+// Two actions are real and go to the server-side story writer: "Write this
+// block" and "Fill remaining area with AI". Both return a PROPOSAL, both land
+// in the same editable draft as typed copy, marked needs_review, and neither
+// touches the database - the desk accepts, autosave carries it.
+//
+// Everything under "More AI actions", and Optimize, are still stubs: they build
+// and display the exact request an integration would send. They are marked
+// `is-placeholder` in the markup so nothing here pretends to work.
+//
+// Replacing copy somebody has already written asks first (confirmReplacement).
 
 import { escapeHtml } from "../format.js";
 import { buildFlowMap, flowAscii, flowFit, flowImageFromRow } from "../layout/text-flow.js";
+import { plainText } from "../layout/rich-text.js";
 
 export const AI_ACTIONS = [
   { id: "aiGenerateLayout", label: "Generate Layout", intent: "layout" },
@@ -117,7 +126,9 @@ function tierSelectMarkup() {
 }
 
 function aiStatusLine() {
-  if (!aiStatus) return "No AI provider is connected yet - these actions are stubs.";
+  // Before /api/ai/status has answered. Not "these actions are stubs" - two of
+  // them are real, and a line that is wrong in the other direction is worse.
+  if (!aiStatus) return "Checking which provider is configured…";
   if (!aiStatus.configured) {
     return aiStatus.hint || "No AI provider is configured. Add a key to .env.";
   }
@@ -218,6 +229,24 @@ function fillProposalMarkup(result) {
        <strong>needs review</strong>.</p>`;
 }
 
+/**
+ * Asks before written copy is thrown away.
+ *
+ * VISION.md: AI assists, it never owns, and it never overwrites user content
+ * without confirmation. An empty block is not a question - nothing is being
+ * lost - so this only speaks when there is something to lose, which is what
+ * keeps it worth reading when it does.
+ */
+function confirmReplacement(view) {
+  const has = (value) => Boolean(plainText(value || "").trim());
+  if (!view || (!has(view.body) && !has(view.headline))) return true;
+
+  const what = view.newsItemId
+    ? "This block holds a reporter's story."
+    : "This block already has copy in it.";
+  return window.confirm(`${what}\n\nReplace the headline, subheading and body with the AI's version?`);
+}
+
 export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, getPage) {
   const seed = document.getElementById("edAiSeed");
   const write = document.getElementById("aiWriteStory");
@@ -261,6 +290,12 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, g
       host.hidden = false;
       host.innerHTML = proposalMarkup(result);
       document.getElementById("aiAcceptStory")?.addEventListener("click", () => {
+        // "Write this block" replaces the headline, the deck AND the body. On an
+        // empty block that is the whole point; on a block somebody has already
+        // written - or a reporter has filed - it is destruction, and one click
+        // away from it is not enough. Accepting is explicit; replacing written
+        // copy is explicit twice.
+        if (!confirmReplacement(getView())) return;
         // A proposal becomes a draft, never a saved story: it lands in the same
         // editable draft as typed copy and is marked for review.
         onPatch({ ...result.proposal, aiGenerated: true, status: "needs_review" }, "ai-panel");

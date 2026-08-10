@@ -202,7 +202,7 @@ export function bindViewport() {
   });
 
   // Fit is derived from the container, so it has to be recomputed whenever the
-  // container changes size - a splitter drag, the external editor opening, the
+  // container changes size - a splitter drag, the Block Editor opening, the
   // inspector collapsing. Listening for a window resize misses all three, which
   // is how a fitted page ended up larger than the area left for it.
   resizeObserver?.disconnect();

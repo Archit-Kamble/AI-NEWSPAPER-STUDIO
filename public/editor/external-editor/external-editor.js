@@ -1,6 +1,13 @@
-// The External Editor: the second stage of newspaper production, a full-width
-// dock below the page. The page scrolls naturally; this panel is not squeezed
-// into a viewport (VISION.md, "External Editor").
+// The BLOCK EDITOR: the lower half of the SAHAS Layout Desk.
+//
+// It was called the External Editor, and the name was wrong in a way that
+// mattered. There is no external editor. This is not a second application
+// inside the application, not an embedded product, not something a page hands
+// off to - it is the other half of the same editor, showing the block the
+// newspaper canvas above has selected. One store, one selected block, one
+// draft, two views of it. (The module path still says external-editor/ because
+// renaming a working folder buys nothing but risk; the name a desk reads is
+// what had to change.)
 //
 // No tabs. VISION.md is explicit that tabs must not be added just because they
 // look organised, and the section lifecycle it defines runs in one direction:
@@ -47,9 +54,9 @@ import { storyDetailsMarkup, bindStoryDetails, refreshStoryDetails } from "./sto
 // The panels of the desk, in the order they are read: write on the left, the
 // help beside it on the right.
 export const GROUPS = [
-  { key: "story", label: "Write the story" },
-  { key: "ai", label: "Generate with AI" },
-  { key: "space", label: "Space left in this block" },
+  { key: "story", label: "Story" },
+  { key: "ai", label: "AI" },
+  { key: "space", label: "Layout" },
   { key: "card", label: "Smart cards" },
 ];
 
@@ -148,8 +155,8 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
     // VISION.md: the editor should never wonder where to go next.
     container.innerHTML = `
       <div class="ext-editor-header">
-        <h3>External Editor</h3>
-        <span class="muted">Nothing open yet</span>
+        <h3>Block Editor</h3>
+        <span class="muted">No block selected</span>
         <div class="ext-editor-header-actions">
           <button type="button" class="ext-icon-btn" id="edToggleDock" title="Collapse editor">▾</button>
         </div>
@@ -161,8 +168,8 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
            space that is left.</p>
         <ol class="ext-idle-steps">
           <li><strong>Left of the page</strong> — how the block is set: type, particulars, history</li>
-          <li><strong>Here on the left</strong> — the story itself, words and pictures together</li>
-          <li><strong>On the right</strong> — the AI, the space it has to fill, and the smart cards</li>
+          <li><strong>Story</strong> — the headline, the subheading, the copy and its pictures</li>
+          <li><strong>AI and Layout</strong> — what helps write it, and how much room is left</li>
         </ol>
         <button type="button" class="btn-submit" id="edPickBlock">Choose a block ↑</button>
       </div>
@@ -176,7 +183,11 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
 
   container.innerHTML = `
     <div class="ext-editor-header">
-      <h3>External Editor</h3>
+      <h3>Block Editor</h3>
+      <!-- WHICH block. The heading used to name the panel and then the block,
+           with nothing joining the two, so a desk looking at a page of forty
+           boxes had to work out which one it was about to edit. -->
+      <span class="ext-editor-selected">Selected:</span>
       <span class="ext-editor-section-name">${escapeHtml(section.section_key)}</span>
       <!-- What KIND of block this is, and the work it wants - the same words the
            night desk's worklist uses, from the same catalog (block-kinds.js).
@@ -220,7 +231,7 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
             tools: `<button type="button" class="rt-btn rt-picture" id="cmpAddImage"
                        title="Put a picture on this block">▣ Picture</button>`,
             pictures: `
-              <h5 class="story-block-title">Pictures on this block</h5>
+              <h5 class="story-block-title" id="edImagesHeading">Images</h5>
               ${picturesPanelMarkup(callbacks.getImages?.() || [])}
               ${pictureControlsMarkup()}`,
           })}
@@ -235,9 +246,9 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
            is briefed with - the two are one thought, and a proposal is judged
            against the copy beside it rather than a screen below it. -->
       <aside class="ext-assist-col">
-        ${group("ai", "Generate with AI", aiPanelMarkup(view))}
+        ${group("ai", "AI", aiPanelMarkup(view), "assists — you accept every change")}
 
-        ${group("space", "Space left in this block", `<div id="edSpaceGroup">${spacePanelMarkup(section, view, callbacks.getImages?.() || [])}</div>`)}
+        ${group("space", "Layout", `<div id="edSpaceGroup">${spacePanelMarkup(section, view, callbacks.getImages?.() || [])}</div>`)}
 
         ${group("card", "Smart cards", smartCardMarkup(view))}
       </aside>

@@ -1263,8 +1263,12 @@ body {
    its panels are ABOUT the page, so scrolling one away from the other would
    defeat the reason they are next to each other. */
 .workspace-tools {
-  position: sticky;
-  top: var(--toolbar-h, 36px);
+  /* NOT sticky. It was, and the containing block for a sticky grid item is the
+     whole grid - which now holds the Block Editor in its second row. So the
+     rail went on sticking as the desk scrolled down and sat on top of the
+     story column, covering the headline field with a font menu.
+     It does not need to stick: it is capped to the height of the page beside
+     it, so the two scroll away together, which is what they should do. */
   /* Never taller than the page beside it - see measureToolbar(). A rail that
      grows past the page makes the top of the screen as tall as its own panels
      and puts the writing surface below the fold. It scrolls inside itself
@@ -1849,22 +1853,15 @@ body.print-view .canvas-view-controls {
   background: white;
   border-top: 1px solid #ececed;
 }
-/* The rail carries its own scrollbar, pinned under the toolbar.
-   It is a tall column - the writing surface, the pictures, the cards, the
-   space read-out, the AI panel and three folded panels - and when the whole
-   document scrolled to reach the bottom of it, the page went with it and the
-   scroll never seemed to end. Now the page stays exactly where it is and only
-   the rail moves, which is how an editor beside a document behaves.
-   Only where it is a column: stacked, it is just part of the page. */
-@media (min-width: 1025px) {
-  .workspace-external-editor {
-    position: sticky;
-    top: var(--toolbar-h, 36px);
-    height: calc(100vh - var(--toolbar-h, 36px));
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-}
+/* ONE page scroll.
+   The Block Editor used to be `position: sticky; height: calc(100vh - toolbar);
+   overflow-y: auto` - a viewport-tall scroller inside a scrolling document,
+   which is two full-length scrollbars on one screen. The desk could never tell
+   which one it had hold of, and the wheel did different things depending on
+   where the pointer happened to be.
+   The document scrolls: toolbar, newspaper, Block Editor, end of page. The
+   Block Editor is long, and that is fine - it is part of the page, not an
+   application inside the application. */
 /* Collapsed, it is gone rather than a white stripe. */
 .editor-collapsed .workspace-external-editor {
   display: none;
@@ -2205,7 +2202,7 @@ body.print-view .canvas-view-controls {
   color: var(--secondary);
 }
 
-/* ============ External Editor dock: tabs and panels ============ */
+/* ============ Block Editor: panels ============ */
 
 /* NOT sticky. There is exactly one sticky bar on this page - the toolbar, which
    carries Save, Undo and Publish and is needed everywhere. A second pinned bar

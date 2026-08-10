@@ -4,7 +4,67 @@ Architectural audit only. No code was changed to produce this document. Reflects
 
 ---
 
-## 0. Update — the Block Editor, and one page scroll (2026-08-10)
+## 0. Update — Gemini writes, Sarvam covers (2026-08-10)
+
+A configuration change, not an architectural one. The provider abstraction,
+the story writer, the Smart Card pipeline and the editor are untouched.
+
+| | before | after |
+|---|---|---|
+| `AI_PROVIDER` | sarvam | **gemini** |
+| `AI_FALLBACK_PROVIDER` | gemini,anthropic | **sarvam,anthropic** |
+| `DEFAULT_PROVIDER` (code) | 'sarvam' | **'gemini'** |
+
+`DEFAULT_PROVIDER` in `src/services/ai/index.js` is the only hard-coded
+provider name in the application, and it decides nothing except what happens
+when `.env` is silent. A sweep for `sarvam` found no other place treating it as
+primary; every remaining mention is a comment or the provider registry.
+
+**Model:** `gemini-3.6-flash` — the value already in `.env`, confirmed callable
+by this key (input 1048576, output 65536, thinking supported). Not invented and
+not changed. Sarvam remains `sarvam-105b`.
+
+**Reasoning against output.** Gemini has an effort dial now
+(`thinkingConfig.thinkingBudget`), so `supportsTiers` became true and the desk's
+Basic/Plus/Ultra buy 1024 / 4096 / 12288 thinking tokens. Plus is the everyday
+tier and is deliberately not the maximum.
+
+Thinking is counted **inside** `maxOutputTokens`, exactly as on Sarvam —
+measured, not assumed: `maxOutputTokens: 200` with `thinkingBudget: 4096` came
+back `MAX_TOKENS` with six tokens of answer. So the two are budgeted separately
+and summed: `GEMINI_MAX_OUTPUT_TOKENS` (8192) is the article's room and the
+tier's thinking is added on top, capped at the model's 65536.
+`thinkingBudget: 0` is rejected outright by this model, so the cheap tier asks
+for a little thinking rather than none. `MAX_TOKENS` is reported as
+`outputExhausted`, which reuses the existing one-retry policy.
+
+**Verified against the live account, through the application's own abstraction:**
+
+- short: a Marathi headline, Gemini, 3s, `fellBackTo: null`
+- long: 4407 characters of Marathi at Ultra — 2240 thought tokens plus 1213
+  answer tokens, 21s. Reasoning did not eat the article.
+- the real pipeline: `storyWriter.write` on a 1125-character block returned
+  1090 characters, headline and deck, not overflowing, 50s
+- structured: राशिभविष्य came back as twelve signs each with `luckyNumber` and
+  `luckyColour` as fields; सुविचार as text and attribution. Sudoku involves **no
+  model at all** — it is deterministic in `src/features/sudoku.js`, which is why
+  its grid has always been structured.
+- fallback, both directions: Gemini forced to fail → Sarvam answered
+  (`fellBackTo: sarvam`, 16s); Gemini restored → Gemini answered
+  (`fellBackTo: null`, 3s)
+- from the UI: "Write this block" produced a Marathi story in 92s, showed the
+  proposal with its fit, and the accepted copy reached the canvas
+
+**Security.** The Gemini key had been pasted into `.env.example`, which is
+tracked by git. It was never committed — `HEAD` still had an empty value — and
+it has been removed from the working tree. `.env` holds it and is gitignored.
+
+**Verification:** `npm test` 183 (12 new in `tests/geminiPrimary.test.js`);
+browser net 49/49 with no console errors.
+
+---
+
+## 0a. Update — the Block Editor, and one page scroll (2026-08-10)
 
 **Terminology.** "External Editor" is gone from everything a person reads. The
 newspaper canvas and the panel below it are two views of one editor over one

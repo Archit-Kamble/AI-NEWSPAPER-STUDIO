@@ -35,7 +35,14 @@ const PROVIDERS = {
   openai: require('./providers/openai-compatible'),
 };
 
-const DEFAULT_PROVIDER = 'sarvam';
+// Who writes when `.env` does not say. Gemini: it has the room for a full-page
+// lead and a real thinking dial, and the failure that kept reaching the desk
+// was a call coming back empty rather than a sentence being a shade off.
+// Sarvam is the understudy and its Marathi is still why it is there.
+//
+// This is the ONLY hard-coded provider name in the application. Everything else
+// reads AI_PROVIDER / AI_FALLBACK_PROVIDER through chain() below.
+const DEFAULT_PROVIDER = 'gemini';
 // 120s, not 60. These are reasoning models and the work is not small: twelve
 // horoscope signs at Basic effort measured 40 seconds against a real account,
 // and a lead story at Ultra is slower again. At 60s the call was being aborted
@@ -51,7 +58,7 @@ function providerNamed(name) {
  * The provider that writes, and the ones that cover for it in order.
  *
  * `AI_FALLBACK_PROVIDER` takes a comma-separated list, so a newsroom running
- * three providers can say "Sarvam, then Gemini, then Claude" rather than being
+ * three providers can say "Gemini, then Sarvam, then Claude" rather than being
  * limited to a single understudy. The order is the order they are tried.
  */
 function chain() {

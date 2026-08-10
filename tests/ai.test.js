@@ -117,7 +117,8 @@ test('with no key at all it says so, and never invents content', async () => {
     const result = await ai.askForJson('anything', { type: 'object' }, {});
     assert.equal(result.unconfigured, true);
     assert.equal(result.data, undefined, 'a paper that prints placeholder text is worse than one that prints nothing');
-    assert.match(result.error, /SARVAM_API_KEY/);
+    // The hint names the DEFAULT provider's key, which is Gemini's now.
+    assert.match(result.error, /GEMINI_API_KEY/);
   });
 });
 
@@ -131,8 +132,18 @@ test('the provider is chosen by .env, not by the code', () => {
   });
 });
 
-test('Sarvam is the default provider when nothing is named', () => {
-  withEnv({ ...NO_KEYS, AI_PROVIDER: undefined, SARVAM_API_KEY: 'test-key' }, () => {
+// Kept, with its answer reversed. Gemini became the writer and Sarvam the
+// understudy: the failure that kept reaching the desk was a call coming back
+// empty for want of output room, not a sentence being a shade off. The point of
+// the test is unchanged - ONE place decides, and it is not scattered through
+// the code.
+test('Gemini is the default provider when nothing is named', () => {
+  withEnv({ ...NO_KEYS, AI_PROVIDER: undefined, GEMINI_API_KEY: 'test-key' }, () => {
+    assert.equal(ai.status().provider.key, 'gemini');
+  });
+  // And naming Sarvam still puts Sarvam in front - the default is a default,
+  // not a hard-coding.
+  withEnv({ ...NO_KEYS, AI_PROVIDER: 'sarvam', SARVAM_API_KEY: 'test-key' }, () => {
     assert.equal(ai.status().provider.key, 'sarvam');
   });
 });
@@ -205,7 +216,13 @@ test('the status says whether the tiers actually mean anything on this provider'
     assert.equal(ai.status().tiersMeaningful, true, 'Sarvam has a real effort dial');
   });
   withEnv({ ...NO_KEYS, AI_PROVIDER: 'gemini', GEMINI_API_KEY: 'k' }, () => {
-    assert.equal(ai.status().tiersMeaningful, false, 'Gemini has none, and the menu should not pretend');
+    // Gemini gained one: thinkingConfig.thinkingBudget. It had none when this
+    // test was written, and saying so was the honest answer then.
+    assert.equal(ai.status().tiersMeaningful, true, 'Gemini has a thinking budget');
+  });
+  withEnv({ ...NO_KEYS, AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: 'k' }, () => {
+    assert.equal(ai.status().tiersMeaningful, false,
+      'a provider with no dial says so rather than charging differently for identical work');
   });
 });
 

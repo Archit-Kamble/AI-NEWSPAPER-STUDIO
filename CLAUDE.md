@@ -149,10 +149,22 @@ Adding a card: give the builder in `src/features/` a `card` payload beside its `
 
 Everything the AI produces is a **proposal**. It enters the same editable draft as typed copy, marked `needs_review`, and nothing reaches the database until the desk accepts and autosave carries it. Reporter copy is never overwritten — `fillRemaining` carries it on, word for word, at the front.
 
-Two production traps, both hit for real:
+**Who writes:** `AI_PROVIDER=gemini`, `AI_FALLBACK_PROVIDER=sarvam,anthropic`. Gemini writes because a full-page lead needs room; Sarvam covers, and its Marathi is still why it is there. `DEFAULT_PROVIDER` in `src/services/ai/index.js` is the **only** hard-coded provider name and decides nothing except what happens when `.env` is silent. Never name a provider anywhere else.
 
-- **Reasoning tokens are billed and counted as output on Sarvam.** A small `max_tokens` can spend the whole budget thinking and return nothing. `SARVAM_MAX_OUTPUT_TOKENS` defaults to 16384; the range is Starter 4096 / Pro 16384 / Business 128000; and the account's real ceiling is *learned* from the 400 the API returns, not configured by hand.
-- **`finish_reason: "length"` gets exactly one retry**, one tier down with twice the room. Never a loop — every attempt is billed. What the desk is finally shown names the two things a sub-editor can do, never an environment variable.
+Fallback is for a provider that is **down**, never for copy somebody dislikes — quality is the desk's judgement.
+
+**Reasoning is counted inside the output budget on both providers.** This is the trap that has cost the most time, and it is measured, not assumed:
+
+| | budget variable | what it means |
+|---|---|---|
+| Gemini | `GEMINI_MAX_OUTPUT_TOKENS` (8192) | room for the **article**; the tier's thinking budget is **added** on top, capped at the model's 65536 |
+| Sarvam | `SARVAM_MAX_OUTPUT_TOKENS` (16384) | the whole allowance, thinking included; the account's real ceiling is *learned* from the 400 the API returns |
+
+On Gemini, `maxOutputTokens: 200` with `thinkingBudget: 4096` came back `MAX_TOKENS` with **six tokens of answer**. That is why the two are budgeted separately and summed. `thinkingBudget: 0` is rejected outright by `gemini-3.6-flash`, so the cheap tier asks for a little thinking rather than none.
+
+Tiers buy thinking: Basic 1024, Plus 4096, Ultra 12288. Plus is the everyday tier and is deliberately **not** the maximum — every token of thinking is paid for and waited for.
+
+- **An exhausted budget gets exactly one retry**, one tier down with twice the room. Never a loop — every attempt is billed. What the desk is finally shown names the two things a sub-editor can do, never an environment variable.
 
 Bulk generation is **one request per block, two at a time** (`bulk-generate.js`). Never send a newspaper in one request: the budget is per request, one failure would lose every block, and each block has its own measured hole.
 
@@ -206,6 +218,14 @@ A task is complete only when: it builds/boots (`node server.js` or `npm test`'s 
 `npm test` runs `tests/*.test.js` via `node --test` against a real Postgres instance (`.env` / `DB_*` vars) and a real `createApp()` — not mocks. After any feature change, confirm: app boots, the routes you touched work, DB queries succeed, `npm test` still passes green.
 
 **`npm test` does not see the browser, and most of this product is the browser.** Every UI regression in this project was found by driving the running app, never by reading code. Log in as a desk user, open an edition, click a block, and look at a screenshot. A blank frame is a failure to launch.
+
+`tests/browser/workspace.browser.js` is that net, and it lives **in the repository on purpose** — it used to live in a scratch directory, which was wiped, and a hundred checks went with it. Run it against the running app:
+
+```bash
+node tests/browser/workspace.browser.js          # defaults to edition 2099
+```
+
+It resets the block it drives first, so it can be run repeatedly. It needs `playwright-core` and Chrome at `/usr/bin/google-chrome` (`CHROME_PATH` overrides).
 
 The dev database is full of test fixtures — 221 editions across 13 dates, named `साहस`, `ZZ …`, `8/3/2026 Edition`. Tests that create an edition must remove it in `t.after(...)`. `POST /api/newspapers` is **not** idempotent; only `POST /api/newspapers/start` is, and only that one is wired to a button.
 

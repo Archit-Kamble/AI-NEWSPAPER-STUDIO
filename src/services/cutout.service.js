@@ -163,6 +163,23 @@ async function writeCutout(publicDir, image, alpha, relative) {
   const { width, height } = image.bitmap;
   for (let i = 0; i < alpha.length; i += 1) image.bitmap.data[i * 4 + 3] = alpha[i];
 
+  // Trimmed to the subject.
+  //
+  // Taking the background out leaves the person standing in the middle of the
+  // ORIGINAL rectangle, surrounded by transparency. The picture then still
+  // occupies its old box: the frame drawn round it, the cells the character
+  // grid counts and the space it takes on the page are all the rectangle's, not
+  // the person's. The desk cuts a background out precisely so the picture stops
+  // being a rectangle, and it stayed one.
+  const bounds = subjectBounds(alpha, width, height);
+  let trim = null;
+  if (bounds && (bounds.width < width || bounds.height < height)) {
+    image.crop({ x: bounds.x, y: bounds.y, w: bounds.width, h: bounds.height });
+    alpha = cropAlpha(alpha, width, bounds);
+    trim = { ...bounds, originalWidth: width, originalHeight: height };
+  }
+  const cut = { width: image.bitmap.width, height: image.bitmap.height };
+
   const stem = path.basename(relative).replace(/\.[^.]+$/, '');
   const name = `cutout-${Date.now()}-${stem}.png`;
   const outPath = path.join(publicDir, 'uploads', name);
@@ -174,9 +191,39 @@ async function writeCutout(publicDir, image, alpha, relative) {
 
   return {
     url: `/uploads/${name}`,
-    mask: occupancyMask(alpha, width, height),
+    // Measured on what was WRITTEN, so the cells the copy wraps to describe the
+    // file that exists rather than the rectangle it was cut from.
+    mask: occupancyMask(alpha, cut.width, cut.height),
     removedShare: Number((1 - opaque / (width * height)).toFixed(3)),
+    trim,
   };
+}
+
+/** The smallest rectangle holding everything that is not transparent. */
+function subjectBounds(alpha, width, height) {
+  let top = -1; let bottom = -1; let left = width; let right = -1;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (alpha[y * width + x] <= 32) continue;
+      if (top === -1) top = y;
+      bottom = y;
+      if (x < left) left = x;
+      if (x > right) right = x;
+    }
+  }
+  if (top === -1 || right === -1) return null;
+  return { x: left, y: top, width: right - left + 1, height: bottom - top + 1 };
+}
+
+function cropAlpha(alpha, width, bounds) {
+  const out = new Uint8Array(bounds.width * bounds.height);
+  for (let y = 0; y < bounds.height; y += 1) {
+    for (let x = 0; x < bounds.width; x += 1) {
+      out[y * bounds.width + x] = alpha[(bounds.y + y) * width + (bounds.x + x)];
+    }
+  }
+  return out;
 }
 
 /**

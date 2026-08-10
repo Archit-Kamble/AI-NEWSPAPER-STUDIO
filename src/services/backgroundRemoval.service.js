@@ -92,7 +92,25 @@ async function removeBackground(sectionId, imageId, origin) {
   });
 
   // The mask is what makes copy wrap the subject instead of its box.
-  await repo.update(image.id, { shape: 'cutout', mask: result.mask || null });
+  //
+  // The cut-out is trimmed to the subject, so the placement has to follow it or
+  // the person would jump: the same box now holds a picture with the
+  // transparent margin taken off. Scaled by where the subject sat inside the
+  // original, the subject stays exactly where the desk put it and the box
+  // stops being a rectangle around it.
+  const placement = { shape: 'cutout', mask: result.mask || null };
+  if (result.trim) {
+    const trim = result.trim;
+    const width = Number(image.width_px);
+    const height = Number(image.height_px);
+    Object.assign(placement, {
+      x: Math.round(Number(image.x_px) + (width * trim.x) / trim.originalWidth),
+      y: Math.round(Number(image.y_px) + (height * trim.y) / trim.originalHeight),
+      width: Math.max(12, Math.round((width * trim.width) / trim.originalWidth)),
+      height: Math.max(12, Math.round((height * trim.height) / trim.originalHeight)),
+    });
+  }
+  await repo.update(image.id, placement);
   await repo.replaceAsset(image.id, asset.id);
 
   return { ok: true, removedShare: result.removedShare };

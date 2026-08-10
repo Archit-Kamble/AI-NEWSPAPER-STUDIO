@@ -32,6 +32,7 @@
 
 import { escapeHtml } from "../format.js";
 import { statusOf, statusLabel, statusClass } from "../status/section-status.js";
+import { blockKind, blockNote } from "../layout/block-kinds.js";
 import { pictureControlsMarkup, renderPictureControls, bindPictureControls, selectPicture } from "./picture-controls.js";
 import { picturesPanelMarkup, bindPicturesPanel, refreshPicturesPanel } from "./pictures-panel.js";
 import { typographyPanelMarkup, bindTypographyPanel, refreshTypographyPanel } from "./typography-panel.js";
@@ -55,10 +56,10 @@ export const GROUPS = [
 let notifyTimer = null;
 let activeCallbacks = null;
 
-function group(key, label, body) {
+function group(key, label, body, note = "") {
   return `
     <section class="ext-group" data-group="${key}" id="edGroup-${key}">
-      <h4 class="ext-group-title">${label}</h4>
+      <h4 class="ext-group-title">${label}${note ? `<span class="ext-group-note">${note}</span>` : ""}</h4>
       <div class="ext-group-body" id="edGroupBody-${key}">${body}</div>
     </section>
   `;
@@ -177,6 +178,17 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
     <div class="ext-editor-header">
       <h3>External Editor</h3>
       <span class="ext-editor-section-name">${escapeHtml(section.section_key)}</span>
+      <!-- What KIND of block this is, and the work it wants - the same words the
+           night desk's worklist uses, from the same catalog (block-kinds.js).
+           A page is not forty of the same box: an advert slot is space that was
+           sold, a photo block wants a photograph and a caption, a feature
+           carries the day's standing furniture. The software has always known
+           this and only ever said it on the worklist, so the one screen where
+           the work happens was the one screen that did not say what it was. -->
+      <span class="ext-editor-kind is-${escapeHtml(section.block_type || "article")}"
+            title="${escapeHtml(blockKind(section.block_type).work)}">${escapeHtml(blockKind(section.block_type).label)}${
+        section.feature_key ? ` · ${escapeHtml(section.feature_key)}` : ""
+      }</span>
       <!-- The block's own size. It was in the Inspector's heading; a desk
            reads it constantly, because it is what the copy has to fit. -->
       <span class="ext-editor-section-size" id="edSectionSize">${section.width_px} × ${section.height_px} px</span>
@@ -201,7 +213,7 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
            around. One panel, and nothing above it - selecting a block has to put
            a cursor within reach. -->
       <div class="ext-write-col">
-        ${group("story", "Write the story", `
+        ${group("story", escapeHtml(blockKind(section.block_type).panel), `
           ${storySourceMarkup(view, story)}
           ${storyEditorMarkup(view, {
             budget: callbacks.getBudget ? callbacks.getBudget() : 0,
@@ -212,7 +224,7 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
               ${picturesPanelMarkup(callbacks.getImages?.() || [])}
               ${pictureControlsMarkup()}`,
           })}
-        `)}
+        `, escapeHtml(blockNote(section.block_type)))}
 
         <div class="ext-mount-strip">
           <div id="external-editor" class="ext-editor-mount"></div>

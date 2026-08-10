@@ -1873,6 +1873,21 @@ body.print-view .canvas-view-controls {
   color: var(--primary);
   text-transform: uppercase;
 }
+/* What kind of block is open. Advert and photo are marked apart because they
+   are the two a desk must not treat as an unwritten story. */
+.ext-editor-kind {
+  padding: 1px 8px;
+  border: 1px solid #dcdce2;
+  border-radius: 999px;
+  background: #f6f6f7;
+  color: #5c5c66;
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ext-editor-kind.is-advert { border-color: #f0d9a8; background: #fdf6e6; color: #8a6a20; }
+.ext-editor-kind.is-photo { border-color: #cfe0f5; background: #f0f6fd; color: #2f5a8a; }
+.ext-editor-kind.is-feature { border-color: #d8e8d8; background: #f2f8f2; color: #3a6a44; }
 .ext-editor-notice {
   margin-left: auto;
   font-size: 0.72rem;
@@ -2348,6 +2363,9 @@ body.print-view .canvas-view-controls {
   border-radius: 10px;
 }
 .ext-group-title {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
   margin: 0;
   padding: var(--s2) var(--s3);
   border-bottom: 1px solid #eeeef2;
@@ -2356,6 +2374,14 @@ body.print-view .canvas-view-controls {
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+/* What this block wants, in the worklist's own words. */
+.ext-group-note {
+  color: #9a9aa2;
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
 }
 .ext-group-body { padding: var(--s3); }
 

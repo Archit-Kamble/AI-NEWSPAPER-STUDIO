@@ -234,6 +234,38 @@ test('the worklist counts every block and lists only the unfinished ones', async
   assert.equal(stillListed, false, 'a finished block drops off the list');
 });
 
+// The words the worklist prints against a block are the same words the editor
+// prints on the block itself, because both read public/editor/layout/
+// block-kinds.js. A second copy of a catalog is how the template keys drifted
+// (CLAUDE.md), and this one is read by a night editor deciding whether a box is
+// an unwritten story or space that was sold.
+test('the worklist describes a block in the same words the editor does', async (t) => {
+  const server = createApp().listen(0);
+  t.after(() => server.close());
+  const desk = await signIn(server.address().port);
+
+  const started = await desk.json('/api/newspapers/start', {
+    method: 'POST',
+    body: JSON.stringify({ publicationDate: '2031-03-19', pageCount: 4, fillFeatures: false }),
+  });
+  t.after(() => removeEdition(started.newspaper.id));
+
+  const { BLOCK_KINDS, blockWork } = await import('../public/editor/layout/block-kinds.js');
+  const list = await desk.json(`/api/newspapers/${started.newspaper.id}/worklist`);
+  const blocks = list.pages.flatMap((page) => page.blocks);
+
+  assert.ok(blocks.length > 0, 'a fresh edition has unfinished blocks');
+  for (const block of blocks) {
+    assert.equal(block.work, blockWork(block.blockType),
+      `${block.sectionKey} is described as "${block.work}"`);
+  }
+  // Every kind the catalog knows carries all three descriptions - a kind added
+  // with no panel heading would silently head an advert "Write the story".
+  for (const [key, kind] of Object.entries(BLOCK_KINDS)) {
+    assert.ok(kind.label && kind.work && kind.panel, `${key} is fully described`);
+  }
+});
+
 test('the worklist says how many characters an empty block holds, before a word is written', async (t) => {
   const server = createApp().listen(0);
   t.after(() => server.close());

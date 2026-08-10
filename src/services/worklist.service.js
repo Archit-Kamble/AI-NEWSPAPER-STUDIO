@@ -28,18 +28,16 @@ async function textFlow() {
   return flowModule;
 }
 
-const has = (value) => Boolean(String(value ?? '').trim());
+// What each kind of block is for, from the one module that defines it - the
+// same words the editor now prints on the block itself. Never a second copy
+// (see CLAUDE.md, and the template-key drift it describes).
+let kindsModule = null;
+async function blockKinds() {
+  if (!kindsModule) kindsModule = await import('../../public/editor/layout/block-kinds.js');
+  return kindsModule;
+}
 
-// What kind of work a block represents, in the words a desk uses. An advert
-// slot is not "an unwritten story" - it is space the advertising side sells,
-// and a night editor should not be looking at it as copy to write.
-const WORK = {
-  article: 'copy to write',
-  briefs: 'briefs to gather',
-  photo: 'a photograph to place',
-  advert: 'advertising space',
-  feature: 'a standing feature',
-};
+const has = (value) => Boolean(String(value ?? '').trim());
 
 function stateOf(section) {
   const wantsPicture = section.block_type === 'photo';
@@ -91,6 +89,7 @@ async function forEdition(newspaperId) {
   const placements = await sectionImages.placementsByEdition(newspaperId);
 
   const flow = await textFlow();
+  const kinds = await blockKinds();
   const pages = new Map();
   const totals = { blocks: 0, done: 0, empty: 0, started: 0, needsCaption: 0, charactersWanted: 0 };
 
@@ -150,7 +149,7 @@ async function forEdition(newspaperId) {
         sectionKey: row.section_key,
         blockType: row.block_type,
         featureKey: row.feature_key,
-        work: WORK[row.block_type] || 'copy to write',
+        work: kinds.blockWork(row.block_type),
         state: over > 0 && state === 'done' ? 'overset' : state,
         headline: row.headline || '',
         widthPx: row.width_px,

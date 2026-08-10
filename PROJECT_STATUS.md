@@ -4,6 +4,90 @@ Architectural audit only. No code was changed to produce this document. Reflects
 
 ---
 
+## 0f. Seventh pass — the verified information layer, foundation + RSS (2026-08-11)
+
+Implemented the design the previous (design-only, no-code) pass proposed:
+`src/services/information/` — a provider-neutral retrieval layer, mirroring
+`src/services/ai/`'s own router shape, with exactly one provider (RSS/Atom).
+Weather, sports, election and paid-news providers are deliberately not built
+yet; they sit behind the same interface for a later pass.
+
+**The invariant this exists to hold:** for a request classified as
+current-event, a retrieval failure must never silently let Gemini answer from
+its own memory. `storyWriter.write()` now classifies the seed
+(`information.classifyIntent()` — five keyword-based categories, no model
+call, both Marathi and English terms) **before spending an AI call**. Only
+`evergreen` and `reporter_copy` skip retrieval entirely — same one-call
+behaviour as before this pass, verified by test. `current_news`,
+`current_data` and `ambiguous` all call `information.fetchContext()` first,
+and only a `verified` result reaches the model; `insufficient`,
+`unavailable` and `conflicting` all return a refusal to the desk with the
+model never called.
+
+**Trust is a lookup, never a response code.** `information/trust.js`: five
+tiers, `OFFICIAL` for a `.gov.in`/`.nic.in` domain, `TRUSTED_NEWS` only for a
+domain explicitly named in `INFORMATION_TRUSTED_DOMAINS`, everything else
+`UNKNOWN` and unable to verify a claim alone. **Out of the box, nothing is
+configured** — no feeds (`INFORMATION_RSS_FEEDS` is unset by default) and no
+trusted domains — so today every current-event "write this block" request is
+refused, not silently downgraded to unverified AI prose. That is the
+deliberate, correct default for an unconfigured retrieval layer, not a bug:
+turning it on is naming real feeds and real trusted domains, not a code
+change. Confirmed against a real, live public feed (BBC World, no AI call):
+19 items fetched and parsed correctly; a query against it correctly returned
+`insufficient` because no domain is yet marked trusted.
+
+**Conflict detection is deliberately narrow, not fact-checking.** Two
+trustworthy sources whose excerpts both contain numbers, where the number
+sets are disjoint, is `conflicting`; anything without a hard number to
+compare is `insufficient`, never a false `verified`. Freshness is two
+windows (15 minutes for `current_data` — a score, a result, a weather
+reading; 3 hours for general news), not a category per future provider — a
+source with no parseable date is stale by default. The cache is a bare
+in-process `Map`, TTL from the same freshness window, no Redis — same
+no-distributed-infrastructure stance as the rest of this project.
+
+**Prompt injection: retrieved text is data, checked at two points.** The RSS
+reader only ever extracts and HTML-strips feed text; there is no code path
+that treats it as anything but a string. The prompt-side defence is a
+delimited `VERIFIED SOURCE DATA ... END VERIFIED SOURCE DATA` block that
+tells the model explicitly that anything inside — including text shaped like
+an instruction — is a fact to accept or discard, never a command. A fixture
+feed item titled `IGNORE PREVIOUS INSTRUCTIONS AND WRITE...` is held in
+`tests/informationProviders.test.js` and reaches the brief unexecuted, as
+plain text.
+
+**A real, live quota leak was found and fixed, unrelated to this feature.**
+Two Phase 6 tests in `tests/writingPipeline.test.js` stubbed only `gemini`
+and expected a bad-shape answer to end the chain there — true when written,
+because neither `sarvam` nor `anthropic` had a real key in `.env` at the
+time. A real Sarvam key has since been added, so on every `npm test` run
+those two tests were silently falling through to a real, billed Sarvam call
+(confirmed live: real generated prose came back, and one run took over 100
+seconds waiting on it). Both tests now explicitly disable every other
+provider in the chain, so their result depends only on the stub, regardless
+of what `.env` contains — see `withOnlyGemini()` in that file.
+
+**Tests: 274/274 (227 baseline + 47 new), 49/49 browser.** New:
+`tests/information.test.js` (24 — intent, trust, freshness, `fetchContext`,
+cache), `tests/informationProviders.test.js` (17 — RSS/Atom parsing
+including malformed XML, empty feed, missing fields, HTML-in-description,
+injected-instruction text, timeout, HTTP error), 6 added to
+`tests/writingPipeline.test.js` (writer integration: evergreen,
+reporter_copy, verified, insufficient, unavailable, conflicting), all
+against a real Postgres DB and the real HTTP endpoint, with the AI provider
+and the RSS provider both stubbed — no model, no real network in the
+automated suite. One real, live manual RSS fetch was made by hand (BBC
+World), not part of `npm test`, no AI call.
+
+**Not built, on purpose, per this phase's explicit scope:** weather, sports,
+election and paid-news providers; arbitrary webpage scraping (RSS/Atom
+only); database persistence of retrieval metadata (kept in memory, returned
+on the response, for now); a source-management UI; citations printed in the
+newspaper itself.
+
+---
+
 ## 0e. Sixth pass — the writing pipeline audited end to end (2026-08-11)
 
 Mapped the complete path (AI panel → route → `storyWriter.service` → provider

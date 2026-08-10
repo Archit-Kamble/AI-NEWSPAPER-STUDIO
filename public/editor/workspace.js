@@ -43,6 +43,8 @@ import * as history from "./history/history.js";
 import * as autosave from "./autosave/autosave.js";
 import { draftFromSection, draftFromStory, payloadFromDraft, viewOfSection } from "./section-model.js";
 import { canRenderSmartCard, smartCardText } from "./smart-cards/smart-cards.js";
+import { candidatesOn, runBulk } from "./external-editor/bulk-generate.js";
+import { escapeHtml } from "./format.js";
 import { isContentEdit, isExplicit } from "./status/section-status.js";
 import { buildFlowMap, flowImageFromRow } from "./layout/text-flow.js";
 
@@ -729,6 +731,8 @@ function renderShell() {
               <div class="canvas-toolbar-divider"></div>
               <button type="button" class="layout-btn" id="fillFeaturesBtn"
                       title="Fill राशिभविष्य, सूर्योदय-सूर्यास्त, दिनविशेष and सुविचार for this edition's date">Fill features</button>
+              <button type="button" class="layout-btn" id="writeEmptyBtn"
+                      title="Write every block on this page that has a headline and no copy — one request per block, and every one comes back as a proposal">Write empty blocks</button>
               <div class="canvas-toolbar-divider"></div>
               <button type="button" class="layout-btn" id="printViewBtn"
                       title="See the page as it prints - no block chrome, no grid">Print view</button>
@@ -805,6 +809,10 @@ function renderShell() {
   // for this edition's own date. What lands in them is ordinary copy the desk
   // can rewrite (VISION.md: AI assists, never owns).
   document.getElementById("fillFeaturesBtn").addEventListener("click", fillFeatures);
+
+  // Writing the empty blocks of a page. One request per block, two at a time -
+  // never the whole page in one request (bulk-generate.js says why).
+  document.getElementById("writeEmptyBtn").addEventListener("click", writeEmptyBlocks);
 
   // Jump lines. The character grid already knows exactly how much of the story
   // will not fit; this turns that measurement into the move a sub-editor
@@ -1069,6 +1077,111 @@ async function fillFeatures() {
       ? `Filled ${filled} feature${filled === 1 ? "" : "s"}${blocked ? `. ${result.notes[result.notes.length - 1]}` : "."}`
       : result.notes?.[result.notes.length - 1] || "Nothing to fill.",
   );
+}
+
+/**
+ * Writes every block on this page that has a headline and no copy.
+ *
+ * One request per block, two at a time - never the whole page in one request.
+ * See bulk-generate.js for why. Nothing is saved: every block comes back as a
+ * proposal and the desk accepts them one at a time, exactly as it does for a
+ * single block.
+ */
+async function writeEmptyBlocks() {
+  const page = store.getCurrentPage();
+  if (!page) return;
+
+  const { ready, skipped } = candidatesOn(page);
+  if (!ready.length) {
+    return showNotice(
+      skipped.length
+        ? `Nothing to write on this page. ${skipped.length} block${skipped.length === 1 ? " was" : "s were"} left alone — give a block a headline and no copy, and it becomes one to write.`
+        : "Nothing to write on this page.",
+    );
+  }
+
+  const button = document.getElementById("writeEmptyBtn");
+  const label = button?.textContent;
+  if (button) button.disabled = true;
+
+  try {
+    const batch = await runBulk({
+      blocks: ready,
+      onProgress: ({ phase, finished, total, sectionKey }) => {
+        // "Generating 3 of 12" - and which one, because a desk watching a page
+        // fill wants to know where it has got to.
+        if (button) button.textContent = `Writing ${Math.min(finished + 1, total)} of ${total}…`;
+        if (phase === "start") showNotice(`Writing ${sectionKey} — ${finished} of ${total} done.`);
+      },
+      request: (block) =>
+        fetch(`/api/pages/${page.id}/sections/${encodeURIComponent(block.sectionKey)}/write`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ seed: block.seed, notes: block.notes, language: block.language, tier: getAiTier() }),
+        }).then((response) => response.json().catch(() => ({ error: "The AI did not answer." }))),
+    });
+
+    showBulkProposals(batch, skipped);
+  } finally {
+    if (button) { button.disabled = false; button.textContent = label; }
+  }
+}
+
+/**
+ * The batch, as a list the desk works down.
+ *
+ * Each proposal is accepted into its own block through the ordinary path -
+ * select the block, patch the draft, let autosave carry it - so a bulk run and
+ * a single block end up in exactly the same place.
+ */
+function showBulkProposals(batch, skipped) {
+  const rows = batch.results.map((result) => {
+    if (result.error) {
+      return `<li class="bulk-row is-error"><strong>${escapeHtml(result.sectionKey)}</strong>
+        <span class="muted">${escapeHtml(result.error)}</span></li>`;
+    }
+    return `<li class="bulk-row">
+      <strong>${escapeHtml(result.sectionKey)}</strong>
+      <span class="bulk-headline">${escapeHtml(result.proposal.headline)}</span>
+      <span class="muted">${result.fit.charsUsed} of ${result.fit.bodyCharBudget} characters</span>
+      <button type="button" class="ext-editor-btn ext-editor-btn-primary" data-bulk-accept="${escapeHtml(result.sectionKey)}">Accept</button>
+    </li>`;
+  }).join("");
+
+  const skippedNote = skipped.length
+    ? `<p class="muted ext-note">Left alone: ${skipped.map((s) => `${escapeHtml(s.sectionKey)} (${escapeHtml(s.why)})`).join(", ")}.</p>`
+    : "";
+
+  // The same kind of panel over the workspace that "What's left" uses - never
+  // another screen (VISION.md: everything happens inside the one workspace).
+  document.getElementById("bulkPanel")?.remove();
+  const panel = document.createElement("aside");
+  panel.id = "bulkPanel";
+  panel.className = "preflight-panel worklist-panel";
+  panel.innerHTML = `
+    <header>
+      <strong>Written ${batch.written} of ${batch.written + batch.failed}</strong>
+      <button type="button" id="bulkClose" aria-label="Close">×</button>
+    </header>
+    <p class="worklist-summary">Nothing has been saved. Accept a block and it lands in that block's
+       draft, marked <strong>needs review</strong>, exactly as a single block does.</p>
+    <ul class="bulk-list">${rows}</ul>
+    ${skippedNote}
+    <p class="ai-proposal-warn">The desk must check every fact before any of this is printed.</p>`;
+  document.body.appendChild(panel);
+  document.getElementById("bulkClose").addEventListener("click", () => panel.remove());
+
+  panel.querySelectorAll("[data-bulk-accept]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const key = button.dataset.bulkAccept;
+      const result = batch.results.find((r) => r.sectionKey === key);
+      if (!result?.proposal) return;
+      selectSection(key);
+      patchDraft({ ...result.proposal, aiGenerated: true, status: "needs_review" }, "bulk");
+      button.disabled = true;
+      button.textContent = "Accepted";
+    });
+  });
 }
 
 // A page with no block selected leaves the dock empty, which

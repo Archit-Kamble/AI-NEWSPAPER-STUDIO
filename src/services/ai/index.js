@@ -36,7 +36,12 @@ const PROVIDERS = {
 };
 
 const DEFAULT_PROVIDER = 'sarvam';
-const timeoutMs = () => Number(process.env.AI_TIMEOUT_MS) || 60000;
+// 120s, not 60. These are reasoning models and the work is not small: twelve
+// horoscope signs at Basic effort measured 40 seconds against a real account,
+// and a lead story at Ultra is slower again. At 60s the call was being aborted
+// at this end while the model was still writing - which reads to the desk as
+// "the AI is broken" and bills for the thinking anyway.
+const timeoutMs = () => Number(process.env.AI_TIMEOUT_MS) || 120000;
 
 function providerNamed(name) {
   return PROVIDERS[String(name || '').toLowerCase().trim()] || null;

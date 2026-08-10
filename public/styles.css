@@ -3150,6 +3150,20 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 }
 .frame-card .smart-card { font-size: 9px; }
 
+/* The batch, as a list the desk works down one block at a time. */
+.bulk-list { margin: 0; padding: 0; list-style: none; }
+.bulk-row {
+  display: grid;
+  grid-template-columns: 5.5em 1fr auto auto;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s2) var(--s3);
+  border-bottom: 1px solid #f0f0f3;
+  font-size: 0.82rem;
+}
+.bulk-row.is-error { color: #a33; }
+.bulk-row .bulk-headline { font-weight: 600; color: var(--primary); }
+
 .smart-card-placed {
   display: flex;
   align-items: center;

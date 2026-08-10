@@ -157,6 +157,46 @@ test('an ordinary failure is not retried - only an exhausted budget is', async (
   assert.match(result.error, /500/);
 });
 
+test("the account's own ceiling is learned from the API, not configured by hand", async (t) => {
+  // Sarvam rejects a max_tokens above the plan's ceiling with a 400 that names
+  // the number. A Starter account is capped at 4096; the default asks for
+  // 16384. Making the desk read that error and edit .env is passing the problem
+  // on, not handling it.
+  const realFetch = global.fetch;
+  const asked = [];
+  let first = true;
+
+  global.fetch = async (url, options) => {
+    asked.push(JSON.parse(options.body).max_tokens);
+    if (first) {
+      first = false;
+      return {
+        ok: false,
+        status: 400,
+        text: async () => JSON.stringify({ error: { message:
+          'max_tokens (16384) exceeds the maximum allowed for sarvam-105b for your subscription tier (starter): 4096. Please reduce max_tokens or upgrade your plan.' } }),
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ choices: [{ message: { content: '{"body":"मजकूर"}' }, finish_reason: 'stop' }] }),
+    };
+  };
+
+  const env = process.env.SARVAM_API_KEY;
+  process.env.SARVAM_API_KEY = 'test-key';
+  t.after(() => { global.fetch = realFetch; process.env.SARVAM_API_KEY = env; });
+
+  const tier = tiers.tierFor('basic');
+  const result = await sarvam.askForJson('write', SCHEMA, tier, {});
+
+  assert.deepEqual(asked, [16384, 4096], 'it asks, is told the ceiling, and re-sends at it');
+  assert.equal(result.data.body, 'मजकूर', 'and the desk gets its copy on the first try it ever sees');
+  assert.equal(sarvam.knownCeiling(), 4096, 'the ceiling is remembered');
+  assert.equal(sarvam.maxOutputTokens(16384), 4096, 'so every later call is right the first time');
+});
+
 test('the tier ladder only ever steps down', () => {
   assert.equal(tiers.lowerThan('ultra').key, 'plus');
   assert.equal(tiers.lowerThan('plus').key, 'basic');

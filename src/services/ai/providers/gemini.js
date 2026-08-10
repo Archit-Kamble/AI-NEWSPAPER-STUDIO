@@ -19,8 +19,14 @@
 //
 // Thinking is counted inside `maxOutputTokens`, exactly as it is on Sarvam. So
 // the two are budgeted separately here and added: the article gets its own
-// room, and no amount of reasoning can eat it. Getting this wrong is not a
-// slower answer, it is a blank one.
+// room rather than competing with the reasoning for one pool. Getting this
+// wrong is not a slower answer, it is a blank one.
+//
+// One honest qualification, also measured: `thinkingBudget` is a TARGET, not a
+// hard ceiling. A Plus call asked for 4096 and spent 4130 - an overrun of
+// under one percent. So the article's room is protected in practice but not
+// guaranteed to the token; do not build anything that depends on the answer
+// having exactly GEMINI_MAX_OUTPUT_TOKENS available.
 //
 // `thinkingBudget: 0` is rejected outright by gemini-3.6-flash (400), so the
 // cheap tier asks for a little thinking rather than none.

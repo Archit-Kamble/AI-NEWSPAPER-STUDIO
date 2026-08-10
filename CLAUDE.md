@@ -162,9 +162,22 @@ Fallback is for a provider that is **down**, never for copy somebody dislikes �
 
 On Gemini, `maxOutputTokens: 200` with `thinkingBudget: 4096` came back `MAX_TOKENS` with **six tokens of answer**. That is why the two are budgeted separately and summed. `thinkingBudget: 0` is rejected outright by `gemini-3.6-flash`, so the cheap tier asks for a little thinking rather than none.
 
-Tiers buy thinking: Basic 1024, Plus 4096, Ultra 12288. Plus is the everyday tier and is deliberately **not** the maximum — every token of thinking is paid for and waited for.
+Tiers **ask for** thinking: Basic 1024, Plus 4096, Ultra 12288. The desk's dropdown opens on **Basic** — quick and cheap, and the sub-editor raises it for the lead.
+
+`thinkingBudget` is a **request, not a ceiling**, and this is measured against the real account rather than assumed. Four calls to `gemini-3.6-flash`:
+
+| asked | spent thinking |
+|---|---|
+| 1024 | 722 |
+| 1024 | **7191** |
+| 4096 | 4130 |
+| 12288 | 5792 |
+
+So the tier does not reliably cap the thinking, and it is not a cost control. What protects the copy is that the wire allowance is the **sum** — the article's room plus the thinking's — so an overrun eats slack rather than the article. Do not build anything that assumes the answer has exactly `GEMINI_MAX_OUTPUT_TOKENS` available, and do not quote the tiers as a spending limit.
 
 - **An exhausted budget gets exactly one retry**, one tier down with twice the room. Never a loop — every attempt is billed. What the desk is finally shown names the two things a sub-editor can do, never an environment variable.
+- **One press of "Write this block" is TWO paid calls**, by design: the write, then a pass that re-measures against the headline the model actually wrote and fixes the length. Both are Gemini's slowest work, and they are why the button takes 30–90s rather than the 3s a bare API call takes. Nothing in the app is waiting on anything else — measured at **100%** of the time inside the model.
+- **Google's free tier is 20 requests per day, per model.** That is about ten blocks, after which the whole paper silently comes out of Sarvam — whose Starter plan then truncates a full-page lead. Enable billing before an edition depends on this.
 
 Bulk generation is **one request per block, two at a time** (`bulk-generate.js`). Never send a newspaper in one request: the budget is per request, one failure would lose every block, and each block has its own measured hole.
 

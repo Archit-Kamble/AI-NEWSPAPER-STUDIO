@@ -74,6 +74,30 @@ test('Gemini is the primary provider and Sarvam is the understudy', () => {
   });
 });
 
+// The claim is that Gemini is the DEFAULT, not that it is compulsory. Every
+// other test here names AI_PROVIDER explicitly, which would still pass if the
+// provider were hard-coded - so these two hold the actual promise.
+test('with AI_PROVIDER unset, Gemini writes anyway', () => {
+  withEnv({ ...NO_KEYS, AI_PROVIDER: undefined, AI_FALLBACK_PROVIDER: 'sarvam',
+            GEMINI_API_KEY: 'k', SARVAM_API_KEY: 'k' }, () => {
+    assert.equal(ai.status().provider.key, 'gemini', 'silence in .env means Gemini');
+  });
+});
+
+test('and .env can still put Sarvam back in front — Gemini is a default, not a fixture', async (t) => {
+  let first = null;
+  withProviders(t, {
+    gemini: { async askForJson() { first = first || 'gemini'; return { data: { body: 'g' } }; } },
+    sarvam: { async askForJson() { first = first || 'sarvam'; return { data: { body: 's' } }; } },
+  });
+
+  const result = await withEnv({ AI_PROVIDER: 'sarvam', AI_FALLBACK_PROVIDER: 'gemini' },
+    () => ai.askForJson('write', SCHEMA, { tier: 'plus' }));
+
+  assert.equal(first, 'sarvam', 'the newsroom can move provider without touching code');
+  assert.equal(result.provider, 'sarvam');
+});
+
 test('the status endpoint never carries a key', () => {
   withEnv({ ...NO_KEYS, AI_PROVIDER: 'gemini', GEMINI_API_KEY: 'super-secret-value' }, () => {
     const serialised = JSON.stringify(ai.status());
@@ -253,6 +277,51 @@ test('an allowance exhausted by thinking is reported as a condition, and retried
   assert.equal(calls[1].maxOutputTokens, 16384, 'and twice the room');
   assert.equal(result.data.body, 'लांब बातमी');
   assert.equal(result.provider, 'gemini', 'fixed without troubling the understudy');
+});
+
+// ------------------------------------------ the understudy's own ceiling ---
+
+// Measured on the real account, on the fallback path: Gemini went 503, Sarvam
+// took the full-page lead, and a Starter plan's 4096 tokens ran out mid-object.
+// Half a JSON object parses as malformed JSON, and Sarvam used to call that
+// "the wrong shape" - which sends whoever reads it hunting a schema fault that
+// is not there, and got no retry because a shape fault is not retryable.
+//
+// It is the same condition as coming back empty: the budget ran out.
+test('Sarvam cut off mid-answer reports an exhausted budget, not a bad shape', async (t) => {
+  const sarvam = require('../src/services/ai/providers/sarvam');
+  const realFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = realFetch; });
+
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    // Cut off exactly as the API returns it: valid until the budget ended.
+    choices: [{ message: { content: '{"body":"पुण्यातील पायाभूत सुविधां' }, finish_reason: 'length' }],
+    usage: { completion_tokens: 4096 },
+  }), { status: 200 });
+
+  const result = await withEnv({ SARVAM_API_KEY: 'k' },
+    () => sarvam.askForJson('write a long one', SCHEMA, tiers.tierFor('ultra'), {}));
+
+  assert.equal(result.outputExhausted, true, 'so the one retry in ai/index.js applies here too');
+  assert.match(result.error, /output limit/, 'and the desk is told what actually happened');
+  assert.ok(!/shape/.test(result.error), 'never blamed on the schema');
+  assert.equal(result.data, undefined);
+});
+
+test('Sarvam answering real nonsense is still a shape fault, and is not retried', async (t) => {
+  const sarvam = require('../src/services/ai/providers/sarvam');
+  const realFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = realFetch; });
+
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    choices: [{ message: { content: 'Sure! Here is your article:' }, finish_reason: 'stop' }],
+  }), { status: 200 });
+
+  const result = await withEnv({ SARVAM_API_KEY: 'k' },
+    () => sarvam.askForJson('write', SCHEMA, tiers.tierFor('basic'), {}));
+
+  assert.ok(!result.outputExhausted, 'more room would not fix prose where JSON was asked for');
+  assert.match(result.error, /shape/);
 });
 
 // ------------------------------------------------- the schema Gemini accepts ---

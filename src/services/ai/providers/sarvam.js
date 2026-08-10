@@ -1,4 +1,14 @@
-// Sarvam AI — the default provider, and the one whose Marathi goes on the page.
+// Sarvam AI — the understudy, and the reason it is still here is its Marathi.
+//
+// It WAS the default. Gemini writes now (AI_PROVIDER in .env) for room rather
+// than for prose: a full-page lead kept coming back empty because the model had
+// spent its whole allowance thinking. Sarvam is one step behind and is what
+// goes on the page when Gemini is having a bad night.
+//
+// Watch the account ceiling on this path. On a Starter plan the whole
+// allowance is 4096 INCLUDING reasoning, which is not enough for a full-page
+// lead - it comes back cut off mid-sentence. That is reported as an exhausted
+// budget, not as a bad answer, so the one retry in ai/index.js applies.
 //
 // Sarvam is built for Indian languages, and the difference is structural rather
 // than a matter of taste. A global model's tokenizer splits a Devanagari word
@@ -179,6 +189,22 @@ const provider = {
     try {
       return { data: JSON.parse(text), usage: body.usage || null };
     } catch {
+      // Truncated JSON reads as malformed JSON, and saying "wrong shape" sends
+      // whoever reads it looking for a schema fault that is not there. If the
+      // answer was cut off mid-write, that is the SAME condition as returning
+      // nothing at all - the budget ran out - and it gets the same one retry.
+      //
+      // Measured on this account: a full-page lead at Ultra, with the Starter
+      // ceiling of 4096, came back as half an object. Without this the desk was
+      // told Sarvam had answered in the wrong shape, and nothing was retried.
+      if (finish === 'length') {
+        return {
+          error: 'Sarvam reached its output limit part-way through the answer.',
+          outputExhausted: true,
+          spentTokens: body?.usage?.completion_tokens || null,
+          budget: asked,
+        };
+      }
       return { error: 'Sarvam did not answer in the shape that was asked for.' };
     }
   },

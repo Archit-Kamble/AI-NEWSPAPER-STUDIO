@@ -4,6 +4,57 @@ Architectural audit only. No code was changed to produce this document. Reflects
 
 ---
 
+## 0a. Second pass — the migration audited against the live account (2026-08-10)
+
+The migration below was re-verified rather than taken on trust. Routing,
+configuration, the two budgets, the error paths and the desk's own clicks were
+measured. Three things it changed, and two it could not fix:
+
+**Fixed — Sarvam cut off mid-answer was reported as the wrong shape.** On the
+fallback path (Gemini 503, full-page lead, Starter ceiling of 4096) Sarvam
+returned half a JSON object. `JSON.parse` failed, and the provider called that
+"did not answer in the shape that was asked for" — which sends whoever reads it
+hunting a schema fault that does not exist, and got **no retry**, because a
+shape fault is not retryable. It is the same condition as coming back empty:
+the budget ran out. Gemini already handled it; Sarvam now does too.
+
+**Corrected — `thinkingBudget` is a request, not a ceiling.** Measured on
+`gemini-3.6-flash`: asked 1024 → spent 722; asked 1024 again → spent **7191**;
+asked 4096 → 4130; asked 12288 → 5792. The tier does not reliably cap thinking
+and is not a cost control. The copy is protected only because the wire
+allowance is the *sum* of the article's room and the thinking's, so an overrun
+eats slack. The earlier claim that reasoning "can never eat the article" was
+too strong.
+
+**Corrected — the desk's dropdown opens on Basic, not Plus.** The docs said
+Plus was the everyday tier. `tiers.list()` is ordered basic, plus, ultra and
+the `<select>` marks index 0, so every unattended generation runs at Basic.
+Left as it is (quick and cheap is the right default, and thinking is not
+capped by the tier anyway) and the documentation was corrected to match the
+code rather than the other way round.
+
+**NOT FIXED, needs a decision — the Gemini account is on the free tier:**
+
+```
+generate_content_free_tier_requests, limit: 20, model: gemini-3.6-flash
+quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier
+```
+
+Twenty requests **per day**. One press of "Write this block" costs two (the
+write, then the fit pass), so this is roughly ten blocks a day. The quota was
+exhausted during this audit, and everything after it fell through to Sarvam —
+correctly, silently, and with a Starter ceiling that truncates a lead. A daily
+newspaper cannot run on this. Enabling billing is a decision for the newsroom,
+not a code change.
+
+**NOT VERIFIED — a Gemini-served run through the UI, today.** The quota was
+gone by the time the browser test ran, so the UI round trip was served by
+Sarvam (correctly, and the proposal said so: "Written by sarvam (fallback)").
+Gemini was verified end-to-end at the service layer earlier the same session:
+`storyWriter.write` at Basic, 45.9s, two calls, 140 of 144 characters.
+
+---
+
 ## 0. Update — Gemini writes, Sarvam covers (2026-08-10)
 
 A configuration change, not an architectural one. The provider abstraction,
@@ -26,8 +77,8 @@ not changed. Sarvam remains `sarvam-105b`.
 
 **Reasoning against output.** Gemini has an effort dial now
 (`thinkingConfig.thinkingBudget`), so `supportsTiers` became true and the desk's
-Basic/Plus/Ultra buy 1024 / 4096 / 12288 thinking tokens. Plus is the everyday
-tier and is deliberately not the maximum.
+Basic/Plus/Ultra ask for 1024 / 4096 / 12288 thinking tokens. See §0a: the ask
+is not a ceiling, and the dropdown opens on Basic.
 
 Thinking is counted **inside** `maxOutputTokens`, exactly as on Sarvam —
 measured, not assumed: `maxOutputTokens: 200` with `thinkingBudget: 4096` came

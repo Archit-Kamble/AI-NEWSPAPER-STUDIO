@@ -1,16 +1,34 @@
 // The External Editor: the second stage of newspaper production, a full-width
-// dock below the page and the Inspector. The page scrolls naturally; this panel
-// is not squeezed into a viewport (VISION.md, "External Editor").
+// dock below the page. The page scrolls naturally; this panel is not squeezed
+// into a viewport (VISION.md, "External Editor").
 //
 // No tabs. VISION.md is explicit that tabs must not be added just because they
 // look organised, and the section lifecycle it defines runs in one direction:
 //
 //     work on image -> AI measures the space left -> AI fills it -> review -> save
 //
-// So the dock is two columns. Left is the live newspaper preview, exactly as it
-// will print. Right is one continuous control column in that same order, with
-// typography and history folded away underneath - present when wanted, never in
-// the path. An editor arriving here never has to choose a tab before starting.
+// The screen is three places, and a panel belongs to one of them by what it is
+// FOR rather than by when it was written:
+//
+//   beside the page (#workspaceToolsPanel)   how the block is SET - typography,
+//                                            the story's particulars, its
+//                                            history, the small layout. All of
+//                                            it changes what the sheet next to
+//                                            it looks like, so it sits next to
+//                                            the sheet.
+//   the desk, left (.ext-write-col)          where the story is WRITTEN - the
+//                                            copy and the pictures, one panel,
+//                                            most of the width.
+//   the desk, right (.ext-assist-col)        what HELPS write it - the AI, the
+//                                            space read-out it is briefed with,
+//                                            the smart cards. Beside the copy,
+//                                            because a proposal is read against
+//                                            the story, not underneath it.
+//
+// Everything is always rendered. Nothing here is behind a tab, and nothing was
+// dropped when it moved - the three folded panels that used to sit at the foot
+// of the rail are the same panels, opened beside the page instead of below the
+// fold where nobody found them.
 
 import { escapeHtml } from "../format.js";
 import { statusOf, statusLabel, statusClass } from "../status/section-status.js";
@@ -25,12 +43,13 @@ import { storyEditorMarkup, bindStoryEditor, refreshStoryEditor, refreshStoryCou
 import { smartCardMarkup, bindSmartCard } from "./smart-card-panel.js";
 import { storyDetailsMarkup, bindStoryDetails, refreshStoryDetails } from "./story-details-panel.js";
 
-// The three steps of the lifecycle, in order. Anything not on this path lives
-// in a collapsed <details> below them.
+// The panels of the desk, in the order they are read: write on the left, the
+// help beside it on the right.
 export const GROUPS = [
-  { key: "image", label: "1 · Pictures" },
-  { key: "space", label: "2 · Space" },
-  { key: "ai", label: "3 · Write with AI" },
+  { key: "story", label: "Write the story" },
+  { key: "ai", label: "Generate with AI" },
+  { key: "space", label: "Space left in this block" },
+  { key: "card", label: "Smart cards" },
 ];
 
 let notifyTimer = null;
@@ -66,11 +85,61 @@ function refreshStorySource(view, story) {
   bindStorySource(activeCallbacks);
 }
 
+/**
+ * The rail beside the page: everything that describes how the block is set.
+ *
+ * A separate host, written at the same moment as the dock, because the two are
+ * one screen for one block - and the rail must never be left showing the
+ * settings of a block that is no longer open.
+ */
+function renderToolsRail(section, view, callbacks) {
+  const host = document.getElementById("workspaceToolsPanel");
+  const name = document.getElementById("toolsBlockName");
+  if (!host) return;
+
+  if (name) name.textContent = section ? section.section_key : "No block open";
+
+  if (!section || !view) {
+    host.innerHTML = `
+      <p class="tools-idle muted">Click a block on the page and its type, its
+         particulars and its history appear here.</p>`;
+    return;
+  }
+
+  host.innerHTML = `
+    <!-- Typography is open. It is the one a desk reaches for every day, and a
+         fold that is always opened is a click charged for nothing. -->
+    <details class="ext-aside" open>
+      <summary>Typography</summary>
+      ${typographyPanelMarkup(view)}
+    </details>
+
+    <details class="ext-aside">
+      <summary>Story details</summary>
+      ${storyDetailsMarkup(view)}
+    </details>
+
+    <details class="ext-aside">
+      <summary>History</summary>
+      <div id="edHistoryAside">${historyPanelMarkup()}</div>
+    </details>
+
+    <!-- Where on the page this block is, and a way through to the next one. -->
+    ${pageMapMarkup(callbacks.getPage?.(), callbacks.getNewspaper?.(), section.section_key)}
+  `;
+
+  bindTypographyPanel(callbacks.getView, callbacks.onPatch);
+  bindStoryDetails(callbacks.onPatch);
+  bindHistoryPanel(historyHandlers(callbacks));
+  bindPageMap((sectionKey) => callbacks.onSelectSection?.(sectionKey));
+}
+
 export function renderExternalEditor(section, view, story, reporterNews, callbacks) {
   const container = document.getElementById("externalEditorPanel");
   if (!container) return;
 
   activeCallbacks = callbacks;
+  renderToolsRail(section, view, callbacks);
 
   if (!section || !view) {
     // Never a bare strip of white. If an editor scrolls down here before
@@ -86,12 +155,13 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
       </div>
       <div class="ext-editor-idle">
         <h4>This is where a story is composed.</h4>
-        <p>Pick a block on the page above and it opens here: place its pictures, see how many
-           characters are left around them, and let the AI fill exactly that.</p>
+        <p>Pick a block on the page above and it opens here, at the block's own shape:
+           write the copy, drag its pictures onto it, and let the AI fill exactly the
+           space that is left.</p>
         <ol class="ext-idle-steps">
-          <li><strong>Pictures</strong> — place, size and shape them on the block</li>
-          <li><strong>Space</strong> — how many characters the copy has room for</li>
-          <li><strong>Write with AI</strong> — fill exactly those characters</li>
+          <li><strong>Left of the page</strong> — how the block is set: type, particulars, history</li>
+          <li><strong>Here on the left</strong> — the story itself, words and pictures together</li>
+          <li><strong>On the right</strong> — the AI, the space it has to fill, and the smart cards</li>
         </ol>
         <button type="button" class="btn-submit" id="edPickBlock">Choose a block ↑</button>
       </div>
@@ -125,13 +195,12 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
     </div>
 
     <div class="ext-editor-stage">
-      <div class="ext-controls-col">
-        <!-- ONE editor: the words and the pictures of a story are the story,
-             and they were in two panels a screen apart, so placing a picture
-             meant losing sight of the copy it has to run around. The writing
-             surface is first and nothing may go above it - selecting a block
-             has to put a cursor within reach - and the pictures follow it
-             inside the same panel. -->
+      <!-- LEFT, and most of the width: the story. The words and the pictures of
+           a story ARE the story, and they were once two panels a screen apart,
+           so placing a photograph meant losing sight of the copy it has to run
+           around. One panel, and nothing above it - selecting a block has to put
+           a cursor within reach. -->
+      <div class="ext-write-col">
         ${group("story", "Write the story", `
           ${storySourceMarkup(view, story)}
           ${storyEditorMarkup(view, {
@@ -145,35 +214,21 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
           })}
         `)}
 
-        ${group("ai", "Help from AI", aiPanelMarkup(view))}
-
-        ${group("card", "Smart Cards", smartCardMarkup())}
-
-        ${group("space", "Space left", `<div id="edSpaceGroup">${spacePanelMarkup(section, view, callbacks.getImages?.() || [])}</div>`)}
-
-        <details class="ext-aside">
-          <summary>Typography</summary>
-          ${typographyPanelMarkup(view)}
-        </details>
-
-        <details class="ext-aside">
-          <summary>Story details</summary>
-          ${storyDetailsMarkup(view)}
-        </details>
-
-        <details class="ext-aside">
-          <summary>History</summary>
-          <div id="edHistoryAside">${historyPanelMarkup()}</div>
-        </details>
-
-        <!-- Where on the page this block is. It travelled with the old Pictures
-             panel; it is small and it is a way THROUGH the page, so it stays. -->
-        ${pageMapMarkup(callbacks.getPage?.(), callbacks.getNewspaper?.(), section.section_key)}
-
         <div class="ext-mount-strip">
           <div id="external-editor" class="ext-editor-mount"></div>
         </div>
       </div>
+
+      <!-- RIGHT: the machine that helps. The AI first, then the measurement it
+           is briefed with - the two are one thought, and a proposal is judged
+           against the copy beside it rather than a screen below it. -->
+      <aside class="ext-assist-col">
+        ${group("ai", "Generate with AI", aiPanelMarkup(view))}
+
+        ${group("space", "Space left in this block", `<div id="edSpaceGroup">${spacePanelMarkup(section, view, callbacks.getImages?.() || [])}</div>`)}
+
+        ${group("card", "Smart cards", smartCardMarkup())}
+      </aside>
     </div>
   `;
 
@@ -203,13 +258,10 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
     onRemoveImage: callbacks.onRemoveImage,
     onSelectImage: (id) => { selectPicture(id); selectPictureFrame(id); },
   });
-  // The small layout is a way through the page, not only a picture of it.
-  bindPageMap((sectionKey) => callbacks.onSelectSection?.(sectionKey));
-  bindTypographyPanel(callbacks.getView, callbacks.onPatch);
-  bindStoryDetails(callbacks.onPatch);
   bindAiPanel(callbacks.getView, callbacks.getSection, callbacks.onPatch, notify, callbacks.getImages, callbacks.getPage);
-  bindHistoryPanel(historyHandlers(callbacks));
   bindDockToggle(callbacks);
+  // Typography, Story details, History and the small layout are bound by
+  // renderToolsRail - they live beside the page now, not in this dock.
 
   document.getElementById("edCancel").addEventListener("click", callbacks.onCancel);
   document.getElementById("edSaveNow")?.addEventListener("click", callbacks.onSave);

@@ -323,11 +323,16 @@ export async function mountFrame(section, view, images, callbacks) {
 
   if (!window.__sahasFrameResize) {
     window.__sahasFrameResize = true;
-    window.addEventListener("resize", () => {
+    const relayout = () => {
       layoutPage();
       layoutBodyFrame();
       renderPictures(state.images);
-    });
+    };
+    window.addEventListener("resize", relayout);
+    // A splitter drag changes the room the page has without changing the
+    // window, so the page would keep the size it was given for the old column
+    // and the pictures on it would sit at the wrong scale.
+    window.addEventListener("workspace-resized", relayout);
   }
 }
 

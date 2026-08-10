@@ -442,7 +442,10 @@ function onSectionAction(sectionKey, action) {
 
   selectSection(sectionKey);
   if (action === "story") return chooseStory();
-  if (action === "image") return focusGroup("image");
+  // Pictures are part of the writing surface, so "Add a picture" from the
+  // page's own menu goes to the story panel - there is no separate picture
+  // group to send it to any more.
+  if (action === "image") return focusGroup("story");
   if (action === "mark-ready") return setSectionStatus("ready");
   if (action === "mark-review") return setSectionStatus("needs_review");
 }
@@ -648,6 +651,25 @@ function renderShell() {
       <header class="workspace-toolbar" id="toolbar"></header>
 
       <div class="workspace-top" id="workspaceTop">
+        <!-- LEFT: how the open block is SET. Typography, the story's own
+             particulars, its history and the small layout - everything that
+             describes the block rather than composes it. It sits beside the
+             page because that is what it changes: a type size set here shows on
+             the sheet a hand's width away, which is the whole reason a desk
+             changes one. It was three folded panels at the bottom of a rail
+             below the fold, where nobody found them. -->
+        <aside class="workspace-tools" id="workspaceTools">
+          <div class="workspace-tools-head">
+            <h3>Block settings</h3>
+            <span class="workspace-tools-block" id="toolsBlockName">No block open</span>
+          </div>
+          <div class="workspace-tools-body" id="workspaceToolsPanel"></div>
+        </aside>
+
+        <div class="splitter splitter-v" id="toolsResizer" role="separator"
+             aria-orientation="vertical" tabindex="0" title="Drag to resize the block settings rail"></div>
+
+        <!-- RIGHT: the page itself. -->
         <main class="workspace-canvas-host">
           <!-- Two rows, and the split is a real one: the first says WHICH page
                and WHAT SHAPE it is, the second says what to DO with it. Twelve
@@ -690,15 +712,12 @@ function renderShell() {
                aria-orientation="horizontal" tabindex="0" title="Drag to resize the page area"></div>
         </main>
 
-        <div class="splitter splitter-v" id="editorResizer" role="separator"
-             aria-orientation="vertical" tabindex="0" title="Drag to resize the editor"></div>
-
-        <!-- The editor sits BESIDE the page, in the column the Inspector used
-             to hold. It was moved down to a full-width dock under the page, and
-             once the Inspector was deleted that left the only place to type
-             1091px below the fold: opening a block showed a page and no way to
-             write on it. An editor that has to be scrolled to is an editor that
-             is not there. -->
+        <!-- BELOW BOTH: the desk. Writing on the left with most of the width,
+             because a story wants width; the machine that helps write it on the
+             right, where it can be read against the copy instead of underneath
+             it. It is a child of this grid rather than a sibling so that a
+             narrow window can reorder all three - see the grid areas in
+             styles.css: the page, then the desk, then the settings. -->
         <section class="workspace-external-editor" id="externalEditorPanel"></section>
       </div>
 
@@ -807,6 +826,20 @@ function measureToolbar() {
   const shell = document.querySelector(".workspace-shell");
   if (!toolbar || !shell) return;
   shell.style.setProperty("--toolbar-h", `${Math.round(toolbar.getBoundingClientRect().height)}px`);
+
+  // How tall the page area is, so the settings rail beside it can be capped to
+  // the same height and scroll inside itself.
+  //
+  // Without the cap the rail is as tall as its own panels, and being the taller
+  // of the two it sets the height of the whole top row - which pushes the
+  // editor below the fold. That is the one failure this layout exists to
+  // prevent, and it came straight back the moment a second column appeared up
+  // here. The page area's height does not depend on the rail (it is the canvas
+  // toolbar plus --canvas-height), so there is no circle in measuring it.
+  const pageArea = shell.querySelector(".workspace-canvas-host");
+  if (pageArea) {
+    shell.style.setProperty("--page-area-h", `${Math.round(pageArea.getBoundingClientRect().height)}px`);
+  }
 }
 
 // Preflight, and passing a page for press.

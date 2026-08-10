@@ -1204,45 +1204,117 @@ body {
    preview and Inspector sit at a comfortable size, the editor dock is below
    them at its natural height, and the browser scrolls the lot. */
 .workspace-shell {
-  --canvas-height: 620px;
-  --editor-width: 520px;
+  --canvas-height: 380px;
+  --tools-width: 340px;
   background: #f6f6f7;
   font-size: 0.95rem;
 }
 
-/* The page, and the ONE editor beside it.
-   The Inspector that used to hold this column was a second editor bound to the
-   same story. Everything it did moved into the External Editor, and the
-   External Editor moved up here - because when it sat as a full-width dock
-   under the page, deleting the Inspector left the only place to type 1091px
-   below the fold. An editor that has to be scrolled to is an editor that is
-   not there. */
+/* The top of the screen: the block's settings on the LEFT, the page on the
+   RIGHT, and the editor below both at the full width of the window.
+   The settings rail is narrow and fixed-width; the page takes everything left,
+   which is the right way round - a sheet of newsprint has a shape it must keep,
+   and a column of number fields does not. */
 .workspace-top {
-  /* The editor is BELOW the page and the full width of the window, and it gets
-     most of the screen - the page above it is a reference, the editor is where
-     the work happens. As a 520px column beside the page it had 26% of a 1920
-     screen to write a newspaper in.
-     The page's height is the draggable one (--canvas-height), so the desk sets
-     the split; the editor takes everything left. */
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: var(--tools-width) 6px minmax(0, 1fr);
+  grid-template-areas:
+    "tools split page"
+    "editor editor editor";
   align-items: start;
 }
-/* The vertical splitter belonged to the side-by-side layout. */
-.workspace-top > .splitter-v { display: none; }
-.editor-collapsed .workspace-top {
-  grid-template-columns: minmax(0, 1fr);
+.workspace-tools { grid-area: tools; }
+.workspace-top > .splitter-v {
+  grid-area: split;
+  /* The row is sized by the taller of the rail and the page, and `align-items:
+     start` would leave the handle 0px tall - present, invisible, undraggable. */
+  align-self: stretch;
 }
-.editor-collapsed #editorResizer {
-  display: none;
-}
-/* Too narrow for two columns, so they stack - and the page gives up height so
-   that the editor under it is still on the first screen. Stacking at the full
-   620px page height put the headline field below the fold again, which is the
-   whole failure this layout exists to fix. */
+.workspace-canvas-host { grid-area: page; }
+.workspace-external-editor { grid-area: editor; }
+
+/* Too narrow for two columns, so all three stack - and the ORDER changes, which
+   is the reason they share one grid rather than sitting in two containers.
+   The page first because it is what a desk looks at, the writing surface
+   straight under it, and the settings last. Stacked full width the settings are
+   a tall column of fields, and above the editor they put the headline box
+   1000px down - the one failure this layout exists to prevent. */
 @media (max-width: 1024px) {
-  .workspace-top { grid-template-columns: 1fr; }
-  .workspace-top .splitter-v { display: none; }
+  .workspace-top {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "page" "editor" "tools";
+  }
+  .workspace-top > .splitter-v { display: none; }
+  .workspace-tools {
+    position: static;
+    max-height: none;
+    border-right: 0;
+    border-top: 1px solid #ececed;
+  }
+}
+
+/* The block settings rail. It scrolls on its own and stays beside the page:
+   its panels are ABOUT the page, so scrolling one away from the other would
+   defeat the reason they are next to each other. */
+.workspace-tools {
+  position: sticky;
+  top: var(--toolbar-h, 36px);
+  /* Never taller than the page beside it - see measureToolbar(). A rail that
+     grows past the page makes the top of the screen as tall as its own panels
+     and puts the writing surface below the fold. It scrolls inside itself
+     instead, which is what a format pane does. */
+  max-height: var(--page-area-h, calc(100vh - var(--toolbar-h, 36px)));
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: white;
+  border-right: 1px solid #ececed;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.workspace-tools-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s2);
+  padding: var(--s2) var(--s3);
+  background: white;
+  border-bottom: 1px solid #ececed;
+}
+.workspace-tools-head h3 {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--accent);
+}
+/* Which block these settings belong to. Without it the rail is a column of
+   fields that could be describing anything on the page. */
+.workspace-tools-block {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--primary);
+  text-transform: uppercase;
+}
+.workspace-tools-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  padding: var(--s2);
+}
+.tools-idle {
+  margin: 0;
+  padding: var(--s3);
+  font-size: 0.8rem;
+  line-height: 1.5;
 }
 
 .splitter {
@@ -1759,7 +1831,7 @@ body.print-view .canvas-view-controls {
   flex-direction: column;
   min-width: 0;
   background: white;
-  border-left: 1px solid #ececed;
+  border-top: 1px solid #ececed;
 }
 /* The rail carries its own scrollbar, pinned under the toolbar.
    It is a tall column - the writing surface, the pictures, the cards, the
@@ -2189,16 +2261,29 @@ body.print-view .canvas-view-controls {
   background: #f2f2f4;
 }
 
-/* The editor is a rail beside the page, so its panels stack in one column and
-   the writing surface is the first thing in it. One column ALWAYS, not below a
-   viewport breakpoint: a 520px rail is narrow on a 1920px screen, and a media
-   query cannot see that. No tabs - see external-editor.js. */
+/* The desk: the story on the left with most of the width, the help beside it on
+   the right. 70/30 rather than halves - one side is a writing surface and the
+   other is a column of buttons and read-outs, and giving a column of buttons
+   half a 1920px screen takes the width away from the only thing that needs it.
+   No tabs - see external-editor.js. */
 .ext-editor-stage {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 70fr) minmax(320px, 30fr);
   gap: var(--s4);
   padding: var(--s3);
   align-items: start;
+}
+/* Below this the right-hand column would be too narrow to read a proposal in,
+   so the two stack: story first, help under it. */
+@media (max-width: 1180px) {
+  .ext-editor-stage { grid-template-columns: minmax(0, 1fr); }
+}
+.ext-write-col,
+.ext-assist-col {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
 }
 
 .ext-preview-col {
@@ -2211,12 +2296,6 @@ body.print-view .canvas-view-controls {
     position: sticky;
     top: 72px;
   }
-}
-.ext-controls-col {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
 }
 
 .live-preview-head {
@@ -2308,9 +2387,12 @@ body.print-view .canvas-view-controls {
 
 .ext-mount-strip { display: none; }
 
-/* Sub-panels written for the full-width dock stack inside the control column. */
-.ext-controls-col .ext-columns { grid-template-columns: minmax(0, 1fr); gap: var(--s3); }
-.ext-controls-col .ext-column-wide { grid-column: span 1; }
+/* Sub-panels written for the full-width dock stack inside a narrow column - the
+   help column beside the story, and the settings rail beside the page. */
+.ext-assist-col .ext-columns,
+.workspace-tools-body .ext-columns { grid-template-columns: minmax(0, 1fr); gap: var(--s3); }
+.ext-assist-col .ext-column-wide,
+.workspace-tools-body .ext-column-wide { grid-column: span 1; }
 
 /* Full width means real columns rather than one long scroll. */
 .ext-columns {

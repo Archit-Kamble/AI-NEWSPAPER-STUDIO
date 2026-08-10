@@ -3,18 +3,29 @@
 // properties and are remembered in localStorage, so a desk keeps its layout
 // between sessions.
 
-// v2: the editor moved below the page, so a stored 620px page height from
-// the side-by-side layout would leave the editor a third of the screen.
-const STORAGE_KEY = "sahas.workspace.layout.v2";
+// v3: the second draggable width changed meaning. It used to be the editor,
+// when the editor was a column beside the page; the editor is the full width of
+// the window below the page now, and the column beside the page is the block
+// settings rail. A stored 520px from v2 would have made that rail half the
+// screen on the first load after the change.
+const STORAGE_KEY = "sahas.workspace.layout.v3";
 
 const LIMITS = {
   // The page is the reference above the editor, not the work surface, so it
   // starts small and the editor below it gets the rest of the screen.
-  canvasHeight: { min: 200, max: 1200, fallback: 300, prop: "--canvas-height" },
-  // The editor is a column beside the page now, so its width is the second
-  // thing worth dragging. The floor is high on purpose: below about 380px the
-  // writing surface stops being somewhere a story can be written.
-  editorWidth: { min: 380, max: 900, fallback: 520, prop: "--editor-width" },
+  // 380, not 300: the settings rail beside the page is capped to this height
+  // (it must not push the writing surface below the fold), so the number is now
+  // the height of BOTH columns. At 300 the sheet was a 24% thumbnail and the
+  // rail showed four fields of eight. 380 keeps the headline field on a 950px
+  // screen with room to spare, and a desk that wants more drags the handle -
+  // which is remembered.
+  canvasHeight: { min: 200, max: 1200, fallback: 380, prop: "--canvas-height" },
+  // The block settings rail, left of the page. Narrow on purpose - it holds
+  // read-outs and small fields, not a writing surface - but draggable, because
+  // a desk setting type all morning wants it wider than one reading a proof.
+  // 340 is the width at which the eight type fields sit two across instead of
+  // eight down; below that the rail is twice as long as the page beside it.
+  toolsWidth: { min: 240, max: 560, fallback: 340, prop: "--tools-width" },
 };
 
 function readStored() {
@@ -44,7 +55,7 @@ export function applyStoredLayout(shell) {
   const stored = readStored();
   sizes = {
     canvasHeight: clamp("canvasHeight", stored.canvasHeight || LIMITS.canvasHeight.fallback),
-    editorWidth: clamp("editorWidth", stored.editorWidth || LIMITS.editorWidth.fallback),
+    toolsWidth: clamp("toolsWidth", stored.toolsWidth || LIMITS.toolsWidth.fallback),
     editorCollapsed: stored.editorCollapsed === true,
   };
   Object.entries(LIMITS).forEach(([key, { prop }]) => {
@@ -120,7 +131,7 @@ function bindSplitter(shell, handle, key, axis, invert) {
 
 export function bindResizers(shell) {
   bindSplitter(shell, document.getElementById("canvasResizer"), "canvasHeight", "y", false);
-  // Inverted: the editor grows as the pointer moves LEFT, because it is the
-  // right-hand column.
-  bindSplitter(shell, document.getElementById("editorResizer"), "editorWidth", "x", true);
+  // Not inverted: the settings rail is the LEFT column, so it grows as the
+  // pointer moves right.
+  bindSplitter(shell, document.getElementById("toolsResizer"), "toolsWidth", "x", false);
 }

@@ -22,7 +22,7 @@ const SHAPES = [
   ["cutout", "Cut-out"],
 ];
 
-let state = { images: [], selectedId: null, callbacks: {} };
+let state = { images: [], selectedId: null, callbacks: {}, block: null };
 
 export function pictureControlsMarkup() {
   return `
@@ -36,8 +36,9 @@ function selected() {
   return state.images.find((image) => image.id === state.selectedId) || null;
 }
 
-export function renderPictureControls(images, selectedId) {
+export function renderPictureControls(images, selectedId, block) {
   state.images = images || [];
+  if (block) state.block = block;
   if (selectedId !== undefined) state.selectedId = selectedId;
   // A picture that was removed cannot stay selected.
   if (!state.images.some((image) => image.id === state.selectedId)) {
@@ -86,6 +87,12 @@ export function renderPictureControls(images, selectedId) {
       <button type="button" class="ext-editor-btn" data-picture-do="smaller">Smaller</button>
     </div>
     <div class="ext-editor-toolbar">
+      <!-- An advert is supplied at the size of the space it bought, and the
+           desk should not have to drag it there by eye. -->
+      <button type="button" class="ext-editor-btn" data-picture-do="fill">Fit to block</button>
+      <button type="button" class="ext-editor-btn" data-picture-do="fit">Fit inside block</button>
+    </div>
+    <div class="ext-editor-toolbar">
       <button type="button" class="ext-editor-btn" data-picture-do="forward">Bring forward</button>
       <button type="button" class="ext-editor-btn" data-picture-do="backward">Send back</button>
       <button type="button" class="ext-editor-btn" data-picture-do="cutout">Remove background</button>
@@ -126,6 +133,32 @@ function change(image, action) {
     case "flip-v": return { flipV: !image.flip_v };
     case "bigger": return { width: Math.round(width * 1.1), height: Math.round(height * 1.1) };
     case "smaller": return { width: Math.round(width * 0.9), height: Math.round(height * 0.9) };
+    // Fill the block exactly - what an advert wants, because it was supplied
+    // at the size of the space it bought.
+    case "fill": {
+      const block = state.block;
+      if (!block) return null;
+      const margin = Number(block.margin_px) || 12;
+      return {
+        x: margin, y: margin,
+        width: Math.round(Number(block.width_px) - margin * 2),
+        height: Math.round(Number(block.height_px) - margin * 2),
+      };
+    }
+    // Fit inside it, keeping the picture's own proportions - a photograph
+    // stretched to a box it does not share the shape of is a printing error.
+    case "fit": {
+      const block = state.block;
+      if (!block || !width || !height) return null;
+      const margin = Number(block.margin_px) || 12;
+      const room = { w: Number(block.width_px) - margin * 2, h: Number(block.height_px) - margin * 2 };
+      const factor = Math.min(room.w / width, room.h / height);
+      return {
+        x: margin, y: margin,
+        width: Math.max(20, Math.round(width * factor)),
+        height: Math.max(20, Math.round(height * factor)),
+      };
+    }
     // Order is real and it is stored, so it survives a reload. It did not
     // before: the old canvas restacked its own objects and threw the order away.
     case "forward": return { zIndex: (Number(image.z_index) || 0) + 1 };

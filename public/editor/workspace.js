@@ -127,7 +127,7 @@ async function addSectionImage(file) {
   // picture decides how tall that makes it.
   const shape = await naturalShape(url);
   const section = page.sections?.find((row) => row.section_key === key);
-  const width = section ? Math.round(Number(section.width_px) / 2) : 0;
+  const placement = section && shape ? placeInside(section, shape) : null;
 
   const response = await fetch(`/api/pages/${page.id}/sections/${encodeURIComponent(key)}/images`, {
     method: "POST",
@@ -136,7 +136,7 @@ async function addSectionImage(file) {
       url,
       filename: file.name,
       mimeType: file.type,
-      ...(width && shape ? { width, height: Math.max(20, Math.round(width / shape)) } : {}),
+      ...(placement || {}),
     }),
   });
   if (!response.ok) return showNotice("The picture could not be placed.");
@@ -178,6 +178,35 @@ async function readableImage(file) {
     // picture at the door.
     return file;
   }
+}
+
+/**
+ * Where a new picture lands: half the block's width, at the picture's own
+ * proportions, and never bigger than the block.
+ *
+ * A photograph taller than the block it is dropped into used to be placed at
+ * its full height and clipped by the block's edge - the desk saw a picture with
+ * its head cut off and no way to tell that the box, not the picture, was wrong.
+ * A picture that does not fit is made to fit first.
+ */
+function placeInside(section, shape) {
+  const margin = Number(section.margin_px) || 12;
+  const room = {
+    width: Math.max(20, Number(section.width_px) - margin * 2),
+    height: Math.max(20, Number(section.height_px) - margin * 2),
+  };
+
+  let width = Math.round(room.width / 2);
+  let height = Math.round(width / shape);
+  if (height > room.height) {
+    height = room.height;
+    width = Math.round(height * shape);
+  }
+  if (width > room.width) {
+    width = room.width;
+    height = Math.round(width / shape);
+  }
+  return { width: Math.max(20, width), height: Math.max(20, height) };
 }
 
 /** The picture's own width ÷ height, or null if the browser cannot read it. */

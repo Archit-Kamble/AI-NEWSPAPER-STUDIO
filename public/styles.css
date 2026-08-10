@@ -3918,9 +3918,13 @@ body.print-view .page-imprint {
   object-fit: contain;
   pointer-events: none;
 }
-/* A cut-out has no box to draw - its own alpha is the shape. */
+/* A cut-out has no box. Its own alpha IS the shape: the copy runs to the
+   subject's outline, and drawing a rectangle around it - the hover outline, the
+   selection ring, the corner - puts the box straight back on a picture whose
+   whole point is not having one. Only the handles show, and only on hover. */
 .story-picture[data-shape="cutout"] { shape-image-threshold: 0.5; }
 .story-picture[data-shape="cutout"] img { border-radius: 0; }
+.story-picture[data-shape="cutout"]::after { display: none; }
 /* An oval picture is set as an oval and the copy runs round the oval, which is
    what `shape` means on the block. */
 .story-picture[data-shape="ellipse"] { shape-outside: ellipse(50% 50%); }

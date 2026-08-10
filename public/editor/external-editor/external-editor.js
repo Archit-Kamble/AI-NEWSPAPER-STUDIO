@@ -19,7 +19,6 @@ import { picturesPanelMarkup, bindPicturesPanel, refreshPicturesPanel } from "./
 import { typographyPanelMarkup, bindTypographyPanel, refreshTypographyPanel } from "./typography-panel.js";
 import { spacePanelMarkup, refreshSpacePanel } from "./layout-panel.js";
 import { aiPanelMarkup, bindAiPanel, refreshAiPanel } from "./ai-panel.js";
-import { assetsPanelMarkup, bindAssetsPanel, refreshAssetsPanel } from "./assets-panel.js";
 import { historyPanelMarkup, bindHistoryPanel, refreshHistoryPanel } from "./history-panel.js";
 import { pageMapMarkup, bindPageMap } from "./page-map.js";
 import { storyEditorMarkup, bindStoryEditor, refreshStoryEditor, refreshStoryCount, refreshStoryStats, refreshStoryPictures } from "./story-editor.js";
@@ -142,19 +141,15 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
             pictures: `
               <h5 class="story-block-title">Pictures on this block</h5>
               ${picturesPanelMarkup(callbacks.getImages?.() || [])}
-              ${pictureControlsMarkup()}
-              <details class="ext-more">
-                <summary>Choose from the reporter's pictures</summary>
-                ${assetsPanelMarkup(view, reporterNews)}
-              </details>`,
+              ${pictureControlsMarkup()}`,
           })}
         `)}
+
+        ${group("ai", "Help from AI", aiPanelMarkup(view))}
 
         ${group("card", "Smart Cards", smartCardMarkup())}
 
         ${group("space", "Space left", `<div id="edSpaceGroup">${spacePanelMarkup(section, view, callbacks.getImages?.() || [])}</div>`)}
-
-        ${group("ai", "Help from AI", aiPanelMarkup(view))}
 
         <details class="ext-aside">
           <summary>Typography</summary>
@@ -190,7 +185,7 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
     onRemoveImage: callbacks.onRemoveImage,
     onRemoveBackground: callbacks.onRemoveBackground,
   });
-  renderPictureControls(callbacks.getImages?.() || []);
+  renderPictureControls(callbacks.getImages?.() || [], undefined, section);
   bindPicturesPanel({ ...callbacks, onSelectImage: selectPicture });
   bindSmartCard(callbacks.onRequestSmartCard, callbacks.onPatch, notify);
   bindStorySource(callbacks);
@@ -213,7 +208,6 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
   bindTypographyPanel(callbacks.getView, callbacks.onPatch);
   bindStoryDetails(callbacks.onPatch);
   bindAiPanel(callbacks.getView, callbacks.getSection, callbacks.onPatch, notify, callbacks.getImages, callbacks.getPage);
-  bindAssetsPanel(callbacks.onPatch, notify);
   bindHistoryPanel(historyHandlers(callbacks));
   bindDockToggle(callbacks);
 
@@ -258,12 +252,11 @@ export function refreshExternalEditor(section, view, story, source) {
   }
 
   const images = activeCallbacks?.getImages?.() || [];
-  renderPictureControls(images);
+  renderPictureControls(images, undefined, section);
   refreshPicturesPanel(images);
   refreshSpacePanel(section, view, activeCallbacks?.getImages?.() || []);
   refreshTypographyPanel(view, source);
   refreshStoryDetails(view, source);
-  refreshAssetsPanel(view);
   refreshAiPanel(view, source);
   refreshStorySource(view, story);
   // Not when the change came from the editor itself - rewriting the box a

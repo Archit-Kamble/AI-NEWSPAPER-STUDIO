@@ -233,11 +233,22 @@ const BODY_SCHEMA = {
   properties: { body: { type: 'string', description: 'The story, resized to fit.' } },
 };
 
-// How much of the block a hole may take before a reader would notice it. Three
-// body lines - measured in LINES rather than as a percentage, because that is
-// what the page shows: the same 15% is invisible on a full-page lead and is the
-// whole block on a two-line filler.
-const HOLE_LINES = 3;
+// How much of the block a hole may take before a reader would notice it.
+// Measured in LINES rather than as a percentage, because that is what the page
+// shows: the same 15% is invisible on a full-page lead and is the whole block
+// on a two-line filler.
+//
+// Was 3. `planningFit` now reserves the headline and deck at their full legal
+// limit (see its own comment), which guarantees the real budget is never
+// smaller than the briefed one - but a model that writes a shorter, ordinary
+// headline (which is normal, and often the better headline) still leaves more
+// of that reservation unclaimed than a snug guess would have. At 3, that
+// ordinary slack was reaching this check on 41% of writes across a real
+// edition, asking for a second call to fill a gap the ONLY reason for was the
+// planner's own conservatism. At 4 the same edition measured 7% - a check that
+// still catches a genuine hole without treating the guarantee's own margin as
+// one.
+const HOLE_LINES = 4;
 
 /**
  * Should the story be sent back to be resized?

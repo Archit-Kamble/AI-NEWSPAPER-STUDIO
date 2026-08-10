@@ -88,6 +88,32 @@ test('a hole a reader would see is repaired, whoever is at fault', () => {
   assert.equal(verdict.reason, 'hole');
 });
 
+test('the boundary: up to 4 empty lines are accepted, more than 4 is a hole', () => {
+  // HOLE_LINES was 3, then 4: at 3, `planningFit`'s own conservatism (headline
+  // and deck reserved at their full legal limit, never a typical or trimmed
+  // length) was routinely enough on its own to cross the line - 41% of writes
+  // on a real edition, asking for a second call to fill a gap the model did
+  // nothing to cause. Measured on the same edition, 4 brought that to 7%:
+  // still a real hole, not the guarantee's own margin.
+  //
+  // A budget generous enough that the 92%-floor check (a SEPARATE rule) is not
+  // what these numbers are testing, and a 40-column block, so N lines of gap
+  // is exactly N*40 characters. The check is `>`, so 4 lines exactly still
+  // passes - the threshold moved to 4, not to "4 or more".
+  const budget = 3000;
+  const cols = 40;
+
+  const threeLines = resizeNeeded({ used: budget - 3 * cols, real: block(budget, cols), briefed: budget });
+  assert.equal(threeLines, false, '3 empty lines is inside the tolerance');
+
+  const fourLines = resizeNeeded({ used: budget - 4 * cols, real: block(budget, cols), briefed: budget });
+  assert.equal(fourLines, false, 'exactly 4 empty lines is still inside the tolerance - the check is strictly greater-than');
+
+  const fiveLines = resizeNeeded({ used: budget - 5 * cols, real: block(budget, cols), briefed: budget });
+  assert.ok(fiveLines, 'more than 4 empty lines reads as a hole');
+  assert.equal(fiveLines.reason, 'hole');
+});
+
 test('the hole is counted in lines, not in percent', () => {
   // The same shortfall, on two different measures. 90 characters is two lines
   // on a wide block and six on a narrow one - the page shows lines, so the rule

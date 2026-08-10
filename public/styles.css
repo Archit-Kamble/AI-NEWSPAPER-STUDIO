@@ -2869,12 +2869,14 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 
 /* Pictures placed inside a block, shown on the page canvas exactly where the
    composition editor put them. */
-.section-placed-image {
-  position: absolute;
-  object-fit: cover;
-  pointer-events: none;
-}
-.section-placed-image.oval { border-radius: 50%; }
+/* The frame is placed; the picture inside it is drawn by the one rule in
+   layout/picture-style.js, which writes the sizing and the turn as inline
+   style. `cover` used to live here and cropped every picture on the page while
+   the editor showed it whole. */
+.section-placed { position: absolute; }
+.section-placed-image { pointer-events: none; }
+/* A cut-out has no box on the page either. */
+.section-placed[data-shape="cutout"] { background: none; }
 
 /* Copy poured around the pictures on the page canvas, cell by cell. */
 /* A line of copy set on one run of free cells.

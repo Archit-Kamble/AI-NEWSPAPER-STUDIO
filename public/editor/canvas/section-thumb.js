@@ -4,6 +4,7 @@
 // the editor is being typed into - the canvas never rebuilds every box for one
 // keystroke (Part 14).
 
+import { placedPictureStyle } from "../layout/picture-style.js";
 import { escapeHtml } from "../format.js";
 import { statusOf, statusLabel, statusClass } from "../status/section-status.js";
 import { computeMetrics } from "../layout/layout-metrics.js";
@@ -56,18 +57,12 @@ function placedImagesMarkup(section) {
   if (!images.length) return "";
   return images
     .map((image) => {
-      const transform = [
-        image.rotation ? `rotate(${image.rotation}deg)` : "",
-        image.flip_h ? "scaleX(-1)" : "",
-        image.flip_v ? "scaleY(-1)" : "",
-      ]
-        .filter(Boolean)
-        .join(" ");
-      const frame = `left:${image.x_px}px;top:${image.y_px}px;width:${image.width_px}px;height:${image.height_px}px;`;
-      const picture = `<img class="section-placed-image${image.shape === "ellipse" ? " oval" : ""}"
-                   src="${escapeHtml(image.url)}" alt=""
-                   onerror="this.remove()"
-                   style="${frame}${transform ? `transform:${transform};` : ""}z-index:${image.z_index || 1}" />`;
+      // One rule for how a placed picture is drawn - layout/picture-style.js -
+      // so the page and the editor cannot disagree about the same photograph.
+      const style = placedPictureStyle(image);
+      const picture = `<span class="section-placed" style="${style.frame}" data-shape="${style.shape}">
+                   <img class="section-placed-image" src="${escapeHtml(image.url)}" alt=""
+                        onerror="this.remove()" style="${style.image}" /></span>`;
       // A photograph in a newspaper is captioned. The caption is set under the
       // picture, in the picture's own measure, not in the story's.
       if (!image.caption) return picture;

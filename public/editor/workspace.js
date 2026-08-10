@@ -106,7 +106,17 @@ async function loadSectionImages() {
 function redrawCompose() {
   const section = store.getSelectedSection();
   const view = currentView();
-  if (section && view) refreshExternalEditor(section, view, currentStory(), "images");
+  if (!section || !view) return;
+
+  // The PAGE has to be told too. Moving, turning or removing a picture goes
+  // straight to its own endpoint, which returns the pictures - not the page -
+  // so the canvas went on drawing the placement it was last given. The desk saw
+  // the picture move in the editor and stay put on the page, and reasonably
+  // reported that the two did not match.
+  section.images = sectionImages;
+  refreshSection(section, view, { selected: true, dirty: store.getState().dirty });
+
+  refreshExternalEditor(section, view, currentStory(), "images");
 }
 
 async function addSectionImage(file) {

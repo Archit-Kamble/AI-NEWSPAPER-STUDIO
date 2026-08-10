@@ -19,6 +19,7 @@
 
 import { sanitise } from "../layout/rich-text.js";
 import { buildFlowMap } from "../layout/text-flow.js";
+import { placedPictureStyle } from "../layout/picture-style.js";
 
 let quill = null;
 let hooks = {};
@@ -182,22 +183,13 @@ export function renderPictures(images) {
     const url = String(row.url || "");
     if (image.getAttribute("src") !== url) image.setAttribute("src", url);
 
-    if (!frame.classList.contains("is-dragging")) {
-      frame.style.left = `${Number(row.x_px) / scale}px`;
-      frame.style.top = `${Number(row.y_px) / scale}px`;
-      frame.style.width = `${Number(row.width_px) / scale}px`;
-      frame.style.height = `${Number(row.height_px) / scale}px`;
-    }
-    frame.style.zIndex = String(Number(row.z_index) || 1);
-    frame.dataset.shape = row.shape || "rect";
+    // The same rule the page canvas draws with, so a photograph looks the same
+    // in both places. It used to be `cover` on the page and `contain` here.
+    const style = placedPictureStyle(row, scale);
+    if (!frame.classList.contains("is-dragging")) frame.setAttribute("style", `position:absolute;${style.frame}`);
+    image.setAttribute("style", style.image);
+    frame.dataset.shape = style.shape;
     frame.classList.toggle("is-selected", row.id === state.selectedId);
-
-    const turn = (((Number(row.rotation) || 0) % 360) + 360) % 360;
-    const quarter = turn % 180 !== 0;
-    image.style.width = quarter ? frame.style.height : "100%";
-    image.style.height = quarter ? frame.style.width : "100%";
-    image.style.transform = `translate(-50%, -50%) rotate(${turn}deg)`
-      + (row.flip_h ? " scaleX(-1)" : "") + (row.flip_v ? " scaleY(-1)" : "");
   }
 
   host.querySelectorAll(".pic-frame").forEach((frame) => {

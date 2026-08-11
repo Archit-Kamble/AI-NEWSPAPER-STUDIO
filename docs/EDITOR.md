@@ -1,26 +1,33 @@
 # The single-story editor
 
-SAHAS is currently migrating toward one editor for one selected newspaper block.
-Until the dock replacement has been accepted in the live workflow, the
-Inspector keeps the immediately visible editable headline, subheading, body,
-caption and metadata form. The composition dock reads and writes the same
-workspace draft and provides the richer writing, image, AI and Smart Card tools.
+There is one editor for one selected newspaper block: the **Block Editor**
+(`public/editor/external-editor/`, still named "external-editor" in the
+filesystem — see CLAUDE.md's "Terminology" section for why the folder keeps
+that name while nothing user-facing does). There used to be a separate
+Inspector beside the page carrying its own copy of headline/subheading/body,
+bound to the same draft as the dock below it. Two editors on one story is how
+a desk loses work — a plain textarea could only show the rich editor's marks
+as literal `<p><br></p>`, and every read-out had to be kept in step twice.
+Everything the Inspector did that the Block Editor did not was moved into the
+Block Editor first, then the Inspector was deleted. It is not coming back.
 
 ## What happens when a block is selected
 
 1. The page thumbnail highlights the block.
-2. The dock opens its story source bar, Word-style writing surface, Smart Cards,
-   image controls, space read-out, AI controls, details, typography and history.
-3. Every change goes through the workspace draft. That one draft updates the
-   page thumbnail, composition proof, character budget, undo history and
+2. The Block Editor opens: its story source bar, Word-style writing surface
+   (`story-editor.js` + `block-frame.js`), Smart Cards, image controls, an AI
+   panel, and — beside the page, not inside the dock — Typography, Properties,
+   Story details and History (`workspace-tools`, capped to the page's own
+   height, see CLAUDE.md's "Newspaper Workspace" section).
+3. Every change goes through the one workspace draft (`store.js`). That one
+   draft updates the page thumbnail, the character budget, undo history and
    autosave together.
 4. Moving to another block flushes a dirty autosave before the draft changes.
 
 Reporter selection, caption, reporter, category, location, tags, language and
-editorial status are available in both the immediate Inspector form and the
-dock's folded **Story details** section during this compatibility stage. They
-stay synchronised through the one workspace draft; neither surface keeps its
-own story copy.
+editorial status live in exactly one place: the dock's **Story details**
+panel (`story-details-panel.js`), reading and writing the one workspace draft.
+There is no second copy of this form anywhere to keep in sync.
 
 ## The writing surface
 

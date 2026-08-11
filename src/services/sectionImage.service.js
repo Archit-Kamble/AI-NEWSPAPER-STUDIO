@@ -69,9 +69,39 @@ async function list(pageId, sectionKey) {
   return repo.listBySection(section.id);
 }
 
+// A reporter's auto-filled photo (page_sections.image_url - "Take from
+// Reporter" sets it from story.image_urls[0], section-model.js) and a desk's
+// own placed pictures (section_images, this table) are two independent
+// fields. The moment section_images gains its first row, sectionInnerHtml()
+// switches the block over to the flowed/canvas renderer entirely and
+// image_url is never drawn again - the reporter's photo silently vanishes
+// from the page, with no warning, while the block still shows its "linked to
+// reporter" flag. Found live against a real block, not assumed (see
+// PROJECT_STATUS.md, PROJECT A audit). Converting it into the first
+// section_images row here, at the one moment that would otherwise orphan it,
+// loses nothing - it becomes an ordinary placed picture, still visible, now
+// draggable exactly like one the desk added directly.
+async function carryForwardAutoFilledImage(section, ownerId) {
+  if (!section.image_url) return;
+  const existing = await repo.listBySection(section.id);
+  if (existing.length) return;
+
+  const asset = await repo.findOrCreateAsset({ url: section.image_url, filename: null, mimeType: null, ownerId });
+  const placement = clampToBlock(section, {
+    x: 0,
+    y: await copyStartsAt(section),
+    width: Math.round(Number(section.width_px) / 2),
+    height: Math.round(Number(section.height_px) / 3),
+  });
+  await repo.place(section.id, asset.id, placement);
+  await pool.query('UPDATE page_sections SET image_url = NULL WHERE id = $1', [section.id]);
+}
+
 async function add(pageId, sectionKey, body, ownerId) {
   const section = await sectionRow(pageId, sectionKey);
   if (!section || !body.url) return null;
+
+  await carryForwardAutoFilledImage(section, ownerId);
 
   const asset = await repo.findOrCreateAsset({
     url: body.url,

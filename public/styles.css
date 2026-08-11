@@ -1688,19 +1688,28 @@ body.print-view .canvas-view-controls {
   color: white;
   border-color: var(--primary);
 }
-/* The stage holds the viewport and the minimap. The page itself is scaled with
-   a real transform, so proportions are identical at every zoom level. */
+/* The stage holds the rulers, the viewport and the minimap. The page itself
+   is scaled with a real transform, so proportions are identical at every
+   zoom level. */
 .canvas-stage {
   position: relative;
   overflow: hidden;
+  --ruler-size: 20px;
 }
 /* The viewport SCROLLS. A transform does not affect layout, so a scaled page
    can never produce a scrollbar on its own - which is why zooming in used to
    clip the top and bottom of the page away with no way to reach them. The
-   scaled size is carried by .canvas-sizer below, and this scrolls over that. */
+   scaled size is carried by .canvas-sizer below, and this scrolls over that.
+   Inset by the ruler's own thickness on two edges - fitScale() reads this
+   element's clientWidth/clientHeight, so Fit already shrinks correctly to
+   leave room for the rulers, the same way it already does for the settings
+   rail or the Block Editor opening. */
 .canvas-viewport {
   position: absolute;
-  inset: 0;
+  top: var(--ruler-size);
+  left: var(--ruler-size);
+  right: 0;
+  bottom: 0;
   overflow: auto;
   /* Scroll chaining is left ON deliberately. `overscroll-behavior: contain`
      was tried here to stop the page bouncing past the canvas edge, and it
@@ -1768,6 +1777,122 @@ body.print-view .canvas-view-controls {
   padding: 40px;
   text-align: center;
 }
+/* Rulers (Stage 4, ruler.js). Two thin bars along the top and left of the
+   page, and a corner square where they meet. Tick marks are drawn by JS in
+   PAGE pixels - the CSS here only sets the bars' own fixed footprint and
+   dresses the ticks it will insert. */
+.canvas-ruler-corner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--ruler-size);
+  height: var(--ruler-size);
+  background: #eeeef1;
+  border-right: 1px solid #d8d8de;
+  border-bottom: 1px solid #d8d8de;
+  z-index: 3;
+}
+.canvas-ruler {
+  position: absolute;
+  background: #f4f4f6;
+  overflow: hidden;
+  z-index: 2;
+  cursor: crosshair;
+}
+.canvas-ruler-h {
+  top: 0;
+  left: var(--ruler-size);
+  right: 0;
+  height: var(--ruler-size);
+  border-bottom: 1px solid #d8d8de;
+}
+.canvas-ruler-v {
+  top: var(--ruler-size);
+  left: 0;
+  bottom: 0;
+  width: var(--ruler-size);
+  border-right: 1px solid #d8d8de;
+}
+.ruler-ticks {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+.canvas-ruler-h .ruler-ticks { height: 100%; }
+.canvas-ruler-v .ruler-ticks { width: 100%; }
+.ruler-tick {
+  position: absolute;
+  background: #c4c4cc;
+}
+.canvas-ruler-h .ruler-tick { bottom: 0; width: 1px; height: 5px; }
+.canvas-ruler-h .ruler-tick-major { height: 9px; background: #9a9aa4; }
+.canvas-ruler-v .ruler-tick { right: 0; height: 1px; width: 5px; }
+.canvas-ruler-v .ruler-tick-major { width: 9px; background: #9a9aa4; }
+.ruler-tick-label {
+  position: absolute;
+  font-size: 0.6rem;
+  color: #7a7a84;
+  white-space: nowrap;
+  user-select: none;
+}
+.canvas-ruler-h .ruler-tick-label { left: 2px; top: 1px; }
+.canvas-ruler-v .ruler-tick-label {
+  left: 2px;
+  top: 2px;
+  /* Vertical ruler labels read top-to-bottom, not sideways - a stack of
+     ninety-degree text down a 20px-wide bar is unreadable at a glance,
+     which is the one thing a ruler label exists for. */
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+}
+/* Print view has nothing to do with editor chrome - see printViewBtn's own
+   note - and a ruler is exactly that: never printed, never in the e-paper. */
+body.print-view .canvas-ruler,
+body.print-view .canvas-ruler-corner {
+  display: none;
+}
+body.print-view .canvas-viewport {
+  top: 0;
+  left: 0;
+}
+
+/* Page guides (Stage 4, page-guides.js). Drawn INSIDE #canvasSurface, so a
+   guide's top/left is set once, in raw page pixels, and the page's own CSS
+   transform scales and positions it exactly as it does every block - no
+   zoom or scroll math needed here, unlike the ruler. */
+.page-guides {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 40;
+}
+.page-guides.guides-hidden {
+  display: none;
+}
+.page-guide {
+  position: absolute;
+  pointer-events: none;
+}
+.page-guide-h { left: 0; right: 0; height: 0; border-top: 1px solid #2f8fd8; }
+.page-guide-v { top: 0; bottom: 0; width: 0; border-left: 1px solid #2f8fd8; }
+.page-guide-preview { opacity: 0.6; border-style: dashed; }
+/* The clickable strip is a few pixels wide, centred on the line itself - a
+   guide crossing a picture or a block must not make an ordinary click on
+   that object unreliable; only a grab within a few px of the exact line
+   should be read as "the guide", everywhere else passes straight through
+   (this container's own pointer-events: none, above). */
+.page-guide-hit {
+  position: absolute;
+  pointer-events: auto;
+}
+.page-guide-h .page-guide-hit { left: 0; right: 0; top: -4px; height: 8px; cursor: ns-resize; }
+.page-guide-v .page-guide-hit { top: 0; bottom: 0; left: -4px; width: 8px; cursor: ew-resize; }
+.page-guide.is-dragging { border-color: #1665b0; }
+.page-guide.will-remove { border-color: #c8102e; border-style: dashed; opacity: 0.7; }
+body.print-view .page-guides {
+  display: none;
+}
+
 .canvas-minimap {
   position: absolute;
   right: 14px;

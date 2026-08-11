@@ -4,7 +4,10 @@
 // photograph placed in the middle of a column. It cannot: CSS wraps text around
 // a FLOAT, and a float can only touch the left or right edge of its column. No
 // editor library changes that - Quill, TipTap and CKEditor all draw through the
-// same engine. So the picture could never go where the desk put it.
+// same engine. So the picture could never go where the desk put it - this is
+// not a bug to patch, it is why Word and Google Docs need their own text-layout
+// engine to do real image runaround at all, and building one is a project of
+// its own, not a fix (see PROJECT_STATUS.md, Bug #1/#3).
 //
 // The model here is the one every page-layout tool uses - InDesign, Canva,
 // Scribus, which is where this paper is going anyway. The block is a page at
@@ -15,17 +18,23 @@
 //
 // The copy inside the body frame is edited with Quill (vendored under
 // public/vendor/quill, BSD-3-Clause), so the writing surface is a real word
-// processor rather than a hand-rolled contenteditable.
+// processor rather than a hand-rolled contenteditable. Quill cannot show the
+// real runaround live, so it does not try to fake it: the headline and deck
+// frames position themselves clear of a picture exactly as the canvas does
+// (bandBox(), text-flow.js), and the body frame shows the canvas's own,
+// proven-correct flowed render (flowedBodyMarkup()) as an accurate, read-only
+// "how this prints" strip above the plain writing surface, rather than
+// silently letting a picture sit over text with no relationship to it at all.
 
 import { sanitise } from "../layout/rich-text.js";
-import { buildFlowMap } from "../layout/text-flow.js";
+import { buildFlowMap, bandBox, CELL, flowImageFromRow } from "../layout/text-flow.js";
 import { placedPictureStyle } from "../layout/picture-style.js";
 import { smartCardMarkup } from "../smart-cards/smart-cards.js";
-// The same functions the page canvas draws a headline and a deck with - so
-// the WYSIWYG frame and the newspaper page can never drift onto two
-// different renderings of the same block, the way the headline/subheading
-// inputs and the canvas once did.
-import { headlineMarkup, subheadingMarkup } from "../canvas/section-thumb.js";
+// The same functions the page canvas draws a headline, a deck and a flowed
+// body with - so the WYSIWYG frame and the newspaper page can never drift
+// onto two different renderings of the same block, the way the
+// headline/subheading inputs and the canvas once did.
+import { headlineMarkup, subheadingMarkup, flowedBodyMarkup } from "../canvas/section-thumb.js";
 // The same six words the Typography panel's "Editing: X" label uses - one
 // catalog for what a selected object is called, not two that could drift.
 import { PART_LABEL } from "./typography-panel.js";
@@ -43,7 +52,12 @@ let hooks = {};
 // Shift+click could leave the two disagreeing: a picture dropped from the
 // Set by Shift+click stayed selected on screen because the OTHER field still
 // named it. One field, no drift.
-let state = { section: null, view: null, images: [], selectedIds: new Set(), selectedPart: "block" };
+// previewMode: has the desk asked to see the real flowed render instead of
+// the plain Quill surface? Off by default on every mount - a picture that
+// does not reach into the body needs no toggle at all (bindTextFrames()
+// hides it), and one that does should not silently swap the desk's writing
+// surface out from under them the moment they open the block.
+let state = { section: null, view: null, images: [], selectedIds: new Set(), selectedPart: "block", previewMode: false };
 
 // ---------------------------------------------------------------- loading ---
 
@@ -122,6 +136,16 @@ export function blockFrameMarkup() {
           <div class="frame-card" id="edFrameCard" hidden></div>
           <div id="edQuill"></div>
         </div>
+        <!-- Only shown when a picture actually reaches into the body area -
+             most blocks never need it. Quill cannot show real runaround live
+             (see this file's own header note), so this is the honest
+             alternative: the exact render the canvas will print, read-only,
+             a click away rather than silently different. -->
+        <div class="frame-flowed-preview" id="edFlowedPreview" hidden></div>
+      </div>
+      <div class="frame-preview-toggle" id="edPreviewToggle" hidden>
+        <button type="button" class="ext-editor-btn" id="edPreviewToggleBtn"></button>
+        <span class="muted">A picture reaches into the copy - Quill cannot show the real wrap live.</span>
       </div>
       <p class="frame-note muted" id="edFrameNote"></p>
     </div>
@@ -243,6 +267,14 @@ function applyBlockSelection() {
 // built from, so "how tall is the headline" has one answer everywhere it is
 // asked. The body frame used to compute this map on its own; the headline and
 // subheading frames now share that same computation rather than repeating it.
+//
+// Built with the block's REAL placed pictures (it used to pass `[]` here,
+// unconditionally - see this file's own header note and PROJECT_STATUS.md,
+// Bug #1/#3 - which meant the headline and deck bands were positioned as if
+// the block held no pictures at all, however many it actually had). The
+// headline and deck are whole positioned bands (bandBox(), shared with the
+// canvas), so they dodge a picture standing in their rows exactly as the
+// canvas does. The body cannot: see renderFlowedPreview() below.
 function layoutTextFrames() {
   const page = document.getElementById("edFramePage");
   const headlineFrame = document.getElementById("edHeadlineFrame");
@@ -252,9 +284,12 @@ function layoutTextFrames() {
 
   const scale = pageScale();
   const margin = Number(state.view.marginPx) || 12;
-  const map = buildFlowMap(state.section, state.view, []);
+  const images = (state.images || []).map(flowImageFromRow);
+  const map = buildFlowMap(state.section, state.view, images);
+  const measure = map.cols * map.cellWidth;
   const headlineHeight = map.headlineRows * map.cellHeight;
   const subheadingHeight = map.subheadingRows * map.cellHeight;
+  const band = (kind, fallbackLeft) => bandBox(map, kind, margin, measure, fallbackLeft);
 
   // The font size baked into headlineMarkup()/subheadingMarkup() is the
   // block's real, unscaled size (the same number the canvas sets) - scaled
@@ -263,8 +298,10 @@ function layoutTextFrames() {
   const scaledView = (fontField) => ({ ...state.view, [fontField]: (Number(state.view[fontField]) || 0) / scale });
 
   if (headlineFrame) {
-    headlineFrame.style.left = `${margin / scale}px`;
-    headlineFrame.style.right = `${margin / scale}px`;
+    const box = state.view.headline && headlineHeight > 0 ? band(CELL.HEADLINE, margin) : { left: margin, width: measure };
+    headlineFrame.style.left = `${box.left / scale}px`;
+    headlineFrame.style.width = `${box.width / scale}px`;
+    headlineFrame.style.right = "";
     headlineFrame.style.top = `${margin / scale}px`;
     headlineFrame.style.height = `${headlineHeight / scale}px`;
     headlineFrame.style.display = state.view.headline ? "" : "none";
@@ -274,8 +311,12 @@ function layoutTextFrames() {
 
   if (subheadingFrame) {
     const top = margin + headlineHeight;
-    subheadingFrame.style.left = `${margin / scale}px`;
-    subheadingFrame.style.right = `${margin / scale}px`;
+    const box = state.view.subheading && subheadingHeight > 0
+      ? band(CELL.SUBHEADING, margin)
+      : { left: margin, width: measure };
+    subheadingFrame.style.left = `${box.left / scale}px`;
+    subheadingFrame.style.width = `${box.width / scale}px`;
+    subheadingFrame.style.right = "";
     subheadingFrame.style.top = `${top / scale}px`;
     subheadingFrame.style.height = `${subheadingHeight / scale}px`;
     subheadingFrame.style.display = state.view.subheading ? "" : "none";
@@ -300,6 +341,93 @@ function layoutTextFrames() {
       if (state.view.fontFamily) editor.style.fontFamily = state.view.fontFamily;
     }
   }
+
+  layoutFlowedPreview(map, images, scale);
+}
+
+// A picture that reaches into the BODY's own rows (not just the headline/deck
+// bands above, which already dodge it) is the one case Quill cannot show
+// live - see this file's header note. Rather than let text render invisibly
+// under the picture (the bug this replaces), offer the exact render the
+// canvas will print, a click away, only when it is actually needed.
+//
+// `map` (real, unscaled block pixels) only decides WHETHER a picture reaches
+// the body - the preview itself is built from a SEPARATE map whose section,
+// view and images are all pre-divided by `scale`, so every value buildFlowMap()
+// derives (cellWidth, cellHeight, every run's left/top) already comes out in
+// on-screen pixels. A single CSS transform on top of that would scale the
+// same geometry twice; scaling the inputs once, the way headlineMarkup()'s
+// font size already is above, is the one correct way to do this.
+function layoutFlowedPreview(map, images, scale) {
+  const toggle = document.getElementById("edPreviewToggle");
+  const toggleBtn = document.getElementById("edPreviewToggleBtn");
+  const preview = document.getElementById("edFlowedPreview");
+  const bodyFrame = document.getElementById("edBodyFrame");
+  if (!toggle || !toggleBtn || !preview || !bodyFrame) return;
+
+  const bodyStartRow = map.headlineRows + map.subheadingRows;
+  const bodyCollision = images.length > 0 && map.grid.slice(bodyStartRow).some((row) => row.includes(CELL.IMAGE));
+
+  if (!bodyCollision) {
+    toggle.hidden = true;
+    preview.hidden = true;
+    bodyFrame.style.visibility = "";
+    return;
+  }
+
+  toggle.hidden = false;
+  toggleBtn.textContent = state.previewMode ? "Back to writing" : "Show how this will print";
+
+  if (!state.previewMode) {
+    preview.hidden = true;
+    bodyFrame.style.visibility = "";
+    return;
+  }
+
+  preview.hidden = false;
+  // The plain writing surface stays mounted (Quill keeps its own state and
+  // undo stack) but out of the way, rather than being torn down and rebuilt
+  // on every toggle.
+  bodyFrame.style.visibility = "hidden";
+
+  const margin = (Number(state.view.marginPx) || 12) / scale;
+  const scaledSection = {
+    ...state.section,
+    width_px: Number(state.section.width_px) / scale,
+    height_px: Number(state.section.height_px) / scale,
+  };
+  const scaledView = {
+    ...state.view,
+    marginPx: margin,
+    headlineFontPx: (Number(state.view.headlineFontPx) || 0) / scale,
+    subheadingFontPx: (Number(state.view.subheadingFontPx) || 0) / scale,
+    bodyFontPx: (Number(state.view.bodyFontPx) || 0) / scale,
+  };
+  const scaledImages = images.map((image) => ({
+    ...image,
+    x: image.x / scale,
+    y: image.y / scale,
+    width: image.width / scale,
+    height: image.height / scale,
+    standOffPx: (Number(image.standOffPx) || 0) / scale,
+  }));
+  const previewMap = buildFlowMap(scaledSection, scaledView, scaledImages);
+
+  preview.style.left = `${margin}px`;
+  preview.style.top = `${margin}px`;
+  preview.style.width = `${previewMap.cols * previewMap.cellWidth}px`;
+  preview.style.height = `${previewMap.rows * previewMap.cellHeight}px`;
+  preview.innerHTML = flowedBodyMarkup(previewMap, scaledView, margin);
+}
+
+/** Bound once at mount, like bindPictureFrames()/bindTextFrames() - the
+ * button is part of the static blockFrameMarkup() template, never rebuilt by
+ * a refresh, so binding it again on every refresh would stack listeners. */
+function bindPreviewToggle() {
+  document.getElementById("edPreviewToggleBtn")?.addEventListener("click", () => {
+    state.previewMode = !state.previewMode;
+    layoutTextFrames();
+  });
 }
 
 /**
@@ -576,6 +704,7 @@ export async function mountFrame(section, view, images, callbacks, selectedPart 
   renderPictures(state.images);
   bindPictureFrames();
   bindTextFrames();
+  bindPreviewToggle();
 
   if (!window.__sahasFrameResize) {
     window.__sahasFrameResize = true;

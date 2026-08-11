@@ -4455,6 +4455,27 @@ body.print-view .page-imprint {
 }
 .frame-body .ql-editor { padding: 0; }
 .frame-body .ql-editor.ql-blank::before { left: 0; right: 0; font-style: normal; color: #a8a8b0; }
+/* The accurate, read-only render of the body once a picture reaches into it -
+   Quill cannot show this live (block-frame.js's own header note), so this is
+   the honest alternative: the same flowedBodyMarkup() the page canvas draws
+   with, shown on demand rather than a silent mismatch. Its own positioning
+   context for the absolutely-positioned .section-flowed runs inside it. */
+.frame-flowed-preview {
+  position: absolute;
+  background: white;
+}
+/* [hidden] and this class carry the same specificity, so without this the
+   later, author rule's `display: flex` would win over the browser's own
+   `[hidden] { display: none }` and the toggle would stay visible - found live,
+   not assumed, when a test asserted "no pictures, no toggle" and it failed. */
+.frame-preview-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  margin-top: var(--s2);
+}
+.frame-preview-toggle[hidden] { display: none; }
+.frame-preview-toggle .muted { font-size: 0.75rem; }
 /* Quill's toolbar belongs to the copy, so it sits with the page rather than in
    the block's own type bar - marking WORDS and setting the BLOCK are different
    decisions and a desk should not have to tell them apart in one strip. */

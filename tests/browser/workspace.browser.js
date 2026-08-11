@@ -651,6 +651,60 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
       await page.evaluate(([pid, key, imgId]) => fetch(`/api/pages/${pid}/sections/${key}/images/${imgId}`, { method: 'DELETE' }), [pageId, KEY, id]);
     }
     await reopen();
+
+    // ---- Bug #1/#3 (PROJECT_STATUS.md): the flowed preview toggle ----
+    //
+    // A picture placed low enough that it reaches into the BODY's own rows
+    // (not just the headline/deck bands, which dodge it live) is the one
+    // case Quill cannot show real runaround for - see block-frame.js's own
+    // header note. The toggle only appears when that is actually true.
+    //
+    // A genuine clean slate, not an assumption that the z-order test's own
+    // cleanup above left nothing - the same reasoning as the multi-selection
+    // block's own opening cleanup (a picture surviving an earlier interrupted
+    // run of this file is exactly what that guards against too).
+    for (const row of (await fetchImages()).images) {
+      await page.evaluate(([pid, key, imgId]) => fetch(`/api/pages/${pid}/sections/${key}/images/${imgId}`, { method: 'DELETE' }), [pageId, KEY, row.id]);
+    }
+    await reopen();
+    say(await page.locator('#edPreviewToggle').isHidden(), 'no pictures at all on the block - no preview toggle');
+
+    // A tall picture on the left, guaranteed to still be standing once the
+    // block's own headline/subheading rows have passed.
+    const picF = await addPicture(URL_A, { x: 5, y: 5, width: 50, height: 200 });
+    await reopen();
+    say(await page.locator('#edPreviewToggle').isVisible(), 'a picture reaching into the body shows the toggle');
+    say((await page.locator('#edFlowedPreview').isHidden()), 'the preview itself starts hidden - Quill is still the default writing surface');
+
+    await page.locator('#edPreviewToggleBtn').click();
+    await page.waitForTimeout(400);
+    say(await page.locator('#edFlowedPreview').isVisible(), 'clicking the toggle shows the accurate preview');
+    say((await page.locator('#edPreviewToggleBtn').textContent()).includes('Back to writing'), 'and the button now offers to go back');
+    const previewHtml = await page.locator('#edFlowedPreview').innerHTML();
+    say(previewHtml.includes('section-flowed'), 'the preview is built from the real flowed runs, not a placeholder');
+
+    await page.locator('#edPreviewToggleBtn').click();
+    await page.waitForTimeout(400);
+    say(await page.locator('#edFlowedPreview').isHidden(), 'clicking it again returns to the writing surface');
+    say(await page.locator('.ql-editor').isVisible(), 'Quill is visible again');
+
+    // Typing must still work normally after all this toggling - the preview
+    // is display-only, never a second copy of the story. Restored with
+    // Quill's own undo (not a plain-text round-trip), so any bold/italic
+    // marks already in this fixture's copy survive the test intact.
+    await page.click('.ql-editor');
+    await page.keyboard.press('End');
+    await page.keyboard.type(' चाचणी-शब्द');
+    await page.waitForTimeout(700);
+    say((await page.locator('.ql-editor').innerText()).includes('चाचणी-शब्द'), 'typing in the body still works with the toggle on the page');
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(400);
+    say(!(await page.locator('.ql-editor').innerText()).includes('चाचणी-शब्द'), 'and undoes cleanly, same as before the toggle existed');
+
+    for (const id of [picF.id]) {
+      await page.evaluate(([pid, key, imgId]) => fetch(`/api/pages/${pid}/sections/${key}/images/${imgId}`, { method: 'DELETE' }), [pageId, KEY, id]);
+    }
+    await reopen();
   }
 
   // ------------------------------------------------------- properties inspector ---

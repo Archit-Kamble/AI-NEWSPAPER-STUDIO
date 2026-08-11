@@ -11,7 +11,7 @@ import { escapeHtml } from "../format.js";
 import { statusOf, statusLabel, statusClass } from "../status/section-status.js";
 import { computeMetrics } from "../layout/layout-metrics.js";
 import { imageTransformCss } from "../image/image-manager.js";
-import { buildFlowMap, CELL, flowRuns, bandSpan, pourIntoRuns, flowImageFromRow } from "../layout/text-flow.js";
+import { buildFlowMap, CELL, flowRuns, bandBox, pourIntoRuns, flowImageFromRow } from "../layout/text-flow.js";
 import { textWithMarks, markRun, plainText } from "../layout/rich-text.js";
 
 const ICONS = {
@@ -219,7 +219,15 @@ function bodyMarkup(view) {
 
 // Copy poured into the cells the pictures leave free - the same calculation the
 // composition canvas and the AI brief use, so the page shows the page.
-function flowedTextMarkup(section, view) {
+//
+// Exported so the Block Editor (block-frame.js) can show a real, accurate
+// preview of the flowed result next to its own writing surface - a live
+// contenteditable cannot flow text around a picture on both sides in one row
+// (CSS float only pushes to one edge; Word and Google Docs need their own
+// text-layout engine to do this, not a browser's), so the Block Editor's own
+// Quill body stays plain rather than a second, approximate implementation of
+// what this function already does correctly. See PROJECT_STATUS.md, Bug #1/#3.
+export function flowedTextMarkup(section, view) {
   const images = (section?.images || []).map(flowImageFromRow);
   if (!images.length) return null;
 
@@ -241,19 +249,9 @@ function flowedTextMarkup(section, view) {
 
   // The band keeps clear of any picture standing in it, the same way the body
   // does - a headline set straight over a photograph is the mistake this
-  // avoids.
-  // If dodging the picture would leave the band less than half the measure, the
-  // picture is in the wrong place, not the headline: squeezing a headline into
-  // a third of the column reads far worse than letting the designer see the
-  // clash and move the photograph.
-  const MIN_BAND_SHARE = 0.5;
-  const band = (kind, fallbackLeft) => {
-    const span = bandSpan(map, kind);
-    if (!span || span.length * map.cellWidth < measure * MIN_BAND_SHARE) {
-      return { left: fallbackLeft, width: measure };
-    }
-    return { left: pad + span.col * map.cellWidth, width: span.length * map.cellWidth };
-  };
+  // avoids. bandBox() is shared with the Block Editor (block-frame.js), so
+  // the two draw the same box for the same picture.
+  const band = (kind, fallbackLeft) => bandBox(map, kind, pad, measure, fallbackLeft);
 
   if (view.headline && headlineHeight > 0) {
     const box = band(CELL.HEADLINE, pad);
@@ -268,8 +266,16 @@ function flowedTextMarkup(section, view) {
     );
   }
 
-  // The body is what actually flows round the picture, line by line, which is
-  // the whole point of the grid.
+  pieces.push(flowedBodyMarkup(map, view, pad));
+  return pieces.join("");
+}
+
+// Just the body: poured into the cells the pictures leave free, line by line
+// - the part of flowedTextMarkup() that actually does the runaround. Split
+// out so the Block Editor can show this exact body alone, beside its own
+// headline/subheading frames (which it already positions correctly via
+// bandBox()), without rendering a second copy of the headline/subheading.
+export function flowedBodyMarkup(map, view, pad) {
   const dateline = [view.location, view.author].map((p) => String(p || "").trim()).filter(Boolean).join(", ");
   // The copy is poured as PLAIN text, because the grid measures and places
   // characters - a tag has no width. The bold and italic ranges are carried
@@ -280,13 +286,10 @@ function flowedTextMarkup(section, view) {
   const body = bodyText ? `${prefix}${bodyText}` : "";
   const offset = prefix.length;
 
-  pourIntoRuns(flowRuns(map, CELL.TEXT), body).forEach((run) => {
+  return pourIntoRuns(flowRuns(map, CELL.TEXT), body).map((run) => {
     const marked = markRun(run.text, (run.at || 0) - offset, marks, escapeHtml);
-    pieces.push(
-      `<span class="section-flowed" style="left:${pad + run.col * map.cellWidth}px;top:${pad + run.row * map.cellHeight}px;width:${run.length * map.cellWidth + 2}px;font-size:${view.bodyFontPx}px;line-height:${map.cellHeight}px">${marked}</span>`,
-    );
-  });
-  return pieces.join("");
+    return `<span class="section-flowed" style="left:${pad + run.col * map.cellWidth}px;top:${pad + run.row * map.cellHeight}px;width:${run.length * map.cellWidth + 2}px;font-size:${view.bodyFontPx}px;line-height:${map.cellHeight}px">${marked}</span>`;
+  }).join("");
 }
 
 export function sectionInnerHtml(section, view, { dirty = false, selected = false } = {}) {

@@ -298,6 +298,29 @@ export function bandSpan(map, kind) {
   return best;
 }
 
+// How far a picture-free share of a band's own measure still counts as "the
+// band avoided the picture" rather than "the picture ate the band". Below
+// this, squeezing a headline into a sliver reads far worse than letting the
+// clash show - the picture is in the wrong place, not the headline. Shared
+// so the canvas and the Block Editor draw the same box for the same reason;
+// it used to live only in section-thumb.js, as a local closure block-frame.js
+// could not see, which is why the editor never dodged a picture at all (see
+// PROJECT_STATUS.md, Bug #1/#3).
+const MIN_BAND_SHARE = 0.5;
+
+// The widest picture-free rectangle a band (the headline or the subheading)
+// can set across, within its own row range. `kind` is CELL.HEADLINE or
+// CELL.SUBHEADING; `fallbackLeft` is used when no free span clears the
+// MIN_BAND_SHARE threshold, in which case the band is drawn at the full
+// measure and left to clash with the picture rather than being squeezed.
+export function bandBox(map, kind, padding, measure, fallbackLeft) {
+  const span = bandSpan(map, kind);
+  if (!span || span.length * map.cellWidth < measure * MIN_BAND_SHARE) {
+    return { left: fallbackLeft, width: measure };
+  }
+  return { left: padding + span.col * map.cellWidth, width: span.length * map.cellWidth };
+}
+
 // Contiguous runs of one kind of cell, row by row. A run is a piece of line
 // that text can actually be set on - the gaps are where the picture is.
 export function flowRuns(map, kind) {

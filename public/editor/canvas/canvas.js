@@ -9,6 +9,8 @@ import { mastheadMarkup, folioMarkup, pageFootMarkup, registrationMarkup, imprin
 import { bindSectionDrag } from "./section-drag.js";
 import { viewOfSection } from "../section-model.js";
 import { computeMetrics } from "../layout/layout-metrics.js";
+import { rulerMarkup, rebuildRulers, bindRulers } from "./ruler.js";
+import { guideLayerMarkup, renderGuides, bindGuideInteractions, setGuidesVisible } from "./page-guides.js";
 
 let handlers = {};
 
@@ -56,6 +58,7 @@ export function renderCanvas(page, newspaper, selection, callbacks = {}) {
   const { selectedSectionKey, draft, dirty } = selection;
 
   host.innerHTML = `
+    ${rulerMarkup()}
     <div class="canvas-viewport" id="canvasViewport">
      <div class="canvas-sizer" id="canvasSizer">
       <div class="newspaper-canvas${page.prints_colour === false ? " mono-forme" : ""}${page.origin === "common" ? " common-page" : ""}"
@@ -89,6 +92,7 @@ export function renderCanvas(page, newspaper, selection, callbacks = {}) {
               >${sectionInnerHtml(section, view, { dirty: selected && dirty, selected })}</div>`;
           })
           .join("")}
+        ${guideLayerMarkup()}
       </div>
      </div>
     </div>
@@ -120,6 +124,23 @@ export function renderCanvas(page, newspaper, selection, callbacks = {}) {
   bindSpacebarPan();
   applyTransform();
   renderMiniMap(page, newspaper, selectedSectionKey);
+
+  rebuildRulers(pageWidth, pageHeight);
+  bindRulers();
+  renderGuides(handlers.guides);
+  setGuidesVisible(handlers.guidesVisible !== false);
+  bindGuideInteractions({
+    onCreateGuide: (orientation, positionPx) => handlers.onCreateGuide?.(orientation, positionPx),
+    onMoveGuide: (id, positionPx) => handlers.onMoveGuide?.(id, positionPx),
+    onDeleteGuide: (id) => handlers.onDeleteGuide?.(id),
+  });
+}
+
+/** Guides load asynchronously, after the page has already painted - this
+ * repaints just the guide layer once they arrive, without a full re-render. */
+export function refreshGuides(guides) {
+  handlers.guides = guides;
+  renderGuides(guides);
 }
 
 // Part 14: repaint exactly one section. Used for every keystroke, so live

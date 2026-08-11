@@ -17,8 +17,10 @@
 // This is the only module that talks to the section API and the only one that
 // subscribes to the store on behalf of the views. Views never import each other.
 
-import { renderCanvas, refreshSection, refreshSelection } from "./canvas/canvas.js";
+import { renderCanvas, refreshSection, refreshSelection, refreshGuides } from "./canvas/canvas.js";
 import { renderMiniMap, configure as configureCanvasView, applyTransform } from "./canvas/canvas-view.js";
+import { refreshRulers } from "./canvas/ruler.js";
+import { setGuidesVisible } from "./canvas/page-guides.js";
 import { loadGeometry, findFreeRect, getGeometry } from "./canvas/grid.js";
 import { loadIdentity } from "./canvas/masthead.js";
 import { zoomControlMarkup, bindZoomControl, syncZoomControl, pageIndicatorMarkup } from "./canvas/canvas-toolbar.js";
@@ -69,7 +71,13 @@ export async function renderWorkspace(newspaperId) {
     refreshHistoryButtons(history.canUndo(), history.canRedo());
     refreshHistoryTab();
   });
-  configureCanvasView(syncZoomControl);
+  // Rulers redraw their tick marks whenever the scale changes, same trigger
+  // as the zoom control's own readout - one combined handler, not a second
+  // subscription slot canvas-view.js does not have.
+  configureCanvasView(() => {
+    syncZoomControl();
+    refreshRulers();
+  });
   renderShell();
 }
 
@@ -84,6 +92,61 @@ function currentView() {
 
 function currentStory() {
   return store.findStory(store.getDraft()?.newsItemId);
+}
+
+// -------------------------------------------------------------- page guides ---
+//
+// Ruler guides (Stage 4) - page-level, not per-block, so they load on a page
+// switch, not a section switch, and there is no "no page open" case the way
+// there is for a block's own images.
+
+let pageGuides = [];
+let guidesVisible = true;
+
+async function loadPageGuides() {
+  const page = store.getCurrentPage();
+  if (!page) {
+    pageGuides = [];
+    return;
+  }
+  const response = await fetch(`/api/pages/${page.id}/guides`);
+  pageGuides = response.ok ? await response.json() : [];
+  refreshGuides(pageGuides);
+}
+
+async function createGuide(orientation, positionPx) {
+  const page = store.getCurrentPage();
+  if (!page) return;
+  const response = await fetch(`/api/pages/${page.id}/guides`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ orientation, positionPx }),
+  });
+  if (!response.ok) return showNotice("The guide could not be added.");
+  pageGuides = await response.json();
+  refreshGuides(pageGuides);
+}
+
+async function moveGuide(guideId, positionPx) {
+  const page = store.getCurrentPage();
+  if (!page) return;
+  const response = await fetch(`/api/pages/${page.id}/guides/${guideId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ positionPx }),
+  });
+  if (!response.ok) return showNotice("The guide could not be moved.");
+  pageGuides = await response.json();
+  refreshGuides(pageGuides);
+}
+
+async function deleteGuide(guideId) {
+  const page = store.getCurrentPage();
+  if (!page) return;
+  const response = await fetch(`/api/pages/${page.id}/guides/${guideId}`, { method: "DELETE" });
+  if (!response.ok) return;
+  pageGuides = await response.json();
+  refreshGuides(pageGuides);
 }
 
 // ------------------------------------------------------- pictures in a block ---
@@ -805,6 +868,8 @@ function renderShell() {
               <button type="button" class="layout-btn" id="writeEmptyBtn"
                       title="Write every block on this page that has a headline and no copy — one request per block, and every one comes back as a proposal">Write empty blocks</button>
               <div class="canvas-toolbar-divider"></div>
+              <button type="button" class="layout-btn active" id="guidesToggleBtn"
+                      title="Show or hide ruler guides - hiding never deletes them">Guides</button>
               <button type="button" class="layout-btn" id="printViewBtn"
                       title="See the page as it prints - no block chrome, no grid">Print view</button>
             </div>
@@ -875,6 +940,18 @@ function renderShell() {
     event.currentTarget.textContent = on ? "Editing view" : "Print view";
   });
 
+  // Guides ON/OFF. A view toggle, not a data operation - hiding never
+  // deletes a guide or touches its stored position (setGuidesVisible only
+  // ever toggles a CSS class), and turning it back on shows the exact same
+  // guides. Not persisted: nothing in this project keeps a per-desk editor
+  // settings row to persist a view toggle into, so this stays session-only,
+  // same as the print-view toggle beside it.
+  document.getElementById("guidesToggleBtn").addEventListener("click", (event) => {
+    guidesVisible = !guidesVisible;
+    event.currentTarget.classList.toggle("active", guidesVisible);
+    setGuidesVisible(guidesVisible);
+  });
+
   // The day's standing features. One press fills every block the layout marked
   // as one - the horoscope, the almanac box, दिनविशेष, the thought for the day -
   // for this edition's own date. What lands in them is ordinary copy the desk
@@ -909,6 +986,7 @@ function renderShell() {
   renderPageArea();
   renderSidePanels();
   renderStoryPickerPanel();
+  loadPageGuides();
   subscribeViews();
   if (!window.__sahasShortcutsBound) {
     window.__sahasShortcutsBound = true;
@@ -1278,7 +1356,16 @@ function syncRemoveBlockButton() {
 function renderPageArea() {
   const state = store.getState();
   const page = store.getCurrentPage();
-  renderCanvas(page, state.newspaper, state, { onSelectSection: selectSection, onSectionAction, onMoveSection: moveSection });
+  renderCanvas(page, state.newspaper, state, {
+    onSelectSection: selectSection,
+    onSectionAction,
+    onMoveSection: moveSection,
+    guides: pageGuides,
+    guidesVisible,
+    onCreateGuide: createGuide,
+    onMoveGuide: moveGuide,
+    onDeleteGuide: deleteGuide,
+  });
   renderPageNavigator(state.pages, page, state.newspaper, selectPage);
   renderLayoutSidebar(page, applyTemplate);
   const indicator = document.getElementById("pageIndicator");
@@ -1503,6 +1590,7 @@ function subscribeViews() {
     renderPageArea();
     renderSidePanels();
     renderStoryPickerPanel();
+    loadPageGuides();
     refreshToolbarSelection(Boolean(store.getState().selectedSectionKey), false);
     selectFirstSection();
   });

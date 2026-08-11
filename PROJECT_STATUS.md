@@ -4,6 +4,30 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zb. Project B3 — frame and semantic hierarchy diagnostics (2026-08-12)
+
+`analyzeLayout()` now emits a diagnostic object for every content-bearing
+section: persisted semantic type/priority, clipped frame area and area ratio,
+width/height ratio, rank among editorial frames, and image/Smart Card content
+signals. Editorial ranking excludes `ADVERTISEMENT` and `SMART_CARD`, so paid
+space and structured features cannot falsely defeat a lead.
+
+The hierarchy subscore is a bounded diagnostic overlay on B2’s geometry score,
+not a print gate. It reports `PRIORITY_FRAME_MISMATCH`, `LEAD_NOT_DOMINANT`,
+`MULTIPLE_COMPETING_LEADS`, `BRIEF_OVERSIZED_FRAME`,
+`PHOTO_FEATURE_WITHOUT_IMAGE`, `PHOTO_FEATURE_IMAGE_TOO_SMALL`, and
+`SMART_CARD_MISSING_DATA` with geometric evidence. The analyzer still does
+not choose another frame, move a story, or balance a page.
+
+Capacity-derived underfill remains deferred. The one trustworthy capacity
+calculation is the shared asynchronous text-flow map; adding a new
+characters-per-pixel estimate to this pure synchronous geometry module would
+create the typesetting drift documented in `docs/TYPESSETTING_PARITY.md`.
+`tests/layoutQuality.test.js` covers normal and weak hierarchy, brief/photo/
+card semantics, editorial-only lead ranking, and the B2 geometry invariants.
+
+---
+
 ## 0za. Project B2 — deterministic layout-quality metrics V1 (2026-08-12)
 
 `src/layout/layout-quality.js` now provides pure, synchronous

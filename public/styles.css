@@ -2488,6 +2488,27 @@ body.print-view .canvas-view-controls {
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 0 12px;
 }
+/* The Properties inspector (properties-panel.js). Compact sections, not a
+   giant form - a heading, a small field grid or a couple of read-outs, done. */
+.prop-section + .prop-section {
+  margin-top: var(--s3);
+  padding-top: var(--s3);
+  border-top: 1px solid #ececf0;
+}
+.prop-heading {
+  margin: 0 0 var(--s2);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #9a9aa2;
+}
+.prop-readout {
+  margin: 0;
+  padding: 6px 0;
+  font-size: 0.8rem;
+  color: #33333c;
+}
 .preview-label {
   display: block;
   margin-bottom: 8px;

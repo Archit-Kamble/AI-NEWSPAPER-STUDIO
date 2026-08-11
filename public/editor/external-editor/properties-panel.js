@@ -1,0 +1,290 @@
+// Stage 3: a real properties inspector for whatever object selectedPart
+// (store.js) currently names - block, headline, subheading, body, image or
+// smartCard.
+//
+// "Real" means: every field shown here is a column that is actually
+// persisted AND actually rendered somewhere a desk can see it. Two things
+// were deliberately left out of the image panel for exactly that reason -
+// section_images has crop_x_px/crop_y_px/crop_width_px/crop_height_px
+// columns, but nothing in picture-style.js reads them, so a crop control
+// here would change a number with no visible effect; there is no `opacity`
+// column at all. Headline/subheading/body get no X/Y/W/H, because their
+// position is a row count from the character grid (text-flow.js), not a
+// stored coordinate - see textPropertiesMarkup()'s own note, which is the
+// content of this panel for those three, not an apology for missing one.
+
+import { escapeHtml } from "../format.js";
+import { PART_LABEL } from "./typography-panel.js";
+// The Layer control reuses the EXACT arithmetic the Story panel's "Bring
+// forward"/"Send back" buttons already use - not a second copy of
+// "z-index plus or minus one, floored at zero".
+import { change as pictureAction } from "./picture-controls.js";
+
+const SHAPES = [
+  ["rect", "Box"],
+  ["ellipse", "Oval"],
+  ["cutout", "Cut-out"],
+];
+
+let boundHandlers = null;
+
+function normDeg(value) {
+  return ((Math.round(Number(value) || 0) % 360) + 360) % 360;
+}
+
+function numberField(id, label, value, { min, max, step = 1, unit = "" } = {}) {
+  return `
+    <div class="form-group">
+      <label>${label}${unit ? ` (${unit})` : ""}</label>
+      <input type="number" id="${id}"
+        ${min !== undefined ? `min="${min}"` : ""} ${max !== undefined ? `max="${max}"` : ""} step="${step}"
+        value="${Math.round(Number(value) || 0)}" />
+    </div>`;
+}
+
+// -------------------------------------------------------------- markup ---
+
+function blockPropertiesMarkup(section, view, page) {
+  return `
+    <div class="field-grid">
+      <div class="form-group"><label>Block type</label><p class="prop-readout">${escapeHtml(section.block_type || "article")}</p></div>
+      <div class="form-group"><label>Status</label><p class="prop-readout">${escapeHtml(view.status || "empty")}</p></div>
+      <div class="form-group"><label>Size</label><p class="prop-readout">${section.width_px} × ${section.height_px} px</p></div>
+      ${page?.template_key ? `<div class="form-group"><label>Layout</label><p class="prop-readout">${escapeHtml(page.template_key)}</p></div>` : ""}
+    </div>
+    <p class="muted ext-note">A block's position and size come from the page's layout template, not from this panel - see the small page map below for where it sits.</p>
+  `;
+}
+
+// Headline, subheading and body have no independent x/y/width/height in the
+// data model - they are whole rows taken off the top of the block by the
+// character grid (text-flow.js), the same measurement the Typography
+// panel's own selection note already makes. Showing coordinate fields for
+// them would be the exact kind of fake control the task this panel was
+// built for explicitly forbids.
+function textPropertiesMarkup() {
+  return `<p class="muted ext-note">Position and width are set by the newspaper's text-flow grid, not a coordinate - changing the type below changes how many rows this object takes, which is what moves it. See Typography for what is actually editable here.</p>`;
+}
+
+function imagePropertiesMarkup(image) {
+  if (!image) return `<p class="muted">No picture selected.</p>`;
+  const rotation = normDeg(image.rotation);
+  return `
+    <div class="prop-section">
+      <h5 class="prop-heading">Transform</h5>
+      <div class="field-grid">
+        ${numberField("propImgX", "X", image.x_px, { unit: "px" })}
+        ${numberField("propImgY", "Y", image.y_px, { unit: "px" })}
+        ${numberField("propImgWidth", "Width", image.width_px, { min: 1, unit: "px" })}
+        ${numberField("propImgHeight", "Height", image.height_px, { min: 1, unit: "px" })}
+      </div>
+      <label class="toggle"><input type="checkbox" id="propImgLock" /> Lock width/height together</label>
+      ${numberField("propImgRotation", "Rotation", rotation, { min: 0, max: 359, unit: "deg" })}
+    </div>
+
+    <div class="prop-section">
+      <h5 class="prop-heading">Appearance</h5>
+      <div class="form-group">
+        <label>Copy wraps as</label>
+        <div class="segmented" data-prop-shape>
+          ${SHAPES.map(
+            ([key, label]) => `<button type="button" class="segment${(image.shape || "rect") === key ? " active" : ""}" data-shape="${key}">${label}</button>`,
+          ).join("")}
+        </div>
+      </div>
+    </div>
+
+    <div class="prop-section">
+      <h5 class="prop-heading">Text wrap</h5>
+      ${numberField("propImgStandOff", "Gap around the picture", image.stand_off_px, { min: 0, max: 60, unit: "px" })}
+    </div>
+
+    <div class="prop-section">
+      <h5 class="prop-heading">Layer</h5>
+      <p class="prop-readout" id="propImgZIndex">z-index ${Number(image.z_index) || 0}</p>
+      <div class="ext-editor-toolbar">
+        <button type="button" class="ext-editor-btn" data-prop-layer="forward">Move up</button>
+        <button type="button" class="ext-editor-btn" data-prop-layer="backward">Move down</button>
+      </div>
+    </div>
+  `;
+}
+
+// Smart Card content is generated data (see CLAUDE.md's "structured, never
+// flattened"), not something this panel edits - a fake geometry section
+// here would claim a card is a positioned box the way a picture is, and it
+// is not; its size is exactly the space the layout gave the block.
+function smartCardPropertiesMarkup(view) {
+  return `
+    <div class="form-group"><label>Type</label><p class="prop-readout">${escapeHtml(view.smartCardKey || "-")}</p></div>
+    <p class="muted ext-note">A Smart Card's content is generated, not typed - see the Smart Cards panel to change or regenerate it.</p>
+  `;
+}
+
+function bodyMarkupFor(section, view, image, part, page) {
+  if (part === "image") return imagePropertiesMarkup(image);
+  if (part === "smartCard") return smartCardPropertiesMarkup(view);
+  if (part === "block") return blockPropertiesMarkup(section, view, page);
+  return textPropertiesMarkup();
+}
+
+export function propertiesPanelMarkup(section, view, image, part = "block", page = null) {
+  return `
+    <p class="ty-selection-label">Properties: <strong id="propSelectionLabel">${PART_LABEL[part] || "Whole block"}</strong></p>
+    <div id="propBody">${bodyMarkupFor(section, view, image, part, page)}</div>
+  `;
+}
+
+// -------------------------------------------------------------- binding ---
+//
+// Numeric fields commit on blur or Enter, never on every keystroke - unlike
+// the Typography panel's fields (which patch the DRAFT, itself debounced by
+// autosave), a picture's geometry PATCHes the database immediately on every
+// call, so an "input" listener here would be a network request per digit.
+
+const GEOMETRY_FIELDS = [
+  { input: "propImgX", api: "x", row: "x_px", positive: false },
+  { input: "propImgY", api: "y", row: "y_px", positive: false },
+  { input: "propImgWidth", api: "width", row: "width_px", positive: true },
+  { input: "propImgHeight", api: "height", row: "height_px", positive: true },
+];
+
+function commitOnBlurOrEnter(input, commit) {
+  if (!input) return;
+  input.addEventListener("change", commit);
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      input.blur(); // fires "change" above
+    }
+  });
+}
+
+function bindGeometryFields(handlers) {
+  GEOMETRY_FIELDS.forEach((field) => {
+    const input = document.getElementById(field.input);
+    commitOnBlurOrEnter(input, () => {
+      const current = handlers.getSelectedImage?.();
+      if (!current || !input) return;
+      const existing = Math.round(Number(current[field.row]) || 0);
+      const raw = Math.round(Number(input.value));
+
+      // Reject, don't clamp-and-send: width/height <= 0 is not a placement
+      // the block can hold, so the field reverts to what is actually saved
+      // rather than asking the server to make sense of it.
+      if (!Number.isFinite(raw) || (field.positive && raw <= 0)) {
+        input.value = existing;
+        return;
+      }
+      if (raw === existing) return;
+
+      const patch = { [field.api]: raw };
+      const locked = document.getElementById("propImgLock")?.checked;
+      if (locked && (field.api === "width" || field.api === "height")) {
+        // A UI-only convenience (Stage 3's own brief: fine as long as it does
+        // not conflict with the persisted model, which stores width/height
+        // as two independent columns either way) - the ratio is read fresh
+        // from the image every time, not captured once and gone stale.
+        const w = Number(current.width_px) || 1;
+        const h = Number(current.height_px) || 1;
+        const ratio = h / w;
+        if (field.api === "width") patch.height = Math.max(1, Math.round(raw * ratio));
+        else patch.width = Math.max(1, Math.round(raw / ratio));
+      }
+      handlers.onPatchImage?.(current.id, patch);
+    });
+  });
+}
+
+function bindRotationField(handlers) {
+  const input = document.getElementById("propImgRotation");
+  commitOnBlurOrEnter(input, () => {
+    const current = handlers.getSelectedImage?.();
+    if (!current || !input) return;
+    const existing = normDeg(current.rotation);
+    const raw = Number(input.value);
+    if (!Number.isFinite(raw)) {
+      input.value = existing;
+      return;
+    }
+    const value = normDeg(raw);
+    input.value = value;
+    if (value === existing) return;
+    handlers.onPatchImage?.(current.id, { rotation: value });
+  });
+}
+
+function bindStandOffField(handlers) {
+  const input = document.getElementById("propImgStandOff");
+  commitOnBlurOrEnter(input, () => {
+    const current = handlers.getSelectedImage?.();
+    if (!current || !input) return;
+    const existing = Math.round(Number(current.stand_off_px) || 0);
+    const raw = Math.round(Number(input.value));
+    if (!Number.isFinite(raw) || raw < 0) {
+      input.value = existing;
+      return;
+    }
+    if (raw === existing) return;
+    handlers.onPatchImage?.(current.id, { standOffPx: raw });
+  });
+}
+
+function bindShapeButtons(handlers) {
+  document.querySelectorAll("[data-prop-shape] [data-shape]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const current = handlers.getSelectedImage?.();
+      if (!current) return;
+      handlers.onPatchImage?.(current.id, { shape: button.dataset.shape });
+    });
+  });
+}
+
+function bindLayerButtons(handlers) {
+  document.querySelectorAll("[data-prop-layer]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const current = handlers.getSelectedImage?.();
+      if (!current) return;
+      const patch = pictureAction(current, button.dataset.propLayer);
+      if (patch) handlers.onPatchImage?.(current.id, patch);
+    });
+  });
+}
+
+function bindImageControls() {
+  if (!boundHandlers) return;
+  bindGeometryFields(boundHandlers);
+  bindRotationField(boundHandlers);
+  bindStandOffField(boundHandlers);
+  bindShapeButtons(boundHandlers);
+  bindLayerButtons(boundHandlers);
+}
+
+export function bindPropertiesPanel(handlers) {
+  boundHandlers = handlers;
+  bindImageControls();
+}
+
+// ------------------------------------------------------------- refresh ---
+
+export function refreshPropertiesPanel(section, view, image, source, part = "block", page = null) {
+  const label = document.getElementById("propSelectionLabel");
+  if (label) label.textContent = PART_LABEL[part] || "Whole block";
+
+  const host = document.getElementById("propBody");
+  if (!host) return;
+
+  // Never while a NUMBER FIELD in this panel has focus - a live sync from
+  // elsewhere (a drag on the canvas, an autosave landing) must not blur an
+  // input mid-edit and lose what has not been committed. Deliberately
+  // narrower than "anything in the panel has focus": Tab out of a number
+  // field lands on the aspect-lock checkbox or a shape/layer button next in
+  // the panel, and those hold no uncommitted text - blocking the refresh
+  // for those too made a drag on the canvas silently stop updating Width
+  // and Height the moment a desk had merely tabbed past a checkbox.
+  const active = document.activeElement;
+  if (active?.tagName === "INPUT" && active.type === "number" && host.contains(active)) return;
+
+  host.innerHTML = bodyMarkupFor(section, view, image, part, page);
+  if (part === "image") bindImageControls();
+}

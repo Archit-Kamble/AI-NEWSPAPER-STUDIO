@@ -123,7 +123,12 @@ function redrawCompose() {
   section.images = sectionImages;
   refreshSection(section, view, { selected: true, dirty: store.getState().dirty });
 
-  refreshExternalEditor(section, view, currentStory(), "images");
+  // Without the selected part, refreshExternalEditor's own default ("block")
+  // would silently reset the Properties/Typography scoping every time a
+  // picture changes - including from an edit made IN the Properties panel
+  // itself, which would watch its own commit knock it back to block-level a
+  // moment later.
+  refreshExternalEditor(section, view, currentStory(), "images", store.getSelectedPart());
 }
 
 async function addSectionImage(file) {
@@ -1300,6 +1305,7 @@ function renderSidePanels() {
     getView: currentView,
     getSection: () => store.getSelectedSection(),
     getImages: () => sectionImages,
+    getSelectedImage: () => sectionImages.find((image) => image.id === store.getState().selectedImageId) || null,
     // The story editor shows the block's real character budget under the box.
     getBudget: () => {
       const section = store.getSelectedSection();

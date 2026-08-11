@@ -114,7 +114,11 @@ export function selectedPictureId() {
 // Rotation, flipping and scaling are arithmetic on the placement, not a canvas
 // operation - the picture is drawn by the browser now, and the grid reads the
 // stored numbers either way.
-function change(image, action) {
+//
+// Exported so the Properties inspector's Layer control (properties-panel.js)
+// can reuse the exact same forward/backward arithmetic rather than a second
+// copy of "z-index plus or minus one, floored at zero".
+export function change(image, action) {
   const width = Number(image.width_px) || 0;
   const height = Number(image.height_px) || 0;
 

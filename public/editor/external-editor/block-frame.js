@@ -26,6 +26,9 @@ import { smartCardMarkup } from "../smart-cards/smart-cards.js";
 // different renderings of the same block, the way the headline/subheading
 // inputs and the canvas once did.
 import { headlineMarkup, subheadingMarkup } from "../canvas/section-thumb.js";
+// The same six words the Typography panel's "Editing: X" label uses - one
+// catalog for what a selected object is called, not two that could drift.
+import { PART_LABEL } from "./typography-panel.js";
 
 let quill = null;
 let hooks = {};
@@ -87,6 +90,13 @@ export function blockFrameMarkup() {
         </span>
       </div>
       <div class="frame-page" id="edFramePage">
+        <!-- ONE label, moved to whichever object is currently selected
+             (updateSelectionLabel()) rather than one copy per object - the
+             same "one source of truth" reasoning as the selection state
+             itself. Not shown for a selected picture: its handles already
+             make "this is selected" unambiguous without a chip over the
+             photograph. -->
+        <span class="frame-selection-label" id="edSelectionLabel" hidden></span>
         <!-- The headline and deck are drawn here, in the block's own type, at
              the page's scale - not a separate generic input elsewhere that
              happens to hold the same words. Clicking either focuses the real
@@ -169,7 +179,57 @@ function layoutCard() {
   host.hidden = !markup;
   host.innerHTML = markup || "";
   if (quill) quill.hidden = Boolean(markup);
+  host.classList.toggle("frame-selected", Boolean(markup) && state.selectedPart === "smartCard");
   return Boolean(markup);
+}
+
+// ---------------------------------------------------------- selection UI ---
+//
+// One reusable mechanism for "show that this object is the one targeted" -
+// a plain accent outline (no fake resize handles on flow-based text; see the
+// CSS's own note) plus a small label chip, moved to whichever object is
+// selected rather than duplicated per object. Both the outline classes and
+// the label are driven from the ONE selectedPart the store holds - nothing
+// here decides selection, only draws it, exactly as the rest of this file's
+// frames already do for the block's content.
+const LABEL_HOST_ID = {
+  block: "edFramePage",
+  headline: "edHeadlineFrame",
+  subheading: "edSubheadingFrame",
+  body: "edBodyFrame",
+  smartCard: "edFrameCard",
+};
+
+function updateSelectionLabel() {
+  const label = document.getElementById("edSelectionLabel");
+  const page = document.getElementById("edFramePage");
+  if (!label || !page) return;
+  const hostId = LABEL_HOST_ID[state.selectedPart];
+  const host = hostId && document.getElementById(hostId);
+  // A card that isn't there (hidden), or a selection kind this label doesn't
+  // cover (a picture - its handles already say "selected" on their own) -
+  // hide rather than show a chip pointing at nothing.
+  if (!host || host.hidden) {
+    label.hidden = true;
+    return;
+  }
+  // Positioned by coordinate, not appendChild()'d INTO the target frame:
+  // headlineFrame/subheadingFrame/frameCard all replace their own innerHTML
+  // on every layout pass (their text or their card changed), which would
+  // silently destroy a label element living inside them. The page itself
+  // never has its innerHTML replaced wholesale, only specific children
+  // updated - so the label stays put there and is just repositioned.
+  const pageRect = page.getBoundingClientRect();
+  const hostRect = host.getBoundingClientRect();
+  label.style.left = `${hostRect.left - pageRect.left + 2}px`;
+  label.style.top = `${hostRect.top - pageRect.top + 2}px`;
+  label.textContent = PART_LABEL[state.selectedPart] || state.selectedPart;
+  label.hidden = false;
+}
+
+/** The block itself, selected: an outline around the whole page. */
+function applyBlockSelection() {
+  document.getElementById("edFramePage")?.classList.toggle("frame-selected", state.selectedPart === "block");
 }
 
 // Headline, deck and body positioned from ONE buildFlowMap() call - the same
@@ -237,30 +297,59 @@ function layoutTextFrames() {
 }
 
 /**
- * Clicking the headline or deck frame selects that object AND focuses the
- * real input that types it - a click on the page is both "target this" and
- * "start editing this" at once, which is how direct manipulation is supposed
- * to feel; two separate clicks for the same object would not be.
+ * A single click targets the headline or deck frame - a selection, the way
+ * clicking an object in a page-layout tool does, without jumping the desk's
+ * focus (and the page's scroll) to a field elsewhere. A double click is what
+ * starts typing: it focuses the real input that holds the words (still an
+ * ordinary <input>, further down the page - see story-editor.js), because
+ * that is where the character-limit counters and IME already live, and
+ * duplicating a second live text surface just for this frame would be the
+ * exact kind of second implementation CLAUDE.md warns against.
  */
 function bindTextFrames() {
-  document.getElementById("edHeadlineFrame")?.addEventListener("click", () => {
+  const headline = document.getElementById("edHeadlineFrame");
+  const subheading = document.getElementById("edSubheadingFrame");
+
+  headline?.addEventListener("click", () => hooks.onSelectPart?.("headline"));
+  headline?.addEventListener("dblclick", () => {
     hooks.onSelectPart?.("headline");
     document.getElementById("edStoryHeadline")?.focus();
   });
-  document.getElementById("edSubheadingFrame")?.addEventListener("click", () => {
+
+  subheading?.addEventListener("click", () => hooks.onSelectPart?.("subheading"));
+  subheading?.addEventListener("dblclick", () => {
     hooks.onSelectPart?.("subheading");
     document.getElementById("edStorySubheading")?.focus();
   });
+
+  // Empty room on the page - inside the margins, outside every frame -
+  // targets the block as a whole. A click that landed on a frame or a
+  // picture already handled itself and never reaches here as a bubbled
+  // event on the page's own background, so checking target === currentTarget
+  // (rather than stopping propagation everywhere else) is enough.
+  document.getElementById("edFramePage")?.addEventListener("click", (event) => {
+    if (event.target === event.currentTarget) hooks.onSelectPart?.("block");
+  });
+
+  document.getElementById("edFrameCard")?.addEventListener("click", () => hooks.onSelectPart?.("smartCard"));
 }
 
 // ---------------------------------------------------------- picture frames ---
 
+// Four corners, at minimum, per Stage 2's own spec - a single bottom-right
+// handle let a desk grow a picture but never shrink it from the top or left
+// without also dragging it back into place afterwards.
+const RESIZE_CORNERS = ["tl", "tr", "bl", "br"];
+
 function pictureMarkup(row) {
+  const handles = RESIZE_CORNERS.map(
+    (corner) => `<span class="pic-handle pic-handle-${corner}" data-pic-size data-corner="${corner}" aria-hidden="true"></span>`,
+  ).join("");
   return `
     <figure class="pic-frame" data-image-id="${row.id}" data-shape="${row.shape || "rect"}">
       <img src="${String(row.url || "")}" alt="" draggable="false">
       <button type="button" class="pic-remove" data-pic-remove aria-label="Take this picture off the block"></button>
-      <span class="pic-handle" data-pic-size aria-hidden="true"></span>
+      ${handles}
     </figure>`;
 }
 
@@ -298,6 +387,36 @@ export function renderPictures(images) {
   });
 }
 
+// Resizing from one of the four corners keeps the OPPOSITE corner still, the
+// way every page-layout tool does it - drag the top-left in and the picture's
+// bottom-right edge does not move. Aspect ratio is preserved by default (the
+// spec's own instruction), so only width is dragged directly; height follows
+// it, and left/top are re-derived from whichever corner is the anchor.
+function resizeFromCorner(corner, from, ratio, bounds, dx) {
+  const minSize = 24;
+  const growsRight = corner === "tr" || corner === "br";
+  // The anchor edge that must not cross page 0, expressed as a max WIDTH
+  // (height follows width via ratio, so a height limit becomes a width limit
+  // too) - only relevant on corners whose anchor is the far edge from that
+  // side. Corners that anchor the near edge (br's top-left, tr's bottom-left
+  // "left" side, etc.) already can't go negative because dx is clamped
+  // against the room to the right instead.
+  const maxWidthByLeft = corner === "tl" || corner === "bl" ? from.left + from.width : Infinity;
+  const maxWidthByTop = corner === "tl" || corner === "tr" ? (from.top + from.height) / ratio : Infinity;
+  const maxWidthByRight = growsRight ? bounds.width - from.left : Infinity;
+
+  const requested = growsRight ? from.width + dx : from.width - dx;
+  const width = Math.max(minSize, Math.min(requested, maxWidthByLeft, maxWidthByTop, maxWidthByRight));
+  const height = width * ratio;
+
+  return {
+    width,
+    height,
+    left: corner === "tl" || corner === "bl" ? from.left + from.width - width : from.left,
+    top: corner === "tl" || corner === "tr" ? from.top + from.height - height : from.top,
+  };
+}
+
 /**
  * Dragging and sizing a picture frame.
  *
@@ -321,7 +440,9 @@ function bindPictureFrames() {
     hooks.onSelectPart?.("image", id);
     page.querySelectorAll(".pic-frame").forEach((f) => f.classList.toggle("is-selected", f === frame));
 
-    const sizing = Boolean(event.target.closest("[data-pic-size]"));
+    const handle = event.target.closest("[data-pic-size]");
+    const sizing = Boolean(handle);
+    const corner = handle?.dataset.corner || "br";
     const scale = pageScale();
     const start = { x: event.clientX, y: event.clientY };
     const from = {
@@ -340,9 +461,11 @@ function bindPictureFrames() {
       const dy = moveEvent.clientY - start.y;
 
       if (sizing) {
-        const width = Math.max(24, Math.min(bounds.width - from.left, from.width + dx));
-        frame.style.width = `${Math.round(width)}px`;
-        frame.style.height = `${Math.round(width * ratio)}px`;
+        const next = resizeFromCorner(corner, from, ratio, bounds, dx);
+        frame.style.width = `${Math.round(next.width)}px`;
+        frame.style.height = `${Math.round(next.height)}px`;
+        frame.style.left = `${Math.round(next.left)}px`;
+        frame.style.top = `${Math.round(next.top)}px`;
         return;
       }
       // Kept on the page: a frame dragged off the block would print off the
@@ -429,6 +552,8 @@ export async function mountFrame(section, view, images, callbacks, selectedPart 
   layoutPage();
   layoutTextFrames();
   layoutCard();
+  applyBlockSelection();
+  updateSelectionLabel();
   renderPictures(state.images);
   bindPictureFrames();
   bindTextFrames();
@@ -438,6 +563,8 @@ export async function mountFrame(section, view, images, callbacks, selectedPart 
     const relayout = () => {
       layoutPage();
       layoutTextFrames();
+      applyBlockSelection();
+      updateSelectionLabel();
       renderPictures(state.images);
     };
     window.addEventListener("resize", relayout);
@@ -454,6 +581,8 @@ export function refreshFrame(section, view, images, source, selectedPart) {
   layoutPage();
   layoutTextFrames();
   const showingCard = layoutCard();
+  applyBlockSelection();
+  updateSelectionLabel();
   renderPictures(state.images);
 
   // A block showing a card has nothing for Quill to hold, and pasting the

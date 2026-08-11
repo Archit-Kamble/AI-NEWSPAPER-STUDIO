@@ -4263,6 +4263,26 @@ body.print-view .page-imprint {
   outline: 2px solid var(--accent);
   outline-offset: -1px;
 }
+/* ONE label element, moved to whichever frame is selected
+   (block-frame.js's updateSelectionLabel()) rather than drawn once per
+   object. Small and out of the way - the newspaper stays the thing a desk is
+   actually looking at. */
+.frame-selection-label {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  z-index: 2;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--accent);
+  color: white;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.6;
+  pointer-events: none;
+}
 .frame-headline .section-headline, .frame-subheading .section-subheading { margin: 0; }
 .frame-body { display: flex; flex-direction: column; min-width: 0; }
 .frame-body .ql-container {
@@ -4328,18 +4348,23 @@ body.print-view .page-imprint {
    it puts the box back on the one picture whose point is not having one. */
 .pic-frame[data-shape="cutout"]::after { display: none; }
 
+/* Four corners, at minimum (block-frame.js's own note on why one was not
+   enough). Each is a real, independent resize handle - dragging one keeps
+   the OPPOSITE corner still, the way every page-layout tool does it. */
 .pic-handle {
   position: absolute;
-  right: -6px;
-  bottom: -6px;
   width: 13px;
   height: 13px;
   border: 2px solid var(--accent);
   border-radius: 3px;
   background: white;
-  cursor: nwse-resize;
   opacity: 0;
+  touch-action: none;
 }
+.pic-handle-tl { left: -6px; top: -6px; cursor: nwse-resize; }
+.pic-handle-tr { right: -6px; top: -6px; cursor: nesw-resize; }
+.pic-handle-bl { left: -6px; bottom: -6px; cursor: nesw-resize; }
+.pic-handle-br { right: -6px; bottom: -6px; cursor: nwse-resize; }
 .pic-remove {
   position: absolute;
   top: -8px;

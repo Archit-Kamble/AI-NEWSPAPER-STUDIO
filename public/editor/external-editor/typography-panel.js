@@ -88,7 +88,9 @@ function segmented(name, options, current) {
 // "headline-only" would claim a precision the schema does not have. This map
 // is deliberately short for that reason.
 const PART_FIELD = { headline: "tyHeadlineSize", subheading: "tySubheadingSize", body: "tyBodySize" };
-const PART_LABEL = {
+// Exported so block-frame.js's on-frame selection label reads the same six
+// words the Typography panel does - one catalog, not two that could drift.
+export const PART_LABEL = {
   block: "Whole block",
   headline: "Headline",
   subheading: "Subheading",

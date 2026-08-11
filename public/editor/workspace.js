@@ -103,6 +103,10 @@ async function loadSectionImages() {
   }
   const response = await fetch(`/api/pages/${page.id}/sections/${encodeURIComponent(key)}/images`);
   sectionImages = response.ok ? await response.json() : [];
+  // The opening history snapshot (history.reset(), in selectSection()) was
+  // taken before these arrived, so it doesn't yet know this block's actual
+  // pictures - correct it in place rather than push a second "opened" step.
+  history.primeImages(sectionImages);
   redrawCompose();
 }
 
@@ -234,17 +238,68 @@ function naturalShape(url) {
   });
 }
 
-async function patchSectionImage(imageId, patch) {
+// Saves a picture's own row - the PATCH the drag/resize handles, and history
+// undo/redo, both go through. No history recording here: recording is what
+// makes THIS an undoable step versus a step the history navigation itself is
+// merely applying to catch the app up to a past/future snapshot.
+async function persistImagePatch(imageId, patch) {
   const page = store.getCurrentPage();
   const key = store.getState().selectedSectionKey;
-  if (!page || !key) return;
+  if (!page || !key) return null;
 
   const response = await fetch(
     `/api/pages/${page.id}/sections/${encodeURIComponent(key)}/images/${imageId}`,
     { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) },
   );
-  if (!response.ok) return showNotice("The picture could not be moved.");
+  if (!response.ok) return null;
   sectionImages = await response.json();
+  return sectionImages;
+}
+
+function imagePatchLabel(patch) {
+  if ("width" in patch || "height" in patch) return "Picture resized";
+  if ("x" in patch || "y" in patch) return "Picture moved";
+  if ("shape" in patch) return "Picture shape changed";
+  return "Picture changed";
+}
+
+// A drag, a resize, or a control in the pictures panel. One choke point for
+// every way a picture's own row changes, so recording undo history here -
+// once - covers all of them, rather than each caller remembering to.
+async function patchSectionImage(imageId, patch) {
+  const result = await persistImagePatch(imageId, patch);
+  if (!result) return showNotice("The picture could not be moved.");
+  redrawCompose();
+  history.record(store.getDraft(), { coalesce: false, label: imagePatchLabel(patch), kind: "image", images: sectionImages });
+}
+
+// Brings the placed pictures back to what a history snapshot says they were -
+// undo/redo of a resize or a move. Pictures the snapshot doesn't know about
+// (added or removed since) are left alone: that is a different, wider kind of
+// undo this stage does not cover - see block-frame.js's own note on scope.
+// Row shape (GET, and what a snapshot stores) is x_px/y_px/width_px/height_px -
+// the database's own column names (sectionImage.repository.js's `SELECT si.*`).
+// The PATCH body the move/resize endpoint accepts is camelCase x/y/width/height
+// instead (sectionImage.service.js's `move()`) - an existing asymmetry this
+// function has to bridge, not one it introduces.
+async function reconcileImages(images) {
+  if (!Array.isArray(images)) return;
+  const current = new Map(sectionImages.map((image) => [image.id, image]));
+  const GEOMETRY_KEYS = ["x_px", "y_px", "width_px", "height_px"];
+
+  for (const wanted of images) {
+    const now = current.get(wanted.id);
+    if (!now) continue;
+    const changed = GEOMETRY_KEYS.some((k) => Number(now[k] ?? 0) !== Number(wanted[k] ?? 0));
+    if (changed) {
+      await persistImagePatch(wanted.id, {
+        x: Number(wanted.x_px) || 0,
+        y: Number(wanted.y_px) || 0,
+        width: Number(wanted.width_px) || 0,
+        height: Number(wanted.height_px) || 0,
+      });
+    }
+  }
   redrawCompose();
 }
 
@@ -383,7 +438,7 @@ function patchDraft(patch, source) {
     draft && isContentEdit(patch) && !isExplicit(draft.status) && !draft.aiGenerated && draft.status !== "editing";
 
   store.updateDraft(advances ? { ...patch, status: "editing" } : patch, source);
-  history.record(store.getDraft(), { label: describePatch(patch) });
+  history.record(store.getDraft(), { label: describePatch(patch), images: sectionImages });
   autosave.schedule();
 }
 
@@ -415,7 +470,7 @@ async function selectStoryForSection(story) {
   const draft = store.getDraft();
   if (!draft) return;
   store.replaceDraft(draftFromStory(draft, story), "story-picker");
-  history.record(store.getDraft(), { coalesce: false, label: `Linked "${story.title}"`, kind: "link" });
+  history.record(store.getDraft(), { coalesce: false, label: `Linked "${story.title}"`, kind: "link", images: sectionImages });
   autosave.schedule();
   store.setStoryPickerOpen(false);
 
@@ -459,7 +514,7 @@ function clearSection(sectionKey) {
     { ...draft, newsItemId: null, headline: "", subheading: "", body: "", caption: "", imageUrl: "", aiGenerated: false, status: "empty" },
     "canvas",
   );
-  history.record(store.getDraft(), { coalesce: false, label: "Cleared section", kind: "clear" });
+  history.record(store.getDraft(), { coalesce: false, label: "Cleared section", kind: "clear", images: sectionImages });
   autosave.schedule();
 }
 
@@ -554,24 +609,27 @@ async function moveSection(sectionKey, rect) {
   store.replacePage(await response.json(), { structural: true });
 }
 
-function undo() {
-  const draft = history.undo();
-  if (!draft) return;
-  store.replaceDraft(draft, "history");
+async function undo() {
+  const result = history.undo();
+  if (!result) return;
+  store.replaceDraft(result.draft, "history");
+  await reconcileImages(result.images);
   autosave.schedule();
 }
 
-function redo() {
-  const draft = history.redo();
-  if (!draft) return;
-  store.replaceDraft(draft, "history");
+async function redo() {
+  const result = history.redo();
+  if (!result) return;
+  store.replaceDraft(result.draft, "history");
+  await reconcileImages(result.images);
   autosave.schedule();
 }
 
-function jumpHistory(index) {
-  const draft = history.jumpTo(index);
-  if (!draft) return;
-  store.replaceDraft(draft, "history");
+async function jumpHistory(index) {
+  const result = history.jumpTo(index);
+  if (!result) return;
+  store.replaceDraft(result.draft, "history");
+  await reconcileImages(result.images);
   autosave.schedule();
 }
 
@@ -585,7 +643,7 @@ function cancelEdits() {
   // persisted row, so leaving it dirty would make a later block switch flush a
   // needless save and leave the toolbar claiming there is unsaved work.
   store.setSaveState("saved");
-  history.reset(draft, "Reverted to saved");
+  history.reset(draft, "Reverted to saved", sectionImages);
   autosave.cancel();
   showNotice("Reverted to the last saved version.");
 }

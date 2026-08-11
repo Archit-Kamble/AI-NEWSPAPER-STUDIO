@@ -5,6 +5,14 @@
 // selection moves, so Undo can never silently rewrite a section the editor is no
 // longer looking at. Nothing here touches the network - undo of an
 // already-saved change is a new edit, which autosave then persists.
+//
+// Stage 2 (InDesign-like editor): a picture's placement (x/y/width/height)
+// does not live in the draft - it is its own row, saved the moment a drag
+// ends, through a separate endpoint (workspace.js's patchSectionImage). So
+// each snapshot now carries `images` alongside `draft`, in the SAME stack -
+// not a second history for pictures. A snapshot that does not pass its own
+// images carries the previous entry's forward, so undoing a headline edit
+// can never, as a side effect, silently move a picture back too.
 
 const MAX_DEPTH = 60;
 // Typing must not produce one undo step per character.
@@ -16,31 +24,51 @@ let lastPushAt = 0;
 let onChange = null;
 let clock = () => Date.now();
 
-function snapshot(draft, label, kind) {
-  return { draft: JSON.parse(JSON.stringify(draft)), label, kind, at: clock() };
+function snapshot(draft, label, kind, images) {
+  return {
+    draft: JSON.parse(JSON.stringify(draft)),
+    images: JSON.parse(JSON.stringify(images || [])),
+    label,
+    kind,
+    at: clock(),
+  };
+}
+
+function fromEntry(entry) {
+  return { draft: JSON.parse(JSON.stringify(entry.draft)), images: JSON.parse(JSON.stringify(entry.images || [])) };
 }
 
 export function configure(handler) {
   onChange = handler;
 }
 
-export function reset(draft, label = "Opened section") {
-  past = draft ? [snapshot(draft, label, "open")] : [];
+export function reset(draft, label = "Opened section", images = []) {
+  past = draft ? [snapshot(draft, label, "open", images)] : [];
   future = [];
   lastPushAt = 0;
   onChange?.();
 }
 
-export function record(draft, { coalesce = true, label = "Edit", kind = "edit" } = {}) {
+// Called once the images for a freshly-opened section have loaded (they are
+// fetched separately from the draft, so they are not known yet at reset()
+// time) - corrects the opening snapshot in place rather than pushing a new
+// one, so the FIRST undo step still reads "Opened <section>".
+export function primeImages(images) {
+  const current = past[past.length - 1];
+  if (current) current.images = JSON.parse(JSON.stringify(images || []));
+}
+
+export function record(draft, { coalesce = true, label = "Edit", kind = "edit", images } = {}) {
   if (!draft) return;
   const now = clock();
   const isRapid = coalesce && now - lastPushAt < COALESCE_MS;
   lastPushAt = now;
+  const carriedImages = images !== undefined ? images : past[past.length - 1]?.images || [];
 
   if (isRapid && past.length > 1) {
-    past[past.length - 1] = snapshot(draft, label, kind);
+    past[past.length - 1] = snapshot(draft, label, kind, carriedImages);
   } else {
-    past.push(snapshot(draft, label, kind));
+    past.push(snapshot(draft, label, kind, carriedImages));
     if (past.length > MAX_DEPTH) past.shift();
   }
   future = [];
@@ -60,7 +88,7 @@ export function undo() {
   future.unshift(past.pop());
   lastPushAt = 0;
   onChange?.();
-  return JSON.parse(JSON.stringify(past[past.length - 1].draft));
+  return fromEntry(past[past.length - 1]);
 }
 
 export function redo() {
@@ -69,7 +97,7 @@ export function redo() {
   past.push(next);
   lastPushAt = 0;
   onChange?.();
-  return JSON.parse(JSON.stringify(next.draft));
+  return fromEntry(next);
 }
 
 // Jump straight to a timeline entry. Index is into the combined list the
@@ -81,7 +109,7 @@ export function jumpTo(index) {
   future = combined.slice(index + 1);
   lastPushAt = 0;
   onChange?.();
-  return JSON.parse(JSON.stringify(combined[index].draft));
+  return fromEntry(combined[index]);
 }
 
 export function canUndo() {

@@ -34,6 +34,13 @@ const state = {
   // "block" is the default: nothing more specific is targeted yet.
   selectedPart: "block", // block | headline | subheading | body | image | smartCard
   selectedImageId: null,
+  // The full multi-selection, for bulk operations (align, nudge, delete) on
+  // more than one picture at once (Stage 7). selectedImageId above stays the
+  // single "primary" picture the Properties/Typography panels show - those
+  // panels' numeric fields have no meaning averaged across several pictures,
+  // so multi-selection is additive: it never changes what those panels do
+  // for a single selection, only what the NEW bulk actions can act on.
+  selectedImageIds: [],
   // Working copy of the selected section. Everything the user types lives here
   // until it is saved - never in the DOM, so undo/redo and autosave can read it.
   draft: null,
@@ -131,6 +138,7 @@ export function setSelectedSection(sectionKey, draft) {
   // silently carry over onto whatever is clicked next.
   state.selectedPart = "block";
   state.selectedImageId = null;
+  state.selectedImageIds = [];
   emit(TOPICS.SELECTION, { previous, current: sectionKey });
 }
 
@@ -140,16 +148,55 @@ export function clearSelection() {
 
 // Which object within the selected block is the active editing target -
 // e.g. clicking the headline frame in the Block Editor, or clicking a
-// picture. Does not touch which block is selected or its draft.
+// picture. Does not touch which block is selected or its draft. An ordinary
+// (non-shift) click on a picture always narrows the selection to just that
+// one picture - the same behaviour as before multi-selection existed.
 export function setSelectedPart(part, imageId = null) {
-  if (state.selectedPart === part && state.selectedImageId === imageId) return;
+  const sameSingle = state.selectedPart === part && state.selectedImageId === imageId && state.selectedImageIds.length <= 1;
+  if (sameSingle) return;
   state.selectedPart = part;
   state.selectedImageId = part === "image" ? imageId : null;
+  state.selectedImageIds = part === "image" && imageId != null ? [imageId] : [];
   emit(TOPICS.SELECTION, { current: state.selectedSectionKey, part });
 }
 
 export function getSelectedPart() {
   return state.selectedPart;
+}
+
+// Shift+click on a picture: add it to the selection, or drop it if it was
+// already in. The last picture added becomes the new "primary" (what the
+// Properties panel shows); dropping the primary hands that role to whatever
+// is left, or back to "block" if nothing is.
+export function toggleSelectedImage(imageId) {
+  const set = new Set(state.selectedImageIds);
+  if (set.has(imageId)) set.delete(imageId);
+  else set.add(imageId);
+  state.selectedImageIds = [...set];
+  if (set.has(imageId)) {
+    state.selectedPart = "image";
+    state.selectedImageId = imageId;
+  } else {
+    state.selectedImageId = state.selectedImageIds[state.selectedImageIds.length - 1] ?? null;
+    state.selectedPart = state.selectedImageId != null ? "image" : "block";
+  }
+  emit(TOPICS.SELECTION, { current: state.selectedSectionKey, part: state.selectedPart });
+}
+
+export function getSelectedImageIds() {
+  return state.selectedImageIds;
+}
+
+// Escape's own step-out: a multi-selection collapses to its single primary
+// picture first, the way a step-out should - a block-wide Escape is one step
+// further "out" than dropping down from several pictures to one. Returns
+// whether it did anything, so the caller knows whether to also reduce to
+// "block" instead of just this.
+export function collapseMultiSelection() {
+  if (state.selectedImageIds.length <= 1) return false;
+  state.selectedImageIds = state.selectedImageId != null ? [state.selectedImageId] : [];
+  emit(TOPICS.SELECTION, { current: state.selectedSectionKey, part: state.selectedPart });
+  return true;
 }
 
 // ------------------------------------------------------------------ draft ---

@@ -32,12 +32,18 @@ import { PART_LABEL } from "./typography-panel.js";
 
 let quill = null;
 let hooks = {};
-// selectedId is which PICTURE is selected (unrelated to selectedPart="image" -
-// that says WHICH KIND of object is targeted; selectedId says which one when
-// there's more than one on the block). Both come from the one store
-// (store.js's selectedPart/selectedImageId) via workspace.js - block-frame.js
-// itself never decides selection, only draws it.
-let state = { section: null, view: null, images: [], selectedId: null, selectedPart: "block" };
+// selectedIds is which PICTURE(s) are selected (unrelated to selectedPart=
+// "image" - that says WHICH KIND of object is targeted; selectedIds says
+// which ones when there's more than one on the block). Comes from the one
+// store (store.js's selectedPart/selectedImageIds) via workspace.js -
+// block-frame.js itself never decides selection, only draws it.
+//
+// A single "primary" id used to be tracked here too, separately from this
+// Set, for exactly the single-selection case - and it rotted the first time
+// Shift+click could leave the two disagreeing: a picture dropped from the
+// Set by Shift+click stayed selected on screen because the OTHER field still
+// named it. One field, no drift.
+let state = { section: null, view: null, images: [], selectedIds: new Set(), selectedPart: "block" };
 
 // ---------------------------------------------------------------- loading ---
 
@@ -379,7 +385,7 @@ export function renderPictures(images) {
     if (!frame.classList.contains("is-dragging")) frame.setAttribute("style", `position:absolute;${style.frame}`);
     image.setAttribute("style", style.image);
     frame.dataset.shape = style.shape;
-    frame.classList.toggle("is-selected", row.id === state.selectedId);
+    frame.classList.toggle("is-selected", state.selectedIds.has(row.id));
   }
 
   host.querySelectorAll(".pic-frame").forEach((frame) => {
@@ -435,12 +441,25 @@ function bindPictureFrames() {
 
     event.preventDefault();
     const id = Number(frame.dataset.imageId);
-    state.selectedId = id;
+    const handle = event.target.closest("[data-pic-size]");
+
+    // Shift+click (away from a resize handle) toggles this picture in or out
+    // of the multi-selection instead of starting a drag - building up a
+    // selection to align is a sequence of clicks to ADD pictures, not a
+    // request to move whichever was clicked last.
+    if (event.shiftKey && !handle) {
+      if (state.selectedIds.has(id)) state.selectedIds.delete(id);
+      else state.selectedIds.add(id);
+      frame.classList.toggle("is-selected", state.selectedIds.has(id));
+      hooks.onToggleImageSelection?.(id);
+      return;
+    }
+
+    state.selectedIds = new Set([id]);
     hooks.onSelectImage?.(id);
     hooks.onSelectPart?.("image", id);
     page.querySelectorAll(".pic-frame").forEach((f) => f.classList.toggle("is-selected", f === frame));
 
-    const handle = event.target.closest("[data-pic-size]");
     const sizing = Boolean(handle);
     const corner = handle?.dataset.corner || "br";
     const scale = pageScale();
@@ -509,9 +528,9 @@ export function copyFromFrame() {
   return /^<p>(<br\s*\/?>)?<\/p>$/i.test(html.trim()) ? "" : sanitise(html);
 }
 
-export async function mountFrame(section, view, images, callbacks, selectedPart = "block") {
+export async function mountFrame(section, view, images, callbacks, selectedPart = "block", selectedImageIds = []) {
   hooks = callbacks || {};
-  state = { section, view, images: images || [], selectedId: state.selectedId, selectedPart };
+  state = { section, view, images: images || [], selectedIds: new Set(selectedImageIds), selectedPart };
 
   const host = document.getElementById("edQuill");
   if (!host) return;
@@ -576,8 +595,15 @@ export async function mountFrame(section, view, images, callbacks, selectedPart 
 }
 
 /** Live sync: the block changed under us. */
-export function refreshFrame(section, view, images, source, selectedPart) {
-  state = { ...state, section, view, images: images || [], selectedPart: selectedPart ?? state.selectedPart };
+export function refreshFrame(section, view, images, source, selectedPart, selectedImageIds) {
+  state = {
+    ...state,
+    section,
+    view,
+    images: images || [],
+    selectedPart: selectedPart ?? state.selectedPart,
+    selectedIds: selectedImageIds ? new Set(selectedImageIds) : state.selectedIds,
+  };
   layoutPage();
   layoutTextFrames();
   const showingCard = layoutCard();
@@ -598,6 +624,6 @@ export function refreshFrame(section, view, images, source, selectedPart) {
 }
 
 export function selectPictureFrame(id) {
-  state.selectedId = id;
+  state.selectedIds = new Set([id]);
   renderPictures(state.images);
 }

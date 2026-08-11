@@ -274,6 +274,8 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
     onPatchImage: callbacks.onPatchImage,
     onRemoveImage: callbacks.onRemoveImage,
     onRemoveBackground: callbacks.onRemoveBackground,
+    onAlignImages: callbacks.onAlignImages,
+    onRemoveSelectedImages: callbacks.onRemoveSelectedImages,
   });
   renderPictureControls(callbacks.getImages?.() || [], undefined, section);
   bindPicturesPanel({ ...callbacks, onSelectImage: (id) => { selectPicture(id); selectPictureFrame(id); } });
@@ -293,6 +295,7 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
     onRemoveImage: callbacks.onRemoveImage,
     onSelectImage: (id) => { selectPicture(id); selectPictureFrame(id); },
     onSelectPart: callbacks.onSelectPart,
+    onToggleImageSelection: callbacks.onToggleImageSelection,
   });
   bindAiPanel(callbacks.getView, callbacks.getSection, callbacks.onPatch, notify, callbacks.getImages, callbacks.getPage);
   bindDockToggle(callbacks);
@@ -331,7 +334,7 @@ export function focusGroup(groupKey) {
 
 // Live sync. Panels update themselves in place - nothing is rebuilt, so scroll
 // positions and the caret survive every keystroke.
-export function refreshExternalEditor(section, view, story, source, selectedPart) {
+export function refreshExternalEditor(section, view, story, source, selectedPart, selectedImageIds = []) {
   const badge = document.getElementById("edStatusBadge");
   if (badge) {
     const status = statusOf(view);
@@ -340,7 +343,7 @@ export function refreshExternalEditor(section, view, story, source, selectedPart
   }
 
   const images = activeCallbacks?.getImages?.() || [];
-  renderPictureControls(images, undefined, section);
+  renderPictureControls(images, undefined, section, selectedImageIds);
   refreshPicturesPanel(images);
   refreshSpacePanel(section, view, activeCallbacks?.getImages?.() || []);
   refreshPropertiesPanel(section, view, activeCallbacks?.getSelectedImage?.(), source, selectedPart, activeCallbacks?.getPage?.());
@@ -353,7 +356,7 @@ export function refreshExternalEditor(section, view, story, source, selectedPart
   // classic way a rich editor becomes unusable.
   // The page and everything on it: the frames follow every change to the block
   // - one picture added, one dragged, one taken off, a type size changed.
-  refreshStoryEditor(view, section, images, source, selectedPart);
+  refreshStoryEditor(view, section, images, source, selectedPart, selectedImageIds);
 }
 
 /**

@@ -183,7 +183,7 @@ export function refreshStoryCount() {
   readout.classList.toggle("over", over > 0);
 }
 
-export function bindStoryEditor({ onPatch, getBudget, getSection, getView, getImages, onPatchImage, onRemoveImage, onSelectImage, onSelectPart }) {
+export function bindStoryEditor({ onPatch, getBudget, getSection, getView, getImages, onPatchImage, onRemoveImage, onSelectImage, onSelectPart, onToggleImageSelection }) {
   budgetOf = getBudget;
 
   const headline = document.getElementById("edStoryHeadline");
@@ -244,6 +244,7 @@ export function bindStoryEditor({ onPatch, getBudget, getSection, getView, getIm
       onRemoveImage,
       onSelectImage,
       onSelectPart,
+      onToggleImageSelection,
     }).then(refreshStoryCount);
   }
 }
@@ -268,13 +269,13 @@ export function refreshStoryPictures(images) {
   renderPictures(images);
 }
 
-export function refreshStoryEditor(view, section, images, source, selectedPart) {
+export function refreshStoryEditor(view, section, images, source, selectedPart, selectedImageIds) {
   const headline = document.getElementById("edStoryHeadline");
   const subheading = document.getElementById("edStorySubheading");
   if (headline && document.activeElement !== headline) headline.value = plainText(view.headline);
   if (subheading && document.activeElement !== subheading) subheading.value = plainText(view.subheading);
 
-  if (section) refreshFrame(section, view, images, source, selectedPart);
+  if (section) refreshFrame(section, view, images, source, selectedPart, selectedImageIds);
 
   refreshStoryCount();
   refreshFieldCounters(view);

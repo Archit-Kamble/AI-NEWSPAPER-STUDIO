@@ -22,7 +22,12 @@ const SHAPES = [
   ["cutout", "Cut-out"],
 ];
 
-let state = { images: [], selectedId: null, callbacks: {}, block: null };
+const ALIGN_BUTTONS = [
+  ["left", "Align left"], ["center", "Align center"], ["right", "Align right"],
+  ["top", "Align top"], ["middle", "Align middle"], ["bottom", "Align bottom"],
+];
+
+let state = { images: [], selectedId: null, selectedIds: new Set(), callbacks: {}, block: null };
 
 export function pictureControlsMarkup() {
   return `
@@ -36,10 +41,37 @@ function selected() {
   return state.images.find((image) => image.id === state.selectedId) || null;
 }
 
-export function renderPictureControls(images, selectedId, block) {
+// Stage 7: two or more pictures shift-clicked at once - align them against
+// each other's shared bounding box, or take them all off the block together.
+// Nothing here computes a placement itself; align.js does that (and is
+// unit-tested on its own), this only renders the buttons and forwards which
+// one was pressed.
+function multiSelectMarkup(count) {
+  return `
+    <div class="picture-controls-head">
+      <strong>${count} pictures selected</strong>
+      <button type="button" class="ext-editor-btn danger" data-picture-do="remove-selected">Remove all</button>
+    </div>
+    <label class="preview-label">Align</label>
+    <div class="ext-editor-toolbar">
+      ${ALIGN_BUTTONS.map(([key, label]) => `<button type="button" class="ext-editor-btn" data-picture-align="${key}">${label}</button>`).join("")}
+    </div>
+    <p class="muted ext-note">Shift+click a picture to add or remove it from the selection; click one alone to go back to editing just it.</p>
+  `;
+}
+
+export function renderPictureControls(images, selectedId, block, selectedIds = []) {
   state.images = images || [];
   if (block) state.block = block;
   if (selectedId !== undefined) state.selectedId = selectedId;
+  state.selectedIds = new Set(selectedIds);
+  // The multi-selection is authoritative once it names exactly one picture -
+  // Shift+click only ever updates the Set, never this separate "primary"
+  // field, so after Shift+clicking down to one picture this field could
+  // otherwise still be naming whichever was clicked first (the same drift
+  // that made a dropped picture keep showing selected on the canvas - see
+  // block-frame.js's own note on that bug).
+  if (state.selectedIds.size === 1) state.selectedId = [...state.selectedIds][0];
   // A picture that was removed cannot stay selected.
   if (!state.images.some((image) => image.id === state.selectedId)) {
     state.selectedId = state.images.length ? state.images[state.images.length - 1].id : null;
@@ -47,6 +79,11 @@ export function renderPictureControls(images, selectedId, block) {
 
   const host = document.getElementById("edPictureControls");
   if (!host) return;
+
+  if (state.selectedIds.size >= 2) {
+    host.innerHTML = multiSelectMarkup(state.selectedIds.size);
+    return;
+  }
 
   const image = selected();
   if (!image) {
@@ -93,8 +130,12 @@ export function renderPictureControls(images, selectedId, block) {
       <button type="button" class="ext-editor-btn" data-picture-do="fit">Fit inside block</button>
     </div>
     <div class="ext-editor-toolbar">
+      <button type="button" class="ext-editor-btn" data-picture-do="front">Bring to front</button>
       <button type="button" class="ext-editor-btn" data-picture-do="forward">Bring forward</button>
       <button type="button" class="ext-editor-btn" data-picture-do="backward">Send back</button>
+      <button type="button" class="ext-editor-btn" data-picture-do="back">Send to back</button>
+    </div>
+    <div class="ext-editor-toolbar">
       <button type="button" class="ext-editor-btn" data-picture-do="cutout">Remove background</button>
     </div>
     <p class="muted ext-note">Drag it in the story to move it, and its corner to size it.</p>
@@ -167,6 +208,15 @@ export function change(image, action) {
     // before: the old canvas restacked its own objects and threw the order away.
     case "forward": return { zIndex: (Number(image.z_index) || 0) + 1 };
     case "backward": return { zIndex: Math.max(0, (Number(image.z_index) || 0) - 1) };
+    // Jump straight to either end, rather than clicking "forward"/"backward"
+    // once per picture in between. Floored at 0 like "backward" already is -
+    // never negative, because placedPictureStyle() reads z-index with
+    // `Number(row.z_index) || 1`, where a literal 0 already falls through to
+    // 1; a negative number would instead survive as itself and could put the
+    // picture behind page content with no z-index of its own. Not this
+    // stage's bug to fix (see PROJECT_STATUS.md), just one not to walk into.
+    case "front": return { zIndex: Math.max(0, ...state.images.map((i) => Number(i.z_index) || 0)) + 1 };
+    case "back": return { zIndex: 0 };
     default: return null;
   }
 }
@@ -176,6 +226,15 @@ export function bindPictureControls(callbacks) {
 
   const host = document.getElementById("edPictureControls");
   host?.addEventListener("click", (event) => {
+    // The multi-select panel's own buttons - checked first, since they act
+    // on the whole selection, not the single "primary" picture below. A
+    // distinct attribute from the story toolbar's own [data-align] (text
+    // alignment, story-editor.js) - the two are unrelated concepts that
+    // happened to want the same obvious name.
+    const align = event.target.closest("[data-picture-align]");
+    if (align) return callbacks.onAlignImages?.(align.dataset.pictureAlign);
+    if (event.target.closest('[data-picture-do="remove-selected"]')) return callbacks.onRemoveSelectedImages?.();
+
     const image = selected();
     if (!image) return;
 

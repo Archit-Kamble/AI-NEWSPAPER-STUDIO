@@ -46,6 +46,7 @@ import * as autosave from "./autosave/autosave.js";
 import { draftFromSection, draftFromStory, payloadFromDraft, viewOfSection } from "./section-model.js";
 import { canRenderSmartCard, smartCardText } from "./smart-cards/smart-cards.js";
 import { candidatesOn, runBulk } from "./external-editor/bulk-generate.js";
+import { computeAlignment } from "./external-editor/align.js";
 import { escapeHtml } from "./format.js";
 import { isContentEdit, isExplicit } from "./status/section-status.js";
 import { buildFlowMap, flowImageFromRow } from "./layout/text-flow.js";
@@ -191,7 +192,7 @@ function redrawCompose() {
   // picture changes - including from an edit made IN the Properties panel
   // itself, which would watch its own commit knock it back to block-level a
   // moment later.
-  refreshExternalEditor(section, view, currentStory(), "images", store.getSelectedPart());
+  refreshExternalEditor(section, view, currentStory(), "images", store.getSelectedPart(), store.getSelectedImageIds());
 }
 
 async function addSectionImage(file) {
@@ -495,6 +496,13 @@ function selectSection(sectionKey) {
 // Typography panel and the selection box pointed at right now."
 function selectPart(part, imageId = null) {
   store.setSelectedPart(part, imageId);
+}
+
+// Shift+click on a picture - add or drop it from the multi-selection that
+// align/bulk-delete/bulk-nudge act on. Same non-touching-draft-or-history
+// rule as selectPart() above.
+function toggleImageSelection(imageId) {
+  store.toggleSelectedImage(imageId);
 }
 
 function patchDraft(patch, source) {
@@ -1407,6 +1415,9 @@ function renderSidePanels() {
     getNewspaper: () => store.getState().newspaper,
     onSelectSection: selectSection,
     onSelectPart: selectPart,
+    onToggleImageSelection: toggleImageSelection,
+    onAlignImages: alignSelectedImages,
+    onRemoveSelectedImages: removeSelectedImages,
     onAddImage: addSectionImage,
     onPatchImage: patchSectionImage,
     onRemoveImage: removeSectionImage,
@@ -1458,6 +1469,11 @@ function isTypingTarget(el) {
 }
 
 function nudgeSelectedImage(dx, dy) {
+  // Two or more pictures selected: move them all together, one history step -
+  // the single-picture path below remains exactly what it always was.
+  const ids = store.getSelectedImageIds();
+  if (ids.length > 1) return nudgeSelectedImages(dx, dy);
+
   const { selectedPart, selectedImageId } = store.getState();
   if (selectedPart !== "image" || !selectedImageId) return false;
   const image = sectionImages.find((row) => row.id === selectedImageId);
@@ -1470,9 +1486,62 @@ function nudgeSelectedImage(dx, dy) {
 }
 
 function deleteSelectedImage() {
+  const ids = store.getSelectedImageIds();
+  if (ids.length > 1) return removeSelectedImages();
+
   const { selectedPart, selectedImageId } = store.getState();
   if (selectedPart !== "image" || !selectedImageId) return false;
   removeSectionImage(selectedImageId);
+  return true;
+}
+
+// ---------------------------------------------------- multi-selection (Stage 7) ---
+//
+// Pictures are the one object with real, freely-persisted X/Y/W/H (see
+// external-editor/align.js's own note) - a block's geometry is always
+// re-snapped to the grid server-side, and text has no coordinate at all - so
+// a multi-selection, and everything that acts on one, is scoped to pictures
+// within the currently open block.
+
+function selectedImageRows() {
+  const ids = new Set(store.getSelectedImageIds());
+  return sectionImages.filter((row) => ids.has(row.id));
+}
+
+async function alignSelectedImages(kind) {
+  const rows = selectedImageRows();
+  if (rows.length < 2) return;
+  const patches = computeAlignment(rows, kind);
+  for (const row of rows) {
+    const patch = patches[row.id];
+    if (patch) await persistImagePatch(row.id, patch);
+  }
+  redrawCompose();
+  history.record(store.getDraft(), { coalesce: false, label: "Aligned pictures", kind: "image", images: sectionImages });
+}
+
+function nudgeSelectedImages(dx, dy) {
+  const rows = selectedImageRows();
+  if (rows.length < 2) return false;
+  Promise.all(rows.map((row) => persistImagePatch(row.id, {
+    x: Math.round((Number(row.x_px) || 0) + dx),
+    y: Math.round((Number(row.y_px) || 0) + dy),
+  }))).then(() => {
+    redrawCompose();
+    history.record(store.getDraft(), { coalesce: false, label: "Pictures moved", kind: "image", images: sectionImages });
+  });
+  return true;
+}
+
+// Deleting is not undoable for a single picture either (history.js's own
+// reconcileImages() explicitly leaves added/removed rows alone - see its own
+// note) - bulk delete matches that existing behaviour rather than quietly
+// becoming the one delete path that can be undone.
+async function removeSelectedImages() {
+  const ids = [...store.getSelectedImageIds()];
+  if (ids.length < 2) return false;
+  for (const id of ids) await removeSectionImage(id);
+  store.setSelectedPart("block");
   return true;
 }
 
@@ -1485,8 +1554,11 @@ function bindKeyboardShortcuts() {
       // First press backs out of the object that is targeted, to the block
       // itself - not out of the block entirely, which would read as closing
       // the editor a desk is still looking at. A field also gives up focus,
-      // the ordinary meaning of Escape in a form.
+      // the ordinary meaning of Escape in a form. A multi-selection is one
+      // step further "in" than a single picture, so it collapses to its
+      // primary first - only the step after that reaches "block".
       if (typing) event.target.blur();
+      if (store.collapseMultiSelection()) return;
       if (store.getState().selectedPart !== "block") store.setSelectedPart("block");
       return;
     }
@@ -1531,7 +1603,7 @@ function subscribeViews() {
     const view = currentView();
     if (!section || !view) return;
     refreshSection(section, view, { selected: true, dirty: store.isDirty() });
-    refreshExternalEditor(section, view, currentStory(), source, store.getSelectedPart());
+    refreshExternalEditor(section, view, currentStory(), source, store.getSelectedPart(), store.getSelectedImageIds());
   });
 
   // Which OBJECT within the block is targeted changed (a click on the
@@ -1543,7 +1615,7 @@ function subscribeViews() {
     const section = store.getSelectedSection();
     const view = currentView();
     if (!section || !view) return;
-    refreshExternalEditor(section, view, currentStory(), "selection", store.getSelectedPart());
+    refreshExternalEditor(section, view, currentStory(), "selection", store.getSelectedPart(), store.getSelectedImageIds());
   });
 
   store.subscribe(store.TOPICS.SAVE, () => {

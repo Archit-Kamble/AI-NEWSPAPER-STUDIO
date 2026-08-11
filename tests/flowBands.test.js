@@ -116,3 +116,63 @@ test('flowedBodyMarkup: body text is poured only into TEXT cells - never into a 
   assert.ok(lefts.length > 0, 'at least one run was captured');
   assert.ok(lefts.every((left) => left >= 90), 'every run starts clear of the picture, not inside it', lefts.join(', '));
 });
+
+// MIN_RUN_CHARS / pourIntoRuns / bodyCharBudget: a picture that leaves only a
+// hairline sliver beside it, for EVERY row it touches, used to still get
+// prose poured into it - the only width available anywhere in that flow, so
+// the "wait for a wider run" logic that protects an ordinary single narrow
+// row had nothing wider to wait for. Found live on Project A's realistic
+// test edition: a photo-feature block whose picture left a 5-cell run for
+// ten rows straight rendered "शहरातील" as "शहरात" / "ील" on two separate
+// lines, and "होणारी" as "होणार" / "ी" - a real word, shredded to one glyph
+// per line, not the "अतिवृष्टीग्रस" hyphenation case the widest-run check
+// already guarded against (there, a wider row genuinely existed later in the
+// same flow to wait for).
+
+test('pourIntoRuns: a run that is the widest available anywhere, but still hairline-thin, gets nothing poured into it rather than one glyph per line', async () => {
+  const { pourIntoRuns } = await loadTextFlow();
+  // Every row exactly 3 cells wide - no row anywhere in this flow could ever
+  // hold ordinary prose, unlike the case where a narrow row is followed by a
+  // wider one further down and the word can simply wait.
+  const runs = Array.from({ length: 8 }, (_, row) => ({ row, col: 53, length: 3 }));
+  const result = pourIntoRuns(runs, 'शहरातील मुख्य चौकात रोज सकाळी होणारी वाहतूक कोंडी.');
+  assert.deepEqual(result, [], 'nothing is poured into a flow with no usable width anywhere');
+});
+
+test('pourIntoRuns: a genuinely narrow row is still fine when a wider row exists later in the SAME flow - the word waits for it', async () => {
+  const { pourIntoRuns } = await loadTextFlow();
+  // Two narrow rows (beside a picture), then a full-width row below it -
+  // exactly the ordinary picture-runaround case, which must be unaffected.
+  const runs = [
+    { row: 0, col: 20, length: 3 },
+    { row: 1, col: 20, length: 3 },
+    { row: 2, col: 0, length: 40 },
+  ];
+  const result = pourIntoRuns(runs, 'शहरातील मुख्य चौकात.');
+  assert.ok(result.length > 0, 'text still flows once a usable row exists');
+  assert.ok(result.every((run) => run.text.length <= run.length), 'every placed run still fits its own cells');
+});
+
+test('buildFlowMap: bodyCharBudget never counts cells that pourIntoRuns would actually refuse to use', async () => {
+  const { buildFlowMap, flowRuns, pourIntoRuns, CELL } = await loadTextFlow();
+  const section = { width_px: 307, height_px: 296 };
+  const view = {
+    kicker: 'फोटो फिचर', headline: 'सकाळच्या गर्दीचे क्षणचित्र', subheading: '', body: '',
+    marginPx: 12, columnCount: 1, lineHeight: 1.45,
+    headlineFontPx: 24, subheadingFontPx: 14, bodyFontPx: 10,
+  };
+  // The exact real-world shape that found this bug: a picture nearly as tall
+  // as the block, leaving only a hairline column beside it for every body row.
+  const image = { x: 0, y: 90, width: 260, height: 160, shape: 'rect', rotation: 0, standOffPx: 0 };
+  const map = buildFlowMap(section, view, [image]);
+
+  // A body long enough to fill whatever budget is reported.
+  const longBody = 'शब्द '.repeat(200).trim();
+  const poured = pourIntoRuns(flowRuns(map, CELL.TEXT), longBody);
+  const actuallyUsedChars = poured.reduce((sum, run) => sum + run.text.length, 0);
+
+  assert.ok(
+    actuallyUsedChars <= map.bodyCharBudget,
+    `pourIntoRuns placed ${actuallyUsedChars} characters, more than the ${map.bodyCharBudget} the AI would have been briefed with`,
+  );
+});

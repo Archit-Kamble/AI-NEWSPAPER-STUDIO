@@ -227,10 +227,17 @@ async function fillPage2(desk, pageId) {
 }
 
 async function fillPage3(desk, pageId) {
+  // feature-one is 307px wide. A 260px-wide image here (this fixture's first
+  // draft) left only a 5-character sliver for the body to wrap into, for
+  // every row the picture touched - text-flow.js's own MIN_RUN_CHARS guard
+  // now refuses to pour prose into a run that narrow rather than shredding it
+  // one glyph per line, but a real desk would not have sized the picture this
+  // way to begin with. 150px leaves a genuinely readable ~25-character column
+  // beside it, a real photo-feature wrap rather than a wall filling the block.
   await placeImage(desk, pageId, 'feature-one', {
     url: (global.__images || {})['zz-test-edition-p3-feature.jpg'],
     filename: 'zz-test-edition-p3-feature.jpg',
-    width: 260, height: 160, caption: 'शहरातील रस्त्यावर सकाळच्या वेळी वाहतुकीची स्थिती.',
+    width: 150, height: 140, caption: 'शहरातील रस्त्यावर सकाळच्या वेळी वाहतुकीची स्थिती.',
   });
   await write(desk, pageId, 'feature-one', {
     kicker: 'फोटो फिचर',

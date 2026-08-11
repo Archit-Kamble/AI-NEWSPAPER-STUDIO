@@ -47,6 +47,18 @@ export const MIN_LINE_HEIGHT = 1.45;
 
 export const CELL = { HEADLINE: "H", SUBHEADING: "S", TEXT: "T", IMAGE: "I", EMPTY: "." };
 
+// Below this many cells wide, a run cannot hold ordinary prose at all - every
+// row a picture leaves this narrow forces the SAME word to break character by
+// character down the whole column ("शहरात/ील/मुख्य/चौकात/रोज/सकाळी/होणार/ी" -
+// found live, a photo-feature block whose picture left a 5-cell sliver for ten
+// rows straight, the ONLY width available anywhere in that flow). Matches
+// bandBox()'s own MIN_BAND_SHARE reasoning for the headline/subheading bands:
+// below a usable width, showing nothing reads far better than a column of
+// single glyphs. Used both here, to keep bodyCharBudget honest about what a
+// block can actually hold (never claim room the render will refuse to use),
+// and in pourIntoRuns(), which is what actually refuses it.
+export const MIN_RUN_CHARS = 4;
+
 // Turns a point into the picture's own frame, so a rotated picture is tested
 // against an upright rectangle. Rotation is about the picture's top-left, which
 // is where Fabric anchors it.
@@ -161,7 +173,6 @@ export function buildFlowMap(section, view, images = []) {
     : 0;
 
   const grid = [];
-  let textCells = 0;
   let imageCells = 0;
 
   for (let row = 0; row < rows; row += 1) {
@@ -187,10 +198,25 @@ export function buildFlowMap(section, view, images = []) {
         continue;
       }
       line.push(CELL.TEXT);
-      textCells += 1;
     }
     grid.push(line);
   }
+
+  // The USABLE budget, not a raw count of every free cell. pourIntoRuns()
+  // refuses to pour real prose into a run narrower than MIN_RUN_CHARS - a run
+  // that narrow, sustained because a picture leaves no wider row anywhere in
+  // the flow, would only ever produce single-character lines. A flat count of
+  // every free cell (including ones inside such a run) used to be handed to
+  // the AI as the block's real capacity: a block could be briefed to fill
+  // room the renderer would then refuse to use, the exact "the AI was told
+  // about room it does not actually have" bug this whole grid exists to
+  // prevent for headline/subheading overflow. Computed here with flowRuns()
+  // itself (same row-scan, same MIN_RUN_CHARS), so this can never drift from
+  // what pourIntoRuns() actually does with the same grid.
+  const usableRuns = flowRuns({ grid, rows, cols }, CELL.TEXT);
+  const usableBudget = usableRuns.reduce(
+    (sum, run) => sum + (run.length >= MIN_RUN_CHARS ? run.length : 0), 0,
+  );
 
   return {
     cols,
@@ -201,10 +227,11 @@ export function buildFlowMap(section, view, images = []) {
     headlineRows,
     subheadingRows,
     imageCells,
-    // One cell holds one character. This is the number the AI is given.
-    bodyCharBudget: textCells,
+    // One cell holds one character. This is the number the AI is given -
+    // usableBudget, not the raw textCells count (see above).
+    bodyCharBudget: usableBudget,
     // Marathi averages roughly six characters a word including the space.
-    bodyWordBudget: Math.round(textCells / 6),
+    bodyWordBudget: Math.round(usableBudget / 6),
     // What the copy will SET, not how it is marked up. Two words in bold take
     // exactly as much room as two words that are not.
     usedChars: plainText(view.body).length,
@@ -355,6 +382,7 @@ export function pourIntoRuns(runs, text) {
   // ष्टीग्रस" on one side of the subject and "त" on the other, which is not
   // hyphenation, it is damage.
   const widest = runs.reduce((max, run) => Math.max(max, run.length), 0);
+  if (widest < MIN_RUN_CHARS) return [];
 
   for (const run of runs) {
     let line = "";

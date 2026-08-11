@@ -43,6 +43,7 @@ import { blockKind, blockNote } from "../layout/block-kinds.js";
 import { pictureControlsMarkup, renderPictureControls, bindPictureControls, selectPicture } from "./picture-controls.js";
 import { picturesPanelMarkup, bindPicturesPanel, refreshPicturesPanel } from "./pictures-panel.js";
 import { typographyPanelMarkup, bindTypographyPanel, refreshTypographyPanel } from "./typography-panel.js";
+import { propertiesPanelMarkup, bindPropertiesPanel, refreshPropertiesPanel } from "./properties-panel.js";
 import { spacePanelMarkup, refreshSpacePanel } from "./layout-panel.js";
 import { aiPanelMarkup, bindAiPanel, refreshAiPanel } from "./ai-panel.js";
 import { historyPanelMarkup, bindHistoryPanel, refreshHistoryPanel } from "./history-panel.js";
@@ -115,6 +116,16 @@ function renderToolsRail(section, view, callbacks) {
   }
 
   host.innerHTML = `
+    <!-- Properties is open and comes first: what this panel is FOR is "what
+         is true about the object currently selected", and that answer is
+         different for a block, a picture, a Smart Card, or flow-based text -
+         Typography (below) is one part of that answer, the part that is the
+         same three-field shape for every text object. -->
+    <details class="ext-aside" open>
+      <summary>Properties</summary>
+      <div id="edPropertiesGroup">${propertiesPanelMarkup(section, view, callbacks.getSelectedImage?.(), "block", callbacks.getPage?.())}</div>
+    </details>
+
     <!-- Typography is open. It is the one a desk reaches for every day, and a
          fold that is always opened is a click charged for nothing. -->
     <details class="ext-aside" open>
@@ -136,6 +147,7 @@ function renderToolsRail(section, view, callbacks) {
     ${pageMapMarkup(callbacks.getPage?.(), callbacks.getNewspaper?.(), section.section_key)}
   `;
 
+  bindPropertiesPanel({ getSelectedImage: callbacks.getSelectedImage, onPatchImage: callbacks.onPatchImage });
   bindTypographyPanel(callbacks.getView, callbacks.onPatch);
   bindStoryDetails(callbacks.onPatch);
   bindHistoryPanel(historyHandlers(callbacks));
@@ -331,6 +343,7 @@ export function refreshExternalEditor(section, view, story, source, selectedPart
   renderPictureControls(images, undefined, section);
   refreshPicturesPanel(images);
   refreshSpacePanel(section, view, activeCallbacks?.getImages?.() || []);
+  refreshPropertiesPanel(section, view, activeCallbacks?.getSelectedImage?.(), source, selectedPart, activeCallbacks?.getPage?.());
   refreshTypographyPanel(view, source, selectedPart);
   refreshStoryDetails(view, source);
   refreshAiPanel(view, source);

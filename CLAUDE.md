@@ -39,16 +39,23 @@ Route → Controller → Service → Repository → PostgreSQL
 
 ## Current reality (read this before touching code)
 
-`server.js` is the entry point and still defines many routes inline, but the layering migration is **partly done**. Four resources are mounted from real route modules:
+`server.js` is the entry point. The layering migration now covers every resource that touches the database; five resources are mounted from real route modules:
 
 ```
 app.use("/api/auth",       src/routes/auth.routes.js)
 app.use("/api/news",       requireSignIn, src/routes/news.routes.js)
 app.use("/api/newspapers", deskWrites,    src/routes/newspaper.routes.js)
-                                          src/routes/page.routes.js
+app.use("/api/features",   deskWrites,    src/routes/feature.routes.js)
+app.use("/api",            deskWrites,    src/routes/page.routes.js)
 ```
 
-Those go Route → Controller (`src/controllers/*.controller.js`) → Service (`src/services/*.service.js`) → Repository (`src/repositories/*.repository.js`) → PostgreSQL, which is the target shape. Everything else is still inline in `server.js` calling `src/repositories/*` directly. There is no more `src/db.js` — it held only `authenticateUser`, a duplicate of `user.repository.js` plus a bcrypt check; that logic now lives in `auth.service.js` and the file was deleted rather than kept as a second copy. When continuing the migration, take one resource at a time, verify boot + `npm test` after each, small commits.
+Those go Route → Controller (`src/controllers/*.controller.js`) → Service (`src/services/*.service.js`) → Repository (`src/repositories/*.repository.js`) → PostgreSQL, which is the target shape. All still-inline `server.js` routes are stateless lookups with no database access at all — `/api/templates`, `/api/geometry`, `/api/identity`, `/api/ai/status`, `/api/health` — plus `/api/uploads/images` (multer only, no business logic) and `/epaper/:id` (delegates straight to `newspaperController.epaperHtml`, kept in `server.js` only because it sits outside the `/api/newspapers` mount path). There is no more `src/db.js` — it held only `authenticateUser`, a duplicate of `user.repository.js` plus a bcrypt check; that logic now lives in `auth.service.js` and the file was deleted rather than kept as a second copy.
+
+**Section production actions are addressed by `sectionKey` (e.g. `"lead"`), not a numeric id** — `write`, `fill`, `carry-over`, `reunite`, `fit` and `rate` all live in `pageSection.controller.js`/`pageSection.service.js` alongside the numeric-id section CRUD (`update`/`create`/`remove`/`move`), because `pageSection.service.js` already addressed sections by key internally (`saveSection(pageId, sectionKey, ...)`) — there was no real domain boundary to justify a separate controller. Page-level actions (`colour`, `state`) live in `page.controller.js` instead, next to `create`/`list`/`update`, matching how they're addressed (by `pageId` alone).
+
+**`deskWrites` leaves every GET unauthenticated — it only guards writes.** Every GET route moved onto a `deskWrites`-mounted router that used to carry an explicit `requireDesk` inline (`preflight`, `worklist`, `status`, `history`, `scribus`, `press-package`, and now `fit` (GET) and `rate`) must repeat that `requireDesk` at the route level, or desk-only production data goes silently public. This has already bitten this migration twice — check `src/middleware/auth.js` before wiring any GET route into an existing router, don't assume the router-level middleware covers it.
+
+When continuing the migration, take one resource at a time, verify boot + `npm test` after each, small commits.
 
 `src/services/` is substantial and live: `auth`, `editionStart`, `editionFeatures`, `worklist`, `fit`, `jump`, `preflight`, `pressPackage`, `scribus`, `epaper`, `signoff`, `storyWriter`, `sectionImage`, `backgroundRemoval`, `cutout`, `segment`, `districtEdition`, plus `src/services/ai/` and `src/services/information/` (verified current-event context — see below).
 

@@ -81,6 +81,18 @@ async function findByNewspaper(newspaperId) {
   return Promise.all(rows.map((page) => hydrate(page)));
 }
 
+// The one join a rate quote needs: the section, joined to its page for the
+// page number and colour forme, and the newspaper id to look the paper up by.
+async function findSectionForRate(pageId, sectionKey) {
+  const { rows } = await pool.query(
+    `SELECT ps.*, p.page_number, p.prints_colour, p.newspaper_id
+       FROM page_sections ps JOIN pages p ON p.id = ps.page_id
+      WHERE ps.page_id = $1 AND ps.section_key = $2`,
+    [pageId, sectionKey],
+  );
+  return rows[0] || null;
+}
+
 async function findById(id) {
   const { rows } = await pool.query('SELECT * FROM pages WHERE id = $1', [id]);
   return rows[0] ? hydrate(rows[0]) : null;
@@ -292,6 +304,7 @@ module.exports = {
   setColourForme,
   findByNewspaper,
   findById,
+  findSectionForRate,
   updateTemplate,
   saveSection,
   createSection,

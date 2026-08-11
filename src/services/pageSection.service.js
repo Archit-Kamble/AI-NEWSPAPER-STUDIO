@@ -1,5 +1,7 @@
 const pageRepository = require('../repositories/page.repository');
+const newspaperRepository = require('../repositories/newspaper.repository');
 const { geometryOf, snapPointsX } = require('../layout/geometry');
+const { quote } = require('../layout/rateCard');
 
 const G = geometryOf({});
 const MIN_HEIGHT_PX = G.baselinePx * 4;
@@ -104,4 +106,17 @@ async function saveSection(pageId, sectionKey, body) {
   return pageRepository.findById(parseInt(pageId, 10));
 }
 
-module.exports = { saveSection, createSection, deleteSection, moveSection, snapGeometry };
+// What a block of space is worth, by column-centimetre and position. Position
+// is most of the price, so this needs the section, its page number and colour
+// forme, and how many pages the edition has.
+async function rateFor(pageId, sectionKey) {
+  const section = await pageRepository.findSectionForRate(parseInt(pageId, 10), sectionKey);
+  if (!section) return null;
+
+  const pages = await pageRepository.findByNewspaper(section.newspaper_id);
+  const newspaper = await newspaperRepository.findById(section.newspaper_id);
+
+  return quote(section, section, { totalPages: pages.length, newspaper });
+}
+
+module.exports = { saveSection, createSection, deleteSection, moveSection, snapGeometry, rateFor };

@@ -664,6 +664,199 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
     await page.waitForTimeout(1200);
   }
 
+  // ------------------------------------------------------------ rulers + guides ---
+  //
+  // Stage 4: rulers show PAGE coordinates (never screen or zoom-scaled ones),
+  // and dragging off either one creates a persisted, page-level guide - a
+  // reference line, not yet a snap target (Stage 5). Page-scoped, so this
+  // block does not touch KEY's own selection state except at the very end,
+  // where it checks a guide never steals an ordinary click.
+  {
+    const pageIdOf = () => page.evaluate(async (ed) => (await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json()))[0].id, ED);
+    const fetchGuides = (pid) => page.evaluate((p) => fetch(`/api/pages/${p}/guides`).then((r) => r.json()), pid);
+    const pid = await pageIdOf();
+
+    // A clean slate - any guide left by a previous run would confuse the
+    // "multiple guides coexist" / "crossing guides" counts below.
+    for (const g of await fetchGuides(pid)) {
+      await page.evaluate(([p, id]) => fetch(`/api/pages/${p}/guides/${id}`, { method: 'DELETE' }), [pid, g.id]);
+    }
+
+    say((await page.locator('#canvasRulerH').count()) === 1, 'a horizontal ruler exists');
+    say((await page.locator('#canvasRulerV').count()) === 1, 'a vertical ruler exists');
+
+    const majorCount = await page.locator('#rulerTicksH .ruler-tick-major').count();
+    const allCount = await page.locator('#rulerTicksH .ruler-tick').count();
+    say(majorCount >= 2, 'the horizontal ruler has labelled major ticks', String(majorCount));
+    say(allCount > majorCount, 'and minor ticks between them', `${allCount} total, ${majorCount} major`);
+
+    const alignment = await page.evaluate(() => {
+      const pageRect = document.getElementById('canvasSurface').getBoundingClientRect();
+      const major = document.querySelector('#rulerTicksH .ruler-tick-major');
+      const tickRect = major?.getBoundingClientRect();
+      return {
+        aligned: tickRect ? Math.abs(tickRect.left - pageRect.left) <= 1 : false,
+        label: major?.querySelector('.ruler-tick-label')?.textContent,
+      };
+    });
+    say(alignment.aligned, 'the ruler\'s own zero tick sits exactly on the page\'s left edge, not an assumed offset');
+    say(alignment.label === '0', 'and its label reads the real editor coordinate', alignment.label);
+
+    // ---- creating guides by dragging off each ruler ----
+    // The canvas is well down the one-page scroll by this point (earlier
+    // Block Editor interactions scroll the document, same as clicking a
+    // block on the canvas already needs it in view) - the sticky toolbar
+    // would otherwise sit over the ruler exactly as it would over any other
+    // canvas control a desk hasn't scrolled back to first.
+    await page.evaluate(() => document.getElementById('canvasRulerH')?.scrollIntoView({ block: 'center' }));
+    await page.waitForTimeout(300);
+
+    const rulerHBox = await page.locator('#canvasRulerH').boundingBox();
+    const rulerVBox = await page.locator('#canvasRulerV').boundingBox();
+    const pageBox = await page.locator('#canvasSurface').boundingBox();
+    // The page's real, unscaled size - so a drop's expected PAGE-pixel
+    // position can be computed from its screen delta, whatever the current
+    // fit/zoom scale happens to be (it varies with how much room the
+    // settings rail and Block Editor are taking, which earlier tests in
+    // this run have already changed).
+    const newspaperPx = await page.evaluate((ed) => fetch(`/api/newspapers/${ed}`).then((r) => r.json()), ED);
+    const scale = pageBox.height / Number(newspaperPx.page_height_px);
+
+    const createRequests = [];
+    const onCreateRequest = (req) => { if (req.method() === 'POST' && /\/guides$/.test(req.url())) createRequests.push(req.url()); };
+    page.on('request', onCreateRequest);
+
+    await page.mouse.move(rulerHBox.x + 100, rulerHBox.y + rulerHBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(pageBox.x + 100, pageBox.y + 40, { steps: 5 });
+    await page.mouse.move(pageBox.x + 100, pageBox.y + 80, { steps: 5 }); // several moves - must not fire a request each
+    await page.mouse.move(pageBox.x + 100, pageBox.y + 120, { steps: 5 });
+    say(createRequests.length === 0, 'dragging to create a guide sends no request until it is dropped');
+    await page.mouse.up();
+    await page.waitForTimeout(500);
+    say(createRequests.length === 1, 'releasing on the page sends exactly one create request', `${createRequests.length}`);
+    page.off('request', onCreateRequest);
+
+    await page.mouse.move(rulerVBox.x + rulerVBox.width / 2, rulerVBox.y + 100);
+    await page.mouse.down();
+    await page.mouse.move(pageBox.x + 60, pageBox.y + 100, { steps: 8 });
+    await page.mouse.up();
+    await page.waitForTimeout(500);
+
+    let guides = await fetchGuides(pid);
+    say(guides.length === 2, 'both guides exist - multiple guides coexist', String(guides.length));
+    const hGuide = guides.find((g) => g.orientation === 'horizontal');
+    const vGuide = guides.find((g) => g.orientation === 'vertical');
+    say(Boolean(hGuide), 'dragging from the horizontal ruler created a HORIZONTAL guide');
+    say(Boolean(vGuide), 'dragging from the vertical ruler created a VERTICAL guide');
+    const expectedH = 120 / scale; // dropped at pageBox.y + 120 SCREEN px
+    say(Math.abs(hGuide.position_px - expectedH) <= 3, 'its position is in page pixels, not screen pixels',
+      `position_px ${hGuide.position_px}, expected ~${expectedH.toFixed(1)} at scale ${scale.toFixed(3)}`);
+    say((await page.locator('.page-guide').count()) === 2, 'both are drawn on the page');
+    say((await page.locator(`.page-guide[data-guide-id="${hGuide.id}"].page-guide-h`).count()) === 1,
+      'the horizontal guide carries the horizontal class');
+    say((await page.locator(`.page-guide[data-guide-id="${vGuide.id}"].page-guide-v`).count()) === 1,
+      'the vertical guide carries the vertical class');
+
+    // ---- moving a guide: visual during drag, one persist on release ----
+    const moveRequests = [];
+    const onMoveRequest = (req) => { if (req.method() === 'PATCH' && /\/guides\/\d+$/.test(req.url())) moveRequests.push(req.url()); };
+    page.on('request', onMoveRequest);
+
+    const hHit = page.locator(`.page-guide[data-guide-id="${hGuide.id}"] .page-guide-hit`);
+    const hBox = await hHit.boundingBox();
+    await page.mouse.move(hBox.x + hBox.width / 2, hBox.y + hBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(pageBox.x + 100, pageBox.y + 200, { steps: 4 });
+    await page.mouse.move(pageBox.x + 100, pageBox.y + 250, { steps: 4 });
+    say(moveRequests.length === 0, 'dragging an existing guide sends no request until release');
+    await page.mouse.up();
+    await page.waitForTimeout(500);
+    say(moveRequests.length === 1, 'releasing sends exactly one move request, not one per mousemove', `${moveRequests.length}`);
+    page.off('request', onMoveRequest);
+
+    guides = await fetchGuides(pid);
+    const movedH = guides.find((g) => g.id === hGuide.id);
+    const expectedMoved = 250 / scale; // dropped at pageBox.y + 250 SCREEN px
+    say(movedH.position_px !== hGuide.position_px && Math.abs(movedH.position_px - expectedMoved) <= 3,
+      'the moved guide\'s new position is saved', `now ${movedH.position_px}, expected ~${expectedMoved.toFixed(1)}`);
+
+    // ---- deleting: drag off the page (onto the ruler), the primary gesture ----
+    const vHit = page.locator(`.page-guide[data-guide-id="${vGuide.id}"] .page-guide-hit`);
+    const vBox = await vHit.boundingBox();
+    await page.mouse.move(vBox.x + vBox.width / 2, vBox.y + vBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(rulerVBox.x + 5, rulerVBox.y + 100, { steps: 8 });
+    await page.mouse.up();
+    await page.waitForTimeout(500);
+    guides = await fetchGuides(pid);
+    say(guides.length === 1 && !guides.some((g) => g.id === vGuide.id),
+      'dragging a guide off the page deletes it', `${guides.length} left`);
+    say(guides.some((g) => g.id === hGuide.id),
+      'and the OTHER guide is untouched - crossing/coexisting guides stay independent');
+
+    // ---- visibility: hides, never deletes ----
+    await page.click('#guidesToggleBtn');
+    await page.waitForTimeout(250);
+    say(await page.locator('#pageGuides').evaluate((el) => el.classList.contains('guides-hidden')),
+      'turning Guides off hides the layer');
+    say((await fetchGuides(pid)).length === 1, 'but the guide still exists in the database while hidden');
+    await page.click('#guidesToggleBtn');
+    await page.waitForTimeout(250);
+    say(!(await page.locator('#pageGuides').evaluate((el) => el.classList.contains('guides-hidden'))),
+      'turning Guides back on restores the layer');
+    say((await page.locator('.page-guide').count()) === 1, 'and the same guide is drawn again, not recreated');
+
+    // ---- zoom: the stored value never changes, only where it draws ----
+    const beforeZoom = (await fetchGuides(pid))[0].position_px;
+    await page.selectOption('#zoomSelect', '2');
+    await page.waitForTimeout(500);
+    say((await fetchGuides(pid))[0].position_px === beforeZoom, 'zooming to 200% does not change the stored position');
+    const guideRectAt200 = await page.locator(`.page-guide[data-guide-id="${movedH.id}"]`).boundingBox();
+    const surfaceAt200 = await page.locator('#canvasSurface').boundingBox();
+    say(Math.abs((guideRectAt200.y - surfaceAt200.y) - beforeZoom * 2) <= 3,
+      'but its ON-SCREEN position scales with zoom, as it should',
+      `screen offset ${(guideRectAt200.y - surfaceAt200.y).toFixed(1)} vs expected ~${beforeZoom * 2}`);
+
+    // ---- window resize: still aligned, coordinate unchanged ----
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.waitForTimeout(500);
+    say((await fetchGuides(pid))[0].position_px === beforeZoom, 'a window resize does not change the stored position');
+    const alignedAfterResize = await page.evaluate(() => {
+      const pageRect = document.getElementById('canvasSurface').getBoundingClientRect();
+      const tickRect = document.querySelector('#rulerTicksH .ruler-tick-major')?.getBoundingClientRect();
+      return tickRect ? Math.abs(tickRect.left - pageRect.left) <= 1 : false;
+    });
+    say(alignedAfterResize, 'and the ruler is still exactly aligned with the page after the resize');
+    await page.setViewportSize({ width: 1512, height: 950 });
+    await page.selectOption('#zoomSelect', 'fit');
+    await page.waitForTimeout(500);
+
+    // ---- reload persistence ----
+    await openEdition();
+    await page.waitForTimeout(1200);
+    const afterReload = await fetchGuides(pid);
+    say(afterReload.length === 1 && afterReload[0].position_px === beforeZoom,
+      'the guide survives a reload, at the exact position it was left');
+    say((await page.locator('.page-guide').count()) === 1, 'and is drawn on the page again');
+
+    // ---- a guide never steals an ordinary click meant for a block ----
+    await block().click();
+    await page.waitForTimeout(800);
+    say(await block().evaluate((el) => el.classList.contains('active')),
+      'clicking a block still selects it normally with a guide present on the page');
+
+    const scrollers = await nestedScrollers();
+    say(scrollers.length === 0, 'rulers and guides introduce no second full-page scrollbar');
+    say((await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 2)),
+      'and no horizontal page overflow');
+
+    // Cleanup.
+    for (const g of await fetchGuides(pid)) {
+      await page.evaluate(([p, id]) => fetch(`/api/pages/${p}/guides/${id}`, { method: 'DELETE' }), [pid, g.id]);
+    }
+  }
+
   // ------------------------------------------------------- keyboard shortcuts ---
   //
   // Undo/redo already existed (history.js) with toolbar buttons; what is new

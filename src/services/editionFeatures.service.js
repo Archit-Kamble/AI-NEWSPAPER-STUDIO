@@ -33,6 +33,12 @@ async function textFlow() {
 // A feature result becomes a headline and a body. Label-and-text items - the
 // twelve signs, the almanac's five lines - are set one to a line, because that
 // is how they are read: down a narrow box, not across a paragraph.
+//
+// The body text is always built, even when `card` is present - everything
+// that MEASURES a block reads body text (the character grid, the worklist,
+// preflight, the fit action; smart-cards.js's own comment on smartCardText()
+// says so directly), so the flattened copy has to exist regardless of whether
+// a card renders on top of it.
 function toCopy(result) {
   const items = result.items || [];
   const lines = items.map((item) => {
@@ -103,13 +109,25 @@ async function fillEdition(newspaperId, { tier } = {}) {
       continue;
     }
     const copy = toCopy(result);
+    // `result.card` is the structured payload every feature builder produces
+    // (src/features/{sudoku,written,panchang,dinvishesh}.js) beside its
+    // flattened `items` - and this UPDATE used to discard it, writing only the
+    // flattened copy. So "Fill features", the one bulk action a desk actually
+    // presses every morning, never once produced a real Smart Card: the
+    // rashi/panchang/dinvishesh/suvichar/sudoku blocks it fills all fell
+    // through to feature-table.js's fallback, silently, every single edition.
+    // Overwritten unconditionally, exactly like headline/subheading/body
+    // already are above - pressing "Fill features" is a deliberate refill,
+    // same as it always has been for the copy.
     await pool.query(
       `UPDATE page_sections
           SET headline = $2, subheading = $3, body = $4,
+              smart_card_key = $5, smart_card_data = $6,
               status = 'ready', ai_generated = TRUE, language = 'Marathi',
               updated_at = CURRENT_TIMESTAMP
         WHERE id = $1`,
-      [block.id, copy.headline, copy.subheading, copy.body],
+      [block.id, copy.headline, copy.subheading, copy.body,
+        result.card ? block.feature_key : null, result.card ? JSON.stringify(result.card) : null],
     );
     filled.push({ sectionKey: block.section_key, feature: block.feature_key, chars: copy.body.length });
   }

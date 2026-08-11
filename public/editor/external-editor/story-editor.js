@@ -98,21 +98,26 @@ export function storyEditorMarkup(view, { budget = 0, tools = "", pictures = "" 
       </header>
 
       <div class="story-editor-paper" id="edStoryPaper">
-        <label class="story-field-label" for="edStoryHeadline">
-          Headline
-          <span class="field-counter" id="edStoryHeadlineCounter">${plainText(view.headline).length}/${HEADLINE_LIMIT}</span>
-        </label>
-        <input id="edStoryHeadline" class="story-headline-input" maxlength="200"
-          style="font-size:${Number(view.headlineFontPx) || 24}px;line-height:${Math.max(1.45, Number(view.lineHeight) || 1.45)}"
-          placeholder="मथळा — the headline as it will print" value="${escapeAttribute(plainText(view.headline))}">
-        <label class="story-field-label" for="edStorySubheading">
-          Subheading
-          <span class="field-counter" id="edStorySubheadingCounter">${plainText(view.subheading).length}/${SUBHEADING_LIMIT}</span>
-        </label>
-        <input id="edStorySubheading" class="story-subheading-input" maxlength="300"
-          style="font-size:${Number(view.subheadingFontPx) || 14}px;line-height:${Math.max(1.45, Number(view.lineHeight) || 1.45)}"
-          placeholder="उपमथळा — the subheading, if the story has one" value="${escapeAttribute(plainText(view.subheading))}">
+        <!-- The block itself is the primary object here - the headline and
+             deck are drawn inside it, in the block's own type (block-frame.js).
+             The fields below are where the typing actually happens, not a
+             second copy of the composition: kept deliberately plain and
+             modest so the eye goes to the page above, not to two headlines. -->
         ${blockFrameMarkup()}
+        <div class="story-fields">
+          <label class="story-field-label" for="edStoryHeadline">
+            Headline
+            <span class="field-counter" id="edStoryHeadlineCounter">${plainText(view.headline).length}/${HEADLINE_LIMIT}</span>
+          </label>
+          <input id="edStoryHeadline" class="story-headline-input" maxlength="200"
+            placeholder="मथळा — the headline as it will print" value="${escapeAttribute(plainText(view.headline))}">
+          <label class="story-field-label" for="edStorySubheading">
+            Subheading
+            <span class="field-counter" id="edStorySubheadingCounter">${plainText(view.subheading).length}/${SUBHEADING_LIMIT}</span>
+          </label>
+          <input id="edStorySubheading" class="story-subheading-input" maxlength="300"
+            placeholder="उपमथळा — the subheading, if the story has one" value="${escapeAttribute(plainText(view.subheading))}">
+        </div>
       </div>
 
       <footer class="story-editor-foot">

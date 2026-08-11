@@ -135,6 +135,25 @@ async function carryOver(pageId, sectionKey, { toPageId, toSectionKey } = {}) {
   const { head, tail } = splitAt(source.body.trim(), room);
   if (!tail) return { error: 'All of this story already fits — there is nothing to carry.' };
 
+  // The landing block gets no say in how much text arrives - `room` above is
+  // sized against the SOURCE's own capacity alone, so a short story leaving a
+  // long tail behind can silently overset whatever empty block findLanding()
+  // happened to pick, especially a narrow column far smaller than the block
+  // the story started in. Found live: a lead's continuation landed 560
+  // characters over budget in a four-column block. Checked here, before
+  // anything is written, rather than left for preflight to catch after the
+  // fact - "never truncate, never silently overflow" applies to a jump line
+  // exactly as it does to a first draft.
+  const targetBudget = await budgetFor({ ...target, headline: source.headline, subheading: target.subheading || '' });
+  const targetRoom = targetBudget - pickUp.length - 1;
+  if (`${pickUp} ${tail}`.length > targetBudget) {
+    return {
+      error: targetRoom < 40
+        ? 'The block this would land on is too small to hold a continuation and its pick-up line.'
+        : `The remaining ${tail.length} characters are more than the landing block can hold (room for about ${Math.max(0, targetRoom)}). Choose a bigger block, or cut the story first.`,
+    };
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');

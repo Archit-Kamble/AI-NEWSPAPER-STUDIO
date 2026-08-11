@@ -10,6 +10,7 @@
 
 import { snapRect, matterBox, minWidthPx, minHeightPx, getGeometry } from "./grid.js";
 import { findAlignments, drawGuides, clearGuides } from "./align-guides.js";
+import { getGuides, getGuidesVisible, findGuideSnaps, setActiveGuides } from "./page-guides.js";
 
 let onCommit = null;
 let active = null;
@@ -127,14 +128,42 @@ function onPointerMove(event) {
     rect.y = Math.min(box.bottom - rect.height, Math.max(box.top, rect.y));
   }
 
-  // Snap to the grid first, then look for a neighbour to line up with. The grid
-  // is the hard rule - a block must cover whole columns - and alignment is the
-  // refinement inside it, so it can only ever move the block by a few pixels
-  // and never off the column it just landed on.
+  // Snap to the grid first, then look for a neighbour or a desk-drawn guide to
+  // line up with. The grid is the hard rule - a block must cover whole
+  // columns - and both alignment and guide snapping are refinements inside
+  // it, so together they can only ever move the block by a few pixels and
+  // never off the column it just landed on. When both a neighbour and a
+  // guide are within reach on the same axis, the closer one wins; a hidden
+  // guide (Guides toggled off) never competes at all.
   const snapped = snapRect(rect);
-  const { adjustX, adjustY, guides } = findAlignments(snapped, active.others, {
+  const { adjustX: alignX, adjustY: alignY, guides } = findAlignments(snapped, active.others, {
     resizing: Boolean(active.handle),
   });
+  const guideCandidates = getGuidesVisible() ? getGuides() : [];
+  const { adjustX: guideX, adjustY: guideY, activeX, activeY } = findGuideSnaps(snapped, guideCandidates);
+
+  const hasAlignX = guides.some((g) => g.axis === "x");
+  const hasAlignY = guides.some((g) => g.axis === "y");
+
+  let adjustX = 0;
+  let snapGuideX = null;
+  if (activeX !== null && (!hasAlignX || Math.abs(guideX) <= Math.abs(alignX))) {
+    adjustX = guideX;
+    snapGuideX = activeX;
+  } else if (hasAlignX) {
+    adjustX = alignX;
+  }
+
+  let adjustY = 0;
+  let snapGuideY = null;
+  if (activeY !== null && (!hasAlignY || Math.abs(guideY) <= Math.abs(alignY))) {
+    adjustY = guideY;
+    snapGuideY = activeY;
+  } else if (hasAlignY) {
+    adjustY = alignY;
+  }
+
+  setActiveGuides([snapGuideX, snapGuideY].filter((id) => id !== null));
 
   if (active.handle) {
     // Resizing moves the edge under the hand, not the whole block.
@@ -159,6 +188,7 @@ function endDrag(event) {
   element.classList.remove("dragging");
   showGrid(false);
   clearGuides();
+  setActiveGuides([]);
 
   const rect = {
     x: element.offsetLeft,

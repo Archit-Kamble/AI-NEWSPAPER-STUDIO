@@ -1889,6 +1889,10 @@ body.print-view .canvas-viewport {
 .page-guide-v .page-guide-hit { top: 0; bottom: 0; left: -4px; width: 8px; cursor: ew-resize; }
 .page-guide.is-dragging { border-color: #1665b0; }
 .page-guide.will-remove { border-color: #c8102e; border-style: dashed; opacity: 0.7; }
+/* Stage 5: a block being dragged has snapped to this guide. The line itself
+   is the indicator - a glow on the same blue, not a second visual language -
+   and it is never persisted; it only ever reflects the drag in progress. */
+.page-guide.is-target { box-shadow: 0 0 0 1px #2f8fd8, 0 0 5px 1px rgba(47, 143, 216, 0.65); }
 body.print-view .page-guides {
   display: none;
 }

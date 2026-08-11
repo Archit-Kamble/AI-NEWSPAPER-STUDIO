@@ -1,6 +1,11 @@
 // Ruler guides on the newspaper page (Stage 4) - purely visual/reference
-// lines a desk drags off a ruler. No snapping yet (that is Stage 5): a guide
-// here never moves an object, it only marks a place on the page.
+// lines a desk drags off a ruler.
+//
+// Stage 5 adds snapping: findGuideSnaps() below is the one place that turns
+// the current guide list into snap candidates for a block being dragged
+// (section-drag.js is the only caller - see that file for why blocks are the
+// only object that shares this coordinate space). A guide's own position is
+// never touched by a snap; only the object being dragged moves.
 //
 // Guides are drawn as children of #canvasSurface - the page itself, already
 // scaled by canvas-view.js's CSS transform - so a guide's `top`/`left` is set
@@ -44,15 +49,89 @@ function guideMarkup(guide) {
   </div>`;
 }
 
+// The current guide list and visibility, kept live here so section-drag.js
+// can read "what can I snap to right now" at drag time without a snapshot
+// going stale - the same pattern grid.js's getGeometry() already uses.
+let currentGuides = [];
+let currentlyVisible = true;
+
 /** Draws the current guide list. Called on load, and after any create/move/delete. */
 export function renderGuides(guides) {
+  currentGuides = guides || [];
   const layer = document.getElementById("pageGuides");
   if (!layer) return;
-  layer.innerHTML = (guides || []).map(guideMarkup).join("");
+  layer.innerHTML = currentGuides.map(guideMarkup).join("");
 }
 
 export function setGuidesVisible(visible) {
+  currentlyVisible = visible;
   document.getElementById("pageGuides")?.classList.toggle("guides-hidden", !visible);
+}
+
+export function getGuides() {
+  return currentGuides;
+}
+
+export function getGuidesVisible() {
+  return currentlyVisible;
+}
+
+/** Emphasizes the guide(s) an in-progress drag is currently snapped to - the
+ * guide line itself is the indicator, so nothing new is drawn on top of it. */
+export function setActiveGuides(ids) {
+  document.querySelectorAll("#pageGuides .page-guide").forEach((el) => {
+    el.classList.toggle("is-target", ids.includes(Number(el.dataset.guideId)));
+  });
+}
+
+// How close an object's edge must come to a user guide before it snaps -
+// matches align-guides.js's own SNAP_PX exactly, so the two soft-refinement
+// systems (line-up-with-a-neighbour, line-up-with-a-guide) feel identical
+// under the same hand on the mouse. Both operate in page pixels, never
+// screen pixels, so the same threshold means the same physical distance at
+// any zoom.
+const GUIDE_SNAP_PX = 6;
+
+/**
+ * Closest vertical guide to the rect's left/centre/right, and closest
+ * horizontal guide to its top/middle/bottom - found independently, so a
+ * drag can snap on both axes at once. A guide's own stored position is only
+ * ever read here, never written: the caller moves the OBJECT to match it.
+ */
+export function findGuideSnaps(rect, guides) {
+  let adjustX = 0;
+  let activeX = null;
+  let bestXDistance = Infinity;
+  const xEdges = [rect.x, rect.x + rect.width / 2, rect.x + rect.width];
+  for (const guide of guides) {
+    if (guide.orientation !== "vertical") continue;
+    const at = Number(guide.position_px);
+    for (const edge of xEdges) {
+      const distance = Math.abs(edge - at);
+      if (distance > GUIDE_SNAP_PX || distance >= bestXDistance) continue;
+      bestXDistance = distance;
+      adjustX = at - edge;
+      activeX = guide.id;
+    }
+  }
+
+  let adjustY = 0;
+  let activeY = null;
+  let bestYDistance = Infinity;
+  const yEdges = [rect.y, rect.y + rect.height / 2, rect.y + rect.height];
+  for (const guide of guides) {
+    if (guide.orientation !== "horizontal") continue;
+    const at = Number(guide.position_px);
+    for (const edge of yEdges) {
+      const distance = Math.abs(edge - at);
+      if (distance > GUIDE_SNAP_PX || distance >= bestYDistance) continue;
+      bestYDistance = distance;
+      adjustY = at - edge;
+      activeY = guide.id;
+    }
+  }
+
+  return { adjustX, adjustY, activeX, activeY };
 }
 
 /**

@@ -92,7 +92,7 @@ function placedImagesMarkup(section) {
 // "ड्रग्जपासून *दूर राहा*" - which is deliberate: the software must never guess
 // which word matters. Failing that, a block whose layout asked for the accent
 // treatment paints its last word, which is the commonest choice in print.
-function headlineMarkup(view) {
+export function headlineMarkup(view) {
   if (!view.headline) return "";
   const accent = escapeHtml(view.accentColor || "#c8102e");
   // Plain, because a headline is set as one line of display type - the marks a
@@ -122,6 +122,14 @@ function headlineMarkup(view) {
     }
   }
   return `<div class="section-headline" ${size}>${escapeHtml(text)}</div>`;
+}
+
+// One rule for the subheading/deck - the page canvas and the Block Editor's
+// WYSIWYG frame both draw it with this, so they cannot drift onto two
+// different font sizes the way the headline and body inputs once did.
+export function subheadingMarkup(view) {
+  if (!view.subheading) return "";
+  return `<div class="section-subheading" style="font-size:${view.subheadingFontPx}px">${escapeHtml(plainText(view.subheading))}</div>`;
 }
 
 // "■ मुंबई, वृत्तसंस्था" — place first, then who filed. It opens the body text,
@@ -156,7 +164,7 @@ function contentMarkup(section, view) {
     <div class="section-content" style="font-size:${view.bodyFontPx}px;line-height:${view.lineHeight || 1.25}">
       ${view.kicker ? `<div class="section-kicker" style="font-size:${Math.round(view.bodyFontPx * 1.05)}px">${escapeHtml(view.kicker)}</div>` : ""}
       ${headlineMarkup(view)}
-      ${view.subheading ? `<div class="section-subheading" style="font-size:${view.subheadingFontPx}px">${escapeHtml(plainText(view.subheading))}</div>` : ""}
+      ${subheadingMarkup(view)}
       ${
         hasImage
           ? `<span class="section-image-box"><img class="section-image" src="${escapeHtml(view.imageUrl)}" alt=""
@@ -256,7 +264,7 @@ function flowedTextMarkup(section, view) {
   if (view.subheading && subheadingHeight > 0) {
     const box = band(CELL.SUBHEADING, pad);
     pieces.push(
-      `<div class="section-flowed section-flowed-band" style="left:${box.left}px;top:${bandTop + headlineHeight}px;width:${box.width}px;height:${subheadingHeight}px"><div class="section-subheading" style="font-size:${view.subheadingFontPx}px">${escapeHtml(plainText(view.subheading))}</div></div>`,
+      `<div class="section-flowed section-flowed-band" style="left:${box.left}px;top:${bandTop + headlineHeight}px;width:${box.width}px;height:${subheadingHeight}px">${subheadingMarkup(view)}</div>`,
     );
   }
 

@@ -4073,6 +4073,14 @@ body.print-view .mono-forme-warning { display: none; }
 .story-editor-paper {
   display: flex;
   flex-direction: column;
+  gap: var(--s3);
+}
+/* The block preview (block-frame.js) is the primary object in this column;
+   these fields are where the typing happens, kept plain and modest on
+   purpose - see the comment in story-editor.js. */
+.story-fields {
+  display: flex;
+  flex-direction: column;
   gap: var(--s1);
 }
 .story-editor-paper .story-headline-input,
@@ -4203,6 +4211,20 @@ body.print-view .page-imprint {
 .frame-note { margin: 0; font-size: 0.7rem; }
 
 .frame { position: absolute; }
+/* The headline and deck are read here, not typed here (story-editor.js still
+   owns the actual input) - a pointer cursor and a soft hover say "click to
+   edit" without pretending this is a text field itself. overflow:hidden
+   matches the reserved band the character grid gave them; a headline whose
+   real wrap runs slightly taller than the grid's estimate crops here rather
+   than spilling into the deck below it. */
+.frame-headline, .frame-subheading {
+  overflow: hidden;
+  cursor: text;
+  border-radius: 2px;
+  transition: background-color 0.12s ease;
+}
+.frame-headline:hover, .frame-subheading:hover { background: rgba(196, 30, 58, 0.06); }
+.frame-headline .section-headline, .frame-subheading .section-subheading { margin: 0; }
 .frame-body { display: flex; flex-direction: column; min-width: 0; }
 .frame-body .ql-container {
   flex: 1;

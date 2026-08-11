@@ -21,6 +21,11 @@ import { sanitise } from "../layout/rich-text.js";
 import { buildFlowMap } from "../layout/text-flow.js";
 import { placedPictureStyle } from "../layout/picture-style.js";
 import { smartCardMarkup } from "../smart-cards/smart-cards.js";
+// The same functions the page canvas draws a headline and a deck with - so
+// the WYSIWYG frame and the newspaper page can never drift onto two
+// different renderings of the same block, the way the headline/subheading
+// inputs and the canvas once did.
+import { headlineMarkup, subheadingMarkup } from "../canvas/section-thumb.js";
 
 let quill = null;
 let hooks = {};
@@ -77,6 +82,13 @@ export function blockFrameMarkup() {
         </span>
       </div>
       <div class="frame-page" id="edFramePage">
+        <!-- The headline and deck are drawn here, in the block's own type, at
+             the page's scale - not a separate generic input elsewhere that
+             happens to hold the same words. Clicking either focuses the real
+             input (below the page), which is still where the typing and the
+             character-limit counters live - see story-editor.js. -->
+        <div class="frame frame-headline" id="edHeadlineFrame" tabindex="-1" title="Click to edit the headline"></div>
+        <div class="frame frame-subheading" id="edSubheadingFrame" tabindex="-1" title="Click to edit the subheading"></div>
         <div class="frame-pictures" id="edFramePictures"></div>
         <div class="frame frame-body" id="edBodyFrame">
           <!-- A block holding a Smart Card draws the CARD here, not its copy.
@@ -155,28 +167,75 @@ function layoutCard() {
   return Boolean(markup);
 }
 
-function layoutBodyFrame() {
-  const frame = document.getElementById("edBodyFrame");
-  if (!frame || !state.section || !state.view) return;
+// Headline, deck and body positioned from ONE buildFlowMap() call - the same
+// map the page canvas measures a picture's runaround with and the AI brief is
+// built from, so "how tall is the headline" has one answer everywhere it is
+// asked. The body frame used to compute this map on its own; the headline and
+// subheading frames now share that same computation rather than repeating it.
+function layoutTextFrames() {
+  const page = document.getElementById("edFramePage");
+  const headlineFrame = document.getElementById("edHeadlineFrame");
+  const subheadingFrame = document.getElementById("edSubheadingFrame");
+  const bodyFrame = document.getElementById("edBodyFrame");
+  if (!page || !state.section || !state.view) return;
 
   const scale = pageScale();
   const margin = Number(state.view.marginPx) || 12;
   const map = buildFlowMap(state.section, state.view, []);
-  const top = margin + (map.headlineRows + map.subheadingRows) * map.cellHeight;
+  const headlineHeight = map.headlineRows * map.cellHeight;
+  const subheadingHeight = map.subheadingRows * map.cellHeight;
 
-  frame.style.left = `${margin / scale}px`;
-  frame.style.right = `${margin / scale}px`;
-  frame.style.top = `${top / scale}px`;
-  frame.style.bottom = `${margin / scale}px`;
+  // The font size baked into headlineMarkup()/subheadingMarkup() is the
+  // block's real, unscaled size (the same number the canvas sets) - scaled
+  // down here, once, for the page's own on-screen size, exactly as the body
+  // editor already scales bodyFontPx below.
+  const scaledView = (fontField) => ({ ...state.view, [fontField]: (Number(state.view[fontField]) || 0) / scale });
 
-  const editor = frame.querySelector(".ql-editor");
-  if (editor) {
-    editor.style.fontSize = `${(Number(state.view.bodyFontPx) || 10) / scale}px`;
-    editor.style.lineHeight = String(Math.max(1.45, Number(state.view.lineHeight) || 1.45));
-    editor.style.columnCount = String(Math.max(1, Number(state.view.columnCount) || 1));
-    editor.style.textAlign = state.view.textAlign || "left";
-    if (state.view.fontFamily) editor.style.fontFamily = state.view.fontFamily;
+  if (headlineFrame) {
+    headlineFrame.style.left = `${margin / scale}px`;
+    headlineFrame.style.right = `${margin / scale}px`;
+    headlineFrame.style.top = `${margin / scale}px`;
+    headlineFrame.style.height = `${headlineHeight / scale}px`;
+    headlineFrame.style.display = state.view.headline ? "" : "none";
+    headlineFrame.innerHTML = headlineMarkup(scaledView("headlineFontPx"));
   }
+
+  if (subheadingFrame) {
+    const top = margin + headlineHeight;
+    subheadingFrame.style.left = `${margin / scale}px`;
+    subheadingFrame.style.right = `${margin / scale}px`;
+    subheadingFrame.style.top = `${top / scale}px`;
+    subheadingFrame.style.height = `${subheadingHeight / scale}px`;
+    subheadingFrame.style.display = state.view.subheading ? "" : "none";
+    subheadingFrame.innerHTML = subheadingMarkup(scaledView("subheadingFontPx"));
+  }
+
+  if (bodyFrame) {
+    const top = margin + headlineHeight + subheadingHeight;
+    bodyFrame.style.left = `${margin / scale}px`;
+    bodyFrame.style.right = `${margin / scale}px`;
+    bodyFrame.style.top = `${top / scale}px`;
+    bodyFrame.style.bottom = `${margin / scale}px`;
+
+    const editor = bodyFrame.querySelector(".ql-editor");
+    if (editor) {
+      editor.style.fontSize = `${(Number(state.view.bodyFontPx) || 10) / scale}px`;
+      editor.style.lineHeight = String(Math.max(1.45, Number(state.view.lineHeight) || 1.45));
+      editor.style.columnCount = String(Math.max(1, Number(state.view.columnCount) || 1));
+      editor.style.textAlign = state.view.textAlign || "left";
+      if (state.view.fontFamily) editor.style.fontFamily = state.view.fontFamily;
+    }
+  }
+}
+
+/** Clicking the headline or deck frame focuses the real input that types it. */
+function bindTextFrames() {
+  document.getElementById("edHeadlineFrame")?.addEventListener("click", () => {
+    document.getElementById("edStoryHeadline")?.focus();
+  });
+  document.getElementById("edSubheadingFrame")?.addEventListener("click", () => {
+    document.getElementById("edStorySubheading")?.focus();
+  });
 }
 
 // ---------------------------------------------------------- picture frames ---
@@ -344,16 +403,17 @@ export async function mountFrame(section, view, images, callbacks) {
   });
 
   layoutPage();
-  layoutBodyFrame();
+  layoutTextFrames();
   layoutCard();
   renderPictures(state.images);
   bindPictureFrames();
+  bindTextFrames();
 
   if (!window.__sahasFrameResize) {
     window.__sahasFrameResize = true;
     const relayout = () => {
       layoutPage();
-      layoutBodyFrame();
+      layoutTextFrames();
       renderPictures(state.images);
     };
     window.addEventListener("resize", relayout);
@@ -368,7 +428,7 @@ export async function mountFrame(section, view, images, callbacks) {
 export function refreshFrame(section, view, images, source) {
   state = { ...state, section, view, images: images || [] };
   layoutPage();
-  layoutBodyFrame();
+  layoutTextFrames();
   const showingCard = layoutCard();
   renderPictures(state.images);
 

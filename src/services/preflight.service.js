@@ -87,6 +87,14 @@ async function checkPage(page, newspaper, totalPages) {
     right: g.marginXPx + g.matterWidthPx,
     bottom: g.marginYPx + g.matterHeightPx,
   };
+  // The region a story is actually allowed to occupy - inside the matter box,
+  // AND clear of the header/footer furniture (Project A's region model,
+  // geometry.js's regionsFor). page-region furniture (masthead-advert aside,
+  // which is deliberately IN the header band beside the nameplate) is not a
+  // section a desk places, so this only ever fires for a custom block dragged
+  // somewhere the snap-to-content clamp (pageSection.service.js) should
+  // already have prevented - defence in depth, not the primary guard.
+  const region = g.regions[Number(page.page_number) === 1 ? 'front' : 'inside'];
 
   const sections = page.sections || [];
 
@@ -100,6 +108,31 @@ async function checkPage(page, newspaper, totalPages) {
       findings.push({
         level: 'error', check: 'outside-matter', ...at(section),
         message: 'This block runs outside the matter box and will be trimmed off.',
+      });
+    }
+
+    // --- on top of the nameplate/folio or the footer furniture ------------
+    // The masthead's own sold corner (`masthead-advert`) lives in the header
+    // band by design (templates.js) and is exempt; every other block must
+    // stay inside the content region.
+    if (section.section_key !== 'masthead-advert' && section.y_px < region.header.bottom - 1) {
+      findings.push({
+        level: 'error', check: 'header-collision', ...at(section),
+        message: 'This block overlaps the nameplate/folio band.',
+      });
+    }
+    if (section.y_px + section.height_px > region.footer.top + 1) {
+      findings.push({
+        level: 'error', check: 'footer-collision', ...at(section),
+        message: 'This block overlaps the footer band and will print under the page-foot/imprint furniture.',
+      });
+    }
+
+    // --- nonsense geometry --------------------------------------------------
+    if (section.width_px <= 0 || section.height_px <= 0) {
+      findings.push({
+        level: 'error', check: 'negative-dimensions', ...at(section),
+        message: `This block has a ${section.width_px}×${section.height_px}px size - nothing can be drawn in it.`,
       });
     }
 
@@ -140,6 +173,27 @@ async function checkPage(page, newspaper, totalPages) {
         level: 'warning', check: 'empty-block', ...at(section),
         message: 'This block is empty and will print as a white hole.',
       });
+    }
+
+    // --- two pictures on the same block printing on top of each other -----
+    // Graded, not flatly an error: a cutout's real occupancy is its alpha
+    // mask, narrower than the rectangle stored in x_px/y_px/width_px/height_px
+    // (Project A audit - a bounding-box check is the wrong tool for a cutout,
+    // confirmed by direct visual inspection, not assumed). Two overlapping
+    // RECTANGLES are unambiguous; anything involving a cutout is flagged for a
+    // person to look at rather than failed outright.
+    const images = section.images || [];
+    for (let i = 0; i < images.length; i += 1) {
+      for (let j = i + 1; j < images.length; j += 1) {
+        if (!overlaps(images[i], images[j])) continue;
+        const bothRect = (images[i].shape || 'rect') === 'rect' && (images[j].shape || 'rect') === 'rect';
+        findings.push({
+          level: bothRect ? 'error' : 'warning', check: 'image-collision', ...at(section),
+          message: bothRect
+            ? 'Two pictures on this block overlap and will print on top of each other.'
+            : 'Two pictures on this block have overlapping frames - check whether the cutout actually collides.',
+        });
+      }
     }
 
     // --- pictures ----------------------------------------------------------
@@ -253,4 +307,56 @@ async function checkEdition(newspaperId) {
   };
 }
 
-module.exports = { checkEdition, checkPage, effectiveDpi, MIN_EFFECTIVE_DPI, IDEAL_EFFECTIVE_DPI, MIN_BODY_PT };
+// The named geometry-error vocabulary Project A's composition engine speaks
+// in - the same checks `checkPage()` already runs (this file has done most of
+// this work since preflight existed; a second, parallel "collision engine"
+// would be exactly the duplicate system CLAUDE.md warns against), reshaped
+// into named types a caller can branch on without parsing an English sentence.
+const COLLISION_TYPES = {
+  'outside-matter': 'OUTSIDE_PAGE',
+  'header-collision': 'OVERLAPPING_HEADER',
+  'footer-collision': 'OVERLAPPING_FOOTER',
+  'negative-dimensions': 'NEGATIVE_SPACE',
+  'overlapping-blocks': 'STORY_COLLISION',
+  'image-collision': 'IMAGE_COLLISION',
+};
+const OVERFLOW_TYPES = { overset: 'TEXT_OVERFLOW' };
+
+/**
+ * The general collision layer for one page, in the shape a layout engine (or
+ * an AI composer's own repair loop) wants: named error types, not prose.
+ *
+ * This is not a second implementation - it runs `checkPage()`, the exact
+ * function preflight has used since it existed, and reshapes the same
+ * findings. A geometry bug fixed here is fixed for the desk's preflight
+ * report and for this at the same time, because there is only the one check.
+ */
+async function validatePageLayout(page, newspaper) {
+  const findings = await checkPage(page, newspaper, 1);
+
+  const collisions = [];
+  const overflow = [];
+  const warnings = [];
+
+  for (const finding of findings) {
+    if (COLLISION_TYPES[finding.check]) {
+      collisions.push({ type: COLLISION_TYPES[finding.check], ...finding });
+    } else if (OVERFLOW_TYPES[finding.check]) {
+      overflow.push({ type: OVERFLOW_TYPES[finding.check], ...finding });
+    } else {
+      warnings.push(finding);
+    }
+  }
+
+  return {
+    valid: collisions.every((c) => c.level !== 'error') && overflow.every((c) => c.level !== 'error'),
+    collisions,
+    overflow,
+    warnings,
+  };
+}
+
+module.exports = {
+  checkEdition, checkPage, validatePageLayout, effectiveDpi,
+  MIN_EFFECTIVE_DPI, IDEAL_EFFECTIVE_DPI, MIN_BODY_PT,
+};

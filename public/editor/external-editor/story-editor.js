@@ -103,12 +103,14 @@ export function storyEditorMarkup(view, { budget = 0, tools = "", pictures = "" 
           <span class="field-counter" id="edStoryHeadlineCounter">${plainText(view.headline).length}/${HEADLINE_LIMIT}</span>
         </label>
         <input id="edStoryHeadline" class="story-headline-input" maxlength="200"
+          style="font-size:${Number(view.headlineFontPx) || 24}px;line-height:${Math.max(1.45, Number(view.lineHeight) || 1.45)}"
           placeholder="मथळा — the headline as it will print" value="${escapeAttribute(plainText(view.headline))}">
         <label class="story-field-label" for="edStorySubheading">
           Subheading
           <span class="field-counter" id="edStorySubheadingCounter">${plainText(view.subheading).length}/${SUBHEADING_LIMIT}</span>
         </label>
         <input id="edStorySubheading" class="story-subheading-input" maxlength="300"
+          style="font-size:${Number(view.subheadingFontPx) || 14}px;line-height:${Math.max(1.45, Number(view.lineHeight) || 1.45)}"
           placeholder="उपमथळा — the subheading, if the story has one" value="${escapeAttribute(plainText(view.subheading))}">
         ${blockFrameMarkup()}
       </div>

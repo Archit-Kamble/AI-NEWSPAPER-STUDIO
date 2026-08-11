@@ -128,13 +128,16 @@ function onPointerMove(event) {
     rect.y = Math.min(box.bottom - rect.height, Math.max(box.top, rect.y));
   }
 
-  // Snap to the grid first, then look for a neighbour or a desk-drawn guide to
-  // line up with. The grid is the hard rule - a block must cover whole
-  // columns - and both alignment and guide snapping are refinements inside
-  // it, so together they can only ever move the block by a few pixels and
-  // never off the column it just landed on. When both a neighbour and a
-  // guide are within reach on the same axis, the closer one wins; a hidden
-  // guide (Guides toggled off) never competes at all.
+  // Snap to the grid first - the hard rule, a block must cover whole
+  // columns - then a soft refinement on top of it. A desk-drawn guide is a
+  // deliberate placement and wins whenever one is in range; the neighbour
+  // alignment (align-guides.js) only fills in where no guide applies. This
+  // is not "closest wins": on a column grid, most blocks already share an
+  // edge with SOME neighbour purely because there are only a handful of
+  // column positions on the whole page - inspection found align-guides
+  // matching at distance 0 on a block that had not even moved yet, which
+  // would drown out every guide if the two were compared by distance alone.
+  // A hidden guide (Guides toggled off) never competes at all.
   const snapped = snapRect(rect);
   const { adjustX: alignX, adjustY: alignY, guides } = findAlignments(snapped, active.others, {
     resizing: Boolean(active.handle),
@@ -147,7 +150,7 @@ function onPointerMove(event) {
 
   let adjustX = 0;
   let snapGuideX = null;
-  if (activeX !== null && (!hasAlignX || Math.abs(guideX) <= Math.abs(alignX))) {
+  if (activeX !== null) {
     adjustX = guideX;
     snapGuideX = activeX;
   } else if (hasAlignX) {
@@ -156,7 +159,7 @@ function onPointerMove(event) {
 
   let adjustY = 0;
   let snapGuideY = null;
-  if (activeY !== null && (!hasAlignY || Math.abs(guideY) <= Math.abs(alignY))) {
+  if (activeY !== null) {
     adjustY = guideY;
     snapGuideY = activeY;
   } else if (hasAlignY) {

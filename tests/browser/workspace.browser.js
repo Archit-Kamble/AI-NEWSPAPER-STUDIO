@@ -857,6 +857,321 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
     }
   }
 
+  // ------------------------------------------------------------ guide snapping ---
+  //
+  // Stage 5: a block being dragged or resized magnetically snaps to a user
+  // guide, live, while the pointer is moving. Blocks are the only object
+  // that shares the guide's page-coordinate space - pictures are positioned
+  // only inside the Block Editor's own separate block-pixel frame, which has
+  // no rulers or guides at all - so this is the one place Stage 5's
+  // snapping genuinely applies.
+  //
+  // A real finding from inspecting the persistence path, not assumed: every
+  // block geometry write (pageSection.service.js's moveSection(), called by
+  // both a plain drag and a resize) runs the body through snapGeometry()
+  // UNCONDITIONALLY - "Snapping on the server as well as in the browser
+  // means a page is always printable whatever sent the request" is that
+  // function's own comment. The server re-snaps x onto a column start and y
+  // onto the 8px baseline no matter what the client sends, which is exactly
+  // the same reason the PRE-EXISTING align-guides.js neighbour-alignment
+  // nudge has also always been a live, in-drag visual only: a fractional
+  // offset never survives the save either way, by deliberate print-safety
+  // design, not by omission. So the tests below check what the drag ACTUALLY
+  // does - the block visually tracks the guide while the pointer moves, and
+  // the guide is highlighted as the current target - and separately confirm
+  // the final persisted position always lands on a legal grid/baseline
+  // value, exactly as it did before this stage.
+  {
+    const pageIdOf = () => page.evaluate(async (ed) => (await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json()))[0].id, ED);
+    const fetchGuides = (pid) => page.evaluate((p) => fetch(`/api/pages/${p}/guides`).then((r) => r.json()), pid);
+    // Guide mutations below go straight to the REST API (not the ruler-drag
+    // UI, already covered in the previous block) so each subtest can place a
+    // guide at an exact page pixel - but the running app only learns about a
+    // guide through its own createGuide/moveGuide/deleteGuide, which call
+    // canvas.js's refreshGuides(). A raw API call bypasses that, so the
+    // in-browser module state (what section-drag.js actually reads at drag
+    // time) would otherwise go stale; syncGuides() below calls the exact
+    // same page-guides.js function the app itself calls on every real
+        // mutation, so the test drives the app into a state it could reach
+    // through ordinary use, not a fabricated one.
+    const syncGuides = (pid) => page.evaluate(async (p) => {
+      const mod = await import('/editor/canvas/page-guides.js');
+      const guides = await fetch(`/api/pages/${p}/guides`).then((r) => r.json());
+      mod.renderGuides(guides);
+    }, pid);
+    const createGuide = async (pid, orientation, positionPx) => {
+      const list = await page.evaluate(
+        ([p, o, pos]) => fetch(`/api/pages/${p}/guides`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orientation: o, positionPx: pos }),
+        }).then((r) => r.json()),
+        [pid, orientation, positionPx],
+      );
+      await syncGuides(pid);
+      return list[list.length - 1];
+    };
+    const deleteGuide = async (pid, id) => {
+      await page.evaluate(([p, gid]) => fetch(`/api/pages/${p}/guides/${gid}`, { method: 'DELETE' }), [pid, id]);
+      await syncGuides(pid);
+    };
+    const fetchSection = async (key) => {
+      const pages = await page.evaluate((ed) => fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json()), ED);
+      return pages[0].sections.find((s) => s.section_key === key);
+    };
+    // Like the guide sync above: a raw PATCH updates the database, but the
+    // running app's own in-memory page (what section-drag.js reads element
+    // positions from at the next drag's beginDrag()) only updates when told
+    // to, via store.js's own replacePage() - the exact call moveSection()
+    // itself makes with the PATCH response. Skipping this left the DOM
+    // showing the previous drag's committed position while the database had
+    // already moved on, which is what made an early version of this test
+    // flaky - not the product, the test's own bypassed state.
+    const restoreGeometry = (pid, key, rect) => page.evaluate(
+      async ([p, k, r]) => {
+        const updated = await fetch(`/api/pages/${p}/sections/${encodeURIComponent(k)}/geometry`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(r),
+        }).then((res) => res.json());
+        const store = await import('/editor/store.js');
+        store.replacePage(updated, { structural: true });
+      },
+      [pid, key, rect],
+    );
+
+    const pid = await pageIdOf();
+    for (const g of await fetchGuides(pid)) await deleteGuide(pid, g.id);
+
+    const before = await fetchSection(KEY);
+    const original = { x: Number(before.x_px), y: Number(before.y_px), width: Number(before.width_px), height: Number(before.height_px) };
+    const newspaperPx = await page.evaluate((ed) => fetch(`/api/newspapers/${ed}`).then((r) => r.json()), ED);
+    const geometry = await page.evaluate(() => fetch('/api/geometry').then((r) => r.json()));
+
+    // At "fit" zoom the page renders at under 30% scale (194px wide for a
+    // 660px page), where a 4px snap threshold is under 2 screen px - too
+    // fine for a simulated mouse to land reliably. Zoomed to 200%, the same
+    // page-pixel distances are comfortably large on screen; the guide's
+    // stored position and the snap threshold are unchanged either way,
+    // since both are defined in page pixels, never screen ones.
+    await page.selectOption('#zoomSelect', '2');
+    await page.waitForTimeout(400);
+
+    await block().scrollIntoViewIfNeeded();
+    await block().click();
+    await page.waitForTimeout(500);
+    say(await block().evaluate((el) => el.classList.contains('active')), 'the block is selected before dragging it');
+
+    async function scaleOf() {
+      const pageBox = await page.locator('#canvasSurface').boundingBox();
+      return pageBox.height / Number(newspaperPx.page_height_px);
+    }
+
+    // Moves the block by a page-pixel delta and stops MID-DRAG (pointer still
+    // down) so the caller can read the live, in-flight style and the active
+    // snap indicator before anything is committed.
+    async function dragBlockToMidway(dxPagePx, dyPagePx) {
+      await block().scrollIntoViewIfNeeded();
+      await page.waitForTimeout(200);
+      const box = await block().boundingBox();
+      const scale = await scaleOf();
+      const startX = box.x + box.width / 2;
+      const startY = box.y + box.height / 2;
+      await page.mouse.move(startX, startY);
+      await page.mouse.down();
+      await page.mouse.move(startX + (dxPagePx * scale) / 2, startY + (dyPagePx * scale) / 2, { steps: 5 });
+      await page.mouse.move(startX + dxPagePx * scale, startY + dyPagePx * scale, { steps: 5 });
+    }
+
+    async function releaseDrag() {
+      await page.mouse.up();
+      await page.waitForTimeout(500);
+    }
+
+    async function dragHandleToMidway(handle, dxPagePx, dyPagePx) {
+      await block().scrollIntoViewIfNeeded();
+      const handleBox = await page.locator(`.section-handle.handle-${handle}`).boundingBox();
+      const scale = await scaleOf();
+      const startX = handleBox.x + handleBox.width / 2;
+      const startY = handleBox.y + handleBox.height / 2;
+      await page.mouse.move(startX, startY);
+      await page.mouse.down();
+      await page.mouse.move(startX + (dxPagePx * scale) / 2, startY + (dyPagePx * scale) / 2, { steps: 5 });
+      await page.mouse.move(startX + dxPagePx * scale, startY + dyPagePx * scale, { steps: 5 });
+    }
+
+    async function liveRect() {
+      return block().evaluate((el) => ({
+        left: parseFloat(el.style.left) || 0,
+        top: parseFloat(el.style.top) || 0,
+        width: parseFloat(el.style.width) || 0,
+        height: parseFloat(el.style.height) || 0,
+      }));
+    }
+
+    async function activeGuideIds() {
+      return page.locator('.page-guide.is-target').evaluateAll((els) => els.map((el) => Number(el.dataset.guideId)));
+    }
+
+    async function resetToOriginal() {
+      await restoreGeometry(pid, KEY, original);
+      await page.waitForTimeout(500);
+    }
+
+    // ---- vertical guide magnetically snaps the left edge, live ----
+    // dx=+15 keeps the raw drag inside the same column's snap zone (the next
+    // column start is ~39px away, so anything under ~19.5px stays put), so
+    // the grid alone would leave the left edge at original.x - only the
+    // guide, 4px further on, pulls it the rest of the way while dragging.
+    let vGuide = await createGuide(pid, 'vertical', original.x + 4);
+    await dragBlockToMidway(15, 0);
+    let live = await liveRect();
+    say(live.left === original.x + 4,
+      'dragging the block\'s left edge within threshold snaps it, live, onto the vertical guide',
+      `style.left ${live.left}, guide at ${original.x + 4}`);
+    say(Math.abs(live.top - original.y) <= 1, 'and the untouched Y axis is not disturbed by an X-only drag',
+      `style.top ${live.top}, original.y ${original.y}`);
+    say((await activeGuideIds()).includes(vGuide.id), 'the guide itself is highlighted as the active snap target while dragging');
+    await releaseDrag();
+    say((await page.locator('.page-guide.is-target').count()) === 0, 'the snap indicator clears once the drag ends');
+    say(await block().evaluate((el) => el.classList.contains('active')), 'the block, not the guide, remains selected after a snap');
+    say((await fetchGuides(pid)).find((g) => g.id === vGuide.id).position_px === vGuide.position_px,
+      'the guide\'s own stored position never changes because an object snapped to it');
+    let sec = await fetchSection(KEY);
+    say(geometry.snapLeftPx.includes(Number(sec.x_px)),
+      'the persisted position still lands on a legal grid column - the print-safety rule the server enforces on every save',
+      `x_px ${sec.x_px}`);
+    await resetToOriginal();
+
+    // ---- horizontal guide magnetically snaps the top edge, live ----
+    // dy=+8 (one full baseline step) is unambiguous under the grid's own
+    // baseline rounding - then the guide, 4px further on, pulls the rest of
+    // the way while dragging. The vertical guide from the previous subtest
+    // is gone first - left in play, it would keep pulling X on every drag
+    // regardless of a Y-only intent, which is a fact about how independent
+    // per-axis snapping works, not something this "Y-only" test wants to
+    // exercise.
+    await deleteGuide(pid, vGuide.id);
+    let hGuide = await createGuide(pid, 'horizontal', original.y + 8 + 4);
+    await dragBlockToMidway(0, 8);
+    live = await liveRect();
+    say(live.top === original.y + 8 + 4,
+      'dragging the block\'s top edge within threshold snaps it, live, onto the horizontal guide',
+      `style.top ${live.top}, guide at ${original.y + 8 + 4}`);
+    say(Math.abs(live.left - original.x) <= 1, 'and the untouched X axis is not disturbed by a Y-only drag');
+    await releaseDrag();
+    await resetToOriginal();
+
+    // ---- both axes can snap live in the same drag ----
+    vGuide = await createGuide(pid, 'vertical', original.x + 4);
+    await dragBlockToMidway(15, 8);
+    live = await liveRect();
+    say(live.left === original.x + 4 && live.top === original.y + 8 + 4,
+      'horizontal and vertical snapping happen independently, live, in the same drag',
+      `style.left ${live.left}, style.top ${live.top}`);
+    await releaseDrag();
+    await resetToOriginal();
+    await deleteGuide(pid, hGuide.id);
+    await deleteGuide(pid, vGuide.id);
+
+    // ---- closest guide wins when two are in range ----
+    const nearGuide = await createGuide(pid, 'vertical', original.x + 2);
+    const farGuide = await createGuide(pid, 'vertical', original.x + 5);
+    await dragBlockToMidway(15, 0);
+    live = await liveRect();
+    say(live.left === original.x + 2,
+      'when two guides are both in range, the block snaps, live, to the CLOSER one', `style.left ${live.left}`);
+    await releaseDrag();
+    await resetToOriginal();
+    await deleteGuide(pid, nearGuide.id);
+    await deleteGuide(pid, farGuide.id);
+
+    // ---- outside the threshold, no snap ----
+    const farAwayGuide = await createGuide(pid, 'vertical', original.x + 20);
+    await dragBlockToMidway(15, 0);
+    live = await liveRect();
+    say(live.left === original.x,
+      'a guide well outside the threshold is not a snap target - the grid result stands untouched', `style.left ${live.left}`);
+    await releaseDrag();
+    await resetToOriginal();
+
+    // ---- hidden guide: no snap; shown again: snap resumes ----
+    await page.click('#guidesToggleBtn');
+    await page.waitForTimeout(250);
+    await deleteGuide(pid, farAwayGuide.id);
+    const hiddenGuide = await createGuide(pid, 'vertical', original.x + 4);
+    await dragBlockToMidway(15, 0);
+    live = await liveRect();
+    say(live.left === original.x, 'a guide is not a snap target while Guides is turned off', `style.left ${live.left}`);
+    await releaseDrag();
+    await resetToOriginal();
+    await page.click('#guidesToggleBtn');
+    await page.waitForTimeout(250);
+    await dragBlockToMidway(15, 0);
+    live = await liveRect();
+    say(live.left === original.x + 4, 'turning Guides back on makes it a snap target again', `style.left ${live.left}`);
+    await releaseDrag();
+    await resetToOriginal();
+
+    // ---- deleted guide is no longer a snap target ----
+    await deleteGuide(pid, hiddenGuide.id);
+    await dragBlockToMidway(15, 0);
+    live = await liveRect();
+    say(live.left === original.x, 'a deleted guide leaves no stale snap target', `style.left ${live.left}`);
+    await releaseDrag();
+    await resetToOriginal();
+
+    // ---- resize: the dragged edge snaps live, the opposite edge stays put ----
+    const resizeGuide = await createGuide(pid, 'vertical', original.x + original.width + 39 + 4);
+    // The 'e' handle grows the right edge; +34 raw px lands the grid-snapped
+    // right edge on the next column boundary (~39px away), then the guide,
+    // 4px further on, pulls it the rest of the way while dragging - the left
+    // edge, under no handle, must not move at all.
+    await block().scrollIntoViewIfNeeded();
+    await block().click();
+    await page.waitForTimeout(400);
+    await dragHandleToMidway('e', 34, 0);
+    live = await liveRect();
+    say(live.left === original.x, 'resizing from the right leaves the left (opposite) edge exactly where it was, live');
+    say(live.left + live.width === original.x + original.width + 39 + 4,
+      'and the resized right edge snaps, live, exactly onto the guide',
+      `right edge ${live.left + live.width}, guide at ${original.x + original.width + 39 + 4}`);
+    await releaseDrag();
+    await resetToOriginal();
+    await deleteGuide(pid, resizeGuide.id);
+
+    // ---- network: nothing during the drag, exactly one PATCH on release ----
+    const geometryGuide = await createGuide(pid, 'vertical', original.x + 4);
+    const geometryRequests = [];
+    const onGeometryRequest = (req) => { if (req.method() === 'PATCH' && /\/geometry$/.test(req.url())) geometryRequests.push(req.url()); };
+    page.on('request', onGeometryRequest);
+    await dragBlockToMidway(15, 0);
+    say(geometryRequests.length === 0, 'no geometry request is sent while a snapped drag is still in progress');
+    await releaseDrag();
+    say(geometryRequests.length === 1, 'exactly one geometry request is sent when the drag ends', `${geometryRequests.length}`);
+    page.off('request', onGeometryRequest);
+    await resetToOriginal();
+    await deleteGuide(pid, geometryGuide.id);
+
+    // ---- a snap never creates a new guide ----
+    const snapGuide = await createGuide(pid, 'vertical', original.x + 4);
+    const beforeCount = (await fetchGuides(pid)).length;
+    await dragBlockToMidway(15, 0);
+    await releaseDrag();
+    await resetToOriginal();
+    say((await fetchGuides(pid)).length === beforeCount, 'snapping to a guide never creates another one');
+    await deleteGuide(pid, snapGuide.id);
+
+    // ---- ordinary grid snapping (no guides at all) is unaffected ----
+    await dragBlockToMidway(75, 0);
+    await releaseDrag();
+    sec = await fetchSection(KEY);
+    say(geometry.snapLeftPx.includes(Number(sec.x_px)),
+      'with no guides on the page, an ordinary drag still lands on a column start', `x_px ${sec.x_px}`);
+    await resetToOriginal();
+
+    say((await fetchGuides(pid)).length === 0, 'no guides are left over from this block');
+
+    await page.selectOption('#zoomSelect', 'fit');
+    await page.waitForTimeout(400);
+  }
+
   // ------------------------------------------------------- keyboard shortcuts ---
   //
   // Undo/redo already existed (history.js) with toolbar buttons; what is new

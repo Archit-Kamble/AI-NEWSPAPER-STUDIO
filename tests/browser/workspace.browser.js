@@ -1531,8 +1531,75 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
   await page.locator('#worklistBtn').click();
   await page.waitForTimeout(1200);
   say(await page.locator('#worklistPanel').count() === 1, "What's left opens");
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  say(await page.locator('#worklistPanel').count() === 0, 'Stage 8: Escape closes a panel, same as its own × button');
+  await page.locator('#worklistBtn').click();
+  await page.waitForTimeout(1200);
   await page.locator('#worklistClose').click();
   await page.waitForTimeout(400);
+
+  // ------------------------------------------------- Stage 8: XSS hardening ---
+  // A reporter's own title/category/reporter_name used to reach the Story
+  // Explorer drawer's innerHTML unescaped - a malicious submission would run
+  // in whichever desk opened the drawer. Rendered directly against the real
+  // module with a crafted record; no need to write it to the database first.
+  {
+    const outcome = await page.evaluate(async () => {
+      const mod = await import('/editor/story-explorer.js');
+      const host = document.createElement('div');
+      host.id = 'xssTestHost';
+      document.body.appendChild(host);
+      host.innerHTML = mod.renderStoryExplorerMarkup([]);
+      const malicious = {
+        id: 999999, title: '<img src=x onerror="window.__xssFired = true">',
+        reporter_name: '<b>hacker</b>', category: 'news', status: 'approved',
+        created_at: new Date().toISOString(), image_urls: [],
+      };
+      mod.bindStoryExplorer([malicious], () => {});
+      const card = document.querySelector('.story-card strong');
+      const result = {
+        rendersLiveImg: !!document.querySelector('#xssTestHost img[src="x"]'),
+        cardText: card ? card.textContent : null,
+        xssFired: window.__xssFired === true,
+      };
+      host.remove();
+      delete window.__xssFired;
+      return result;
+    });
+    say(outcome.rendersLiveImg === false, 'Story Explorer: a malicious title creates no live <img> element');
+    say(outcome.xssFired === false, 'Story Explorer: the onerror handler never runs - it is text, not markup');
+    say(outcome.cardText === '<img src=x onerror="window.__xssFired = true">',
+      'and the card shows the literal characters, not a parsed tag', outcome.cardText);
+  }
+
+  // --------------------------------------------------- Stage 8: load failure ---
+  // The workspace used to have no error handling around its initial load - a
+  // dropped connection or a stale edition link left the desk staring at a
+  // half-cleared screen with no message and no way back. A newspaper id that
+  // does not exist 404s exactly like a dropped connection would.
+  {
+    // A 404 and the resulting console.error are the point of this block, not
+    // a regression - snapshot errors[] and restore it after, the same way a
+    // desk's own eyes would tell "the load failed, and it was handled" apart
+    // from "something broke".
+    const before = errors.length;
+    const outcome = await page.evaluate(async () => {
+      const mod = await import('/editor/workspace.js');
+      await mod.renderWorkspace(999999999);
+      return {
+        errorShown: !!document.querySelector('.workspace-load-error'),
+        hasRetry: !!document.getElementById('workspaceLoadRetry'),
+      };
+    });
+    say(outcome.errorShown, 'Stage 8: a failed edition load shows a clear message, not a blank screen');
+    say(outcome.hasRetry, 'and offers a way to try again');
+    errors.length = before;
+  }
+  // Leave the workspace back on the real edition for anything appended after this.
+  await openEdition();
+  await block().click();
+  await page.waitForTimeout(1200);
 
   // --------------------------------------------------------- responsive ---
   for (const width of [1280, 1024, 900]) {

@@ -4,6 +4,31 @@ Architectural audit only. No code was changed to produce this document. Reflects
 
 ---
 
+## 0u. Twenty-second pass — workspace duplication audit, Stage 6 (2026-08-11)
+
+**Stage 6 of the InDesign-like editor program asked for architectural consolidation of a described "duplicated/competing Newspaper Editor workspace" - `public/admin.js` allegedly containing its own `renderWorkspace`/`newspaperTemplates` implementation competing with `public/admin/newspaper-workspace.js`, `public/admin/page-editor.js`, and a set of `public/editor/*.js` files (`canvas.js`, `page-sidebar.js`, `layout-sidebar.js`, `section-editor.js`, `story-explorer.js` as flat top-level files).**
+
+**None of that duplication exists at commit `ed98d57`, verified independently rather than assumed:**
+
+- `git log --oneline --diff-filter=D` (and `--diff-filter=A --name-only` across full history) for `public/admin/newspaper-workspace.js`, `public/admin/page-editor.js`, and plausible variants returns nothing - these files were never added to this repository, at any commit, ever. The task's premise describes a state that predates this repository's own history, not a regression that happened here.
+- `public/admin.js` imports exactly one thing from the editor: `import { renderWorkspace } from "./editor/workspace.js"`, and calls it once (`renderWorkspace(newspaperId)`). A full-text search of `admin.js` for `newspaperTemplates`, `availableTemplates`, `renderPageCanvas`, `renderSectionEditor`, `selectPageTemplates`, `showSectionEditor` returns zero matches. It defines none of them.
+- A repo-wide search for `renderWorkspace` finds exactly two references: the import/call site in `admin.js`, and the one definition in `editor/workspace.js`. No second `renderWorkspace` exists anywhere.
+- `public/editor/layout-sidebar.js` and `public/editor/story-explorer.js` DO exist as top-level files (not inside a subfolder) - the only part of the task's premise that was even superficially true. Tracing their imports shows both are live, correctly-wired submodules of the one real workspace, not a second implementation: `workspace.js` imports `renderLayoutSidebar` from `layout-sidebar.js` directly, and imports `renderStoryPicker` from `story-picker.js`, which itself imports `renderStoryExplorerMarkup`/`bindStoryExplorer` from `story-explorer.js`. Neither is orphaned; removing either would break the real workspace, not a legacy one.
+- A repo-wide search for `window.currentNewspaper`, `window.currentPage`, `window.reporterNews`, `window.availableTemplates`, `window.selectedSection` returns zero matches anywhere in `public/`.
+- Every other file that touches `/api/newspapers` (`admin.js`'s admin newspaper-listing table, `admin/editions.js`'s edition ladder/booking management, `editor/publication.js`'s Scribus/print-PDF upload modal) is a genuinely separate concern - admin listing, edition management, and post-production file handoff, none of them page/section rendering - not a duplicate of the workspace.
+
+**This matches, word for word, what this document's own "Frontend load path" section and CLAUDE.md's "Current reality" section already say**: *"The workspace itself is not loaded by `app.js` - `editor/publication.js` pulls in `editor/workspace.js`, which is the real workspace... There is no `admin/newspaper-workspace.js` or `admin/page-editor.js` any more; do not go looking for them."* The consolidation Stage 6 asked for had already happened, evidently before this pass sequence began; the task's brief was working from a stale/hypothetical architecture description, not this repository's actual state.
+
+**No code was changed as a result of this audit** - per this project's own rule ("Delete only code confirmed dead... Do not perform unrelated cleanup") and the task's own explicit "DO NOT ADD NEW FEATURES," there is nothing to consolidate, no dead file to remove, no global to strip. Inventing a change to have something to show would itself be the kind of unnecessary churn this project's engineering rules exist to prevent.
+
+**One small, real, in-scope contribution was made: a structural regression guard**, `tests/workspaceArchitecture.test.js` (5 tests, static file checks, no browser needed) - asserting `admin.js` imports rather than reimplements `renderWorkspace`, carries no second template catalog, that exactly one module in `public/` exports `renderWorkspace`, that the two hypothetical competing admin files still don't exist, and that no `window.*` workspace global has been introduced. This is what "make future editor features safe to build" concretely means when the architecture is already correct: a cheap, non-brittle check that would fail loudly if someone reintroduced exactly the drift this stage was asked to fix, rather than a rewrite of code that already works.
+
+**Verified, not assumed.** `npm test`: **318/318** (313 + 5 new structural checks). `node tests/browser/workspace.browser.js`: **180/180**, unchanged from Stage 5 - expected, since no editor behavior was touched. Full login → open edition → page switch → section select/edit → save → template/layout change → reporter story pick → rulers → guides → guide drag/snap → block drag/resize flow all covered by the existing suite and passing exactly as before.
+
+**Remaining architectural debt, genuinely found, not fabricated:** none specific to workspace duplication. The one open item worth naming for a future pass is unrelated to this stage's brief: `public/admin.js` is still a large (20.6KB), general-purpose admin bootstrap file (login, admin dashboard, reporter dashboard) - not a workspace duplicate, but a candidate for the kind of "keep modules small, avoid a God admin.js" split CLAUDE.md's own engineering rules already call for, whenever a future pass adds enough new admin-only surface to justify it. Not touched here, since Stage 6's brief was specifically the editor workspace, and this file already contains none of that duplication.
+
+---
+
 ## 0t. Twenty-first pass — snapping objects to guides (2026-08-11)
 
 **Stage 5 of the InDesign-like editor program.** Magnetic snapping to Stage 4's user guides, live while dragging or resizing. No new grid, no new alignment system, no snap-to-guide for images (see below for why).

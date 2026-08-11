@@ -32,13 +32,23 @@ export function isContentEdit(patch) {
   return Object.keys(patch).some((key) => CONTENT_FIELDS.includes(key));
 }
 
-export function statusOf(view) {
+// `hasImages` - whether the block carries any PLACED picture (section_images)
+// - is a second argument rather than a `view` field on purpose: `view` is the
+// desk's editable draft (section-model.js's draftFromSection), and placed
+// pictures are a separate table with their own API, kept apart from the draft
+// everywhere else in this codebase (block-frame.js's own state keeps
+// `images` beside `view`, not inside it). Before this existed, a block filled
+// with only a placed picture and no headline/body/legacy image_url read as
+// "Empty" for ever - found live on Project A's realistic test edition (a pure
+// photo block, correctly showing its picture on the canvas, badged EMPTY in
+// every panel that reads status).
+export function statusOf(view, hasImages = false) {
   if (!view) return "empty";
   // An editor who marked a section "ready" keeps that answer until they change
   // it - derivation must never silently overwrite an explicit decision.
   if (isExplicit(view.status)) return view.status;
   if (view.aiGenerated) return "ai_generated";
-  if (!view.headline && !view.body && !view.imageUrl) {
+  if (!view.headline && !view.body && !view.imageUrl && !hasImages) {
     return view.newsItemId ? "story_linked" : "empty";
   }
   // A section straight off a linked story is still `story_linked`; it becomes

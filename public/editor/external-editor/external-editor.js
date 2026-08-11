@@ -135,7 +135,7 @@ function renderToolsRail(section, view, callbacks) {
 
     <details class="ext-aside">
       <summary>Story details</summary>
-      ${storyDetailsMarkup(view)}
+      ${storyDetailsMarkup(view, Boolean((section.images || []).length))}
     </details>
 
     <details class="ext-aside">
@@ -191,7 +191,7 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
     return;
   }
 
-  const status = statusOf(view);
+  const status = statusOf(view, Boolean((section.images || []).length));
 
   container.innerHTML = `
     <div class="ext-editor-header">
@@ -335,14 +335,15 @@ export function focusGroup(groupKey) {
 // Live sync. Panels update themselves in place - nothing is rebuilt, so scroll
 // positions and the caret survive every keystroke.
 export function refreshExternalEditor(section, view, story, source, selectedPart, selectedImageIds = []) {
+  const images = activeCallbacks?.getImages?.() || [];
+
   const badge = document.getElementById("edStatusBadge");
   if (badge) {
-    const status = statusOf(view);
+    const status = statusOf(view, Boolean(images.length));
     badge.textContent = statusLabel(status);
     badge.className = `section-status-badge ${statusClass(status)}`;
   }
 
-  const images = activeCallbacks?.getImages?.() || [];
   renderPictureControls(images, undefined, section, selectedImageIds);
   refreshPicturesPanel(images);
   refreshSpacePanel(section, view, activeCallbacks?.getImages?.() || []);

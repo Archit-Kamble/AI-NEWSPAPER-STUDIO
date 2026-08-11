@@ -293,7 +293,7 @@ export function flowedBodyMarkup(map, view, pad) {
 }
 
 export function sectionInnerHtml(section, view, { dirty = false, selected = false } = {}) {
-  const status = statusOf(view);
+  const status = statusOf(view, Boolean((section.images || []).length));
   const type = sectionType(section.section_key);
   const metrics = computeMetrics(section, view);
   // A Smart Card is a grid or a table. It is not copy, so it is not poured
@@ -327,8 +327,12 @@ export function sectionInnerHtml(section, view, { dirty = false, selected = fals
   `;
 }
 
-export function sectionClassName(view, { selected = false, dirty = false, overflowing = false, atRightEdge = false } = {}) {
-  const filled = Boolean(view.headline || view.body || view.imageUrl);
+export function sectionClassName(view, { selected = false, dirty = false, overflowing = false, atRightEdge = false, hasImages = false } = {}) {
+  // Same gap as statusOf() (status/section-status.js) and the same fix: a
+  // block holding only a placed picture (section_images), no headline/body/
+  // legacy image_url, was drawn with the empty-block treatment on the canvas
+  // itself, not just badged wrong.
+  const filled = Boolean(view.headline || view.body || view.imageUrl || hasImages);
   return [
     "newspaper-section",
     // What the layout decided this block is, and how it is ruled off. Both are

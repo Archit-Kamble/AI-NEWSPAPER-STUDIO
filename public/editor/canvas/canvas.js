@@ -86,7 +86,7 @@ export function renderCanvas(page, newspaper, selection, callbacks = {}) {
             // pixel canvas, and dragging has to write back the exact numbers
             // that get stored and printed.
             return `
-              <div class="${sectionClassName(view, { selected, dirty: selected && dirty, overflowing, atRightEdge })}"
+              <div class="${sectionClassName(view, { selected, dirty: selected && dirty, overflowing, atRightEdge, hasImages: Boolean((section.images || []).length) })}"
                    data-section-key="${section.section_key}"
                    style="left:${section.x_px}px;top:${section.y_px}px;width:${section.width_px}px;height:${section.height_px}px;"
               >${sectionInnerHtml(section, view, { dirty: selected && dirty, selected })}</div>`;
@@ -151,7 +151,7 @@ export function refreshSection(section, view, { selected = false, dirty = false 
   const overflowing = computeMetrics(section, view).overflowing;
   const g = getGeometry();
   const atRightEdge = g ? section.x_px + section.width_px >= g.marginXPx + g.matterWidthPx - 2 : false;
-  element.className = sectionClassName(view, { selected, dirty, overflowing, atRightEdge });
+  element.className = sectionClassName(view, { selected, dirty, overflowing, atRightEdge, hasImages: Boolean((section.images || []).length) });
   element.innerHTML = sectionInnerHtml(section, view, { dirty, selected });
 }
 

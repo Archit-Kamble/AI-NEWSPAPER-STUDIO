@@ -18,8 +18,8 @@ function input(field, view) {
   return `<div class="form-group"><label for="${field.id}">${field.label}${count}</label><input id="${field.id}" value="${escapeHtml(view[field.field])}"></div>`;
 }
 
-export function storyDetailsMarkup(view) {
-  const status = statusOf(view);
+export function storyDetailsMarkup(view, hasImages = false) {
+  const status = statusOf(view, hasImages);
   return `<div class="story-details-grid">
     ${FIELDS.map((field) => input(field, view)).join("")}
     <div class="form-group"><label for="edLanguage">Language</label><select id="edLanguage">${LANGUAGES.map((language) => `<option value="${language}"${view.language === language ? " selected" : ""}>${language}</option>`).join("")}</select></div>

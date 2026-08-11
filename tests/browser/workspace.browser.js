@@ -172,6 +172,100 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
       'one draft holds all three, and nothing shadows them', draft.shadows.join(',') || '(none)');
   }
 
+  // -------------------------------------------- WYSIWYG geometry match ---
+  //
+  // The canvas positions the headline/subheading/body by real CSS reflow
+  // (no picture on this block, so it takes contentMarkup()'s normal-flow
+  // path); the Block Editor's frame positions them from buildFlowMap()'s
+  // row-count ESTIMATE (block-frame.js#layoutTextFrames). Those are two
+  // different algorithms answering the same question, so exact pixel
+  // equality is not the bar - order, non-overlap, and a tolerance shaped by
+  // the grid's own row height are. A block whose editor frame put the body
+  // above the headline, or 200px off, would be exactly the bug this guards.
+  {
+    const geom = await page.evaluate((key) => {
+      const scaleOf = (el) => {
+        const t = el ? getComputedStyle(el).transform : 'none';
+        if (!t || t === 'none') return 1;
+        const m = t.match(/matrix\(([^,]+),/);
+        return m ? parseFloat(m[1]) : 1;
+      };
+      const normRect = (el, scale) => {
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { top: r.top / scale, left: r.left / scale, height: r.height / scale, width: r.width / scale };
+      };
+
+      const canvasScale = scaleOf(document.getElementById('canvasSurface'));
+      const canvasBlock = document.querySelector(`.newspaper-section[data-section-key="${key}"]`);
+      // .section-content's own box already excludes the chrome status bar
+      // (type icon/label/status badge) that the canvas draws and the editor
+      // frame, correctly, does not - so it is the fair "content starts here"
+      // origin on the canvas side.
+      const cOrigin = normRect(canvasBlock.querySelector('.section-content'), canvasScale);
+      const cHeadline = normRect(canvasBlock.querySelector('.section-headline'), canvasScale);
+      const cSubheading = normRect(canvasBlock.querySelector('.section-subheading'), canvasScale);
+      const cBody = normRect(canvasBlock.querySelector('.section-body'), canvasScale);
+
+      const framePage = document.getElementById('edFramePage');
+      const blockWidthPx = parseFloat(canvasBlock.style.width);
+      // pageScale()'s own formula (block-frame.js): block px per screen px.
+      const frameScale = blockWidthPx / framePage.getBoundingClientRect().width;
+      const margin = frameScale ? (parseFloat(document.getElementById('edHeadlineFrame')?.style.left) || 0) * frameScale : 0;
+      const fOriginRaw = normRect(framePage, 1 / frameScale);
+      // The frame page's own top-left is the RAW block edge (matches the
+      // canvas's outer .newspaper-section, not .section-content) - shifted
+      // by the block's margin so both origins mean "where the content area
+      // starts", the same adjustment .section-content already made for free.
+      const fOrigin = fOriginRaw ? { top: fOriginRaw.top + margin, left: fOriginRaw.left + margin } : null;
+      const fHeadline = normRect(document.getElementById('edHeadlineFrame'), 1 / frameScale);
+      const fSubheading = normRect(document.getElementById('edSubheadingFrame'), 1 / frameScale);
+      const fBody = normRect(document.getElementById('edBodyFrame'), 1 / frameScale);
+
+      const rel = (rect, origin) => (rect && origin ? { top: rect.top - origin.top, left: rect.left - origin.left, height: rect.height } : null);
+
+      return {
+        canvas: { headline: rel(cHeadline, cOrigin), subheading: rel(cSubheading, cOrigin), body: rel(cBody, cOrigin) },
+        editor: { headline: rel(fHeadline, fOrigin), subheading: rel(fSubheading, fOrigin), body: rel(fBody, fOrigin) },
+      };
+    }, KEY);
+
+    // The grid reserves whole rows; real text can end mid-row. The gap this
+    // creates is bounded by roughly one row's height at the block's own
+    // body size - generous on purpose, since this is a real, understood,
+    // and (per CLAUDE.md) deliberately conservative property of the
+    // reservation, not slop in the test.
+    const tolerance = 60;
+    const within = (a, b) => typeof a === 'number' && typeof b === 'number' && Math.abs(a - b) <= tolerance;
+
+    say(
+      within(geom.canvas.headline.top, geom.editor.headline.top) && within(geom.canvas.headline.height, geom.editor.headline.height),
+      'the editor headline sits where the canvas headline sits, within the row-reservation tolerance',
+      `canvas top ${geom.canvas.headline.top.toFixed(1)} vs editor top ${geom.editor.headline.top.toFixed(1)}`,
+    );
+    say(
+      within(geom.canvas.subheading.top, geom.editor.subheading.top),
+      'the editor subheading sits where the canvas subheading sits',
+      `canvas top ${geom.canvas.subheading.top.toFixed(1)} vs editor top ${geom.editor.subheading.top.toFixed(1)}`,
+    );
+    say(
+      within(geom.canvas.body.top, geom.editor.body.top),
+      'the editor body starts where the canvas body starts',
+      `canvas top ${geom.canvas.body.top.toFixed(1)} vs editor top ${geom.editor.body.top.toFixed(1)}`,
+    );
+    // The one invariant that must hold exactly, in both places, with zero
+    // tolerance: the reading order is headline, then subheading, then body -
+    // never overlapping, never reordered.
+    say(
+      geom.canvas.headline.top < geom.canvas.subheading.top && geom.canvas.subheading.top < geom.canvas.body.top,
+      'canvas order: headline, then subheading, then body',
+    );
+    say(
+      geom.editor.headline.top < geom.editor.subheading.top && geom.editor.subheading.top < geom.editor.body.top,
+      'editor order: headline, then subheading, then body',
+    );
+  }
+
   // ------------------------------------------------------------- scrolling ---
   {
     const scrollers = await nestedScrollers();

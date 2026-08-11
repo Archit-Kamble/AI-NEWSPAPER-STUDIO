@@ -15,6 +15,7 @@ import {
   blockFrameMarkup, mountFrame, refreshFrame, copyFromFrame,
   renderPictures, selectPictureFrame,
 } from "./block-frame.js";
+import { escapeHtml as escapeAttribute } from "../format.js";
 
 // The editorial limits, not the storage limits. A headline over about 90
 // characters cannot be set at headline size in a column and stay a headline;
@@ -34,9 +35,6 @@ const BODY_SIZES = [7, 8, 8.5, 9, 9.5, 10, 11, 12, 13, 14, 16, 18, 20, 24];
 
 let budgetOf = null;
 let escapeBound = false;
-
-const escapeAttribute = (value) =>
-  String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 function options(list, current) {
   return list

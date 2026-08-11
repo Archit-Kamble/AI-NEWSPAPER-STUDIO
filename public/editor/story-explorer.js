@@ -1,11 +1,11 @@
-import { formatDate } from "./format.js";
+import { formatDate, escapeHtml } from "./format.js";
 
 function uniqueValues(items, key) {
   return [...new Set(items.map((item) => item[key]).filter(Boolean))].sort();
 }
 
 function optionList(values) {
-  return values.map((value) => `<option value="${value}">${value}</option>`).join("");
+  return values.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join("");
 }
 
 export function renderStoryExplorerMarkup(reporterNews) {
@@ -57,10 +57,10 @@ function renderCards(reporterNews, filters, selectedId, onSelectCard) {
         "this.onerror=null";
       return `
         <div class="story-card${story.id === selectedId ? " active" : ""}" data-story-id="${story.id}">
-          ${thumb ? `<img class="story-card-thumb" src="${thumb}" alt="" onerror="${onError}" />` : `<div class="story-card-thumb story-card-thumb-empty"></div>`}
+          ${thumb ? `<img class="story-card-thumb" src="${escapeHtml(thumb)}" alt="" onerror="${onError}" />` : `<div class="story-card-thumb story-card-thumb-empty"></div>`}
           <div class="story-card-body">
-            <strong>${story.title}</strong>
-            <small>${story.reporter_name || "Unknown reporter"} &middot; ${story.category || "Uncategorised"}</small>
+            <strong>${escapeHtml(story.title)}</strong>
+            <small>${escapeHtml(story.reporter_name || "Unknown reporter")} &middot; ${escapeHtml(story.category || "Uncategorised")}</small>
             <small class="muted">${formatDate(story.created_at)}</small>
           </div>
         </div>

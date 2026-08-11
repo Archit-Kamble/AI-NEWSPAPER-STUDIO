@@ -16,6 +16,8 @@
 //     paper prints it and how much of it is filled.
 //   * a way to find an older one without scrolling past a hundred rows.
 
+import { escapeHtml } from "../editor/format.js";
+
 const DIGITS = ['०', '१', '२', '३', '४', '५', '६', '७', '८', '९'];
 const WEEKDAYS = ['रविवार', 'सोमवार', 'मंगळवार', 'बुधवार', 'गुरुवार', 'शुक्रवार', 'शनिवार'];
 const MONTHS = ['जानेवारी', 'फेब्रुवारी', 'मार्च', 'एप्रिल', 'मे', 'जून',
@@ -24,9 +26,6 @@ const MONTHS = ['जानेवारी', 'फेब्रुवारी', '�
 const RECENT_LIMIT = 12;
 
 const devanagari = (value) => String(value).replace(/\d/g, (d) => DIGITS[Number(d)]);
-const escapeHtml = (value) =>
-  String(value ?? '').replace(/[&<>"']/g, (c) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 /** Today where the paper is printed - not the browser's timezone, and never UTC. */
 export function todayIso() {

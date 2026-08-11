@@ -10,11 +10,7 @@
 // endpoint the drag does, so there is one way a picture changes and one thing
 // that reads it: the character grid.
 
-function escapeText(value) {
-  const div = document.createElement("div");
-  div.textContent = value ?? "";
-  return div.innerHTML;
-}
+import { escapeHtml as escapeText } from "../format.js";
 
 const SHAPES = [
   ["rect", "Box"],

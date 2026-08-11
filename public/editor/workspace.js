@@ -47,24 +47,36 @@ import { draftFromSection, draftFromStory, payloadFromDraft, viewOfSection } fro
 import { canRenderSmartCard, smartCardText } from "./smart-cards/smart-cards.js";
 import { candidatesOn, runBulk } from "./external-editor/bulk-generate.js";
 import { computeAlignment } from "./external-editor/align.js";
-import { escapeHtml } from "./format.js";
+import { escapeHtml, closeOnEscape } from "./format.js";
 import { isContentEdit, isExplicit } from "./status/section-status.js";
 import { buildFlowMap, flowImageFromRow } from "./layout/text-flow.js";
 
-export async function renderWorkspace(newspaperId) {
-  const [newspaper, pages, reporterNews] = await Promise.all([
-    fetch(`/api/newspapers/${newspaperId}`).then((r) => r.json()),
-    fetch(`/api/newspapers/${newspaperId}/pages`).then((r) => r.json()),
-    fetch("/api/news").then((r) => r.json()),
-    // The column grid and the px-per-mm scale come from the server; nothing is
-    // laid out until they are known.
-    loadGeometry(),
-  ]);
+async function fetchJson(url, options) {
+  const response = await fetch(url, options);
+  if (!response.ok) throw new Error(`${url} responded ${response.status}`);
+  return response.json();
+}
 
-  // The paper's standing furniture, and this edition's volume and issue number
-  // worked out from its date. Fetched before the first paint so page one is
-  // drawn complete rather than popping its nameplate in a moment later.
-  await loadIdentity(newspaper?.publication_date, pages?.length);
+export async function renderWorkspace(newspaperId) {
+  let newspaper, pages, reporterNews;
+  try {
+    [newspaper, pages, reporterNews] = await Promise.all([
+      fetchJson(`/api/newspapers/${newspaperId}`),
+      fetchJson(`/api/newspapers/${newspaperId}/pages`),
+      fetchJson("/api/news"),
+      // The column grid and the px-per-mm scale come from the server; nothing is
+      // laid out until they are known.
+      loadGeometry(),
+    ]);
+
+    // The paper's standing furniture, and this edition's volume and issue number
+    // worked out from its date. Fetched before the first paint so page one is
+    // drawn complete rather than popping its nameplate in a moment later.
+    await loadIdentity(newspaper?.publication_date, pages?.length);
+  } catch (error) {
+    renderWorkspaceLoadError(newspaperId, error);
+    return;
+  }
 
   store.setEdition({ newspaper, pages, reporterNews });
   autosave.configure({ save: persistDraft, onStateChange: onAutosaveState });
@@ -80,6 +92,25 @@ export async function renderWorkspace(newspaperId) {
     refreshRulers();
   });
   renderShell();
+}
+
+// The edition could not be loaded at all - a dropped connection, a stale
+// link, a server error. The desk must never be left staring at whatever the
+// dashboard left behind (a hidden right panel, a half-cleared screen) with no
+// way back and no idea why. No stack trace: this is the one message a desk
+// reads, so it says what happened and offers the one thing that can fix it.
+function renderWorkspaceLoadError(newspaperId, error) {
+  console.error("Workspace load failed:", error);
+  const content = document.getElementById("content");
+  if (!content) return;
+  content.innerHTML = `
+    <div class="workspace-load-error">
+      <h2>This edition could not be opened</h2>
+      <p>The connection may have dropped, or the edition may no longer exist. Nothing was lost — the edition itself is unchanged.</p>
+      <button type="button" class="btn-secondary" id="workspaceLoadRetry">Try again</button>
+    </div>
+  `;
+  document.getElementById("workspaceLoadRetry")?.addEventListener("click", () => renderWorkspace(newspaperId));
 }
 
 // ------------------------------------------------------------ derived data ---
@@ -202,7 +233,8 @@ async function addSectionImage(file) {
 
   const form = new FormData();
   form.append("images", await readableImage(file));
-  const uploaded = await fetch("/api/uploads/images", { method: "POST", body: form }).then((r) => r.json());
+  const uploadResponse = await fetch("/api/uploads/images", { method: "POST", body: form });
+  const uploaded = uploadResponse.ok ? await uploadResponse.json().catch(() => null) : null;
   const url = uploaded?.imageUrls?.[0];
   if (!url) return showNotice("The picture could not be uploaded.");
 
@@ -1079,9 +1111,9 @@ function renderPreflight(report) {
     .map(
       (finding) => `
         <li class="preflight-row preflight-${finding.level}"
-            data-page="${finding.pageNumber}" data-section="${escapeAttribute(finding.sectionKey)}">
-          <span class="preflight-where">p${finding.pageNumber} · ${escapeAttribute(finding.sectionKey)}</span>
-          <span class="preflight-what">${escapeAttribute(finding.message)}</span>
+            data-page="${finding.pageNumber}" data-section="${escapeHtml(finding.sectionKey)}">
+          <span class="preflight-where">p${finding.pageNumber} · ${escapeHtml(finding.sectionKey)}</span>
+          <span class="preflight-what">${escapeHtml(finding.message)}</span>
         </li>`,
     )
     .join("");
@@ -1097,7 +1129,7 @@ function renderPreflight(report) {
     <ul>${rows}</ul>`;
   document.body.appendChild(panel);
 
-  document.getElementById("preflightClose").addEventListener("click", () => panel.remove());
+  document.getElementById("preflightClose").addEventListener("click", closeOnEscape(() => panel.remove()));
   panel.querySelectorAll(".preflight-row").forEach((row) => {
     row.addEventListener("click", () => {
       const page = store.getState().pages.find((p) => Number(p.page_number) === Number(row.dataset.page));
@@ -1107,9 +1139,6 @@ function renderPreflight(report) {
     });
   });
 }
-
-const escapeAttribute = (value) =>
-  String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 // What is left on this edition.
 async function showWorklist() {
@@ -1330,7 +1359,7 @@ function showBulkProposals(batch, skipped) {
     ${skippedNote}
     <p class="ai-proposal-warn">The desk must check every fact before any of this is printed.</p>`;
   document.body.appendChild(panel);
-  document.getElementById("bulkClose").addEventListener("click", () => panel.remove());
+  document.getElementById("bulkClose").addEventListener("click", closeOnEscape(() => panel.remove()));
 
   panel.querySelectorAll("[data-bulk-accept]").forEach((button) => {
     button.addEventListener("click", () => {

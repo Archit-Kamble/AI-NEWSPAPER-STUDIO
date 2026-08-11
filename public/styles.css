@@ -1216,6 +1216,17 @@ body {
   font-size: 0.95rem;
 }
 
+.workspace-load-error {
+  max-width: 480px;
+  margin: var(--s6, 3rem) auto;
+  padding: var(--s4);
+  text-align: center;
+}
+.workspace-load-error .btn-secondary {
+  width: auto;
+  padding: var(--s2) var(--s4);
+}
+
 /* The top of the screen: the block's settings on the LEFT, the page on the
    RIGHT, and the editor below both at the full width of the window.
    The settings rail is narrow and fixed-width; the page takes everything left,

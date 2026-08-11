@@ -6,6 +6,7 @@
 // CLAUDE.md's rule about never mixing the two silently.
 
 import { MIN_LINE_HEIGHT } from "../layout/text-flow.js";
+import { escapeHtml as escapeText } from "../format.js";
 
 // Exported because the writing toolbar offers the same font and the same
 // alignments, and they must be the SAME list. A second copy of a catalog is how
@@ -202,12 +203,6 @@ export function previewMarkup(view) {
       ${bodyEl}
     </div>
   `;
-}
-
-function escapeText(value) {
-  const div = document.createElement("div");
-  div.textContent = value ?? "";
-  return div.innerHTML;
 }
 
 export function bindTypographyPanel(getView, onPatch) {

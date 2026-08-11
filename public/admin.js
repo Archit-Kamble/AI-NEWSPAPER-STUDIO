@@ -1,5 +1,6 @@
 import { renderWorkspace } from "./editor/workspace.js";
 import { renderEditions } from "./admin/editions.js";
+import { escapeHtml } from "./editor/format.js";
 
 const app = document.getElementById("app");
 let currentUser = null;
@@ -85,7 +86,7 @@ async function renderReporterDashboard() {
           <button class="hamburger-btn" id="appSidebarToggle" title="Menu">&#9776;</button>
           SAHAS
         </div>
-        <div class="header-center">Hi ${currentUser.name}</div>
+        <div class="header-center">Hi ${escapeHtml(currentUser.name)}</div>
         <div class="header-right"><button id="logoutBtn">Logout</button></div>
       </div>
       <div class="container">
@@ -154,15 +155,15 @@ function showReporterProfile() {
       <div class="profile-info">
         <div class="info-row">
           <label>Name:</label>
-          <strong>${currentUser.name}</strong>
+          <strong>${escapeHtml(currentUser.name)}</strong>
         </div>
         <div class="info-row">
           <label>Email:</label>
-          <strong>${currentUser.email}</strong>
+          <strong>${escapeHtml(currentUser.email)}</strong>
         </div>
         <div class="info-row">
           <label>Role:</label>
-          <strong>${currentUser.role}</strong>
+          <strong>${escapeHtml(currentUser.role)}</strong>
         </div>
       </div>
     </div>
@@ -173,11 +174,18 @@ function showReporterProfile() {
 async function showReporterNewsList(status, title) {
   const content = document.getElementById("content");
   const rightPanel = document.getElementById("rightPanel");
-  const news = await fetch(
-    `/api/news?status=${status}&reporterId=${currentUser.id}`,
-  ).then((r) => r.json());
+  let news;
+  try {
+    news = await fetch(`/api/news?status=${status}&reporterId=${currentUser.id}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.status))));
+  } catch (error) {
+    console.error("News list load failed:", error);
+    rightPanel.innerHTML = `<h3>${escapeHtml(title)}</h3>`;
+    content.innerHTML = '<div class="form-section"><p>This list could not be loaded. Check the connection and try again.</p></div>';
+    return;
+  }
 
-  rightPanel.innerHTML = `<h3>${title}</h3><p>Click on any news to edit</p>`;
+  rightPanel.innerHTML = `<h3>${escapeHtml(title)}</h3><p>Click on any news to edit</p>`;
 
   content.innerHTML = `
     <div class="form-section">
@@ -197,12 +205,12 @@ async function showReporterNewsList(status, title) {
     item.className = "news-item";
     item.innerHTML = `
       <div>
-        <strong>${newsItem.title}</strong>
-        <p>${newsItem.subheading || newsItem.subtitle || ""}</p>
+        <strong>${escapeHtml(newsItem.title)}</strong>
+        <p>${escapeHtml(newsItem.subheading || newsItem.subtitle || "")}</p>
 
 <small>
-${newsItem.category || ""} •
-${newsItem.location || ""} •
+${escapeHtml(newsItem.category || "")} •
+${escapeHtml(newsItem.location || "")} •
 ${new Date(newsItem.created_at || newsItem.createdAt).toLocaleDateString()}
 </small>
       </div>
@@ -281,8 +289,15 @@ async function showPastNewspapers() {
   const content = document.getElementById("content");
   const rightPanel = document.getElementById("rightPanel");
 
-  const newspapers = await fetch("/api/newspapers").then((r) => r.json());
-  const news = await fetch("/api/news").then((r) => r.json());
+  let news;
+  try {
+    news = await fetch("/api/news").then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.status))));
+  } catch (error) {
+    console.error("Dashboard load failed:", error);
+    rightPanel.innerHTML = "<p>The newsroom status could not be loaded. Check the connection and reload.</p>";
+    content.innerHTML = "";
+    return;
+  }
 
   const pending = news.filter((n) => n.status === "pending").length;
   const approved = news.filter((n) => n.status === "approved").length;
@@ -326,7 +341,15 @@ async function showPastNewspapers() {
 async function showPastNews() {
   const content = document.getElementById("content");
   const rightPanel = document.getElementById("rightPanel");
-  const news = await fetch("/api/news").then((r) => r.json());
+  let news;
+  try {
+    news = await fetch("/api/news").then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.status))));
+  } catch (error) {
+    console.error("News review load failed:", error);
+    rightPanel.innerHTML = "<h3>Reporter News</h3>";
+    content.innerHTML = '<div class="form-section"><p>This list could not be loaded. Check the connection and try again.</p></div>';
+    return;
+  }
   rightPanel.innerHTML =
     "<h3>Reporter News</h3><p>Review every reporter submission and approve it for publication.</p>";
   content.innerHTML =
@@ -339,7 +362,7 @@ async function showPastNews() {
   news.forEach((item) => {
     const card = document.createElement("div");
     card.className = "admin-news-card";
-    card.innerHTML = `<div><strong>${item.title}</strong><small>${item.reporter_name || item.reporterName || "Reporter"} · ${item.category || "Uncategorised"}</small><p>${item.description || "No description"}</p></div><div class="status-actions"><span class="status-pill ${item.status}">${item.status}</span><button class="btn-secondary approve">Approve</button><button class="btn-secondary reject">Reject</button></div>`;
+    card.innerHTML = `<div><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.reporter_name || item.reporterName || "Reporter")} · ${escapeHtml(item.category || "Uncategorised")}</small><p>${escapeHtml(item.description || "No description")}</p></div><div class="status-actions"><span class="status-pill ${escapeHtml(item.status)}">${escapeHtml(item.status)}</span><button class="btn-secondary approve">Approve</button><button class="btn-secondary reject">Reject</button></div>`;
     card.querySelector(".approve").addEventListener("click", async () => {
       await fetch(`/api/news/${item.id}/status`, {
         method: "PATCH",
@@ -555,14 +578,14 @@ function renderReporterNewsDetails(newsItem) {
   const rightPanel = document.getElementById("rightPanel");
   rightPanel.innerHTML = `
     <div class="form-section">
-      <h2>${newsItem.title}</h2>
-      <p><em>${newsItem.subheading || newsItem.subtitle || ""}</em></p>
-      <div class="info-row"><label>Category:</label><strong>${newsItem.category || "-"}</strong></div>
-      <div class="info-row"><label>Location:</label><strong>${newsItem.location || "-"}</strong></div>
-      <div class="info-row"><label>Tags:</label><strong>${newsItem.tags || "-"}</strong></div>
+      <h2>${escapeHtml(newsItem.title)}</h2>
+      <p><em>${escapeHtml(newsItem.subheading || newsItem.subtitle || "")}</em></p>
+      <div class="info-row"><label>Category:</label><strong>${escapeHtml(newsItem.category || "-")}</strong></div>
+      <div class="info-row"><label>Location:</label><strong>${escapeHtml(newsItem.location || "-")}</strong></div>
+      <div class="info-row"><label>Tags:</label><strong>${escapeHtml(newsItem.tags || "-")}</strong></div>
       <div class="form-group">
         <label>Description</label>
-        <p>${newsItem.description || "-"}</p>
+        <p>${escapeHtml(newsItem.description || "-")}</p>
       </div>
       <div id="newsImages"></div>
     </div>

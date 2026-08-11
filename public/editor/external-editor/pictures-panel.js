@@ -5,11 +5,7 @@
 // see the result. Repeating those controls here is exactly the duplicate input
 // VISION.md rules out. This says what is on the block and lets you add another.
 
-function escapeText(value) {
-  const div = document.createElement("div");
-  div.textContent = value ?? "";
-  return div.innerHTML;
-}
+import { escapeHtml as escapeText } from "../format.js";
 
 export function picturesPanelMarkup(images = []) {
   return `

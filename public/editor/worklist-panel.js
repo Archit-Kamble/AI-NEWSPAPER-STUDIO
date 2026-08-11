@@ -11,8 +11,7 @@
 // row goes to it. It is a panel over the workspace, never another screen
 // (VISION.md: everything happens inside the one workspace).
 
-const escapeAttribute = (value) =>
-  String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+import { escapeHtml as escapeAttribute, closeOnEscape } from "./format.js";
 
 const STATE_LABEL = {
   empty: "empty",
@@ -79,7 +78,7 @@ export function renderWorklist(list, { onGoTo }) {
     <ul>${body}</ul>`;
   document.body.appendChild(panel);
 
-  document.getElementById("worklistClose").addEventListener("click", () => panel.remove());
+  document.getElementById("worklistClose").addEventListener("click", closeOnEscape(() => panel.remove()));
   panel.querySelectorAll(".worklist-row").forEach((row) => {
     row.addEventListener("click", () => onGoTo(Number(row.dataset.page), row.dataset.section));
   });

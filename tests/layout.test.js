@@ -126,6 +126,30 @@ test('a block dragged past the page edge is clamped into the matter box', async 
   });
 });
 
+test('a block dragged onto the nameplate or the footer band is clamped into the CONTENT region, not just the matter box', async () => {
+  // Before this fix, snapGeometry() clamped against the raw matter box, so a
+  // block dragged to the very top or foot of page one could legally land on
+  // top of the nameplate or the page-foot/imprint furniture - the same
+  // collision the region model exists to rule out (Bug #7/#8/#9). This is
+  // page one specifically (withServer's fixture), so the FRONT region - the
+  // taller nameplate band - is the one that must hold.
+  await withServer(async ({ page, desk }) => {
+    const ontoNameplate = await desk(`/api/pages/${page.id}/sections`, {
+      method: 'POST',
+      body: JSON.stringify({ x: G.marginXPx, y: 0, width: 150, height: 60 }),
+    }).then((r) => r.json());
+    const top = ontoNameplate.sections.find((s) => s.section_key.startsWith('block-'));
+    assert.ok(top.y_px >= G.regions.front.content.top, 'a block cannot be dragged up onto the nameplate');
+
+    const ontoFooter = await desk(`/api/pages/${page.id}/sections`, {
+      method: 'POST',
+      body: JSON.stringify({ x: G.marginXPx, y: 9000, width: 150, height: 60 }),
+    }).then((r) => r.json());
+    const foot = ontoFooter.sections.filter((s) => s.section_key.startsWith('block-')).pop();
+    assert.ok(foot.y_px + foot.height_px <= G.regions.front.content.bottom, 'a block cannot be dragged down onto the footer band');
+  });
+});
+
 test('deleting a block that does not exist is a 404, not a crash', async () => {
   await withServer(async ({ port, page, desk }) => {
     const response = await desk(`/api/pages/${page.id}/sections/no-such-block`, {
@@ -265,4 +289,62 @@ test('content starts on the baseline, so bands divide into the page exactly', ()
       'remainder comes out as a fatter gap above the last band',
     );
   }
+});
+
+// --- the page-region model: header / content / footer, one source ------------
+//
+// Project A, Bug #7/#8/#9: templates.js let a block's content region run all
+// the way to the matter's true bottom edge, while masthead.js independently
+// drew an opaque page-foot bar (and, on the imprint page, the printer's Act
+// declaration) inside that same band, on top of it - a content block and page
+// furniture claiming the same pixels, on every inside page and the front page
+// alike. geometry.js's regionsFor() is now the one place that reserves the
+// footer band; these tests hold that no template block ever enters it, and
+// that the furniture pieces sharing the band never collide with each other
+// either.
+
+test('no template block enters the reserved footer band', () => {
+  const { templates } = require('../src/layout/templates');
+  const { geometryOf } = require('../src/layout/geometry');
+  const g = geometryOf({});
+
+  for (const template of Object.values(templates)) {
+    for (const section of template.sections) {
+      assert.ok(
+        section.y + section.height <= g.regions.inside.footer.top,
+        `${template.key}/${section.key} ends at ${section.y + section.height}, past the footer band's top at ${g.regions.inside.footer.top}`,
+      );
+    }
+  }
+});
+
+test('the footer band is identical for the front page and inside pages', () => {
+  const { geometryOf } = require('../src/layout/geometry');
+  const g = geometryOf({});
+  assert.deepEqual(g.regions.front.footer, g.regions.inside.footer);
+});
+
+test('the page-foot strip and the imprint declaration are stacked, not overlapping', () => {
+  const { geometryOf } = require('../src/layout/geometry');
+  const g = geometryOf({});
+  const { footer } = g.regions.inside;
+  assert.ok(
+    footer.imprintTop + footer.imprintHeightPx <= footer.footTop,
+    'the imprint block must end at or before the foot strip begins',
+  );
+  assert.equal(footer.footTop + footer.footHeightPx, footer.bottom, 'the foot strip fills exactly to the matter edge');
+});
+
+test('a page-region content bottom is exactly the footer band top - one boundary, not two', () => {
+  const { geometryOf } = require('../src/layout/geometry');
+  const g = geometryOf({});
+  assert.equal(g.regions.front.content.bottom, g.regions.front.footer.top);
+  assert.equal(g.regions.inside.content.bottom, g.regions.inside.footer.top);
+});
+
+test('the front page starts its content below the nameplate; inside pages start below the slimmer folio', () => {
+  const { geometryOf } = require('../src/layout/geometry');
+  const g = geometryOf({});
+  assert.ok(g.regions.front.content.top > g.regions.inside.content.top,
+    'the nameplate band is taller than the folio strip, so front-page content starts lower');
 });

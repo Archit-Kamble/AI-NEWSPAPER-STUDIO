@@ -3189,8 +3189,19 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 .section-placed[data-shape="cutout"] { background: none; }
 
 /* The daily features that are READ as tables are set as tables: a sudoku is a
-   grid a reader solves, not nine lines of copy. */
-.section-feature { position: absolute; inset: 0; display: grid; place-items: center; padding: 2px; }
+   grid a reader solves, not nine lines of copy.
+   A normal flex-column child, not `position:absolute; inset:0` - which is
+   what this was until Project A found it live. `inset:0` positions against
+   the whole BLOCK, ignoring every sibling already in the flex column above
+   it (contentMarkup() always renders the headline/kicker/subheading first,
+   and every feature builder - src/features/*.js - sets a headline alongside
+   its card data, "आजचे राशिभविष्य" above the table exactly as a printed
+   paper sets it). The card was drawing on top of its own block's headline,
+   on every block that carries both - which, by the data model, is every
+   Smart Card there is. `flex:1` fills the same remaining space `inset:0`
+   claimed when there is no headline to share it with, so a card-only block
+   (no separate heading) is unchanged. */
+.section-feature { flex: 1 1 auto; min-height: 0; display: grid; place-items: center; padding: 2px; overflow: hidden; }
 .feature-grid {
   border-collapse: collapse;
   table-layout: fixed;
@@ -3723,6 +3734,11 @@ body.print-view .newspaper-section.at-right-edge {
   padding-top: 2px;
   font-family: "Sahas Sans", "Noto Sans Devanagari", Arial, sans-serif;
   background: #fff;
+  /* Height comes from the reserved footer band (geometry.js's regionsFor) -
+     overflow is hidden rather than left to grow, so a long identity string can
+     never push this strip past the room templates.js left for it. */
+  overflow: hidden;
+  box-sizing: border-box;
 }
 .foot-printline {
   font-size: 6px;

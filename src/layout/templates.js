@@ -11,36 +11,31 @@
 // steps; a story still spans several of them, the way a printed column does. All of it derives from geometry.js - the numbers are computed here,
 // never typed twice.
 
-const { geometryOf, DEFAULTS } = require('./geometry');
+const { geometryOf, DEFAULTS, regionsFor } = require('./geometry');
 
 const G = geometryOf({});
 
 const PAGE_WIDTH = G.pageWidthPx;
 const PAGE_HEIGHT = G.pageHeightPx;
 
-// Vertical anchors, in editor px.
-//
-// Page one is not laid out from the top of the matter: the nameplate band sits
-// there, and it is page furniture rather than an editorial block - the canvas
-// draws it from the edition's own date and src/layout/identity.js. Making it a
-// block would invite an editor to type a story into the masthead. Content
-// therefore starts below it. Inside pages carry a slim folio, drawn the same
-// way, so they start only a little lower than the matter's top edge.
-const MASTHEAD_HEIGHT = 136;
+// Vertical anchors, in editor px - all derived from the one page-region model
+// (geometry.js's regionsFor). Page one is not laid out from the top of the
+// matter: the nameplate band sits there, and it is page furniture rather than
+// an editorial block - the canvas draws it from the edition's own date and
+// src/layout/identity.js. Making it a block would invite an editor to type a
+// story into the masthead. Content therefore starts below it. Inside pages
+// carry a slim folio, drawn the same way, so they start only a little lower
+// than the matter's top edge. And EVERY page's content stops short of the
+// matter's true bottom edge, leaving room for the footer band (the printline
+// strip, and on the imprint page the Act declaration) that masthead.js draws
+// there - see geometry.js's own comment on why that reservation used to be
+// missing (Bug #7/#8/#9).
+const FRONT_REGIONS = regionsFor(G, 'front');
+const INSIDE_REGIONS = regionsFor(G, 'inside');
 const MATTER_BOTTOM = G.marginYPx + G.matterHeightPx;
-
-// Where content starts, snapped UP to the baseline.
-//
-// This matters more than it looks. The matter's bottom edge is a whole number
-// of baselines from the top of the page, so if content starts on a baseline
-// too, then the depth available to fill is also a whole number of baselines -
-// and bands divide into it exactly. Starting four pixels off the grid instead
-// left a remainder in every division, and the remainder came out as a fatter
-// gap above the last band on the page. That is where the uneven spacing was
-// coming from.
-const up = (px) => Math.ceil(px / G.baselinePx) * G.baselinePx;
-const MASTHEAD_BOTTOM = up(G.marginYPx + MASTHEAD_HEIGHT + 8);
-const INSIDE_TOP = up(G.marginYPx + 40);
+const MASTHEAD_BOTTOM = FRONT_REGIONS.content.top;
+const INSIDE_TOP = INSIDE_REGIONS.content.top;
+const INSIDE_BOTTOM = INSIDE_REGIONS.content.bottom;
 
 // x of a block starting at column `col`, and the width of a block spanning
 // `span` columns. Rounding happens once, at the edge, so a full-width span is
@@ -146,10 +141,25 @@ function block(key, col, span, y, height, options = {}) {
   };
 }
 
+// Baseline-snap a raw pixel value upward. Used only for the masthead advert's
+// own corner, which sits inside the header band rather than the content
+// region the region model governs.
+const up = (px) => Math.ceil(px / G.baselinePx) * G.baselinePx;
+
 // The bands of each page, top to bottom. A template declares how DEEP its
 // bands are; `rows()` works out where they start, so the gap between them is
-// the same everywhere and no y-coordinate is typed by hand.
-const FRONT = rows(MASTHEAD_BOTTOM, [248, 264, 168, 172]);
+// the same everywhere and no y-coordinate is typed by hand. The first three
+// are hand-tuned depths; the fourth takes whatever is left down to the content
+// region's real bottom edge (above the reserved footer band), the same
+// last-band-absorbs-the-remainder idiom `split()` uses elsewhere - not a
+// fourth hand-typed number that has to be re-tuned by hand every time the
+// footer reservation changes.
+const FRONT = rows(MASTHEAD_BOTTOM, [248, 264, 168]);
+FRONT.push({
+  y: FRONT[2].end + GAP,
+  height: baseline(FRONT_REGIONS.content.bottom - (FRONT[2].end + GAP)),
+  end: FRONT_REGIONS.content.bottom,
+});
 
 // The top-left corner of page one is sold.
 //
@@ -166,7 +176,6 @@ const MASTHEAD_ADVERT = {
   y: up(G.marginYPx),
   height: MASTHEAD_BOTTOM - GAP - up(G.marginYPx),
 };
-const INSIDE_BOTTOM = MATTER_BOTTOM;
 
 const templates = {
   // Page one, laid out the way a Marathi broadsheet daily lays out page one:

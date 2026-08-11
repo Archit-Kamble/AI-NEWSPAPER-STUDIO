@@ -64,6 +64,78 @@ function snapPointsX(geometry) {
 const BASELINE_MM = 4;
 const baselinePx = () => mmToPx(BASELINE_MM);
 
+// The one page-region model: every page has a HEADER, a CONTENT region and a
+// FOOTER, and this is the only place that says how deep each is. templates.js
+// reads this to know where a block may start and must stop; masthead.js (the
+// header/footer furniture itself - nameplate, folio, the page-foot printline,
+// the Act imprint) reads the exact same numbers to know where to draw. Before
+// this existed the two disagreed: templates.js let a block's content region
+// run all the way to the matter's true bottom edge, while masthead.js
+// independently drew an opaque page-foot bar (and, on the imprint page, the
+// printer's declaration) inside that same 16-34px band, on top of it - a
+// content block and the page furniture claiming the same pixels. That is what
+// Project A's Bug #7/#8/#9 (footer/content overlap, duplicate-looking footer
+// regions, uneven gaps on the imprint page) turned out to be: not a filled-in-
+// unevenly-content illusion, a geometry clash baked into two files that never
+// shared a number.
+const HEADER = {
+  // Page one: the nameplate band. 136px is furniture, fixed by the identity
+  // artwork rendered there - not derived, see templates.js's own history of
+  // this number.
+  mastheadHeightPx: 136,
+  mastheadClearancePx: 8,
+  // Inside pages: the folio strip, one ruled line.
+  folioHeightPx: 40,
+};
+
+// The footer band, reserved at the foot of EVERY page's content region - front
+// and inside alike, whether or not this particular page happens to be the
+// imprint page. Reserving it uniformly, rather than only on whichever page
+// identity.js names as the imprint page, is deliberate: a template is built
+// once, at module load, before any page exists to ask "am I page two?", and a
+// uniform reservation is also what makes the gap above the footer the same
+// page to page rather than only on the one page that happens to carry the
+// extra legal declaration.
+const FOOTER = {
+  footHeightPx: 16, // the printline + page number strip every page carries
+  imprintHeightPx: 24, // the Act declaration, stacked directly above it
+  gapPx: 8, // one baseline between them
+};
+FOOTER.bandPx = FOOTER.footHeightPx + FOOTER.gapPx + FOOTER.imprintHeightPx;
+
+const snapUp = (px, step) => Math.ceil(px / step) * step;
+const snapDown = (px, step) => Math.floor(px / step) * step;
+
+/**
+ * The three regions for one page, in editor px. `kind` is "front" or
+ * "inside" - the only two headers a page can have (the nameplate, or the
+ * folio strip). The footer band is identical either way.
+ */
+function regionsFor(g, kind = 'inside') {
+  const step = g.baselinePx;
+  const matterBottom = g.marginYPx + g.matterHeightPx;
+
+  const headerBottom = kind === 'front'
+    ? snapUp(g.marginYPx + HEADER.mastheadHeightPx + HEADER.mastheadClearancePx, step)
+    : snapUp(g.marginYPx + HEADER.folioHeightPx, step);
+
+  const footerTop = snapDown(matterBottom - FOOTER.bandPx, step);
+  const footTop = snapDown(matterBottom - FOOTER.footHeightPx, step);
+
+  return {
+    header: { top: g.marginYPx, bottom: headerBottom },
+    content: { top: headerBottom, bottom: footerTop },
+    footer: {
+      top: footerTop,
+      bottom: matterBottom,
+      imprintTop: footerTop,
+      imprintHeightPx: FOOTER.imprintHeightPx,
+      footTop,
+      footHeightPx: FOOTER.footHeightPx,
+    },
+  };
+}
+
 function geometryOf(newspaper = {}) {
   const g = {
     pageWidthMm: Number(newspaper.page_width_mm) || DEFAULTS.pageWidthMm,
@@ -77,7 +149,7 @@ function geometryOf(newspaper = {}) {
   };
 
   const grid = columnGrid(g);
-  return {
+  const resolved = {
     ...g,
     pxPerMm: PX_PER_MM,
     baselinePx: baselinePx(),
@@ -94,6 +166,8 @@ function geometryOf(newspaper = {}) {
     printPageWidthPx: mmToPrintPx(g.pageWidthMm, g.printDpi),
     printPageHeightPx: mmToPrintPx(g.pageHeightMm, g.printDpi),
   };
+  resolved.regions = { front: regionsFor(resolved, 'front'), inside: regionsFor(resolved, 'inside') };
+  return resolved;
 }
 
 module.exports = {
@@ -107,6 +181,9 @@ module.exports = {
   snapPointsX,
   geometryOf,
   typeScaleFor,
+  regionsFor,
+  HEADER,
+  FOOTER,
 };
 
 // Default type sizes for a block, scaled to how wide it is.

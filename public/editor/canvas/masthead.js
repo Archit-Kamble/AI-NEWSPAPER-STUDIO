@@ -147,11 +147,26 @@ export function folioMarkup(newspaper, page, geometry) {
   `;
 }
 
+// The footer band, read from the one page-region model (geometry.js's
+// regionsFor, served over GET /api/geometry as geometry.regions). Front and
+// inside pages reserve the identical band, so this falls back to the same
+// numbers regionsFor(g, 'inside') computes when an older geometry payload
+// (without .regions) is ever passed in.
+const FALLBACK_FOOTER = { footTop: 1024, footHeightPx: 16, imprintTop: 1006, imprintHeightPx: 24 };
+function footerBand(geometry) {
+  return geometry?.regions?.inside?.footer || geometry?.regions?.front?.footer || FALLBACK_FOOTER;
+}
+
 /**
  * The foot of the page: the printline every Indian newspaper carries by law,
  * the page number and the edition's date. Standing furniture - identical in
  * every edition except for the two numbers, both of which the software already
  * knows. Nobody types this.
+ *
+ * Positioned and SIZED from the reserved footer band, not a hand-typed offset
+ * - the explicit height plus `overflow: hidden` on `.page-foot` (styles.css)
+ * is what guarantees this strip can never grow past the room templates.js
+ * left for it, however long the identity strings are.
  */
 export function pageFootMarkup(newspaper, page, geometry) {
   if (!identity || !page) return "";
@@ -159,14 +174,15 @@ export function pageFootMarkup(newspaper, page, geometry) {
   const date = dateParts(newspaper?.publication_date);
   const left = geometry?.marginXPx ?? 20;
   const width = geometry?.matterWidthPx ?? 620;
-  const top = (geometry?.marginYPx ?? 20) + (geometry?.matterHeightPx ?? 1020) - 16;
+  const band = footerBand(geometry);
   const dateText = date ? `${date.day} ${date.monthYear}` : "";
 
   // The foot follows the same outer-edge rule as the folio.
   const verso = Number(page.page_number) % 2 === 0;
 
   return `
-    <div class="page-foot ${verso ? "foot-verso" : "foot-recto"}" style="left:${left}px;top:${top}px;width:${width}px;">
+    <div class="page-foot ${verso ? "foot-verso" : "foot-recto"}"
+         style="left:${left}px;top:${band.footTop}px;width:${width}px;height:${band.footHeightPx}px;">
       <span class="foot-printline">${escapeHtml(identity.printline || "")}</span>
       <span class="foot-page">${escapeHtml(identity.title || "")} । ${escapeHtml(dateText)} । पृष्ठ ${escapeHtml(devanagari(page.page_number))}</span>
     </div>
@@ -188,10 +204,10 @@ export function imprintMarkup(newspaper, page, geometry) {
 
   const left = geometry?.marginXPx ?? 20;
   const width = geometry?.matterWidthPx ?? 620;
-  const bottom = (geometry?.marginYPx ?? 20) + (geometry?.matterHeightPx ?? 1020);
+  const band = footerBand(geometry);
 
   return `
-    <div class="page-imprint" style="left:${left}px;width:${width}px;top:${bottom - 34}px;">
+    <div class="page-imprint" style="left:${left}px;width:${width}px;top:${band.imprintTop}px;height:${band.imprintHeightPx}px;">
       <span class="imprint-mr">${escapeHtml(identity.imprint || "")}</span>
       <span class="imprint-en">${escapeHtml(identity.imprintEnglish || "")}</span>
     </div>

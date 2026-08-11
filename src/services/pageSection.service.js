@@ -11,11 +11,22 @@ const nearest = (value, points) =>
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 // Every block the editor draws or drags covers a whole number of columns and
-// sits on the baseline, inside the matter box. Snapping on the server as well
-// as in the browser means a page is always printable whatever sent the request.
-function snapGeometry(input) {
-  const top = G.marginYPx;
-  const bottom = G.marginYPx + G.matterHeightPx;
+// sits on the baseline, inside the CONTENT region - never the raw matter box.
+// Snapping on the server as well as in the browser means a page is always
+// printable whatever sent the request.
+//
+// This used to clamp against the matter box alone (marginYPx to
+// marginYPx+matterHeightPx), which is the whole printable area including the
+// header and footer furniture's own bands - so a block dragged to the very
+// top or foot of the page could legally land on top of the nameplate/folio or
+// the page-foot/imprint strip, exactly the collision geometry.js's region
+// model exists to rule out (Project A, Bug #7/#8/#9). Clamping to
+// G.regions[kind].content instead makes that collision impossible to create
+// in the first place, not just something validatePageLayout() reports after
+// the fact.
+function snapGeometry(input, pageNumber) {
+  const kind = Number(pageNumber) === 1 ? 'front' : 'inside';
+  const { top, bottom } = G.regions[kind].content;
 
   // Left edge onto a column start, right edge onto a column end - never the
   // other way round, or a block would begin inside a gutter.
@@ -35,7 +46,7 @@ async function createSection(pageId, body) {
   const id = parseInt(pageId, 10);
   const page = await pageRepository.findById(id);
   if (!page) return null;
-  await pageRepository.createSection(id, snapGeometry(body));
+  await pageRepository.createSection(id, snapGeometry(body, page.page_number));
   return pageRepository.findById(id);
 }
 
@@ -48,7 +59,9 @@ async function deleteSection(pageId, sectionKey) {
 
 async function moveSection(pageId, sectionKey, body) {
   const id = parseInt(pageId, 10);
-  const saved = await pageRepository.saveSectionGeometry(id, sectionKey, snapGeometry(body));
+  const page = await pageRepository.findById(id);
+  if (!page) return null;
+  const saved = await pageRepository.saveSectionGeometry(id, sectionKey, snapGeometry(body, page.page_number));
   if (!saved) return null;
   return pageRepository.findById(id);
 }

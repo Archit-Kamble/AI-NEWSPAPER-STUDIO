@@ -459,6 +459,211 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
     await page.waitForTimeout(1200);
   }
 
+  // ------------------------------------------------------- properties inspector ---
+  //
+  // Stage 3: the settings rail's new Properties panel. What it shows has to
+  // be REAL - a column that is both persisted and actually rendered
+  // somewhere (properties-panel.js's own note explains why crop_x_px etc.
+  // and an "opacity" field are deliberately absent). Image geometry is the
+  // priority: real X/Y/Width/Height, editable, going through the same
+  // history stack Stage 2 already wired pictures into.
+  {
+    const partOf = () => page.evaluate(async () => (await import('/editor/store.js')).getState().selectedPart);
+    const fetchImages = () => page.evaluate(async ([ed, key]) => {
+      const pages = await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json());
+      return { pageId: pages[0].id, images: await fetch(`/api/pages/${pages[0].id}/sections/${key}/images`).then((r) => r.json()) };
+    }, [ED, KEY]);
+
+    // ---- block and text: no fake geometry ----
+    await page.locator('#edFramePage').click({ position: { x: 2, y: 2 } });
+    await page.waitForTimeout(250);
+    say((await partOf()) === 'block', 'block is selected for this check');
+    say((await page.locator('#propSelectionLabel').innerText()).toLowerCase() === 'whole block',
+      'Properties panel says "Whole block"');
+    say((await page.locator('#edPropertiesGroup').innerText()).toLowerCase().includes('article'),
+      'and shows the real block type');
+    say((await page.locator('#edPropertiesGroup').innerText()).includes(`${150} × ${264}`)
+      || /\d+\s*×\s*\d+\s*px/.test(await page.locator('#edPropertiesGroup').innerText()),
+      'and the real block size', await page.locator('#edPropertiesGroup').innerText());
+    say((await page.locator('#edPropertiesGroup input[type="number"]').count()) === 0,
+      'no numeric geometry fields for the block - it has none to edit here');
+
+    await page.locator('#edHeadlineFrame').click();
+    await page.waitForTimeout(250);
+    say((await partOf()) === 'headline', 'headline is selected for this check');
+    say((await page.locator('#propSelectionLabel').innerText()).toLowerCase() === 'headline',
+      'Properties panel follows the selection to "Headline"');
+    say((await page.locator('#edPropertiesGroup input[type="number"]').count()) === 0,
+      'text objects show no fake X/Y/W/H - text-flow position is not a coordinate');
+    say(/text-flow|grid/i.test(await page.locator('#edPropertiesGroup').innerText()),
+      'and says so honestly, pointing at what actually decides its position');
+
+    // Typography's own per-object scoping (Stage 1) must still work - the
+    // properties panel is additive, not a replacement that could regress it.
+    say((await page.locator('#tySelectionLabel').innerText()).toLowerCase() === 'headline',
+      'Typography panel is still correctly scoped to Headline alongside Properties');
+
+    await page.locator('.ql-editor').click();
+    await page.waitForTimeout(250);
+    say((await partOf()) === 'body', 'body is selected for this check');
+    say((await page.locator('#edPropertiesGroup input[type="number"]').count()) === 0,
+      'the body shows no fake X/Y/W/H either');
+
+    // ---- image: the real thing ----
+    const added = await page.evaluate(async ([ed, key]) => {
+      const pages = await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json());
+      const images = await fetch(`/api/pages/${pages[0].id}/sections/${key}/images`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: '/uploads/1785497125079-aada20ab-f300-4300-a704-61d0a090f83c.png',
+          filename: 'stage3-properties-test.png',
+          x: 10, y: 10, width: 60, height: 60,
+        }),
+      }).then((r) => r.json());
+      return images[images.length - 1];
+    }, [ED, KEY]);
+    say(Boolean(added?.id), 'a picture was placed for the properties test');
+
+    const otherKey = await page.evaluate(async ([ed, key]) => {
+      const pages = await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json());
+      return pages[0].sections.map((s) => s.section_key).find((k) => k !== key) || null;
+    }, [ED, KEY]);
+    if (otherKey) { await block(otherKey).click(); await page.waitForTimeout(500); }
+    await block().click();
+    await page.waitForTimeout(1200);
+
+    const picFrame = () => page.locator(`.pic-frame[data-image-id="${added.id}"]`);
+    await picFrame().click();
+    await page.waitForTimeout(250);
+    say((await partOf()) === 'image', 'the picture is selected for the properties test');
+    say((await page.locator('#propSelectionLabel').innerText()).toLowerCase() === 'picture',
+      'Properties panel follows the selection to "Picture"');
+
+    say((await page.inputValue('#propImgX')) === '10', 'the inspector shows the real X');
+    say((await page.inputValue('#propImgY')) === '10', 'the inspector shows the real Y');
+    say((await page.inputValue('#propImgWidth')) === '60', 'the inspector shows the real Width');
+    say((await page.inputValue('#propImgHeight')) === '60', 'the inspector shows the real Height');
+
+    // No request-per-keystroke: typing three digits into a field before
+    // committing must not send three PATCHes.
+    const requests = [];
+    const onRequest = (req) => { if (req.method() === 'PATCH' && /\/images\/\d+$/.test(req.url())) requests.push(req.url()); };
+    page.on('request', onRequest);
+    // The block is 150px wide and the picture is 60px wide here, so the
+    // valid X range is 0-90 (clampToBlock's own existing rule, reused rather
+    // than duplicated) - 45 is comfortably inside it.
+    await page.click('#propImgX');
+    await page.keyboard.press('Control+a');
+    await page.keyboard.type('45', { delay: 30 }); // two real keystrokes, not a paste
+    await page.waitForTimeout(200);
+    say(requests.length === 0, 'typing into a numeric field before committing sends no request yet',
+      `${requests.length} request(s) so far`);
+    await page.keyboard.press('Tab');
+    await page.waitForTimeout(700);
+    say(requests.length === 1, 'committing (blur/Enter) sends exactly one request, not one per digit',
+      `${requests.length} request(s)`);
+    page.off('request', onRequest);
+
+    let row = (await fetchImages()).images.find((r) => r.id === added.id);
+    say(Number(row?.x_px) === 45, 'the X change is saved to the picture\'s own row', `x_px ${row?.x_px}`);
+    const canvasAfterX = await picFrame().boundingBox();
+
+    // Y
+    await page.fill('#propImgY', '35');
+    await page.keyboard.press('Tab');
+    await page.waitForTimeout(700);
+    row = (await fetchImages()).images.find((r) => r.id === added.id);
+    say(Number(row?.y_px) === 35, 'changing Y moves the picture and saves it', `y_px ${row?.y_px}`);
+
+    // Width
+    await page.fill('#propImgWidth', '90');
+    await page.keyboard.press('Tab');
+    await page.waitForTimeout(700);
+    row = (await fetchImages()).images.find((r) => r.id === added.id);
+    say(Number(row?.width_px) === 90, 'changing Width resizes the picture and saves it', `width_px ${row?.width_px}`);
+    const canvasAfterWidth = await picFrame().boundingBox();
+    say(canvasAfterWidth.width > canvasAfterX.width, 'the canvas picture is visibly wider after the Width change');
+
+    // Height
+    await page.fill('#propImgHeight', '70');
+    await page.keyboard.press('Tab');
+    await page.waitForTimeout(700);
+    row = (await fetchImages()).images.find((r) => r.id === added.id);
+    say(Number(row?.height_px) === 70, 'changing Height resizes the picture and saves it', `height_px ${row?.height_px}`);
+
+    // A direct drag (Stage 2's own mechanism) must still update Properties -
+    // the inspector cannot go stale relative to the canvas.
+    const tlHandle = picFrame().locator('.pic-handle-tl');
+    const hBox = await tlHandle.boundingBox();
+    await page.mouse.move(hBox.x + hBox.width / 2, hBox.y + hBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(hBox.x + 15, hBox.y + 15, { steps: 5 });
+    await page.mouse.up();
+    await page.waitForTimeout(700);
+    row = (await fetchImages()).images.find((r) => r.id === added.id);
+    say(await page.inputValue('#propImgWidth') === String(row.width_px),
+      'a direct drag on the canvas updates the Properties panel\'s Width field',
+      `field ${await page.inputValue('#propImgWidth')} vs row ${row.width_px}`);
+    say(await page.inputValue('#propImgHeight') === String(row.height_px),
+      'and its Height field', `field ${await page.inputValue('#propImgHeight')} vs row ${row.height_px}`);
+
+    // Reject invalid geometry rather than sending it.
+    await page.fill('#propImgWidth', '0');
+    await page.keyboard.press('Tab');
+    await page.waitForTimeout(400);
+    say(Number(await page.inputValue('#propImgWidth')) > 0,
+      'Width <= 0 is rejected - the field reverts instead of saving a hole with no picture in it');
+
+    // Undo/redo through the SAME history stack Stage 2 wired pictures into -
+    // not a second one for "properties changes" specifically. The rejected
+    // Width=0 attempt above sent no request and recorded no history step, so
+    // this Ctrl+Z steps back through the last REAL change (the direct drag) -
+    // proving a properties-panel edit and a drag share one undo stack.
+    const widthBeforeUndo = Number((await fetchImages()).images.find((r) => r.id === added.id).width_px);
+    await page.locator('.ext-editor-header').click();
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(700);
+    row = (await fetchImages()).images.find((r) => r.id === added.id);
+    say(Number(row?.width_px) !== widthBeforeUndo, 'Ctrl+Z steps the picture back through the shared history stack');
+    await page.keyboard.press('Control+Shift+z');
+    await page.waitForTimeout(700);
+    row = (await fetchImages()).images.find((r) => r.id === added.id);
+    say(Number(row?.width_px) === widthBeforeUndo, 'Ctrl+Shift+Z redoes it', `width_px ${row?.width_px}`);
+
+    // Zoom (a window resize, which relayouts the Block Editor) must not
+    // change what a property IS - only how big it looks on screen.
+    const widthField = Number(await page.inputValue('#propImgWidth'));
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.waitForTimeout(500);
+    say(Number(await page.inputValue('#propImgWidth')) === widthField,
+      'the Width property is unchanged by a viewport/zoom change - it is editor pixels, not screen pixels');
+    await page.setViewportSize({ width: 1512, height: 950 });
+    await page.waitForTimeout(500);
+
+    // Reload persistence.
+    await openEdition();
+    await block().click();
+    await page.waitForTimeout(1500);
+    await picFrame().click();
+    await page.waitForTimeout(300);
+    const persisted = (await fetchImages()).images.find((r) => r.id === added.id);
+    say(await page.inputValue('#propImgX') === String(persisted.x_px), 'X survives a reload');
+    say(await page.inputValue('#propImgY') === String(persisted.y_px), 'Y survives a reload');
+    say(await page.inputValue('#propImgWidth') === String(persisted.width_px), 'Width survives a reload');
+    say(await page.inputValue('#propImgHeight') === String(persisted.height_px), 'Height survives a reload');
+
+    const scrollers = await nestedScrollers();
+    say(scrollers.length === 0, 'the Properties panel introduces no second full-page scrollbar');
+
+    // Cleanup.
+    const { pageId } = await fetchImages();
+    await page.evaluate(([pid, key, id]) => fetch(`/api/pages/${pid}/sections/${key}/images/${id}`, { method: 'DELETE' }), [pageId, KEY, added.id]);
+    if (otherKey) { await block(otherKey).click(); await page.waitForTimeout(500); }
+    await block().click();
+    await page.waitForTimeout(1200);
+  }
+
   // ------------------------------------------------------- keyboard shortcuts ---
   //
   // Undo/redo already existed (history.js) with toolbar buttons; what is new
@@ -561,8 +766,8 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
     for (const wanted of ['story', 'ai', 'layout', 'smart cards']) {
       say(groups.some((g) => g.toLowerCase().includes(wanted)), `panel: ${wanted}`, groups.join(' | '));
     }
-    say(await page.locator('#workspaceToolsPanel .ext-aside > summary').count() === 3,
-      'Typography, Story details and History are beside the page');
+    say(await page.locator('#workspaceToolsPanel .ext-aside > summary').count() === 4,
+      'Properties, Typography, Story details and History are beside the page');
     say(await page.locator('#edStoryToolbar #cmpAddImage').count() === 1,
       'the pictures are part of the writing surface');
     say(await page.locator('#aiFillRemaining').count() === 1

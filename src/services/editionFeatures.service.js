@@ -39,17 +39,42 @@ async function textFlow() {
 // preflight, the fit action; smart-cards.js's own comment on smartCardText()
 // says so directly), so the flattened copy has to exist regardless of whether
 // a card renders on top of it.
-function toCopy(result) {
+//
+// `maxBodyChars`, when given, is enforced HERE, not merely requested of the
+// model. राशिभविष्य/सुविचार are AI-written (written.js), and the brief already
+// asks for a per-sign character ceiling - but a brief is a request, not a
+// guarantee, exactly as CLAUDE.md documents at length for storyWriter.service.js
+// (the sibling problem for ordinary story blocks, solved there with a measured
+// reservation and a resize retry). Confirmed live, not assumed: re-running
+// "Fill features" against the same real block landed the rashi card 126
+// characters over its own budget on one run in five - a real, if occasional,
+// production overset with no safety net at all before this. Rather than a
+// second paid AI call (which every other resize path in this codebase treats
+// as a real cost to avoid), whole ENTRIES are dropped from the tail until the
+// body fits - never a mid-sentence cut, and dropped entries are reported so
+// the gap is visible on the response, not silently absorbed.
+function toCopy(result, maxBodyChars) {
   const items = result.items || [];
   const lines = items.map((item) => {
     const head = item.label ? `${item.label} : ` : '';
     const tail = item.note ? ` (${item.note})` : '';
     return `${head}${item.text}${tail}`;
   });
+
+  let kept = lines;
+  let entriesDropped = 0;
+  if (maxBodyChars) {
+    while (kept.length && kept.join('\n').length > maxBodyChars) {
+      kept = kept.slice(0, -1);
+      entriesDropped += 1;
+    }
+  }
+
   return {
     headline: result.title || '',
     subheading: result.subtitle || '',
-    body: lines.join('\n'),
+    body: kept.join('\n'),
+    entriesDropped,
   };
 }
 
@@ -90,6 +115,7 @@ async function fillEdition(newspaperId, { tier } = {}) {
 
   const filled = [];
   const skipped = [];
+  const trimNotes = [];
 
   for (const block of blocks) {
     const result = built.features[block.feature_key];
@@ -108,7 +134,23 @@ async function fillEdition(newspaperId, { tier } = {}) {
       });
       continue;
     }
-    const copy = toCopy(result);
+    const budget = await bodyBudgetFor(block, result.title || '', result.subtitle || '');
+    const copy = toCopy(result, budget);
+    if (copy.entriesDropped) {
+      trimNotes.push(
+        `${block.section_key}: ${copy.entriesDropped} entr${copy.entriesDropped === 1 ? 'y' : 'ies'} did not fit ` +
+        'this block and were left out rather than cut mid-sentence. The block was still filled with the rest.',
+      );
+      // The trim protects the flattened body - the canonical text every
+      // measuring tool reads (worklist/preflight/character grid), and what a
+      // reader would see if the card were ever removed. It does not also trim
+      // `result.card`'s own entries, so a card that is CURRENTLY rendering
+      // still shows all twelve signs; only the text underneath it, which is
+      // what is actually oversized, is protected. Revisit if a card's own
+      // rendered height is ever found to overflow its block too - today
+      // `.section-feature`'s `overflow:hidden` (styles.css) already makes
+      // that structurally impossible, so there is nothing to protect there.
+    }
     // `result.card` is the structured payload every feature builder produces
     // (src/features/{sudoku,written,panchang,dinvishesh}.js) beside its
     // flattened `items` - and this UPDATE used to discard it, writing only the
@@ -132,7 +174,26 @@ async function fillEdition(newspaperId, { tier } = {}) {
     filled.push({ sectionKey: block.section_key, feature: block.feature_key, chars: copy.body.length });
   }
 
-  return { date: built.date, filled, skipped, notes: built.notes, writtenBy: built.writtenBy || null };
+  return { date: built.date, filled, skipped, notes: [...built.notes, ...trimNotes], writtenBy: built.writtenBy || null };
+}
+
+// The real character budget for THIS block, with the headline/subheading it
+// is actually about to receive - not an estimate. `toCopy()`'s trim is only as
+// good as this number: measured too generously, an oversized body still gets
+// written; too strictly, entries are dropped that would have fit.
+async function bodyBudgetFor(block, headline, subheading) {
+  const { buildFlowMap } = await textFlow();
+  const map = buildFlowMap(block, {
+    marginPx: Number(block.margin_px) || 12,
+    lineHeight: Number(block.line_height) || 1.25,
+    headline,
+    headlineFontPx: Number(block.headline_font_px),
+    subheading,
+    subheadingFontPx: Number(block.subheading_font_px),
+    body: '',
+    bodyFontPx: Number(block.body_font_px),
+  });
+  return map.bodyCharBudget;
 }
 
 // How many characters each of the twelve signs may run to, given the box the
@@ -157,4 +218,4 @@ async function perSignBudget(block) {
   return Math.max(40, Math.min(160, Math.floor(usable / 12)));
 }
 
-module.exports = { fillEdition, toCopy, perSignBudget };
+module.exports = { fillEdition, toCopy, perSignBudget, bodyBudgetFor };

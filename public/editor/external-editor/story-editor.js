@@ -183,7 +183,7 @@ export function refreshStoryCount() {
   readout.classList.toggle("over", over > 0);
 }
 
-export function bindStoryEditor({ onPatch, getBudget, getSection, getView, getImages, onPatchImage, onRemoveImage, onSelectImage }) {
+export function bindStoryEditor({ onPatch, getBudget, getSection, getView, getImages, onPatchImage, onRemoveImage, onSelectImage, onSelectPart }) {
   budgetOf = getBudget;
 
   const headline = document.getElementById("edStoryHeadline");
@@ -194,10 +194,15 @@ export function bindStoryEditor({ onPatch, getBudget, getSection, getView, getIm
     onPatch?.({ headline: headline.value }, "story-editor");
     refreshFieldCounters({ headline: headline.value, subheading: subheading?.value });
   });
+  // Typing here IS the headline object being edited - Tab-ing into the field,
+  // or a click that landed on the input rather than the frame drawn over the
+  // page, must select it exactly as clicking the frame does.
+  headline?.addEventListener("focus", () => onSelectPart?.("headline"));
   subheading?.addEventListener("input", () => {
     onPatch?.({ subheading: subheading.value }, "story-editor");
     refreshFieldCounters({ headline: headline?.value, subheading: subheading.value });
   });
+  subheading?.addEventListener("focus", () => onSelectPart?.("subheading"));
 
   // The block's own type. Same fields the Typography panel writes.
   document.getElementById("edStoryFont")?.addEventListener("change", (event) =>
@@ -238,6 +243,7 @@ export function bindStoryEditor({ onPatch, getBudget, getSection, getView, getIm
       onPatchImage,
       onRemoveImage,
       onSelectImage,
+      onSelectPart,
     }).then(refreshStoryCount);
   }
 }
@@ -262,13 +268,13 @@ export function refreshStoryPictures(images) {
   renderPictures(images);
 }
 
-export function refreshStoryEditor(view, section, images, source) {
+export function refreshStoryEditor(view, section, images, source, selectedPart) {
   const headline = document.getElementById("edStoryHeadline");
   const subheading = document.getElementById("edStorySubheading");
   if (headline && document.activeElement !== headline) headline.value = plainText(view.headline);
   if (subheading && document.activeElement !== subheading) subheading.value = plainText(view.subheading);
 
-  if (section) refreshFrame(section, view, images, source);
+  if (section) refreshFrame(section, view, images, source, selectedPart);
 
   refreshStoryCount();
   refreshFieldCounters(view);

@@ -2446,6 +2446,34 @@ body.print-view .canvas-view-controls {
 .ext-column-wide {
   grid-column: span 2;
 }
+/* Which object on the page the panel's controls are pointed at - the
+   Typography tab used to always mean "the whole block"; now it says which
+   part of it a click on the canvas/Block Editor last targeted. */
+.ty-selection-label {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #6a6a74;
+}
+.ty-selection-label strong { color: var(--accent); }
+.ty-selection-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: var(--s2) var(--s3);
+  background: #fff5f6;
+  border: 1px solid #f0d7da;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  color: #55555f;
+}
+.form-group-targeted {
+  border-radius: 6px;
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
 @media (max-width: 1100px) {
   .ext-column-wide { grid-column: span 1; }
 }
@@ -4224,6 +4252,17 @@ body.print-view .page-imprint {
   transition: background-color 0.12s ease;
 }
 .frame-headline:hover, .frame-subheading:hover { background: rgba(196, 30, 58, 0.06); }
+/* The selection box a direct-manipulation editor shows for the object
+   currently targeted. No corner drag handles here on purpose: text position
+   in this block is decided by the character grid (headline/deck take whole
+   rows off the top), not by dragging, so showing resize handles would
+   promise an interaction the newspaper model cannot actually save or
+   print - see block-frame.js's own note on this. A plain accent outline
+   marks the box as an editor selection, not a print rule. */
+.frame-selected {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
 .frame-headline .section-headline, .frame-subheading .section-subheading { margin: 0; }
 .frame-body { display: flex; flex-direction: column; min-width: 0; }
 .frame-body .ql-container {

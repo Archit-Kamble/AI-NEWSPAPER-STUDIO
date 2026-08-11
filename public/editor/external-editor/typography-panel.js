@@ -80,9 +80,39 @@ function segmented(name, options, current) {
   </div>`;
 }
 
-export function typographyPanelMarkup(view) {
+// Which NUMBER_FIELDS entry is "the object currently selected" - only the
+// three font sizes are actually stored per-object (headline_font_px,
+// subheading_font_px, body_font_px); everything else (family, weight,
+// alignment, columns, margin, line height, letter/paragraph spacing) is one
+// value for the whole block in page_sections, so highlighting it as
+// "headline-only" would claim a precision the schema does not have. This map
+// is deliberately short for that reason.
+const PART_FIELD = { headline: "tyHeadlineSize", subheading: "tySubheadingSize", body: "tyBodySize" };
+const PART_LABEL = {
+  block: "Whole block",
+  headline: "Headline",
+  subheading: "Subheading",
+  body: "Body",
+  image: "Picture",
+  smartCard: "Smart Card",
+};
+
+function selectionNote(part) {
+  if (!part || part === "block") return "";
+  if (part === "image") {
+    return `<p class="ty-selection-note">A picture is selected. Its size, position and crop are set on the page itself, or in Story → Images - not here.</p>`;
+  }
+  if (part === "smartCard") {
+    return `<p class="ty-selection-note">A Smart Card is selected. Its content is generated, not typed - see the Smart Cards panel.</p>`;
+  }
+  return `<p class="ty-selection-note">Editing <strong>${PART_LABEL[part] || part}</strong> - its size is highlighted below. Family, weight, alignment and spacing are set for the whole block.</p>`;
+}
+
+export function typographyPanelMarkup(view, part = "block") {
   return `
     <div class="ext-columns">
+      <p class="ty-selection-label">Editing: <strong id="tySelectionLabel">${PART_LABEL[part] || "Whole block"}</strong></p>
+      ${selectionNote(part)}
       <div class="ext-column">
         <div class="form-group">
           <label>Font family</label>
@@ -112,7 +142,7 @@ export function typographyPanelMarkup(view) {
         <div class="field-grid">
           ${NUMBER_FIELDS.map(
             (f) => `
-            <div class="form-group">
+            <div class="form-group${f.id === PART_FIELD[part] ? " form-group-targeted" : ""}">
               <label>${f.label}</label>
               <input type="number" id="${f.id}" min="${f.min}" max="${f.max}" step="${f.step}" value="${view[f.field]}" />
             </div>`,
@@ -204,9 +234,21 @@ export function bindTypographyPanel(getView, onPatch) {
   });
 }
 
-export function refreshTypographyPanel(view, source) {
+export function refreshTypographyPanel(view, source, part = "block") {
   const preview = document.getElementById("tyPreview");
   if (preview) preview.innerHTML = previewMarkup(view);
+
+  const label = document.getElementById("tySelectionLabel");
+  if (label) label.textContent = PART_LABEL[part] || "Whole block";
+  const note = document.querySelector(".ty-selection-note");
+  const wantedNote = selectionNote(part);
+  if ((note?.outerHTML || "") !== wantedNote) note?.remove();
+  if (wantedNote && !document.querySelector(".ty-selection-note")) {
+    label?.closest("p")?.insertAdjacentHTML("afterend", wantedNote);
+  }
+  document.querySelectorAll(".form-group-targeted").forEach((el) => el.classList.remove("form-group-targeted"));
+  const targeted = PART_FIELD[part];
+  if (targeted) document.getElementById(targeted)?.closest(".form-group")?.classList.add("form-group-targeted");
 
   document.querySelectorAll("[data-segmented]").forEach((group) => {
     const field = group.dataset.segmented;

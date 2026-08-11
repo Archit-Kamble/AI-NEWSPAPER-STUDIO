@@ -26,6 +26,14 @@ const state = {
   currentPageId: null,
   reporterNews: [],
   selectedSectionKey: null,
+  // WHICH PART of the selected block is the active editing target - the block
+  // as a whole, or one of the objects inside it. One source of truth for
+  // selection, read by the Block Editor's frames (which draw the selection
+  // box) and the Typography panel (which points its controls at it), rather
+  // than each inferring it from DOM classes or focus state independently.
+  // "block" is the default: nothing more specific is targeted yet.
+  selectedPart: "block", // block | headline | subheading | body | image | smartCard
+  selectedImageId: null,
   // Working copy of the selected section. Everything the user types lives here
   // until it is saved - never in the DOM, so undo/redo and autosave can read it.
   draft: null,
@@ -118,11 +126,30 @@ export function setSelectedSection(sectionKey, draft) {
   state.selectedSectionKey = sectionKey;
   state.draft = draft;
   state.dirty = false;
+  // A new block starts with nothing more specific than the block itself
+  // targeted - the previous block's headline being selected must never
+  // silently carry over onto whatever is clicked next.
+  state.selectedPart = "block";
+  state.selectedImageId = null;
   emit(TOPICS.SELECTION, { previous, current: sectionKey });
 }
 
 export function clearSelection() {
   setSelectedSection(null, null);
+}
+
+// Which object within the selected block is the active editing target -
+// e.g. clicking the headline frame in the Block Editor, or clicking a
+// picture. Does not touch which block is selected or its draft.
+export function setSelectedPart(part, imageId = null) {
+  if (state.selectedPart === part && state.selectedImageId === imageId) return;
+  state.selectedPart = part;
+  state.selectedImageId = part === "image" ? imageId : null;
+  emit(TOPICS.SELECTION, { current: state.selectedSectionKey, part });
+}
+
+export function getSelectedPart() {
+  return state.selectedPart;
 }
 
 // ------------------------------------------------------------------ draft ---

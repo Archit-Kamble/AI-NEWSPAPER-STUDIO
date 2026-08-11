@@ -280,6 +280,7 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
     onPatchImage: callbacks.onPatchImage,
     onRemoveImage: callbacks.onRemoveImage,
     onSelectImage: (id) => { selectPicture(id); selectPictureFrame(id); },
+    onSelectPart: callbacks.onSelectPart,
   });
   bindAiPanel(callbacks.getView, callbacks.getSection, callbacks.onPatch, notify, callbacks.getImages, callbacks.getPage);
   bindDockToggle(callbacks);
@@ -318,7 +319,7 @@ export function focusGroup(groupKey) {
 
 // Live sync. Panels update themselves in place - nothing is rebuilt, so scroll
 // positions and the caret survive every keystroke.
-export function refreshExternalEditor(section, view, story, source) {
+export function refreshExternalEditor(section, view, story, source, selectedPart) {
   const badge = document.getElementById("edStatusBadge");
   if (badge) {
     const status = statusOf(view);
@@ -330,7 +331,7 @@ export function refreshExternalEditor(section, view, story, source) {
   renderPictureControls(images, undefined, section);
   refreshPicturesPanel(images);
   refreshSpacePanel(section, view, activeCallbacks?.getImages?.() || []);
-  refreshTypographyPanel(view, source);
+  refreshTypographyPanel(view, source, selectedPart);
   refreshStoryDetails(view, source);
   refreshAiPanel(view, source);
   refreshStorySource(view, story);
@@ -339,7 +340,7 @@ export function refreshExternalEditor(section, view, story, source) {
   // classic way a rich editor becomes unusable.
   // The page and everything on it: the frames follow every change to the block
   // - one picture added, one dragged, one taken off, a type size changed.
-  refreshStoryEditor(view, section, images, source);
+  refreshStoryEditor(view, section, images, source, selectedPart);
 }
 
 /**

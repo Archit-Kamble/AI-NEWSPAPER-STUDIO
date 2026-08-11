@@ -29,7 +29,12 @@ import { headlineMarkup, subheadingMarkup } from "../canvas/section-thumb.js";
 
 let quill = null;
 let hooks = {};
-let state = { section: null, view: null, images: [], selectedId: null };
+// selectedId is which PICTURE is selected (unrelated to selectedPart="image" -
+// that says WHICH KIND of object is targeted; selectedId says which one when
+// there's more than one on the block). Both come from the one store
+// (store.js's selectedPart/selectedImageId) via workspace.js - block-frame.js
+// itself never decides selection, only draws it.
+let state = { section: null, view: null, images: [], selectedId: null, selectedPart: "block" };
 
 // ---------------------------------------------------------------- loading ---
 
@@ -198,6 +203,7 @@ function layoutTextFrames() {
     headlineFrame.style.height = `${headlineHeight / scale}px`;
     headlineFrame.style.display = state.view.headline ? "" : "none";
     headlineFrame.innerHTML = headlineMarkup(scaledView("headlineFontPx"));
+    headlineFrame.classList.toggle("frame-selected", state.selectedPart === "headline");
   }
 
   if (subheadingFrame) {
@@ -207,6 +213,7 @@ function layoutTextFrames() {
     subheadingFrame.style.top = `${top / scale}px`;
     subheadingFrame.style.height = `${subheadingHeight / scale}px`;
     subheadingFrame.style.display = state.view.subheading ? "" : "none";
+    subheadingFrame.classList.toggle("frame-selected", state.selectedPart === "subheading");
     subheadingFrame.innerHTML = subheadingMarkup(scaledView("subheadingFontPx"));
   }
 
@@ -216,6 +223,7 @@ function layoutTextFrames() {
     bodyFrame.style.right = `${margin / scale}px`;
     bodyFrame.style.top = `${top / scale}px`;
     bodyFrame.style.bottom = `${margin / scale}px`;
+    bodyFrame.classList.toggle("frame-selected", state.selectedPart === "body");
 
     const editor = bodyFrame.querySelector(".ql-editor");
     if (editor) {
@@ -228,12 +236,19 @@ function layoutTextFrames() {
   }
 }
 
-/** Clicking the headline or deck frame focuses the real input that types it. */
+/**
+ * Clicking the headline or deck frame selects that object AND focuses the
+ * real input that types it - a click on the page is both "target this" and
+ * "start editing this" at once, which is how direct manipulation is supposed
+ * to feel; two separate clicks for the same object would not be.
+ */
 function bindTextFrames() {
   document.getElementById("edHeadlineFrame")?.addEventListener("click", () => {
+    hooks.onSelectPart?.("headline");
     document.getElementById("edStoryHeadline")?.focus();
   });
   document.getElementById("edSubheadingFrame")?.addEventListener("click", () => {
+    hooks.onSelectPart?.("subheading");
     document.getElementById("edStorySubheading")?.focus();
   });
 }
@@ -303,6 +318,7 @@ function bindPictureFrames() {
     const id = Number(frame.dataset.imageId);
     state.selectedId = id;
     hooks.onSelectImage?.(id);
+    hooks.onSelectPart?.("image", id);
     page.querySelectorAll(".pic-frame").forEach((f) => f.classList.toggle("is-selected", f === frame));
 
     const sizing = Boolean(event.target.closest("[data-pic-size]"));
@@ -370,9 +386,9 @@ export function copyFromFrame() {
   return /^<p>(<br\s*\/?>)?<\/p>$/i.test(html.trim()) ? "" : sanitise(html);
 }
 
-export async function mountFrame(section, view, images, callbacks) {
+export async function mountFrame(section, view, images, callbacks, selectedPart = "block") {
   hooks = callbacks || {};
-  state = { section, view, images: images || [], selectedId: state.selectedId };
+  state = { section, view, images: images || [], selectedId: state.selectedId, selectedPart };
 
   const host = document.getElementById("edQuill");
   if (!host) return;
@@ -401,6 +417,14 @@ export async function mountFrame(section, view, images, callbacks) {
     if (source !== "user") return;
     hooks.onPatch?.({ body: copyFromFrame() }, "block-frame");
   });
+  // A real click or keyboard focus in Quill is source "user"; refreshFrame()'s
+  // own dangerouslyPasteHTML(..., "silent") sync (below) also moves Quill's
+  // internal selection and would otherwise fire this the same way, quietly
+  // reselecting "body" every time any OTHER part is selected. Only "user"
+  // is a person actually choosing to edit the body.
+  quill.on("selection-change", (range, oldRange, source) => {
+    if (source === "user" && range) hooks.onSelectPart?.("body");
+  });
 
   layoutPage();
   layoutTextFrames();
@@ -425,8 +449,8 @@ export async function mountFrame(section, view, images, callbacks) {
 }
 
 /** Live sync: the block changed under us. */
-export function refreshFrame(section, view, images, source) {
-  state = { ...state, section, view, images: images || [] };
+export function refreshFrame(section, view, images, source, selectedPart) {
+  state = { ...state, section, view, images: images || [], selectedPart: selectedPart ?? state.selectedPart };
   layoutPage();
   layoutTextFrames();
   const showingCard = layoutCard();

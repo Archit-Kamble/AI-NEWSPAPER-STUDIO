@@ -4,6 +4,27 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0za. Project B2 — deterministic layout-quality metrics V1 (2026-08-12)
+
+`src/layout/layout-quality.js` now provides pure, synchronous
+`analyzeLayout(page, newspaper)`. It is intentionally separate from
+`validatePageLayout()`: preflight remains the legality authority, while this
+diagnostic reports a legal page's content-region occupancy, empty template
+frames, largest exact empty rectangle, and left/right plus top/bottom occupied
+area balance. Occupied and empty area are clipped to the canonical
+front/inside content regions and unioned, so overlapping frames are never
+double-counted. V1 uses equal density/whitespace/balance subscores because no
+editor-approved corpus exists to calibrate weights; it emits
+`LOW_PAGE_OCCUPANCY`, `LARGE_EMPTY_REGION`, `LARGE_EMPTY_FRAME`,
+`HORIZONTAL_IMBALANCE`, and `VERTICAL_IMBALANCE` with numerical evidence.
+
+`tests/layoutQuality.test.js` covers valid-but-poor pages, clipping, unions,
+midpoint splitting, empty frames, placed images, Smart Cards and determinism.
+V1 does **not** yet measure typography quality, story hierarchy, image
+appropriateness, story/frame compatibility, or perform page balancing.
+
+---
+
 ## 0z. Project B — persisted story-type foundation (2026-08-12)
 
 This bounded foundation establishes semantic meaning without beginning page

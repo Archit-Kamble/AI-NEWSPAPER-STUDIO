@@ -1558,6 +1558,25 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
     await page.waitForTimeout(1500);
     say(await block().locator('.smart-card-grid-table td').count() === 81, 'and the same grid is on the newspaper');
     say(await page.locator('#edFrameCard .smart-card-grid-table td').count() === 81, 'and in the editor');
+
+    // The card's own headline ("आजचे सुडोकू", set by the accept handler
+    // alongside smartCardKey/smartCardData - smart-card-panel.js) and the
+    // card itself must not overlap. .section-feature used to be
+    // position:absolute;inset:0, drawing the card over whatever headline
+    // the flex column above it had already set - found live on a real
+    // generated page (Project A, PROJECT_STATUS.md), not hypothetical: this
+    // is the exact block this test already puts a card and a headline on.
+    const headlineBox = await block().locator('.section-headline').boundingBox();
+    const cardBox = await block().locator('.smart-card').boundingBox();
+    if (headlineBox && cardBox) {
+      const verticalOverlap = Math.min(headlineBox.y + headlineBox.height, cardBox.y + cardBox.height)
+        - Math.max(headlineBox.y, cardBox.y);
+      say(verticalOverlap <= 0, 'the Smart Card does not draw over its own block\'s headline',
+        `overlap ${verticalOverlap.toFixed(1)}px`);
+    } else {
+      say(false, 'the Smart Card does not draw over its own block\'s headline', 'headline or card not found');
+    }
+
     await page.waitForTimeout(3000);
 
     await openEdition();

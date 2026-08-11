@@ -52,6 +52,12 @@ const OUT_DIR = process.argv[3] || '/tmp/claude-1000/-home-archit-kamble-ai-news
   const pills = await page.locator('.page-pill').count();
   console.log(`found ${pills} page pills`);
 
+  const printView = process.argv.includes('--print-view');
+  if (printView) {
+    await page.locator('#printViewBtn').click();
+    await page.waitForTimeout(300);
+  }
+
   for (let i = 0; i < pills; i += 1) {
     await page.locator('.page-pill').nth(i).click();
     await page.waitForTimeout(1000);
@@ -70,7 +76,8 @@ const OUT_DIR = process.argv[3] || '/tmp/claude-1000/-home-archit-kamble-ai-news
     const surface = page.locator('#canvasSurface');
     await surface.evaluate((el) => el.scrollIntoView({ block: 'start', inline: 'nearest' }));
     await page.waitForTimeout(300);
-    const file = path.join(OUT_DIR, `test-edition-page-${i + 1}.png`);
+    const suffix = printView ? '-print' : '';
+    const file = path.join(OUT_DIR, `test-edition-page-${i + 1}${suffix}.png`);
     await surface.screenshot({ path: file });
     console.log(`wrote ${file}`);
   }

@@ -302,6 +302,163 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
     say((await partOf()) === 'block', 'Escape backs out to the whole block being selected, not deselecting it entirely');
   }
 
+  // ------------------------------------------- direct editing & block selection ---
+  //
+  // Stage 2: a single click now only SELECTS the headline/deck (no jump of
+  // focus into the input elsewhere on the page); a double click is what
+  // starts typing. And empty room on the page - inside the margins, outside
+  // every frame - selects the block as a whole, the way clicking empty
+  // canvas does in any page-layout tool.
+  {
+    const partOf = () => page.evaluate(async () => (await import('/editor/store.js')).getState().selectedPart);
+    const focusedId = () => page.evaluate(() => document.activeElement?.id || '');
+
+    await page.locator('.ext-editor-header').click(); // give focus away first
+    await page.locator('#edHeadlineFrame').click();
+    await page.waitForTimeout(200);
+    say((await partOf()) === 'headline', 'a single click on the headline still selects it');
+    say((await focusedId()) !== 'edStoryHeadline', 'but does not steal focus into the real input');
+
+    await page.locator('#edHeadlineFrame').dblclick();
+    await page.waitForTimeout(200);
+    say((await focusedId()) === 'edStoryHeadline', 'a double click on the headline enters text editing');
+    say((await partOf()) === 'headline', 'and the headline is still what is selected');
+
+    say(await page.locator('#edHeadlineFrame').evaluate((el) => !el.querySelector('.pic-handle')),
+      'the headline frame has no resize handles - the character grid decides its position, not a drag');
+    say(await page.locator('#edBodyFrame').evaluate((el) => !el.querySelector('.pic-handle')),
+      'neither does the body frame');
+
+    // A point inside the page's own margin, outside every frame - the block
+    // fixture is well over 100px screen-tall at this point, so a few pixels
+    // in from the page's own top-left corner is safely in the gutter.
+    await page.locator('#edFramePage').click({ position: { x: 2, y: 2 } });
+    await page.waitForTimeout(250);
+    say((await partOf()) === 'block', 'clicking empty room on the page selects the block as a whole');
+    say(await page.locator('#edFramePage').evaluate((el) => el.classList.contains('frame-selected')),
+      'and the page itself shows a selection box');
+    say((await page.locator('#edSelectionLabel').innerText()).toLowerCase() === 'whole block',
+      'the selection label reads "Whole block"');
+  }
+
+  // -------------------------------------------------------- image resize handles ---
+  //
+  // A real picture, placed through the same endpoint "Take from Reporter"
+  // and the pictures panel already use (sectionImage.service.js's add()) -
+  // not a fixture invented only for this test.
+  {
+    const partOf = () => page.evaluate(async () => (await import('/editor/store.js')).getState().selectedPart);
+    const fetchImages = () => page.evaluate(async ([ed, key]) => {
+      const pages = await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json());
+      return { pageId: pages[0].id, images: await fetch(`/api/pages/${pages[0].id}/sections/${key}/images`).then((r) => r.json()) };
+    }, [ED, KEY]);
+
+    const added = await page.evaluate(async ([ed, key]) => {
+      const pages = await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json());
+      const images = await fetch(`/api/pages/${pages[0].id}/sections/${key}/images`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: '/uploads/1785497125079-aada20ab-f300-4300-a704-61d0a090f83c.png',
+          filename: 'stage2-handle-test.png',
+          x: 10, y: 10, width: 60, height: 60,
+        }),
+      }).then((r) => r.json());
+      return images[images.length - 1];
+    }, [ED, KEY]);
+    say(Boolean(added?.id), 'a picture was placed on the block for this test');
+
+    // The app only re-fetches a block's pictures on selectSection() - switch
+    // away and back so it notices the one just added outside it.
+    const otherKey = await page.evaluate(async ([ed, key]) => {
+      const pages = await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json());
+      return pages[0].sections.map((s) => s.section_key).find((k) => k !== key) || null;
+    }, [ED, KEY]);
+    if (otherKey) { await block(otherKey).click(); await page.waitForTimeout(500); }
+    await block().click();
+    await page.waitForTimeout(1200);
+
+    const picFrame = () => page.locator(`.pic-frame[data-image-id="${added.id}"]`);
+    await picFrame().click();
+    await page.waitForTimeout(250);
+    say((await partOf()) === 'image', 'clicking the picture selects the image object');
+    say(await picFrame().evaluate((el) => el.classList.contains('is-selected')), 'the picture frame shows as selected');
+    say((await picFrame().locator('.pic-handle').count()) === 4, 'a selected picture shows four resize handles');
+    say(await page.locator('#edSelectionLabel').isHidden(),
+      'no text label is drawn over a selected picture - the handles already say it is selected');
+
+    // Drag the top-left handle inward. The OPPOSITE corner (bottom-right)
+    // must stay exactly where it was - that is what "resize from a corner"
+    // means, versus a resize that also silently repositions the picture.
+    const before = await picFrame().boundingBox();
+    const tlHandle = picFrame().locator('.pic-handle-tl');
+    const hBox = await tlHandle.boundingBox();
+    await page.mouse.move(hBox.x + hBox.width / 2, hBox.y + hBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(hBox.x + 20, hBox.y + 20, { steps: 6 });
+    await page.mouse.up();
+    await page.waitForTimeout(700);
+    const after = await picFrame().boundingBox();
+
+    say(after.width < before.width && after.height < before.height,
+      'dragging the top-left handle shrinks the picture',
+      `${before.width.toFixed(0)}x${before.height.toFixed(0)} -> ${after.width.toFixed(0)}x${after.height.toFixed(0)}`);
+    const brBefore = { x: before.x + before.width, y: before.y + before.height };
+    const brAfter = { x: after.x + after.width, y: after.y + after.height };
+    say(Math.abs(brBefore.x - brAfter.x) < 4 && Math.abs(brBefore.y - brAfter.y) < 4,
+      'and the opposite (bottom-right) corner stays where it was',
+      `${brBefore.x.toFixed(0)},${brBefore.y.toFixed(0)} -> ${brAfter.x.toFixed(0)},${brAfter.y.toFixed(0)}`);
+
+    let { images: afterDrag } = await fetchImages();
+    let row = afterDrag.find((r) => r.id === added.id);
+    say(row && Number(row.width_px) < 60,
+      "the resize is saved to the picture's own row, not just the screen", `width_px now ${row?.width_px}`);
+    const resizedWidth = Number(row.width_px);
+
+    // Alignment survives a relayout - the handle is a child of the same
+    // frame the picture is, not a second coordinate system kept in sync by
+    // hand, so this is really testing "did the frame itself relayout
+    // correctly", not the handle specifically.
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.waitForTimeout(500);
+    const frameAtResize = await picFrame().boundingBox();
+    const tlAtResize = await picFrame().locator('.pic-handle-tl').boundingBox();
+    say(
+      frameAtResize && tlAtResize
+      && Math.abs((tlAtResize.x + tlAtResize.width / 2) - frameAtResize.x) < 8
+      && Math.abs((tlAtResize.y + tlAtResize.height / 2) - frameAtResize.y) < 8,
+      'after a window resize, the handle is still exactly on the picture\'s own corner',
+    );
+    await page.setViewportSize({ width: 1512, height: 950 });
+    await page.waitForTimeout(500);
+
+    // Undo/redo through the SAME history stack text edits use (Stage 2's own
+    // requirement) - not a second, separate undo mechanism for pictures.
+    await page.locator('.ext-editor-header').click();
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(700);
+    let afterUndo = (await fetchImages()).images.find((r) => r.id === added.id);
+    say(Number(afterUndo?.width_px) === 60, 'Ctrl+Z restores the picture to its size before the resize',
+      `width_px ${afterUndo?.width_px}`);
+
+    await page.keyboard.press('Control+Shift+z');
+    await page.waitForTimeout(700);
+    let afterRedo = (await fetchImages()).images.find((r) => r.id === added.id);
+    say(Number(afterRedo?.width_px) === resizedWidth, 'Ctrl+Shift+Z redoes the resize',
+      `width_px ${afterRedo?.width_px}`);
+
+    // This picture only exists for this test. Removed the same way
+    // resetBlock() clears pictures, then the block is switched away and back
+    // so the running app's own picture list forgets it too, not just the
+    // database - otherwise a stale frame for a deleted row would sit in the
+    // DOM for the rest of this run.
+    const { pageId } = await fetchImages();
+    await page.evaluate(([pid, key, id]) => fetch(`/api/pages/${pid}/sections/${key}/images/${id}`, { method: 'DELETE' }), [pageId, KEY, added.id]);
+    if (otherKey) { await block(otherKey).click(); await page.waitForTimeout(500); }
+    await block().click();
+    await page.waitForTimeout(1200);
+  }
+
   // ------------------------------------------------------- keyboard shortcuts ---
   //
   // Undo/redo already existed (history.js) with toolbar buttons; what is new

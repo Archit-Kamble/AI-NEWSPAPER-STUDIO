@@ -69,6 +69,43 @@ test('the desk\'s extra instructions reach the brief', () => {
   assert.match(brief, /the road stayed open/i);
 });
 
+// Bug #10 (PROJECT_STATUS.md): a block styled headline: "accent" used to get
+// no instruction about the *asterisk* emphasis convention at all, so the
+// renderer's own fallback - highlight the LAST word - did 100% of the work,
+// with no semantic basis. Confirmed live against a real AI-written headline
+// ("...देण्याचा *संकल्प*" instead of "*नरेंद्र मोदी* यांचा...").
+test('an accent-styled block is told the asterisk convention; a plain one is not', () => {
+  const args = {
+    seed: 'protest', notes: '', fit: { bodyCharBudget: 300, bodyWordBudget: 50, cols: 40, rows: 20, hasPictures: false },
+    section: { width_px: 200, height_px: 200 }, language: 'Marathi', isLead: false,
+  };
+  assert.match(writer.briefFor({ ...args, accentStyle: true }), /wrapping it in asterisks/i);
+  assert.doesNotMatch(writer.briefFor({ ...args, accentStyle: false }), /wrapping it in asterisks/i);
+  assert.doesNotMatch(writer.briefFor(args), /wrapping it in asterisks/i, 'omitted entirely defaults to no instruction');
+});
+
+test('sanitiseAccentMarks: a well-formed single emphasis is kept as-is', () => {
+  const headline = '*नरेंद्र मोदी* यांचा तिसरा कार्यकाळ: देशाच्या विकासाला नवी गती देण्याचा संकल्प';
+  assert.equal(writer.sanitiseAccentMarks(headline, true), headline);
+});
+
+test('sanitiseAccentMarks: no asterisks at all is left untouched', () => {
+  assert.equal(writer.sanitiseAccentMarks('साध्या मथळा', true), 'साध्या मथळा');
+});
+
+test('sanitiseAccentMarks: an odd number of asterisks is a malformed pair, stripped', () => {
+  assert.equal(writer.sanitiseAccentMarks('नरेंद्र * मोदी यांचा', true), 'नरेंद्र  मोदी यांचा');
+});
+
+test('sanitiseAccentMarks: emphasising almost the whole headline defeats the point, stripped', () => {
+  const headline = '*नरेंद्र मोदी यांचा तिसरा कार्यकाळ सुरू*';
+  assert.equal(writer.sanitiseAccentMarks(headline, true), 'नरेंद्र मोदी यांचा तिसरा कार्यकाळ सुरू');
+});
+
+test('sanitiseAccentMarks: a block whose template did not ask for accent styling keeps no emphasis', () => {
+  assert.equal(writer.sanitiseAccentMarks('*नरेंद्र मोदी* यांचा निर्णय', false), 'नरेंद्र मोदी यांचा निर्णय');
+});
+
 test('nothing is written without a subject', async () => {
   const result = await writer.write(1, 'lead', { seed: '   ' });
   assert.match(result.error, /what the story is about/i);

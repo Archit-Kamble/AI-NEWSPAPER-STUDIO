@@ -118,6 +118,37 @@ function subheadingLimit(cols) {
   return Math.max(40, Math.min(140, cols * 2));
 }
 
+// The renderer (headlineMarkup(), section-thumb.js) paints whatever a desk or
+// the model wraps in *asterisks* - this is the one place that trusts the
+// model's own asterisks before they reach it. Not accepted blind: an AI that
+// wraps nearly the whole headline defeats the point of a single accent, and
+// an odd number of `*` is a malformed pair the renderer would leave
+// unhighlighted anyway (harmless, but confusing to a desk who sees a stray
+// asterisk in the stored text). Bug #10's own fix, see PROJECT_STATUS.md -
+// without this, a block whose template asked for one highlighted word had no
+// way to ask the model for it at all, and fell back to painting the LAST
+// word regardless of what the headline actually said.
+function sanitiseAccentMarks(headline, accentStyle) {
+  if (!headline.includes('*')) return headline;
+
+  // A block whose template did not ask for accent styling keeps its plain
+  // type - a stray asterisk from a model that added one anyway is not this
+  // block's decision to make.
+  if (!accentStyle) return headline.replace(/\*/g, '');
+
+  const stars = (headline.match(/\*/g) || []).length;
+  if (stars % 2 !== 0) return headline.replace(/\*/g, '');
+
+  const plain = headline.replace(/\*/g, '');
+  const emphasised = [...headline.matchAll(/\*([^*]+)\*/g)].reduce((sum, m) => sum + m[1].length, 0);
+  // Highlighting almost the whole headline is not emphasis, it is just a
+  // different colour of the same headline - strip it and let the "last word"
+  // default apply instead, which is at least consistently one word.
+  if (!plain.length || emphasised / plain.length > 0.85) return plain;
+
+  return headline;
+}
+
 // A stand-in headline, made of real words rather than a repeated character -
 // readable in a debugger, and no different to the grid, which counts length
 // only. See the correction below: a shorter, EARLIER version of this comment
@@ -214,7 +245,7 @@ function verifiedContextBlock(verifiedContext) {
  * Written as instructions to a sub-editor rather than as a template, because
  * that is what produces newspaper copy instead of an essay.
  */
-function briefFor({ seed, notes, fit, section, language, isLead, verifiedContext }) {
+function briefFor({ seed, notes, fit, section, language, isLead, verifiedContext, accentStyle }) {
   const languageName = LANGUAGE_NAMES[language] || LANGUAGE_NAMES.Marathi;
   const headlineChars = headlineLimit(fit.cols);
   const deckChars = subheadingLimit(fit.cols);
@@ -245,6 +276,14 @@ function briefFor({ seed, notes, fit, section, language, isLead, verifiedContext
     `  * ${isLead ? 'This is a lead story: open with the most important fact.' : 'Open with the most important fact.'}`,
     '  * Short paragraphs, separated by a blank line. Plain newspaper prose.',
     '  * No markdown, no headings inside the body, no bullet characters, no quotation marks around the whole thing.',
+    accentStyle
+      ? '  * This headline is set with one phrase painted in the paper\'s colour - the single'
+        + ' most recognisable name or entity the story is about (usually a person\'s name, an'
+        + ' organisation, or a place). Mark it by wrapping it in asterisks exactly where it falls'
+        + ' in your own headline, e.g. "*नरेंद्र मोदी* यांचा मोठा निर्णय" - do not wrap the last word'
+        + ' out of habit, and do not wrap more than a few words. If nothing in the headline is'
+        + ' more important than the rest, leave it unmarked.'
+      : '',
     '',
     'WHAT YOU MUST NOT DO — read this twice:',
     '  * Do NOT invent facts. No casualty figures, no rupee amounts, no dates, no',
@@ -429,6 +468,7 @@ async function write(pageId, sectionKey, { seed, notes, tier, language } = {}) {
     return { error: 'This block has no room for copy — it is filled by its pictures, or it is too small.' };
   }
 
+  const accentStyle = section.headline_style === 'accent';
   const result = await ai.askForJson(
     briefFor({
       seed: clean,
@@ -438,6 +478,7 @@ async function write(pageId, sectionKey, { seed, notes, tier, language } = {}) {
       language: language || section.language,
       isLead: /lead/i.test(sectionKey),
       verifiedContext,
+      accentStyle,
     }),
     STORY_SCHEMA,
     { tier },
@@ -446,7 +487,7 @@ async function write(pageId, sectionKey, { seed, notes, tier, language } = {}) {
 
   const { plainText } = await textFlow().then(() => require('../layout/plain-text'));
   const proposal = {
-    headline: String(result.data.headline || '').trim(),
+    headline: sanitiseAccentMarks(String(result.data.headline || '').trim(), accentStyle),
     subheading: String(result.data.subheading || '').trim(),
     body: String(result.data.body || '').trim(),
   };
@@ -648,5 +689,5 @@ module.exports = {
   briefFor, resizeBriefFor, fillBriefFor,
   STORY_SCHEMA, BODY_SCHEMA,
   // Exported so the rule can be held by tests without calling a model.
-  resizeNeeded,
+  resizeNeeded, sanitiseAccentMarks,
 };

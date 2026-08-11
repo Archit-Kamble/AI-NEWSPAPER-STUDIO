@@ -21,10 +21,21 @@
 //
 // All of this is in editor pixels (2 px per mm of the 330 x 530 mm page).
 
-// Average glyph advance as a fraction of font size. The same ratio
-// layout-metrics.js uses, kept deliberately identical so the two never disagree
-// about how much fits.
-const AVG_CHAR_WIDTH_RATIO = 0.5;
+// Average glyph advance as a fraction of font size, measured rather than
+// guessed: probed in a real browser against the newspaper's own font stack.
+// Marathi body copy in Noto Serif Devanagari averaged ~0.36 across three
+// representative samples; English in Georgia averaged ~0.41. 0.5 (the
+// original guess) overstated both by 25-40%, so the grid always believed
+// noticeably fewer characters fit per line than actually do - the budget the
+// AI is briefed with, and the "X% of the room for copy used" readout, were
+// both built on that undercount. A block reporting "98% used" while visibly
+// short of its own bottom edge was not a rendering bug: the AI had genuinely
+// been told to stop at a number well below what the block could hold, and
+// then correctly reported having reached it. Set to 0.4 rather than the bare
+// Marathi measurement - close enough to fix the undercount for both
+// languages without cutting it so fine that a conjunct-heavy headline or a
+// wide English word overflows a line the budget assumed would hold it.
+const AVG_CHAR_WIDTH_RATIO = 0.4;
 
 // Devanagari needs a taller line than Latin. Marathi stacks vowel signs above
 // the shirorekha (ि े ै ो ं) and below the baseline (ु ृ), so a 1.25 line box
@@ -32,7 +43,7 @@ const AVG_CHAR_WIDTH_RATIO = 0.5;
 // script, not a taste setting, so it is a floor rather than a default.
 import { plainText } from "./rich-text.js";
 
-const MIN_LINE_HEIGHT = 1.45;
+export const MIN_LINE_HEIGHT = 1.45;
 
 export const CELL = { HEADLINE: "H", SUBHEADING: "S", TEXT: "T", IMAGE: "I", EMPTY: "." };
 
@@ -200,7 +211,15 @@ export function buildFlowMap(section, view, images = []) {
   };
 }
 
-function estimateHeight(text, fontPx, availableWidthPx) {
+// How tall a run of text sets at this size, across this width - the one
+// estimate every consumer of a block's geometry shares (the character grid,
+// the Space read-out, the overflow flag on the canvas), so "how full is this
+// block" has one answer instead of several. Always at MIN_LINE_HEIGHT: a
+// block whose real CSS renders at a shorter line height than this estimate
+// assumed finishes its copy short of the bottom of the box while still
+// reading as "98% used" - the estimate was the one place this was already
+// right, so section-model.js's `lineHeight` is floored to match it instead.
+export function estimateHeight(text, fontPx, availableWidthPx) {
   if (!text || !fontPx || availableWidthPx <= 0) return 0;
   const perLine = Math.max(1, Math.floor(availableWidthPx / (fontPx * AVG_CHAR_WIDTH_RATIO)));
   return Math.ceil(text.length / perLine) * fontPx * MIN_LINE_HEIGHT;

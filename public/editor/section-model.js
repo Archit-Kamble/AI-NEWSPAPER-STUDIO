@@ -8,6 +8,7 @@
 // records for the duplicated template catalog.
 
 import { isExplicit } from "./status/section-status.js";
+import { MIN_LINE_HEIGHT } from "./layout/text-flow.js";
 
 export const DRAFT_FIELDS = [
   "newsItemId",
@@ -102,7 +103,14 @@ export function draftFromSection(section) {
     textAlign: section.text_align || "left",
     columnCount: Number(section.column_count) || 1,
     marginPx: Number.isFinite(Number(section.margin_px)) ? Number(section.margin_px) : 12,
-    lineHeight: Number(section.line_height) || 1.25,
+    // A floor, not a default (text-flow.js's MIN_LINE_HEIGHT comment explains
+    // why: Devanagari vowel signs stack above and below the baseline, and a
+    // shorter line height crops them). The character grid has always assumed
+    // this floor when it works out how much copy fits; the real rendered
+    // block used to default to 1.25 instead, so a block reported as "98%
+    // used" against the grid's assumption could still finish visibly short
+    // of the bottom of the box once rendered at the shorter line height.
+    lineHeight: Math.max(MIN_LINE_HEIGHT, Number(section.line_height) || 1.25),
     letterSpacingPx: Number(section.letter_spacing_px) || 0,
     paragraphSpacingPx: Number.isFinite(Number(section.paragraph_spacing_px)) ? Number(section.paragraph_spacing_px) : 8,
     listStyle: section.list_style || "none",

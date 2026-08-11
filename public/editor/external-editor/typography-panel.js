@@ -5,6 +5,8 @@
 // space and convert to mm at export time; the conversion stays explicit, per
 // CLAUDE.md's rule about never mixing the two silently.
 
+import { MIN_LINE_HEIGHT } from "../layout/text-flow.js";
+
 // Exported because the writing toolbar offers the same font and the same
 // alignments, and they must be the SAME list. A second copy of a catalog is how
 // the template keys drifted (CLAUDE.md); these set real Scribus properties, so
@@ -46,7 +48,11 @@ const NUMBER_FIELDS = [
   { id: "tyBodySize", field: "bodyFontPx", label: "Body size (px)", min: 6, max: 48, step: 1 },
   { id: "tyColumns", field: "columnCount", label: "Columns", min: 1, max: 6, step: 1 },
   { id: "tyMargin", field: "marginPx", label: "Margins (px)", min: 0, max: 60, step: 1 },
-  { id: "tyLineHeight", field: "lineHeight", label: "Line spacing", min: 0.8, max: 3, step: 0.05 },
+  // The floor, not just this control's default: below it, Devanagari vowel
+  // signs crop against the next line (text-flow.js's MIN_LINE_HEIGHT). What
+  // this input offers has to match what section-model.js actually stores, or
+  // a desk could type 1.0 here and watch it render at 1.45 anyway.
+  { id: "tyLineHeight", field: "lineHeight", label: "Line spacing", min: MIN_LINE_HEIGHT, max: 3, step: 0.05 },
   { id: "tyLetterSpacing", field: "letterSpacingPx", label: "Letter spacing (px)", min: -2, max: 10, step: 0.1 },
   { id: "tyParagraphSpacing", field: "paragraphSpacingPx", label: "Paragraph spacing (px)", min: 0, max: 60, step: 1 },
 ];

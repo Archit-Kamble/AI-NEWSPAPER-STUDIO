@@ -7,6 +7,7 @@ const { requireDesk } = require('../middleware/auth');
 const pageController = asyncController(require('../controllers/page.controller'));
 const pageSectionController = asyncController(require('../controllers/pageSection.controller'));
 const sectionImageController = asyncController(require('../controllers/sectionImage.controller'));
+const pageGuideController = asyncController(require('../controllers/pageGuide.controller'));
 
 const router = express.Router();
 
@@ -28,6 +29,14 @@ router.post('/pages/:pageId/sections/:sectionId/images', sectionImageController.
 router.patch('/pages/:pageId/sections/:sectionId/images/:imageId', sectionImageController.move);
 router.delete('/pages/:pageId/sections/:sectionId/images/:imageId', sectionImageController.remove);
 router.post('/pages/:pageId/sections/:sectionId/images/:imageId/cutout', sectionImageController.cutout);
+
+// Ruler guides (Stage 4) - page-level reference lines, never printed and (so
+// far) not a snap target. Same list-of-placements shape as pictures, so the
+// same four verbs.
+router.get('/pages/:pageId/guides', pageGuideController.list);
+router.post('/pages/:pageId/guides', pageGuideController.create);
+router.patch('/pages/:pageId/guides/:guideId', pageGuideController.move);
+router.delete('/pages/:pageId/guides/:guideId', pageGuideController.remove);
 
 // Section production workflow: writing, filling, jump lines and fitting. All
 // addressed by the section's semantic key (e.g. "lead"), not its numeric id -

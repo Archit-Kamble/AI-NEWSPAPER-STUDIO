@@ -389,3 +389,28 @@ ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS carried_from_section_id INTEG
 ALTER TABLE page_sections ALTER COLUMN headline_font_px TYPE NUMERIC(5,1);
 ALTER TABLE page_sections ALTER COLUMN subheading_font_px TYPE NUMERIC(5,1);
 ALTER TABLE page_sections ALTER COLUMN body_font_px TYPE NUMERIC(5,1);
+
+-- ---------------------------------------------------------------------------
+-- Stage 4: page guides.
+--
+-- Reference lines a desk drags off the ruler - never printed, and (unlike
+-- grid.js's column/baseline grid, which is computed, server-derived layout
+-- geometry) never a snap target yet either, that is a later stage. Page-level,
+-- not per-block: the page is the coordinate system the ruler itself reads, so
+-- a guide belongs to the same scope. `position_px` is always an editor/page
+-- pixel - never a screen or zoom-scaled value; the client is responsible for
+-- converting a pointer position into one before it is ever sent here.
+--
+-- Deliberately as few columns as the earlier per-picture placement tables:
+-- no "locked" column (nothing in this stage reads or writes one), no
+-- "visible" column (visibility is a client-side view toggle over guides that
+-- still exist, not a fact about the guide itself - see ruler.js's own note).
+CREATE TABLE IF NOT EXISTS page_guides (
+  id SERIAL PRIMARY KEY,
+  page_id INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+  orientation VARCHAR(10) NOT NULL CHECK (orientation IN ('horizontal', 'vertical')),
+  position_px INTEGER NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_page_guides_page ON page_guides(page_id);

@@ -266,6 +266,87 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
     );
   }
 
+  // ------------------------------------------------------- object selection ---
+  //
+  // One selection model (store.js's selectedPart), read by both the frame's
+  // selection box and the Typography panel's highlighted field - clicking an
+  // object in the Block Editor is direct manipulation, not "fill in a form
+  // and hope it corresponds to something."
+  {
+    const partOf = () => page.evaluate(async () => (await import('/editor/store.js')).getState().selectedPart);
+
+    await page.locator('#edHeadlineFrame').click();
+    await page.waitForTimeout(250);
+    say((await partOf()) === 'headline', 'clicking the headline frame selects the headline object');
+    say(await page.locator('#edHeadlineFrame').evaluate((el) => el.classList.contains('frame-selected')),
+      'the headline frame shows a selection box');
+    say((await page.locator('#tySelectionLabel').innerText()).toLowerCase() === 'headline',
+      'Typography panel says it is editing the headline');
+    say(await page.locator('#tyHeadlineSize').evaluate((el) => el.closest('.form-group').classList.contains('form-group-targeted')),
+      'and highlights the headline size field, not the subheading/body ones');
+
+    await page.locator('#edSubheadingFrame').click();
+    await page.waitForTimeout(250);
+    say((await partOf()) === 'subheading', 'clicking the subheading frame selects the subheading object');
+    say(!(await page.locator('#edHeadlineFrame').evaluate((el) => el.classList.contains('frame-selected'))),
+      'and the headline is no longer shown selected');
+
+    await page.locator('.ql-editor').click();
+    await page.waitForTimeout(250);
+    say((await partOf()) === 'body', 'clicking into the body selects the body object', await partOf());
+    say(await page.locator('#edBodyFrame').evaluate((el) => el.classList.contains('frame-selected')),
+      'the body frame shows a selection box');
+
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(250);
+    say((await partOf()) === 'block', 'Escape backs out to the whole block being selected, not deselecting it entirely');
+  }
+
+  // ------------------------------------------------------- keyboard shortcuts ---
+  //
+  // Undo/redo already existed (history.js) with toolbar buttons; what is new
+  // is the keyboard layer, and specifically that it must not fight normal
+  // text editing - Ctrl+Z while a field has focus has to be the browser's
+  // own undo of the last few characters, never a jump in the editor's
+  // history stack out from under a cursor mid-sentence.
+  {
+    const original = await page.inputValue('#edStoryHeadline');
+    await page.fill('#edStoryHeadline', 'की-बोर्ड चाचणी मथळा');
+    await page.waitForTimeout(700); // past history.js's COALESCE_MS, so this is its own undo step
+    say((await page.inputValue('#edStoryHeadline')) === 'की-बोर्ड चाचणी मथळा', 'the test headline was actually typed');
+
+    // Move focus OUT of the field first - Ctrl+Z's target is the editor, not the input.
+    await page.locator('.ext-editor-header').click();
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(400);
+    say((await page.inputValue('#edStoryHeadline')) === original,
+      'Ctrl+Z outside a text field undoes the last edit', await page.inputValue('#edStoryHeadline'));
+
+    await page.keyboard.press('Control+Shift+z');
+    await page.waitForTimeout(400);
+    say((await page.inputValue('#edStoryHeadline')) === 'की-बोर्ड चाचणी मथळा',
+      'Ctrl+Shift+Z redoes it', await page.inputValue('#edStoryHeadline'));
+
+    // Ctrl+Z back INTO a focused field must not jump the editor's history -
+    // only the field's own native undo should act, leaving the editor's
+    // state exactly where it was.
+    await page.click('#edStoryHeadline');
+    await page.keyboard.type(' अ');
+    const beforeFieldUndo = await page.inputValue('#edStoryHeadline');
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(300);
+    const afterFieldUndo = await page.inputValue('#edStoryHeadline');
+    say(afterFieldUndo !== beforeFieldUndo && afterFieldUndo.startsWith('की-बोर्ड'),
+      'Ctrl+Z while typing is the field\'s own undo, not the editor jumping history',
+      `${beforeFieldUndo} -> ${afterFieldUndo}`);
+
+    // Restore the headline this block started with - later checks in this
+    // script (the reload section) depend on it, and this test's own
+    // undo/redo dance is not something they should have to know about.
+    await page.fill('#edStoryHeadline', original);
+    await page.waitForTimeout(400);
+  }
+
   // ------------------------------------------------------------- scrolling ---
   {
     const scrollers = await nestedScrollers();

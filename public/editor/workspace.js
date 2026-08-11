@@ -366,6 +366,14 @@ function selectSection(sectionKey) {
   refreshToolbarSelection(true, store.getState().storyPickerOpen);
 }
 
+// Which object inside the selected block is the editing target - clicking
+// the headline frame, the body, a picture. Unlike selectSection(), this never
+// touches the draft, history or autosave: it is purely "what is the
+// Typography panel and the selection box pointed at right now."
+function selectPart(part, imageId = null) {
+  store.setSelectedPart(part, imageId);
+}
+
 function patchDraft(patch, source) {
   const draft = store.getDraft();
   // Editing the article's words advances the lifecycle, unless an editor has
@@ -839,6 +847,10 @@ function renderShell() {
   renderSidePanels();
   renderStoryPickerPanel();
   subscribeViews();
+  if (!window.__sahasShortcutsBound) {
+    window.__sahasShortcutsBound = true;
+    bindKeyboardShortcuts();
+  }
   selectFirstSection();
 
   // Fit mode is derived from the container, so it has to be recomputed whenever
@@ -1243,6 +1255,7 @@ function renderSidePanels() {
     getPage: () => store.getCurrentPage(),
     getNewspaper: () => store.getState().newspaper,
     onSelectSection: selectSection,
+    onSelectPart: selectPart,
     onAddImage: addSectionImage,
     onPatchImage: patchSectionImage,
     onRemoveImage: removeSectionImage,
@@ -1282,6 +1295,81 @@ function repaintSections(page) {
   }
 }
 
+// -------------------------------------------------------- keyboard shortcuts ---
+//
+// A professional editor's shortcuts must never fight typing: Ctrl+Z inside a
+// text field is the browser's own undo of the last few characters, not this
+// editor's undo of the last edit, and arrow keys inside a field move the text
+// cursor, not the selected object. Every shortcut here is guarded on that.
+
+function isTypingTarget(el) {
+  return Boolean(el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable));
+}
+
+function nudgeSelectedImage(dx, dy) {
+  const { selectedPart, selectedImageId } = store.getState();
+  if (selectedPart !== "image" || !selectedImageId) return false;
+  const image = sectionImages.find((row) => row.id === selectedImageId);
+  if (!image) return false;
+  patchSectionImage(selectedImageId, {
+    x: Math.round((Number(image.x_px) || 0) + dx),
+    y: Math.round((Number(image.y_px) || 0) + dy),
+  });
+  return true;
+}
+
+function deleteSelectedImage() {
+  const { selectedPart, selectedImageId } = store.getState();
+  if (selectedPart !== "image" || !selectedImageId) return false;
+  removeSectionImage(selectedImageId);
+  return true;
+}
+
+function bindKeyboardShortcuts() {
+  document.addEventListener("keydown", (event) => {
+    const typing = isTypingTarget(event.target);
+    const primary = event.ctrlKey || event.metaKey;
+
+    if (event.key === "Escape") {
+      // First press backs out of the object that is targeted, to the block
+      // itself - not out of the block entirely, which would read as closing
+      // the editor a desk is still looking at. A field also gives up focus,
+      // the ordinary meaning of Escape in a form.
+      if (typing) event.target.blur();
+      if (store.getState().selectedPart !== "block") store.setSelectedPart("block");
+      return;
+    }
+
+    if (primary && !event.shiftKey && event.key.toLowerCase() === "z") {
+      if (typing) return; // the field's own undo, not the editor's
+      event.preventDefault();
+      undo();
+      return;
+    }
+    if (primary && (event.shiftKey && event.key.toLowerCase() === "z" || event.key.toLowerCase() === "y")) {
+      if (typing) return;
+      event.preventDefault();
+      redo();
+      return;
+    }
+
+    if (typing) return; // everything below moves/deletes an OBJECT, never while typing
+
+    if (event.key === "Delete" || event.key === "Backspace") {
+      if (deleteSelectedImage()) event.preventDefault();
+      return;
+    }
+    if (event.key.startsWith("Arrow")) {
+      const step = event.shiftKey ? 10 : 1;
+      const delta = {
+        ArrowUp: [0, -step], ArrowDown: [0, step],
+        ArrowLeft: [-step, 0], ArrowRight: [step, 0],
+      }[event.key];
+      if (delta && nudgeSelectedImage(delta[0], delta[1])) event.preventDefault();
+    }
+  });
+}
+
 // ------------------------------------------------------------ subscriptions ---
 
 function subscribeViews() {
@@ -1292,7 +1380,19 @@ function subscribeViews() {
     const view = currentView();
     if (!section || !view) return;
     refreshSection(section, view, { selected: true, dirty: store.isDirty() });
-    refreshExternalEditor(section, view, currentStory(), source);
+    refreshExternalEditor(section, view, currentStory(), source, store.getSelectedPart());
+  });
+
+  // Which OBJECT within the block is targeted changed (a click on the
+  // headline frame, the body, a picture...) - not what it says, so this
+  // updates the Block Editor's selection box and the Typography panel's
+  // highlighted field without touching the draft or re-fetching anything.
+  store.subscribe(store.TOPICS.SELECTION, ({ part }) => {
+    if (part === undefined) return; // a block (not a part) changed - selectSection() already handled it
+    const section = store.getSelectedSection();
+    const view = currentView();
+    if (!section || !view) return;
+    refreshExternalEditor(section, view, currentStory(), "selection", store.getSelectedPart());
   });
 
   store.subscribe(store.TOPICS.SAVE, () => {

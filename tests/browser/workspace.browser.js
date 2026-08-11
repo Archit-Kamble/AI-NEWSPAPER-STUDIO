@@ -459,6 +459,200 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
     await page.waitForTimeout(1200);
   }
 
+  // ------------------------------------------------------------- multi-selection ---
+  //
+  // Stage 7: Shift+click builds a selection of several pictures in the open
+  // block; Align/Remove-all act on all of them at once. Blocks and text have
+  // no freely-movable geometry to align (see external-editor/align.js's own
+  // note), so pictures are the one place this applies.
+  {
+    const fetchImages = () => page.evaluate(async ([ed, key]) => {
+      const pages = await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json());
+      return { pageId: pages[0].id, images: await fetch(`/api/pages/${pages[0].id}/sections/${key}/images`).then((r) => r.json()) };
+    }, [ED, KEY]);
+
+    // Two DIFFERENT uploaded files, not the same one twice: the images
+    // endpoint finds-or-creates a media asset by exact URL and a section can
+    // hold only one placement per asset (a real DB constraint,
+    // section_images' own UNIQUE(page_section_id, media_asset_id) - POSTing
+    // the same URL a second time updates the existing row instead of adding
+    // a second one, discovered the hard way while writing this test).
+    const URL_A = '/uploads/1785497125079-aada20ab-f300-4300-a704-61d0a090f83c.png';
+    const URL_B = '/uploads/1785495695928-8f0cdf12-b61d-4140-bc06-68384fbad89a.png';
+    const addPicture = (url, rect) => page.evaluate(async ([ed, key, u, r]) => {
+      const pages = await fetch(`/api/newspapers/${ed}/pages`).then((r2) => r2.json());
+      const images = await fetch(`/api/pages/${pages[0].id}/sections/${key}/images`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: u, filename: 'stage7-multiselect-test.png', ...r }),
+      }).then((res) => res.json());
+      return images[images.length - 1];
+    }, [ED, KEY, url, rect]);
+
+    // A clean slate: a picture left behind by an earlier, interrupted run of
+    // this same suite (or the block's own single-picture test above, if IT
+    // was interrupted before its own cleanup ran) would otherwise collide
+    // with addPicture() above via that same find-or-create-by-URL behaviour.
+    let { pageId, images: leftover } = await fetchImages();
+    for (const row of leftover) {
+      await page.evaluate(([pid, key, id]) => fetch(`/api/pages/${pid}/sections/${key}/images/${id}`, { method: 'DELETE' }), [pageId, KEY, row.id]);
+    }
+
+    // The app only re-fetches a block's pictures on selectSection() - the
+    // same fact the single-picture test above already found. Switching away
+    // and back is how every test in this file makes a raw API change visible
+    // to the running app, not just the database.
+    const otherKey = await page.evaluate(async ([ed, key]) => {
+      const pages = await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json());
+      return pages[0].sections.map((s) => s.section_key).find((k) => k !== key) || null;
+    }, [ED, KEY]);
+    const reopen = async () => {
+      if (otherKey) { await block(otherKey).click(); await page.waitForTimeout(500); }
+      await block().click();
+      await page.waitForTimeout(1200);
+    };
+
+    const picA = await addPicture(URL_A, { x: 10, y: 10, width: 60, height: 40 });
+    const picB = await addPicture(URL_B, { x: 100, y: 60, width: 40, height: 60 });
+    say(picA.id !== picB.id, 'two different uploads make two different picture rows, not one reused row',
+      `${picA.id} vs ${picB.id}`);
+    await reopen();
+
+    const frameA = () => page.locator(`.pic-frame[data-image-id="${picA.id}"]`);
+    const frameB = () => page.locator(`.pic-frame[data-image-id="${picB.id}"]`);
+    const align = (kind) => page.locator(`[data-picture-align="${kind}"]`);
+
+    await frameA().click();
+    await page.waitForTimeout(250);
+    say(await frameA().evaluate((el) => el.classList.contains('is-selected')), 'a plain click selects one picture');
+    say(!(await frameB().evaluate((el) => el.classList.contains('is-selected'))), 'and only that one');
+
+    await frameB().click({ modifiers: ['Shift'] });
+    await page.waitForTimeout(250);
+    say(await frameA().evaluate((el) => el.classList.contains('is-selected')) && await frameB().evaluate((el) => el.classList.contains('is-selected')),
+      'Shift+click adds a second picture without dropping the first');
+    say((await align('left').count()) === 1, 'the align toolbar appears once two pictures are selected');
+    say((await page.locator('.picture-controls-head strong').textContent()) === '2 pictures selected',
+      'and says how many', await page.locator('.picture-controls-head strong').textContent());
+
+    await align('left').click();
+    await page.waitForTimeout(500);
+    let rows = (await fetchImages()).images;
+    let a = rows.find((r) => r.id === picA.id);
+    let b = rows.find((r) => r.id === picB.id);
+    say(Number(a.x_px) === 10 && Number(b.x_px) === 10, 'Align left moves both pictures to the selection\'s own left edge',
+      `a.x_px ${a.x_px}, b.x_px ${b.x_px}`);
+
+    // Aligning BOTH axes to the same corner necessarily makes the two
+    // rectangles overlap near it (they now share a top-left point) - real
+    // geometry, not a bug. Playwright's mouse click, even forced, still
+    // dispatches at a real screen point and the BROWSER's own hit-testing
+    // (not Playwright's actionability checks, which force:true skips)
+    // routes it to whichever frame is physically on top there - not
+    // necessarily the one this test means to click. dispatchEvent bypasses
+    // hit-testing entirely by firing the event straight at the target
+    // element, which is what the rest of this test uses from here on; the
+    // plain clicks above (before any overlap exists) keep using the real
+    // mouse, since that is what proves an ordinary click actually works.
+    const shiftClick = (locator) => locator.dispatchEvent('pointerdown', { bubbles: true, button: 0, shiftKey: true });
+    // A plain (non-shift) pointerdown on a picture frame also arms a
+    // possible drag (window pointermove/pointerup listeners) - completing it
+    // with a real pointerup, even though nothing moved, is what lets that
+    // drag's own cleanup run and remove those listeners, rather than leaving
+    // them attached to fire on whatever real mouse movement this suite does
+    // next, elsewhere in the page, applying a phantom PATCH to this picture.
+    const plainClick = async (locator) => {
+      await locator.dispatchEvent('pointerdown', { bubbles: true, button: 0 });
+      await page.evaluate(() => window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true })));
+    };
+
+    await align('top').click();
+    await page.waitForTimeout(500);
+    rows = (await fetchImages()).images;
+    a = rows.find((r) => r.id === picA.id);
+    b = rows.find((r) => r.id === picB.id);
+    say(Number(a.y_px) === 10 && Number(b.y_px) === 10, 'Align top moves both pictures to the selection\'s own top edge',
+      `a.y_px ${a.y_px}, b.y_px ${b.y_px}`);
+
+    say(await page.evaluate(() => document.querySelector('.pic-frame.is-dragging') === null),
+      'an align never leaves a picture mid-drag');
+
+    // Shift+click the same picture again removes it from the selection.
+    await shiftClick(frameB());
+    await page.waitForTimeout(250);
+    say((await align('left').count()) === 0,
+      'Shift+click on an already-selected picture drops it - back to the single-picture panel');
+    say(await frameA().evaluate((el) => el.classList.contains('is-selected')), 'the picture left in the selection stays selected');
+
+    // Escape collapses the multi-selection before it reaches "block".
+    await shiftClick(frameB());
+    await page.waitForTimeout(250);
+    say((await align('left').count()) === 1, 'both selected again, for the Escape check');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+    say((await align('left').count()) === 0,
+      'Escape collapses a multi-selection to its primary picture first');
+    say(await page.evaluate(() => document.querySelectorAll('.pic-frame.is-selected').length) === 1,
+      'exactly one picture is still shown selected, not zero');
+
+    // Bulk nudge: select both again, arrow-move them together, one history
+    // step. Escape just above collapsed the pair down to B (the primary -
+    // whichever was added to the selection last) - Shift+click A, the one
+    // NOT currently selected, to rebuild the pair; Shift+clicking B again
+    // would instead drop the only picture still selected.
+    await shiftClick(frameA());
+    await page.waitForTimeout(250);
+    const beforeNudge = (await fetchImages()).images;
+    const ax0 = Number(beforeNudge.find((r) => r.id === picA.id).x_px);
+    const bx0 = Number(beforeNudge.find((r) => r.id === picB.id).x_px);
+    await page.keyboard.press('ArrowRight');
+    await page.waitForTimeout(500);
+    rows = (await fetchImages()).images;
+    a = rows.find((r) => r.id === picA.id);
+    b = rows.find((r) => r.id === picB.id);
+    say(Number(a.x_px) === ax0 + 1 && Number(b.x_px) === bx0 + 1,
+      'an arrow key with two pictures selected moves BOTH by the same step', `a.x_px ${a.x_px}, b.x_px ${b.x_px}`);
+
+    // Bulk delete via "Remove all".
+    await plainClick(frameA());
+    await page.waitForTimeout(250);
+    await shiftClick(frameB());
+    await page.waitForTimeout(250);
+    await page.locator('[data-picture-do="remove-selected"]').click();
+    await page.waitForTimeout(700);
+    rows = (await fetchImages()).images;
+    say(!rows.some((r) => r.id === picA.id) && !rows.some((r) => r.id === picB.id),
+      '"Remove all" deletes every selected picture', `${rows.length} left`);
+
+    // -------- front/back z-order, on a fresh single picture --------
+    const picC = await addPicture(URL_A, { x: 5, y: 5, width: 30, height: 30 });
+    const picD = await addPicture(URL_B, { x: 40, y: 5, width: 30, height: 30 });
+    await reopen();
+
+    await page.locator(`.pic-frame[data-image-id="${picC.id}"]`).click();
+    await page.waitForTimeout(250);
+    await page.locator('[data-picture-do="front"]').click();
+    await page.waitForTimeout(500);
+    rows = (await fetchImages()).images;
+    let c = rows.find((r) => r.id === picC.id);
+    let d = rows.find((r) => r.id === picD.id);
+    say(Number(c.z_index) > Number(d.z_index), '"Bring to front" puts this picture above every other on the block',
+      `C z_index ${c.z_index}, D z_index ${d.z_index}`);
+
+    await page.locator('[data-picture-do="back"]').click();
+    await page.waitForTimeout(500);
+    rows = (await fetchImages()).images;
+    c = rows.find((r) => r.id === picC.id);
+    say(Number(c.z_index) === 0, '"Send to back" returns it to the floor', `z_index ${c.z_index}`);
+
+    // Cleanup - these pictures only exist for this test. Same pageId as
+    // above - it does not change while this block stays open.
+    for (const id of [picC.id, picD.id]) {
+      await page.evaluate(([pid, key, imgId]) => fetch(`/api/pages/${pid}/sections/${key}/images/${imgId}`, { method: 'DELETE' }), [pageId, KEY, id]);
+    }
+    await reopen();
+  }
+
   // ------------------------------------------------------- properties inspector ---
   //
   // Stage 3: the settings rail's new Properties panel. What it shows has to

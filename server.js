@@ -21,7 +21,23 @@ const newspaperController = require('./src/controllers/newspaper.controller');
 
 dotenv.config();
 
+// The session secret signs every desk's login cookie. "dev-secret" is fine on
+// a desk machine on a newsroom LAN in development - it is not fine on a
+// production deploy, where anyone who knows this codebase is public would
+// know the fallback and could forge a session. Only enforced when
+// NODE_ENV=production is actually set, so local dev and npm test - which
+// never set it - are unaffected.
+function assertSessionSecretConfigured() {
+  if (process.env.NODE_ENV !== "production") return;
+  if (process.env.SESSION_SECRET && process.env.SESSION_SECRET !== "dev-secret") return;
+  throw new Error(
+    "SESSION_SECRET must be set to a real secret when NODE_ENV=production. " +
+    "Refusing to start with the development fallback.",
+  );
+}
+
 function createApp() {
+  assertSessionSecretConfigured();
   const app = express();
 
   app.use(express.json({ limit: "50mb" }));

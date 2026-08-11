@@ -4,6 +4,18 @@ Architectural audit only. No code was changed to produce this document. Reflects
 
 ---
 
+## 0m. Fourteenth pass — production refuses to start on the dev session secret (2026-08-11)
+
+**Autonomous pass (Phase 15), a production-readiness finding rather than a continuation of the route migration**, which is now essentially done (Pass 0l left `server.js` holding only routes with no database access). `session({ secret: process.env.SESSION_SECRET || "dev-secret", ... })` had no enforcement anywhere: a production deploy that forgot to set `SESSION_SECRET` (or copied `.env.example`'s literal placeholder) would silently sign every desk's login cookie with a string that is public in this repository, letting anyone who has read this codebase forge a session. `.env.example` already documents `SESSION_SECRET=change-this-secret` as something to change, but nothing checked that it had been.
+
+**Fixed narrowly, not by removing the fallback.** `dev-secret` is genuinely fine for local development and for `npm test` - this product runs on a desk machine on a newsroom LAN in that mode, per this file's own earlier security note about `requireDesk`. `assertSessionSecretConfigured()` in `server.js` now throws before the app is built, but only when `NODE_ENV === 'production'` **and** `SESSION_SECRET` is unset or still equal to the literal fallback string - `npm test` and `npm start` in development never set `NODE_ENV`, so neither is affected; only a real production deploy that sets `NODE_ENV=production` (which any reasonable deploy should) is held to the check.
+
+**Regression test added**, per this phase's own instruction to test a bug rather than merely report it: `tests/serverConfig.test.js` (5 tests) - production with no secret refuses, production with the literal fallback value refuses, production with a real secret starts normally, development with no secret still starts, and `npm test`'s own environment (no `NODE_ENV` at all) still starts.
+
+**Verified, not assumed.** `npm test`: 310/310 (305 + 5 new). Live: `NODE_ENV=production node server.js` with no `SESSION_SECRET` exits 1 with a clear message and binds no port (confirmed via `ss`); normal boot (`node server.js`, no `NODE_ENV`) still starts and answers `/api/health` exactly as before. `node tests/browser/workspace.browser.js`: 49/49. Server stopped by port afterward.
+
+---
+
 ## 0l. Thirteenth pass — page/section production routes migrated, server.js reduced to stateless lookups (2026-08-11)
 
 **Autonomous pass (Phase 14), continuing the same migration into the routes the previous session deliberately deferred.** Audited every remaining inline route in `server.js` for its actual domain before moving anything, per this pass's own instruction not to force a mechanical move: `write`, `fill`, `carry-over`, `reunite`, `fit` (GET+POST) and `rate` are all addressed by `pageId` + `sectionKey` — the same addressing `pageSection.service.js` already used internally for its existing CRUD (`saveSection(pageId, sectionKey, ...)`), so they went into `pageSection.controller.js` rather than a new controller; there was no real domain boundary to justify one. `colour` and `state` are addressed by `pageId` alone, matching `page.controller.js`'s existing shape, so they went there. `/api/features` (GET, list), `/api/features/build` and `/api/features/:key` are a genuinely separate domain from both page and newspaper — `src/features/index.js`, not `editionFeatures.service.js` (which the already-migrated `/api/newspapers/:id/features` uses) — so they got their own `feature.controller.js`/`feature.routes.js`, mounted at `/api/features`.

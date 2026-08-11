@@ -4,6 +4,89 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0x. PROJECT A — Layout Engine, Phase 1 audit (in progress, 2026-08-11)
+
+**Scope note**: this entry is written mid-work, as the task's own rules require ("Keep a running PROJECT_STATUS.md update... what you found, what you changed"), and will be extended as later phases land. It starts with what Phase 1's audit actually found, against the real running app and real data — not the architecture assumed from the brief.
+
+### The map (data → store → layout → canvas → editor → print)
+
+```
+page_sections (DB row: x_px/y_px/width_px/height_px, headline/subheading/body,
+  headline_font_px/subheading_font_px/body_font_px, image_url + image_rotation/
+  zoom/fit — a SECOND, separate single-image field alongside...)
+section_images (DB rows: x_px/y_px/width_px/height_px, shape, rotation,
+  stand_off_px, mask — the multi-picture placement system built in Stage 7)
+        │
+        ▼
+store.js (state.pages[].sections[], draft, selectedImageIds — one store, confirmed)
+        │
+        ├──► public/editor/canvas/section-thumb.js
+        │      sectionInnerHtml() → flowedTextMarkup() when section.images.length,
+        │      else contentMarkup(). flowedTextMarkup() calls
+        │      buildFlowMap(section, view, images) with the REAL placed images -
+        │      text is poured cell-by-cell into the runs the grid leaves free.
+        │      This is the correct, working implementation.
+        │
+        └──► public/editor/external-editor/block-frame.js (the Block Editor)
+               layoutTextFrames() calls buildFlowMap(state.section, state.view, [])
+               — an EMPTY ARRAY. The headline/subheading/body frames are always
+               positioned as if the block held no pictures at all. Pictures are
+               rendered separately (renderPictures()) as absolutely-positioned
+               frames on top, with no relationship to the text layout beneath.
+        │
+        ▼
+public/editor/layout/text-flow.js (buildFlowMap, the one character grid) - a
+  real per-cell occupancy grid (rect / ellipse / cutout-mask aware), shared by
+  both renderers above, by the AI brief, and by the Space/worklist read-outs.
+  This part of the architecture is sound and does not need rebuilding.
+```
+
+### CRITICAL BUG #1 / #3 — editor and canvas disagree, images overlap text in the editor: FIXED, VERIFIED
+
+Confirmed live against newspaper 2100 / page 3777 / block `second-lead` (a real AI-written article about Narendra Modi, `page_sections.id = 39176`, the exact article the task named):
+
+- **Canvas** (`audit-modi-100pct-2x.png`): correct. Body text visibly narrows beside the picture's cutout silhouette and widens back to full measure below it. `flowedTextMarkup()` works as designed.
+- **Block Editor, before the fix** (`audit-modi-blockframe-full.png`): the Modi cutout is drawn directly on top of the body copy with **zero reflow** — Marathi text renders straight through, invisible behind roughly a third of every line for seven lines. Confirmed both visually and numerically: the picture's real box is `x:88-279, y:790-1337` (screen px); the body frame is `x:77-978, y:931-1346` — the picture sits inside the body frame's full-width bounding box because `layoutTextFrames()` never learns the picture exists.
+
+**Root cause, in the code's own words** (block-frame.js's header comment): Quill is a real `contenteditable` word processor; CSS cannot flow text around a floating object on both sides in the same row (only `float` to one edge), so "the picture could never go where the desk put it" inside a live editing surface. Also confirmed directly: `.frame-body .ql-container` sets `overflow: auto`, which establishes its own block-formatting context — a float placed outside it cannot reach the text inside it either way. Quill also runs a MutationObserver-based reconciliation of its own DOM subtree, so injecting a foreign node directly into `.ql-editor` risks the node being stripped, or worse, folded into the story's own saved HTML. This is a genuine, hard constraint (confirmed, not assumed) — real per-row, both-sides text exclusion inside a live browser `contenteditable` is not achievable without either corrupting the saved document or replacing Quill's own layout engine (which is why Word and Google Docs need their own text-layout engines for this, not a browser's contenteditable).
+
+**Fixed with two changes that respect that constraint rather than fight it:**
+1. `bandBox()` (new, `text-flow.js`) is `section-thumb.js`'s own band-avoidance closure, extracted so the Block Editor can call the exact same function rather than a second copy. `layoutTextFrames()` (`block-frame.js`) now calls `buildFlowMap(section, view, REAL images)` (it used to pass `[]`, unconditionally) and positions the **headline and subheading frames** with `bandBox()`, so they dodge a picture standing in their rows exactly as the canvas does — including correctly using a cutout's real alpha mask rather than its full rectangular bounding box, confirmed live (the headline visibly starts past Modi's shoulders, not his full photo frame).
+2. For the **body**, which cannot get live per-row wrap for the reason above: `flowedBodyMarkup()` (new, `section-thumb.js` — `flowedTextMarkup()`'s own body-pouring logic, extracted) is shown as an accurate, read-only "Show how this will print" preview (`#edFlowedPreview`, `block-frame.js`), toggled on demand, built from the exact same function the canvas uses — so it is architecturally impossible for the preview to disagree with the canvas, rather than an approximation that could drift. The toggle only appears when a picture genuinely reaches into the body's own rows (most blocks with a picture never need it); Quill remains the default, always-visible writing surface underneath it, unchanged in the common case. A real CSS bug was caught and fixed during this: `.frame-preview-toggle { display: flex }` had the same specificity as the browser's own `[hidden] { display: none }` and, being the later rule, was winning — the toggle was visually showing even when JS had set `.hidden = true`. Found by a failing test, not by reading the CSS twice; fixed with an explicit `.frame-preview-toggle[hidden] { display: none }`.
+
+Verified live: headline/subheading now visibly wrap around the Modi cutout on both the canvas and in the editor; the toggle appears only when the picture reaches the body; the preview shown is pixel-identical to the canvas's own render (same function); typing and undo in Quill are unaffected by the toggle's presence. `npm test`: 5 new tests in `tests/flowBands.test.js` (pure logic, `bandBox`/`flowedBodyMarkup`, no DOM). Browser suite: 16 new assertions in the existing "multi-selection" block of `tests/browser/workspace.browser.js` (toggle visibility, preview content, typing/undo unaffected).
+
+### CRITICAL BUG #10 — wrong word highlighted: FIXED, VERIFIED
+
+Confirmed against the same real block. `headline_style = 'accent'` (a template decision, `templates.js`'s `block(..., { headline: 'accent' })` on `lead`/`second-lead`/`feature-one`), and `headlineMarkup()`'s accent fallback is unconditional: split the plain headline on whitespace, highlight the **last word**. The real headline is "नरेंद्र मोदींच्या ... देण्याचा संकल्प" — last word "संकल्प" (resolve), not "नरेंद्र मोदी" (the name, first). Screenshot confirmed exactly this is what rendered, in red, both on the canvas and in the editor (they agreed here, because both call the one shared `headlineMarkup()`).
+
+This was not "AI semantic emphasis and rendering disconnected" as initially framed — it was simpler and worse: **the AI was never told the asterisk-emphasis convention exists at all** (confirmed: no mention of "accent", "emphasis" or "asterisk" anywhere in `storyWriter.service.js`'s prompt-building code, before this fix). The renderer's "last word" fallback was therefore doing 100% of the work on every AI-written accent headline, with no semantic basis, and Marathi name-first phrasing defeats it reliably.
+
+**Fixed**: `briefFor()` now takes an `accentStyle` flag (`section.headline_style === 'accent'`, computed in `write()`) and, when true, tells the model to wrap the one most important phrase in `*asterisks*` directly in the headline it returns — the exact convention `headlineMarkup()` already parses, so no schema change and no new rendering path. `sanitiseAccentMarks()` (new) validates what comes back before it is trusted: an odd number of `*` (a malformed pair) or asterisks wrapping more than 85% of the headline (defeats the point of a single accent) are stripped, falling back to the existing last-word default rather than a broken or pointless highlight; a headline from a non-accent-styled block has any stray asterisks stripped too, respecting the template's own plain-type decision. `npm test`: 8 new tests in `tests/storyWriter.test.js` (the brief carries the instruction only when asked; `sanitiseAccentMarks`'s four real cases, including the exact Modi headline).
+
+### The duplicate image system: found and fixed
+
+`page_sections.image_url` (+ `image_rotation`/`image_zoom`/`image_fit`) is a second, independent image field alongside `section_images` (Stage 7's multi-picture placement table). `image_url` is very much alive — it is how "Take from Reporter" auto-fills a block's photo (`section-model.js`: `imageUrl: story.image_urls?.[0] || draft.imageUrl || ""`). Consequence, confirmed by reading `sectionInnerHtml()`: the moment a desk manually placed even one `section_images` picture on a block that already had a reporter's auto-filled `image_url`, `flowedTextMarkup()` took over and `contentMarkup()` (the only renderer that draws `image_url`) never ran again — **the reporter's photo silently disappeared from the page**, with no warning, while the block still showed its "linked to reporter" flag.
+
+**Fixed, not merged**: the two fields still exist (a real schema merge was judged out of proportion to the bug — `image_url` is written from exactly one place, the reporter auto-fill, and reading it stays cheap), but `carryForwardAutoFilledImage()` (new, `sectionImage.service.js`) runs at the one moment that would otherwise orphan it: the first manual `POST .../images`. If the section still has `image_url` set and no `section_images` rows yet, the auto-filled photo is converted into an ordinary placed picture first (same asset, a sensible default placement, existing z-index rules) and `image_url` is cleared — nothing is lost, it simply becomes the picture underneath whatever the desk adds next. Adding the exact same URL the auto-fill already held resolves to the one row, not two (the existing `UNIQUE(page_section_id, media_asset_id)` upsert already guarantees this). `npm test`: 3 new tests in `tests/sectionImage.test.js`, real Postgres — the carry-forward happens, a block with no auto-fill is unaffected, and the same-URL case does not duplicate.
+
+### Bug #4 (blur): investigated, inconclusive so far
+
+`#canvasSurface` renders its full-resolution DOM (660×1060px) then applies `transform: matrix(0.29434, 0, 0, 0.29434, ...)` (CSS scale) to fit the viewport at "Fit" zoom - a non-clean fractional scale factor, a real candidate for the softness reported. At 100% app zoom + 2x device pixel ratio the same block renders crisply (`audit-modi-100pct-2x.png`), so the effect - if real - is specific to non-100% zoom levels rendered through a CSS transform rather than a resolution problem. Not yet visually confirmed as a problem at the zoom levels a desk actually works at day to day; needs a side-by-side comparison at matched final pixel size before deciding whether it is worth `image-rendering`/rasterisation changes or is already acceptable browser antialiasing.
+
+### Bug #7/#8/#9 (footer/page-region issues): could not reproduce with available data
+
+Page 2 of the same edition (template `local`, the one template with an explicit `footer` block) has no content in any of its six sections yet - every block renders its empty-state placeholder. The reported "two footer-like regions overlapping" needs a page with real content to reproduce. `templates.js`'s own band math (`rows()`/`split()`) is rigorous - every y/height is derived from declared depths, never hand-typed, and fills exactly to the matter's bottom edge with no accumulated rounding gap. It is not, on this reading, a source of the reported whitespace/overlap bugs; the cause is more likely in how an EMPTY or OVERSET block renders (its status chrome, its placeholder box) than in the template's own geometry. Will revisit once the realistic mixed test edition (Phase 12's own requirement) exists with real content on an inside page.
+
+### What Phase 1 confirms is NOT broken
+
+- `templates.js`: rigorous, gapless, no hand-typed y-coordinates - not a source of the whitespace/gap bugs as such.
+- `text-flow.js`: a real, working per-cell occupancy grid (rect/ellipse/cutout-mask), shared correctly by the canvas, the AI brief, and the Space read-out. This is the right foundation for Project A, not something to replace.
+- `geometry.js`: sound mm↔px conversion, single source of truth, already exported over `/api/geometry`.
+- The store: one `store.js`, confirmed no competing state.
+
+---
+
 ## 0w. Twenty-fourth pass — production hardening, Stage 8 (2026-08-11)
 
 **Stage 8 was explicitly hardening, not reinvention: audit the repository, fix what a real audit finds, document actual (not aspirational) architecture, and define where the two upcoming major projects (Layout Engine, AI Fill) will attach — without starting either.** Read first, changed only what the reading justified.

@@ -11,15 +11,17 @@ const { printsColourByDefault } = require('../layout/formes');
 const insertSectionSql = `
   INSERT INTO page_sections (page_id, section_key, x_px, y_px, width_px, height_px, z_index,
                              headline_font_px, subheading_font_px, body_font_px,
-                             block_type, border_style, headline_style, feature_key)
-  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`;
+                             block_type, story_type, editorial_priority,
+                             border_style, headline_style, feature_key)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`;
 
 function insertSectionValues(pageId, section, index) {
   const type = typeScaleFor(section.width, section.height);
   return [
     pageId, section.key, section.x, section.y, section.width, section.height, index,
     type.headlineFontPx, type.subheadingFontPx, type.bodyFontPx,
-    section.blockType || 'article', section.borderStyle || 'none', section.headlineStyle || 'plain',
+    section.blockType || 'article', section.storyType || 'STANDARD', section.editorialPriority || 3,
+    section.borderStyle || 'none', section.headlineStyle || 'plain',
     section.featureKey || null,
   ];
 }
@@ -151,11 +153,24 @@ async function updateTemplate(pageId, templateKey) {
         await client.query(
           `UPDATE page_sections
               SET x_px = $3, y_px = $4, width_px = $5, height_px = $6, z_index = $7,
-                  block_type = $8, border_style = $9, headline_style = $10, feature_key = $11,
+                  block_type = $8,
+                  -- A template recommends semantics for an empty frame. Once
+                  -- a desk has filled it, semantic identity belongs to that
+                  -- story and a layout switch must not overwrite it.
+                  story_type = CASE WHEN news_item_id IS NULL
+                    AND COALESCE(headline, '') = '' AND COALESCE(subheading, '') = ''
+                    AND COALESCE(body, '') = '' AND COALESCE(caption, '') = ''
+                    AND COALESCE(image_url, '') = '' THEN $9 ELSE story_type END,
+                  editorial_priority = CASE WHEN news_item_id IS NULL
+                    AND COALESCE(headline, '') = '' AND COALESCE(subheading, '') = ''
+                    AND COALESCE(body, '') = '' AND COALESCE(caption, '') = ''
+                    AND COALESCE(image_url, '') = '' THEN $10 ELSE editorial_priority END,
+                  border_style = $11, headline_style = $12, feature_key = $13,
                   updated_at = CURRENT_TIMESTAMP
            WHERE page_id = $1 AND section_key = $2`,
           [pageId, section.key, section.x, section.y, section.width, section.height, index,
-           section.blockType || 'article', section.borderStyle || 'none', section.headlineStyle || 'plain',
+           section.blockType || 'article', section.storyType || 'STANDARD', section.editorialPriority || 3,
+           section.borderStyle || 'none', section.headlineStyle || 'plain',
            section.featureKey || null]
         );
       } else {
@@ -267,6 +282,8 @@ async function saveSection(pageId, sectionKey, updates) {
          headline_style = COALESCE($40, headline_style), accent_color = COALESCE($41, accent_color),
          kicker = $42,
          smart_card_key = $43, smart_card_data = $44,
+         story_type = COALESCE($45, story_type),
+         editorial_priority = COALESCE($46, editorial_priority),
          updated_at = CURRENT_TIMESTAMP
      WHERE page_id = $1 AND section_key = $2 RETURNING *`,
     [pageId, sectionKey, updates.newsItemId || null, updates.headline || null, updates.headlineFontPx || null,
@@ -293,7 +310,11 @@ async function saveSection(pageId, sectionKey, updates) {
       // that claims to hold a sudoku and cannot draw one. `null` for both is how
       // a card is discarded.
       updates.smartCardKey || null,
-      updates.smartCardKey && updates.smartCardData ? JSON.stringify(updates.smartCardData) : null]
+      updates.smartCardKey && updates.smartCardData ? JSON.stringify(updates.smartCardData) : null,
+      updates.storyType || null,
+      Number.isInteger(updates.editorialPriority)
+        ? Math.min(5, Math.max(1, updates.editorialPriority))
+        : null]
   );
   return rows[0] || null;
 }

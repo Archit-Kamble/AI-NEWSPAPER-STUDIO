@@ -41,6 +41,11 @@ CREATE TABLE IF NOT EXISTS news_items (
   city VARCHAR(120),
   tags TEXT,
   reporter_name VARCHAR(120),
+  -- Editorial meaning is separate from physical layout. `story_type` tells
+  -- the composition engine what treatment the copy needs; a page block's
+  -- `block_type` still says what kind of physical slot it is.
+  story_type VARCHAR(30) NOT NULL DEFAULT 'STANDARD',
+  editorial_priority SMALLINT NOT NULL DEFAULT 3,
   image_urls TEXT[] NOT NULL DEFAULT '{}',
   status VARCHAR(20) NOT NULL DEFAULT 'draft',
   created_by INTEGER REFERENCES users(id),
@@ -50,6 +55,8 @@ CREATE TABLE IF NOT EXISTS news_items (
 
 ALTER TABLE news_items ADD COLUMN IF NOT EXISTS image_urls TEXT[] NOT NULL DEFAULT '{}';
 ALTER TABLE news_items ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE news_items ADD COLUMN IF NOT EXISTS story_type VARCHAR(30) NOT NULL DEFAULT 'STANDARD';
+ALTER TABLE news_items ADD COLUMN IF NOT EXISTS editorial_priority SMALLINT NOT NULL DEFAULT 3;
 
 CREATE TABLE IF NOT EXISTS templates (
   id SERIAL PRIMARY KEY,
@@ -82,6 +89,8 @@ CREATE TABLE IF NOT EXISTS page_sections (
   page_id INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
   section_key VARCHAR(100) NOT NULL,
   block_type VARCHAR(30) NOT NULL DEFAULT 'article',
+  story_type VARCHAR(30) NOT NULL DEFAULT 'STANDARD',
+  editorial_priority SMALLINT NOT NULL DEFAULT 3,
   x_px INTEGER NOT NULL,
   y_px INTEGER NOT NULL,
   width_px INTEGER NOT NULL CHECK (width_px > 0),
@@ -118,6 +127,8 @@ ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS image_url TEXT;
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS image_rotation INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS image_zoom NUMERIC(5,2) NOT NULL DEFAULT 1;
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS image_fit VARCHAR(20) NOT NULL DEFAULT 'cover';
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS story_type VARCHAR(30) NOT NULL DEFAULT 'STANDARD';
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS editorial_priority SMALLINT NOT NULL DEFAULT 3;
 
 -- Typography. Print composition needs each of these as its own column rather
 -- than a JSON blob: the Scribus/PDF export will map them one-to-one onto frame

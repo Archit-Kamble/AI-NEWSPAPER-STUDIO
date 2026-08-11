@@ -4,7 +4,9 @@ const jump = require('../services/jump.service');
 const fit = require('../services/fit.service');
 
 async function update(req, res) {
-  const page = await pageSectionService.saveSection(req.params.pageId, req.params.sectionId, req.body);
+  const result = await pageSectionService.saveSection(req.params.pageId, req.params.sectionId, req.body);
+  if (result?.error) return res.status(400).json({ error: result.error });
+  const page = result;
   if (!page) return res.status(404).json({ error: 'Not found' });
   res.json(page);
 }

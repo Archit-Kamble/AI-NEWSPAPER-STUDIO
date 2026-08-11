@@ -9,9 +9,12 @@
 
 import { isExplicit } from "./status/section-status.js";
 import { MIN_LINE_HEIGHT } from "./layout/text-flow.js";
+import { normalizeEditorialPriority, resolveStoryType } from "./layout/story-types.js";
 
 export const DRAFT_FIELDS = [
   "newsItemId",
+  "storyType",
+  "editorialPriority",
   "kicker",
   "headline",
   "subheading",
@@ -71,6 +74,8 @@ export function draftFromSection(section) {
     // What kind of block this is comes from the layout, not the desk: an advert
     // slot stays an advert slot however it is filled. Read-only in the draft.
     blockType: section.block_type || "article",
+    storyType: resolveStoryType(section),
+    editorialPriority: normalizeEditorialPriority(section.editorial_priority, 3),
     // Which standing daily feature fills this block, if any. Set by the layout,
     // not by the desk - read-only in the draft.
     featureKey: section.feature_key || null,
@@ -135,6 +140,11 @@ export function draftFromStory(draft, story) {
   return {
     ...draft,
     newsItemId: story.id,
+    storyType: resolveStoryType(story.story_type || draft.storyType || "STANDARD"),
+    editorialPriority: normalizeEditorialPriority(
+      story.editorial_priority ?? draft.editorialPriority,
+      3,
+    ),
     headline: story.title || "",
     subheading: story.subheading || story.subtitle || "",
     body: story.description || "",
@@ -159,6 +169,8 @@ export function draftFromStory(draft, story) {
 export function payloadFromDraft(draft) {
   return {
     newsItemId: draft.newsItemId,
+    storyType: resolveStoryType(draft.storyType),
+    editorialPriority: normalizeEditorialPriority(draft.editorialPriority, 3),
     kicker: draft.kicker,
     headline: draft.headline,
     subheading: draft.subheading,

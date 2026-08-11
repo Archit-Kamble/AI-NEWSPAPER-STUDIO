@@ -1,4 +1,5 @@
 const newsRepository = require('../repositories/news.repository');
+const { normalizeStoryMetadata } = require('./storyType.service');
 
 const VALID_STATUSES = ['draft', 'pending', 'approved', 'rejected'];
 
@@ -10,6 +11,11 @@ async function createNews({ body, files, sessionUser }) {
   if (!body.title) {
     return { error: 'Title required' };
   }
+  const semantic = await normalizeStoryMetadata(body, {
+    storyType: 'STANDARD',
+    editorialPriority: 3,
+  });
+  if (semantic.error) return semantic;
 
   const item = await newsRepository.create({
     newspaper_id: null,
@@ -21,6 +27,8 @@ async function createNews({ body, files, sessionUser }) {
     city: body.city || '',
     tags: body.tags || '',
     reporter_name: body.reporterName || sessionUser?.name || '',
+    story_type: semantic.storyType,
+    editorial_priority: semantic.editorialPriority,
     image_urls: buildImageUrls(files),
     status: body.status || 'draft',
     created_by: sessionUser?.id || Number.parseInt(body.reporterId, 10) || null,
@@ -48,6 +56,11 @@ async function getNews(id) {
 async function updateNews(id, { body, files }) {
   const existing = await newsRepository.findById(parseInt(id, 10));
   if (!existing) return { notFound: true };
+  const semantic = await normalizeStoryMetadata(body, {
+    storyType: existing.story_type,
+    editorialPriority: existing.editorial_priority,
+  });
+  if (semantic.error) return semantic;
 
   const updates = {
     newspaper_id: existing.newspaper_id,
@@ -59,6 +72,8 @@ async function updateNews(id, { body, files }) {
     city: body.city || '',
     tags: body.tags || '',
     reporter_name: body.reporterName || '',
+    story_type: semantic.storyType,
+    editorial_priority: semantic.editorialPriority,
     image_urls: existing.image_urls || [],
     status: body.status || 'draft',
     created_by: existing.created_by,

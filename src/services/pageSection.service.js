@@ -1,5 +1,6 @@
 const pageRepository = require('../repositories/page.repository');
 const newspaperRepository = require('../repositories/newspaper.repository');
+const { normalizeStoryMetadata } = require('./storyType.service');
 const { geometryOf, snapPointsX } = require('../layout/geometry');
 const { quote } = require('../layout/rateCard');
 
@@ -67,8 +68,12 @@ async function moveSection(pageId, sectionKey, body) {
 }
 
 async function saveSection(pageId, sectionKey, body) {
+  const semantic = await normalizeStoryMetadata(body);
+  if (semantic.error) return semantic;
   const article = {
     newsItemId: body.newsItemId || body.sourceNewsId,
+    storyType: semantic.storyType,
+    editorialPriority: semantic.editorialPriority,
     headline: body.headline || body.title,
     headlineFontPx: body.headlineFontPx,
     kicker: body.kicker,

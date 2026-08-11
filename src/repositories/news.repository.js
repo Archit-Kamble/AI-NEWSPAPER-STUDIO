@@ -12,12 +12,14 @@ async function create(news) {
             city,
             tags,
             reporter_name,
+            story_type,
+            editorial_priority,
             image_urls,
             status,
             created_by
         )
         VALUES (
-            $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12
+            $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14
         )
         RETURNING *;
     `;
@@ -32,6 +34,8 @@ async function create(news) {
     news.city,
     news.tags,
     news.reporter_name,
+    news.story_type,
+    news.editorial_priority,
     news.image_urls,
     news.status,
     news.created_by,
@@ -100,9 +104,11 @@ async function update(id, news) {
             city=$7,
             tags=$8,
             reporter_name=$9,
-            image_urls=$10,
-            status=$11
-        WHERE id=$12
+            story_type=$10,
+            editorial_priority=$11,
+            image_urls=$12,
+            status=$13
+        WHERE id=$14
         RETURNING *;
     `;
 
@@ -116,6 +122,8 @@ async function update(id, news) {
     news.city,
     news.tags,
     news.reporter_name,
+    news.story_type,
+    news.editorial_priority,
     news.image_urls,
     news.status,
     id,

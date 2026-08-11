@@ -4,6 +4,38 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0z. Project B — persisted story-type foundation (2026-08-12)
+
+This bounded foundation establishes semantic meaning without beginning page
+balancing, quality scoring, AI composition, typography fitting, or a UI
+redesign.
+
+- `public/editor/layout/story-types.js` is the one semantic catalog. It
+  defines the twelve uppercase persisted values (`LEAD` through
+  `ADVERTISEMENT`), their semantic policies, documented aliases, legacy
+  resolution from real block/card data, and the 1–5 editorial-priority scale.
+  It contains no page coordinates or fixture-specific logic.
+- `news_items` and `page_sections` now persist `story_type` and
+  `editorial_priority`, with additive defaults of `STANDARD` and `3` for old
+  databases and old rows. The editor draft maps snake_case DB rows to
+  camelCase exactly once and sends canonical values back on save.
+- Request services use a tiny CommonJS bridge to import that browser-safe
+  catalog instead of carrying a second enum. Known aliases are canonicalised;
+  unknown explicit story types and nonnumeric explicit priorities are rejected;
+  numeric priorities clamp to the agreed 1–5 scale.
+- Templates now carry semantic recommendations for their frames (for example,
+  a front lead is `LEAD`, an advert is `ADVERTISEMENT`, and a standing feature
+  is `SMART_CARD`). Those recommendations seed empty frames only: changing a
+  template cannot overwrite the semantic identity already assigned to filled
+  copy.
+- `tests/storyTypeFoundation.test.js` exercises catalog completeness, legacy
+  defaults, normalization, invalid-input rejection, news persistence,
+  page-section persistence/reload, template validity, and template-switch
+  preservation. This is deliberately the foundation only; composition engines
+  will consume it in a later milestone.
+
+---
+
 ## 0y. PROJECT A — Layout Engine, Phase 2: real composition (2026-08-12)
 
 **Correction to Phase 1 (0x), below, per CLAUDE.md's own rule to trust the repository over a prior doc entry when they disagree**: Phase 1 stated story continuation "does not exist as a feature at all." That was wrong. `src/services/jump.service.js`'s `carryOver()`/`reunite()` already existed, already wired to `POST /api/pages/:pageId/sections/:sectionKey/carry-over` and `/reunite`, already split a story at a sentence or word boundary, wrote the two Marathi jump lines (`(उर्वरित पान N वर)` / `(पान N वरून)`), and recorded the link via `continued_from_section_id` — a real, working single-hop continuation, just never exercised end-to-end before this pass (see below, it had a real bug).

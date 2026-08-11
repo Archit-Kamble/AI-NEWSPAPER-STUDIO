@@ -126,13 +126,24 @@ function split(top, bottom, count) {
 function block(key, col, span, y, height, options = {}) {
   const top = Math.round(y);
   const maxHeight = MATTER_BOTTOM - top;
+  const blockType = options.type || 'article';
+  // Physical slots and editorial meaning are deliberately different axes.
+  // Every built-in frame declares an explicit recommendation below. A custom
+  // frame starts as an ordinary story until the desk/composition system gives
+  // it a semantic identity; this file does not maintain a second policy map.
+  const storyType = options.story || 'STANDARD';
+  const priority = Number.isInteger(options.priority)
+    ? Math.min(5, Math.max(1, options.priority))
+    : 3;
   return {
     key,
     x: colX(col),
     y: top,
     width: colW(col, span),
     height: baseline(Math.min(height, maxHeight)),
-    blockType: options.type || 'article',
+    blockType,
+    storyType,
+    editorialPriority: priority,
     borderStyle: options.border || 'none',
     headlineStyle: options.headline || 'plain',
     // A standing daily feature: the software fills this block for the
@@ -196,29 +207,39 @@ const templates = {
       return [
         // The sold corner of page one, beside the nameplate.
         block('masthead-advert', MASTHEAD_ADVERT.col, MASTHEAD_ADVERT.span,
-          MASTHEAD_ADVERT.y, MASTHEAD_ADVERT.height, { type: 'advert', border: 'box' }),
+          MASTHEAD_ADVERT.y, MASTHEAD_ADVERT.height,
+          { type: 'advert', story: 'ADVERTISEMENT', priority: 1, border: 'box' }),
 
         // Band one - the day's lead, flanked by pictures, with an advert ear.
-        block('lead-pictures', 0, 2, FRONT[0].y, FRONT[0].height, { type: 'photo' }),
-        block('lead', 2, 7, FRONT[0].y, FRONT[0].height, { headline: 'accent' }),
-        block('lead-side', 9, 2, FRONT[0].y, FRONT[0].height, { type: 'photo' }),
-        block('top-advert', 11, 5, FRONT[0].y, FRONT[0].height, { type: 'advert', border: 'box' }),
+        block('lead-pictures', 0, 2, FRONT[0].y, FRONT[0].height,
+          { type: 'photo', story: 'PHOTO_FEATURE', priority: 4 }),
+        block('lead', 2, 7, FRONT[0].y, FRONT[0].height,
+          { story: 'LEAD', priority: 5, headline: 'accent' }),
+        block('lead-side', 9, 2, FRONT[0].y, FRONT[0].height,
+          { type: 'photo', story: 'PHOTO_FEATURE', priority: 3 }),
+        block('top-advert', 11, 5, FRONT[0].y, FRONT[0].height,
+          { type: 'advert', story: 'ADVERTISEMENT', priority: 1, border: 'box' }),
 
         // Band two - two heavy stories.
-        block('second-lead', 0, 5, FRONT[1].y, FRONT[1].height, { headline: 'accent' }),
-        block('third-lead', 5, 4, FRONT[1].y, FRONT[1].height),
-        block('anchor', 9, 7, anchor.y, anchor.height),
-        block('display-advert', 9, 7, advert.y, advert.height, { type: 'advert', border: 'box' }),
+        block('second-lead', 0, 5, FRONT[1].y, FRONT[1].height,
+          { story: 'SECONDARY', priority: 4, headline: 'accent' }),
+        block('third-lead', 5, 4, FRONT[1].y, FRONT[1].height,
+          { story: 'SECONDARY', priority: 4 }),
+        block('anchor', 9, 7, anchor.y, anchor.height,
+          { story: 'SECONDARY', priority: 4 }),
+        block('display-advert', 9, 7, advert.y, advert.height,
+          { type: 'advert', story: 'ADVERTISEMENT', priority: 1, border: 'box' }),
 
         // Band three - the day's reports.
-        block('report-one', 0, 3, FRONT[2].y, FRONT[2].height),
-        block('report-two', 3, 3, FRONT[2].y, FRONT[2].height),
-        block('report-three', 6, 3, FRONT[2].y, FRONT[2].height),
+        block('report-one', 0, 3, FRONT[2].y, FRONT[2].height, { story: 'STANDARD', priority: 3 }),
+        block('report-two', 3, 3, FRONT[2].y, FRONT[2].height, { story: 'STANDARD', priority: 3 }),
+        block('report-three', 6, 3, FRONT[2].y, FRONT[2].height, { story: 'STANDARD', priority: 3 }),
 
         // Band four - short items along the foot.
-        block('brief-one', 0, 3, FRONT[3].y, FRONT[3].height),
-        block('brief-two', 3, 3, FRONT[3].y, FRONT[3].height),
-        block('short-news', 6, 3, FRONT[3].y, FRONT[3].height, { type: 'briefs', border: 'box' }),
+        block('brief-one', 0, 3, FRONT[3].y, FRONT[3].height, { story: 'BRIEF', priority: 2 }),
+        block('brief-two', 3, 3, FRONT[3].y, FRONT[3].height, { story: 'BRIEF', priority: 2 }),
+        block('short-news', 6, 3, FRONT[3].y, FRONT[3].height,
+          { type: 'briefs', story: 'BRIEF', priority: 2, border: 'box' }),
       ];
     })(),
   },
@@ -238,12 +259,13 @@ const templates = {
       // all three end level.
       const [top, bottom] = split(band[1].y, band[1].end, 2);
       return [
-        block('banner', 0, 16, band[0].y, band[0].height),
-        block('left-column', 0, 6, band[1].y, band[1].height),
-        block('centre-column', 6, 6, band[1].y, band[1].height),
-        block('right-top', 12, 4, top.y, top.height),
-        block('right-bottom', 12, 4, bottom.y, bottom.height),
-        block('footer', 0, 16, footer, INSIDE_BOTTOM - footer),
+        block('banner', 0, 16, band[0].y, band[0].height, { story: 'LEAD', priority: 5 }),
+        block('left-column', 0, 6, band[1].y, band[1].height, { story: 'ANALYSIS', priority: 4 }),
+        block('centre-column', 6, 6, band[1].y, band[1].height, { story: 'STANDARD', priority: 3 }),
+        block('right-top', 12, 4, top.y, top.height, { story: 'BRIEF', priority: 2 }),
+        block('right-bottom', 12, 4, bottom.y, bottom.height, { story: 'STANDARD', priority: 3 }),
+        block('footer', 0, 16, footer, INSIDE_BOTTOM - footer,
+          { type: 'feature', story: 'SMART_CARD', priority: 2 }),
       ];
     })(),
   },
@@ -256,10 +278,10 @@ const templates = {
       const band = rows(INSIDE_TOP, [270]);
       const columnsTop = band[0].end + GAP;
       return [
-        block('editorial', 0, 16, band[0].y, band[0].height),
-        block('opinion-one', 0, 6, columnsTop, INSIDE_BOTTOM - columnsTop),
-        block('opinion-two', 6, 6, columnsTop, INSIDE_BOTTOM - columnsTop),
-        block('opinion-three', 12, 4, columnsTop, INSIDE_BOTTOM - columnsTop),
+        block('editorial', 0, 16, band[0].y, band[0].height, { story: 'OPINION', priority: 4 }),
+        block('opinion-one', 0, 6, columnsTop, INSIDE_BOTTOM - columnsTop, { story: 'OPINION', priority: 3 }),
+        block('opinion-two', 6, 6, columnsTop, INSIDE_BOTTOM - columnsTop, { story: 'OPINION', priority: 3 }),
+        block('opinion-three', 12, 4, columnsTop, INSIDE_BOTTOM - columnsTop, { story: 'OPINION', priority: 3 }),
       ];
     })(),
   },
@@ -274,10 +296,14 @@ const templates = {
       // The two supporting pictures fill the dominant one's depth between them.
       const [top, bottom] = split(band[0].y, band[0].end, 2);
       return [
-        block('photo-lead', 0, 10, band[0].y, band[0].height, { type: 'photo' }),
-        block('photo-top', 10, 6, top.y, top.height, { type: 'photo' }),
-        block('photo-bottom', 10, 6, bottom.y, bottom.height, { type: 'photo' }),
-        block('caption-story', 0, 16, storyTop, INSIDE_BOTTOM - storyTop),
+        block('photo-lead', 0, 10, band[0].y, band[0].height,
+          { type: 'photo', story: 'PHOTO_FEATURE', priority: 5 }),
+        block('photo-top', 10, 6, top.y, top.height,
+          { type: 'photo', story: 'PHOTO_FEATURE', priority: 3 }),
+        block('photo-bottom', 10, 6, bottom.y, bottom.height,
+          { type: 'photo', story: 'PHOTO_FEATURE', priority: 3 }),
+        block('caption-story', 0, 16, storyTop, INSIDE_BOTTOM - storyTop,
+          { story: 'PHOTO_FEATURE', priority: 4 }),
       ];
     })(),
   },
@@ -297,25 +323,25 @@ const templates = {
       // story slot at all - a headline filled it and no copy fitted.
       const [lead, shoulder] = split(band[0].y, band[0].end, 2);
       return [
-        block('anchor', 0, 8, band[0].y, band[0].height),
-        block('second-lead', 8, 8, lead.y, lead.height),
-        block('shoulder', 8, 8, shoulder.y, shoulder.height),
+        block('anchor', 0, 8, band[0].y, band[0].height, { story: 'LEAD', priority: 5 }),
+        block('second-lead', 8, 8, lead.y, lead.height, { story: 'SECONDARY', priority: 4 }),
+        block('shoulder', 8, 8, shoulder.y, shoulder.height, { story: 'STANDARD', priority: 3 }),
 
-        block('col-one-a', 0, 4, band[1].y, band[1].height),
-        block('col-one-b', 0, 4, band[2].y, band[2].height),
-        block('col-two-a', 4, 4, band[1].y, band[1].height),
-        block('col-two-b', 4, 4, band[2].y, band[2].height),
-        block('col-three-a', 8, 4, band[1].y, band[1].height),
-        block('col-three-b', 8, 4, band[2].y, band[2].height),
-        block('col-four-a', 12, 4, band[1].y, band[1].height),
-        block('col-four-b', 12, 4, band[2].y, band[2].height),
+        block('col-one-a', 0, 4, band[1].y, band[1].height, { story: 'BRIEF', priority: 2 }),
+        block('col-one-b', 0, 4, band[2].y, band[2].height, { story: 'BRIEF', priority: 2 }),
+        block('col-two-a', 4, 4, band[1].y, band[1].height, { story: 'BRIEF', priority: 2 }),
+        block('col-two-b', 4, 4, band[2].y, band[2].height, { story: 'BRIEF', priority: 2 }),
+        block('col-three-a', 8, 4, band[1].y, band[1].height, { story: 'BRIEF', priority: 2 }),
+        block('col-three-b', 8, 4, band[2].y, band[2].height, { story: 'BRIEF', priority: 2 }),
+        block('col-four-a', 12, 4, band[1].y, band[1].height, { story: 'BRIEF', priority: 2 }),
+        block('col-four-b', 12, 4, band[2].y, band[2].height, { story: 'BRIEF', priority: 2 }),
 
-        block('strip-left', 0, 6, band[3].y, band[3].height),
-        block('strip-centre', 6, 6, band[3].y, band[3].height),
-        block('strip-right', 12, 4, band[3].y, band[3].height),
+        block('strip-left', 0, 6, band[3].y, band[3].height, { story: 'SIDEBAR', priority: 2 }),
+        block('strip-centre', 6, 6, band[3].y, band[3].height, { story: 'SIDEBAR', priority: 2 }),
+        block('strip-right', 12, 4, band[3].y, band[3].height, { story: 'SIDEBAR', priority: 2 }),
 
-        block('foot-left', 0, 8, foot, INSIDE_BOTTOM - foot),
-        block('foot-right', 8, 8, foot, INSIDE_BOTTOM - foot),
+        block('foot-left', 0, 8, foot, INSIDE_BOTTOM - foot, { story: 'ANALYSIS', priority: 3 }),
+        block('foot-right', 8, 8, foot, INSIDE_BOTTOM - foot, { story: 'STANDARD', priority: 3 }),
       ];
     })(),
   },
@@ -335,15 +361,21 @@ const templates = {
       // The horoscope runs the full depth of the three boxes beside it.
       const rashiDepth = bottom - GAP - INSIDE_TOP;
       return [
-        block('rashi', 0, 8, INSIDE_TOP, rashiDepth, { type: 'feature', border: 'box', feature: 'rashi' }),
-        block('panchang', 8, 4, right[0].y, right[0].height, { type: 'feature', border: 'box', feature: 'panchang' }),
-        block('dinvishesh', 12, 4, right[0].y, right[0].height, { type: 'feature', border: 'box', feature: 'dinvishesh' }),
-        block('suvichar', 8, 8, right[1].y, right[1].height, { type: 'feature', border: 'box', feature: 'suvichar' }),
-        block('feature-one', 8, 8, right[2].y, right[2].height, { headline: 'accent' }),
+        block('rashi', 0, 8, INSIDE_TOP, rashiDepth,
+          { type: 'feature', story: 'SMART_CARD', priority: 3, border: 'box', feature: 'rashi' }),
+        block('panchang', 8, 4, right[0].y, right[0].height,
+          { type: 'feature', story: 'SMART_CARD', priority: 2, border: 'box', feature: 'panchang' }),
+        block('dinvishesh', 12, 4, right[0].y, right[0].height,
+          { type: 'feature', story: 'SMART_CARD', priority: 2, border: 'box', feature: 'dinvishesh' }),
+        block('suvichar', 8, 8, right[1].y, right[1].height,
+          { type: 'feature', story: 'QUOTE', priority: 2, border: 'box', feature: 'suvichar' }),
+        block('feature-one', 8, 8, right[2].y, right[2].height,
+          { story: 'PHOTO_FEATURE', priority: 4, headline: 'accent' }),
 
-        block('feature-two', 0, 4, bottom, INSIDE_BOTTOM - bottom),
-        block('feature-three', 4, 4, bottom, INSIDE_BOTTOM - bottom),
-        block('feature-advert', 8, 8, bottom, INSIDE_BOTTOM - bottom, { type: 'advert', border: 'box' }),
+        block('feature-two', 0, 4, bottom, INSIDE_BOTTOM - bottom, { story: 'OPINION', priority: 3 }),
+        block('feature-three', 4, 4, bottom, INSIDE_BOTTOM - bottom, { story: 'DATA', priority: 3 }),
+        block('feature-advert', 8, 8, bottom, INSIDE_BOTTOM - bottom,
+          { type: 'advert', story: 'ADVERTISEMENT', priority: 1, border: 'box' }),
       ];
     })(),
   },

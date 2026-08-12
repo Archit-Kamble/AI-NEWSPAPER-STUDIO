@@ -4,6 +4,19 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zo. Project B7B-F4 — unified page-furniture gutter (2026-08-12)
+
+`PAGE_FURNITURE_GAP_PX` is the one 4px physical gap between visible standing
+furniture and editorial frames: masthead→news, folio→news, news→footer, and
+Page-2 news→imprint. The live 2026-08-12 edition was reapplied through the
+controlled transaction after template changes; custom frames and editorial
+data remain untouched. Page 2 keeps its safe 32px imprint and 4px
+imprint→footer separator. The F3 28px bounded Devanagari footer remains
+unchanged. PAGE SHELL / FIXED LAYOUT PHASE COMPLETE, pending only manual
+visual confirmation. Next milestone: B8B — actual SAHAS-brain AI fill.
+
+---
+
 ## 0zn. Project B7B-F3 — actual-edition page furniture correction (2026-08-12)
 
 F2 corrected only the guarded `2099-*` fixtures; the visible 2026-08-12

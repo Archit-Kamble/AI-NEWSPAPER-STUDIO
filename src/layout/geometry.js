@@ -64,6 +64,10 @@ function snapPointsX(geometry) {
 const BASELINE_MM = 4;
 const baselinePx = () => mmToPx(BASELINE_MM);
 
+// One physical breathing space measured from a visible furniture rule to the
+// nearest editorial frame. Every page shell boundary uses this token.
+const PAGE_FURNITURE_GAP_PX = 4;
+
 // The one page-region model: every page has a HEADER, a CONTENT region and a
 // FOOTER, and this is the only place that says how deep each is. templates.js
 // reads this to know where a block may start and must stop; masthead.js (the
@@ -86,10 +90,10 @@ const HEADER = {
   // The masthead itself is unchanged; only its editorial gutter is tightened.
   // The visible masthead rule ends at y=140.  Four pixels gives the first
   // editorial band a deliberate, compact breathing space (snapped to y=144).
-  mastheadClearancePx: 4,
+  mastheadClearancePx: PAGE_FURNITURE_GAP_PX,
   // One compact ruled folio line plus a small editorial gutter.
   folioHeightPx: 32,
-  folioContentGapPx: 8,
+  folioContentGapPx: PAGE_FURNITURE_GAP_PX,
 };
 
 const FOOTER = {
@@ -97,7 +101,7 @@ const FOOTER = {
   // Its extra four pixels come from the editorial gutter, preserving total
   // editorial reservation on every page.
   footHeightPx: 28,
-  contentFooterGapPx: 4,
+  contentFooterGapPx: PAGE_FURNITURE_GAP_PX,
   imprintHeightPx: 32, // two safe compact legal-imprint lines, Page 2 only
   imprintGapPx: 4,
 };
@@ -202,6 +206,7 @@ module.exports = {
   geometryOf,
   typeScaleFor,
   regionsFor,
+  PAGE_FURNITURE_GAP_PX,
   HEADER,
   FOOTER,
   hasLegalImprint,

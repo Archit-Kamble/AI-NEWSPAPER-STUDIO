@@ -350,10 +350,10 @@ test('compact Devanagari-safe furniture leaves one small canonical gap after its
   const { geometryOf, HEADER, FOOTER } = require('../src/layout/geometry');
   const g = geometryOf({});
   assert.equal(HEADER.mastheadClearancePx, 4);
-  assert.equal(HEADER.folioContentGapPx, 8);
+  assert.equal(HEADER.folioContentGapPx, 4);
   assert.equal(FOOTER.contentFooterGapPx, 4);
   assert.equal(g.regions.front.content.top, 144);
-  assert.equal(g.regions.inside.content.top, 64);
+  assert.equal(g.regions.inside.content.top, 56);
 });
 
 test('the front page starts its content below the nameplate; inside pages start below the slimmer folio', () => {

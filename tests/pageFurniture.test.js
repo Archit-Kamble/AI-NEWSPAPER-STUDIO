@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { geometryOf, HEADER, FOOTER, regionForPage } = require('../src/layout/geometry');
+const { geometryOf, HEADER, FOOTER, PAGE_FURNITURE_GAP_PX, regionForPage } = require('../src/layout/geometry');
 const { getTemplateForPage, comparePageGeometryToTemplate } = require('../src/layout/templates');
 
 const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'styles.css'), 'utf8');
@@ -26,11 +26,11 @@ test('masthead, folio, footer, and legal imprint use bounded Devanagari-safe lin
 test('canonical furniture reserves compact header/footer space with Page-2-only legal imprint', () => {
   const g = geometryOf({});
   assert.equal(HEADER.mastheadHeightPx, 120);
-  assert.equal(HEADER.mastheadClearancePx, 4);
+  assert.equal(HEADER.mastheadClearancePx, PAGE_FURNITURE_GAP_PX);
   assert.equal(HEADER.folioHeightPx, 32);
-  assert.equal(HEADER.folioContentGapPx, 8);
+  assert.equal(HEADER.folioContentGapPx, PAGE_FURNITURE_GAP_PX);
   assert.equal(FOOTER.footHeightPx, 28);
-  assert.equal(FOOTER.contentFooterGapPx, 4);
+  assert.equal(FOOTER.contentFooterGapPx, PAGE_FURNITURE_GAP_PX);
   assert.equal(regionForPage(g, 2).footer.imprintHeightPx, 32);
   assert.equal(regionForPage(g, 1).footer.imprintHeightPx, 0);
   assert.equal(regionForPage(g, 3).footer.imprintHeightPx, 0);
@@ -53,12 +53,18 @@ test('permanent Marathi footer has bounded Devanagari-safe child boxes and a 4px
   }
 });
 
-test('Page 1 alone tightens its top gutter while Pages 2–4 retain their accepted folio boundary', () => {
+test('one canonical furniture gap governs masthead, folio, footer, and imprint boundaries', () => {
   const g = geometryOf({});
+  assert.equal(PAGE_FURNITURE_GAP_PX, 4);
   assert.equal(regionForPage(g, 1).content.top, 144);
-  assert.equal(regionForPage(g, 2).content.top, 64);
-  assert.equal(regionForPage(g, 3).content.top, 64);
-  assert.equal(regionForPage(g, 4).content.top, 64);
+  assert.equal(regionForPage(g, 2).content.top, 56);
+  assert.equal(regionForPage(g, 3).content.top, 56);
+  assert.equal(regionForPage(g, 4).content.top, 56);
+  for (const pageNumber of [1, 3, 4]) {
+    const region = regionForPage(g, pageNumber);
+    assert.equal(region.footer.footTop - region.content.bottom, PAGE_FURNITURE_GAP_PX);
+  }
+  assert.equal(regionForPage(g, 2).footer.imprintTop - regionForPage(g, 2).content.bottom, PAGE_FURNITURE_GAP_PX);
 });
 
 test('footer redistribution preserves ordinary and imprint-page editorial reservation', () => {

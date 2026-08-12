@@ -9,7 +9,8 @@ const scribusService = require('../services/scribus.service');
 const pressPackageService = require('../services/pressPackage.service');
 const editionFeaturesService = require('../services/editionFeatures.service');
 const plainTextModule = require('../layout/plain-text');
-const { ladderFor } = require('../layout/ladder');
+const { ladderFor, getSupportedEditionPageCounts } = require('../layout/ladder');
+const editionResizeService = require('../services/editionResize.service');
 
 async function create(req, res) {
   const newspaper = await newspaperService.createNewspaper(req.body, req.session.user);
@@ -21,7 +22,14 @@ async function create(req, res) {
 // standing features. One call, because it is one decision.
 async function start(req, res) {
   const result = await editionStartService.startEdition(req.body, req.session.user);
+  if (result.error) return res.status(400).json(result);
   res.status(result.created ? 201 : 200).json(result);
+}
+
+async function resize(req, res) {
+  const result = await editionResizeService.resizeEdition(Number(req.params.id), Number(req.body.pageCount));
+  if (!result.ok) return res.status(result.code === 'EDITION_RESIZE_HAS_CONTENT' ? 409 : 400).json(result);
+  res.json(result);
 }
 
 // What a given page count would produce, so the desk can see the ladder before
@@ -29,6 +37,7 @@ async function start(req, res) {
 async function ladder(req, res) {
   res.json(ladderFor(req.query.pages));
 }
+async function supportedPageCounts(req, res) { res.json(getSupportedEditionPageCounts()); }
 
 async function list(req, res) {
   res.json(await newspaperService.listNewspapers());
@@ -172,7 +181,7 @@ async function pressPackage(req, res) {
 }
 
 module.exports = {
-  create, start, ladder, list, latest, getOne, update, saveFinalFiles,
+  create, start, resize, ladder, supportedPageCounts, list, latest, getOne, update, saveFinalFiles,
   createDistrictEdition, listDistrictEditions, printedPages,
   epaper, epaperHtml, preflight, worklist, status, history, features,
   scribus, pressPackage,

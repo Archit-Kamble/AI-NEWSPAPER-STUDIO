@@ -14,6 +14,8 @@ router.post('/', newspaperController.create);
 // Both must be declared before '/:id', or "start" and "ladder" are read as ids.
 router.post('/start', newspaperController.start);
 router.get('/ladder', newspaperController.ladder);
+router.get('/supported-page-counts', newspaperController.supportedPageCounts);
+router.post('/:id/resize', newspaperController.resize);
 router.get('/', newspaperController.list);
 router.get('/latest', newspaperController.latest);
 router.get('/:id', newspaperController.getOne);

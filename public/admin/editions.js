@@ -98,7 +98,10 @@ export async function renderEditions(host, { onOpen }) {
   const editions = await fetch('/api/newspapers').then((r) => r.json());
   const list = Array.isArray(editions) ? editions : [];
   const todays = list.find((e) => String(e.publication_date || '').slice(0, 10) === today);
-  const ladder = await fetch('/api/newspapers/ladder?pages=4').then((r) => r.json()).catch(() => []);
+  const supportedCounts = await fetch('/api/newspapers/supported-page-counts').then((r) => r.json()).catch(() => [4, 6, 8, 10, 12, 14, 16]);
+  const pageOptions = (selected) => supportedCounts.map((count) => `<option value="${count}" ${Number(count) === Number(selected) ? 'selected' : ''}>${count}</option>`).join('');
+  const selectedPages = todays?.page_count || supportedCounts[0] || 4;
+  const ladder = await fetch(`/api/newspapers/ladder?pages=${selectedPages}`).then((r) => r.json()).catch(() => []);
 
   host.innerHTML = `
     <div class="form-section">
@@ -116,12 +119,16 @@ export async function renderEditions(host, { onOpen }) {
           <label>Date
             <input type="date" id="editionDate" value="${today}">
           </label>
-          <label>Pages
-            <input type="number" id="editionPages" min="1" max="32" value="${todays?.page_count || 4}">
-          </label>
-          <button class="btn-submit" id="startEditionBtn">
-            ${todays ? "Open today's edition" : "Start today's edition"}
-          </button>
+          ${todays ? `<p><strong>Current edition:</strong> ${devanagari(todays.page_count || 0)} pages</p>
+            <button class="btn-submit" id="openEditionBtn">Open Edition</button>
+            <label>Change pages
+              <select id="editionPages">${pageOptions(todays.page_count)}</select>
+            </label>
+            <button class="btn-secondary" id="resizeEditionBtn">Change Page Count</button>`
+            : `<label>Pages
+                <select id="editionPages">${pageOptions(selectedPages)}</select>
+              </label>
+              <button class="btn-submit" id="startEditionBtn">Start Edition</button>`}
         </div>
       </div>
       <p class="edition-ladder" id="editionLadder">${ladderLine(ladder)}</p>
@@ -173,7 +180,17 @@ export async function renderEditions(host, { onOpen }) {
     host.querySelector('#editionLadder').innerHTML = ladderLine(rungs);
   });
 
-  host.querySelector('#startEditionBtn').addEventListener('click', async (event) => {
+  host.querySelector('#openEditionBtn')?.addEventListener('click', () => onOpen(todays.id));
+  host.querySelector('#resizeEditionBtn')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget; button.disabled = true;
+    try {
+      const response = await fetch(`/api/newspapers/${todays.id}/resize`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pageCount: Number(pagesInput.value) }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.code === 'EDITION_RESIZE_HAS_CONTENT' ? `Cannot reduce: ${result.blockers.map((p) => `page ${p.pageNumber} (${p.reasons.join(', ')})`).join('; ')}` : (result.code || 'Could not change page count.'));
+      onOpen(todays.id, result);
+    } catch (error) { button.disabled = false; alert(error.message); }
+  });
+  host.querySelector('#startEditionBtn')?.addEventListener('click', async (event) => {
     const button = event.currentTarget;
     button.disabled = true;
     button.textContent = 'Starting…';

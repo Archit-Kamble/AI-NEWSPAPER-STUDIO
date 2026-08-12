@@ -31,6 +31,13 @@
 
 const { templates } = require('./templates');
 
+const SUPPORTED_EDITION_PAGE_COUNTS = Object.freeze(
+  Array.from({ length: 31 }, (_, index) => (index + 2) * 2),
+);
+
+function getSupportedEditionPageCounts() { return [...SUPPORTED_EDITION_PAGE_COUNTS]; }
+function isSupportedEditionPageCount(value) { return SUPPORTED_EDITION_PAGE_COUNTS.includes(Number(value)); }
+
 /**
  * The layout key for every page of an edition of `pageCount` pages.
  * Returns an array of { pageNumber, templateKey, why } in page order.
@@ -84,4 +91,4 @@ function describeLadder(pageCount) {
     .join('   ');
 }
 
-module.exports = { ladderFor, describeLadder };
+module.exports = { ladderFor, describeLadder, getSupportedEditionPageCounts, isSupportedEditionPageCount };

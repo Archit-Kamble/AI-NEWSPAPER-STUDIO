@@ -4,6 +4,21 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zp. Project B7B-F5 — edition page-count integrity and clean footer (2026-08-12)
+
+Start/Open/Resize are now separate operations: start creates one edition for a
+new date; opening an existing edition never changes its database page count;
+an explicit resize transaction reconciles the complete supported-page ladder.
+Expansion preserves semantic page roles and their work, while a shrink is
+blocked when a disappearing role contains content, images, or custom blocks.
+Supported counts come from the shared production ladder policy. Recent rows
+continue to open by exact edition ID. The permanent footer upper rule is gone;
+the Page-2 legal imprint separator, registration marks, Devanagari-safe footer
+metrics, and frozen 4px page-furniture geometry remain unchanged. Fixed page
+shell geometry is frozen. Next milestone: B8B — actual SAHAS-brain AI fill.
+
+---
+
 ## 0zo. Project B7B-F4 — unified page-furniture gutter (2026-08-12)
 
 `PAGE_FURNITURE_GAP_PX` is the one 4px physical gap between visible standing

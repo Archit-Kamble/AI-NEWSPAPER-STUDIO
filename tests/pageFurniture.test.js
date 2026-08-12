@@ -40,6 +40,7 @@ test('permanent Marathi footer has bounded Devanagari-safe child boxes and a 4px
   const g = geometryOf({});
   const foot = rule('.page-foot');
   assert.match(foot, /overflow:\s*hidden/);
+  assert.doesNotMatch(foot, /border-top/);
   assert.match(rule('.foot-printline'), /font-size:\s*8px/);
   assert.match(rule('.foot-page'), /font-size:\s*9px/);
   for (const selector of ['.foot-printline', '.foot-page']) {

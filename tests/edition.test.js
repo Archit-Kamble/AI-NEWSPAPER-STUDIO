@@ -95,7 +95,7 @@ test('a started edition comes out with the ladder on it, not four front pages', 
   for (const page of pages) assert.ok(page.sections.length > 0, `page ${page.page_number} has blocks`);
 });
 
-test('asking for more pages adds them; it never takes a page away', async (t) => {
+test('opening an existing edition never resizes it despite a different requested count', async (t) => {
   const server = createApp().listen(0);
   t.after(() => server.close());
   const desk = await signIn(server.address().port);
@@ -111,14 +111,56 @@ test('asking for more pages adds them; it never takes a page away', async (t) =>
     method: 'POST',
     body: JSON.stringify({ publicationDate: date, pageCount: 6, fillFeatures: false }),
   });
-  assert.equal(six.pageCount, 6);
+  assert.equal(six.pageCount, 4);
+  assert.equal(six.newspaper.id, four.newspaper.id);
+});
 
-  // Asking for fewer must not delete pages - there could be work on them.
-  const backToFour = await desk.json('/api/newspapers/start', {
-    method: 'POST',
-    body: JSON.stringify({ publicationDate: date, pageCount: 4, fillFeatures: false }),
-  });
-  assert.equal(backToFour.pageCount, 6, 'a smaller page count must not throw pages away');
+test('explicit resize reconciles the 4→6 ladder and preserves retained page content', async (t) => {
+  const server = createApp().listen(0); t.after(() => server.close()); const desk = await signIn(server.address().port);
+  const started = await desk.json('/api/newspapers/start', { method: 'POST', body: JSON.stringify({ publicationDate: '2099-07-11', pageCount: 4, fillFeatures: false }) });
+  t.after(() => removeEdition(started.newspaper.id));
+  const before = await desk.json(`/api/newspapers/${started.newspaper.id}/pages`);
+  const features = before.find((page) => page.template_key === 'features');
+  await desk.json(`/api/pages/${features.id}/sections/${features.sections[0].section_key}`, { method: 'PUT', body: JSON.stringify({ headline: 'जतन केलेले पान', body: 'ही सामग्री स्थलांतरानंतरही टिकते.', status: 'draft' }) });
+  const resized = await desk.json(`/api/newspapers/${started.newspaper.id}/resize`, { method: 'POST', body: JSON.stringify({ pageCount: 6 }) });
+  assert.equal(resized.ok, true);
+  const pages = await desk.json(`/api/newspapers/${started.newspaper.id}/pages`);
+  assert.deepEqual(pages.map((page) => page.template_key), ['front', 'local', 'local', 'opinion', 'features', 'dense']);
+  assert.equal(pages.find((page) => page.template_key === 'features').sections[0].headline, 'जतन केलेले पान');
+});
+
+test('unsafe shrink is blocked while an empty removed role permits a safe shrink', async (t) => {
+  const server = createApp().listen(0); t.after(() => server.close()); const desk = await signIn(server.address().port);
+  const started = await desk.json('/api/newspapers/start', { method: 'POST', body: JSON.stringify({ publicationDate: '2099-07-12', pageCount: 6, fillFeatures: false }) });
+  t.after(() => removeEdition(started.newspaper.id));
+  let pages = await desk.json(`/api/newspapers/${started.newspaper.id}/pages`);
+  const general = pages.find((page) => page.page_number === 3);
+  await desk.json(`/api/pages/${general.id}/sections/${general.sections[0].section_key}`, { method: 'PUT', body: JSON.stringify({ headline: 'काम आहे', body: 'पान हटवता येणार नाही.', status: 'draft' }) });
+  const blocked = await desk.json(`/api/newspapers/${started.newspaper.id}/resize`, { method: 'POST', body: JSON.stringify({ pageCount: 4 }) });
+  assert.equal(blocked.code, 'EDITION_RESIZE_HAS_CONTENT');
+  assert.equal((await desk.json(`/api/newspapers/${started.newspaper.id}/pages`)).length, 6);
+});
+
+test('safe 6→4 shrink removes only empty roles and moves retained semantic pages', async (t) => {
+  const server = createApp().listen(0); t.after(() => server.close()); const desk = await signIn(server.address().port);
+  const started = await desk.json('/api/newspapers/start', { method: 'POST', body: JSON.stringify({ publicationDate: '2099-07-13', pageCount: 6, fillFeatures: false }) });
+  t.after(() => removeEdition(started.newspaper.id));
+  const pages = await desk.json(`/api/newspapers/${started.newspaper.id}/pages`);
+  const features = pages.find((page) => page.template_key === 'features');
+  await desk.json(`/api/pages/${features.id}/sections/${features.sections[0].section_key}`, { method: 'PUT', body: JSON.stringify({ headline: 'वैशिष्ट्य जतन', body: 'जागा बदलली तरी मजकूर टिकतो.', status: 'draft' }) });
+  const resized = await desk.json(`/api/newspapers/${started.newspaper.id}/resize`, { method: 'POST', body: JSON.stringify({ pageCount: 4 }) });
+  assert.equal(resized.ok, true);
+  const after = await desk.json(`/api/newspapers/${started.newspaper.id}/pages`);
+  assert.deepEqual(after.map((page) => page.template_key), ['front', 'local', 'features', 'dense']);
+  assert.equal(after[2].sections[0].headline, 'वैशिष्ट्य जतन');
+});
+
+test('unsupported page counts are rejected without creating an edition', async (t) => {
+  const server = createApp().listen(0); t.after(() => server.close()); const desk = await signIn(server.address().port);
+  const response = await desk('/api/newspapers/start', { method: 'POST', body: JSON.stringify({ publicationDate: '2099-07-14', pageCount: 5, fillFeatures: false }) });
+  assert.equal(response.status, 400);
+  const all = await desk.json('/api/newspapers');
+  assert.equal(all.some((edition) => String(edition.publication_date).slice(0, 10) === '2099-07-14'), false);
 });
 
 test('an advert carries forward to the next edition, and news never does', async (t) => {

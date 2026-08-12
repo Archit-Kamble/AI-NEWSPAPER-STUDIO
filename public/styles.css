@@ -3738,7 +3738,6 @@ body.print-view .newspaper-section.at-right-edge {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  border-top: 1px solid #111;
   padding: 1px 0;
   font-family: "Sahas Sans", "Noto Sans Devanagari", Arial, sans-serif;
   background: #fff;

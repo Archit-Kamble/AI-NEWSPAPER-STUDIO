@@ -31,15 +31,7 @@ async function create(newspaperId, pageNumber, templateKey = 'front') {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const { rows } = await client.query(
-      `INSERT INTO pages (newspaper_id, page_number, template_key) VALUES ($1, $2, $3) RETURNING *`,
-      [newspaperId, pageNumber, template.key]
-    );
-    const page = rows[0];
-    for (let index = 0; index < template.sections.length; index += 1) {
-      const section = template.sections[index];
-      await client.query(insertSectionSql, insertSectionValues(page.id, section, index));
-    }
+    const page = await createInTransaction(newspaperId, pageNumber, templateKey, client);
     await refreshFormes(newspaperId, client);
     await client.query('COMMIT');
     return findById(page.id);
@@ -49,6 +41,19 @@ async function create(newspaperId, pageNumber, templateKey = 'front') {
   } finally {
     client.release();
   }
+}
+
+async function createInTransaction(newspaperId, pageNumber, templateKey, client) {
+  const template = getTemplateForPage(templateKey, pageNumber);
+  const { rows } = await client.query(
+      `INSERT INTO pages (newspaper_id, page_number, template_key) VALUES ($1, $2, $3) RETURNING *`,
+      [newspaperId, pageNumber, template.key]
+  );
+  const page = rows[0];
+  for (let index = 0; index < template.sections.length; index += 1) {
+    await client.query(insertSectionSql, insertSectionValues(page.id, template.sections[index], index));
+  }
+  return page;
 }
 
 // Colour is bought a forme at a time, and which pages a forme covers depends on
@@ -427,6 +432,7 @@ async function saveComposedStoryContent(pageId, sectionKey, story) {
 
 module.exports = {
   create,
+  createInTransaction,
   refreshFormes,
   setColourForme,
   findByNewspaper,

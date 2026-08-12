@@ -28,7 +28,7 @@ const pool = require('../config/db');
 const newspaperRepository = require('../repositories/newspaper.repository');
 const pageRepository = require('../repositories/page.repository');
 const editionFeatures = require('./editionFeatures.service');
-const { ladderFor } = require('../layout/ladder');
+const { ladderFor, isSupportedEditionPageCount } = require('../layout/ladder');
 const { identity } = require('../layout/identity');
 
 /** Today, in the timezone the paper is printed in - never the server's, never UTC. */
@@ -99,34 +99,19 @@ async function carryForwardAdverts(fromNewspaperId, toNewspaperId) {
  */
 async function startEdition(body = {}, sessionUser = null) {
   const date = isoDate(body.publicationDate || body.date) || todayWhereWePrint();
-  const pageCount = Math.max(1, Math.min(64, Math.floor(Number(body.pageCount) || 4)));
+  const pageCount = Number(body.pageCount || 4);
+  if (!isSupportedEditionPageCount(pageCount)) return { error: 'INVALID_EDITION_PAGE_COUNT', created: false };
   const carryForward = body.carryForward !== false;
   const fillFeatures = body.fillFeatures !== false;
 
   const existing = await newspaperRepository.findByDate(date);
   if (existing) {
-    let pages = await pageRepository.findByNewspaper(existing.id);
-
-    // A paper grows during the evening: a heavy news day turns four pages into
-    // six. Asking for more pages than the edition has adds the missing ones at
-    // their proper rung. It never removes a page - a page with work on it is
-    // not something a page-count field should be able to throw away.
-    const added = [];
-    if (pageCount > pages.length) {
-      const rungs = ladderFor(pageCount);
-      const have = new Set(pages.map((page) => page.page_number));
-      for (const rung of rungs) {
-        if (have.has(rung.pageNumber)) continue;
-        await pageRepository.create(existing.id, rung.pageNumber, rung.templateKey);
-        added.push(rung);
-      }
-      pages = await pageRepository.findByNewspaper(existing.id);
-    }
+    const pages = await pageRepository.findByNewspaper(existing.id);
 
     return {
       newspaper: existing,
       created: false,
-      pagesAdded: added,
+      existing: true,
       pageCount: pages.length,
       ladder: pages.map((page) => ({ pageNumber: page.page_number, templateKey: page.template_key })),
       carriedAdverts: 0,

@@ -152,7 +152,7 @@ export function folioMarkup(newspaper, page, geometry) {
 // inside pages reserve the identical band, so this falls back to the same
 // numbers regionsFor(g, 'inside') computes when an older geometry payload
 // (without .regions) is ever passed in.
-const FALLBACK_FOOTER = { footTop: 1020, footHeightPx: 20, imprintTop: 984, imprintHeightPx: 32 };
+const FALLBACK_FOOTER = { footTop: 1016, footHeightPx: 24, imprintTop: 980, imprintHeightPx: 32 };
 function footerBand(geometry, page) {
   if (Number(page?.page_number) === 1) return geometry?.regions?.front?.footer || FALLBACK_FOOTER;
   if (Number(page?.page_number) === 2) return geometry?.regions?.insideImprint?.footer || FALLBACK_FOOTER;

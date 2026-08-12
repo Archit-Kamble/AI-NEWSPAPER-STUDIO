@@ -399,10 +399,21 @@ function getTemplateForPage(templateKey, pageNumber, newspaper = {}) {
 function reconcileSectionsForPage(sections = [], pageNumber, newspaper = {}) {
   const geometry = geometryOf(newspaper);
   const { top, bottom } = regionForPage(geometry, pageNumber).content;
+  const editorial = sections.filter((section) => !(Number(pageNumber) === 1 && section.section_key === 'masthead-advert'));
+  const firstTop = Math.min(...editorial.map((section) => Number(section.y_px ?? section.y)));
+  // Page-one legacy pages were saved before the compact masthead clearance.
+  // Rebase the entire editorial template to the canonical top edge, retaining
+  // all inter-frame geometry rather than nudging named blocks independently.
+  const topRebasePx = Number(pageNumber) === 1 ? Math.max(0, firstTop - top) : 0;
+  const lastTop = Math.max(...editorial.map((section) => Number(section.y_px ?? section.y) - topRebasePx));
   return sections.map((section) => {
     if (Number(pageNumber) === 1 && section.section_key === 'masthead-advert') return section;
-    const y = Math.max(top, Number(section.y_px ?? section.y));
-    const wantedHeight = Number(section.height_px ?? section.height);
+    const y = Math.max(top, Number(section.y_px ?? section.y) - topRebasePx);
+    // Existing fixture rows were created against older region bottoms. Extend
+    // only the final template row to the current canonical content edge; the
+    // template owns that row's extent, never a named fixture section.
+    const isFinalRow = y === lastTop;
+    const wantedHeight = Number(section.height_px ?? section.height) + (isFinalRow ? Math.max(0, bottom - (y + Number(section.height_px ?? section.height))) : 0);
     return { ...section, y_px: y, y, height_px: Math.max(geometry.baselinePx, Math.min(wantedHeight, bottom - y)), height: Math.max(geometry.baselinePx, Math.min(wantedHeight, bottom - y)) };
   });
 }

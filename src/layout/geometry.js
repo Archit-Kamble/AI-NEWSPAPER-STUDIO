@@ -83,14 +83,21 @@ const HEADER = {
   // approximations: masthead/folio text uses the same Devanagari-safe 1.45
   // convention as article copy. CSS reads the regions below to draw them.
   mastheadHeightPx: 120,
-  mastheadClearancePx: 8,
+  // The masthead itself is unchanged; only its editorial gutter is tightened.
+  // The sold masthead corner reaches y=160. Twenty logical pixels baseline-snap
+  // to that physical lower edge, reducing the prior 8px post-advert gap to
+  // zero without letting editorial copy collide with header-owned advert.
+  mastheadClearancePx: 20,
   // One compact ruled folio line plus a small editorial gutter.
   folioHeightPx: 32,
   folioContentGapPx: 8,
 };
 
 const FOOTER = {
-  footHeightPx: 20, // Devanagari-safe compact printline every page carries
+  // A 7px Marathi line at 1.45 needs 10.15px before vertical padding and the
+  // rule. 24px is the smallest bounded strip that keeps upper/lower matras
+  // inside the permanent footer in editor and print rendering.
+  footHeightPx: 24,
   contentFooterGapPx: 8,
   imprintHeightPx: 32, // two safe compact legal-imprint lines, Page 2 only
   imprintGapPx: 4,
@@ -119,7 +126,9 @@ function regionsFor(g, kind = 'inside', pageNumber = kind === 'front' ? 1 : 3) {
     : snapUp(g.marginYPx + HEADER.folioHeightPx + HEADER.folioContentGapPx, step);
 
   const imprintHeightPx = hasLegalImprint(pageNumber) ? FOOTER.imprintHeightPx : 0;
-  const footerTop = snapDown(matterBottom - footerBandPx(pageNumber), step);
+  // The content edge is the exact physical furniture edge. Snapping this down
+  // silently created a second 4px gutter (12px instead of the specified 8px).
+  const footerTop = matterBottom - footerBandPx(pageNumber);
   // The foot itself is a declared physical strip, so it meets the matter edge
   // exactly. Only the editorial boundary is baseline-snapped.
   const footTop = matterBottom - FOOTER.footHeightPx;

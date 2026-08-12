@@ -3739,7 +3739,7 @@ body.print-view .newspaper-section.at-right-edge {
   align-items: center;
   gap: 12px;
   border-top: 1px solid #111;
-  padding-top: 1px;
+  padding: 2px 0 1px;
   font-family: "Sahas Sans", "Noto Sans Devanagari", Arial, sans-serif;
   background: #fff;
   /* Height comes from the reserved footer band (geometry.js's regionsFor) -
@@ -3749,7 +3749,7 @@ body.print-view .newspaper-section.at-right-edge {
   box-sizing: border-box;
 }
 .foot-printline {
-  font-size: 6px;
+  font-size: 7px;
   line-height: var(--devanagari-line);
   color: #444;
   overflow: hidden;
@@ -3757,7 +3757,7 @@ body.print-view .newspaper-section.at-right-edge {
   text-overflow: ellipsis;
 }
 .foot-page {
-  font-size: 7px;
+  font-size: 8px;
   font-weight: 700;
   color: #111;
   white-space: nowrap;

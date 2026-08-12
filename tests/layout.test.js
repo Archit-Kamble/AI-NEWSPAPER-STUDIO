@@ -349,10 +349,10 @@ test('a page-region content bottom is exactly the footer band top - one boundary
 test('compact Devanagari-safe furniture leaves one small canonical gap after its rule', () => {
   const { geometryOf, HEADER, FOOTER } = require('../src/layout/geometry');
   const g = geometryOf({});
-  assert.equal(HEADER.mastheadClearancePx, 8);
+  assert.equal(HEADER.mastheadClearancePx, 20);
   assert.equal(HEADER.folioContentGapPx, 8);
   assert.equal(FOOTER.contentFooterGapPx, 8);
-  assert.equal(g.regions.front.content.top, 152);
+  assert.equal(g.regions.front.content.top, 160);
   assert.equal(g.regions.inside.content.top, 64);
 });
 

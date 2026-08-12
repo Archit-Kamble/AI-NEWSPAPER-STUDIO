@@ -2689,3 +2689,25 @@ and visual inspection remain to be repeated against the running fixture. Page
 furniture is ready for B7B visual verification; adaptive story geometry,
 professional story treatments, image treatment and feature redesign remain
 separate work.
+
+### 24. Final permanent-footer and boundary correction (B7B-F1)
+
+The remaining footer clipping was a real box-size error, not an overflow
+setting: a 20px footer held a 7px Devanagari line at 1.45 with only 1px top
+padding, while the baseline snap also added an unintended 4px to the editorial
+gap. The permanent footer is now 24px with 2px/1px vertical padding and
+7px/8px Marathi-safe footer type. The canonical editorial edge sits exactly
+8px above it; content and print furniture no longer disagree.
+
+Bottom furniture is explicitly page-specific: Pages 1, 3 and 4 reserve only
+the permanent footer, while Page 2 reserves its 32px legal imprint, a 4px
+separation, and the same footer. Legacy layouts are reconciled by template-row
+semantics (first/final editorial row), not section-key offsets. This removes
+the Page-2 footer intrusion and recovers the final 8px editorial gutter on
+Pages 1, 3 and 4. Page 1’s editorial region begins at the unchanged sold-advert
+lower edge (160px); Pages 2–4 retain their 64px folio boundary.
+
+Real fixture preflight is clean on all four pages. Screenshot capture remains
+blocked in this checkout because the existing screenshot script requires
+`playwright-core`, which is not installed; no browser result is claimed. The
+page-shell/layout cleanup is complete enough to proceed to AI-fill work.

@@ -4,6 +4,33 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0ze. Project B5B1 — quality-driven single-page rebalancing (2026-08-12)
+
+`src/layout/page-balancer.js` adds pure synchronous
+`rebalancePageAssignments(stories, frames, context)`. It starts with B5A's
+Hungarian assignment, builds disposable candidate pages from unchanged frame
+geometry plus assigned story content, and calls the canonical `analyzeLayout()`
+for page-wide diagnostics. Its normalized objective is 45% average B4
+compatibility, 45% analyzer quality score, and 10% assignment coverage after a
+priority-aware unassigned penalty. Those small, documented weights are exposed
+in `BALANCER_V1` rather than hidden in search logic.
+
+The bounded deterministic hill-climb evaluates only swaps, moves into an empty
+existing frame, and an assigned/unassigned replacement. Pair compatibility is
+cached for each run; hard-rejected candidates are excluded. It accepts only a
+strict objective increase above epsilon, records every accepted repair with
+before/after objective, quality and compatibility evidence, and stops at a
+local optimum, no assignments, or a deterministic iteration ceiling.
+
+`tests/pageBalancer.test.js` covers stable optimum behavior, swap/move/
+replacement repair, priority protection, ad/card frame semantics, a realistic
+seven-story pure scenario, determinism, immutability and the iteration limit.
+There is still no persistence, editor integration, template geometry change,
+canonical text-demand matching, headline fitting, multi-page planning or AI
+composition; B5B1 is only a candidate-assignment planner.
+
+---
+
 ## 0zd. Project B5A — deterministic single-page assignment planning (2026-08-12)
 
 `src/layout/page-assignment.js` adds pure synchronous

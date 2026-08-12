@@ -4,6 +4,34 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zj. Project B6D — flow-aware quality-driven page rebalancing (2026-08-12)
+
+`src/layout/flow-aware-page-balancer.js` adds async pure
+`rebalanceFlowAwarePageAssignments(stories, frames, context)`. It precomputes
+the B6C semantic-plus-canonical-fit matrix once, obtains the initial mapping
+through the existing Hungarian solver, then uses only cached pair scores and
+synchronous `analyzeLayout()` during deterministic local search. No candidate
+swap, move or replacement rebuilds text flow.
+
+The objective is 60% selected B6C planning quality, 30% synchronous page
+layout quality, and 10% priority-aware assignment coverage. B6C remains the
+only semantic/fit weighting authority (70/30 reliable fit, 85/15 unresolved
+image fit, semantic-only structured renderers), so B6D neither recalculates
+nor double-counts fit. Accepted repairs record cached before/after pair,
+layout, coverage and per-story fit-class evidence; all require strict positive
+objective improvement.
+
+Focused B6D coverage proves a short story in a large frame plus long story in
+a small frame is swapped to short→small and long→large when canonical fit
+improves, while lead hierarchy, priority, advertisement/Smart Card hard
+semantics, immutability and deterministic precomputation remain protected.
+Planning diagnostics are now sufficiently developed for the next product
+priority: AI exact-fit writing from supplied news—not another diagnostic layer.
+No persistence, editor integration, geometry change, image treatment,
+headline fitting or AI writing is included here.
+
+---
+
 ## 0zi. Project B6C — flow-aware assignment planning (2026-08-12)
 
 `src/layout/flow-aware-page-planner.js` adds async

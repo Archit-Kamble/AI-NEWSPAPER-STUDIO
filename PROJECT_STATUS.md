@@ -4,6 +4,23 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zn. Project B7B-F3 — actual-edition page furniture correction (2026-08-12)
+
+F2 corrected only the guarded `2099-*` fixtures; the visible 2026-08-12
+four-page edition retained stale persisted rectangles. `scripts/reapply-edition-layout.js`
+is now the controlled, dry-run-by-default maintenance path for an explicitly
+identified edition. It changes only `x_px`, `y_px`, `width_px`, and
+`height_px` on matching non-custom template frames inside one transaction.
+
+The front content edge is now y=144, leaving a real four-pixel gap after the
+masthead’s visible lower rule. Footer space is redistributed from an 8px
+editorial gutter plus 24px foot to a 4px gutter plus 28px foot, preserving
+editorial capacity (including Page 2’s imprint reservation). Footer children
+now own bounded, padded Devanagari-safe ink boxes. Inside-page header geometry
+remains y=64. B8A semantic/editorial contracts were not changed.
+
+---
+
 ## 0zl. Project B7A1 — hardened policy-aware exact-fit writing (2026-08-12)
 
 B7A prompts now state the real canonical BODY capacity and policy-derived

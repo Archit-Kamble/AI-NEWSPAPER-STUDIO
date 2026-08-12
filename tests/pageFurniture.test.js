@@ -26,34 +26,48 @@ test('masthead, folio, footer, and legal imprint use bounded Devanagari-safe lin
 test('canonical furniture reserves compact header/footer space with Page-2-only legal imprint', () => {
   const g = geometryOf({});
   assert.equal(HEADER.mastheadHeightPx, 120);
-  assert.equal(HEADER.mastheadClearancePx, 20);
+  assert.equal(HEADER.mastheadClearancePx, 4);
   assert.equal(HEADER.folioHeightPx, 32);
   assert.equal(HEADER.folioContentGapPx, 8);
-  assert.equal(FOOTER.footHeightPx, 24);
-  assert.equal(FOOTER.contentFooterGapPx, 8);
+  assert.equal(FOOTER.footHeightPx, 28);
+  assert.equal(FOOTER.contentFooterGapPx, 4);
   assert.equal(regionForPage(g, 2).footer.imprintHeightPx, 32);
   assert.equal(regionForPage(g, 1).footer.imprintHeightPx, 0);
   assert.equal(regionForPage(g, 3).footer.imprintHeightPx, 0);
 });
 
-test('permanent Marathi footer has a real safe line box and exactly the canonical 8px editorial gutter', () => {
+test('permanent Marathi footer has bounded Devanagari-safe child boxes and a 4px editorial gutter', () => {
   const g = geometryOf({});
   const foot = rule('.page-foot');
-  assert.match(foot, /padding:\s*2px 0 1px/);
-  assert.match(rule('.foot-printline'), /font-size:\s*7px/);
-  assert.match(rule('.foot-page'), /font-size:\s*8px/);
+  assert.match(foot, /overflow:\s*hidden/);
+  assert.match(rule('.foot-printline'), /font-size:\s*8px/);
+  assert.match(rule('.foot-page'), /font-size:\s*9px/);
+  for (const selector of ['.foot-printline', '.foot-page']) {
+    assert.match(rule(selector), /min-height:\s*18px/);
+    assert.match(rule(selector), /padding:\s*2px 0/);
+    assert.match(rule(selector), /box-sizing:\s*border-box/);
+  }
   for (const region of [regionForPage(g, 1), regionForPage(g, 3), regionForPage(g, 4)]) {
-    assert.equal(region.footer.footHeightPx, 24);
-    assert.equal(region.footer.footTop - region.content.bottom, 8);
+    assert.equal(region.footer.footHeightPx, 28);
+    assert.equal(region.footer.footTop - region.content.bottom, 4);
   }
 });
 
 test('Page 1 alone tightens its top gutter while Pages 2–4 retain their accepted folio boundary', () => {
   const g = geometryOf({});
-  assert.equal(regionForPage(g, 1).content.top, 160);
+  assert.equal(regionForPage(g, 1).content.top, 144);
   assert.equal(regionForPage(g, 2).content.top, 64);
   assert.equal(regionForPage(g, 3).content.top, 64);
   assert.equal(regionForPage(g, 4).content.top, 64);
+});
+
+test('footer redistribution preserves ordinary and imprint-page editorial reservation', () => {
+  const g = geometryOf({});
+  assert.equal(regionForPage(g, 1).content.bottom, 1008);
+  assert.equal(regionForPage(g, 3).content.bottom, 1008);
+  assert.equal(regionForPage(g, 2).content.bottom, 972);
+  assert.equal(regionForPage(g, 2).footer.imprintTop, 976);
+  assert.equal(regionForPage(g, 2).footer.footTop, 1012);
 });
 
 test('Page 2 templates stop at its smaller imprint-aware editorial boundary without changing frame roles', () => {

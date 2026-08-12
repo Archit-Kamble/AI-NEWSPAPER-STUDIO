@@ -84,21 +84,20 @@ const HEADER = {
   // convention as article copy. CSS reads the regions below to draw them.
   mastheadHeightPx: 120,
   // The masthead itself is unchanged; only its editorial gutter is tightened.
-  // The sold masthead corner reaches y=160. Twenty logical pixels baseline-snap
-  // to that physical lower edge, reducing the prior 8px post-advert gap to
-  // zero without letting editorial copy collide with header-owned advert.
-  mastheadClearancePx: 20,
+  // The visible masthead rule ends at y=140.  Four pixels gives the first
+  // editorial band a deliberate, compact breathing space (snapped to y=144).
+  mastheadClearancePx: 4,
   // One compact ruled folio line plus a small editorial gutter.
   folioHeightPx: 32,
   folioContentGapPx: 8,
 };
 
 const FOOTER = {
-  // A 7px Marathi line at 1.45 needs 10.15px before vertical padding and the
-  // rule. 24px is the smallest bounded strip that keeps upper/lower matras
-  // inside the permanent footer in editor and print rendering.
-  footHeightPx: 24,
-  contentFooterGapPx: 8,
+  // The footer owns 28px so Devanagari glyph boxes have real vertical safety.
+  // Its extra four pixels come from the editorial gutter, preserving total
+  // editorial reservation on every page.
+  footHeightPx: 28,
+  contentFooterGapPx: 4,
   imprintHeightPx: 32, // two safe compact legal-imprint lines, Page 2 only
   imprintGapPx: 4,
 };

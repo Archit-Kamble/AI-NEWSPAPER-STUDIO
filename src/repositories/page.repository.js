@@ -1,5 +1,5 @@
 const pool = require('../config/db');
-const { getTemplate, getTemplateForPage, reconcileSectionsForPage } = require('../layout/templates');
+const { getTemplate, getTemplateForPage } = require('../layout/templates');
 const { typeScaleFor } = require('../layout/geometry');
 const { printsColourByDefault } = require('../layout/formes');
 
@@ -80,7 +80,7 @@ async function setColourForme(pageId, printsColour) {
 
 async function findByNewspaper(newspaperId) {
   const { rows } = await pool.query('SELECT * FROM pages WHERE newspaper_id = $1 ORDER BY page_number', [newspaperId]);
-  return Promise.all(rows.map((page) => hydrate(page).then((hydrated) => ({ ...hydrated, sections: reconcileSectionsForPage(hydrated.sections, hydrated.page_number) }))));
+  return Promise.all(rows.map(hydrate));
 }
 
 // The one join a rate quote needs: the section, joined to its page for the
@@ -97,7 +97,7 @@ async function findSectionForRate(pageId, sectionKey) {
 
 async function findById(id) {
   const { rows } = await pool.query('SELECT * FROM pages WHERE id = $1', [id]);
-  return rows[0] ? hydrate(rows[0]).then((hydrated) => ({ ...hydrated, sections: reconcileSectionsForPage(hydrated.sections, hydrated.page_number) })) : null;
+  return rows[0] ? hydrate(rows[0]) : null;
 }
 
 async function hydrate(page) {
@@ -189,8 +189,72 @@ async function updateTemplate(pageId, templateKey) {
   }
 }
 
-// Explicit fixture-only operation. It updates only frame-owned geometry and
-// template treatment, never story copy or images; ordinary pages never call it.
+function geometryDiff(page, sections) {
+  const template = getTemplateForPage(page.template_key, page.page_number);
+  const storedByKey = new Map(sections.map((section) => [section.section_key, section]));
+  const missing = template.sections.filter((section) => !storedByKey.has(section.key)).map((section) => section.key);
+  const changes = template.sections.flatMap((target) => {
+    const current = storedByKey.get(target.key);
+    if (!current || current.is_custom) return [];
+    const before = { x: Number(current.x_px), y: Number(current.y_px), width: Number(current.width_px), height: Number(current.height_px) };
+    const after = { x: target.x, y: target.y, width: target.width, height: target.height };
+    return Object.keys(after).some((key) => before[key] !== after[key])
+      ? [{ pageId: page.id, pageNumber: page.page_number, sectionKey: target.key, before, after }]
+      : [];
+  });
+  return { missing, changes };
+}
+
+async function previewEditionTemplateGeometry(newspaperId, client = pool) {
+  const { rows: pages } = await client.query(
+    'SELECT id, page_number, template_key FROM pages WHERE newspaper_id = $1 ORDER BY page_number, id', [newspaperId],
+  );
+  const result = [];
+  for (const page of pages) {
+    const { rows: sections } = await client.query(
+      'SELECT section_key, x_px, y_px, width_px, height_px, COALESCE(is_custom, FALSE) AS is_custom FROM page_sections WHERE page_id = $1', [page.id],
+    );
+    const diff = geometryDiff(page, sections);
+    result.push({ pageId: page.id, pageNumber: page.page_number, templateKey: page.template_key, ...diff });
+  }
+  return result;
+}
+
+// Applies only the four physical geometry columns for template-owned frames.
+// It deliberately does not use updateTemplate(): that operation changes frame
+// treatments and is inappropriate for a finished edition.
+async function reapplyEditionTemplateGeometry(newspaperId) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const preview = await previewEditionTemplateGeometry(newspaperId, client);
+    // Missing template frames are reported by the preview and deliberately
+    // left absent.  Creating one would invent an advert or overwrite the
+    // desk's layout; existing matching frames can still be corrected safely.
+    for (const page of preview) {
+      for (const change of page.changes) {
+        await client.query(
+          `UPDATE page_sections
+              SET x_px = $3, y_px = $4, width_px = $5, height_px = $6, updated_at = CURRENT_TIMESTAMP
+            WHERE page_id = $1 AND section_key = $2 AND COALESCE(is_custom, FALSE) = FALSE`,
+          [page.pageId, change.sectionKey, change.after.x, change.after.y, change.after.width, change.after.height],
+        );
+      }
+    }
+    const after = await previewEditionTemplateGeometry(newspaperId, client);
+    if (after.some((page) => page.changes.length)) throw new Error('Geometry reapply verification failed');
+    await client.query('COMMIT');
+    return { before: preview, after };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+// Explicit fixture-only compatibility operation. The public fixture route is
+// still restricted in page.service; it now has the same preservation contract.
 async function reapplyTemplateGeometry(pageId) {
   const { rows: pages } = await pool.query('SELECT page_number, template_key FROM pages WHERE id = $1', [pageId]);
   if (!pages[0]) return null;
@@ -200,10 +264,8 @@ async function reapplyTemplateGeometry(pageId) {
     await client.query('BEGIN');
     for (let index = 0; index < template.sections.length; index += 1) {
       const section = template.sections[index];
-      await client.query(`UPDATE page_sections SET x_px = $3, y_px = $4, width_px = $5, height_px = $6, z_index = $7,
-        block_type = $8, border_style = $9, headline_style = $10, feature_key = $11, updated_at = CURRENT_TIMESTAMP
-        WHERE page_id = $1 AND section_key = $2`, [pageId, section.key, section.x, section.y, section.width, section.height, index,
-        section.blockType || 'article', section.borderStyle || 'none', section.headlineStyle || 'plain', section.featureKey || null]);
+      await client.query(`UPDATE page_sections SET x_px = $3, y_px = $4, width_px = $5, height_px = $6, updated_at = CURRENT_TIMESTAMP
+        WHERE page_id = $1 AND section_key = $2 AND COALESCE(is_custom, FALSE) = FALSE`, [pageId, section.key, section.x, section.y, section.width, section.height]);
     }
     await client.query('COMMIT'); return findById(pageId);
   } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
@@ -372,6 +434,8 @@ module.exports = {
   findSectionForRate,
   updateTemplate,
   reapplyTemplateGeometry,
+  previewEditionTemplateGeometry,
+  reapplyEditionTemplateGeometry,
   saveSection,
   saveComposedStoryContent,
   COMPOSED_STORY_COLUMNS,

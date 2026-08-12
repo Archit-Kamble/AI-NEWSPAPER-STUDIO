@@ -3739,7 +3739,7 @@ body.print-view .newspaper-section.at-right-edge {
   align-items: center;
   gap: 12px;
   border-top: 1px solid #111;
-  padding: 2px 0 1px;
+  padding: 1px 0;
   font-family: "Sahas Sans", "Noto Sans Devanagari", Arial, sans-serif;
   background: #fff;
   /* Height comes from the reserved footer band (geometry.js's regionsFor) -
@@ -3749,19 +3749,26 @@ body.print-view .newspaper-section.at-right-edge {
   box-sizing: border-box;
 }
 .foot-printline {
-  font-size: 7px;
+  font-size: 8px;
   line-height: var(--devanagari-line);
+  box-sizing: border-box;
+  min-height: 18px;
+  padding: 2px 0;
   color: #444;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 .foot-page {
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 700;
   color: #111;
   white-space: nowrap;
   line-height: var(--devanagari-line);
+  box-sizing: border-box;
+  min-height: 18px;
+  padding: 2px 0;
+  overflow: hidden;
 }
 
 /* Verso and recto. The page number sits on the OUTER edge of the spread - left

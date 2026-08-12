@@ -185,7 +185,9 @@ const MASTHEAD_ADVERT = {
   col: 0,
   span: 4,
   y: up(G.marginYPx),
-  height: MASTHEAD_BOTTOM - GAP - up(G.marginYPx),
+  // The sold corner ends at the editorial boundary; it must not extend into
+  // the compact four-pixel masthead-to-news gutter.
+  height: FRONT_REGIONS.content.top - GAP - up(G.marginYPx),
 };
 
 const templates = {

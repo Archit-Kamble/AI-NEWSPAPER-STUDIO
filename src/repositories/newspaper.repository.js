@@ -63,6 +63,17 @@ async function findByDate(publicationDate) {
   return rows[0] || null;
 }
 
+async function findAllByDate(publicationDate) {
+  const { rows } = await pool.query(
+    `SELECT n.*, COUNT(DISTINCT p.id)::int AS page_count
+       FROM newspapers n LEFT JOIN pages p ON p.newspaper_id = n.id
+      WHERE n.publication_date = $1 AND n.parent_edition_id IS NULL
+      GROUP BY n.id ORDER BY n.created_at ASC`,
+    [publicationDate],
+  );
+  return rows;
+}
+
 /** The most recent edition published before `publicationDate` - yesterday's paper. */
 async function findPrevious(publicationDate) {
   const { rows } = await pool.query(
@@ -88,4 +99,4 @@ async function update(id, updates) {
   return rows[0] || null;
 }
 
-module.exports = { create, findAll, findById, findByDate, findPrevious, update };
+module.exports = { create, findAll, findById, findByDate, findAllByDate, findPrevious, update };

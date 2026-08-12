@@ -7,6 +7,7 @@
 const { planPageAssignments } = require('./page-assignment');
 const { scoreStoryForFrame } = require('./story-frame-compatibility');
 const { analyzeLayout } = require('./layout-quality');
+const { projectStoryIntoFrame } = require('./composition-adapter');
 
 const BALANCER_V1 = Object.freeze({
   compatibilityWeight: 0.45,
@@ -80,17 +81,17 @@ function candidatePage(state, stories, frames, context) {
   const storyByFrame = new Map(state.flatMap((frameIndex, storyIndex) => frameIndex === null ? [] : [[frameIndex, stories[storyIndex]]]));
   return {
     page_number: context?.page?.page_number ?? context?.pageNumber ?? 2,
-    sections: frames.map((frame, index) => {
+    // Fixed sections (continuations, standing features and photo companions in
+    // the production adapter) remain part of every candidate page. They are
+    // never a planner input, but omitting them would make quality comparisons
+    // falsely report a worse proposed page.
+    sections: [...(context?.fixedSections || []), ...frames.map((frame, index) => {
       const story = storyByFrame.get(index);
       // Frame geometry always wins; assignment only transfers printable story
       // identity/content into a disposable analyzer input.
-      return story ? {
-        ...frame, ...story,
-        x_px: frame.x_px, y_px: frame.y_px, width_px: frame.width_px, height_px: frame.height_px,
-        section_key: idOf(frame, index, 'frame'),
-      }
+      return story ? projectStoryIntoFrame(story, frame)
         : { ...frame, section_key: idOf(frame, index, 'frame'), headline: '', subheading: '', body: '', caption: '', kicker: '', image_url: '', images: [], smart_card_key: null, smart_card_data: null };
-    }),
+    })],
   };
 }
 

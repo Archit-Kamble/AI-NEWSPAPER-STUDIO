@@ -35,10 +35,15 @@ function dimensions(frame) {
 }
 
 function frameKind(frame) {
-  const semantic = typeOf(frame);
+  // `story_type` on a persisted page section belongs to its present occupant,
+  // not its physical frame. Composition callers supply the template's explicit
+  // recommendation as `recommendedStoryType`; only a standalone synthetic
+  // frame may use its legacy story_type fallback.
+  const semantic = String(frame?.recommendedStoryType ?? frame?.recommended_story_type
+    ?? frame?.story_type ?? frame?.storyType ?? 'STANDARD').trim().toUpperCase() || 'STANDARD';
   const block = String(frame?.block_type ?? frame?.blockType ?? '').trim().toLowerCase();
   if (semantic === 'ADVERTISEMENT' || block === 'advert') return 'ADVERTISEMENT';
-  if (semantic === 'SMART_CARD' || block === 'feature' || frame?.feature_key || frame?.featureKey) return 'SMART_CARD';
+  if (semantic === 'SMART_CARD') return 'SMART_CARD';
   return semantic;
 }
 
@@ -95,9 +100,13 @@ function scoreStoryForFrame(story = {}, frame = {}, context = {}) {
   const geometry = prominence(frame, context);
   const reasons = [];
 
-  const impossible = (storyType === 'SMART_CARD' && frameType === 'ADVERTISEMENT')
-    || (storyType === 'ADVERTISEMENT' && frameType === 'SMART_CARD');
+  const impossible = (frameType === 'ADVERTISEMENT' && storyType !== 'ADVERTISEMENT')
+    || (storyType === 'ADVERTISEMENT' && frameType !== 'ADVERTISEMENT')
+    || (storyType === 'SMART_CARD' && frameType === 'ADVERTISEMENT');
   if (impossible) {
+    if (frameType === 'ADVERTISEMENT' && storyType !== 'ADVERTISEMENT') {
+      reasons.push(reason('EDITORIAL_IN_AD_FRAME', -100, { storyType, frameType }));
+    }
     reasons.push(reason('HARD_SEMANTIC_INCOMPATIBILITY', -100, { storyType, frameType }));
     return {
       score: COMPATIBILITY_V1.hardRejectScore,

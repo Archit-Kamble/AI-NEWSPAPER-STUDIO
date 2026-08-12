@@ -4,6 +4,36 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zf. Project B5B2A — real-page composition adapter and dry run (2026-08-12)
+
+`src/layout/composition-adapter.js` establishes the production boundary:
+story packets carry only semantic/editorial content and image evidence, while
+frame descriptors own section identity, geometry, physical block type,
+template-derived `recommendedStoryType`, feature key and destination treatment.
+`projectStoryIntoFrame()` uses explicit allowlists, so a moved story cannot
+overwrite a target frame's coordinates, physical type, feature identity or
+typography. Existing placed-image coordinates remain source-frame-relative and
+are marked for later image-treatment review, never silently reused.
+
+Compatibility now prefers explicit frame recommendations rather than a
+persisted section's current `story_type`; a `feature` physical slot is no
+longer automatically a Smart Card. Explicit advert frames hard-reject
+non-advert stories. Legacy occupied advert slots whose metadata still says
+`STANDARD` are locked, avoiding an unsafe editorial move until their semantic
+data is repaired.
+
+The real 2099-05-01 four-page dry-run script hydrates the edition, locks
+continuation sources/fragments, standing features, image-only companions and
+non-movable physical slots, and performs no writes. Its current composition
+is a local optimum under B5B1: pages 1–4 retained quality 99.4931, 99.636,
+99.5297 and 99.3778 respectively, with no proposed assignment changes.
+
+This remains diagnostic only: it does not persist assignments, move
+`section_images`, alter frame geometry or visible output, repair feature
+proportions, fit headlines/copy, alter continuation destinations, or use AI.
+
+---
+
 ## 0ze. Project B5B1 — quality-driven single-page rebalancing (2026-08-12)
 
 `src/layout/page-balancer.js` adds pure synchronous

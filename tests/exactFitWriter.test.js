@@ -45,3 +45,14 @@ test('writer input preserves semantic metadata and URLs without inventing placem
   assert.equal(input.storyType, 'PHOTO_FEATURE'); assert.equal(input.editorialPriority, 4); assert.deepEqual(input.images, [{ url: 'a.jpg' }]);
   assert.equal(input.images[0].x_px, undefined);
 });
+
+test('writer accepts only validated semantic metadata and reports deterministic thin-source sufficiency without a third call', async () => {
+  let calls = 0;
+  const result = await composeSourceToFrame({
+    source: { title: 'साताऱ्यात योजना', category: 'स्थानिक', location: 'सातारा', body: '१२ कोटी रुपये योजनेची माहिती देण्यात आली.' },
+    storyType: 'LEAD', frame: frame({ width_px: 420, height_px: 320 }),
+    askForJson: async () => { calls += 1; return { data: { headline: 'साताऱ्यात योजना', subheading: '', body: '१२ कोटी रुपये योजनेची माहिती देण्यात आली.', kicker: 'स्थानिक', annotations: [{ role: 'KEY_NUMBER', phrase: '१२ कोटी रुपये', target: 'body' }, { role: 'ACCENT_PHRASE', phrase: 'color:red', target: 'body' }], color: '#f00', html: '<span>नको</span>' }, provider: 'stub' }; },
+  });
+  assert.ok(calls <= 2); assert.equal(result.proposal.annotations.length, 1); assert.equal(result.proposal.kicker, 'स्थानिक');
+  assert.equal(result.sourceSufficiency.status, 'INSUFFICIENT_FOR_TREATMENT');
+});

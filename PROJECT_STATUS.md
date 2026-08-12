@@ -2711,3 +2711,20 @@ Real fixture preflight is clean on all four pages. Screenshot capture remains
 blocked in this checkout because the existing screenshot script requires
 `playwright-core`, which is not installed; no browser result is claimed. The
 page-shell/layout cleanup is complete enough to proceed to AI-fill work.
+
+### 25. SAHAS-controlled editorial packages (B8A)
+
+**AI is advisory for presentation; SAHAS is authoritative.** B8A adds the
+plain-content `EditorialPackage` contract (headline, deck, body, kicker,
+caption and phrase annotations). AI can identify a key number, name, location,
+accent phrase or pull-quote candidate, but never CSS, HTML, fonts, colour or
+geometry. SAHAS validates every phrase against both final text and supplied
+newsroom source, rejects unsafe/ambiguous/excess annotations without rejecting
+good copy, and compiles accepted meaning into conservative publication-owned
+tokens (`ACCENT`, `STRONG`, `CALLOUT`, `NONE`).
+
+The package also reports deterministic source sufficiency: `SUFFICIENT`,
+`THIN`, or `INSUFFICIENT_FOR_TREATMENT`, with a SAHAS-side recommendation.
+There is still a strict maximum of two writer calls—thin source never triggers
+invented filler or a third call. The next milestone integrates this contract
+into the disposable AI edition and visually inspects the resulting treatments.

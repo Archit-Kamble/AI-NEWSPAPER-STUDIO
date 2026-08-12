@@ -4,6 +4,29 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zc. Project B4 — deterministic story/frame compatibility (2026-08-12)
+
+`src/layout/story-frame-compatibility.js` adds pure synchronous
+`scoreStoryForFrame(story, frame, context)`. It returns a bounded 0–100 score,
+four explainable subscores (semantic type, editorial priority, geometry and
+imagery), a hard-reject flag, and structured reasons. It uses persisted
+story/frame semantics, 1–5 priority, frame area/rank among caller-provided
+editorial frames, actual supplied image metadata, and structured-card payload
+presence. Advertisements and Smart Cards are excluded from editorial
+prominence context.
+
+The only hard rejects are structurally impossible crossovers: a Smart Card in
+an advertising frame and an advertisement in a Smart Card frame. Preference
+reasons cover leads, briefs, standard stories, photo features, structured
+cards and advertising slots. `tests/storyFrameCompatibility.test.js` covers
+the contract, canonical/legacy fallbacks, bounds, determinism and immutability.
+
+This engine does **not** choose assignments, move stories, balance pages,
+measure canonical text demand, alter typography, or call AI. A later balancer
+can call it repeatedly as one candidate signal.
+
+---
+
 ## 0zb. Project B3 — frame and semantic hierarchy diagnostics (2026-08-12)
 
 `analyzeLayout()` now emits a diagnostic object for every content-bearing

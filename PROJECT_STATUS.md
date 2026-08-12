@@ -4,6 +4,36 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zg. Project B6A — canonical content-utilization quality (2026-08-12)
+
+The earlier ~99 geometry scores answered only whether a physical frame had any
+printable content. `src/layout/composed-layout-quality.js` now adds the async
+`analyzeComposedLayout(page, newspaper)` diagnostic without changing the
+synchronous `analyzeLayout()` API. It dynamically imports the existing shared
+`buildFlowMap()` and `flowImageFromRow()` implementation, so headline/deck
+reservations, margins, minimum readable runs, rich-text plain text and placed
+images use the exact same capacity truth as preflight, worklist and AI briefs.
+
+Frame occupancy and effective utilization are explicitly separate. Per eligible
+section the enriched output includes canonical body budget and used characters,
+raw and normalized body fill, headline/deck rows, image cells/ratio and
+effective grid-cell utilization. Structured Smart Cards, advertisements and
+standing features are not falsely measured as ordinary body copy; photo
+features account for image cells and compact briefs avoid generic prose-fill
+findings. `SEVERELY_UNDERFILLED_SECTION`, `UNDERFILLED_DOMINANT_FRAME`,
+`LOW_EFFECTIVE_PAGE_UTILIZATION` and raw-evidence `OVERFILLED_SECTION` make
+the diagnostic actionable.
+
+V2 weights geometry at 45% and canonical effective utilization at 55%. The
+real dry run now reports frame occupancy/effective use of P1 95%/83.89%, P2
+97.07%/52.27%, P3 96.82%/57.77%, P4 94.33%/60.75%, yielding enriched scores
+90.91, 73.59, 76.56 and 78.13 rather than four misleading ~99s. This is only
+better measurement: no page repair, persistence, AI writing, headline fitting
+or geometry change has been applied, and the synchronous balancer has not yet
+been converted to consume the async score.
+
+---
+
 ## 0zf. Project B5B2A — real-page composition adapter and dry run (2026-08-12)
 
 `src/layout/composition-adapter.js` establishes the production boundary:

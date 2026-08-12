@@ -4,6 +4,7 @@ const newspaperRepository = require('../src/repositories/newspaper.repository');
 const pageRepository = require('../src/repositories/page.repository');
 const { getTemplate } = require('../src/layout/templates');
 const { analyzeLayout } = require('../src/layout/layout-quality');
+const { analyzeComposedLayout } = require('../src/layout/composed-layout-quality');
 const { compositionInputForPage } = require('../src/layout/composition-adapter');
 const { rebalancePageAssignments, candidatePage } = require('../src/layout/page-balancer');
 const pool = require('../src/config/db');
@@ -27,6 +28,7 @@ async function main() {
     const lockedKeys = new Set(input.lockedSections.map((item) => item.sectionKey));
     const fixedSections = page.sections.filter((section) => lockedKeys.has(section.section_key));
     const current = analyzeLayout(page, newspaper);
+    const enriched = await analyzeComposedLayout(page, newspaper);
     // This is a rebalance dry run, not an independent B5A re-layout: start
     // from every movable section's own physical frame, then report only real
     // local improvements from the current composition.
@@ -41,7 +43,10 @@ async function main() {
     ));
     const proposed = analyzeLayout(candidatePage(finalState, input.movableStories, input.candidateFrames, balanceContext), newspaper);
     const changes = result.improvements.map((item) => `${item.type}:${item.affectedStories.join(',')}→${item.affectedFrames.join(',')}`);
-    console.log(`PAGE ${page.page_number} | current ${current.score} | proposed ${proposed.score} | objective ${result.initialObjective}→${result.finalObjective} | changes ${changes.length} | locked ${input.lockedSections.length}`);
+    const worst = enriched.sections.filter((section) => section.measured).sort((a, b) => a.effectiveContentRatio - b.effectiveContentRatio).slice(0, 3);
+    const severe = enriched.findings.filter((item) => item.code === 'SEVERELY_UNDERFILLED_SECTION').length;
+    console.log(`PAGE ${page.page_number} | occupancy ${current.metrics.occupancyRatio} | effective ${enriched.metrics.effectiveUtilizationRatio} | geometry ${current.score} | enriched ${enriched.score} | proposed ${proposed.score} | objective ${result.initialObjective}→${result.finalObjective} | changes ${changes.length} | locked ${input.lockedSections.length} | underfilled ${severe}`);
+    if (worst.length) console.log(`  worst: ${worst.map((item) => `${item.sectionKey}[${item.storyType}/p${item.editorialPriority} area:${item.frameAreaRatio} body:${item.bodyFillRatio} image:${item.imageRatio} effective:${item.effectiveContentRatio}]`).join('; ')}`);
     if (input.lockedSections.length) console.log(`  locked: ${input.lockedSections.map((item) => `${item.sectionKey}:${item.reason}`).join(', ')}`);
   }
 }

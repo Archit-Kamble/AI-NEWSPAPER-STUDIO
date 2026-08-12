@@ -4,6 +4,35 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zd. Project B5A — deterministic single-page assignment planning (2026-08-12)
+
+`src/layout/page-assignment.js` adds pure synchronous
+`planPageAssignments(stories, frames, context)`. It uses the canonical B4
+`scoreStoryForFrame()` result for every real story/frame pair and solves the
+whole one-to-one mapping with an O(n³) Hungarian maximum-weight matching,
+rather than greedily assigning the first story's best frame. It returns
+candidate assignments, explicit unassigned stories and empty frames, a bounded
+average compatibility score, and transparent compatibility, hard-reject and
+priority diagnostics. No input is mutated and no plan is persisted.
+
+Every story gets a deterministic dummy column that represents being left
+unassigned. Its small priority-aware weight makes leaving priority 5 copy out
+less desirable than leaving priority 1 copy out, while a B4 hard rejection is
+represented as impossible and therefore cannot be chosen over a dummy.
+Additional unused frames are returned explicitly. Equal weights prefer the
+original frame order, with the Hungarian iteration retaining original story
+order. The planner inherits B1's legacy semantic defaults through the B4
+scorer.
+
+`tests/pageAssignment.test.js` covers global-vs-greedy matching, semantic
+placement for lead/brief/photo/ad/card content, hard rejects, unequal counts,
+priority pressure, legacy rows, immutability, diagnostics and deterministic
+ties. B5B remains responsible for page-wide local balancing, intentional
+empty-frame selection, whitespace repair, quality-score-driven swaps or
+relocations, and applying/persisting a chosen plan.
+
+---
+
 ## 0zc. Project B4 — deterministic story/frame compatibility (2026-08-12)
 
 `src/layout/story-frame-compatibility.js` adds pure synchronous

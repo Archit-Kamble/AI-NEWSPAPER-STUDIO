@@ -4,6 +4,35 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zh. Project B6B — canonical story/frame text-fit measurement (2026-08-12)
+
+`src/layout/story-frame-fit.js` adds async pure
+`measureStoryFrameFit(story, frame, context)`. Story content is projected into
+the destination frame through B5B2A's allowlisted ownership boundary, so the
+candidate always uses destination geometry, margins, fonts, columns and line
+height—not typography inherited from the source frame. It deliberately does
+not modify B4 compatibility, B5 assignment, or the synchronous balancer.
+
+B6A now exports its low-level `measureFlowUtilization()` helper, and B6B uses
+that same `buildFlowMap()` / `flowImageFromRow()` result. Consequently current
+composition and same-frame candidate fit share body budget, plain-text used
+characters, headline/deck reservation and image-cell evidence exactly. Fit
+returns raw/normalized fill, underfill/overflow characters, demand class,
+bounded fit score, and `SEVERE_UNDERFILL` through `OVERFLOW` classifications.
+
+Placed images are used only for the same source section or an explicitly
+provided candidate placement. A story moving to another frame reports
+`UNRESOLVED_DESTINATION_PLACEMENT` rather than copying source-relative
+coordinates. Article-like types—including briefs and photo features—are
+measured; Smart Cards, adverts, quotes and data return a structured-renderer
+deferral. The real-edition script also reports per-page fit counts and worst
+current pairs when database configuration is available.
+
+This remains measurement only: no assignment change, copy rewrite, dynamic
+headline fit, image placement/cropping, persistence or AI generation occurs.
+
+---
+
 ## 0zg. Project B6A — canonical content-utilization quality (2026-08-12)
 
 The earlier ~99 geometry scores answered only whether a physical frame had any

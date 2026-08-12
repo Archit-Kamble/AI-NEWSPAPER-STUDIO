@@ -47,13 +47,33 @@ function flowView(section) {
 
 function cells(map, kind) { return map.grid.reduce((total, row) => total + row.filter((cell) => cell === kind).length, 0); }
 
+// One canonical section measurement shared by completed-page utilization and
+// candidate story/frame fit. The caller decides eligibility; this helper only
+// translates a real grid into stable raw evidence.
+async function measureFlowUtilization(section, images = section?.images || []) {
+  const { buildFlowMap, flowImageFromRow, CELL } = await textFlow();
+  const map = buildFlowMap(section, flowView(section), images.map(flowImageFromRow));
+  const headlineCells = cells(map, CELL.HEADLINE);
+  const subheadingCells = cells(map, CELL.SUBHEADING);
+  const availableCells = map.cols * map.rows;
+  const rawBodyFillRatio = map.bodyCharBudget ? map.usedChars / map.bodyCharBudget : (map.usedChars ? Infinity : 0);
+  const usedCells = headlineCells + subheadingCells + map.imageCells + Math.min(map.usedChars, map.bodyCharBudget);
+  return {
+    map, bodyCharBudget: map.bodyCharBudget, bodyCharsUsed: map.usedChars,
+    bodyFillRatio: round(rawBodyFillRatio), normalizedBodyFillRatio: round(Math.min(1, rawBodyFillRatio)),
+    headlineRows: map.headlineRows, subheadingRows: map.subheadingRows, imageCells: map.imageCells,
+    imageRatio: round(availableCells ? map.imageCells / availableCells : 0),
+    effectiveUsedCells: usedCells, effectiveAvailableCells: availableCells,
+    effectiveContentRatio: round(availableCells ? Math.min(1, usedCells / availableCells) : 0),
+  };
+}
+
 function finding(code, severity, message, evidence, sectionKey = undefined) {
   return sectionKey === undefined ? { code, severity, message, evidence } : { code, severity, message, evidence, sectionKey };
 }
 
 async function analyzeComposedLayout(page, newspaper = {}) {
   const geometry = analyzeLayout(page, newspaper);
-  const { buildFlowMap, flowImageFromRow, CELL } = await textFlow();
   const geometryByKey = new Map((geometry.sections || []).map((section) => [String(section.sectionKey), section]));
   const sections = [];
   let effectiveUsedArea = 0;
@@ -68,28 +88,16 @@ async function analyzeComposedLayout(page, newspaper = {}) {
       sections.push({ sectionKey: section.section_key, storyType, editorialPriority: priorityOf(section), measured: false, reason: 'STRUCTURED_OR_SPECIAL_RENDERER' });
       continue;
     }
-    const map = buildFlowMap(section, flowView(section), (section.images || []).map(flowImageFromRow));
-    const headlineCells = cells(map, CELL.HEADLINE);
-    const subheadingCells = cells(map, CELL.SUBHEADING);
-    const imageCells = map.imageCells;
-    const availableCells = map.cols * map.rows;
-    const rawBodyFillRatio = map.bodyCharBudget ? map.usedChars / map.bodyCharBudget : (map.usedChars ? Infinity : 0);
-    const normalizedBodyFillRatio = Math.min(1, rawBodyFillRatio);
-    const usedCells = headlineCells + subheadingCells + imageCells + Math.min(map.usedChars, map.bodyCharBudget);
-    const effectiveContentRatio = availableCells ? Math.min(1, usedCells / availableCells) : 0;
+    const measured = await measureFlowUtilization(section);
     const diagnostic = {
       sectionKey: section.section_key, storyType, editorialPriority: priorityOf(section), measured: true,
       frameAreaRatio: frame.frameAreaRatio, frameSizeRank: frame.frameSizeRank,
-      bodyCharBudget: map.bodyCharBudget, bodyCharsUsed: map.usedChars,
-      bodyFillRatio: round(rawBodyFillRatio), normalizedBodyFillRatio: round(normalizedBodyFillRatio),
-      headlineRows: map.headlineRows, subheadingRows: map.subheadingRows,
-      imageCells, imageRatio: round(availableCells ? imageCells / availableCells : 0),
-      effectiveUsedCells: usedCells, effectiveAvailableCells: availableCells, effectiveContentRatio: round(effectiveContentRatio),
+      ...measured,
     };
     sections.push(diagnostic);
     // Compact briefs and photo features are represented, but only ordinary
     // prose types are held to body-fill findings below.
-    effectiveUsedArea += effectiveContentRatio * frame.frameArea;
+    effectiveUsedArea += measured.effectiveContentRatio * frame.frameArea;
     effectiveAvailableArea += frame.frameArea;
   }
   const effectiveUtilizationRatio = effectiveAvailableArea ? effectiveUsedArea / effectiveAvailableArea : 0;
@@ -128,4 +136,4 @@ async function analyzeComposedLayout(page, newspaper = {}) {
   };
 }
 
-module.exports = { analyzeComposedLayout, UTILIZATION_V1, flowView };
+module.exports = { analyzeComposedLayout, UTILIZATION_V1, flowView, measureFlowUtilization };

@@ -18,7 +18,9 @@ function storyPacketFromSection(section = {}) {
   for (const field of STORY_FIELDS) if (Object.hasOwn(section, field)) packet[field] = section[field];
   packet.images = Array.isArray(section.images) ? section.images.map((image) => ({
     media_asset_id: image.media_asset_id, url: image.url, source_width_px: image.source_width_px,
-    source_height_px: image.source_height_px, width_px: image.width_px, height_px: image.height_px,
+    source_height_px: image.source_height_px, x_px: image.x_px, y_px: image.y_px,
+    width_px: image.width_px, height_px: image.height_px, shape: image.shape, rotation: image.rotation,
+    stand_off_px: image.stand_off_px, mask: image.mask,
   })) : [];
   // Existing image placements are source-frame-relative; never claim they are
   // valid in a destination frame before image-treatment work exists.

@@ -5,6 +5,7 @@ const pageRepository = require('../src/repositories/page.repository');
 const { getTemplate } = require('../src/layout/templates');
 const { analyzeLayout } = require('../src/layout/layout-quality');
 const { analyzeComposedLayout } = require('../src/layout/composed-layout-quality');
+const { measureStoryFrameFit } = require('../src/layout/story-frame-fit');
 const { compositionInputForPage } = require('../src/layout/composition-adapter');
 const { rebalancePageAssignments, candidatePage } = require('../src/layout/page-balancer');
 const pool = require('../src/config/db');
@@ -47,6 +48,14 @@ async function main() {
     const severe = enriched.findings.filter((item) => item.code === 'SEVERELY_UNDERFILLED_SECTION').length;
     console.log(`PAGE ${page.page_number} | occupancy ${current.metrics.occupancyRatio} | effective ${enriched.metrics.effectiveUtilizationRatio} | geometry ${current.score} | enriched ${enriched.score} | proposed ${proposed.score} | objective ${result.initialObjective}→${result.finalObjective} | changes ${changes.length} | locked ${input.lockedSections.length} | underfilled ${severe}`);
     if (worst.length) console.log(`  worst: ${worst.map((item) => `${item.sectionKey}[${item.storyType}/p${item.editorialPriority} area:${item.frameAreaRatio} body:${item.bodyFillRatio} image:${item.imageRatio} effective:${item.effectiveContentRatio}]`).join('; ')}`);
+    const fits = await Promise.all(input.movableStories.map(async (story) => {
+      const frame = input.candidateFrames.find((item) => String(item.id) === String(story.id));
+      return { sectionKey: frame?.section_key, ...(await measureStoryFrameFit(story, frame || {})) };
+    }));
+    const summary = fits.reduce((counts, fit) => { counts[fit.fitClass] = (counts[fit.fitClass] || 0) + 1; return counts; }, {});
+    const worstFits = fits.filter((fit) => fit.applicable).sort((a, b) => a.rawBodyFillRatio - b.rawBodyFillRatio).slice(0, 3);
+    console.log(`  fit: GOOD_FIT ${summary.GOOD_FIT || 0}, UNDERFILLED ${(summary.UNDERFILL || 0) + (summary.SEVERE_UNDERFILL || 0)}, OVERFLOW ${summary.OVERFLOW || 0}`);
+    if (worstFits.length) console.log(`  fit worst: ${worstFits.map((fit) => `${fit.sectionKey}[${fit.storyType}/p${fit.editorialPriority} ${fit.bodyCharsUsed}/${fit.bodyCharBudget} ${fit.rawBodyFillRatio} ${fit.fitClass}]`).join('; ')}`);
     if (input.lockedSections.length) console.log(`  locked: ${input.lockedSections.map((item) => `${item.sectionKey}:${item.reason}`).join(', ')}`);
   }
 }

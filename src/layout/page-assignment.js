@@ -66,10 +66,7 @@ function hungarianMin(cost) {
   return assignment;
 }
 
-function planPageAssignments(stories = [], frames = [], context = {}) {
-  const editorialFrames = context.editorialFrames || frames;
-  const scoreContext = { ...context, editorialFrames };
-  const pairings = stories.map((story) => frames.map((frame) => scoreStoryForFrame(story, frame, scoreContext)));
+function planPageAssignmentsFromEvaluations(stories = [], frames = [], pairings = [], context = {}) {
   const hardRejectedPairCount = pairings.flat().filter((item) => item.hardReject).length;
   const columns = frames.length + stories.length;
   const weights = stories.map((story, storyIndex) => Array.from({ length: columns }, (_, columnIndex) => {
@@ -78,7 +75,7 @@ function planPageAssignments(stories = [], frames = [], context = {}) {
       if (result.hardReject) return ASSIGNMENT_V1.impossibleWeight;
       // Frame index is a tiny deterministic tie-break only; canonical score
       // remains untouched in the public assignment result.
-      return (result.score * 1000) + (frames.length - columnIndex) / 1000;
+      return ((result.planningScore ?? result.score) * 1000) + (frames.length - columnIndex) / 1000;
     }
     return ASSIGNMENT_V1.unassignedWeightForPriority(priorityOf(story)) * 1000;
   }));
@@ -96,7 +93,8 @@ function planPageAssignments(stories = [], frames = [], context = {}) {
       usedFrames.add(column);
       assignments.push({
         storyId: idOf(story, storyIndex, 'story'), frameId: idOf(frame, column, 'frame'),
-        score: compatible.score, subscores: compatible.subscores, reasons: compatible.reasons,
+        score: compatible.planningScore ?? compatible.score, compatibilityScore: compatible.compatibility?.score ?? compatible.score,
+        fit: compatible.fit, subscores: compatible.subscores ?? compatible.compatibility?.subscores, reasons: compatible.reasons,
       });
     } else {
       const validPairs = pairings[storyIndex].filter((item) => !item.hardReject);
@@ -128,4 +126,11 @@ function planPageAssignments(stories = [], frames = [], context = {}) {
   };
 }
 
-module.exports = { planPageAssignments, ASSIGNMENT_V1, hungarianMin };
+function planPageAssignments(stories = [], frames = [], context = {}) {
+  const editorialFrames = context.editorialFrames || frames;
+  const scoreContext = { ...context, editorialFrames };
+  const pairings = stories.map((story) => frames.map((frame) => scoreStoryForFrame(story, frame, scoreContext)));
+  return planPageAssignmentsFromEvaluations(stories, frames, pairings, context);
+}
+
+module.exports = { planPageAssignments, planPageAssignmentsFromEvaluations, ASSIGNMENT_V1, hungarianMin };

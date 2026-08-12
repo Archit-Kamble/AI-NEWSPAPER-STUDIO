@@ -4,6 +4,31 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zi. Project B6C — flow-aware assignment planning (2026-08-12)
+
+`src/layout/flow-aware-page-planner.js` adds async
+`buildFlowAwarePairEvaluations()` and `planFlowAwarePageAssignments()`. Each
+non-rejected story/frame pair receives canonical B4 semantic compatibility and
+B6B current-copy fit exactly once, then B5A's single shared Hungarian solver
+matches the precomputed matrix. The old synchronous `planPageAssignments()`
+continues to build semantic-only evaluations and retains its existing API.
+
+Reliable text fit contributes 30% of a pair's planning score and B4 semantic
+compatibility 70%. If image placement is unresolved in another destination
+frame, fit contributes only 15% and compatibility returns to 85%. Structured
+renderers with non-applicable generic fit use semantic compatibility alone.
+Only B4 hard rejects remain impossible; underfill and overflow are current-copy
+preferences, not assignment bans. Diagnostics expose pair counts, skipped hard
+reject fit work, selected fit classes/averages/confidence, and changes against
+the semantic-only plan.
+
+The planner is still independent of B5B1 rebalancing, persistence, editor/UI,
+copy rewriting, image placement/cropping, headline fitting and AI generation.
+The deterministic real-fixture comparison is deferred until normal local DB
+configuration is available; no credentials were reconstructed or committed.
+
+---
+
 ## 0zh. Project B6B — canonical story/frame text-fit measurement (2026-08-12)
 
 `src/layout/story-frame-fit.js` adds async pure

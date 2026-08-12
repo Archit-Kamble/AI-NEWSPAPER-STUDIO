@@ -44,7 +44,11 @@ async function measureStoryFrameFit(story = {}, frame = {}, context = {}) {
   const measured = await measureFlowUtilization(projected, placement.images);
   const raw = measured.bodyFillRatio;
   const fitClass = classify(raw);
-  const fitScore = Number.isFinite(raw) ? Math.round(Math.max(0, 100 - (Math.abs(0.82 - Math.min(1, raw)) * 140))) : 0;
+  // Distance is measured from the useful target band, without clamping raw
+  // overflow first: a 7× overset frame cannot look nearly as good as a fit.
+  const fitScore = Number.isFinite(raw)
+    ? Math.round(Math.max(0, 100 - (Math.abs(0.82 - raw) * 140)))
+    : 0;
   return {
     applicable: true, storyType, editorialPriority: Number(story.editorial_priority ?? story.editorialPriority) || 3,
     ...measured, rawBodyFillRatio: raw, underfillChars: Math.max(0, measured.bodyCharBudget - measured.bodyCharsUsed),

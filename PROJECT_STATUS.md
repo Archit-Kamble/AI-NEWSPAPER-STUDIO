@@ -2728,3 +2728,26 @@ The package also reports deterministic source sufficiency: `SUFFICIENT`,
 There is still a strict maximum of two writer calls—thin source never triggers
 invented filler or a third call. The next milestone integrates this contract
 into the disposable AI edition and visually inspects the resulting treatments.
+
+### 26. Persisted fixture geometry reapplication (B7B-F2)
+
+The actual rendering path is `template → copied page_sections rows → page API
+payload → canvas/print inline x/y/width/height`. Changing a template therefore
+does not move an edition that already exists. This was the reason F1’s source
+geometry initially did not appear in the visual fixture: raw Page 1 rows began
+at 168px and ended at 992px, Page 2’s footer frame ended at 992px, and Pages 3
+and 4 final rows ended at 992px despite the newer templates.
+
+`build-test-edition.js --rebuild` now explicitly reapplies template-owned
+geometry only for the deterministic fixture workflow; normal editor pages are
+unchanged. A fixture-only guarded route/repository operation updates frame
+coordinates and frame treatment while preserving story copy and image
+placements. `comparePageGeometryToTemplate()` exposes `MATCH`/`MISMATCH` with
+per-section drift instead of treating template constants as render proof.
+
+The current 2099-05-01 fixture was explicitly rebuilt: raw DB/template parity
+is MATCH on all pages. Measured rendered-source geometry is P1 `160–1008`, P2
+`64–972` then imprint `980–1012` and footer `1016`, P3 `64–1008`, P4
+`64–1008`; preflight is clean. Screenshot automation still cannot run because
+this checkout lacks `playwright-core`, so layout is accepted only after manual
+visual confirmation.

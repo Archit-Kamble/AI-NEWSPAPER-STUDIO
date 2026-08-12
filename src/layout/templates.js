@@ -418,6 +418,20 @@ function reconcileSectionsForPage(sections = [], pageNumber, newspaper = {}) {
   });
 }
 
+function comparePageGeometryToTemplate(pageSections = [], template = {}) {
+  const expected = new Map((template.sections || []).map((section) => [section.key, section]));
+  const differences = [];
+  for (const section of pageSections) {
+    const target = expected.get(section.section_key);
+    if (!target) { differences.push({ sectionKey: section.section_key, reason: 'NOT_IN_TEMPLATE' }); continue; }
+    const actual = { x: Number(section.x_px), y: Number(section.y_px), width: Number(section.width_px), height: Number(section.height_px) };
+    const wanted = { x: Number(target.x), y: Number(target.y), width: Number(target.width), height: Number(target.height) };
+    if (JSON.stringify(actual) !== JSON.stringify(wanted)) differences.push({ sectionKey: section.section_key, actual, expected: wanted });
+  }
+  for (const section of expected.values()) if (!pageSections.some((item) => item.section_key === section.key)) differences.push({ sectionKey: section.key, reason: 'MISSING_PERSISTED_SECTION' });
+  return { status: differences.length ? 'MISMATCH' : 'MATCH', differences };
+}
+
 module.exports = {
   PAGE_WIDTH,
   PAGE_HEIGHT,
@@ -425,6 +439,7 @@ module.exports = {
   getTemplate,
   getTemplateForPage,
   reconcileSectionsForPage,
+  comparePageGeometryToTemplate,
   templates,
   colX,
   colW,

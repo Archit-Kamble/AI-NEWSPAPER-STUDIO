@@ -37,6 +37,7 @@ if (!/^\d{4}-\d{2}-\d{2}$/.test(PUBLICATION_DATE)) {
   throw new Error('Use --date YYYY-MM-DD (or SAHAS_TEST_EDITION_DATE).');
 }
 const UPLOAD_DIR = path.join(__dirname, '..', 'public', 'uploads');
+const REBUILD_LAYOUT = process.argv.includes('--rebuild') || process.argv.includes('--reset-layout');
 
 async function signIn() {
   const response = await fetch(`${BASE}/api/auth/login`, {
@@ -323,6 +324,14 @@ async function main() {
   const newspaperId = start.newspaper.id;
   const pages = await desk.json(`/api/newspapers/${newspaperId}/pages`);
   const byNumber = new Map(pages.map((p) => [p.page_number, p]));
+
+  if (REBUILD_LAYOUT) {
+    // This explicit diagnostic-fixture action is intentionally not exposed to
+    // normal editor workflow. It reapplies current template-owned geometry.
+    for (const page of byNumber.values()) await desk.json(`/api/test-fixtures/pages/${page.id}/reapply-template-geometry`, { method: 'POST' });
+    const refreshed = await desk.json(`/api/newspapers/${newspaperId}/pages`);
+    refreshed.forEach((page) => byNumber.set(page.page_number, page));
+  }
 
   // Idempotent re-runs: undo any previous carry-over first, so the lead is
   // back to one whole piece before it is rewritten and re-split - otherwise a

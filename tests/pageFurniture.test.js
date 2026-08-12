@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { geometryOf, HEADER, FOOTER, regionForPage } = require('../src/layout/geometry');
-const { getTemplateForPage } = require('../src/layout/templates');
+const { getTemplateForPage, comparePageGeometryToTemplate } = require('../src/layout/templates');
 
 const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'styles.css'), 'utf8');
 
@@ -93,4 +93,10 @@ test('masthead source asset remains the same readable RGBA canvas after isolated
   const { Jimp } = await import('jimp'); const image = await Jimp.read(asset);
   assert.equal(image.bitmap.width, 1600); assert.equal(image.bitmap.height, 300);
   assert.equal(image.bitmap.data.length, 1600 * 300 * 4);
+});
+
+test('geometry drift reports persisted/template differences rather than pretending a template moved an existing page', () => {
+  const template = { sections: [{ key: 'one', x: 20, y: 64, width: 100, height: 120 }] };
+  assert.equal(comparePageGeometryToTemplate([{ section_key: 'one', x_px: 20, y_px: 80, width_px: 100, height_px: 120 }], template).status, 'MISMATCH');
+  assert.equal(comparePageGeometryToTemplate([{ section_key: 'one', x_px: 20, y_px: 64, width_px: 100, height_px: 120 }], template).status, 'MATCH');
 });

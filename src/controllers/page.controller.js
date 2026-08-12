@@ -33,5 +33,11 @@ async function state(req, res) {
   if (result.error) return res.status(409).json(result);
   res.json(result);
 }
+async function reapplyFixtureGeometry(req, res) {
+  const page = await pageService.reapplyFixtureGeometry(req.params.pageId);
+  if (!page) return res.status(404).json({ error: 'No such page.' });
+  if (page.error) return res.status(403).json(page);
+  res.json(page);
+}
 
-module.exports = { create, list, update, colour, state };
+module.exports = { create, list, update, colour, state, reapplyFixtureGeometry };

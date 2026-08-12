@@ -189,6 +189,26 @@ async function updateTemplate(pageId, templateKey) {
   }
 }
 
+// Explicit fixture-only operation. It updates only frame-owned geometry and
+// template treatment, never story copy or images; ordinary pages never call it.
+async function reapplyTemplateGeometry(pageId) {
+  const { rows: pages } = await pool.query('SELECT page_number, template_key FROM pages WHERE id = $1', [pageId]);
+  if (!pages[0]) return null;
+  const page = pages[0]; const template = getTemplateForPage(page.template_key, page.page_number);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (let index = 0; index < template.sections.length; index += 1) {
+      const section = template.sections[index];
+      await client.query(`UPDATE page_sections SET x_px = $3, y_px = $4, width_px = $5, height_px = $6, z_index = $7,
+        block_type = $8, border_style = $9, headline_style = $10, feature_key = $11, updated_at = CURRENT_TIMESTAMP
+        WHERE page_id = $1 AND section_key = $2`, [pageId, section.key, section.x, section.y, section.width, section.height, index,
+        section.blockType || 'article', section.borderStyle || 'none', section.headlineStyle || 'plain', section.featureKey || null]);
+    }
+    await client.query('COMMIT'); return findById(pageId);
+  } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
+}
+
 // Blocks drawn by hand on the canvas. A page is no longer limited to whatever
 // its template declared - a dense inside page needs fifteen or twenty items,
 // and an editor adds them where the page needs them.
@@ -351,6 +371,7 @@ module.exports = {
   findById,
   findSectionForRate,
   updateTemplate,
+  reapplyTemplateGeometry,
   saveSection,
   saveComposedStoryContent,
   COMPOSED_STORY_COLUMNS,

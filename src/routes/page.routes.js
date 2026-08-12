@@ -16,6 +16,7 @@ router.get('/newspapers/:newspaperId/pages', pageController.list);
 router.patch('/pages/:pageId', pageController.update);
 router.patch('/pages/:pageId/colour', pageController.colour);
 router.patch('/pages/:pageId/state', pageController.state);
+router.post('/test-fixtures/pages/:pageId/reapply-template-geometry', pageController.reapplyFixtureGeometry);
 
 router.put('/pages/:pageId/sections/:sectionId', pageSectionController.update);
 router.post('/pages/:pageId/sections', pageSectionController.create);

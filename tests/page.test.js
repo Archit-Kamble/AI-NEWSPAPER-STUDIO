@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createApp } = require('../server');
 const pool = require('../src/config/db');
+const pageRepository = require('../src/repositories/page.repository');
 const { signIn } = require('./helpers/desk');
 
 async function createNewspaper(desk, name) {
@@ -45,6 +46,19 @@ test('creating a page applies the requested template and its sections', async ()
     if (newspaper) await cleanupNewspaper(newspaper.id);
     server.close();
   }
+});
+
+test('explicit fixture geometry reapply updates frames but preserves story-owned copy', async () => {
+  const app = createApp(); const server = app.listen(0); const port = server.address().port; const desk = await signIn(port); let newspaper;
+  try {
+    newspaper = await createNewspaper(desk, 'Fixture geometry reapply');
+    await pool.query('UPDATE newspapers SET publication_date = $2 WHERE id = $1', [newspaper.id, '2099-12-31']);
+    const page = await desk(`/api/newspapers/${newspaper.id}/pages`, { method: 'POST', body: JSON.stringify({ pageNumber: 3, templateKey: 'dense' }) }).then((r) => r.json());
+    await pool.query("UPDATE page_sections SET y_px = y_px + 16, headline = 'जपून ठेवलेली बातमी' WHERE page_id = $1 AND section_key = 'foot-left'", [page.id]);
+    const response = await desk(`/api/test-fixtures/pages/${page.id}/reapply-template-geometry`, { method: 'POST' }); assert.equal(response.status, 200);
+    const rebuilt = await pageRepository.findById(page.id); const foot = rebuilt.sections.find((s) => s.section_key === 'foot-left');
+    assert.equal(foot.y_px + foot.height_px, 1008); assert.equal(foot.headline, 'जपून ठेवलेली बातमी');
+  } finally { if (newspaper) await cleanupNewspaper(newspaper.id); server.close(); }
 });
 
 test('creating a page without a template defaults to front', async () => {

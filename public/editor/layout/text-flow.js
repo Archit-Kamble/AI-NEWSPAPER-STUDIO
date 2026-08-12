@@ -252,6 +252,13 @@ export function estimateHeight(text, fontPx, availableWidthPx) {
   return Math.ceil(text.length / perLine) * fontPx * MIN_LINE_HEIGHT;
 }
 
+// Kept beside estimateHeight so every caller derives headline/deck rows from
+// the exact same width and line-height model, never from body typography.
+export function estimateLineCount(text, fontPx, availableWidthPx) {
+  if (!text || !fontPx || availableWidthPx <= 0) return 0;
+  return Math.max(1, Math.round(estimateHeight(text, fontPx, availableWidthPx) / (fontPx * MIN_LINE_HEIGHT)));
+}
+
 // The map as the picture the editor drew for us. This exact string goes into
 // the AI request, because it says more in twelve lines than any prose brief.
 export function flowAscii(map, { maxCols = 60, maxRows = 40 } = {}) {

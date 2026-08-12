@@ -47,3 +47,11 @@ test('structured renderers defer generic text fit and B6A current composition st
   assert.equal(fit.bodyCharBudget, quality.sections[0].bodyCharBudget);
   assert.equal(fit.bodyCharsUsed, quality.sections[0].bodyCharsUsed);
 });
+
+test('policy-aware targets distinguish photo density from physical overflow', async () => {
+  const base = await measureStoryFrameFit(story('p', { story_type: 'PHOTO_FEATURE', body: '' }), frame('photo'));
+  const atTarget = await measureStoryFrameFit(story('p', { story_type: 'PHOTO_FEATURE', body: 'अ'.repeat(Math.round(base.bodyCharBudget * 0.5)) }), frame('photo'));
+  const dense = await measureStoryFrameFit(story('p', { story_type: 'PHOTO_FEATURE', body: 'अ'.repeat(Math.round(base.bodyCharBudget * 0.9)) }), frame('photo'));
+  assert.equal(atTarget.policyFitClass, 'GOOD_POLICY_FIT'); assert.ok(atTarget.fitScore > dense.fitScore);
+  assert.equal(dense.rawBodyFillRatio < 1, true); assert.equal(dense.overflowChars, 0); assert.equal(dense.policyFitClass, 'ABOVE_POLICY_RANGE');
+});

@@ -37,6 +37,8 @@ async function measureStoryFrameFit(story = {}, frame = {}, context = {}) {
   if (STRUCTURED_TYPES.has(storyType) || !TEXT_TYPES.has(storyType)) {
     return { applicable: false, reason: 'STRUCTURED_RENDERER', storyType, fitClass: 'NOT_APPLICABLE', fitScore: null, imagePlacementStatus: 'NO_IMAGE' };
   }
+  const { storyPolicy } = await import('../../public/editor/layout/story-types.js');
+  const policy = storyPolicy(storyType);
   const placement = imagePlacement(story, frame, context);
   // Projection is an allowlisted ownership boundary: destination geometry and
   // presentation survive, while story content/semantics travel.
@@ -44,17 +46,19 @@ async function measureStoryFrameFit(story = {}, frame = {}, context = {}) {
   const measured = await measureFlowUtilization(projected, placement.images);
   const raw = measured.bodyFillRatio;
   const fitClass = classify(raw);
-  // Distance is measured from the useful target band, without clamping raw
-  // overflow first: a 7× overset frame cannot look nearly as good as a fit.
-  const fitScore = Number.isFinite(raw)
-    ? Math.round(Math.max(0, 100 - (Math.abs(0.82 - raw) * 140)))
-    : 0;
+  const policyFitClass = raw < policy.bodyFill.min ? 'BELOW_POLICY_RANGE'
+    : raw > policy.bodyFill.max ? 'ABOVE_POLICY_RANGE' : 'GOOD_POLICY_FIT';
+  // Raw > 1 is physical overflow. Editorial density is separately governed
+  // by the one semantic policy catalog, including photo-feature low density.
+  const distance = Math.abs(policy.bodyFill.target - raw);
+  const fitScore = Number.isFinite(raw) ? Math.round(Math.max(0, 100 - (distance * 140))) : 0;
   return {
     applicable: true, storyType, editorialPriority: Number(story.editorial_priority ?? story.editorialPriority) || 3,
     ...measured, rawBodyFillRatio: raw, underfillChars: Math.max(0, measured.bodyCharBudget - measured.bodyCharsUsed),
     overflowChars: Math.max(0, measured.bodyCharsUsed - measured.bodyCharBudget),
     imagePlacementStatus: placement.status, imagePlacementUnresolved: placement.status === 'UNRESOLVED_DESTINATION_PLACEMENT',
     fitClass, fitScore, textDemandRatio: raw,
+    policyMinFill: policy.bodyFill.min, policyTargetFill: policy.bodyFill.target, policyMaxFill: policy.bodyFill.max, policyFitClass,
     copyDemandClass: raw > 1 ? 'OVERFLOWING' : raw >= FIT_V1.goodMinimum ? 'HEAVY' : raw >= FIT_V1.underfillMinimum ? 'MEDIUM' : 'LIGHT',
   };
 }

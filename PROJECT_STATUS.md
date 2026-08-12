@@ -4,6 +4,32 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zl. Project B7A1 — hardened policy-aware exact-fit writing (2026-08-12)
+
+B7A prompts now state the real canonical BODY capacity and policy-derived
+minimum, target and maximum character counts, explicitly separated from
+headline/deck. The initial estimate reserves supplied title/deck through the
+shared grid; final fit remains measured from generated treatment. Zero usable
+body capacity returns `NO_BODY_CAPACITY` without calling a provider. Repair
+briefs now carry the editable previous draft, original DATA-only source,
+headline/deck state, actual headline rows, exact body used/budget/fill, policy
+character range and issue codes.
+
+`estimateLineCount()` now lives beside `estimateHeight()` in canonical
+text-flow, so headline rows use headline type rather than body line height.
+Attempt selection uses numeric lexicographic quality comparison rather than
+string comparison. B6B `fitScore` is policy-aware via the one story catalog:
+photo features at their intended 50% density score well, while editorial
+over-density is reported separately from physical overflow.
+
+`writerInputFromNewsItem()` supplies B7B-ready in-memory source, canonical
+story type/priority and image URL evidence without inventing destination image
+coordinates. B7A remains in-memory and is now ready for disposable-edition
+integration; the next task is B7B visual output from news items, planned
+frames and exact-fit proposals.
+
+---
+
 ## 0zk. Project B7A — source-grounded exact-fit Marathi writer core (2026-08-12)
 
 `src/services/exactFitWriter.service.js` adds pure reusable

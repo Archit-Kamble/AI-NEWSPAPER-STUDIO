@@ -30,7 +30,12 @@ const BASE = `http://127.0.0.1:${PORT}`;
 // actually renders instead of showing its deliberate "nothing checked for
 // this date" empty state (dinvishesh.js), which is correct behaviour but not
 // what this fixture is for.
-const PUBLICATION_DATE = '2099-05-01';
+const dateArgument = process.argv.indexOf('--date');
+const requestedDate = dateArgument >= 0 ? process.argv[dateArgument + 1] : null;
+const PUBLICATION_DATE = process.env.SAHAS_TEST_EDITION_DATE || requestedDate || '2099-05-01';
+if (!/^\d{4}-\d{2}-\d{2}$/.test(PUBLICATION_DATE)) {
+  throw new Error('Use --date YYYY-MM-DD (or SAHAS_TEST_EDITION_DATE).');
+}
 const UPLOAD_DIR = path.join(__dirname, '..', 'public', 'uploads');
 
 async function signIn() {

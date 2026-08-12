@@ -2648,3 +2648,17 @@ And one correctness defect the screenshot made obvious:
 
 A wider sweep - every visible button wired, page switching, undo, save
 round-trip, typography, the story explorer, zoom - found nothing else.
+
+### 22. B7B disposable composition proving ground (implementation pending local integration)
+
+`scripts/build-test-edition.js` now accepts a separate `--date YYYY-MM-DD`
+while retaining `2099-05-01` as its reference-fixture default. The companion
+`scripts/compose-ai-test-edition.js` is safe by default (`--apply` is the only
+write mode), snapshots a page before composition, locks special and
+image-bearing frames from cross-frame movement, and persists only
+story-owned columns through `saveComposedStoryContent()`.
+
+The local environment has no `.env`, so this entry deliberately does **not**
+claim that database composition, AI generation, preflight, screenshots, or
+visual QA have been verified. Those remain the next gated integration run on a
+separate disposable date (for example `2099-05-02`).

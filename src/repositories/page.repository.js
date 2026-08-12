@@ -319,6 +319,28 @@ async function saveSection(pageId, sectionKey, updates) {
   return rows[0] || null;
 }
 
+const COMPOSED_STORY_COLUMNS = Object.freeze([
+  'news_item_id', 'story_type', 'editorial_priority', 'kicker', 'headline', 'subheading', 'body', 'caption',
+  'category', 'location', 'tags', 'reporter_name', 'ai_notes', 'language', 'status', 'ai_generated',
+]);
+
+// B7B's narrow persistence seam. Composition may change editorial content but
+// must never reset the destination frame's geometry, treatment or image state.
+async function saveComposedStoryContent(pageId, sectionKey, story) {
+  const { rows } = await pool.query(
+    `UPDATE page_sections SET news_item_id = $3, story_type = $4, editorial_priority = $5,
+       kicker = $6, headline = $7, subheading = $8, body = $9, caption = $10,
+       category = $11, location = $12, tags = $13, reporter_name = $14,
+       ai_notes = $15, language = $16, status = $17, ai_generated = $18,
+       updated_at = CURRENT_TIMESTAMP WHERE page_id = $1 AND section_key = $2 RETURNING *`,
+    [pageId, sectionKey, story.newsItemId || null, story.storyType || 'STANDARD', story.editorialPriority || 3,
+      story.kicker || null, story.headline || null, story.subheading || null, story.body || null, story.caption || null,
+      story.category || null, story.location || null, story.tags || null, story.reporterName || null,
+      story.aiNotes || null, story.language || 'Marathi', story.status || 'needs_review', story.aiGenerated === true],
+  );
+  return rows[0] || null;
+}
+
 module.exports = {
   create,
   refreshFormes,
@@ -328,6 +350,8 @@ module.exports = {
   findSectionForRate,
   updateTemplate,
   saveSection,
+  saveComposedStoryContent,
+  COMPOSED_STORY_COLUMNS,
   createSection,
   deleteSection,
   saveSectionGeometry,

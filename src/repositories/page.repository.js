@@ -1,5 +1,5 @@
 const pool = require('../config/db');
-const { getTemplate } = require('../layout/templates');
+const { getTemplate, getTemplateForPage, reconcileSectionsForPage } = require('../layout/templates');
 const { typeScaleFor } = require('../layout/geometry');
 const { printsColourByDefault } = require('../layout/formes');
 
@@ -27,7 +27,7 @@ function insertSectionValues(pageId, section, index) {
 }
 
 async function create(newspaperId, pageNumber, templateKey = 'front') {
-  const template = getTemplate(templateKey);
+  const template = getTemplateForPage(templateKey, pageNumber);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -80,7 +80,7 @@ async function setColourForme(pageId, printsColour) {
 
 async function findByNewspaper(newspaperId) {
   const { rows } = await pool.query('SELECT * FROM pages WHERE newspaper_id = $1 ORDER BY page_number', [newspaperId]);
-  return Promise.all(rows.map((page) => hydrate(page)));
+  return Promise.all(rows.map((page) => hydrate(page).then((hydrated) => ({ ...hydrated, sections: reconcileSectionsForPage(hydrated.sections, hydrated.page_number) }))));
 }
 
 // The one join a rate quote needs: the section, joined to its page for the
@@ -97,7 +97,7 @@ async function findSectionForRate(pageId, sectionKey) {
 
 async function findById(id) {
   const { rows } = await pool.query('SELECT * FROM pages WHERE id = $1', [id]);
-  return rows[0] ? hydrate(rows[0]) : null;
+  return rows[0] ? hydrate(rows[0]).then((hydrated) => ({ ...hydrated, sections: reconcileSectionsForPage(hydrated.sections, hydrated.page_number) })) : null;
 }
 
 async function hydrate(page) {
@@ -124,7 +124,9 @@ async function hydrate(page) {
 }
 
 async function updateTemplate(pageId, templateKey) {
-  const template = getTemplate(templateKey);
+  const { rows: current } = await pool.query('SELECT page_number FROM pages WHERE id = $1', [pageId]);
+  if (!current[0]) return null;
+  const template = getTemplateForPage(templateKey, current[0].page_number);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');

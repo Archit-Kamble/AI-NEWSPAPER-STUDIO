@@ -2662,3 +2662,30 @@ The local environment has no `.env`, so this entry deliberately does **not**
 claim that database composition, AI generation, preflight, screenshots, or
 visual QA have been verified. Those remain the next gated integration run on a
 separate disposable date (for example `2099-05-02`).
+
+### 23. Compact, Devanagari-safe page furniture (B7B-F0)
+
+The clipping root cause was physical drift: geometry reserved a 136px
+masthead, 40px inside folio and a 48px footer on every page, while the rendered
+furniture used smaller Latin-height line boxes. Marathi matras could therefore
+be cut by bounded strips, and non-imprint pages lost space to a declaration
+that was never rendered.
+
+`geometry.js` is now the canonical contract: Page 1 has a 120px masthead plus
+an 8px content gutter; inside pages have a 32px folio plus an 8px gutter; every
+page has an 8px content-to-footer gutter and a 20px Devanagari-safe footer.
+Only Page 2 reserves its 32px legal imprint (with a 4px separation). This
+recovers 16px at the Page-1 top, 8px at the inside-page top, and 16px of footer
+area on Pages 1/3/4; Page 2 receives a measured, safe legal band instead.
+
+Masthead, folio, footer and imprint now use `--devanagari-line` inside bounded
+line boxes. The source nameplate remains a 1600×300 RGBA asset; six isolated
+bottom-edge coloured artefact islands were removed without altering its artwork
+or registration marks. Editor, template construction, snapping and preflight
+all resolve the same page-specific boundaries.
+
+Focused geometry, persistence and preflight tests pass. Browser screenshots
+and visual inspection remain to be repeated against the running fixture. Page
+furniture is ready for B7B visual verification; adaptive story geometry,
+professional story treatments, image treatment and feature redesign remain
+separate work.

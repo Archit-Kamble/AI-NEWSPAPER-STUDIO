@@ -318,16 +318,19 @@ test('no template block enters the reserved footer band', () => {
   }
 });
 
-test('the footer band is identical for the front page and inside pages', () => {
+test('only Page 2 reserves the legal-imprint band; ordinary pages recover that editorial height', () => {
   const { geometryOf } = require('../src/layout/geometry');
   const g = geometryOf({});
-  assert.deepEqual(g.regions.front.footer, g.regions.inside.footer);
+  assert.equal(g.regions.front.footer.imprintHeightPx, 0);
+  assert.equal(g.regions.inside.footer.imprintHeightPx, 0);
+  assert.equal(g.regions.insideImprint.footer.imprintHeightPx, 32);
+  assert.ok(g.regions.inside.content.bottom > g.regions.insideImprint.content.bottom);
 });
 
 test('the page-foot strip and the imprint declaration are stacked, not overlapping', () => {
   const { geometryOf } = require('../src/layout/geometry');
   const g = geometryOf({});
-  const { footer } = g.regions.inside;
+  const { footer } = g.regions.insideImprint;
   assert.ok(
     footer.imprintTop + footer.imprintHeightPx <= footer.footTop,
     'the imprint block must end at or before the foot strip begins',
@@ -340,6 +343,17 @@ test('a page-region content bottom is exactly the footer band top - one boundary
   const g = geometryOf({});
   assert.equal(g.regions.front.content.bottom, g.regions.front.footer.top);
   assert.equal(g.regions.inside.content.bottom, g.regions.inside.footer.top);
+  assert.equal(g.regions.insideImprint.content.bottom, g.regions.insideImprint.footer.top);
+});
+
+test('compact Devanagari-safe furniture leaves one small canonical gap after its rule', () => {
+  const { geometryOf, HEADER, FOOTER } = require('../src/layout/geometry');
+  const g = geometryOf({});
+  assert.equal(HEADER.mastheadClearancePx, 8);
+  assert.equal(HEADER.folioContentGapPx, 8);
+  assert.equal(FOOTER.contentFooterGapPx, 8);
+  assert.equal(g.regions.front.content.top, 152);
+  assert.equal(g.regions.inside.content.top, 64);
 });
 
 test('the front page starts its content below the nameplate; inside pages start below the slimmer folio', () => {

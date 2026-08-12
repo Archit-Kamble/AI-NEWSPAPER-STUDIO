@@ -26,7 +26,7 @@ const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 // in the first place, not just something validatePageLayout() reports after
 // the fact.
 function snapGeometry(input, pageNumber) {
-  const kind = Number(pageNumber) === 1 ? 'front' : 'inside';
+  const kind = Number(pageNumber) === 1 ? 'front' : (Number(pageNumber) === 2 ? 'insideImprint' : 'inside');
   const { top, bottom } = G.regions[kind].content;
 
   // Left edge onto a column start, right edge onto a column end - never the

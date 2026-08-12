@@ -94,7 +94,8 @@ async function checkPage(page, newspaper, totalPages) {
   // section a desk places, so this only ever fires for a custom block dragged
   // somewhere the snap-to-content clamp (pageSection.service.js) should
   // already have prevented - defence in depth, not the primary guard.
-  const region = g.regions[Number(page.page_number) === 1 ? 'front' : 'inside'];
+  const region = Number(page.page_number) === 1 ? g.regions.front
+    : (Number(page.page_number) === 2 ? g.regions.insideImprint : g.regions.inside);
 
   const sections = page.sections || [];
 

@@ -11,7 +11,7 @@
 // steps; a story still spans several of them, the way a printed column does. All of it derives from geometry.js - the numbers are computed here,
 // never typed twice.
 
-const { geometryOf, DEFAULTS, regionsFor } = require('./geometry');
+const { geometryOf, DEFAULTS, regionsFor, regionForPage } = require('./geometry');
 
 const G = geometryOf({});
 
@@ -385,11 +385,35 @@ function getTemplate(templateKey) {
   return templates[templateKey] || templates.front;
 }
 
+function getTemplateForPage(templateKey, pageNumber, newspaper = {}) {
+  const template = getTemplate(templateKey);
+  if (Number(pageNumber) !== 2) return template;
+  const geometry = geometryOf(newspaper);
+  const { bottom } = regionForPage(geometry, pageNumber).content;
+  return { ...template, sections: template.sections.map((section) => ({
+    ...section,
+    height: Math.max(geometry.baselinePx, Math.min(section.height, bottom - section.y)),
+  })) };
+}
+
+function reconcileSectionsForPage(sections = [], pageNumber, newspaper = {}) {
+  const geometry = geometryOf(newspaper);
+  const { top, bottom } = regionForPage(geometry, pageNumber).content;
+  return sections.map((section) => {
+    if (Number(pageNumber) === 1 && section.section_key === 'masthead-advert') return section;
+    const y = Math.max(top, Number(section.y_px ?? section.y));
+    const wantedHeight = Number(section.height_px ?? section.height);
+    return { ...section, y_px: y, y, height_px: Math.max(geometry.baselinePx, Math.min(wantedHeight, bottom - y)), height: Math.max(geometry.baselinePx, Math.min(wantedHeight, bottom - y)) };
+  });
+}
+
 module.exports = {
   PAGE_WIDTH,
   PAGE_HEIGHT,
   GRID_COLUMNS: DEFAULTS.gridColumns,
   getTemplate,
+  getTemplateForPage,
+  reconcileSectionsForPage,
   templates,
   colX,
   colW,

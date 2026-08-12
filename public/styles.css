@@ -3449,8 +3449,11 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   position: absolute;
   z-index: 4;
   pointer-events: none;
-  border-bottom: 3px solid #111;
-  padding-bottom: 4px;
+  border-bottom: 1px solid #111;
+  padding-bottom: 2px;
+  box-sizing: border-box;
+  height: 120px;
+  overflow: hidden;
   background: #fff;
 }
 .masthead-strip {
@@ -3458,10 +3461,11 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   justify-content: space-between;
   gap: 12px;
   border-bottom: 1px solid #111;
-  padding-bottom: 2px;
-  margin-bottom: 4px;
+  padding-bottom: 1px;
+  margin-bottom: 2px;
   font-family: "Sahas Sans", "Noto Sans Devanagari", Arial, sans-serif;
   font-size: 7px;
+  line-height: var(--devanagari-line);
   color: #222;
 }
 .masthead-strip-editions {
@@ -3473,7 +3477,7 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 }
 .masthead-body {
   display: grid;
-  grid-template-columns: 110px 1fr 130px;
+  grid-template-columns: 90px 1fr 110px;
   align-items: center;
   gap: 8px;
 }
@@ -3515,7 +3519,7 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 }
 .masthead-plate img {
   max-width: 100%;
-  max-height: 96px;
+  max-height: 76px;
   object-fit: contain;
 }
 .masthead-ear-right {
@@ -3548,22 +3552,26 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   pointer-events: none;
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
-  border-bottom: 2px solid #111;
-  padding-bottom: 2px;
+  border-bottom: 1px solid #111;
+  box-sizing: border-box;
+  height: 32px;
+  padding-bottom: 1px;
   font-family: "Sahas Sans", "Noto Sans Devanagari", Arial, sans-serif;
   background: #fff;
 }
 .folio-title {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 700;
   color: #c8102e;
+  line-height: var(--devanagari-line);
 }
 .folio-date,
 .folio-page {
-  font-size: 9px;
+  font-size: 8px;
   color: #222;
+  line-height: var(--devanagari-line);
 }
 
 /* --- press registration marks ------------------------------------------- */
@@ -3728,10 +3736,10 @@ body.print-view .newspaper-section.at-right-edge {
   pointer-events: none;
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
   gap: 12px;
   border-top: 1px solid #111;
-  padding-top: 2px;
+  padding-top: 1px;
   font-family: "Sahas Sans", "Noto Sans Devanagari", Arial, sans-serif;
   background: #fff;
   /* Height comes from the reserved footer band (geometry.js's regionsFor) -
@@ -3742,7 +3750,7 @@ body.print-view .newspaper-section.at-right-edge {
 }
 .foot-printline {
   font-size: 6px;
-  line-height: 1.2;
+  line-height: var(--devanagari-line);
   color: #444;
   overflow: hidden;
   white-space: nowrap;
@@ -3753,6 +3761,7 @@ body.print-view .newspaper-section.at-right-edge {
   font-weight: 700;
   color: #111;
   white-space: nowrap;
+  line-height: var(--devanagari-line);
 }
 
 /* Verso and recto. The page number sits on the OUTER edge of the spread - left
@@ -4368,6 +4377,7 @@ body.story-fullscreen { overflow: hidden; }
   padding-top: 3px;
   border-top: 1px solid #d0d0d6;
   font-size: 5.5px;
+  line-height: var(--devanagari-line);
   color: #33333a;
   white-space: nowrap;
   overflow: hidden;
@@ -4381,11 +4391,13 @@ body.story-fullscreen { overflow: hidden; }
   position: absolute;
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  padding-top: 3px;
+  gap: 0;
+  padding-top: 1px;
   border-top: 1px solid #b8b8be;
-  font-size: 4.6px;
-  line-height: 1.5;
+  font-size: 5.2px;
+  line-height: var(--devanagari-line);
+  box-sizing: border-box;
+  overflow: hidden;
   color: #2a2a30;
   text-align: justify;
   z-index: 3;

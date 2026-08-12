@@ -79,29 +79,28 @@ const baselinePx = () => mmToPx(BASELINE_MM);
 // unevenly-content illusion, a geometry clash baked into two files that never
 // shared a number.
 const HEADER = {
-  // Page one: the nameplate band. 136px is furniture, fixed by the identity
-  // artwork rendered there - not derived, see templates.js's own history of
-  // this number.
-  mastheadHeightPx: 136,
+  // Compact physical furniture. These are real line boxes, not Latin-height
+  // approximations: masthead/folio text uses the same Devanagari-safe 1.45
+  // convention as article copy. CSS reads the regions below to draw them.
+  mastheadHeightPx: 120,
   mastheadClearancePx: 8,
-  // Inside pages: the folio strip, one ruled line.
-  folioHeightPx: 40,
+  // One compact ruled folio line plus a small editorial gutter.
+  folioHeightPx: 32,
+  folioContentGapPx: 8,
 };
 
-// The footer band, reserved at the foot of EVERY page's content region - front
-// and inside alike, whether or not this particular page happens to be the
-// imprint page. Reserving it uniformly, rather than only on whichever page
-// identity.js names as the imprint page, is deliberate: a template is built
-// once, at module load, before any page exists to ask "am I page two?", and a
-// uniform reservation is also what makes the gap above the footer the same
-// page to page rather than only on the one page that happens to carry the
-// extra legal declaration.
 const FOOTER = {
-  footHeightPx: 16, // the printline + page number strip every page carries
-  imprintHeightPx: 24, // the Act declaration, stacked directly above it
-  gapPx: 8, // one baseline between them
+  footHeightPx: 20, // Devanagari-safe compact printline every page carries
+  contentFooterGapPx: 8,
+  imprintHeightPx: 32, // two safe compact legal-imprint lines, Page 2 only
+  imprintGapPx: 4,
 };
-FOOTER.bandPx = FOOTER.footHeightPx + FOOTER.gapPx + FOOTER.imprintHeightPx;
+
+function hasLegalImprint(pageNumber) { return Number(pageNumber) === 2; }
+function footerBandPx(pageNumber) {
+  return FOOTER.contentFooterGapPx + FOOTER.footHeightPx
+    + (hasLegalImprint(pageNumber) ? FOOTER.imprintGapPx + FOOTER.imprintHeightPx : 0);
+}
 
 const snapUp = (px, step) => Math.ceil(px / step) * step;
 const snapDown = (px, step) => Math.floor(px / step) * step;
@@ -111,16 +110,20 @@ const snapDown = (px, step) => Math.floor(px / step) * step;
  * "inside" - the only two headers a page can have (the nameplate, or the
  * folio strip). The footer band is identical either way.
  */
-function regionsFor(g, kind = 'inside') {
+function regionsFor(g, kind = 'inside', pageNumber = kind === 'front' ? 1 : 3) {
   const step = g.baselinePx;
   const matterBottom = g.marginYPx + g.matterHeightPx;
 
   const headerBottom = kind === 'front'
     ? snapUp(g.marginYPx + HEADER.mastheadHeightPx + HEADER.mastheadClearancePx, step)
-    : snapUp(g.marginYPx + HEADER.folioHeightPx, step);
+    : snapUp(g.marginYPx + HEADER.folioHeightPx + HEADER.folioContentGapPx, step);
 
-  const footerTop = snapDown(matterBottom - FOOTER.bandPx, step);
-  const footTop = snapDown(matterBottom - FOOTER.footHeightPx, step);
+  const imprintHeightPx = hasLegalImprint(pageNumber) ? FOOTER.imprintHeightPx : 0;
+  const footerTop = snapDown(matterBottom - footerBandPx(pageNumber), step);
+  // The foot itself is a declared physical strip, so it meets the matter edge
+  // exactly. Only the editorial boundary is baseline-snapped.
+  const footTop = matterBottom - FOOTER.footHeightPx;
+  const imprintTop = hasLegalImprint(pageNumber) ? footTop - FOOTER.imprintGapPx - imprintHeightPx : footTop;
 
   return {
     header: { top: g.marginYPx, bottom: headerBottom },
@@ -128,8 +131,8 @@ function regionsFor(g, kind = 'inside') {
     footer: {
       top: footerTop,
       bottom: matterBottom,
-      imprintTop: footerTop,
-      imprintHeightPx: FOOTER.imprintHeightPx,
+      imprintTop,
+      imprintHeightPx,
       footTop,
       footHeightPx: FOOTER.footHeightPx,
     },
@@ -166,8 +169,17 @@ function geometryOf(newspaper = {}) {
     printPageWidthPx: mmToPrintPx(g.pageWidthMm, g.printDpi),
     printPageHeightPx: mmToPrintPx(g.pageHeightMm, g.printDpi),
   };
-  resolved.regions = { front: regionsFor(resolved, 'front'), inside: regionsFor(resolved, 'inside') };
+  resolved.regions = {
+    front: regionsFor(resolved, 'front', 1),
+    inside: regionsFor(resolved, 'inside', 3),
+    insideImprint: regionsFor(resolved, 'inside', 2),
+  };
   return resolved;
+}
+
+function regionForPage(geometry, pageNumber) {
+  if (Number(pageNumber) === 1) return geometry.regions.front;
+  return Number(pageNumber) === 2 ? geometry.regions.insideImprint : geometry.regions.inside;
 }
 
 module.exports = {
@@ -184,6 +196,9 @@ module.exports = {
   regionsFor,
   HEADER,
   FOOTER,
+  hasLegalImprint,
+  footerBandPx,
+  regionForPage,
 };
 
 // Default type sizes for a block, scaled to how wide it is.

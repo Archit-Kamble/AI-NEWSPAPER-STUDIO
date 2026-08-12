@@ -152,9 +152,11 @@ export function folioMarkup(newspaper, page, geometry) {
 // inside pages reserve the identical band, so this falls back to the same
 // numbers regionsFor(g, 'inside') computes when an older geometry payload
 // (without .regions) is ever passed in.
-const FALLBACK_FOOTER = { footTop: 1024, footHeightPx: 16, imprintTop: 1006, imprintHeightPx: 24 };
-function footerBand(geometry) {
-  return geometry?.regions?.inside?.footer || geometry?.regions?.front?.footer || FALLBACK_FOOTER;
+const FALLBACK_FOOTER = { footTop: 1020, footHeightPx: 20, imprintTop: 984, imprintHeightPx: 32 };
+function footerBand(geometry, page) {
+  if (Number(page?.page_number) === 1) return geometry?.regions?.front?.footer || FALLBACK_FOOTER;
+  if (Number(page?.page_number) === 2) return geometry?.regions?.insideImprint?.footer || FALLBACK_FOOTER;
+  return geometry?.regions?.inside?.footer || FALLBACK_FOOTER;
 }
 
 /**
@@ -174,7 +176,7 @@ export function pageFootMarkup(newspaper, page, geometry) {
   const date = dateParts(newspaper?.publication_date);
   const left = geometry?.marginXPx ?? 20;
   const width = geometry?.matterWidthPx ?? 620;
-  const band = footerBand(geometry);
+  const band = footerBand(geometry, page);
   const dateText = date ? `${date.day} ${date.monthYear}` : "";
 
   // The foot follows the same outer-edge rule as the folio.
@@ -204,7 +206,7 @@ export function imprintMarkup(newspaper, page, geometry) {
 
   const left = geometry?.marginXPx ?? 20;
   const width = geometry?.matterWidthPx ?? 620;
-  const band = footerBand(geometry);
+  const band = footerBand(geometry, page);
 
   return `
     <div class="page-imprint" style="left:${left}px;width:${width}px;top:${band.imprintTop}px;height:${band.imprintHeightPx}px;">

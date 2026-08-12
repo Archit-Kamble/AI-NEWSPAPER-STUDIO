@@ -4,6 +4,36 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zk. Project B7A — source-grounded exact-fit Marathi writer core (2026-08-12)
+
+`src/services/exactFitWriter.service.js` adds pure reusable
+`composeSourceToFrame()` for supplied reporter/news material and an in-memory
+destination frame. It neither queries nor writes the database. `sourceFromNewsItem()` maps the existing news-item shape (including `description`,
+`reporter_name` and aliases) to a source envelope; no Fact Packet, retrieval
+or provenance schema was introduced.
+
+Source material is a delimited DATA-only block preceded by an explicit
+instruction that instruction-like words inside it are never commands. The
+writer dynamically reads the one story-type policy catalog for deck permission
+and preferred deck, body-fill min/target/max, and headline line limits. It
+uses B6B canonical destination-frame fit plus canonical headline measurement,
+so source-frame typography never controls the result. Special structured
+types return not-applicable rather than fabricated generic prose.
+
+The service makes one initial JSON request and at most one complete-treatment
+repair request (headline, deck and body together). The repair receives the
+original source block. Deterministic assessment chooses the better attempt;
+if supplied material cannot support policy minimum fill, it returns the
+underfilled proposal with `SOURCE_OR_COPY_UNDERFILLED` rather than inventing
+background. Unresolved destination image placement remains provisional.
+
+This core is intentionally not wired into bulk generation, edition filling,
+page persistence, or editor UI. The next milestone can combine approved or
+reporter `news_items`, planned destination frames and B7A proposals in a
+disposable edition for visual inspection.
+
+---
+
 ## 0zj. Project B6D — flow-aware quality-driven page rebalancing (2026-08-12)
 
 `src/layout/flow-aware-page-balancer.js` adds async pure

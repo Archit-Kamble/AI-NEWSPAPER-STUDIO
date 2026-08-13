@@ -3,7 +3,6 @@
 
 const ai = require('./ai');
 const { measureStoryFrameFit } = require('../layout/story-frame-fit');
-const { sanitiseAccentMarks } = require('./storyWriter.service');
 const { validateEditorialPackage, sourceSufficiency } = require('./editorialPackage.service');
 
 const SCHEMA = { type: 'object', additionalProperties: false, required: ['headline', 'subheading', 'body'], properties: { headline: { type: 'string' }, subheading: { type: 'string' }, body: { type: 'string' }, kicker: { type: 'string' }, caption: { type: 'string' }, annotations: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['role', 'phrase', 'target'], properties: { role: { type: 'string' }, phrase: { type: 'string' }, target: { type: 'string' } } } } } };
@@ -38,7 +37,8 @@ async function composeSourceToFrame({ source = {}, storyType = 'STANDARD', edito
   async function attempt(repair) {
     const response = await askForJson(brief({ source: normalizedSource, policy, storyType: normalized, target, repair, language, notes }), SCHEMA, { tier, language, notes });
     if (response.error) return { error: response.error, response };
-    const raw = response.data; const proposal = { headline: sanitiseAccentMarks(String(raw.headline || ''), frame.headline_style === 'accent'), subheading: policy.deck.allowed ? String(raw.subheading || '') : '', body: String(raw.body || ''), kicker: String(raw.kicker || ''), caption: String(raw.caption || ''), annotations: raw.annotations || [] };
+    const clean = (value) => String(value || '').replace(/\*([^*]+)\*/g, '$1');
+    const raw = response.data; const proposal = { headline: clean(raw.headline), subheading: policy.deck.allowed ? clean(raw.subheading) : '', body: clean(raw.body), kicker: clean(raw.kicker), caption: clean(raw.caption), annotations: raw.annotations || [] };
     const semantic = validateEditorialPackage(proposal, normalizedSource, { storyType: normalized });
     Object.assign(proposal, semantic.package);
     const fit = await measureStoryFrameFit({ ...proposal, story_type: normalized, editorial_priority: editorialPriority, images: source.images || [] }, frame, candidateImages ? { candidateImages } : {});

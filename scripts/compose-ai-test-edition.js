@@ -9,6 +9,8 @@ const { rebalanceFlowAwarePageAssignments } = require('../src/layout/flow-aware-
 const { composeSourceToFrame, writerInputFromNewsItem } = require('../src/services/exactFitWriter.service');
 const { analyzeComposedLayout } = require('../src/layout/composed-layout-quality');
 const { validatePageLayout } = require('../src/services/preflight.service');
+const { compileEditorialPresentation } = require('../src/services/editorialPackage.service');
+const { validateGeneratedGrounding } = require('../src/services/generatedGrounding.service');
 const fixtureSources = require('./ai-test-news-sources');
 
 const FIXTURE_DATE = '2099-05-01';
@@ -46,8 +48,9 @@ async function composePage(page, newspaper, options = {}) {
   const {
     apply = false, askForJson, maxStories = Infinity, sources = fixtureSources,
     templateFor = getTemplate, rebalance = rebalanceFlowAwarePageAssignments,
-    compose = composeSourceToFrame, save = pages.saveComposedStoryContent,
+    compose = composeSourceToFrame, saveBatch = pages.saveComposedStoryBatch, save = null,
     analyze = analyzeComposedLayout, preflight = validatePageLayout, reload = pages.findById,
+    maxServiceCalls = 32,
   } = options;
   assertDisposableEdition(newspaper, apply);
   // The immutable source snapshot is never read from the persisted page again.
@@ -74,41 +77,57 @@ async function composePage(page, newspaper, options = {}) {
     .concat(imageAssignments)
     .filter((item) => item.story && item.frame && !SPECIAL.has(String(item.story.story_type || '').toUpperCase()))
     .slice(0, Math.max(0, maxStories));
-  const proposals = [];
+  const proposals = []; let serviceCalls = 0;
   for (const item of planned) {
     const sourceItem = sourceFor(snapshot.find((section) => idOf(section) === idOf(item.story)) || {}, sources);
     const writerInput = await writerInputFromNewsItem({ ...sourceItem, story_type: item.story.story_type, editorial_priority: item.story.editorial_priority });
+    if (options.planOnly) continue;
+    if (serviceCalls >= maxServiceCalls) return { error: 'SERVICE_CALL_BUDGET_EXHAUSTED', balance, proposals, plannedCount: planned.length, serviceCalls };
     const result = await compose({ ...writerInput, source: { ...writerInput.source, images: item.story.images || [] }, frame: item.frame, language: 'Marathi', askForJson });
+    serviceCalls += result.attempts || 0;
     if (fatalResult(result)) return { error: 'FATAL_PROPOSAL', balance, proposals, plannedCount: planned.length, lockedSections: input.lockedSections, imageLockedSectionIds: [...imageIds] };
-    proposals.push({ ...item, writerInput, result });
+    const grounding = validateGeneratedGrounding(result.proposal, writerInput.source);
+    if (!grounding.valid) return { error: 'GROUNDING_FAILED', grounding, balance, proposals, plannedCount: planned.length };
+    const compiled = compileEditorialPresentation(result.proposal, result.editorial.storyType, { source: writerInput.source });
+    proposals.push({ ...item, writerInput, result, compiled, grounding });
   }
   // This loop is intentionally after ALL proposals/acceptance checks.
   const beforeQuality = analyze ? await analyze({ ...page, sections: snapshot }, newspaper) : null;
-  if (apply) for (const item of proposals) {
-    const proposal = item.result.proposal;
-    await save(page.id, item.frame.section_key, {
+  const projected = { ...page, sections: snapshot.map((section) => {
+    const item = proposals.find((proposal) => proposal.frame.section_key === section.section_key); return item ? { ...section, ...item.compiled, editorial_presentation: item.compiled.presentation } : section;
+  }) };
+  const projectedPreflight = proposals.length && preflight ? await preflight(projected, newspaper) : null;
+  if (projectedPreflight && !projectedPreflight.valid) return { error: 'PREFLIGHT_BLOCKED', balance, proposals, plannedCount: planned.length, preflight: projectedPreflight };
+  const batchItems = proposals.map((item) => {
+    const proposal = item.compiled;
+    return { sectionKey: item.frame.section_key, story: {
       newsItemId: item.story.news_item_id, storyType: item.result.editorial.storyType,
       editorialPriority: item.result.editorial.editorialPriority, ...proposal,
       category: item.writerInput.source.category, location: item.writerInput.source.location,
       tags: item.writerInput.source.tags, reporterName: item.writerInput.source.reporterName,
-      language: 'Marathi', aiGenerated: true, status: 'needs_review',
-    });
+      language: 'Marathi', aiGenerated: true, status: 'needs_review', editorialPresentation: item.compiled.presentation,
+    } };
+  });
+  if (apply && batchItems.length) {
+    if (save) for (const item of batchItems) await save(page.id, item.sectionKey, item.story);
+    else await saveBatch(page.id, batchItems);
   }
   const persistedPage = apply && reload ? await reload(page.id) : null;
   const afterQuality = persistedPage && analyze ? await analyze(persistedPage, newspaper) : null;
   const preflightResult = persistedPage && preflight ? await preflight(persistedPage, newspaper) : null;
-  return { balance, proposals, plannedCount: planned.length, applied: apply, lockedSections: input.lockedSections, imageLockedSectionIds: [...imageIds], beforeQuality, afterQuality, preflight: preflightResult };
+  return { balance, proposals, plannedCount: planned.length, applied: apply, serviceCalls, lockedSections: input.lockedSections, imageLockedSectionIds: [...imageIds], beforeQuality, afterQuality, preflight: preflightResult };
 }
 
 function arg(name, fallback = undefined) { const index = process.argv.indexOf(name); return index >= 0 ? process.argv[index + 1] : fallback; }
 async function main() {
   const edition = Number(arg('--edition')); const pageNumber = Number(arg('--page', 2));
   const apply = process.argv.includes('--apply'); const suppliedMax = Number(arg('--max-stories', process.env.SAHAS_AI_TEST_MAX_STORIES)); const maxStories = Number.isFinite(suppliedMax) ? Math.max(0, suppliedMax) : Infinity;
+  const planOnly = process.argv.includes('--plan-only'); const maxServiceCalls = Math.max(0, Number(arg('--max-service-calls', 32)) || 32);
   if (!edition) throw new Error('usage: node scripts/compose-ai-test-edition.js --edition <id> [--page 2] [--plan-only|--apply] [--max-stories N]');
   const newspaper = await newspapers.findById(edition); const page = (await pages.findByNewspaper(edition)).find((item) => item.page_number === pageNumber);
   if (!newspaper || !page) throw new Error('edition or requested page was not found');
-  console.log(JSON.stringify({ sourceMode: 'fixture', page: pageNumber, apply, maximumServiceCalls: Number.isFinite(maxStories) ? maxStories * 2 : '2 per eligible story' }));
-  const result = await composePage(page, newspaper, { apply, maxStories });
+  console.log(JSON.stringify({ sourceMode: 'fixture', page: pageNumber, apply, planOnly, maxStories: Number.isFinite(maxStories) ? maxStories : 'unlimited', maximumServiceCalls: maxServiceCalls }));
+  const result = await composePage(page, newspaper, { apply, planOnly, maxStories, maxServiceCalls });
   console.log(JSON.stringify({ planned: result.plannedCount, proposals: result.proposals.length, applied: result.applied || false, error: result.error || null, lockedSections: result.lockedSections, imageLockedSectionIds: result.imageLockedSectionIds, beforeQuality: result.beforeQuality?.score ?? null, afterQuality: result.afterQuality?.score ?? null, preflightValid: result.preflight?.valid ?? null }, null, 2));
 }
 if (require.main === module) main().catch((error) => { console.error(error.message); process.exit(1); });

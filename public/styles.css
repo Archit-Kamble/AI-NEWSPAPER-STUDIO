@@ -3633,6 +3633,8 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   padding: 1px 3px;
   color: #222;
 }
+.editorial-token-accent { color: #c8102e; }
+.editorial-token-strong { text-decoration: underline; text-decoration-thickness: 1px; }
 /* Newspaper copy is justified and set in a narrow measure, with the columns
    ruled apart the way a printed page rules them. */
 .section-body {

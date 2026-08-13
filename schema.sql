@@ -108,10 +108,13 @@ CREATE TABLE IF NOT EXISTS page_sections (
   tags TEXT,
   reporter_name VARCHAR(120),
   ai_notes TEXT,
+  editorial_presentation JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE (page_id, section_key)
 );
+
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS editorial_presentation JSONB;
 
 -- Production workspace fields. The editor's Story panel adds a caption and a
 -- language; the section lifecycle (empty -> story_linked -> editing ->

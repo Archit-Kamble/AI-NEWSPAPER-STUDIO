@@ -13,6 +13,7 @@ import { computeMetrics } from "../layout/layout-metrics.js";
 import { imageTransformCss } from "../image/image-manager.js";
 import { buildFlowMap, CELL, flowRuns, bandBox, pourIntoRuns, flowImageFromRow } from "../layout/text-flow.js";
 import { textWithMarks, markRun, plainText } from "../layout/rich-text.js";
+import { presentationRanges, renderPresentation } from "../layout/editorial-presentation.js";
 
 const ICONS = {
   article:
@@ -99,9 +100,11 @@ export function headlineMarkup(view) {
   // body takes do not belong in it, and a stray tag from a paste must never
   // print as literal angle brackets.
   const text = plainText(view.headline);
+  const semantic = presentationRanges(text, view.editorialPresentation, 'headline');
 
   const size = `style="font-size:${view.headlineFontPx}px"`;
 
+  if (semantic.length) return `<div class="section-headline" ${size}>${renderPresentation(text, [], semantic, escapeHtml)}</div>`;
   if (text.includes("*")) {
     const parts = text.split(/\*([^*]+)\*/g);
     const html = parts
@@ -129,7 +132,8 @@ export function headlineMarkup(view) {
 // different font sizes the way the headline and body inputs once did.
 export function subheadingMarkup(view) {
   if (!view.subheading) return "";
-  return `<div class="section-subheading" style="font-size:${view.subheadingFontPx}px">${escapeHtml(plainText(view.subheading))}</div>`;
+  const text = plainText(view.subheading);
+  return `<div class="section-subheading" style="font-size:${view.subheadingFontPx}px">${renderPresentation(text, [], presentationRanges(text, view.editorialPresentation, 'subheading'), escapeHtml)}</div>`;
 }
 
 // "■ मुंबई, वृत्तसंस्था" — place first, then who filed. It opens the body text,
@@ -214,7 +218,7 @@ function bodyOrTableMarkup(section, view, columns) {
 // angle brackets on the page.
 function bodyMarkup(view) {
   const { text, marks } = textWithMarks(view.body);
-  return markRun(text, 0, marks, escapeHtml);
+  return renderPresentation(text, marks, presentationRanges(text, view.editorialPresentation, 'body'), escapeHtml);
 }
 
 // Copy poured into the cells the pictures leave free - the same calculation the
@@ -282,12 +286,15 @@ export function flowedBodyMarkup(map, view, pad) {
   // separately and put back on each run afterwards, so what a sub-editor marked
   // is what appears on the page.
   const { text: bodyText, marks } = textWithMarks(view.body);
+  const semantic = presentationRanges(bodyText, view.editorialPresentation, 'body');
   const prefix = dateline ? `■ ${dateline} ` : "";
   const body = bodyText ? `${prefix}${bodyText}` : "";
   const offset = prefix.length;
 
   return pourIntoRuns(flowRuns(map, CELL.TEXT), body).map((run) => {
-    const marked = markRun(run.text, (run.at || 0) - offset, marks, escapeHtml);
+    const at = (run.at || 0) - offset;
+    const relevant = semantic.filter((range) => range.end > at && range.start < at + run.text.length).map((range) => ({ ...range, start: Math.max(0, range.start - at), end: Math.min(run.text.length, range.end - at) }));
+    const marked = renderPresentation(run.text, marks.filter((mark) => mark.end > at && mark.start < at + run.text.length).map((mark) => ({ ...mark, start: Math.max(0, mark.start - at), end: Math.min(run.text.length, mark.end - at) })), relevant, escapeHtml);
     return `<span class="section-flowed" style="left:${pad + run.col * map.cellWidth}px;top:${pad + run.row * map.cellHeight}px;width:${run.length * map.cellWidth + 2}px;font-size:${view.bodyFontPx}px;line-height:${map.cellHeight}px">${marked}</span>`;
   }).join("");
 }

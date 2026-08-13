@@ -4,6 +4,20 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zq. Project B8B — SAHAS-controlled AI composition foundation (2026-08-13)
+
+SAHAS continues to choose composition and rendering; AI supplies only
+source-grounded editorial text and meaning. The disposable composition seam
+now compiles B8A annotations into a narrow `editorial_presentation` JSON
+payload, persists it without geometry/treatment writes, and applies a page
+batch transaction after projected preflight. Browser rendering resolves only
+unique, exact phrases with trusted tokens, preserving rich marks and ignoring
+stale/unknown/malicious metadata. A conservative number/direct-quote grounding
+guard rejects unsupported high-risk generated tokens. Footer/layout geometry,
+page-count workflow, and live editions remain untouched.
+
+---
+
 ## 0zp. Project B7B-F5 — edition page-count integrity and clean footer (2026-08-12)
 
 Start/Open/Resize are now separate operations: start creates one edition for a

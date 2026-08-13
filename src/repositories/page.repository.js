@@ -411,6 +411,7 @@ async function saveSection(pageId, sectionKey, updates) {
 const COMPOSED_STORY_COLUMNS = Object.freeze([
   'news_item_id', 'story_type', 'editorial_priority', 'kicker', 'headline', 'subheading', 'body', 'caption',
   'category', 'location', 'tags', 'reporter_name', 'ai_notes', 'language', 'status', 'ai_generated',
+  'editorial_presentation',
 ]);
 
 // B7B's narrow persistence seam. Composition may change editorial content but
@@ -420,14 +421,40 @@ async function saveComposedStoryContent(pageId, sectionKey, story) {
     `UPDATE page_sections SET news_item_id = $3, story_type = $4, editorial_priority = $5,
        kicker = $6, headline = $7, subheading = $8, body = $9, caption = $10,
        category = $11, location = $12, tags = $13, reporter_name = $14,
-       ai_notes = $15, language = $16, status = $17, ai_generated = $18,
+       ai_notes = $15, language = $16, status = $17, ai_generated = $18, editorial_presentation = $19,
        updated_at = CURRENT_TIMESTAMP WHERE page_id = $1 AND section_key = $2 RETURNING *`,
     [pageId, sectionKey, story.newsItemId || null, story.storyType || 'STANDARD', story.editorialPriority || 3,
       story.kicker || null, story.headline || null, story.subheading || null, story.body || null, story.caption || null,
       story.category || null, story.location || null, story.tags || null, story.reporterName || null,
-      story.aiNotes || null, story.language || 'Marathi', story.status || 'needs_review', story.aiGenerated === true],
+      story.aiNotes || null, story.language || 'Marathi', story.status || 'needs_review', story.aiGenerated === true,
+      story.editorialPresentation ? JSON.stringify(story.editorialPresentation) : null],
   );
   return rows[0] || null;
+}
+
+async function saveComposedStoryBatch(pageId, items = []) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const item of items) {
+      const story = item.story || {};
+      const { rowCount } = await client.query(
+        `UPDATE page_sections SET news_item_id = $3, story_type = $4, editorial_priority = $5,
+         kicker = $6, headline = $7, subheading = $8, body = $9, caption = $10,
+         category = $11, location = $12, tags = $13, reporter_name = $14,
+         ai_notes = $15, language = $16, status = $17, ai_generated = $18, editorial_presentation = $19,
+         updated_at = CURRENT_TIMESTAMP WHERE page_id = $1 AND section_key = $2`,
+        [pageId, item.sectionKey, story.newsItemId || null, story.storyType || 'STANDARD', story.editorialPriority || 3,
+          story.kicker || null, story.headline || null, story.subheading || null, story.body || null, story.caption || null,
+          story.category || null, story.location || null, story.tags || null, story.reporterName || null,
+          story.aiNotes || null, story.language || 'Marathi', story.status || 'needs_review', story.aiGenerated === true,
+          story.editorialPresentation ? JSON.stringify(story.editorialPresentation) : null],
+      );
+      if (rowCount !== 1) throw new Error(`Composition target not found: ${item.sectionKey}`);
+    }
+    await client.query('COMMIT');
+  } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
+  return findById(pageId);
 }
 
 module.exports = {
@@ -444,6 +471,7 @@ module.exports = {
   reapplyEditionTemplateGeometry,
   saveSection,
   saveComposedStoryContent,
+  saveComposedStoryBatch,
   COMPOSED_STORY_COLUMNS,
   createSection,
   deleteSection,

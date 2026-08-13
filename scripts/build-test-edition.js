@@ -348,11 +348,16 @@ async function main() {
   // always lands the same place - a sub-editor would normally choose the
   // landing block too; findLanding() is the convenience default for when they
   // have not.
-  const carry = await desk.json(`/api/pages/${byNumber.get(1).id}/sections/lead/carry-over`, {
-    method: 'POST',
-    body: JSON.stringify({ toPageId: byNumber.get(2).id, toSectionKey: 'right-bottom' }),
+  const carry = await desk(`/api/pages/${byNumber.get(1).id}/sections/lead/carry-over`, {
+    method: 'POST', body: JSON.stringify({ toPageId: byNumber.get(2).id, toSectionKey: 'right-bottom' }),
   });
-  console.log('carry-over:', carry);
+  // Canonical flow can legitimately make the deliberately compact source fit
+  // again. That is a valid fixture state, not a build failure.
+  if (!carry.ok) {
+    const detail = await carry.json();
+    if (!/already fits/i.test(detail.error || '')) throw new Error(`carry-over -> ${carry.status}: ${JSON.stringify(detail)}`);
+    console.log('carry-over: not required (lead fits canonically)');
+  } else console.log('carry-over:', await carry.json());
 
   const preflight = await desk.json(`/api/newspapers/${newspaperId}/preflight`);
   const errors = (preflight.findings || []).filter((finding) => finding.level === 'error').map((finding) => ({ page: finding.pageNumber || finding.page_number, section: finding.sectionKey || finding.section_key, check: finding.check }));

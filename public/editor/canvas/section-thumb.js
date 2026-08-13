@@ -11,7 +11,7 @@ import { escapeHtml } from "../format.js";
 import { statusOf, statusLabel, statusClass } from "../status/section-status.js";
 import { computeMetrics } from "../layout/layout-metrics.js";
 import { imageTransformCss } from "../image/image-manager.js";
-import { buildFlowMap, CELL, flowRuns, bandBox, pourIntoRuns, flowImageFromRow, datelineText } from "../layout/text-flow.js";
+import { buildFlowMap, CELL, flowRuns, bandBox, pourIntoRuns, flowImageFromRow, datelineText, captionBox } from "../layout/text-flow.js";
 import { textWithMarks, markRun, plainText } from "../layout/rich-text.js";
 import { presentationRanges, renderPresentation } from "../layout/editorial-presentation.js";
 
@@ -69,8 +69,9 @@ function placedImagesMarkup(section) {
       // A photograph in a newspaper is captioned. The caption is set under the
       // picture, in the picture's own measure, not in the story's.
       if (!image.caption) return picture;
+      const box = captionBox(image);
       return `${picture}<span class="section-placed-caption"
-                   style="left:${image.x_px}px;top:${image.y_px + image.height_px}px;width:${image.width_px}px;z-index:${(image.z_index || 1) + 1}">${escapeHtml(image.caption)}</span>`;
+                   style="left:${box.x}px;top:${box.y}px;width:${box.width}px;height:${box.height}px;padding:${box.paddingY}px ${box.paddingX}px;font-size:${box.fontPx}px;line-height:${box.lineHeight};z-index:${(image.z_index || 1) + 1}">${escapeHtml(image.caption)}</span>`;
     })
     .join("");
 }

@@ -13,7 +13,7 @@ function normalizeNewsroomSource(item = {}) {
     id: sourceId, sourceId,
     // DB newsroom rows are linked back to their canonical reporter item; a
     // generic external packet may instead have no database identity at all.
-    news_item_id: item.news_item_id ?? item.newsItemId ?? (Number.isInteger(Number(item.id)) ? Number(item.id) : null),
+    news_item_id: item.news_item_id ?? item.newsItemId ?? null,
     story_type: text(item.storyType ?? item.story_type) || 'STANDARD',
     editorial_priority: Math.min(5, Math.max(1, Math.round(Number(item.editorialPriority ?? item.editorial_priority) || 3))),
     title: text(item.headline ?? item.title), subheading: text(item.subheading),
@@ -38,7 +38,9 @@ function sourceSnapshot(sources = []) {
 
 async function loadNewsroomSourcesForEdition(newspaperId, { repository = require('../repositories/news.repository') } = {}) {
   const rows = await repository.findForComposition(newspaperId);
-  return sourceSnapshot(rows);
+  // This boundary knows these are canonical news_items rows. Generic packets
+  // deliberately do not infer an integer FK from an arbitrary `id` string.
+  return sourceSnapshot(rows.map((row) => ({ ...row, news_item_id: row.id })));
 }
 
 function normalizeNewsroomSources(items = []) {

@@ -539,13 +539,11 @@ function toggleImageSelection(imageId) {
 
 function patchDraft(patch, source) {
   const draft = store.getDraft();
-  // Editing the article's words advances the lifecycle, unless an editor has
-  // already made an explicit call or the text came from AI - neither should be
-  // silently downgraded to "editing".
-  const advances =
-    draft && isContentEdit(patch) && !isExplicit(draft.status) && !draft.aiGenerated && draft.status !== "editing";
-
-  store.updateDraft(advances ? { ...patch, status: "editing" } : patch, source);
+  const material = draft && isContentEdit(patch);
+  const revoked = material && isExplicit(draft.status)
+    ? (draft.aiGenerated ? "needs_review" : "editing")
+    : material && !draft.aiGenerated && draft.status !== "editing" ? "editing" : null;
+  store.updateDraft(revoked ? { ...patch, status: revoked } : patch, source);
   history.record(store.getDraft(), { label: describePatch(patch), images: sectionImages });
   autosave.schedule();
 }
@@ -1173,7 +1171,8 @@ function renderCompositionResult(result) {
   const duration = Number.isFinite(result.durationMs) ? ` · ${(result.durationMs / 1000).toFixed(1)}s` : ''; const coverage = result.completion?.pages?.map((page) => `p${page.page} ${Math.round(page.editorialCoverageRatio * 100)}%`).join(' · ') || '';
   const safety = result.atomicallyApplied ? 'Text and images applied atomically.' : result.nothingApplied ? 'Nothing was applied to the edition.' : 'Manual verification required.';
   const imageCoverage = Number.isFinite(result.completion?.imageCoverageRatio) ? `Required image coverage ${Math.round(result.completion.imageCoverageRatio * 100)}% · ${result.completion.unresolvedImageDemand} unresolved` : '';
-  panel.innerHTML = `<header><strong>AI composition — ${escapeHtml(result.state)}</strong><button type="button" id="compositionClose" aria-label="Close">×</button></header><p>${escapeHtml(result.writerTransport || 'composition')} · ${result.writerCalls || 0} calls${duration}</p><p>${escapeHtml(safety)}</p>${imageCoverage ? `<p>${escapeHtml(imageCoverage)}</p>` : ''}${coverage ? `<p>${coverage}</p>` : ''}<ul>${(result.pages || []).map((page) => `<li><strong>p${page.page}</strong> · ${escapeHtml(page.state)}${page.error ? ` · ${escapeHtml(page.error)}` : ''}</li>`).join('')}</ul>`;
+  const review = result.ok && result.review ? `<p><strong>Composition complete.</strong> ${result.review.required} blocks require editorial review. <strong>Not ready for press.</strong></p>` : '';
+  panel.innerHTML = `<header><strong>AI composition — ${escapeHtml(result.state)}</strong><button type="button" id="compositionClose" aria-label="Close">×</button></header>${review}<p>${escapeHtml(result.writerTransport || 'composition')} · ${result.writerCalls || 0} calls${duration}</p><p>${escapeHtml(safety)}</p>${imageCoverage ? `<p>${escapeHtml(imageCoverage)}</p>` : ''}${coverage ? `<p>${coverage}</p>` : ''}<ul>${(result.pages || []).map((page) => `<li><strong>p${page.page}</strong> · ${escapeHtml(page.state)}${page.error ? ` · ${escapeHtml(page.error)}` : ''}</li>`).join('')}</ul>`;
   document.body.appendChild(panel); document.getElementById('compositionClose').addEventListener('click', closeOnEscape(() => panel.remove())); showNotice(`AI composition ${result.state}: ${result.writerCalls} ${result.writerTransport} calls.`);
 }
 
@@ -1238,7 +1237,14 @@ async function downloadPressFile() {
   // The package, not the bare .sla: a Scribus document alone points at pictures
   // by path, and those paths mean nothing on the machine that opens it.
   const response = await fetch(`/api/newspapers/${newspaper.id}/press-package`);
-  if (!response.ok) return showNotice("The press package could not be generated.");
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({}));
+    if (result.code === 'PRESS_NOT_READY') {
+      const counts = result.readiness?.counts || {};
+      return showNotice(`Not ready for press — ${counts.needsReview || 0} need review, ${counts.preflightErrors || 0} preflight errors, ${counts.pagesNotPassed || 0} pages not passed.`);
+    }
+    return showNotice("The press package could not be generated.");
+  }
 
   const pictures = response.headers.get("X-Pictures-Included") || "0";
   const missing = Number(response.headers.get("X-Pictures-Missing") || 0);

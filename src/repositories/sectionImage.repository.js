@@ -40,22 +40,30 @@ async function place(sectionId, assetId, placement, { tx } = {}) {
   );
   const { rows } = await db.query(
     `INSERT INTO section_images
-       (page_section_id, media_asset_id, x_px, y_px, width_px, height_px, shape, stand_off_px, z_index, caption)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       (page_section_id, media_asset_id, x_px, y_px, width_px, height_px, shape, stand_off_px, z_index, caption, source_news_item_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      ON CONFLICT (page_section_id, media_asset_id)
      DO UPDATE SET x_px = EXCLUDED.x_px, y_px = EXCLUDED.y_px,
                    width_px = EXCLUDED.width_px, height_px = EXCLUDED.height_px,
-                   caption = COALESCE(EXCLUDED.caption, section_images.caption)
+                   caption = COALESCE(EXCLUDED.caption, section_images.caption),
+                   source_news_item_id = COALESCE(EXCLUDED.source_news_item_id, section_images.source_news_item_id)
      RETURNING *`,
     [sectionId, assetId, placement.x, placement.y, placement.width, placement.height,
-     placement.shape || 'rect', placement.standOffPx ?? 6, z[0].z, placement.caption || null],
+     placement.shape || 'rect', placement.standOffPx ?? 6, z[0].z, placement.caption || null,
+     placement.sourceNewsItemId || null],
   );
   return rows[0];
 }
 
 async function placePrepared(intent, { tx } = {}) {
   const image = intent.image; const asset = await findOrCreateAsset({ url: image.url, filename: image.filename, mimeType: image.mimeType, ownerId: null }, { tx });
-  return place(intent.destinationSectionId, asset.id, { ...intent.placement, caption: intent.placement.caption || image.caption || null }, { tx });
+  return place(intent.destinationSectionId, asset.id, { ...intent.placement, caption: intent.placement.caption || image.caption || null, sourceNewsItemId: intent.sourceNewsItemId || null }, { tx });
+}
+
+async function linkSectionSource(sectionId, sourceNewsItemId, { tx } = {}) {
+  const db = tx || pool;
+  const { rows } = await db.query('UPDATE page_sections SET news_item_id = $2 WHERE id = $1 RETURNING *', [sectionId, sourceNewsItemId]);
+  return rows[0] || null;
 }
 
 async function update(imageId, patch) {
@@ -121,4 +129,4 @@ async function placementsByEdition(newspaperId) {
   return bySection;
 }
 
-module.exports = { listBySection, placementsByEdition, findOrCreateAsset, place, placePrepared, update, remove, replaceAsset };
+module.exports = { listBySection, placementsByEdition, findOrCreateAsset, place, placePrepared, linkSectionSource, update, remove, replaceAsset };

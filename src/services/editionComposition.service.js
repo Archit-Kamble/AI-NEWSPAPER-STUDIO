@@ -14,7 +14,7 @@ const sectionImages = require('../repositories/sectionImage.repository');
 
 const SPECIAL = new Set(['SMART_CARD', 'ADVERTISEMENT', 'QUOTE', 'DATA']);
 const roleForRung = (rung) => rung.role || (rung.pageNumber === rung.total ? 'BACK' : 'GENERAL');
-function storyPacketFromNewsItem(item = {}) { return { id: item.id, news_item_id: item.id, story_type: item.story_type || 'STANDARD', editorial_priority: item.editorial_priority || 3, headline: item.title || '', subheading: item.subheading || '', body: item.description ?? item.body ?? '', category: item.category || '', location: item.location || '', tags: Array.isArray(item.tags) ? item.tags.join(', ') : item.tags || '', reporter_name: item.reporter_name || '', desired_page_role: item.desired_page_role || null, routed_role: item.routed_role || null, routing_mode: item.routing_mode || null, images: item.images || [], image_urls: item.image_urls || [], imagePlacementNeedsReview: Boolean((item.images || item.image_urls || []).length) }; }
+function storyPacketFromNewsItem(item = {}) { return { id: item.id, news_item_id: item.news_item_id ?? item.newsItemId ?? null, story_type: item.story_type || 'STANDARD', editorial_priority: item.editorial_priority || 3, headline: item.title || '', subheading: item.subheading || '', body: item.description ?? item.body ?? '', category: item.category || '', location: item.location || '', tags: Array.isArray(item.tags) ? item.tags.join(', ') : item.tags || '', reporter_name: item.reporter_name || '', desired_page_role: item.desired_page_role || null, routed_role: item.routed_role || null, routing_mode: item.routing_mode || null, images: item.images || [], image_urls: item.image_urls || [], imagePlacementNeedsReview: Boolean((item.images || item.image_urls || []).length) }; }
 function eligibleEditorialFrames(page, continuationSourceIds = new Set()) { const template = getTemplate(page.template_key); const byKey = new Map(template.sections.map((item) => [item.key, item])); return (page.sections || []).flatMap((section) => { const templateSection = byKey.get(section.section_key); const frame = frameDescriptorFromSection(section, templateSection); const type = String(frame.recommendedStoryType || '').toUpperCase(); const id = section.id ?? section.section_id; if (section.is_custom || section.continued_from_section_id || continuationSourceIds.has(id) || frame.feature_key || section.smart_card_key || frame.block_type === 'advert' || frame.block_type === 'photo' || SPECIAL.has(type) || (section.images || []).length) return []; return [frame]; }); }
 function fallbackRolesForSource(source, availableRoles) {
   const desired = String(source.desired_page_role || '').toUpperCase();
@@ -106,7 +106,7 @@ function summarizeEditionComposition(plans = [], results = []) {
 
 function composedStoryFromCandidate(candidate) {
   const compiled = candidate.compiled; const source = candidate.source || {};
-  return { newsItemId: null, storyType: candidate.result.editorial.storyType, editorialPriority: candidate.result.editorial.editorialPriority,
+  return { newsItemId: source.news_item_id ?? null, storyType: candidate.result.editorial.storyType, editorialPriority: candidate.result.editorial.editorialPriority,
     kicker: compiled.kicker || null, headline: compiled.headline || null, subheading: compiled.subheading || null, body: compiled.body || null, caption: compiled.caption || null,
     category: source.category || null, location: source.location || null, tags: source.tags || null, reporterName: source.reporterName || null,
     aiNotes: null, language: 'Marathi', status: 'needs_review', aiGenerated: true, editorialPresentation: compiled.presentation || null };
@@ -121,6 +121,37 @@ function projectComposedStoryIntoSection(section, candidate) {
   };
 }
 const persistenceStory = composedStoryFromCandidate;
+async function finalizeCandidateImage(frame, intent, compiled, source) {
+  if (!intent?.placement || !intent.image) return { intent, safe: true };
+  const flow = await import('../../public/editor/layout/text-flow.js');
+  const section = { ...frame, width_px: frame.width_px, height_px: frame.height_px };
+  const view = flow.flowViewFromSection(section, { ...compiled, location: source.location, reporterName: source.reporterName });
+  const structural = flow.buildFlowMap(section, view, []);
+  const padding = Number(view.marginPx) || 12;
+  const protectedBottom = padding + (structural.kickerRows + structural.headlineRows + structural.subheadingRows) * structural.cellHeight;
+  const safeTop = Math.ceil(protectedBottom + (Number(intent.placement.standOffPx) || 0));
+  const availableWidth = Math.max(0, Number(frame.width_px) - padding * 2);
+  const availableHeight = Math.max(0, Number(frame.height_px) - padding - safeTop);
+  const aspect = Math.max(0.05, Number(intent.placement.width) / Math.max(1, Number(intent.placement.height)));
+  let width = Math.min(Number(intent.placement.width), availableWidth);
+  let height = width / aspect;
+  if (height > availableHeight) { height = availableHeight; width = height * aspect; }
+  const placement = { ...intent.placement, x: Math.round(padding + Math.max(0, (availableWidth - width) / 2)), y: safeTop, width: Math.round(width), height: Math.round(height) };
+  const row = { ...placement, x_px: placement.x, y_px: placement.y, width_px: placement.width, height_px: placement.height, caption: placement.caption || intent.image.caption || '' };
+  const caption = flow.captionBox(row);
+  const inside = placement.width >= 20 && placement.height >= 20 && placement.x >= 0 && placement.y >= protectedBottom && placement.x + placement.width <= Number(frame.width_px) && (caption ? caption.y + caption.height : placement.y + placement.height) <= Number(frame.height_px);
+  if (!inside) {
+    if (intent.requirement === 'IMAGE_REQUIRED') return { intent: { ...intent, state: 'IMAGE_NO_SAFE_PLACEMENT', placement: null }, safe: false, required: true };
+    return { intent: { ...intent, state: 'IMAGE_SKIPPED_NO_SAFE_PLACEMENT', placement: null }, safe: true, skipped: true };
+  }
+  const finalIntent = { ...intent, placement, state: 'IMAGE_PLANNED' };
+  const measurement = flow.measureSectionFlow(section, { ...compiled, location: source.location, reporterName: source.reporterName }, [flow.flowImageFromRow(row)]);
+  if (measurement.overflowing) {
+    if (intent.requirement === 'IMAGE_REQUIRED') return { intent: { ...finalIntent, state: 'IMAGE_NO_SAFE_PLACEMENT', placement: null }, safe: false, required: true };
+    return { intent: { ...finalIntent, state: 'IMAGE_SKIPPED_NO_SAFE_PLACEMENT', placement: null }, safe: true, skipped: true };
+  }
+  return { intent: finalIntent, safe: true, measurement };
+}
 function errorKeys(report) { return new Set([...(report?.collisions || []), ...(report?.overflow || [])].filter((finding) => finding.level === 'error').map((finding) => `${finding.type || finding.check}:${finding.sectionKey}`)); }
 const parityFields = ['news_item_id', 'story_type', 'editorial_priority', 'kicker', 'headline', 'subheading', 'body', 'caption', 'category', 'location', 'tags', 'reporter_name', 'ai_notes', 'language', 'status', 'ai_generated', 'editorial_presentation'];
 const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
@@ -128,7 +159,8 @@ function projectedImage(intent) {
   const placement = intent.placement;
   return { ...placement, url: intent.image.url,
     x_px: placement.x, y_px: placement.y, width_px: placement.width, height_px: placement.height,
-    stand_off_px: placement.standOffPx, crop_mode: placement.cropMode };
+    stand_off_px: placement.standOffPx, crop_mode: placement.cropMode,
+    source_news_item_id: intent.sourceNewsItemId || null };
 }
 async function parityDifferences(projected, reloaded, active) { const { measureSectionFlow } = await import('../../public/editor/layout/text-flow.js'); const flowFields = ['bodyCharBudget', 'fixedBodyPrefixChars', 'writableBodyCharBudget', 'authoredBodyCharsUsed', 'totalBodyCharsUsed']; return active.flatMap((candidate) => { const left = projected.sections.find((section) => section.section_key === candidate.frame.section_key); const right = reloaded.sections.find((section) => section.section_key === candidate.frame.section_key); const fields = parityFields.filter((field) => !same(left?.[field], right?.[field])); const leftFlow = measureSectionFlow(left || {}), rightFlow = measureSectionFlow(right || {}); const metrics = flowFields.filter((field) => leftFlow[field] !== rightFlow[field]); return fields.length || metrics.length ? [{ sectionKey: candidate.frame.section_key, fields, metrics }] : []; }); }
 
@@ -158,7 +190,10 @@ async function composePagePlan({ pagePlan, sourcesById, newspaper, askForJson, m
     journal?.event('SOURCE_SUFFICIENCY', { page: pagePlan.page.page_number, sourceId: source.id, status: outcome.sufficiency, authoredChars: result.fit.authoredBodyCharsUsed ?? result.fit.bodyCharsUsed, writableCapacity: result.fit.writableBodyCharBudget });
     if (result.sourceSufficiency.status === 'INSUFFICIENT_FOR_TREATMENT') { outcome.state = 'SOURCE_INSUFFICIENT'; continue; }
     const compiled = compileEditorialPresentation(result.proposal, result.editorial.storyType, { source: input.source });
-    candidates.push({ sourceId: source.id, frame, result, grounding, compiled, source: input.source, imageIntent });
+    const finalizedImage = await finalizeCandidateImage(frame, imageIntent, compiled, input.source);
+    if (imageIntent) Object.assign(imageIntent, finalizedImage.intent);
+    if (!finalizedImage.safe) { outcome.state = 'IMAGE_NO_SAFE_PLACEMENT'; return { state: 'PAGE_BLOCKED', error: 'IMAGE_NO_SAFE_PLACEMENT', candidates, outcomes, before, baselinePreflight, serviceCalls: budget.used }; }
+    candidates.push({ sourceId: source.id, frame, result, grounding, compiled, source: input.source, imageIntent: finalizedImage.intent });
     outcome.state = 'READY_TO_PERSIST'; outcome.fit = { writable: result.fit.writableBodyCharBudget, authored: result.fit.authoredBodyCharsUsed ?? result.fit.bodyCharsUsed, physical: result.fit.bodyCharBudget, total: result.fit.totalBodyCharsUsed ?? result.fit.bodyCharsUsed }; journal?.event('FIT_PASS', { page: pagePlan.page.page_number, sourceId: source.id, frame: frame.section_key, selectedAttempt: result.selectedAttempt, attempts: result.attempts, diagnostics: result.attemptDiagnostics || [] });
   }
   const projectionFor = (active) => ({ ...pagePlan.page, sections: pagePlan.page.sections.map((section) => { const candidate = active.find((item) => item.frame.section_key === section.section_key); if (candidate) return projectComposedStoryIntoSection(section, candidate); const intent = (pagePlan.imageIntents || []).find((item) => item.companion && item.destinationSectionId === section.id && item.state === 'IMAGE_PLANNED'); return intent ? { ...section, images: [projectedImage(intent)] } : section; }) });
@@ -198,11 +233,12 @@ async function persistPreparedPageComposition({ pagePlan, prepared, newspaper, t
   const activeKeys = new Set(active.map((candidate) => `${candidate.sourceId}:${candidate.frame.id}`)); const activeStories = new Set(active.map((candidate) => String(candidate.sourceId)));
   const imageIntents = (prepared.imageIntents || []).filter((intent) => intent.state === 'IMAGE_PLANNED' && (intent.companion ? activeStories.has(String(intent.storyId)) : activeKeys.has(`${intent.storyId}:${intent.frameId}`)));
   for (const intent of imageIntents) await sectionImages.placePrepared(intent, { tx });
+  for (const intent of imageIntents.filter((item) => item.companion && item.sourceNewsItemId)) await sectionImages.linkSectionSource(intent.destinationSectionId, intent.sourceNewsItemId, { tx });
   const reloaded = await pageRepository.findById(pagePlan.page.id, { tx });
   const reloadedPreflight = await validatePageLayout(reloaded, newspaper);
   const reloadedQuality = await analyzeComposedLayout(reloaded, newspaper);
   const drift = await parityDifferences(prepared.projected, reloaded, active);
-  for (const intent of imageIntents) { const section = reloaded.sections.find((item) => item.id === intent.destinationSectionId); const image = section?.images?.find((item) => item.url === intent.image.url); const placement = intent.placement; const mismatch = !image || ['x_px','y_px','width_px','height_px'].some((field) => Number(image?.[field]) !== Number(placement[field.replace('_px','')])) || String(image?.shape) !== String(placement.shape) || Number(image?.stand_off_px) !== Number(placement.standOffPx) || String(image?.caption || '') !== String(placement.caption || ''); if (mismatch) drift.push({ sectionKey: intent.destinationSectionKey, fields: ['images'], metrics: [] }); }
+  for (const intent of imageIntents) { const section = reloaded.sections.find((item) => item.id === intent.destinationSectionId); const image = section?.images?.find((item) => item.url === intent.image.url); const placement = intent.placement; const mismatch = !image || ['x_px','y_px','width_px','height_px'].some((field) => Number(image?.[field]) !== Number(placement[field.replace('_px','')])) || String(image?.shape) !== String(placement.shape) || Number(image?.stand_off_px) !== Number(placement.standOffPx) || String(image?.caption || '') !== String(placement.caption || '') || Number(image?.source_news_item_id || 0) !== Number(intent.sourceNewsItemId || 0) || (intent.companion && intent.sourceNewsItemId && Number(section?.news_item_id) !== Number(intent.sourceNewsItemId)); if (mismatch) drift.push({ sectionKey: intent.destinationSectionKey, fields: ['images'], metrics: [] }); }
   const preflightMatches = JSON.stringify([...errorKeys(prepared.preflight)].sort()) === JSON.stringify([...errorKeys(reloadedPreflight)].sort());
   const qualityMatches = Math.abs(prepared.projectedQuality.score - reloadedQuality.score) <= 0.0001;
   if (!preflightMatches || drift.length || !qualityMatches) return { ...prepared, state: 'PAGE_BLOCKED', error: 'POST_SAVE_DRIFT', reloaded, reloadedPreflight, reloadedQuality, drift };

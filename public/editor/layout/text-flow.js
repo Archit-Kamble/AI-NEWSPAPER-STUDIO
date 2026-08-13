@@ -42,8 +42,10 @@ const AVG_CHAR_WIDTH_RATIO = 0.4;
 // crops them: "शेतकऱ्यांसाठी" sets as "शतकऱ्यासाठा". This is a property of the
 // script, not a taste setting, so it is a floor rather than a default.
 import { plainText } from "./rich-text.js";
+import "./caption-geometry.js";
 
 export const MIN_LINE_HEIGHT = 1.45;
+export const { PLACED_CAPTION_METRICS, captionBox } = globalThis.SahasCaptionGeometry;
 
 // Printed by both normal and flowed story renderers. This is SAHAS furniture,
 // not AI-authored copy, so it has its own capacity accounting.
@@ -213,11 +215,23 @@ export function buildFlowMap(section, view, images = []) {
   // grid works inside the block's margin, so a picture has to be moved into
   // that frame before it is asked which cells it covers. Skipping this shifted
   // every runaround by the margin and let copy print over the subject.
-  const placed = images.map((image) => ({
-    ...image,
-    x: (Number(image.x) || 0) - padding,
-    y: (Number(image.y) || 0) - padding,
-  }));
+  const placed = images.flatMap((image) => {
+    const photograph = {
+      ...image,
+      x: (Number(image.x) || 0) - padding,
+      y: (Number(image.y) || 0) - padding,
+    };
+    const caption = captionBox(image);
+    if (!caption) return [photograph];
+    return [photograph, {
+      ...caption,
+      x: caption.x - padding,
+      y: caption.y - padding,
+      shape: 'rect',
+      standOffPx: caption.standOffPx,
+      occupancy: 'caption',
+    }];
+  });
 
   const cols = Math.max(0, Math.floor(contentWidth / cellWidth));
   const rows = Math.max(0, Math.floor(contentHeight / cellHeight));
@@ -376,6 +390,7 @@ export function flowImageFromRow(row) {
     rotation: Number(row.rotation) || 0,
     standOffPx: Number(row.stand_off_px) || 0,
     mask: row.mask || null,
+    caption: row.caption || '',
   };
 }
 
@@ -425,9 +440,9 @@ const MIN_BAND_SHARE = 0.5;
 export function bandBox(map, kind, padding, measure, fallbackLeft) {
   const span = bandSpan(map, kind);
   if (!span || span.length * map.cellWidth < measure * MIN_BAND_SHARE) {
-    return { left: fallbackLeft, width: measure };
+    return { left: fallbackLeft, width: measure, safe: false, reason: 'INSUFFICIENT_PICTURE_FREE_BAND' };
   }
-  return { left: padding + span.col * map.cellWidth, width: span.length * map.cellWidth };
+  return { left: padding + span.col * map.cellWidth, width: span.length * map.cellWidth, safe: true, reason: null };
 }
 
 // Contiguous runs of one kind of cell, row by row. A run is a piece of line

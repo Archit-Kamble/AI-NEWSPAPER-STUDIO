@@ -3,6 +3,10 @@ const newspaperRepository = require('../repositories/newspaper.repository');
 const { normalizeStoryMetadata } = require('./storyType.service');
 const { geometryOf, snapPointsX } = require('../layout/geometry');
 const { quote } = require('../layout/rateCard');
+const reviewInvalidation = require('./reviewInvalidation.service');
+
+const PRINTABLE_FIELDS = ['news_item_id','kicker','headline','subheading','body','caption','image_url','smart_card_key','smart_card_data'];
+const comparable = (value) => JSON.stringify(value ?? null);
 
 const G = geometryOf({});
 const MIN_HEIGHT_PX = G.baselinePx * 4;
@@ -48,6 +52,7 @@ async function createSection(pageId, body) {
   const page = await pageRepository.findById(id);
   if (!page) return null;
   await pageRepository.createSection(id, snapGeometry(body, page.page_number));
+  await reviewInvalidation.invalidatePage(id);
   return pageRepository.findById(id);
 }
 
@@ -55,6 +60,7 @@ async function deleteSection(pageId, sectionKey) {
   const id = parseInt(pageId, 10);
   const removed = await pageRepository.deleteSection(id, sectionKey);
   if (!removed) return null;
+  await reviewInvalidation.invalidatePage(id);
   return pageRepository.findById(id);
 }
 
@@ -64,10 +70,14 @@ async function moveSection(pageId, sectionKey, body) {
   if (!page) return null;
   const saved = await pageRepository.saveSectionGeometry(id, sectionKey, snapGeometry(body, page.page_number));
   if (!saved) return null;
+  await reviewInvalidation.invalidatePage(id);
   return pageRepository.findById(id);
 }
 
 async function saveSection(pageId, sectionKey, body) {
+  const id = parseInt(pageId, 10);
+  const beforePage = await pageRepository.findById(id);
+  const before = beforePage?.sections?.find((section) => section.section_key === sectionKey);
   const semantic = await normalizeStoryMetadata(body);
   if (semantic.error) return semantic;
   const article = {
@@ -120,8 +130,19 @@ async function saveSection(pageId, sectionKey, body) {
     smartCardData: body.smartCardData || null,
   };
 
-  await pageRepository.saveSection(parseInt(pageId, 10), sectionKey, article);
-  return pageRepository.findById(parseInt(pageId, 10));
+  const proposed = {
+    news_item_id: article.newsItemId || null, kicker: article.kicker || null,
+    headline: article.headline || null, subheading: article.subheading || null,
+    body: article.body || null, caption: article.caption || null,
+    image_url: article.imageUrl || null, smart_card_key: article.smartCardKey || null,
+    smart_card_data: article.smartCardData || null,
+  };
+  const changed = before && PRINTABLE_FIELDS.some((field) => comparable(before[field]) !== comparable(proposed[field]));
+  if (changed && ['ready', 'published'].includes(before.status)) article.status = before.ai_generated || article.aiGenerated ? 'needs_review' : 'editing';
+
+  await pageRepository.saveSection(id, sectionKey, article);
+  if (changed) await reviewInvalidation.invalidatePage(id);
+  return pageRepository.findById(id);
 }
 
 // What a block of space is worth, by column-centimetre and position. Position

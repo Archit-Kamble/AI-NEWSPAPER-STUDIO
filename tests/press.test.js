@@ -19,6 +19,12 @@ const scribus = require('../src/services/scribus.service');
 test.after(() => pool.end());
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+async function passPages(desk, pages) {
+  for (const page of pages) {
+    const response = await desk(`/api/pages/${page.id}/state`, { method: 'PATCH', body: JSON.stringify({ state: 'passed' }) });
+    assert.equal(response.status, 200, `page ${page.page_number} should pass before a press artifact is requested`);
+  }
+}
 
 // ------------------------------------------------------------------ locked ---
 
@@ -203,6 +209,7 @@ test('the press file is well-formed Scribus, in millimetres, with every page', a
         location: 'मुंबई', reporterName: 'विशेष प्रतिनिधी', status: 'ready',
       }),
     });
+    await passPages(desk, pages);
 
     const response = await desk(`/api/newspapers/${newspaper.id}/scribus`);
     assert.equal(response.status, 200);
@@ -248,6 +255,18 @@ test('the press file escapes copy that would otherwise break the XML', () => {
   assert.match(xml, /&lt;/);
 });
 
+test('Scribus emits canonical Marathi placed-caption geometry and escaped text', async () => {
+  const { captionBox } = await import('../public/editor/layout/text-flow.js');
+  const image = { x_px: 20, y_px: 40, width_px: 100, height_px: 60, url: '/uploads/test.jpg', caption: 'नदी & पूर <स्थिती>' };
+  const section = { x_px: 30, y_px: 50, width_px: 240, height_px: 240, margin_px: 12, images: [image] };
+  const xml = scribus.blockFrames(section);
+  const box = captionBox(image);
+  assert.match(xml, /नदी &amp; पूर &lt;स्थिती&gt;/);
+  assert.match(xml, new RegExp(`XPOS="${scribus.mm(section.x_px) + scribus.mm(box.x)}"`));
+  assert.match(xml, new RegExp(`YPOS="${scribus.mm(section.y_px) + scribus.mm(box.y)}"`));
+  assert.match(xml, new RegExp(`WIDTH="${scribus.mm(box.width)}" HEIGHT="${scribus.mm(box.height)}"`));
+});
+
 // ----------------------------------------------------------- press package ---
 
 test('the press package is a real zip that carries the pictures with it', async () => {
@@ -273,6 +292,7 @@ test('the press package is a real zip that carries the pictures with it', async 
       method: 'POST',
       body: JSON.stringify({ url: '/uploads/zz-package-test.png', x: 10, y: 90, width: 200, height: 130 }),
     });
+    await passPages(desk, pages);
 
     const response = await desk(`/api/newspapers/${newspaper.id}/press-package`);
     assert.equal(response.status, 200);
@@ -300,6 +320,10 @@ test('the press package is a real zip that carries the pictures with it', async 
 
     const readme = await fs.readFile(path.join(work, 'README.txt'), 'utf8');
     assert.match(readme, /Scribus/);
+    const manifest = JSON.parse(await fs.readFile(path.join(work, 'MANIFEST.json'), 'utf8'));
+    assert.equal(manifest.readiness.readyForPress, true);
+    assert.ok(Array.isArray(manifest.sections));
+    assert.equal(JSON.stringify(manifest).includes('body'), false, 'audit manifest contains no article bodies');
   } finally {
     await fs.rm(picture, { force: true });
     await fs.rm(work, { recursive: true, force: true });
@@ -314,8 +338,9 @@ test('the same edition packages to the same bytes twice', async () => {
   let editionId = null;
 
   try {
-    const { desk, newspaper } = await newEdition(port, 'Deterministic package test', { pages: [[1, 'front']] });
+    const { desk, newspaper, pages } = await newEdition(port, 'Deterministic package test', { pages: [[1, 'front']] });
     editionId = newspaper.id;
+    await passPages(desk, pages);
 
     const first = Buffer.from(await (await desk(`/api/newspapers/${newspaper.id}/press-package`)).arrayBuffer());
     const second = Buffer.from(await (await desk(`/api/newspapers/${newspaper.id}/press-package`)).arrayBuffer());

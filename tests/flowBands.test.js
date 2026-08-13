@@ -77,6 +77,23 @@ test('bandBox: a picture that leaves less than half the measure free is not dodg
 
   assert.equal(box.left, 10, 'falls back to the fallback position - the picture is in the wrong place, not the headline');
   assert.ok(Math.abs(box.width - measure) < 0.01, 'falls back to the full measure rather than a squeezed sliver');
+  assert.equal(box.safe, false, 'the editor may show the clash, but automation can never call it safe');
+  assert.equal(box.reason, 'INSUFFICIENT_PICTURE_FREE_BAND');
+});
+
+test('placed captions reserve the same canonical flow cells the browser paints', async () => {
+  const { buildFlowMap, captionBox, flowImageFromRow } = await loadTextFlow();
+  const section = { width_px: 300, height_px: 300 };
+  const view = { headline: '', subheading: '', body: '', marginPx: 10, columnCount: 1, lineHeight: 1.45, headlineFontPx: 20, subheadingFontPx: 12, bodyFontPx: 10 };
+  const base = { x_px: 20, y_px: 30, width_px: 120, height_px: 80, shape: 'rect', stand_off_px: 0 };
+  const without = buildFlowMap(section, view, [flowImageFromRow(base)]);
+  const one = { ...base, caption: 'लहान छायाचित्र मजकूर' };
+  const wrapped = { ...base, caption: 'मराठी छायाचित्राचा अधिक लांब मजकूर अनेक ओळींमध्ये सुरक्षितपणे मांडला जातो' };
+  const withOne = buildFlowMap(section, view, [flowImageFromRow(one)]);
+  const withWrapped = buildFlowMap(section, view, [flowImageFromRow(wrapped)]);
+  assert.ok(withOne.bodyCharBudget < without.bodyCharBudget);
+  assert.ok(withWrapped.bodyCharBudget < withOne.bodyCharBudget);
+  assert.ok(captionBox(wrapped).height > captionBox(one).height);
 });
 
 test('bandBox: the canvas and the Block Editor call the exact same function - no second implementation to drift', async () => {

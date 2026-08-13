@@ -85,6 +85,12 @@ test('admin workflow saves a page section and final Scribus/PDF files', async ()
     }).then((response) => response.json());
     assert.equal(savedPage.sections.find((section) => section.section_key === 'lead').headline, 'Admin written story');
 
+    await jsonRequest(`/api/pages/${page.id}/sections/lead`, 'PUT', {
+      title: 'Admin written story', description: 'Story text', category: 'Local', status: 'ready'
+    });
+    const passed = await jsonRequest(`/api/pages/${page.id}/state`, 'PATCH', { state: 'passed' });
+    assert.equal(passed.status, 200);
+
     const formData = new FormData();
     formData.append('scribusFile', new Blob(['scribus project']), 'edition.sla');
     formData.append('printPdf', new Blob(['pdf output'], { type: 'application/pdf' }), 'edition.pdf');

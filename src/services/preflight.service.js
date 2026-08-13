@@ -77,7 +77,7 @@ async function textFlow() {
 
 async function checkPage(page, newspaper, totalPages) {
   const g = geometryOf(newspaper);
-  const { measureSectionFlow } = await textFlow();
+  const { measureSectionFlow, flowViewFromSection, buildFlowMap, flowImageFromRow, bandBox, captionBox, CELL } = await textFlow();
   const findings = [];
   const at = (section) => ({ pageNumber: page.page_number, sectionKey: section.section_key });
 
@@ -145,6 +145,38 @@ async function checkPage(page, newspaper, totalPages) {
         findings.push({
           level: 'error', check: 'overset', ...at(section),
           message: `${measurement.overflowChars} characters more than this block holds. Cut it, or carry it over.`,
+        });
+      }
+    }
+
+    // --- photograph/caption against printable copy ------------------------
+    // The canonical flow map is also what the renderer uses. If a title band
+    // cannot retain half its measure, the placement is an error—not a valid
+    // squeezed headline. Caption bounds come from the same shared helper.
+    if ((section.images || []).length) {
+      const view = flowViewFromSection(section);
+      const map = buildFlowMap(section, view, section.images.map(flowImageFromRow));
+      const padding = Number(view.marginPx) || 12;
+      const measure = map.cols * map.cellWidth;
+      for (const [kind, present] of [[CELL.KICKER, view.kicker], [CELL.HEADLINE, view.headline], [CELL.SUBHEADING, view.subheading]]) {
+        if (!present) continue;
+        const box = bandBox(map, kind, padding, measure, padding);
+        if (!box.safe) findings.push({
+          level: 'error', check: 'image-text-collision', ...at(section),
+          message: 'A photograph consumes the kicker/headline/deck band. Move or remove it before press.',
+        });
+      }
+      const protectedBottom = padding + (map.kickerRows + map.headlineRows + map.subheadingRows) * map.cellHeight;
+      for (const image of section.images) {
+        const box = captionBox(image);
+        if (!box) continue;
+        if (box.x < 0 || box.y < 0 || box.x + box.width > Number(section.width_px) || box.y + box.height > Number(section.height_px)) findings.push({
+          level: 'error', check: 'caption-outside-section', ...at(section),
+          message: 'A photograph caption runs outside its owning block.',
+        });
+        if (box.y < protectedBottom) findings.push({
+          level: 'error', check: 'caption-text-collision', ...at(section),
+          message: 'A photograph caption intersects the kicker/headline/deck area.',
         });
       }
     }
@@ -311,6 +343,9 @@ const COLLISION_TYPES = {
   'negative-dimensions': 'NEGATIVE_SPACE',
   'overlapping-blocks': 'STORY_COLLISION',
   'image-collision': 'IMAGE_COLLISION',
+  'image-text-collision': 'IMAGE_TEXT_COLLISION',
+  'caption-text-collision': 'CAPTION_TEXT_COLLISION',
+  'caption-outside-section': 'CAPTION_OUTSIDE_SECTION',
 };
 const OVERFLOW_TYPES = { overset: 'TEXT_OVERFLOW' };
 

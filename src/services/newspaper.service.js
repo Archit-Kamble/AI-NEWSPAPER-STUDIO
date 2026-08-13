@@ -1,6 +1,7 @@
 const newspaperRepository = require('../repositories/newspaper.repository');
 const publicationRepository = require('../repositories/publication.repository');
 const { identity } = require('../layout/identity');
+const pressReadiness = require('./pressReadiness.service');
 
 function withPublicationFiles(newspaper, files) {
   return files.reduce((result, file) => {
@@ -70,6 +71,8 @@ async function saveFinalFiles(id, files, sessionUser) {
   }
 
   const newspaperId = parseInt(id, 10);
+  const readiness = await pressReadiness.assessEdition(newspaperId);
+  if (readiness && !readiness.readyForPress) return { error: 'PRESS_NOT_READY', code: 'PRESS_NOT_READY', readiness };
   const newspaper = await newspaperRepository.findById(newspaperId);
   if (!newspaper) return { notFound: true };
 

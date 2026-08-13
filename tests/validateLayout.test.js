@@ -115,3 +115,16 @@ test('two pictures on one block that do not touch are not flagged', async () => 
   const result = await validatePageLayout(page(2, [section({ images })]), {});
   assert.ok(!result.collisions.some((c) => c.type === 'IMAGE_COLLISION'));
 });
+
+test('a manual photograph consuming the headline band is IMAGE_TEXT_COLLISION', async () => {
+  const images = [{ id: 1, shape: 'rect', x_px: 0, y_px: 0, width_px: 190, height_px: 80, url: '/uploads/missing-safe-test.png' }];
+  const result = await validatePageLayout(page(2, [section({ height_px: 180, images })]), {});
+  assert.ok(result.collisions.some((finding) => finding.type === 'IMAGE_TEXT_COLLISION'));
+  assert.equal(result.valid, false);
+});
+
+test('a caption outside its block is CAPTION_OUTSIDE_SECTION', async () => {
+  const images = [{ id: 1, shape: 'rect', x_px: 10, y_px: 70, width_px: 100, height_px: 25, caption: 'छायाचित्राखाली अनेक अक्षरे आहेत', url: '/uploads/missing-caption-test.png' }];
+  const result = await validatePageLayout(page(2, [section({ height_px: 100, headline: '', images })]), {});
+  assert.ok(result.collisions.some((finding) => finding.type === 'CAPTION_OUTSIDE_SECTION'));
+});

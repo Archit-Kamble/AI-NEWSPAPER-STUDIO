@@ -16,7 +16,7 @@
 //     it", and the answer has to exist.
 
 const pool = require('../config/db');
-const preflight = require('./preflight.service');
+const pressReadiness = require('./pressReadiness.service');
 
 // The states a page moves through, in order. Moving backwards is allowed - a
 // page can be pulled back off the stone - but only one step at a time is
@@ -52,23 +52,21 @@ async function setPageState(pageId, state, actor) {
   if (!page) return null;
 
   if (state === 'passed') {
-    const report = await preflight.checkEdition(page.newspaper_id);
-    const onThisPage = report.findings.filter(
-      (finding) => finding.pageNumber === page.page_number && finding.level === 'error',
-    );
-    if (onThisPage.length) {
+    const readiness = await pressReadiness.assessPage(pageId, { requirePassed: false });
+    if (!readiness.readyForPress) {
       return {
-        error: `Page ${page.page_number} cannot go to press with ${onThisPage.length} error${onThisPage.length === 1 ? '' : 's'} on it.`,
-        findings: onThisPage,
+        error: `Page ${page.page_number} cannot go to press until its blockers are cleared.`, code: 'PRESS_NOT_READY',
+        readiness, findings: readiness.blockers,
       };
     }
+    page.signoff_fingerprint = readiness.fingerprint;
   }
 
   const { rows: updated } = await pool.query(
     `UPDATE pages SET production_state = $2, state_changed_at = CURRENT_TIMESTAMP,
-                      state_changed_by = $3, updated_at = CURRENT_TIMESTAMP
+                      state_changed_by = $3, signoff_fingerprint = $4, updated_at = CURRENT_TIMESTAMP
       WHERE id = $1 RETURNING *`,
-    [pageId, state, actor?.id || null],
+    [pageId, state, actor?.id || null, state === 'passed' ? page.signoff_fingerprint : null],
   );
 
   await record(page.newspaper_id, actor?.id, `page ${page.page_number}: ${LABELS[state]}`);
@@ -91,7 +89,7 @@ async function editionStatus(newspaperId) {
     [newspaperId],
   );
 
-  const report = await preflight.checkEdition(newspaperId);
+  const readiness = await pressReadiness.assessEdition(newspaperId);
   const outstanding = pages.filter((page) => page.production_state !== 'passed');
 
   return {
@@ -99,10 +97,11 @@ async function editionStatus(newspaperId) {
     pages: pages.map((page) => ({
       ...page,
       label: LABELS[page.production_state] || LABELS.making_up,
-      errors: report.findings.filter((f) => f.pageNumber === page.page_number && f.level === 'error').length,
+      errors: readiness.blockers.filter((f) => f.page === page.page_number && (f.code.startsWith('PREFLIGHT_') || f.code === 'TEXT_OVERFLOW')).length,
     })),
-    preflight: { passed: report.passed, counts: report.counts },
-    readyForPress: outstanding.length === 0 && report.passed,
+    preflight: { passed: readiness.counts.preflightErrors === 0, counts: { error: readiness.counts.preflightErrors } },
+    readyForPress: readiness.readyForPress,
+    readiness,
     waitingOn: outstanding.map((page) => page.page_number),
   };
 }

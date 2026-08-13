@@ -156,9 +156,23 @@ async function picturesFor(pages) {
 /**
  * The package: the document, its pictures, and a note saying what is in it.
  */
-async function build(newspaper, pages, sla) {
+function auditManifest(newspaper, pages, readiness) {
+  const sections = pages.flatMap((page) => (page.sections || []).map((section) => ({
+    page: page.page_number, sectionKey: section.section_key, newsItemId: section.news_item_id || null,
+    reviewStatus: section.status, aiGenerated: Boolean(section.ai_generated),
+  })));
+  const images = pages.flatMap((page) => (page.sections || []).flatMap((section) => (section.images || []).map((image) => ({
+    page: page.page_number, sectionKey: section.section_key, mediaAssetId: image.media_asset_id || null,
+    sourceNewsItemId: image.source_news_item_id || null, captionPresent: Boolean(image.caption),
+    geometry: { x: image.x_px, y: image.y_px, width: image.width_px, height: image.height_px, rotation: image.rotation || 0, shape: image.shape || 'rect' },
+  }))));
+  return { schemaVersion: 1, edition: { id: newspaper.id, date: String(newspaper.publication_date).slice(0, 10), pages: pages.length }, readiness: { assessedAt: readiness?.assessedAt || null, readyForPress: Boolean(readiness?.readyForPress), counts: readiness?.counts || null }, sections, images };
+}
+
+async function build(newspaper, pages, sla, readiness = null) {
   const date = String(newspaper.publication_date).slice(0, 10);
   const { files, missing } = await picturesFor(pages);
+  if (missing.length) { const error = new Error('A press asset disappeared while packaging.'); error.code = 'PRESS_ASSET_MISSING'; error.missing = missing; throw error; }
 
   const readme = [
     `${newspaper.name} — ${date}`,
@@ -173,16 +187,16 @@ async function build(newspaper, pages, sla) {
     '',
     'Then: check the page, export as PDF/X-3 or PDF 1.4 with CMYK output,',
     'and send that to the press.',
-    missing.length ? `\nMissing from the server (frames will be empty): ${missing.join(', ')}` : '',
   ].join('\n');
 
   const entries = [
     { name: `sahas-${date}.sla`, data: Buffer.from(sla, 'utf8') },
     { name: 'README.txt', data: Buffer.from(readme, 'utf8') },
+    { name: 'MANIFEST.json', data: Buffer.from(`${JSON.stringify(auditManifest(newspaper, pages, readiness), null, 2)}\n`, 'utf8') },
     ...files,
   ];
 
   return { zip: buildZip(entries, newspaper.publication_date), pictures: files.length, missing };
 }
 
-module.exports = { build, buildZip, crc32, picturesFor };
+module.exports = { build, buildZip, crc32, picturesFor, auditManifest };

@@ -24,6 +24,7 @@ const { geometryOf, pxToMm } = require('../layout/geometry');
 // text. Without this a page goes to press with "<b>" set in type.
 const { strip } = require('../layout/plain-text');
 const { identityFor, dateLine } = require('../layout/identity');
+const { captionBox, PLACED_CAPTION_METRICS } = require('../../public/editor/layout/caption-geometry');
 
 const escapeXml = (value) =>
   String(value ?? '')
@@ -163,6 +164,16 @@ function blockFrames(section, publicDir) {
       rotation: Number(image.rotation) || 0,
       file: `.${image.url}`,
       publicDir,
+    }));
+    const caption = captionBox(image);
+    if (caption) parts.push(textFrame({
+      xMm: xMm + mm(caption.x),
+      yMm: yMm + mm(caption.y),
+      widthMm: mm(caption.width),
+      heightMm: mm(caption.height),
+      text: strip(image.caption),
+      fontPt: pxToPt(PLACED_CAPTION_METRICS.fontPx),
+      font: BODY_FONT,
     }));
   }
 

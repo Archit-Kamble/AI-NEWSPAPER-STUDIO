@@ -1,5 +1,5 @@
 const express = require('express');
-const { asyncController } = require('../middleware/asyncRoute');
+const { asyncController, asyncRoute } = require('../middleware/asyncRoute');
 const { publicationUpload } = require('../middleware/upload');
 const { requireDesk } = require('../middleware/auth');
 
@@ -7,6 +7,7 @@ const { requireDesk } = require('../middleware/auth');
 // crashing the process - see src/middleware/asyncRoute.js. This router used
 // to call the controller unwrapped; every other resource router already did.
 const newspaperController = asyncController(require('../controllers/newspaper.controller'));
+const pressReadiness = require('../services/pressReadiness.service');
 
 const router = express.Router();
 
@@ -22,6 +23,12 @@ router.get('/:id', newspaperController.getOne);
 router.patch('/:id', newspaperController.update);
 router.post(
   '/:id/final-files',
+  asyncRoute(async (req, res, next) => {
+    const readiness = await pressReadiness.assessEdition(Number(req.params.id));
+    if (!readiness) return res.status(404).json({ error: 'Not found' });
+    if (!readiness.readyForPress) return res.status(409).json({ code: 'PRESS_NOT_READY', readiness });
+    next();
+  }),
   publicationUpload.fields([
     { name: 'scribusFile', maxCount: 1 },
     { name: 'printPdf', maxCount: 1 },

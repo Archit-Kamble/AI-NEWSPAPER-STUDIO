@@ -1,6 +1,7 @@
 const pool = require('../config/db');
 const repo = require('../repositories/sectionImage.repository');
 const backgroundRemoval = require('./backgroundRemoval.service');
+const reviewInvalidation = require('./reviewInvalidation.service');
 
 // Placements are clamped to the block they belong to. A picture that hangs
 // outside its block would be off the page in print, and the character grid
@@ -125,6 +126,7 @@ async function add(pageId, sectionKey, body, ownerId) {
   // A photograph arrives with its caption; it should not need a second call to
   // keep it.
   await repo.place(section.id, asset.id, { ...placement, caption: body.caption });
+  await reviewInvalidation.revokeSection(section.id);
   return repo.listBySection(section.id);
 }
 
@@ -152,6 +154,7 @@ async function move(pageId, sectionKey, imageId, body) {
 
   const updated = await repo.update(parseInt(imageId, 10), patch);
   if (!updated) return null;
+  await reviewInvalidation.revokeSection(section.id);
   return repo.listBySection(section.id);
 }
 
@@ -160,6 +163,7 @@ async function remove(pageId, sectionKey, imageId) {
   if (!section) return null;
   const removed = await repo.remove(parseInt(imageId, 10));
   if (!removed) return null;
+  await reviewInvalidation.revokeSection(section.id);
   return repo.listBySection(section.id);
 }
 
@@ -169,6 +173,7 @@ async function cutout(pageId, sectionKey, imageId, origin) {
 
   const result = await backgroundRemoval.removeBackground(section.id, imageId, origin);
   if (result.error) return { error: result.error, status: 503 };
+  await reviewInvalidation.revokeSection(section.id);
   return { images: await repo.listBySection(section.id) };
 }
 

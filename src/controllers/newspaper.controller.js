@@ -12,6 +12,7 @@ const plainTextModule = require('../layout/plain-text');
 const { ladderFor, getSupportedEditionPageCounts } = require('../layout/ladder');
 const editionResizeService = require('../services/editionResize.service');
 const compositionWorkflow = require('../services/editionCompositionWorkflow.service');
+const pressReadiness = require('../services/pressReadiness.service');
 
 async function create(req, res) {
   const newspaper = await newspaperService.createNewspaper(req.body, req.session.user);
@@ -67,6 +68,7 @@ async function saveFinalFiles(req, res) {
     req.files || {},
     req.session.user,
   );
+  if (result.code === 'PRESS_NOT_READY') return res.status(409).json({ code: result.code, readiness: result.readiness });
   if (result.error) return res.status(400).json({ error: result.error });
   if (result.notFound) return res.status(404).json({ error: 'Not found' });
   res.json(result.item);
@@ -160,7 +162,9 @@ async function scribus(req, res) {
   const loaded = await loadForOutput(req.params.id);
   if (!loaded) return res.status(404).json({ error: 'No such edition.' });
   const { newspaper, pages } = loaded;
-  const sla = scribusService.buildDocument(newspaper, pages);
+  const readiness = await pressReadiness.assessEdition(newspaper.id);
+  if (!readiness.readyForPress) return res.status(409).json({ code: 'PRESS_NOT_READY', readiness });
+  const sla = await scribusService.buildDocument(newspaper, pages);
 
   await signoffService.record(newspaper.id, req.session.user?.id, 'Scribus document generated');
   const date = String(newspaper.publication_date).slice(0, 10);
@@ -175,8 +179,13 @@ async function pressPackage(req, res) {
   const loaded = await loadForOutput(req.params.id);
   if (!loaded) return res.status(404).json({ error: 'No such edition.' });
   const { newspaper, pages } = loaded;
-  const sla = scribusService.buildDocument(newspaper, pages);
-  const { zip, pictures, missing } = await pressPackageService.build(newspaper, pages, sla);
+  const readiness = await pressReadiness.assessEdition(newspaper.id);
+  if (!readiness.readyForPress) return res.status(409).json({ code: 'PRESS_NOT_READY', readiness });
+  const sla = await scribusService.buildDocument(newspaper, pages);
+  let packaged;
+  try { packaged = await pressPackageService.build(newspaper, pages, sla, readiness); }
+  catch (error) { if (error.code === 'PRESS_ASSET_MISSING') return res.status(409).json({ code: error.code, missing: error.missing }); throw error; }
+  const { zip, pictures, missing } = packaged;
 
   await signoffService.record(
     newspaper.id, req.session.user?.id,

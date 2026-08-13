@@ -4,6 +4,61 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zza. Project B8B-PRESS-SAFETY-CLOSEOUT — review, provenance and output gate (2026-08-13)
+
+Autonomous prose images are now finalized only after the generated kicker,
+headline and deck exist. The canonical no-image structure protects those
+bands; the supplied image is aspect-preservingly resized into the remaining
+space; optional images may be truthfully skipped and an unplaceable required
+image blocks the edition. `bandBox()` exposes its unsafe fallback, so the
+editor may still show a human-created clash while preflight/composition/press
+cannot call it safe.
+
+Placed captions are physical content. One universal caption-geometry helper
+owns type, padding, Devanagari line height, wrapping and the section-relative
+box. Canvas rendering, the canonical flow budget, preflight and Scribus all
+consume it. Named hard errors cover image/title collision, caption/title
+collision and captions outside their section; Scribus writes the corresponding
+escaped caption frame at the same px→mm geometry.
+
+Database newsroom provenance now survives composition in
+`page_sections.news_item_id`; composition image placements carry additive
+`section_images.source_news_item_id`, including companion photo frames. Generic
+packets remain null instead of manufacturing an integer foreign key. Source
+and image provenance participate in plan/baseline identity and post-save
+parity.
+
+`pressReadiness.service.js` is the sole press gate used by page pass, edition
+status, Scribus, press package and final-file registration. It returns stable
+structured blockers/counts for preflight, review, provenance, image safety,
+page pass/stale signoff, asset readability and uncertain composition runs.
+Generated copy remains `needs_review`; a printable text/image edit revokes a
+ready block server-side and invalidates its page signoff. The browser mirrors
+that lifecycle and labels a successful AI apply “Composition complete … Not
+ready for press.” Press packages now hard-fail missing assets and include a
+safe `MANIFEST.json` with review/provenance/geometry evidence, never prompts,
+secrets or full article bodies.
+
+Fresh disposable proof used edition 13218 (2099-06-12). Plan made zero writer
+calls and zero writes; Apply persisted all four pages with 55 bounded
+`CODEX_LOCAL` calls and four source images. Immediately after Apply, 30 blocks
+needed review, all Scribus/package/final-file routes returned
+`PRESS_NOT_READY`, and all newsroom/image provenance reloaded. Explicit normal
+section review plus page pass made readiness true and produced a 72,606-byte
+Scribus file and 97,887-byte package with four assets. Editing the reviewed
+Page-1 lead revoked it to `needs_review`, pulled the page back from passed and
+blocked package output; re-review/re-pass restored readiness. Evidence:
+`/tmp/sahas-b8b-press-{apply,readiness,approval,revocation}-2099-06-12.json`
+and `/tmp/sahas-b8b-press-page3-2099-06-12.png`.
+
+The fixture still has three fixed non-editorial/photo-only frames outside the
+ordinary 30-story routing demand, so its completion label is
+`PARTIALLY_COMPOSED` even though all four planned page batches persisted. That
+pre-existing semantic denominator remains a follow-up; this closeout did not
+weaken `FULLY_COMPOSED` to conceal it.
+
+---
+
 ## 0zz. Project B8B-IMAGE-COMPOSITION — source-grounded image packages (2026-08-13)
 
 The production edition planner now treats newsroom images as part of the same

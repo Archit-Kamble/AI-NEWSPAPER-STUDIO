@@ -281,6 +281,10 @@ ALTER TABLE section_images ADD COLUMN IF NOT EXISTS z_index INTEGER NOT NULL DEF
 ALTER TABLE section_images ADD COLUMN IF NOT EXISTS shape VARCHAR(20) NOT NULL DEFAULT 'rect';
 ALTER TABLE section_images ADD COLUMN IF NOT EXISTS stand_off_px INTEGER NOT NULL DEFAULT 6;
 ALTER TABLE section_images ADD COLUMN IF NOT EXISTS caption TEXT;
+-- Direct newsroom provenance for composition-created placements. A companion
+-- photo section has no prose story from which this can safely be guessed.
+ALTER TABLE section_images ADD COLUMN IF NOT EXISTS source_news_item_id INTEGER
+  REFERENCES news_items(id) ON DELETE SET NULL;
 
 -- media_assets gains the URL the browser actually loads. Uploads already land
 -- in public/uploads; this is the row that lets a picture be reused across
@@ -394,6 +398,7 @@ ALTER TABLE pages ADD COLUMN IF NOT EXISTS colour_overridden BOOLEAN NOT NULL DE
 ALTER TABLE pages ADD COLUMN IF NOT EXISTS production_state VARCHAR(20) NOT NULL DEFAULT 'making_up';
 ALTER TABLE pages ADD COLUMN IF NOT EXISTS state_changed_at TIMESTAMPTZ;
 ALTER TABLE pages ADD COLUMN IF NOT EXISTS state_changed_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE pages ADD COLUMN IF NOT EXISTS signoff_fingerprint VARCHAR(64);
 
 -- ---------------------------------------------------------------------------
 -- Carrying an advertisement forward.

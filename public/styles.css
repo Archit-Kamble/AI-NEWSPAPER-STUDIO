@@ -3705,11 +3705,10 @@ body.print-view .newspaper-canvas {
 .section-placed-caption {
   position: absolute;
   font-family: "Sahas Sans", "Noto Sans Devanagari", Arial, sans-serif;
-  font-size: 7.5px;
-  line-height: var(--devanagari-line);
   color: #333;
   background: rgba(255, 255, 255, 0.9);
-  padding: 1px 2px;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 /* Rules between stories.

@@ -24,8 +24,22 @@ const MONTHS = ['जानेवारी', 'फेब्रुवारी', '�
   'जुलै', 'ऑगस्ट', 'सप्टेंबर', 'ऑक्टोबर', 'नोव्हेंबर', 'डिसेंबर'];
 
 const RECENT_LIMIT = 12;
+const FALLBACK_PAGE_COUNTS = Object.freeze([4, 6, 8, 10, 12, 14, 16]);
 
 const devanagari = (value) => String(value).replace(/\d/g, (d) => DIGITS[Number(d)]);
+
+export async function loadSupportedPageCounts(fetcher = fetch) {
+  try {
+    const response = await fetcher('/api/newspapers/supported-page-counts');
+    if (!response.ok) throw new Error(`supported page counts: HTTP ${response.status}`);
+    const data = await response.json();
+    if (!Array.isArray(data) || !data.length || !data.every(Number.isInteger)) throw new Error('supported page counts: invalid payload');
+    return data;
+  } catch (error) {
+    console.error(error);
+    return [...FALLBACK_PAGE_COUNTS];
+  }
+}
 
 /** Today where the paper is printed - not the browser's timezone, and never UTC. */
 export function todayIso() {
@@ -95,10 +109,19 @@ function editionRowHtml(edition, today) {
  */
 export async function renderEditions(host, { onOpen }) {
   const today = todayIso();
-  const editions = await fetch('/api/newspapers').then((r) => r.json());
+  let editions;
+  try {
+    const response = await fetch('/api/newspapers');
+    if (!response.ok) throw new Error(`editions: HTTP ${response.status}`);
+    editions = await response.json();
+  } catch (error) {
+    host.innerHTML = '<div class="form-section"><h2 class="editions-title">आजचा अंक</h2><p class="muted">Editions could not be loaded. Other dashboard tools remain available.</p></div>';
+    console.error(error);
+    return;
+  }
   const list = Array.isArray(editions) ? editions : [];
   const todays = list.find((e) => String(e.publication_date || '').slice(0, 10) === today);
-  const supportedCounts = await fetch('/api/newspapers/supported-page-counts').then((r) => r.json()).catch(() => [4, 6, 8, 10, 12, 14, 16]);
+  const supportedCounts = await loadSupportedPageCounts();
   const pageOptions = (selected) => supportedCounts.map((count) => `<option value="${count}" ${Number(count) === Number(selected) ? 'selected' : ''}>${count}</option>`).join('');
   const selectedPages = todays?.page_count || supportedCounts[0] || 4;
   const ladder = await fetch(`/api/newspapers/ladder?pages=${selectedPages}`).then((r) => r.json()).catch(() => []);

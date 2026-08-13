@@ -264,15 +264,18 @@ async function fillPage3(desk, pageId) {
 }
 
 async function fillPage4(desk, pageId) {
+  await write(desk, pageId, 'anchor', {
+    kicker: 'क्रीडा विशेष',
+    headline: 'आंतरशालेय स्पर्धेत यजमान संघ अजिंक्य',
+    body: '■ क्रीडा प्रतिनिधी\nशहरात झालेल्या आंतरशालेय क्रीडा स्पर्धेत यजमान संघाने अजिंक्यपद पटकावले.',
+  });
+  // Placement derives its default y from the actual headline/deck bands.
+  // Writing first keeps a fixture image in the copy field rather than over
+  // the subsequently-added display type.
   await placeImage(desk, pageId, 'anchor', {
     url: (global.__images || {})['zz-test-edition-p4-anchor.jpg'],
     filename: 'zz-test-edition-p4-anchor.jpg',
     width: 200, height: 150, caption: 'स्पर्धेतील विजेत्या संघाचे छायाचित्र.',
-  });
-  await write(desk, pageId, 'anchor', {
-    kicker: 'क्रीडा विशेष',
-    headline: 'आंतरशालेय स्पर्धेत यजमान संघ अजिंक्य',
-    body: '■ क्रीडा प्रतिनिधी\nशहरात झालेल्या आंतरशालेय क्रीडा स्पर्धेत यजमान संघाने अजिंक्यपद पटकावले. अंतिम सामन्यात चुरशीच्या लढतीत यजमान संघाने बाजी मारली.',
   });
 
   await write(desk, pageId, 'second-lead', {

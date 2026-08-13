@@ -76,9 +76,18 @@ const OUT_DIR = process.argv[3] || '/tmp/claude-1000/-home-archit-kamble-ai-news
     const surface = page.locator('#canvasSurface');
     await surface.evaluate((el) => el.scrollIntoView({ block: 'start', inline: 'nearest' }));
     await page.waitForTimeout(300);
+    // Chromium element screenshots include a fixed ancestor's paint layer when
+    // it overlaps the element. The workspace toolbar is fixed while scrolling,
+    // so temporarily hide only that chrome for a truthful page-only capture.
+    await page.evaluate(() => {
+      document.querySelectorAll('.workspace-toolbar, .app-header, .topbar').forEach((el) => { el.dataset.sahasCaptureHidden = el.style.visibility; el.style.visibility = 'hidden'; });
+    });
     const suffix = printView ? '-print' : '';
     const file = path.join(OUT_DIR, `test-edition-page-${i + 1}${suffix}.png`);
     await surface.screenshot({ path: file });
+    await page.evaluate(() => {
+      document.querySelectorAll('[data-sahas-capture-hidden]').forEach((el) => { el.style.visibility = el.dataset.sahasCaptureHidden; delete el.dataset.sahasCaptureHidden; });
+    });
     console.log(`wrote ${file}`);
   }
 

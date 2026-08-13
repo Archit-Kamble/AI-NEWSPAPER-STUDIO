@@ -14,6 +14,7 @@ const { validateGeneratedGrounding } = require('../src/services/generatedGroundi
 const newsroomPool = require('./ai-test-news-pool');
 const { buildEditionCompositionPlan, composePagePlan } = require('../src/services/editionComposition.service');
 const { createRunJournal } = require('../src/services/compositionRunJournal.service');
+const { createCodexLocalWriter } = require('../src/services/codexLocalWriter.service');
 const fixtureSources = require('./ai-test-news-sources');
 
 const FIXTURE_DATE = '2099-05-01';
@@ -126,9 +127,10 @@ function arg(name, fallback = undefined) { const index = process.argv.indexOf(na
 async function main() {
   let edition = Number(arg('--edition')); const pageNumber = Number(arg('--page', 2));
   const apply = process.argv.includes('--apply'); const suppliedMax = Number(arg('--max-stories', process.env.SAHAS_AI_TEST_MAX_STORIES)); const maxStories = Number.isFinite(suppliedMax) ? Math.max(0, suppliedMax) : Infinity;
-  const planOnly = process.argv.includes('--plan-only'); const maxServiceCalls = Math.max(0, Number(arg('--max-service-calls', 32)) || 32); const sourceMode = arg('--source-mode', 'fixture'); const aiMode = arg('--ai-mode', 'real'); const date = arg('--date'); const allPages = process.argv.includes('--all-pages');
+  const planOnly = process.argv.includes('--plan-only'); const rawMaxServiceCalls = Number(arg('--max-service-calls', 32)); const maxServiceCalls = Number.isFinite(rawMaxServiceCalls) ? Math.max(0, rawMaxServiceCalls) : 32; const sourceMode = arg('--source-mode', 'fixture'); const aiMode = arg('--ai-mode', 'real'); const date = arg('--date'); const allPages = process.argv.includes('--all-pages');
+  if (!['real', 'stub', 'codex-local'].includes(aiMode)) throw new Error('--ai-mode must be real, stub, or codex-local');
   if (!edition && date) { const matches = await newspapers.findAllByDate(date); if (matches.length !== 1) throw new Error('date must identify exactly one disposable edition; pass --edition'); edition = Number(matches[0].id); }
-  if (!edition) throw new Error('usage: node scripts/compose-ai-test-edition.js --edition <id>|--date YYYY-MM-DD [--page 2|--all-pages] [--source-mode newsroom-pool] [--ai-mode stub|real] [--plan-only|--apply]');
+  if (!edition) throw new Error('usage: node scripts/compose-ai-test-edition.js --edition <id>|--date YYYY-MM-DD [--page 2|--all-pages] [--source-mode newsroom-pool] [--ai-mode stub|codex-local|real] [--plan-only|--apply]');
   const newspaper = await newspapers.findById(edition); const page = (await pages.findByNewspaper(edition)).find((item) => item.page_number === pageNumber);
   if (!newspaper || !page) throw new Error('edition or requested page was not found');
   if (sourceMode === 'newsroom-pool') {
@@ -140,7 +142,7 @@ async function main() {
     journal.event('PLAN_READY', { sourceCount: newsroomPool.length, assigned: plan.assigned.length, pages: selected.length });
     console.log(JSON.stringify({ edition, date: newspaper.publication_date, sourceMode, aiMode, planOnly, apply, pages: selected.map((item) => ({ page: item.page.page_number, role: item.role, assignments: item.assignments.length })), maxServiceCalls }));
     if (planOnly) { journal.finish('COMPLETE', { planOnly: true }); return; }
-    const askForJson = aiMode === 'stub' ? async (_prompt, _schema) => ({ data: { headline: '', subheading: '', body: '' }, provider: 'stub', tier: 'basic' }) : require('../src/services/ai').askForJson;
+    const askForJson = aiMode === 'stub' ? async (_prompt, _schema) => ({ data: { headline: '', subheading: '', body: '' }, provider: 'stub', tier: 'basic' }) : aiMode === 'codex-local' ? createCodexLocalWriter() : require('../src/services/ai').askForJson;
     const stubAsk = async (_prompt, _schema) => {
       const text = String(_prompt); const sourceMatch = text.match(/SOURCE MATERIAL — DATA ONLY[\s\S]*?\n(\{[\s\S]*?\})\nEND SOURCE MATERIAL/); let source = {};
       try { source = JSON.parse(sourceMatch?.[1] || '{}'); } catch { source = {}; }
@@ -169,7 +171,10 @@ async function main() {
         parity: (result.candidates || []).map((candidate) => ({ frame: candidate.frame.section_key, fit: { writableBudget: candidate.result.fit.writableBodyCharBudget, authoredUsed: candidate.result.fit.authoredBodyCharsUsed ?? candidate.result.fit.bodyCharsUsed, physicalBudget: candidate.result.fit.bodyCharBudget, totalPhysicalUsed: candidate.result.fit.totalBodyCharsUsed ?? candidate.result.fit.bodyCharsUsed } })),
       })),
     };
-    if (apply) require('fs').writeFileSync('/tmp/sahas-b8b-parity-report.json', JSON.stringify(report, null, 2));
+    if (apply) {
+      require('fs').writeFileSync('/tmp/sahas-b8b-parity-report.json', JSON.stringify(report, null, 2));
+      if (aiMode === 'codex-local') require('fs').writeFileSync('/tmp/sahas-b8b-full-report.json', JSON.stringify(report, null, 2));
+    }
     console.log(JSON.stringify(report, null, 2));
     return;
   }

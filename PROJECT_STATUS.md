@@ -4,6 +4,25 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zt. Project B8B-CODEX-LOCAL — no-API disposable composition transport (2026-08-13)
+
+The disposable newsroom-pool runner now has an explicit `--ai-mode codex-local`
+transport. It is intentionally outside the production provider router and only
+returns schema-checked, source-extractive Marathi editorial packages through the
+existing exact-fit, grounding, quality, preflight, parity and transactional
+persistence path. Every invocation consumes the shared call budget and is
+journalled as `PROVIDER_CALL` with provider `CODEX_LOCAL`; it cannot call
+Gemini, Sarvam or another provider in this mode.
+
+Fresh disposable edition 12125 (2099-05-23) completed with Pages 1–4
+`PERSISTED`, 29 CODEX_LOCAL calls, zero baseline/projected/reload preflight
+errors and no post-save drift. Its non-sensitive report is
+`/tmp/sahas-b8b-full-report.json`; print-view captures are under
+`/tmp/sahas-b8b-codex-local-2099-05-23/`. This demonstrates the pipeline and
+its safety gates, not a substitute for a production editorial model.
+
+---
+
 ## 0zq. Project B8B — SAHAS-controlled AI composition foundation (2026-08-13)
 
 SAHAS continues to choose composition and rendering; AI supplies only

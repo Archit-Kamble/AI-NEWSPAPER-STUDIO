@@ -54,8 +54,10 @@ async function measureStoryFrameFit(story = {}, frame = {}, context = {}) {
   const fitScore = Number.isFinite(raw) ? Math.round(Math.max(0, 100 - (distance * 140))) : 0;
   return {
     applicable: true, storyType, editorialPriority: Number(story.editorial_priority ?? story.editorialPriority) || 3,
-    ...measured, rawBodyFillRatio: raw, underfillChars: Math.max(0, measured.bodyCharBudget - measured.bodyCharsUsed),
-    overflowChars: Math.max(0, measured.bodyCharsUsed - measured.bodyCharBudget),
+    ...measured, rawBodyFillRatio: raw, underfillChars: Math.max(0, measured.writableBodyCharBudget - measured.authoredBodyCharsUsed),
+    overflowChars: Math.max(0, measured.totalBodyCharsUsed - measured.bodyCharBudget),
+    rawSourceChars: String(story.body || '').length,
+    sourceScaleStatus: String(story.body || '').length >= Math.round(measured.writableBodyCharBudget * policy.bodyFill.min) ? 'SOURCE_SCALE_OK' : String(story.body || '').length >= Math.round(measured.writableBodyCharBudget * policy.bodyFill.min * 0.5) ? 'SOURCE_SCALE_THIN' : 'SOURCE_SCALE_SEVERELY_THIN',
     imagePlacementStatus: placement.status, imagePlacementUnresolved: placement.status === 'UNRESOLVED_DESTINATION_PLACEMENT',
     fitClass, fitScore, textDemandRatio: raw,
     policyMinFill: policy.bodyFill.min, policyTargetFill: policy.bodyFill.target, policyMaxFill: policy.bodyFill.max, policyFitClass,

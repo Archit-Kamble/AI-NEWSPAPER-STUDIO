@@ -209,6 +209,7 @@ async function askForJson(prompt, schema, options = {}) {
 
   for (const provider of providers) {
     let result = await callOnce(provider, prompt, schema, tier, undefined, options.callBudget, 'initial');
+    if (result.condition === 'budget') return { error: 'SERVICE_CALL_BUDGET_EXHAUSTED', callBudgetExhausted: true, attempts };
 
     // One retry, and only for the one failure that a retry can actually fix:
     // the model spent its whole output budget reasoning and returned nothing.
@@ -231,6 +232,7 @@ async function askForJson(prompt, schema, options = {}) {
         ? provider.maxOutputTokens(result.budget ? result.budget * 2 : undefined)
         : undefined;
       result = await callOnce(provider, prompt, schema, gentler, roomier, options.callBudget, 'retry');
+      if (result.condition === 'budget') return { error: 'SERVICE_CALL_BUDGET_EXHAUSTED', callBudgetExhausted: true, attempts };
       if (result.data) {
         const problem = validate(result.data, schema);
         if (!problem) {
@@ -314,7 +316,9 @@ function consumeProviderCall(budget, metadata) {
     const error = new Error('SERVICE_CALL_BUDGET_EXHAUSTED'); error.code = 'SERVICE_CALL_BUDGET_EXHAUSTED'; throw error;
   }
   budget.used += 1;
-  if (Array.isArray(budget.events)) budget.events.push({ provider: metadata.provider, reason: metadata.reason, at: new Date().toISOString() });
+  const event = { provider: metadata.provider, reason: metadata.reason, callNumber: budget.used, at: new Date().toISOString() };
+  if (Array.isArray(budget.events)) budget.events.push(event);
+  budget.onConsume?.(event);
 }
 async function callOnce(provider, prompt, schema, tier, maxOutputTokens, callBudget, reason = 'initial') {
   const controller = new AbortController();

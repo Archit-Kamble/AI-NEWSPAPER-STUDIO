@@ -36,6 +36,24 @@ test('four-page routing gives general and opinion sources deterministic fallback
   assert.equal(routed.buckets.get(4)[0].id, 'general');
 });
 
+test('routing offers every LOCAL candidate to B6 even when page 2 has fewer frames', () => {
+  const pages = [{ page_number: 1 }, { page_number: 2 }, { page_number: 3 }, { page_number: 4 }];
+  const sources = ['water', 'hospital', 'school', 'health', 'bus'].map((id, index) => ({ id, desired_page_role: 'LOCAL', editorial_priority: 5 - index }));
+  const routed = routeSourcesToEditionPages({ pages, capacities: new Map([[2, 3]]), sources });
+  assert.deepEqual(routed.buckets.get(2).map((item) => item.id), ['water', 'hospital', 'school', 'health', 'bus']);
+  assert.equal(routed.unassigned.length, 0);
+});
+
+test('opinion fallback competes with direct feature candidates instead of being capacity-rejected', () => {
+  const pages = [{ page_number: 1 }, { page_number: 2 }, { page_number: 3 }, { page_number: 4 }];
+  const routed = routeSourcesToEditionPages({ pages, capacities: new Map([[3, 1]]), sources: [
+    { id: 'feature-a', desired_page_role: 'FEATURES', editorial_priority: 4 },
+    { id: 'feature-b', desired_page_role: 'FEATURES', editorial_priority: 3 },
+    { id: 'opinion', desired_page_role: 'OPINION', editorial_priority: 4 },
+  ] });
+  assert.deepEqual(routed.buckets.get(3).map((item) => item.id), ['feature-a', 'feature-b', 'opinion']);
+});
+
 test('invalid baseline blocks before an AI call', async () => {
   let calls = 0;
   const page = { id: 'page', page_number: 2, sections: [{ id: 'frame', section_key: 'frame', width_px: 200, height_px: 100, x_px: 0, y_px: 0 }] };

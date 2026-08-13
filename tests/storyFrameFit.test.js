@@ -71,3 +71,11 @@ test('fit and canonical flow preserve explicit line height and printable rich te
   const over = await measureStoryFrameFit(story('parity', { body: 'अ'.repeat(baseline.bodyCharBudget + 1) }), destination);
   assert.equal(over.overflowChars, 1);
 });
+
+test('raw source scale is distinct from physical overflow', async () => {
+  const base = await measureStoryFrameFit(story('scale', { body: '' }), frame('scale'));
+  const min = Math.round(base.writableBodyCharBudget * base.policyMinFill);
+  assert.equal((await measureStoryFrameFit(story('ok', { body: 'अ'.repeat(min) }), frame('scale'))).sourceScaleStatus, 'SOURCE_SCALE_OK');
+  assert.equal((await measureStoryFrameFit(story('thin', { body: 'अ'.repeat(Math.ceil(min * 0.6)) }), frame('scale'))).sourceScaleStatus, 'SOURCE_SCALE_THIN');
+  assert.equal((await measureStoryFrameFit(story('severe', { body: 'अ'.repeat(Math.max(1, Math.floor(min * 0.4))) }), frame('scale'))).sourceScaleStatus, 'SOURCE_SCALE_SEVERELY_THIN');
+});

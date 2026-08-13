@@ -20,9 +20,10 @@ async function buildFlowAwarePairEvaluations(stories = [], frames = [], context 
     }
     measuredFitPairs += 1;
     const fit = await measureStoryFrameFit(story, frame, context);
+    const sourceScaleHardRejected = context.externalComposition && fit.sourceScaleStatus === 'SOURCE_SCALE_SEVERELY_THIN';
     const fitWeight = !fit.applicable ? 0 : (fit.imagePlacementUnresolved ? FLOW_AWARE_V1.unresolvedImageFitWeight : FLOW_AWARE_V1.fitWeight);
     const planningScore = (compatibility.score * (1 - fitWeight)) + ((fit.fitScore ?? compatibility.score) * fitWeight);
-    return { ...ids, compatibility, fit, planningScore: Number(planningScore.toFixed(4)), hardReject: false, fitContributionApplied: fitWeight, fitConfidence: !fit.applicable ? 'NOT_APPLICABLE' : (fit.imagePlacementUnresolved ? 'REDUCED_UNRESOLVED_IMAGE' : 'FULL'), reasons: [...compatibility.reasons] };
+    return { ...ids, compatibility, fit, planningScore: Number(planningScore.toFixed(4)), hardReject: sourceScaleHardRejected, fitContributionApplied: fitWeight, fitConfidence: !fit.applicable ? 'NOT_APPLICABLE' : (fit.imagePlacementUnresolved ? 'REDUCED_UNRESOLVED_IMAGE' : 'FULL'), reasons: [...compatibility.reasons, ...(sourceScaleHardRejected ? ['SOURCE_SCALE_SEVERELY_THIN'] : [])] };
   }))));
   return { evaluations, diagnostics: { totalPairs: stories.length * frames.length, hardRejectedPairs, measuredFitPairs, skippedFitPairs } };
 }

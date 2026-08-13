@@ -70,4 +70,37 @@ async function removeEdition(id) {
   if (id) await pool.query('DELETE FROM newspapers WHERE id = $1', [id]);
 }
 
-module.exports = { signIn, newEdition, removeEdition };
+// Press/output tests are interested in a particular artifact or lifecycle,
+// not in hand-authoring forty-five unrelated blocks. Seed every canonical
+// publication obligation without bypassing production readiness logic.
+async function satisfyPublicationContent(pages = [], { companionImageUrl = '/uploads/test-image.png' } = {}) {
+  const pageRepository = require('../../src/repositories/page.repository');
+  const { getTemplate } = require('../../src/layout/templates');
+  const { PURPOSE, resolveFramePurpose } = require('../../src/layout/frame-purpose');
+  for (const item of pages) {
+    const page = await pageRepository.findById(item.id ?? item);
+    const byKey = new Map(getTemplate(page.template_key).sections.map((section) => [section.key, section]));
+    for (const section of page.sections) {
+      const owner = resolveFramePurpose(section, byKey.get(section.section_key));
+      if (owner.purpose === PURPOSE.EDITORIAL_STORY) await pool.query(
+        `UPDATE page_sections SET headline=COALESCE(headline,'तपासलेली बातमी'), body=COALESCE(body,'तपासलेला मजकूर'), status='ready' WHERE id=$1`, [section.id],
+      );
+      if (owner.purpose === PURPOSE.ADVERT) await pool.query(
+        `UPDATE page_sections SET headline=COALESCE(headline,'जाहिरात'), status='ready' WHERE id=$1`, [section.id],
+      );
+      if (owner.purpose === PURPOSE.IMAGE_COMPANION) await pool.query(
+        `UPDATE page_sections SET image_url=COALESCE(image_url,$2), status='ready' WHERE id=$1`, [section.id, companionImageUrl],
+      );
+      if (owner.purpose === PURPOSE.STANDING_FEATURE) await pool.query(
+        `UPDATE page_sections SET headline=COALESCE(headline,$2), body=COALESCE(body,'तपासलेली माहिती'), smart_card_key=$2, smart_card_data=$3::jsonb, status='ready', ai_generated=FALSE WHERE id=$1`,
+        [section.id, owner.standingFeatureKind, JSON.stringify({ items: [], entries: ['तपासलेली माहिती'] })],
+      );
+      if (owner.purpose === PURPOSE.UTILITY) await pool.query(
+        `UPDATE page_sections SET headline=COALESCE(headline,'आजचा सुडोकू'), smart_card_key=$2, smart_card_data=$3::jsonb, status='ready', ai_generated=FALSE WHERE id=$1`,
+        [section.id, owner.utilityKind, JSON.stringify({ grid: Array.from({ length: 9 }, () => Array(9).fill(0)) })],
+      );
+    }
+  }
+}
+
+module.exports = { signIn, newEdition, removeEdition, satisfyPublicationContent };

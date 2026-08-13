@@ -96,6 +96,19 @@ test('filling twice re-fills the card (a deliberate refill), not left stale from
   });
 });
 
+test('model-written standing features need review while computed and curated features are ready', async () => {
+  await withFeaturesPage(async ({ newspaper, page }) => {
+    const result = await fillEdition(newspaper.id, {});
+    const statuses = new Map(result.filled.map((item) => [item.feature, item.status]));
+    assert.equal(statuses.get('rashi'), 'needs_review');
+    assert.equal(statuses.get('suvichar'), 'needs_review');
+    assert.equal(statuses.get('panchang'), 'ready');
+    const { rows } = await pool.query(`SELECT feature_key,status FROM page_sections WHERE page_id=$1 AND feature_key IS NOT NULL`, [page.id]);
+    assert.equal(rows.find((item) => item.feature_key === 'rashi').status, 'needs_review');
+    assert.equal(rows.find((item) => item.feature_key === 'panchang').status, 'ready');
+  });
+});
+
 // toCopy()'s trim-to-fit: राशिभविष्य/सुविचार are AI-written (written.js), and
 // the brief already asks the model for a per-sign character ceiling - but a
 // brief is a request, not a guarantee. Re-running "Fill features" against the

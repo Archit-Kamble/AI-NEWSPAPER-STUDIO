@@ -16,6 +16,7 @@
 
 const pool = require('../config/db');
 const features = require('../features');
+const reviewInvalidation = require('./reviewInvalidation.service');
 
 // The character grid, loaded from the one module that defines it.
 //
@@ -161,17 +162,20 @@ async function fillEdition(newspaperId, { tier } = {}) {
     // Overwritten unconditionally, exactly like headline/subheading/body
     // already are above - pressing "Fill features" is a deliberate refill,
     // same as it always has been for the copy.
+    const declared = features.list().find((entry) => entry.key === block.feature_key);
+    const reviewStatus = declared?.source === 'written' ? 'needs_review' : 'ready';
     await pool.query(
       `UPDATE page_sections
           SET headline = $2, subheading = $3, body = $4,
               smart_card_key = $5, smart_card_data = $6,
-              status = 'ready', ai_generated = TRUE, language = 'Marathi',
+              status = $7, ai_generated = TRUE, language = 'Marathi',
               updated_at = CURRENT_TIMESTAMP
         WHERE id = $1`,
       [block.id, copy.headline, copy.subheading, copy.body,
-        result.card ? block.feature_key : null, result.card ? JSON.stringify(result.card) : null],
+        result.card ? block.feature_key : null, result.card ? JSON.stringify(result.card) : null, reviewStatus],
     );
-    filled.push({ sectionKey: block.section_key, feature: block.feature_key, chars: copy.body.length });
+    await reviewInvalidation.invalidatePage(block.page_id);
+    filled.push({ sectionKey: block.section_key, feature: block.feature_key, chars: copy.body.length, status: reviewStatus });
   }
 
   return { date: built.date, filled, skipped, notes: [...built.notes, ...trimNotes], writtenBy: built.writtenBy || null };

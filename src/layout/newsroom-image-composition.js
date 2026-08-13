@@ -1,6 +1,8 @@
 // Pure newsroom-image policy and geometry. Source metadata identifies a
 // photograph; SAHAS alone chooses its destination-relative placement.
 const path = require('path');
+const { getTemplate } = require('./templates');
+const { PURPOSE, resolveFramePurpose } = require('./frame-purpose');
 
 const REQUIRED = 'IMAGE_REQUIRED'; const PREFERRED = 'IMAGE_PREFERRED';
 const OPTIONAL = 'IMAGE_OPTIONAL'; const NONE = 'NO_IMAGE';
@@ -49,18 +51,22 @@ function buildImageIntents(pagePlan, used = new Set()) {
   // A template photo slot is a package companion, not another prose story.
   // Associate it with the highest-priority assigned story occupying the same
   // horizontal band, with stable frame/story tie-breaks.
-  const companions = (pagePlan.page.sections || []).filter((section) => String(section.block_type).toLowerCase() === 'photo').map((section) => {
+  const template = getTemplate(pagePlan.page.template_key);
+  const templateByKey = new Map(template.sections.map((item) => [item.key, item]));
+  const companions = (pagePlan.page.sections || []).filter((section) => resolveFramePurpose(section, templateByKey.get(section.section_key)).purpose === PURPOSE.IMAGE_COMPANION).map((section) => {
+    const ownership = resolveFramePurpose(section, templateByKey.get(section.section_key));
     const centre = Number(section.y_px) + Number(section.height_px) / 2;
-    const owner = [...assignments].sort((a, b) => {
+    const declaredOwner = assignments.find((item) => item.frame?.section_key === ownership.packageOwnerSection);
+    const owner = declaredOwner || [...assignments].sort((a, b) => {
       const aInside = centre >= Number(a.frame?.y_px) && centre <= Number(a.frame?.y_px) + Number(a.frame?.height_px) ? 1 : 0;
       const bInside = centre >= Number(b.frame?.y_px) && centre <= Number(b.frame?.y_px) + Number(b.frame?.height_px) ? 1 : 0;
       return bInside - aInside || Number(b.story?.editorial_priority || 0) - Number(a.story?.editorial_priority || 0) || String(a.story?.id).localeCompare(String(b.story?.id));
     })[0];
-    if (!owner) return null;
-    if ((section.images || []).length) return { page: pagePlan.page.page_number, storyId: owner.story.id, sourceNewsItemId: owner.story.news_item_id ?? null, frameId: owner.frame.id, destinationSectionId: section.id, destinationSectionKey: section.section_key, companion: true, requirement: REQUIRED, image: null, placement: null, state: 'IMAGE_EXISTING_PRESERVED' };
+    if (!owner) return { page: pagePlan.page.page_number, storyId: null, sourceNewsItemId: null, frameId: null, destinationSectionId: section.id, destinationSectionKey: section.section_key, companion: true, packageOwnerSection: ownership.packageOwnerSection, requirement: REQUIRED, image: null, placement: null, state: 'IMAGE_COMPANION_ORPHAN' };
+    if ((section.images || []).length) return { page: pagePlan.page.page_number, storyId: owner.story.id, sourceNewsItemId: owner.story.news_item_id ?? null, frameId: owner.frame.id, destinationSectionId: section.id, destinationSectionKey: section.section_key, companion: true, packageOwnerSection: ownership.packageOwnerSection, requirement: REQUIRED, image: null, placement: null, state: 'IMAGE_EXISTING_PRESERVED' };
     const frame = { id: section.id, section_id: section.id, section_key: section.section_key, width_px: section.width_px, height_px: section.height_px, margin_px: section.margin_px, block_type: 'photo', recommendedStoryType: 'PHOTO_FEATURE' };
     const image = selectSourceImage(owner.story, frame, used); if (image) used.add(image.assetId ? `asset:${image.assetId}` : `url:${image.url}`);
-    return { page: pagePlan.page.page_number, storyId: owner.story.id, sourceNewsItemId: owner.story.news_item_id ?? null, frameId: owner.frame.id, destinationSectionId: section.id, destinationSectionKey: section.section_key, companion: true, requirement: REQUIRED, image, placement: image ? placementFor(frame, image, REQUIRED) : null, state: image ? 'IMAGE_PLANNED' : 'IMAGE_REQUIRED_MISSING' };
+    return { page: pagePlan.page.page_number, storyId: owner.story.id, sourceNewsItemId: owner.story.news_item_id ?? null, frameId: owner.frame.id, destinationSectionId: section.id, destinationSectionKey: section.section_key, companion: true, packageOwnerSection: ownership.packageOwnerSection, requirement: REQUIRED, image, placement: image ? placementFor(frame, image, REQUIRED) : null, state: image ? 'IMAGE_PLANNED' : 'IMAGE_REQUIRED_MISSING' };
   }).filter(Boolean);
   const companionStories = new Set(companions.map((intent) => String(intent.storyId)));
   const prose = assignments.map(({ assignment, story, frame }) => { const packageHasCompanion = companionStories.has(String(assignment.storyId)); const requirement = packageHasCompanion ? NONE : imageRequirement(story, frame); const image = requirement === NONE ? null : selectSourceImage(story, frame, used); if (image) used.add(image.assetId ? `asset:${image.assetId}` : `url:${image.url}`); return { page: pagePlan.page.page_number, storyId: assignment.storyId, sourceNewsItemId: story.news_item_id ?? null, frameId: assignment.frameId, destinationSectionId: frame?.section_id, destinationSectionKey: frame?.section_key, companion: false, requirement, image, placement: image ? placementFor(frame, image, requirement) : null, state: packageHasCompanion ? 'IMAGE_SATISFIED_BY_COMPANION' : image ? 'IMAGE_PLANNED' : requirement === REQUIRED ? 'IMAGE_REQUIRED_MISSING' : 'IMAGE_NOT_REQUIRED' }; });

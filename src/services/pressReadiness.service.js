@@ -4,10 +4,11 @@ const path = require('path');
 const pool = require('../config/db');
 const preflight = require('./preflight.service');
 const districtEditions = require('./districtEdition.service');
+const { buildEditionContentManifest } = require('../layout/edition-content-manifest');
 
 const PUBLIC_DIR = path.resolve(__dirname, '..', '..', 'public');
 const ACTIVE_RUN_STATES = ['PREPARING', 'PREPARED', 'PERSISTING', 'VERIFYING', 'HUMAN_REQUIRED'];
-const COUNTS = Object.freeze({ preflightErrors: 0, needsReview: 0, provenanceMissing: 0, imageSafetyErrors: 0, pagesNotPassed: 0, staleSignoffs: 0, missingAssets: 0, uncertainRuns: 0 });
+const COUNTS = Object.freeze({ preflightErrors: 0, needsReview: 0, provenanceMissing: 0, imageSafetyErrors: 0, pagesNotPassed: 0, staleSignoffs: 0, missingAssets: 0, uncertainRuns: 0, publicationContentIncomplete: 0 });
 const PRINT_FIELDS = ['news_item_id','story_type','editorial_priority','kicker','headline','subheading','body','caption','category','location','tags','reporter_name','language','status','ai_generated','image_url','headline_font_px','subheading_font_px','body_font_px','column_count','margin_px','line_height','editorial_presentation'];
 const imageIdentity = (image) => [image.media_asset_id,image.source_news_item_id,image.url,image.x_px,image.y_px,image.width_px,image.height_px,image.crop_x_px,image.crop_y_px,image.crop_width_px,image.crop_height_px,image.rotation,image.flip_h,image.flip_v,image.shape,image.stand_off_px,image.caption];
 function pageFingerprint(page) {
@@ -26,6 +27,7 @@ function countsOf(blockers) {
     if (item.code === 'PAGE_SIGNOFF_STALE') counts.staleSignoffs += 1;
     if (item.code === 'PRESS_ASSET_MISSING') counts.missingAssets += 1;
     if (item.code === 'COMPOSITION_RUN_UNCERTAIN') counts.uncertainRuns += 1;
+    if (['EDITORIAL_DEMAND_UNRESOLVED','IMAGE_COMPANION_ORPHAN','IMAGE_REQUIRED_MISSING','FEATURE_REQUIRED_MISSING','FEATURE_NEEDS_REVIEW','ADVERT_REQUIRED_MISSING','UTILITY_REQUIRED_MISSING','UTILITY_NEEDS_REVIEW','FRAME_PURPOSE_UNKNOWN','REQUIRED_FRAME_POLICY_MISSING'].includes(item.code)) counts.publicationContentIncomplete += 1;
   }
   return counts;
 }
@@ -38,8 +40,25 @@ function localAsset(url) {
   const resolved = path.resolve(PUBLIC_DIR, `.${clean}`);
   return resolved.startsWith(path.join(PUBLIC_DIR, 'uploads') + path.sep) ? resolved : null;
 }
-async function pageBlockers(page, newspaper, { requirePassed = true, checkUncertainRuns = true } = {}) {
+const CONTENT_BLOCKER = Object.freeze({
+  EDITORIAL_REQUIRED_MISSING: ['EDITORIAL_DEMAND_UNRESOLVED', 'A required editorial destination has no story content.'],
+  IMAGE_REQUIRED_MISSING: ['IMAGE_REQUIRED_MISSING', 'A required story-package image companion is empty.'],
+  IMAGE_COMPANION_ORPHAN: ['IMAGE_COMPANION_ORPHAN', 'An image companion has no canonical story-package owner.'],
+  FEATURE_REQUIRED_MISSING: ['FEATURE_REQUIRED_MISSING', 'A required standing feature is missing or invalid.'],
+  FEATURE_NEEDS_REVIEW: ['FEATURE_NEEDS_REVIEW', 'A generated standing feature needs explicit review.'],
+  ADVERT_REQUIRED_MISSING: ['ADVERT_REQUIRED_MISSING', 'A required external advert slot is empty.'],
+  UTILITY_REQUIRED_MISSING: ['UTILITY_REQUIRED_MISSING', 'A required utility block is missing or invalid.'],
+  UTILITY_NEEDS_REVIEW: ['UTILITY_NEEDS_REVIEW', 'A generated utility block needs explicit review.'],
+  FRAME_PURPOSE_UNKNOWN: ['FRAME_PURPOSE_UNKNOWN', 'A physical frame has no canonical publication owner.'],
+  REQUIRED_FRAME_POLICY_MISSING: ['REQUIRED_FRAME_POLICY_MISSING', 'A physical frame lacks its publication requirement policy.'],
+});
+async function pageBlockers(page, newspaper, { requirePassed = true, checkUncertainRuns = true, contentFrames = null } = {}) {
   const blockers = [];
+  const manifestFrames = contentFrames || buildEditionContentManifest([page]).frames;
+  for (const frame of manifestFrames) {
+    const mapped = CONTENT_BLOCKER[frame.contentState];
+    if (mapped) blockers.push(blocker(mapped[0], frame.page, frame.sectionKey, mapped[1]));
+  }
   const report = await preflight.validatePageLayout(page, newspaper);
   for (const finding of [...report.collisions, ...report.overflow].filter((item) => item.level === 'error')) blockers.push(blocker(finding.type || `PREFLIGHT_${String(finding.check).toUpperCase().replace(/-/g, '_')}`, page.page_number, finding.sectionKey, finding.message));
   for (const section of page.sections || []) {
@@ -71,21 +90,23 @@ async function loadPage(pageId) {
 async function assessPage(pageId, options = {}) {
   const loaded = await loadPage(pageId); if (!loaded) return null;
   const result = await pageBlockers(loaded.page, loaded.newspaper, options);
-  return { readyForPress: result.blockers.length === 0, blockers: result.blockers, counts: countsOf(result.blockers), ...result };
+  const contentManifest = buildEditionContentManifest([loaded.page]);
+  return { readyForPress: result.blockers.length === 0, blockers: result.blockers, counts: countsOf(result.blockers), editorialCompositionState: contentManifest.editorialCompositionState, publicationContentState: contentManifest.publicationContentState, contentManifest, ...result };
 }
 async function assessEdition(newspaperId) {
   const { rows: papers } = await pool.query('SELECT * FROM newspapers WHERE id = $1', [newspaperId]);
   if (!papers[0]) return null;
   const pages = await districtEditions.pagesOf(newspaperId);
+  const contentManifest = buildEditionContentManifest(pages);
   const pageResults = [];
-  for (const page of pages) pageResults.push(await pageBlockers(page, papers[0], { requirePassed: true, checkUncertainRuns: false }));
+  for (const page of pages) pageResults.push(await pageBlockers(page, papers[0], { requirePassed: true, checkUncertainRuns: false, contentFrames: contentManifest.frames.filter((frame) => Number(frame.pageId) === Number(page.id)) }));
   const blockers = pageResults.flatMap((item) => item.blockers);
   const { rows: runs } = await pool.query('SELECT run_id, state FROM edition_composition_runs WHERE edition_id = $1 AND state = ANY($2::varchar[]) ORDER BY started_at, run_id', [newspaperId, ACTIVE_RUN_STATES]);
   for (const run of runs) blockers.push(blocker('COMPOSITION_RUN_UNCERTAIN', null, null, `Composition run ${run.run_id} is ${run.state}.`));
   blockers.sort((a, b) => (a.page ?? 999) - (b.page ?? 999) || String(a.sectionKey || '').localeCompare(String(b.sectionKey || '')) || a.code.localeCompare(b.code));
   const signoffTimes = pages.map((page) => page.state_changed_at && new Date(page.state_changed_at).getTime()).filter(Number.isFinite);
   const assessedAt = signoffTimes.length ? new Date(Math.max(...signoffTimes)).toISOString() : null;
-  return { editionId: Number(newspaperId), assessedAt, readyForPress: blockers.length === 0, blockers, counts: countsOf(blockers), pages: pageResults };
+  return { editionId: Number(newspaperId), assessedAt, editorialCompositionState: contentManifest.editorialCompositionState, publicationContentState: contentManifest.publicationContentState, readyForPress: blockers.length === 0, blockers, counts: countsOf(blockers), contentManifest, pages: pageResults };
 }
 
 module.exports = { assessPage, assessEdition, pageFingerprint, ACTIVE_RUN_STATES };

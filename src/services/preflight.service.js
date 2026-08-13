@@ -19,6 +19,8 @@
 const path = require('path');
 const pool = require('../config/db');
 const { geometryOf, pxToMm } = require('../layout/geometry');
+const { getTemplate } = require('../layout/templates');
+const { resolveFramePurpose } = require('../layout/frame-purpose');
 
 // Below this, a photograph visibly breaks up on newsprint. 300 dpi is the
 // target; 150 is the point at which a picture editor would reject it.
@@ -98,8 +100,16 @@ async function checkPage(page, newspaper, totalPages) {
     : (Number(page.page_number) === 2 ? g.regions.insideImprint : g.regions.inside);
 
   const sections = page.sections || [];
+  const templateByKey = new Map(getTemplate(page.template_key).sections.map((item) => [item.key, item]));
 
   for (const section of sections) {
+    const ownership = resolveFramePurpose(section, templateByKey.get(section.section_key));
+    for (const code of ownership.errors) findings.push({
+      level: 'error', check: code.toLowerCase().replace(/_/g, '-'), ...at(section),
+      message: code === 'IMAGE_COMPANION_ORPHAN'
+        ? 'This image companion has no canonical story-package owner.'
+        : 'This physical frame has no unambiguous publication-content ownership policy.',
+    });
     // --- inside the matter box -------------------------------------------
     if (
       section.x_px < matter.left - 1 || section.y_px < matter.top - 1 ||
@@ -346,6 +356,10 @@ const COLLISION_TYPES = {
   'image-text-collision': 'IMAGE_TEXT_COLLISION',
   'caption-text-collision': 'CAPTION_TEXT_COLLISION',
   'caption-outside-section': 'CAPTION_OUTSIDE_SECTION',
+  'frame-purpose-unknown': 'FRAME_PURPOSE_UNKNOWN',
+  'frame-purpose-ambiguous': 'FRAME_PURPOSE_AMBIGUOUS',
+  'image-companion-orphan': 'IMAGE_COMPANION_ORPHAN',
+  'required-frame-policy-missing': 'REQUIRED_FRAME_POLICY_MISSING',
 };
 const OVERFLOW_TYPES = { overset: 'TEXT_OVERFLOW' };
 

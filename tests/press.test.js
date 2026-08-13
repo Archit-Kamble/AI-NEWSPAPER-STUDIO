@@ -12,7 +12,7 @@ const path = require('node:path');
 const fs = require('node:fs/promises');
 const { createApp } = require('../server');
 const pool = require('../src/config/db');
-const { signIn, newEdition, removeEdition } = require('./helpers/desk');
+const { signIn, newEdition, removeEdition, satisfyPublicationContent } = require('./helpers/desk');
 const preflight = require('../src/services/preflight.service');
 const scribus = require('../src/services/scribus.service');
 
@@ -209,6 +209,7 @@ test('the press file is well-formed Scribus, in millimetres, with every page', a
         location: 'मुंबई', reporterName: 'विशेष प्रतिनिधी', status: 'ready',
       }),
     });
+    await satisfyPublicationContent(pages);
     await passPages(desk, pages);
 
     const response = await desk(`/api/newspapers/${newspaper.id}/scribus`);
@@ -292,10 +293,11 @@ test('the press package is a real zip that carries the pictures with it', async 
       method: 'POST',
       body: JSON.stringify({ url: '/uploads/zz-package-test.png', x: 10, y: 90, width: 200, height: 130 }),
     });
+    await satisfyPublicationContent(pages, { companionImageUrl: '/uploads/zz-package-test.png' });
     await passPages(desk, pages);
 
     const response = await desk(`/api/newspapers/${newspaper.id}/press-package`);
-    assert.equal(response.status, 200);
+    assert.equal(response.status, 200, response.status === 200 ? undefined : await response.clone().text());
     assert.equal(response.headers.get('x-pictures-included'), '1');
     assert.equal(response.headers.get('x-pictures-missing'), '0');
 
@@ -340,6 +342,7 @@ test('the same edition packages to the same bytes twice', async () => {
   try {
     const { desk, newspaper, pages } = await newEdition(port, 'Deterministic package test', { pages: [[1, 'front']] });
     editionId = newspaper.id;
+    await satisfyPublicationContent(pages);
     await passPages(desk, pages);
 
     const first = Buffer.from(await (await desk(`/api/newspapers/${newspaper.id}/press-package`)).arrayBuffer());

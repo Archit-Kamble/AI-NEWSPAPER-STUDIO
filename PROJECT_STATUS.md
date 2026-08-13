@@ -4,6 +4,62 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zzb. Project B8B-WHOLE-EDITION-DEMAND-TRUTH — canonical frame ownership (2026-08-13)
+
+The 2099-06-12 “33 required / 30 composed” result was audited frame by frame.
+The exact unresolved frames were ordinary editorial destinations: Page 2
+`banner`, Page 3 `feature-two`, and Page 4 `strip-right`. They were outside the
+completed set only because that disposable inbox contained 30 sources. The
+same audit found a second old error: Page 3 `feature-three` is an editorial
+article with a DATA recommendation, but hard-coded “special renderer” sets had
+excluded it from demand and exact fitting. The truthful standard-template
+denominator is therefore 34 independent editorial stories, not 30 or 33.
+
+Every built-in physical frame now declares a canonical publication owner and
+requirement, distinct from physical `block_type` and occupant `story_type`:
+34 `EDITORIAL_STORY`, two `IMAGE_COMPANION`, four `STANDING_FEATURE`, four
+required external `ADVERT`, and one required `UTILITY`. The pure centralized
+resolver provides visible legacy inference only when old/custom data lacks
+explicit metadata. The whole-edition manifest classifies all 45 frames,
+reports package/feature/advert/utility ownership and content/review/provenance
+state, and has zero unknown or ambiguous frames for the standard four-page
+ladder. DATA in an editorial article is now measurable/writable prose; cards,
+adverts, and display quotes remain specialized renderers.
+
+Newsroom demand, image-companion selection, composition Plan/Apply summaries,
+preflight configuration errors, central press readiness, edition status and
+the existing workspace summary consume the same ownership truth. Compatibility
+`completionState`/`state` still denotes editorial composition, while explicit
+`editorialCompositionState`, `publicationContentState`, and `readyForPress`
+separate three different claims. Required missing features, utilities, adverts,
+image packages, unknown ownership and orphan companions now block publication
+without mislabelling complete newsroom composition as partial.
+
+Fresh disposable proof used edition 13542 (2099-08-15). Production Plan derived
+34/34 editorial destinations and 3/3 required image treatments; Apply persisted
+all four pages atomically with 60 `CODEX_LOCAL` calls and reported
+`FULLY_COMPOSED` while a deliberately cleared curated `dinvishesh` kept
+publication content `INCOMPLETE` and all press outputs blocked. The normal
+“Fill features” route restored that checked feature and changed publication
+content to `COMPLETE`; 34 normal editorial reviews and four page signoffs then
+made press readiness true. Scribus was 83,047 bytes, the package 266,615 bytes
+with three pictures and zero missing assets, and all page preflight/parity/
+provenance counts were clean. The final safe report is
+`/tmp/sahas-b8b-whole-edition-report.json`; screenshots are under
+`/tmp/sahas-whole-edition-2099-08-15/`.
+
+Model-written standing features now persist as `needs_review`, while computed
+and curated features persist ready; every feature refill invalidates page
+signoff. Full test run: 525/525 before this final lifecycle refinement, with
+the refined feature/ownership/readiness suites also green.
+
+Next major gap: template ownership is complete for the standard ladder, but
+custom/template-author tooling still needs an explicit purpose/policy inspector
+and migration UI so production-created layouts never depend on legacy inferred
+ownership.
+
+---
+
 ## 0zza. Project B8B-PRESS-SAFETY-CLOSEOUT — review, provenance and output gate (2026-08-13)
 
 Autonomous prose images are now finalized only after the generated kicker,

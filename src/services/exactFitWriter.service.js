@@ -6,7 +6,10 @@ const { measureStoryFrameFit } = require('../layout/story-frame-fit');
 const { validateEditorialPackage, sourceSufficiency } = require('./editorialPackage.service');
 
 const SCHEMA = { type: 'object', additionalProperties: false, required: ['headline', 'subheading', 'body'], properties: { headline: { type: 'string' }, subheading: { type: 'string' }, body: { type: 'string' }, kicker: { type: 'string' }, caption: { type: 'string' }, annotations: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['role', 'phrase', 'target'], properties: { role: { type: 'string' }, phrase: { type: 'string' }, target: { type: 'string' } } } } } };
-const SPECIAL = new Set(['SMART_CARD', 'ADVERTISEMENT', 'QUOTE', 'DATA']);
+// DATA can be an ordinary sourced article treatment (the policy catalog
+// permits article frames); only renderer-owned cards/adverts/quotes bypass the
+// prose writer. Frame purpose decides demand, never this semantic set.
+const SPECIAL = new Set(['SMART_CARD', 'ADVERTISEMENT', 'QUOTE']);
 let typesModule;
 async function storyTypes() { if (!typesModule) typesModule = await import('../../public/editor/layout/story-types.js'); return typesModule; }
 function sourceFromNewsItem(item = {}) { return { title: item.title || '', subheading: item.subheading || '', body: item.description ?? item.body ?? '', category: item.category || '', location: item.location || '', city: item.city || '', tags: item.tags || '', reporterName: item.reporter_name ?? item.reporterName ?? '' }; }

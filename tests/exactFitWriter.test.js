@@ -22,6 +22,13 @@ test('destination presentation and image uncertainty reach canonical fit; specia
   const card = await composeSourceToFrame({ source, storyType: 'SMART_CARD', frame: frame() }); assert.equal(card.notApplicable, true);
 });
 
+test('DATA in an editorial article frame uses exact-fit prose instead of a nonexistent structured renderer', async () => {
+  const result = await composeSourceToFrame({ source, storyType: 'DATA', frame: frame(), askForJson: asker([{ headline: 'योजनेची नोंद', subheading: '', body: source.body }], []) });
+  assert.equal(result.notApplicable, undefined);
+  assert.ok(result.attempts >= 1);
+  assert.equal(result.editorial.storyType, 'DATA');
+});
+
 test('news item adapter is pure and source/frame are never mutated', () => {
   const news = { title: 'शीर्षक', description: 'मजकूर', reporter_name: 'वार्ताहर', story_type: 'LEAD', editorial_priority: 5, image_urls: ['x'] };
   assert.deepEqual(sourceFromNewsItem(news), { title: 'शीर्षक', subheading: '', body: 'मजकूर', category: '', location: '', city: '', tags: '', reporterName: 'वार्ताहर' });

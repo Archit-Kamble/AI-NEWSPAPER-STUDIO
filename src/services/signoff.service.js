@@ -100,6 +100,8 @@ async function editionStatus(newspaperId) {
       errors: readiness.blockers.filter((f) => f.page === page.page_number && (f.code.startsWith('PREFLIGHT_') || f.code === 'TEXT_OVERFLOW')).length,
     })),
     preflight: { passed: readiness.counts.preflightErrors === 0, counts: { error: readiness.counts.preflightErrors } },
+    editorialCompositionState: readiness.editorialCompositionState,
+    publicationContentState: readiness.publicationContentState,
     readyForPress: readiness.readyForPress,
     readiness,
     waitingOn: outstanding.map((page) => page.page_number),

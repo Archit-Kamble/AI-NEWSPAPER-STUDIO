@@ -18,6 +18,13 @@ test('FULLY_COMPOSED editorial state is distinct from press approval, and edits 
     editionId = newspaper.id; const page = pages[0]; const lead = page.sections.find((section) => section.section_key === 'lead');
     const { rows: news } = await pool.query(`INSERT INTO news_items (newspaper_id,title,description,status) VALUES ($1,'मूळ बातमी','विश्वसनीय मजकूर','approved') RETURNING id`, [editionId]);
     await pool.query(`UPDATE page_sections SET news_item_id=$1, headline='तपासलेला मथळा', body='विश्वसनीय मजकूर', status='needs_review', ai_generated=TRUE WHERE id=$2`, [news[0].id, lead.id]);
+    // This focused lifecycle test is not an autonomous whole-edition fixture;
+    // give every other required frame truthful test content so the canonical
+    // publication-content gate is satisfied before exercising review/signoff.
+    await pool.query(`UPDATE page_sections SET headline=CASE WHEN block_type='advert' THEN 'जाहिरात' ELSE 'तपासलेली बातमी' END,
+      body=CASE WHEN block_type IN ('article','briefs') THEN 'विश्वसनीय मजकूर' ELSE body END, status='ready'
+      WHERE page_id=$1 AND id<>$2`, [page.id, lead.id]);
+    await pool.query(`UPDATE page_sections SET image_url='/uploads/test-image.png' WHERE page_id=$1 AND block_type='photo'`, [page.id]);
     let report = await readiness.assessPage(page.id, { requirePassed: false });
     assert.equal(report.readyForPress, false);
     assert.ok(report.blockers.some((item) => item.code === 'EDITORIAL_REVIEW_REQUIRED'));

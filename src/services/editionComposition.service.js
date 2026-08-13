@@ -11,11 +11,11 @@ const pageRepository = require('../repositories/page.repository');
 const { normalizeNewsroomSources } = require('./newsroomSource.service');
 const { buildImageIntents } = require('../layout/newsroom-image-composition');
 const sectionImages = require('../repositories/sectionImage.repository');
+const { PURPOSE, REQUIREMENT, resolveFramePurpose } = require('../layout/frame-purpose');
 
-const SPECIAL = new Set(['SMART_CARD', 'ADVERTISEMENT', 'QUOTE', 'DATA']);
 const roleForRung = (rung) => rung.role || (rung.pageNumber === rung.total ? 'BACK' : 'GENERAL');
 function storyPacketFromNewsItem(item = {}) { return { id: item.id, news_item_id: item.news_item_id ?? item.newsItemId ?? null, story_type: item.story_type || 'STANDARD', editorial_priority: item.editorial_priority || 3, headline: item.title || '', subheading: item.subheading || '', body: item.description ?? item.body ?? '', category: item.category || '', location: item.location || '', tags: Array.isArray(item.tags) ? item.tags.join(', ') : item.tags || '', reporter_name: item.reporter_name || '', desired_page_role: item.desired_page_role || null, routed_role: item.routed_role || null, routing_mode: item.routing_mode || null, images: item.images || [], image_urls: item.image_urls || [], imagePlacementNeedsReview: Boolean((item.images || item.image_urls || []).length) }; }
-function eligibleEditorialFrames(page, continuationSourceIds = new Set()) { const template = getTemplate(page.template_key); const byKey = new Map(template.sections.map((item) => [item.key, item])); return (page.sections || []).flatMap((section) => { const templateSection = byKey.get(section.section_key); const frame = frameDescriptorFromSection(section, templateSection); const type = String(frame.recommendedStoryType || '').toUpperCase(); const id = section.id ?? section.section_id; if (section.is_custom || section.continued_from_section_id || continuationSourceIds.has(id) || frame.feature_key || section.smart_card_key || frame.block_type === 'advert' || frame.block_type === 'photo' || SPECIAL.has(type) || (section.images || []).length) return []; return [frame]; }); }
+function eligibleEditorialFrames(page, continuationSourceIds = new Set()) { const template = getTemplate(page.template_key); const byKey = new Map(template.sections.map((item) => [item.key, item])); return (page.sections || []).flatMap((section) => { const templateSection = byKey.get(section.section_key); const frame = frameDescriptorFromSection(section, templateSection); const id = section.id ?? section.section_id; const ownership = resolveFramePurpose(section, templateSection); if (section.is_custom || section.continued_from_section_id || continuationSourceIds.has(id) || ownership.purpose !== PURPOSE.EDITORIAL_STORY || ownership.publicationRequirement !== REQUIREMENT.REQUIRED_CONTENT) return []; return [{ ...frame, framePurpose: ownership.purpose, publicationRequirement: ownership.publicationRequirement }]; }); }
 function fallbackRolesForSource(source, availableRoles) {
   const desired = String(source.desired_page_role || '').toUpperCase();
   if (availableRoles.has(desired)) return [desired];
@@ -101,7 +101,9 @@ function summarizeEditionComposition(plans = [], results = []) {
   const requiredImages = imageLedger.filter((item) => item.requirement === 'IMAGE_REQUIRED'); const resolvedImages = requiredImages.filter((item) => ['IMAGE_GENERATED_PLACEMENT', 'IMAGE_EXISTING_PRESERVED'].includes(item.state));
   const blocked = pages.some((page) => page.blocked);
   const unresolved = ledger.some((item) => item.state !== 'GENERATED_PERSISTED');
-  return { pages, ledger, images: imageLedger, imageCoverageRatio: requiredImages.length ? Number((resolvedImages.length / requiredImages.length).toFixed(4)) : 1, unresolvedImageDemand: requiredImages.length - resolvedImages.length, state: blocked ? 'BLOCKED' : unresolved || resolvedImages.length !== requiredImages.length ? 'PARTIALLY_COMPOSED' : 'FULLY_COMPOSED' };
+  const editorialCompositionState = blocked ? 'BLOCKED' : unresolved || resolvedImages.length !== requiredImages.length ? 'PARTIALLY_COMPOSED' : 'FULLY_COMPOSED';
+  return { pages, ledger, images: imageLedger, imageCoverageRatio: requiredImages.length ? Number((resolvedImages.length / requiredImages.length).toFixed(4)) : 1, unresolvedImageDemand: requiredImages.length - resolvedImages.length,
+    editorialCompositionState, state: editorialCompositionState };
 }
 
 function composedStoryFromCandidate(candidate) {

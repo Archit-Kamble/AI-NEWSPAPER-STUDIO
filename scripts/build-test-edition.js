@@ -73,6 +73,7 @@ async function makePlaceholderImages() {
     { name: 'zz-test-edition-portrait-2.jpg', color: 0x843b38ff, width: 500, height: 1800 },
     { name: 'zz-test-edition-p2-centre.jpg', color: 0x2b7e4cff },
     { name: 'zz-test-edition-p3-feature.jpg', color: 0x7e6b2bff },
+    { name: 'zz-test-edition-feature-package.jpg', color: 0x6b7e2bff, width: 2000, height: 1000 },
     { name: 'zz-test-edition-p4-anchor.jpg', color: 0x5a2b7eff },
   ];
   const urls = {};
@@ -262,7 +263,7 @@ async function fillPage3(desk, pageId) {
     body: 'यंदाच्या हंगामात जिल्ह्यात सरासरीच्या ११२ टक्के पाऊस नोंदवला गेला असून, गेल्या पाच वर्षांतील ही सर्वाधिक नोंद आहे. यामुळे जलसाठ्यांची पातळी समाधानकारक आहे.',
   });
 
-  await write(desk, pageId, 'feature-advert', { headline: 'सुवर्ण संधी! नवीन शाखेचे उद्घाटन — विशेष सवलतीसह' });
+  await write(desk, pageId, 'feature-advert', { headline: 'नवीन शाखेचे उद्घाटन', body: 'आजपासून विशेष सवलत.' });
 }
 
 async function fillPage4(desk, pageId) {

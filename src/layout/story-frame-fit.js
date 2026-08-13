@@ -10,8 +10,8 @@ const FIT_V1 = Object.freeze({
   underfillMinimum: UTILIZATION_V1.severelyUnderfilledBodyRatio,
 });
 
-const TEXT_TYPES = new Set(['LEAD', 'SECONDARY', 'STANDARD', 'OPINION', 'ANALYSIS', 'SIDEBAR', 'BRIEF', 'PHOTO_FEATURE']);
-const STRUCTURED_TYPES = new Set(['SMART_CARD', 'ADVERTISEMENT', 'QUOTE', 'DATA']);
+const TEXT_TYPES = new Set(['LEAD', 'SECONDARY', 'STANDARD', 'OPINION', 'ANALYSIS', 'SIDEBAR', 'BRIEF', 'PHOTO_FEATURE', 'DATA']);
+const STRUCTURED_TYPES = new Set(['SMART_CARD', 'ADVERTISEMENT', 'QUOTE']);
 const typeOf = (value) => String(value?.story_type ?? value?.storyType ?? 'STANDARD').trim().toUpperCase() || 'STANDARD';
 
 function imagePlacement(story, frame, context) {

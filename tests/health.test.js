@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { createApp } = require('../server');
-const { signIn } = require('./helpers/desk');
+const { signIn, satisfyPublicationContent } = require('./helpers/desk');
 
 test('health endpoint returns ok', async () => {
   const app = createApp();
@@ -88,6 +88,7 @@ test('admin workflow saves a page section and final Scribus/PDF files', async ()
     await jsonRequest(`/api/pages/${page.id}/sections/lead`, 'PUT', {
       title: 'Admin written story', description: 'Story text', category: 'Local', status: 'ready'
     });
+    await satisfyPublicationContent([page]);
     const passed = await jsonRequest(`/api/pages/${page.id}/state`, 'PATCH', { state: 'passed' });
     assert.equal(passed.status, 200);
 

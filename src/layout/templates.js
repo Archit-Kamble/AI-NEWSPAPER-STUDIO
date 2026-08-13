@@ -135,6 +135,17 @@ function block(key, col, span, y, height, options = {}) {
   const priority = Number.isInteger(options.priority)
     ? Math.min(5, Math.max(1, options.priority))
     : 3;
+  // Publication ownership is a different axis from both physical block kind
+  // and the semantic recommendation for the story that may occupy it.  The
+  // safe defaults cover only unambiguous prose and sold-space primitives;
+  // feature/photo frames must declare their purpose because either physical
+  // kind can represent several very different responsibilities.
+  const framePurpose = options.purpose
+    || (['article', 'briefs'].includes(blockType) ? 'EDITORIAL_STORY' : null)
+    || (blockType === 'advert' ? 'ADVERT' : null);
+  const publicationRequirement = options.requirement
+    || (framePurpose === 'EDITORIAL_STORY' ? 'REQUIRED_CONTENT' : null)
+    || (framePurpose === 'ADVERT' ? 'EXTERNALLY_SUPPLIED' : null);
   return {
     key,
     x: colX(col),
@@ -149,6 +160,11 @@ function block(key, col, span, y, height, options = {}) {
     // A standing daily feature: the software fills this block for the
     // edition's date rather than a reporter filing into it.
     featureKey: options.feature || null,
+    framePurpose,
+    publicationRequirement,
+    packageOwnerKey: options.packageOwner || null,
+    utilityKey: options.utility || null,
+    advertPolicy: options.advertPolicy || (framePurpose === 'ADVERT' ? 'REQUIRED_EXTERNAL' : null),
   };
 }
 
@@ -214,11 +230,11 @@ const templates = {
 
         // Band one - the day's lead, flanked by pictures, with an advert ear.
         block('lead-pictures', 0, 2, FRONT[0].y, FRONT[0].height,
-          { type: 'photo', story: 'PHOTO_FEATURE', priority: 4 }),
+          { type: 'photo', story: 'PHOTO_FEATURE', priority: 4, purpose: 'IMAGE_COMPANION', requirement: 'REQUIRED_CONTENT', packageOwner: 'lead' }),
         block('lead', 2, 7, FRONT[0].y, FRONT[0].height,
           { story: 'LEAD', priority: 5, headline: 'accent' }),
         block('lead-side', 9, 2, FRONT[0].y, FRONT[0].height,
-          { type: 'photo', story: 'PHOTO_FEATURE', priority: 3 }),
+          { type: 'photo', story: 'PHOTO_FEATURE', priority: 3, purpose: 'IMAGE_COMPANION', requirement: 'REQUIRED_CONTENT', packageOwner: 'lead' }),
         block('top-advert', 11, 5, FRONT[0].y, FRONT[0].height,
           { type: 'advert', story: 'ADVERTISEMENT', priority: 1, border: 'box' }),
 
@@ -267,7 +283,7 @@ const templates = {
         block('right-top', 12, 4, top.y, top.height, { story: 'BRIEF', priority: 2 }),
         block('right-bottom', 12, 4, bottom.y, bottom.height, { story: 'STANDARD', priority: 3 }),
         block('footer', 0, 16, footer, INSIDE_BOTTOM - footer,
-          { type: 'feature', story: 'SMART_CARD', priority: 2 }),
+          { type: 'feature', story: 'SMART_CARD', priority: 2, purpose: 'UTILITY', requirement: 'REQUIRED_CONTENT', utility: 'sudoku' }),
       ];
     })(),
   },
@@ -299,11 +315,11 @@ const templates = {
       const [top, bottom] = split(band[0].y, band[0].end, 2);
       return [
         block('photo-lead', 0, 10, band[0].y, band[0].height,
-          { type: 'photo', story: 'PHOTO_FEATURE', priority: 5 }),
+          { type: 'photo', story: 'PHOTO_FEATURE', priority: 5, purpose: 'IMAGE_COMPANION', requirement: 'REQUIRED_CONTENT', packageOwner: 'caption-story' }),
         block('photo-top', 10, 6, top.y, top.height,
-          { type: 'photo', story: 'PHOTO_FEATURE', priority: 3 }),
+          { type: 'photo', story: 'PHOTO_FEATURE', priority: 3, purpose: 'IMAGE_COMPANION', requirement: 'REQUIRED_CONTENT', packageOwner: 'caption-story' }),
         block('photo-bottom', 10, 6, bottom.y, bottom.height,
-          { type: 'photo', story: 'PHOTO_FEATURE', priority: 3 }),
+          { type: 'photo', story: 'PHOTO_FEATURE', priority: 3, purpose: 'IMAGE_COMPANION', requirement: 'REQUIRED_CONTENT', packageOwner: 'caption-story' }),
         block('caption-story', 0, 16, storyTop, INSIDE_BOTTOM - storyTop,
           { story: 'PHOTO_FEATURE', priority: 4 }),
       ];
@@ -364,13 +380,13 @@ const templates = {
       const rashiDepth = bottom - GAP - INSIDE_TOP;
       return [
         block('rashi', 0, 8, INSIDE_TOP, rashiDepth,
-          { type: 'feature', story: 'SMART_CARD', priority: 3, border: 'box', feature: 'rashi' }),
+          { type: 'feature', story: 'SMART_CARD', priority: 3, border: 'box', feature: 'rashi', purpose: 'STANDING_FEATURE', requirement: 'REQUIRED_CONTENT' }),
         block('panchang', 8, 4, right[0].y, right[0].height,
-          { type: 'feature', story: 'SMART_CARD', priority: 2, border: 'box', feature: 'panchang' }),
+          { type: 'feature', story: 'SMART_CARD', priority: 2, border: 'box', feature: 'panchang', purpose: 'STANDING_FEATURE', requirement: 'REQUIRED_CONTENT' }),
         block('dinvishesh', 12, 4, right[0].y, right[0].height,
-          { type: 'feature', story: 'SMART_CARD', priority: 2, border: 'box', feature: 'dinvishesh' }),
+          { type: 'feature', story: 'SMART_CARD', priority: 2, border: 'box', feature: 'dinvishesh', purpose: 'STANDING_FEATURE', requirement: 'REQUIRED_CONTENT' }),
         block('suvichar', 8, 8, right[1].y, right[1].height,
-          { type: 'feature', story: 'QUOTE', priority: 2, border: 'box', feature: 'suvichar' }),
+          { type: 'feature', story: 'QUOTE', priority: 2, border: 'box', feature: 'suvichar', purpose: 'STANDING_FEATURE', requirement: 'REQUIRED_CONTENT' }),
         block('feature-one', 8, 8, right[2].y, right[2].height,
           { story: 'PHOTO_FEATURE', priority: 4, headline: 'accent' }),
 

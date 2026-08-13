@@ -1,6 +1,6 @@
 // Synthetic newsroom inbox for disposable B8B runs. These are source records,
 // never section-key assignments; SAHAS routes and fits them before AI writes.
-const source = (id, title, body, category, location, type, priority, role) => ({ id, title, description: body, body, category, location, story_type: type, editorial_priority: priority, desired_page_role: role, tags: category, reporter_name: 'चाचणी प्रतिनिधी', image_urls: [] });
+const source = (id, title, body, category, location, type, priority, role, subheading = '') => ({ id, title, subheading, description: body, body, category, location, story_type: type, editorial_priority: priority, desired_page_role: role, tags: category, reporter_name: 'चाचणी प्रतिनिधी', image_urls: [] });
 module.exports = [
   source('src-front-river', 'कृष्णा नदीकाठ विकास आराखड्याला मंजुरी', 'सातारा जिल्हा नियोजन समितीने कृष्णा नदीकाठ विकास आराखड्याला मंजुरी दिली. पहिल्या टप्प्यात पादचारी मार्ग, पावसाच्या पाण्याची निचरा व्यवस्था आणि सार्वजनिक प्रकाशयोजना उभारली जाईल. समितीच्या नोंदीनुसार कामासाठी १२ कोटी रुपयांची तरतूद करण्यात आली असून निविदा प्रक्रिया सप्टेंबरमध्ये सुरू होईल. नगरपालिकेने बाजारपेठेतील वाहतूक व पूररेषेचा स्वतंत्र अभ्यास करण्याचेही मान्य केले.', 'स्थानिक', 'सातारा', 'LEAD', 5, 'FRONT'),
   source('src-front-road', 'जिल्हा रस्त्यांच्या दुरुस्तीसाठी नवीन वेळापत्रक', 'जिल्हा प्रशासनाने ग्रामीण रस्त्यांच्या दुरुस्तीसाठी नव्या वेळापत्रकाला मान्यता दिली. पाच तालुक्यांतील कामे पावसाळ्यानंतर सुरू होतील आणि प्रत्येक टप्प्याचा सार्वजनिक प्रगती अहवाल प्रसिद्ध केला जाईल.', 'प्रशासन', 'सातारा', 'SECONDARY', 4, 'FRONT'),
@@ -19,4 +19,5 @@ module.exports = [
   source('src-back-sports', 'जिल्हा कबड्डी स्पर्धेचा अंतिम सामना शनिवारी', 'जिल्हा कबड्डी स्पर्धेचा अंतिम सामना शनिवारी होणार आहे. दोन्ही संघांनी उपांत्य फेरीत बचाव आणि चढाईत सातत्य राखले.', 'क्रीडा', 'सातारा', 'STANDARD', 3, 'BACK'),
   source('src-back-service', 'वीज दुरुस्तीमुळे दोन भागांत नियोजित खंडित पुरवठा', 'वीज वितरण कंपनीने नियोजित दुरुस्तीमुळे दोन भागांत मर्यादित वेळ पुरवठा बंद राहील, असे कळवले. रुग्णालये आणि पाणीपुरवठा केंद्रांना पर्यायी व्यवस्था ठेवण्यास सांगितले आहे.', 'नागरी', 'सातारा', 'BRIEF', 2, 'BACK'),
   source('src-back-market', 'आठवडी बाजारात भाजीपाल्याची आवक स्थिर', 'आठवडी बाजारात भाजीपाल्याची आवक स्थिर राहिल्याने दरात मोठे बदल झाले नाहीत. बाजार समितीने स्वच्छता आणि कचरा संकलनासाठी अतिरिक्त पथक नेमले.', 'बाजार', 'कराड', 'STANDARD', 3, 'BACK'),
+  source('src-general-public', 'सार्वजनिक नोंदींसाठी तालुकास्तरीय मदत केंद्र', 'तालुकास्तरीय मदत केंद्रात नागरिकांना अर्ज, नोंदी आणि डिजिटल सेवांची माहिती एकाच ठिकाणी दिली जाईल. पहिल्या आठवड्यात कर्मचारी मार्गदर्शनासाठी स्वतंत्र कक्ष ठेवण्यात येणार आहे.', 'प्रशासन', 'सातारा', 'STANDARD', 2, 'GENERAL'),
 ];

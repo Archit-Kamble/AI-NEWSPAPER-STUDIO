@@ -357,6 +357,10 @@ async function main() {
   });
   console.log('carry-over:', carry);
 
+  const preflight = await desk.json(`/api/newspapers/${newspaperId}/preflight`);
+  const errors = (preflight.findings || []).filter((finding) => finding.level === 'error').map((finding) => ({ page: finding.pageNumber || finding.page_number, section: finding.sectionKey || finding.section_key, check: finding.check }));
+  if (errors.length) throw new Error(`Fixture preflight failed: ${errors.map((item) => `${item.page}:${item.section}:${item.check}`).join(', ')}`);
+
   console.log(`\nBuilt edition ${newspaperId}, dated ${PUBLICATION_DATE}.`);
   console.log(`Pages: ${[...byNumber.values()].map((p) => `${p.page_number}=${p.id}`).join(', ')}`);
 }

@@ -5,7 +5,7 @@
 const STORY_FIELDS = [
   'news_item_id', 'story_type', 'editorial_priority', 'kicker', 'headline', 'subheading', 'body', 'caption',
   'reporter_name', 'category', 'location', 'tags', 'language', 'status', 'ai_generated', 'ai_notes',
-  'image_url', 'smart_card_key', 'smart_card_data',
+  'image_url', 'smart_card_key', 'smart_card_data', 'editorial_presentation',
 ];
 
 function idOf(section) { return section?.id ?? section?.section_id ?? section?.section_key; }

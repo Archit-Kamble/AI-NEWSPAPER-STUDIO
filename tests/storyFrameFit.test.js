@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const { measureStoryFrameFit } = require('../src/layout/story-frame-fit');
 const { analyzeComposedLayout } = require('../src/layout/composed-layout-quality');
 const { geometryOf } = require('../src/layout/geometry');
+const { projectStoryIntoFrame } = require('../src/layout/composition-adapter');
 
 const g = geometryOf({}); const left = g.marginXPx; const top = g.regions.inside.content.top;
 function frame(id = 'frame', overrides = {}) { return { id, section_key: id, x_px: left, y_px: top, width_px: 360, height_px: 250, block_type: 'article', headline_font_px: 30, subheading_font_px: 16, body_font_px: 16, margin_px: 12, line_height: 1.45, column_count: 1, ...overrides }; }
@@ -54,4 +55,19 @@ test('policy-aware targets distinguish photo density from physical overflow', as
   const dense = await measureStoryFrameFit(story('p', { story_type: 'PHOTO_FEATURE', body: 'अ'.repeat(Math.round(base.bodyCharBudget * 0.9)) }), frame('photo'));
   assert.equal(atTarget.policyFitClass, 'GOOD_POLICY_FIT'); assert.ok(atTarget.fitScore > dense.fitScore);
   assert.equal(dense.rawBodyFillRatio < 1, true); assert.equal(dense.overflowChars, 0); assert.equal(dense.policyFitClass, 'ABOVE_POLICY_RANGE');
+});
+
+test('fit and canonical flow preserve explicit line height and printable rich text', async () => {
+  const destination = frame('parity', { line_height: 1.8 });
+  const baseline = await measureStoryFrameFit(story('parity', { body: '' }), destination);
+  const body = `<b>${'अ'.repeat(baseline.bodyCharBudget)}</b>`;
+  const fit = await measureStoryFrameFit(story('parity', { body }), destination);
+  const { measureSectionFlow } = await import('../public/editor/layout/text-flow.js');
+  const measured = measureSectionFlow(projectStoryIntoFrame({ ...story('parity', { body }), images: [] }, destination));
+  assert.equal(measured.view.lineHeight, 1.8);
+  assert.equal(fit.bodyCharBudget, measured.bodyCharBudget);
+  assert.equal(fit.bodyCharsUsed, measured.bodyCharsUsed);
+  assert.equal(fit.overflowChars, 0);
+  const over = await measureStoryFrameFit(story('parity', { body: 'अ'.repeat(baseline.bodyCharBudget + 1) }), destination);
+  assert.equal(over.overflowChars, 1);
 });

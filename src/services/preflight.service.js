@@ -77,7 +77,7 @@ async function textFlow() {
 
 async function checkPage(page, newspaper, totalPages) {
   const g = geometryOf(newspaper);
-  const { buildFlowMap, flowImageFromRow } = await textFlow();
+  const { measureSectionFlow } = await textFlow();
   const findings = [];
   const at = (section) => ({ pageNumber: page.page_number, sectionKey: section.section_key });
 
@@ -139,21 +139,12 @@ async function checkPage(page, newspaper, totalPages) {
 
     // --- copy that does not fit -------------------------------------------
     if (section.body) {
-      const map = buildFlowMap(section, {
-        marginPx: Number(section.margin_px) || 12,
-        lineHeight: Number(section.line_height) || 1.25,
-        headline: section.headline || '',
-        headlineFontPx: Number(section.headline_font_px),
-        subheading: section.subheading || '',
-        subheadingFontPx: Number(section.subheading_font_px),
-        body: section.body,
-        bodyFontPx: Number(section.body_font_px),
-      }, (section.images || []).map(flowImageFromRow));
+      const measurement = measureSectionFlow(section);
 
-      if (map.usedChars > map.bodyCharBudget) {
+      if (measurement.overflowing) {
         findings.push({
           level: 'error', check: 'overset', ...at(section),
-          message: `${map.usedChars - map.bodyCharBudget} characters more than this block holds. Cut it, or carry it over.`,
+          message: `${measurement.overflowChars} characters more than this block holds. Cut it, or carry it over.`,
         });
       }
     }

@@ -49,16 +49,30 @@ the required complete real-AI four-page run; no layout geometry was changed.
 
 ## 0zt. Project B8B-PARITY — canonical composition parity repair (2026-08-13)
 
-The B8B preflight gate now distinguishes inherited baseline findings from
-candidate-introduced failures, while the disposable fixture itself was fixed
-to be canonically clean: its previous Page-4 `foot-left` copy was 50 printable
-characters overset before any B8B write. Planning packets no longer duplicate
-the full source body as a deck, frame descriptors carry persisted line height,
-and preflight compares canonical plain-text `usedChars` rather than raw markup
-length. A clean all-page stub run persisted every eligible page atomically with
-zero projected preflight errors. The real Page-2 provider attempt left no
-writes and the page remained preflight-clean; full real-AI continuation is
-blocked pending a provider/result-channel retry, not by an unsafe mutation.
+The prior Page-4 diagnosis is corrected: its old `foot-left` fixture copy was
+already roughly 50 printable characters overset before any AI candidate was
+generated, and it was not an exact-fit proposal failure. The deterministic
+fixture copy now fits without changing frozen geometry, and the fixture builder
+fails if real edition preflight contains an error.
+
+`text-flow.js` now owns the canonical persisted-section adapter and measurement
+helper. Preflight and composed-quality measurements consume that same adapter;
+explicit line height (including 1.8) survives, and rich text is measured by
+printable plain text. B8B makes baseline preflight a zero-AI hard gate, locks
+both continuation sources and landings, projects exactly the semantic fields
+the narrow persistence seam writes, and compares projected/reloaded preflight.
+The synthetic pool has 18 unique records. Four-page fallback routing puts
+OPINION on FEATURES and GENERAL into capacity-aware BACK/LOCAL/FRONT fallback
+slots rather than silently dropping them.
+
+Fresh disposable edition 12009 (2099-05-08) was baseline-clean on all four
+pages and completed the full stub flow: Page 1/2/3/4 persisted with zero
+projected and reload errors (3/2/0/6 candidates; thin sources are deliberately
+not padded). The separate real Page-2 run on edition 12010 reached the provider
+stage but the local execution-result channel ended before a result returned;
+it made no writes and Page 2 remains preflight-clean. This is an external
+provider/result-channel blocker, not a geometry, flow, grounding or partial
+write failure.
 
 ---
 

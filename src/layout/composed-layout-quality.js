@@ -34,14 +34,16 @@ const priorityOf = (section) => {
 
 async function textFlow() { return import('../../public/editor/layout/text-flow.js'); }
 
-function flowView(section) {
+// Compatibility export for existing callers. Measurements below use the
+// canonical text-flow adapter directly; this mirrors its persisted defaults.
+function flowView(section = {}) {
   return {
-    headline: section?.headline || '', subheading: section?.subheading || '', body: section?.body || '',
-    marginPx: Number(section?.margin_px) || 12, columnCount: Number(section?.column_count) || 1,
-    lineHeight: Number(section?.line_height) || 1.45,
-    headlineFontPx: Number(section?.headline_font_px) || 24,
-    subheadingFontPx: Number(section?.subheading_font_px) || 14,
-    bodyFontPx: Number(section?.body_font_px) || 10,
+    headline: section.headline || '', subheading: section.subheading || '', body: section.body || '',
+    marginPx: Number(section.margin_px) || 12, columnCount: Number(section.column_count) || 1,
+    lineHeight: Math.max(1.45, Number(section.line_height) || 1.45),
+    headlineFontPx: Number(section.headline_font_px) || 34,
+    subheadingFontPx: Number(section.subheading_font_px) || 20,
+    bodyFontPx: Number(section.body_font_px) || 16,
   };
 }
 
@@ -51,15 +53,21 @@ function cells(map, kind) { return map.grid.reduce((total, row) => total + row.f
 // candidate story/frame fit. The caller decides eligibility; this helper only
 // translates a real grid into stable raw evidence.
 async function measureFlowUtilization(section, images = section?.images || []) {
-  const { buildFlowMap, flowImageFromRow, CELL } = await textFlow();
-  const map = buildFlowMap(section, flowView(section), images.map(flowImageFromRow));
+  const { CELL, measureSectionFlow } = await textFlow();
+  const measurement = measureSectionFlow(section, {}, images.map((image) => ({
+    x: Number(image.x_px) || 0, y: Number(image.y_px) || 0,
+    width: Number(image.width_px) || 0, height: Number(image.height_px) || 0,
+    shape: image.shape || 'rect', rotation: Number(image.rotation) || 0,
+    standOffPx: Number(image.stand_off_px) || 0, mask: image.mask || null,
+  })));
+  const { map } = measurement;
   const headlineCells = cells(map, CELL.HEADLINE);
   const subheadingCells = cells(map, CELL.SUBHEADING);
   const availableCells = map.cols * map.rows;
   const rawBodyFillRatio = map.bodyCharBudget ? map.usedChars / map.bodyCharBudget : (map.usedChars ? Infinity : 0);
   const usedCells = headlineCells + subheadingCells + map.imageCells + Math.min(map.usedChars, map.bodyCharBudget);
   return {
-    map, bodyCharBudget: map.bodyCharBudget, bodyCharsUsed: map.usedChars,
+    map, bodyCharBudget: measurement.bodyCharBudget, bodyCharsUsed: measurement.bodyCharsUsed,
     bodyFillRatio: round(rawBodyFillRatio), normalizedBodyFillRatio: round(Math.min(1, rawBodyFillRatio)),
     headlineRows: map.headlineRows, subheadingRows: map.subheadingRows, imageCells: map.imageCells,
     imageRatio: round(availableCells ? map.imageCells / availableCells : 0),

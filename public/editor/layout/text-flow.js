@@ -45,6 +45,50 @@ import { plainText } from "./rich-text.js";
 
 export const MIN_LINE_HEIGHT = 1.45;
 
+// The one translation from a persisted section (snake case) or an editor view
+// (camel case) into the flow engine. Keeping it here prevents fit, preflight
+// and quality from each quietly choosing different defaults.
+function flowValue(section, overrides, camel, snake, fallback) {
+  if (overrides[camel] !== undefined && overrides[camel] !== null) return overrides[camel];
+  if (overrides[snake] !== undefined && overrides[snake] !== null) return overrides[snake];
+  if (section[snake] !== undefined && section[snake] !== null) return section[snake];
+  if (section[camel] !== undefined && section[camel] !== null) return section[camel];
+  return fallback;
+}
+
+function numeric(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+export function flowViewFromSection(section = {}, overrides = {}) {
+  return {
+    headline: flowValue(section, overrides, "headline", "headline", ""),
+    subheading: flowValue(section, overrides, "subheading", "subheading", ""),
+    body: flowValue(section, overrides, "body", "body", ""),
+    marginPx: numeric(flowValue(section, overrides, "marginPx", "margin_px", 12), 12),
+    columnCount: numeric(flowValue(section, overrides, "columnCount", "column_count", 1), 1),
+    lineHeight: Math.max(MIN_LINE_HEIGHT, numeric(flowValue(section, overrides, "lineHeight", "line_height", MIN_LINE_HEIGHT), MIN_LINE_HEIGHT)),
+    headlineFontPx: numeric(flowValue(section, overrides, "headlineFontPx", "headline_font_px", 34), 34),
+    subheadingFontPx: numeric(flowValue(section, overrides, "subheadingFontPx", "subheading_font_px", 20), 20),
+    bodyFontPx: numeric(flowValue(section, overrides, "bodyFontPx", "body_font_px", 16), 16),
+  };
+}
+
+export function measureSectionFlow(section = {}, overrides = {}, images = null) {
+  const view = flowViewFromSection(section, overrides);
+  const flowImages = images === null ? (section.images || []).map(flowImageFromRow) : images;
+  const map = buildFlowMap(section, view, flowImages);
+  const bodyCharsUsed = map.usedChars;
+  const bodyCharBudget = map.bodyCharBudget;
+  return {
+    view, map, bodyCharBudget, bodyCharsUsed,
+    overflowing: bodyCharsUsed > bodyCharBudget,
+    overflowChars: Math.max(0, bodyCharsUsed - bodyCharBudget),
+    fillRatio: bodyCharBudget ? bodyCharsUsed / bodyCharBudget : (bodyCharsUsed ? Infinity : 0),
+  };
+}
+
 export const CELL = { HEADLINE: "H", SUBHEADING: "S", TEXT: "T", IMAGE: "I", EMPTY: "." };
 
 // Below this many cells wide, a run cannot hold ordinary prose at all - every

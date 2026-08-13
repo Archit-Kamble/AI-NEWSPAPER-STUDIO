@@ -150,7 +150,19 @@ async function main() {
     };
     const budget = { max: maxServiceCalls, used: 0 }; const byId = new Map(newsroomPool.map((source) => [String(source.id), source])); const results = [];
     for (const item of selected) results.push(await composePagePlan({ pagePlan: item, sourcesById: byId, newspaper, askForJson: aiMode === 'stub' ? stubAsk : askForJson, callBudget: budget, apply }));
-    console.log(JSON.stringify({ serviceCalls: budget.used, pages: results.map((result, index) => ({ page: selected[index].page.page_number, state: result.state, error: result.error || null, candidates: result.candidates?.length || 0, before: result.before?.score, projected: result.projectedQuality?.score, preflightValid: result.preflight?.valid })) }, null, 2));
+    const report = {
+      edition, date: newspaper.publication_date, aiMode, apply, serviceCalls: budget.used,
+      sourceCount: newsroomPool.length, routedCount: plan.routedCount, unassignedCount: plan.routed.length,
+      assignments: selected.flatMap((item) => item.assignments.map((assignment) => ({ page: item.page.page_number, sourceId: assignment.storyId, frame: assignment.frameId, score: assignment.score }))),
+      pages: results.map((result, index) => ({
+        page: selected[index].page.page_number, state: result.state, error: result.error || null, candidates: result.candidates?.length || 0,
+        quality: { before: result.before?.score ?? null, projected: result.projectedQuality?.score ?? null, reload: result.reloadedQuality?.score ?? null },
+        preflight: { baselineErrors: [...(result.baselinePreflight?.collisions || []), ...(result.baselinePreflight?.overflow || [])].filter((x) => x.level === 'error').length, projectedErrors: [...(result.preflight?.collisions || []), ...(result.preflight?.overflow || [])].filter((x) => x.level === 'error').length, reloadErrors: [...(result.reloadedPreflight?.collisions || []), ...(result.reloadedPreflight?.overflow || [])].filter((x) => x.level === 'error').length },
+        parity: (result.candidates || []).map((candidate) => ({ frame: candidate.frame.section_key, fit: { budget: candidate.result.fit.bodyCharBudget, used: candidate.result.fit.bodyCharsUsed }, projected: (() => { const section = selected[index].page.sections.find((s) => s.section_key === candidate.frame.section_key); return section ? null : null; })() })),
+      })),
+    };
+    if (apply) require('fs').writeFileSync('/tmp/sahas-b8b-parity-report.json', JSON.stringify(report, null, 2));
+    console.log(JSON.stringify(report, null, 2));
     return;
   }
   console.log(JSON.stringify({ sourceMode: 'fixture', page: pageNumber, apply, planOnly, maxStories: Number.isFinite(maxStories) ? maxStories : 'unlimited', maximumServiceCalls: maxServiceCalls }));

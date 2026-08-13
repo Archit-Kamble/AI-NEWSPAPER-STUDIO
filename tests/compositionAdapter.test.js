@@ -51,3 +51,10 @@ test('composition input locks continuations, standing features and image-only co
   assert.equal(input.diagnostics.sectionCount, 5);
   assert.equal(new Set(input.diagnostics.accountedSectionKeys).size, 5);
 });
+
+test('continuation source is locked along with its landing fragment', () => {
+  const original = section({ id: 'original', section_key: 'original', headline: 'मूळ', body: 'प्रत' });
+  const landing = section({ id: 'landing', section_key: 'landing', continued_from_section_id: 'original' });
+  const input = compositionInputForPage({ sections: [original, landing] }, { sections: [] }, { continuationSourceIds: new Set(['original']) });
+  assert.deepEqual(input.lockedSections.map((item) => item.reason).sort(), ['CONTINUATION_FRAGMENT', 'CONTINUATION_SOURCE']);
+});

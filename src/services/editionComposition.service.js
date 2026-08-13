@@ -10,34 +10,35 @@ const { validatePageLayout } = require('./preflight.service');
 const pageRepository = require('../repositories/page.repository');
 
 const SPECIAL = new Set(['SMART_CARD', 'ADVERTISEMENT', 'QUOTE', 'DATA']);
-const roleForRung = (rung) => rung.templateKey === 'front' ? 'FRONT' : rung.templateKey === 'local' ? 'LOCAL' : rung.templateKey === 'features' ? 'FEATURES' : rung.templateKey === 'opinion' ? 'OPINION' : rung.pageNumber === rung.total ? 'BACK' : 'GENERAL';
+const roleForRung = (rung) => rung.role || (rung.pageNumber === rung.total ? 'BACK' : 'GENERAL');
 function storyPacketFromNewsItem(item = {}) { return { id: item.id, news_item_id: item.id, story_type: item.story_type || 'STANDARD', editorial_priority: item.editorial_priority || 3, headline: item.title || '', subheading: item.subheading || '', body: item.description ?? item.body ?? '', category: item.category || '', location: item.location || '', tags: Array.isArray(item.tags) ? item.tags.join(', ') : item.tags || '', reporter_name: item.reporter_name || '', images: [], imagePlacementNeedsReview: Boolean((item.image_urls || []).length) }; }
 function eligibleEditorialFrames(page, continuationSourceIds = new Set()) { const template = getTemplate(page.template_key); const byKey = new Map(template.sections.map((item) => [item.key, item])); return (page.sections || []).flatMap((section) => { const templateSection = byKey.get(section.section_key); const frame = frameDescriptorFromSection(section, templateSection); const type = String(frame.recommendedStoryType || '').toUpperCase(); const id = section.id ?? section.section_id; if (section.is_custom || section.continued_from_section_id || continuationSourceIds.has(id) || frame.feature_key || section.smart_card_key || frame.block_type === 'advert' || SPECIAL.has(type) || (section.images || []).length) return []; return [frame]; }); }
 function fallbackRolesForSource(source, availableRoles) {
   const desired = String(source.desired_page_role || '').toUpperCase();
   if (availableRoles.has(desired)) return [desired];
   if (desired === 'OPINION') return ['FEATURES', 'BACK'];
-  if (desired === 'GENERAL') return ['BACK', 'LOCAL', 'FRONT'];
+  if (desired === 'GENERAL') return ['BACK', 'FRONT'];
   return [];
 }
 function routeSourcesToEditionPages({ sources = [], pages = [], ladder = ladderFor(pages.length), capacities = new Map() }) {
-  const pageByRole = new Map(ladder.map((rung) => [roleForRung({ ...rung, total: ladder.length }), rung.pageNumber])); const buckets = new Map(pages.map((page) => [page.page_number, []])); const unassigned = [];
+  const descriptors = ladder.map((rung) => ({ pageNumber: rung.pageNumber, role: roleForRung({ ...rung, total: ladder.length }), templateKey: rung.templateKey, eligibleFrameCount: capacities.get(rung.pageNumber) ?? Infinity }));
+  const pagesByRole = new Map(); for (const descriptor of descriptors) { if (!pagesByRole.has(descriptor.role)) pagesByRole.set(descriptor.role, []); pagesByRole.get(descriptor.role).push(descriptor); }
+  const buckets = new Map(pages.map((page) => [page.page_number, []])); const unassigned = [];
   const order = (a, b) => Number(b.editorial_priority) - Number(a.editorial_priority) || String(a.id).localeCompare(String(b.id));
   const direct = [], fallback = [];
   for (const source of [...sources].sort(order)) {
-    const roles = fallbackRolesForSource(source, new Set(pageByRole.keys()));
+    const roles = fallbackRolesForSource(source, new Set(pagesByRole.keys()));
     if (!roles.length) unassigned.push({ sourceId: source.id, reason: 'NO_SEMANTIC_ROUTE' });
     else (roles[0] === String(source.desired_page_role || '').toUpperCase() ? direct : fallback).push({ source, roles });
   }
   for (const item of [...direct, ...fallback]) {
-    const role = item.roles.find((candidate) => {
-      const pageNumber = pageByRole.get(candidate);
-      return pageNumber && (buckets.get(pageNumber).length < (capacities.get(pageNumber) ?? Infinity));
-    });
-    if (!role) unassigned.push({ sourceId: item.source.id, reason: 'UNASSIGNED_SOURCE_CAPACITY' });
-    else buckets.get(pageByRole.get(role)).push(item.source);
+    const role = item.roles.find((candidate) => (pagesByRole.get(candidate) || []).some((page) => buckets.get(page.pageNumber).length < page.eligibleFrameCount));
+    const target = (pagesByRole.get(role) || []).filter((page) => buckets.get(page.pageNumber).length < page.eligibleFrameCount)
+      .sort((a, b) => (b.eligibleFrameCount - buckets.get(b.pageNumber).length) - (a.eligibleFrameCount - buckets.get(a.pageNumber).length) || a.pageNumber - b.pageNumber)[0];
+    if (!target) unassigned.push({ sourceId: item.source.id, reason: 'UNASSIGNED_SOURCE_CAPACITY' });
+    else buckets.get(target.pageNumber).push(item.source);
   }
-  return { buckets, unassigned, pageByRole };
+  return { buckets, unassigned, pagesByRole, descriptors };
 }
 async function buildEditionCompositionPlan({ pages = [], newspaper = {}, sources = [], rebalance = rebalanceFlowAwarePageAssignments }) {
   const ladder = ladderFor(pages.length);
@@ -75,33 +76,46 @@ function persistenceStory(candidate) {
 }
 function errorKeys(report) { return new Set([...(report?.collisions || []), ...(report?.overflow || [])].filter((finding) => finding.level === 'error').map((finding) => `${finding.type || finding.check}:${finding.sectionKey}`)); }
 
-async function composePagePlan({ pagePlan, sourcesById, newspaper, askForJson, maxServiceCalls = 32, callBudget = null, apply = false, compose = composeSourceToFrame }) {
+async function composePagePlan({ pagePlan, sourcesById, newspaper, askForJson, maxServiceCalls = 32, callBudget = null, apply = false, compose = composeSourceToFrame, journal = null }) {
   const budget = callBudget || { max: maxServiceCalls, used: 0 }; const frameById = new Map(pagePlan.frames.map((frame) => [String(frame.id), frame])); const candidates = [];
   const before = await analyzeComposedLayout(pagePlan.page, newspaper);
   const baselinePreflight = await validatePageLayout(pagePlan.page, newspaper);
-  if (!baselinePreflight.valid) return { state: 'PAGE_BLOCKED', error: 'BASELINE_PREFLIGHT_INVALID', candidates, before, baselinePreflight, serviceCalls: budget.used };
+  const outcomes = [];
+  journal?.event('PAGE_STARTED', { page: pagePlan.page.page_number });
+  if (!baselinePreflight.valid) { journal?.event('PREFLIGHT_FAIL', { page: pagePlan.page.page_number, stage: 'baseline' }); return { state: 'PAGE_BLOCKED', error: 'BASELINE_PREFLIGHT_INVALID', candidates, outcomes, before, baselinePreflight, serviceCalls: budget.used }; }
   for (const assignment of pagePlan.assignments) {
     const source = sourcesById.get(String(assignment.storyId)); const frame = frameById.get(String(assignment.frameId));
-    if (!source || !frame) return { state: 'PAGE_BLOCKED', error: 'INVALID_ASSIGNMENT', candidates, before };
-    const budgetedAsk = async (...args) => { if (budget.used >= budget.max) return { error: 'SERVICE_CALL_BUDGET_EXHAUSTED' }; budget.used += 1; return askForJson(...args); };
+    const outcome = { sourceId: assignment.storyId, frame: frame?.section_key, state: 'PLANNED', editorialAttempts: 0 }; outcomes.push(outcome);
+    journal?.event('STORY_STARTED', { page: pagePlan.page.page_number, sourceId: assignment.storyId, frame: frame?.section_key });
+    if (!source || !frame) return { state: 'PAGE_BLOCKED', error: 'INVALID_ASSIGNMENT', candidates, outcomes, before };
+    const budgetedAsk = async (prompt, schema, options = {}) => { journal?.event('AI_ATTEMPT_STARTED', { page: pagePlan.page.page_number, sourceId: source.id, frame: frame.section_key }); const result = await askForJson(prompt, schema, { ...options, callBudget: budget }); if (result.error) journal?.event('AI_FAILED', { page: pagePlan.page.page_number, sourceId: source.id, frame: frame.section_key, error: result.error }); else journal?.event('AI_RETURNED', { page: pagePlan.page.page_number, sourceId: source.id, frame: frame.section_key, provider: result.provider }); return result; };
     const input = await writerInputFromNewsItem(source); const result = await compose({ ...input, frame, language: 'Marathi', askForJson: budgetedAsk });
-    if (result.error || !result.assessment?.accepted) return { state: 'PAGE_BLOCKED', error: result.error || 'FIT_REJECTED', candidates, before, serviceCalls: budget.used };
+    outcome.editorialAttempts = result.attempts || 0;
+    if (result.error) { outcome.state = result.error === 'SERVICE_CALL_BUDGET_EXHAUSTED' ? 'SERVICE_CALL_BUDGET_EXHAUSTED' : 'PROVIDER_ERROR'; return { state: result.error === 'SERVICE_CALL_BUDGET_EXHAUSTED' ? 'BUDGET_BLOCKED' : 'PROVIDER_BLOCKED', error: result.error, candidates, outcomes, before, baselinePreflight, serviceCalls: budget.used }; }
+    if (!result.assessment?.accepted) { outcome.state = 'FIT_REJECTED'; return { state: 'PAGE_BLOCKED', error: 'FIT_REJECTED', candidates, outcomes, before, baselinePreflight, serviceCalls: budget.used }; }
     const grounding = validateGeneratedGrounding(result.proposal, input.source);
-    if (!grounding.valid) return { state: 'PAGE_BLOCKED', error: grounding.issues[0].code, candidates, before, serviceCalls: budget.used };
-    if (result.sourceSufficiency.status === 'INSUFFICIENT_FOR_TREATMENT') continue;
+    if (!grounding.valid) { outcome.state = 'GROUNDING_REJECTED'; journal?.event('GROUNDING_FAIL', { page: pagePlan.page.page_number, sourceId: source.id }); return { state: 'PAGE_BLOCKED', error: grounding.issues[0].code, candidates, outcomes, before, baselinePreflight, serviceCalls: budget.used }; }
+    journal?.event('GROUNDING_PASS', { page: pagePlan.page.page_number, sourceId: source.id });
+    outcome.sufficiency = result.sourceSufficiency.status;
+    if (result.sourceSufficiency.status === 'INSUFFICIENT_FOR_TREATMENT') { outcome.state = 'SOURCE_INSUFFICIENT'; journal?.event('SOURCE_SUFFICIENCY', { page: pagePlan.page.page_number, sourceId: source.id, status: outcome.state }); continue; }
     const compiled = compileEditorialPresentation(result.proposal, result.editorial.storyType, { source: input.source });
     candidates.push({ sourceId: source.id, frame, result, grounding, compiled, source: input.source });
+    outcome.state = 'READY_TO_PERSIST'; outcome.fit = { writable: result.fit.writableBodyCharBudget, authored: result.fit.authoredBodyCharsUsed ?? result.fit.bodyCharsUsed, physical: result.fit.bodyCharBudget, total: result.fit.totalBodyCharsUsed ?? result.fit.bodyCharsUsed }; journal?.event('FIT_PASS', { page: pagePlan.page.page_number, sourceId: source.id, frame: frame.section_key });
   }
   const projected = { ...pagePlan.page, sections: pagePlan.page.sections.map((section) => { const candidate = candidates.find((item) => item.frame.section_key === section.section_key); return candidate ? projectComposedStoryIntoSection(section, candidate) : section; }) };
   const preflight = await validatePageLayout(projected, newspaper); const projectedQuality = await analyzeComposedLayout(projected, newspaper);
   const baselineErrors = errorKeys(baselinePreflight);
   const introducedErrors = [...errorKeys(preflight)].filter((key) => !baselineErrors.has(key));
-  if (introducedErrors.length || projectedQuality.score < before.score - 5) return { state: 'PAGE_BLOCKED', error: introducedErrors.length ? 'PREFLIGHT_BLOCKED' : 'QUALITY_REGRESSION', candidates, before, baselinePreflight, projectedQuality, preflight, introducedErrors, serviceCalls: budget.used };
-  if (apply && candidates.length) await pageRepository.saveComposedStoryBatch(pagePlan.page.id, candidates.map((candidate) => ({ sectionKey: candidate.frame.section_key, story: persistenceStory(candidate) })));
+  if (introducedErrors.length || projectedQuality.score < before.score - 5) return { state: 'PAGE_BLOCKED', error: introducedErrors.length ? 'PREFLIGHT_BLOCKED' : 'QUALITY_REGRESSION', candidates, outcomes, before, baselinePreflight, projectedQuality, preflight, introducedErrors, serviceCalls: budget.used };
+  journal?.event('PAGE_PROJECTED', { page: pagePlan.page.page_number, candidates: candidates.length });
+  if (apply && candidates.length) { journal?.event('PAGE_BATCH_STARTED', { page: pagePlan.page.page_number, candidates: candidates.length }); await pageRepository.saveComposedStoryBatch(pagePlan.page.id, candidates.map((candidate) => ({ sectionKey: candidate.frame.section_key, story: persistenceStory(candidate) }))); outcomes.filter((item) => item.state === 'READY_TO_PERSIST').forEach((item) => { item.state = 'PERSISTED'; }); journal?.event('PAGE_COMMITTED', { page: pagePlan.page.page_number }); }
   const reloaded = apply ? await pageRepository.findById(pagePlan.page.id) : null;
   const reloadedPreflight = reloaded ? await validatePageLayout(reloaded, newspaper) : null;
   const reloadedQuality = reloaded ? await analyzeComposedLayout(reloaded, newspaper) : null;
-  if (reloaded && (JSON.stringify([...errorKeys(preflight)].sort()) !== JSON.stringify([...errorKeys(reloadedPreflight)].sort()))) return { state: 'PAGE_BLOCKED', error: 'POST_SAVE_DRIFT', candidates, before, baselinePreflight, projectedQuality, preflight, reloaded, reloadedPreflight, reloadedQuality, serviceCalls: budget.used };
-  return { state: apply ? 'PERSISTED' : 'READY_TO_PERSIST', candidates, before, baselinePreflight, projectedQuality, preflight, reloaded, reloadedPreflight, reloadedQuality, serviceCalls: budget.used };
+  if (reloaded && (JSON.stringify([...errorKeys(preflight)].sort()) !== JSON.stringify([...errorKeys(reloadedPreflight)].sort()))) return { state: 'PAGE_BLOCKED', error: 'POST_SAVE_DRIFT', candidates, outcomes, before, baselinePreflight, projectedQuality, preflight, reloaded, reloadedPreflight, reloadedQuality, serviceCalls: budget.used };
+  if (reloaded) journal?.event('POST_SAVE_PARITY_PASS', { page: pagePlan.page.page_number });
+  const state = apply ? (candidates.length ? 'PERSISTED' : 'UNCHANGED_SOURCE_INSUFFICIENT') : 'READY_TO_PERSIST';
+  if (state === 'UNCHANGED_SOURCE_INSUFFICIENT') journal?.event('PAGE_UNCHANGED', { page: pagePlan.page.page_number });
+  return { state, candidates, outcomes, before, baselinePreflight, projectedQuality, preflight, reloaded, reloadedPreflight, reloadedQuality, serviceCalls: budget.used };
 }
 module.exports = { storyPacketFromNewsItem, eligibleEditorialFrames, fallbackRolesForSource, routeSourcesToEditionPages, buildEditionCompositionPlan, projectComposedStoryIntoSection, persistenceStory, composePagePlan, roleForRung };

@@ -208,7 +208,7 @@ async function askForJson(prompt, schema, options = {}) {
     : null);
 
   for (const provider of providers) {
-    let result = await callOnce(provider, prompt, schema, tier);
+    let result = await callOnce(provider, prompt, schema, tier, undefined, options.callBudget, 'initial');
 
     // One retry, and only for the one failure that a retry can actually fix:
     // the model spent its whole output budget reasoning and returned nothing.
@@ -230,7 +230,7 @@ async function askForJson(prompt, schema, options = {}) {
       const roomier = provider.maxOutputTokens
         ? provider.maxOutputTokens(result.budget ? result.budget * 2 : undefined)
         : undefined;
-      result = await callOnce(provider, prompt, schema, gentler, roomier);
+      result = await callOnce(provider, prompt, schema, gentler, roomier, options.callBudget, 'retry');
       if (result.data) {
         const problem = validate(result.data, schema);
         if (!problem) {
@@ -308,12 +308,22 @@ async function askForJson(prompt, schema, options = {}) {
 }
 
 /** One call to one provider, with the timeout every provider is held to. */
-async function callOnce(provider, prompt, schema, tier, maxOutputTokens) {
+function consumeProviderCall(budget, metadata) {
+  if (!budget) return;
+  if (budget.used >= budget.max) {
+    const error = new Error('SERVICE_CALL_BUDGET_EXHAUSTED'); error.code = 'SERVICE_CALL_BUDGET_EXHAUSTED'; throw error;
+  }
+  budget.used += 1;
+  if (Array.isArray(budget.events)) budget.events.push({ provider: metadata.provider, reason: metadata.reason, at: new Date().toISOString() });
+}
+async function callOnce(provider, prompt, schema, tier, maxOutputTokens, callBudget, reason = 'initial') {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs());
   try {
+    consumeProviderCall(callBudget, { provider: provider.key, reason });
     return await provider.askForJson(prompt, schema, tier, { signal: controller.signal, maxOutputTokens });
   } catch (error) {
+    if (error.code === 'SERVICE_CALL_BUDGET_EXHAUSTED') return { error: error.code, condition: 'budget' };
     // A dead socket and a stopwatch are different situations, and only one of
     // them says anything about the provider being reachable.
     return error.name === 'AbortError'
@@ -324,4 +334,4 @@ async function callOnce(provider, prompt, schema, tier, maxOutputTokens) {
   }
 }
 
-module.exports = { askForJson, isConfigured, status, tiers, PROVIDERS };
+module.exports = { askForJson, isConfigured, status, tiers, PROVIDERS, consumeProviderCall };

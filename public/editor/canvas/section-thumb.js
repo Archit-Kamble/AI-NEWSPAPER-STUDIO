@@ -11,7 +11,7 @@ import { escapeHtml } from "../format.js";
 import { statusOf, statusLabel, statusClass } from "../status/section-status.js";
 import { computeMetrics } from "../layout/layout-metrics.js";
 import { imageTransformCss } from "../image/image-manager.js";
-import { buildFlowMap, CELL, flowRuns, bandBox, pourIntoRuns, flowImageFromRow } from "../layout/text-flow.js";
+import { buildFlowMap, CELL, flowRuns, bandBox, pourIntoRuns, flowImageFromRow, datelineText } from "../layout/text-flow.js";
 import { textWithMarks, markRun, plainText } from "../layout/rich-text.js";
 import { presentationRanges, renderPresentation } from "../layout/editorial-presentation.js";
 
@@ -140,9 +140,8 @@ export function subheadingMarkup(view) {
 // which is where every paper puts it, so it is built into the body rather than
 // being a line of its own.
 function datelineMarkup(view) {
-  const parts = [view.location, view.author].map((p) => String(p || "").trim()).filter(Boolean);
-  if (!parts.length) return "";
-  return `<span class="section-dateline">■ ${escapeHtml(parts.join(", "))}</span> `;
+  const value = datelineText(view);
+  return value ? `<span class="section-dateline">${escapeHtml(value.trimEnd())}</span> ` : "";
 }
 
 // How many columns the copy is set in. A newspaper column is about 40 mm; at 2
@@ -248,6 +247,7 @@ export function flowedTextMarkup(section, view) {
   // wrap, cannot carry the painted word, and clips its own vowel signs. The
   // grid's job for these two is to reserve the space, which it still does.
   const bandTop = pad;
+  const kickerHeight = map.kickerRows * map.cellHeight;
   const headlineHeight = map.headlineRows * map.cellHeight;
   const subheadingHeight = map.subheadingRows * map.cellHeight;
 
@@ -257,16 +257,21 @@ export function flowedTextMarkup(section, view) {
   // the two draw the same box for the same picture.
   const band = (kind, fallbackLeft) => bandBox(map, kind, pad, measure, fallbackLeft);
 
+  if (view.kicker && kickerHeight > 0) {
+    const box = band(CELL.KICKER, pad);
+    pieces.push(`<div class="section-flowed section-flowed-band section-kicker" style="left:${box.left}px;top:${bandTop}px;width:${box.width}px;height:${kickerHeight}px;font-size:${Math.round(view.bodyFontPx * 1.05)}px">${escapeHtml(view.kicker)}</div>`);
+  }
+
   if (view.headline && headlineHeight > 0) {
     const box = band(CELL.HEADLINE, pad);
     pieces.push(
-      `<div class="section-flowed section-flowed-band" style="left:${box.left}px;top:${bandTop}px;width:${box.width}px;height:${headlineHeight}px">${headlineMarkup(view)}</div>`,
+      `<div class="section-flowed section-flowed-band" style="left:${box.left}px;top:${bandTop + kickerHeight}px;width:${box.width}px;height:${headlineHeight}px">${headlineMarkup(view)}</div>`,
     );
   }
   if (view.subheading && subheadingHeight > 0) {
     const box = band(CELL.SUBHEADING, pad);
     pieces.push(
-      `<div class="section-flowed section-flowed-band" style="left:${box.left}px;top:${bandTop + headlineHeight}px;width:${box.width}px;height:${subheadingHeight}px">${subheadingMarkup(view)}</div>`,
+      `<div class="section-flowed section-flowed-band" style="left:${box.left}px;top:${bandTop + kickerHeight + headlineHeight}px;width:${box.width}px;height:${subheadingHeight}px">${subheadingMarkup(view)}</div>`,
     );
   }
 
@@ -280,14 +285,13 @@ export function flowedTextMarkup(section, view) {
 // headline/subheading frames (which it already positions correctly via
 // bandBox()), without rendering a second copy of the headline/subheading.
 export function flowedBodyMarkup(map, view, pad) {
-  const dateline = [view.location, view.author].map((p) => String(p || "").trim()).filter(Boolean).join(", ");
   // The copy is poured as PLAIN text, because the grid measures and places
   // characters - a tag has no width. The bold and italic ranges are carried
   // separately and put back on each run afterwards, so what a sub-editor marked
   // is what appears on the page.
   const { text: bodyText, marks } = textWithMarks(view.body);
   const semantic = presentationRanges(bodyText, view.editorialPresentation, 'body');
-  const prefix = dateline ? `■ ${dateline} ` : "";
+  const prefix = datelineText(view);
   const body = bodyText ? `${prefix}${bodyText}` : "";
   const offset = prefix.length;
 

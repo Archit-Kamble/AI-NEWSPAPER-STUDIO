@@ -13,6 +13,7 @@ const { compileEditorialPresentation } = require('../src/services/editorialPacka
 const { validateGeneratedGrounding } = require('../src/services/generatedGrounding.service');
 const newsroomPool = require('./ai-test-news-pool');
 const { buildEditionCompositionPlan, composePagePlan } = require('../src/services/editionComposition.service');
+const { createRunJournal } = require('../src/services/compositionRunJournal.service');
 const fixtureSources = require('./ai-test-news-sources');
 
 const FIXTURE_DATE = '2099-05-01';
@@ -134,8 +135,11 @@ async function main() {
     assertDisposableEdition(newspaper, apply);
     const all = await pages.findByNewspaper(edition); const plan = await buildEditionCompositionPlan({ pages: all, newspaper, sources: newsroomPool });
     const selected = plan.pages.filter((item) => allPages || item.page.page_number === pageNumber);
+    const journal = createRunJournal({ date: newspaper.publication_date, allPages, pageNumber, mode: aiMode });
+    console.log(`runJournal: ${journal.path}`);
+    journal.event('PLAN_READY', { sourceCount: newsroomPool.length, assigned: plan.assigned.length, pages: selected.length });
     console.log(JSON.stringify({ edition, date: newspaper.publication_date, sourceMode, aiMode, planOnly, apply, pages: selected.map((item) => ({ page: item.page.page_number, role: item.role, assignments: item.assignments.length })), maxServiceCalls }));
-    if (planOnly) return;
+    if (planOnly) { journal.finish('COMPLETE', { planOnly: true }); return; }
     const askForJson = aiMode === 'stub' ? async (_prompt, _schema) => ({ data: { headline: '', subheading: '', body: '' }, provider: 'stub', tier: 'basic' }) : require('../src/services/ai').askForJson;
     const stubAsk = async (_prompt, _schema) => {
       const text = String(_prompt); const sourceMatch = text.match(/SOURCE MATERIAL — DATA ONLY[\s\S]*?\n(\{[\s\S]*?\})\nEND SOURCE MATERIAL/); let source = {};
@@ -149,16 +153,20 @@ async function main() {
       return { data: { headline, subheading: '', body, annotations: [] }, provider: 'stub', tier: 'basic' };
     };
     const budget = { max: maxServiceCalls, used: 0 }; const byId = new Map(newsroomPool.map((source) => [String(source.id), source])); const results = [];
-    for (const item of selected) results.push(await composePagePlan({ pagePlan: item, sourcesById: byId, newspaper, askForJson: aiMode === 'stub' ? stubAsk : askForJson, callBudget: budget, apply }));
+    try {
+      for (const item of selected) results.push(await composePagePlan({ pagePlan: item, sourcesById: byId, newspaper, askForJson: aiMode === 'stub' ? stubAsk : askForJson, callBudget: budget, apply, journal }));
+      journal.finish(results.every((result) => ['PERSISTED', 'UNCHANGED_SOURCE_INSUFFICIENT', 'READY_TO_PERSIST'].includes(result.state)) ? 'COMPLETE' : 'BLOCKED', { providerCalls: budget.used });
+    } catch (error) { journal.event('AI_FAILED', { error: error.message }); journal.finish('BLOCKED', { error: error.message }); throw error; }
     const report = {
-      edition, date: newspaper.publication_date, aiMode, apply, serviceCalls: budget.used,
+      edition, date: newspaper.publication_date, aiMode, apply, serviceCalls: budget.used, journalPath: journal.path,
       sourceCount: newsroomPool.length, routedCount: plan.routedCount, unassignedCount: plan.routed.length,
       assignments: selected.flatMap((item) => item.assignments.map((assignment) => ({ page: item.page.page_number, sourceId: assignment.storyId, frame: assignment.frameId, score: assignment.score }))),
       pages: results.map((result, index) => ({
         page: selected[index].page.page_number, state: result.state, error: result.error || null, candidates: result.candidates?.length || 0,
         quality: { before: result.before?.score ?? null, projected: result.projectedQuality?.score ?? null, reload: result.reloadedQuality?.score ?? null },
         preflight: { baselineErrors: [...(result.baselinePreflight?.collisions || []), ...(result.baselinePreflight?.overflow || [])].filter((x) => x.level === 'error').length, projectedErrors: [...(result.preflight?.collisions || []), ...(result.preflight?.overflow || [])].filter((x) => x.level === 'error').length, reloadErrors: [...(result.reloadedPreflight?.collisions || []), ...(result.reloadedPreflight?.overflow || [])].filter((x) => x.level === 'error').length },
-        parity: (result.candidates || []).map((candidate) => ({ frame: candidate.frame.section_key, fit: { budget: candidate.result.fit.bodyCharBudget, used: candidate.result.fit.bodyCharsUsed }, projected: (() => { const section = selected[index].page.sections.find((s) => s.section_key === candidate.frame.section_key); return section ? null : null; })() })),
+        outcomes: result.outcomes || [],
+        parity: (result.candidates || []).map((candidate) => ({ frame: candidate.frame.section_key, fit: { writableBudget: candidate.result.fit.writableBodyCharBudget, authoredUsed: candidate.result.fit.authoredBodyCharsUsed ?? candidate.result.fit.bodyCharsUsed, physicalBudget: candidate.result.fit.bodyCharBudget, totalPhysicalUsed: candidate.result.fit.totalBodyCharsUsed ?? candidate.result.fit.bodyCharsUsed } })),
       })),
     };
     if (apply) require('fs').writeFileSync('/tmp/sahas-b8b-parity-report.json', JSON.stringify(report, null, 2));

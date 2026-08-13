@@ -30,6 +30,7 @@
 // fill and a paper that has to be built first.
 
 const { templates } = require('./templates');
+const PAGE_ROLE = Object.freeze({ FRONT: 'FRONT', LOCAL: 'LOCAL', GENERAL: 'GENERAL', OPINION: 'OPINION', FEATURES: 'FEATURES', BACK: 'BACK' });
 
 const SUPPORTED_EDITION_PAGE_COUNTS = Object.freeze(
   Array.from({ length: 31 }, (_, index) => (index + 2) * 2),
@@ -53,32 +54,32 @@ function ladderFor(pageCount) {
   const opinionPage = total >= 6 ? 4 : null;
 
   for (let pageNumber = 1; pageNumber <= total; pageNumber += 1) {
-    let templateKey;
+    let templateKey; let role;
     let why;
 
     if (pageNumber === 1) {
-      templateKey = 'front';
+      templateKey = 'front'; role = PAGE_ROLE.FRONT;
       why = 'Page one.';
     } else if (pageNumber === total && total > 1) {
-      templateKey = 'dense';
+      templateKey = 'dense'; role = PAGE_ROLE.BACK;
       why = 'The back page - display advertising and short items.';
     } else if (pageNumber === 2) {
-      templateKey = 'local';
+      templateKey = 'local'; role = PAGE_ROLE.LOCAL;
       why = 'City and district news.';
     } else if (pageNumber === featuresPage) {
-      templateKey = 'features';
+      templateKey = 'features'; role = PAGE_ROLE.FEATURES;
       why = 'The daily features page.';
     } else if (pageNumber === opinionPage) {
-      templateKey = 'opinion';
+      templateKey = 'opinion'; role = PAGE_ROLE.OPINION;
       why = 'The editorial and opinion page.';
     } else {
       // General news. Alternating keeps consecutive inside pages from looking
       // like the same page printed twice.
-      templateKey = pageNumber % 2 === 1 ? 'local' : 'dense';
+      templateKey = pageNumber % 2 === 1 ? 'local' : 'dense'; role = PAGE_ROLE.GENERAL;
       why = 'General news.';
     }
 
-    rungs.push({ pageNumber, templateKey, templateName: templates[templateKey]?.name || templateKey, why });
+    rungs.push({ pageNumber, role, templateKey, templateName: templates[templateKey]?.name || templateKey, why });
   }
 
   return rungs;
@@ -91,4 +92,4 @@ function describeLadder(pageCount) {
     .join('   ');
 }
 
-module.exports = { ladderFor, describeLadder, getSupportedEditionPageCounts, isSupportedEditionPageCount };
+module.exports = { PAGE_ROLE, ladderFor, describeLadder, getSupportedEditionPageCounts, isSupportedEditionPageCount };

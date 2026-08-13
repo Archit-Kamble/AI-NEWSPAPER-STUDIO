@@ -76,6 +76,28 @@ write failure.
 
 ---
 
+## 0zu. Project B8B-TRUTH — observable composition state (2026-08-13)
+
+SAHAS now records semantic page roles directly in the ladder; a GENERAL page
+may use the local physical template without becoming LOCAL. Routing supports
+multiple pages per role, capacity-aware fallback, and feeds every routed source
+to B6 instead of truncating candidates before matching. The 18-record synthetic
+pool includes richer LOCAL lead/analysis source material for Page 2.
+
+Canonical flow reserves both kicker and automatic dateline. It exposes authored
+writable capacity separately from total physical capacity: preflight uses the
+physical total and source sufficiency uses authored copy only. Fixture copy was
+adjusted without geometry changes until all four baseline pages were clean.
+
+Composition now records explicit assignment/page states, so zero writes cannot
+report `PERSISTED`. `/tmp` journals atomically record run boundaries, and the
+provider router charges real calls including retry/fallback. The all-page stub
+run showed clean Page-2/Page-4 persistence and reload parity, a truthful
+unchanged Page 3 for insufficient source material, and an explicit Page-1
+quality-gate block. Any real-AI outcome must be determined from its journal.
+
+---
+
 ## 0zp. Project B7B-F5 — edition page-count integrity and clean footer (2026-08-12)
 
 Start/Open/Resize are now separate operations: start creates one edition for a

@@ -29,10 +29,10 @@ async function composeSourceToFrame({ source = {}, storyType = 'STANDARD', edito
   const { storyPolicy, normalizeStoryType } = await storyTypes(); const normalized = normalizeStoryType(storyType); const policy = storyPolicy(normalized);
   if (SPECIAL.has(normalized)) return { notApplicable: true, reason: 'STRUCTURED_RENDERER', editorial: { storyType: normalized, editorialPriority, policy }, attempts: 0 };
   const normalizedSource = sourceFromNewsItem(source); const candidateImages = images || undefined;
-  const provisional = { headline: normalizedSource.title, subheading: policy.deck.allowed ? normalizedSource.subheading : '', body: '' };
+  const provisional = { headline: normalizedSource.title, subheading: policy.deck.allowed ? normalizedSource.subheading : '', body: '', location: normalizedSource.location, reporter_name: normalizedSource.reporterName };
   const initialFit = await measureStoryFrameFit({ ...provisional, story_type: normalized, editorial_priority: editorialPriority, images: source.images || [] }, frame, candidateImages ? { candidateImages } : {});
   if (!initialFit.bodyCharBudget) return { notApplicable: true, reason: 'NO_BODY_CAPACITY', attempts: 0, editorial: { storyType: normalized, editorialPriority, policy } };
-  const target = { ...policy.bodyFill, budget: initialFit.bodyCharBudget, minChars: Math.round(initialFit.bodyCharBudget * policy.bodyFill.min), targetChars: Math.round(initialFit.bodyCharBudget * policy.bodyFill.target), maxChars: Math.round(initialFit.bodyCharBudget * policy.bodyFill.max) };
+  const target = { ...policy.bodyFill, budget: initialFit.writableBodyCharBudget ?? initialFit.bodyCharBudget, minChars: Math.round((initialFit.writableBodyCharBudget ?? initialFit.bodyCharBudget) * policy.bodyFill.min), targetChars: Math.round((initialFit.writableBodyCharBudget ?? initialFit.bodyCharBudget) * policy.bodyFill.target), maxChars: Math.round((initialFit.writableBodyCharBudget ?? initialFit.bodyCharBudget) * policy.bodyFill.max) };
   const attempts = [];
   async function attempt(repair) {
     const response = await askForJson(brief({ source: normalizedSource, policy, storyType: normalized, target, repair, language, notes }), SCHEMA, { tier, language, notes });
@@ -41,7 +41,7 @@ async function composeSourceToFrame({ source = {}, storyType = 'STANDARD', edito
     const raw = response.data; const proposal = { headline: clean(raw.headline), subheading: policy.deck.allowed ? clean(raw.subheading) : '', body: clean(raw.body), kicker: clean(raw.kicker), caption: clean(raw.caption), annotations: raw.annotations || [] };
     const semantic = validateEditorialPackage(proposal, normalizedSource, { storyType: normalized });
     Object.assign(proposal, semantic.package);
-    const fit = await measureStoryFrameFit({ ...proposal, story_type: normalized, editorial_priority: editorialPriority, images: source.images || [] }, frame, candidateImages ? { candidateImages } : {});
+    const fit = await measureStoryFrameFit({ ...proposal, location: normalizedSource.location, reporter_name: normalizedSource.reporterName, story_type: normalized, editorial_priority: editorialPriority, images: source.images || [] }, frame, candidateImages ? { candidateImages } : {});
     const lines = await headlineLines(frame, proposal.headline); const assessed = assessment(proposal, policy, fit, lines);
     return { proposal, fit, assessment: assessed, response };
   }

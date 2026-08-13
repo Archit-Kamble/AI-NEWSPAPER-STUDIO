@@ -45,6 +45,14 @@ import { plainText } from "./rich-text.js";
 
 export const MIN_LINE_HEIGHT = 1.45;
 
+// Printed by both normal and flowed story renderers. This is SAHAS furniture,
+// not AI-authored copy, so it has its own capacity accounting.
+export function datelineText(view = {}) {
+  const parts = [view.location, view.author ?? view.reporterName ?? view.reporter_name]
+    .map((part) => String(part || '').trim()).filter(Boolean);
+  return parts.length ? `■ ${parts.join(', ')} ` : '';
+}
+
 // The one translation from a persisted section (snake case) or an editor view
 // (camel case) into the flow engine. Keeping it here prevents fit, preflight
 // and quality from each quietly choosing different defaults.
@@ -66,6 +74,9 @@ export function flowViewFromSection(section = {}, overrides = {}) {
     headline: flowValue(section, overrides, "headline", "headline", ""),
     subheading: flowValue(section, overrides, "subheading", "subheading", ""),
     body: flowValue(section, overrides, "body", "body", ""),
+    kicker: flowValue(section, overrides, "kicker", "kicker", ""),
+    location: flowValue(section, overrides, "location", "location", ""),
+    author: flowValue(section, overrides, "author", "reporter_name", ""),
     marginPx: numeric(flowValue(section, overrides, "marginPx", "margin_px", 12), 12),
     columnCount: numeric(flowValue(section, overrides, "columnCount", "column_count", 1), 1),
     lineHeight: Math.max(MIN_LINE_HEIGHT, numeric(flowValue(section, overrides, "lineHeight", "line_height", MIN_LINE_HEIGHT), MIN_LINE_HEIGHT)),
@@ -79,17 +90,23 @@ export function measureSectionFlow(section = {}, overrides = {}, images = null) 
   const view = flowViewFromSection(section, overrides);
   const flowImages = images === null ? (section.images || []).map(flowImageFromRow) : images;
   const map = buildFlowMap(section, view, flowImages);
-  const bodyCharsUsed = map.usedChars;
+  const bodyCharsUsed = map.authoredBodyCharsUsed;
   const bodyCharBudget = map.bodyCharBudget;
+  const fixedBodyPrefixChars = map.fixedBodyPrefixChars;
+  const writableBodyCharBudget = Math.max(0, bodyCharBudget - fixedBodyPrefixChars);
+  const totalBodyCharsUsed = map.totalBodyCharsUsed;
   return {
-    view, map, bodyCharBudget, bodyCharsUsed,
-    overflowing: bodyCharsUsed > bodyCharBudget,
-    overflowChars: Math.max(0, bodyCharsUsed - bodyCharBudget),
-    fillRatio: bodyCharBudget ? bodyCharsUsed / bodyCharBudget : (bodyCharsUsed ? Infinity : 0),
+    view, map, bodyCharBudget, bodyCharsUsed, fixedBodyPrefixChars,
+    writableBodyCharBudget, authoredBodyCharsUsed: bodyCharsUsed, totalBodyCharsUsed,
+    overflowing: totalBodyCharsUsed > bodyCharBudget,
+    overflowChars: Math.max(0, totalBodyCharsUsed - bodyCharBudget),
+    fillRatio: writableBodyCharBudget ? bodyCharsUsed / writableBodyCharBudget : (bodyCharsUsed ? Infinity : 0),
+    authoredBodyFillRatio: writableBodyCharBudget ? bodyCharsUsed / writableBodyCharBudget : (bodyCharsUsed ? Infinity : 0),
+    physicalBodyFillRatio: bodyCharBudget ? totalBodyCharsUsed / bodyCharBudget : (totalBodyCharsUsed ? Infinity : 0),
   };
 }
 
-export const CELL = { HEADLINE: "H", SUBHEADING: "S", TEXT: "T", IMAGE: "I", EMPTY: "." };
+export const CELL = { KICKER: "K", HEADLINE: "H", SUBHEADING: "S", TEXT: "T", IMAGE: "I", EMPTY: "." };
 
 // Below this many cells wide, a run cannot hold ordinary prose at all - every
 // row a picture leaves this narrow forces the SAME word to break character by
@@ -207,8 +224,12 @@ export function buildFlowMap(section, view, images = []) {
 
   // The headline and subheading claim whole rows off the top - they are set
   // across the measure, not wrapped around the picture.
+  const kickerText = plainText(view.kicker);
   const headlineText = plainText(view.headline);
   const subheadingText = plainText(view.subheading);
+  const kickerRows = kickerText
+    ? rowsFor(estimateHeight(kickerText, view.bodyFontPx * 1.05, contentWidth), cellHeight) + 1
+    : 0;
   const headlineRows = headlineText
     ? rowsFor(estimateHeight(headlineText, view.headlineFontPx, contentWidth), cellHeight)
     : 0;
@@ -233,11 +254,15 @@ export function buildFlowMap(section, view, images = []) {
         imageCells += 1;
         continue;
       }
-      if (row < headlineRows) {
+      if (row < kickerRows) {
+        line.push(CELL.KICKER);
+        continue;
+      }
+      if (row < kickerRows + headlineRows) {
         line.push(CELL.HEADLINE);
         continue;
       }
-      if (row < headlineRows + subheadingRows) {
+      if (row < kickerRows + headlineRows + subheadingRows) {
         line.push(CELL.SUBHEADING);
         continue;
       }
@@ -268,6 +293,7 @@ export function buildFlowMap(section, view, images = []) {
     cellWidth: Number(cellWidth.toFixed(2)),
     cellHeight: Number(cellHeight.toFixed(2)),
     grid,
+    kickerRows,
     headlineRows,
     subheadingRows,
     imageCells,
@@ -278,7 +304,12 @@ export function buildFlowMap(section, view, images = []) {
     bodyWordBudget: Math.round(usableBudget / 6),
     // What the copy will SET, not how it is marked up. Two words in bold take
     // exactly as much room as two words that are not.
+    // Compatibility alias: authored AI body only. Explicit physical fields
+    // below include the automatic dateline printed by SAHAS.
     usedChars: plainText(view.body).length,
+    fixedBodyPrefixChars: datelineText(view).length,
+    authoredBodyCharsUsed: plainText(view.body).length,
+    totalBodyCharsUsed: datelineText(view).length + plainText(view.body).length,
   };
 }
 

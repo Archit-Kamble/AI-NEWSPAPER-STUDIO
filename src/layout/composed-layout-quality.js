@@ -64,10 +64,13 @@ async function measureFlowUtilization(section, images = section?.images || []) {
   const headlineCells = cells(map, CELL.HEADLINE);
   const subheadingCells = cells(map, CELL.SUBHEADING);
   const availableCells = map.cols * map.rows;
-  const rawBodyFillRatio = map.bodyCharBudget ? map.usedChars / map.bodyCharBudget : (map.usedChars ? Infinity : 0);
-  const usedCells = headlineCells + subheadingCells + map.imageCells + Math.min(map.usedChars, map.bodyCharBudget);
+  const rawBodyFillRatio = measurement.authoredBodyFillRatio;
+  const usedCells = headlineCells + subheadingCells + map.imageCells + Math.min(measurement.totalBodyCharsUsed, map.bodyCharBudget);
   return {
     map, bodyCharBudget: measurement.bodyCharBudget, bodyCharsUsed: measurement.bodyCharsUsed,
+    fixedBodyPrefixChars: measurement.fixedBodyPrefixChars, writableBodyCharBudget: measurement.writableBodyCharBudget,
+    authoredBodyCharsUsed: measurement.authoredBodyCharsUsed, totalBodyCharsUsed: measurement.totalBodyCharsUsed,
+    authoredBodyFillRatio: measurement.authoredBodyFillRatio, physicalBodyFillRatio: measurement.physicalBodyFillRatio,
     bodyFillRatio: round(rawBodyFillRatio), normalizedBodyFillRatio: round(Math.min(1, rawBodyFillRatio)),
     headlineRows: map.headlineRows, subheadingRows: map.subheadingRows, imageCells: map.imageCells,
     imageRatio: round(availableCells ? map.imageCells / availableCells : 0),

@@ -10,7 +10,9 @@ function normalizeNewsroomSource(item = {}) {
   const tags = Array.isArray(item.tags) ? item.tags.filter(Boolean).join(', ') : text(item.tags);
   return {
     id: sourceId, sourceId,
-    news_item_id: item.news_item_id ?? item.newsItemId ?? null,
+    // DB newsroom rows are linked back to their canonical reporter item; a
+    // generic external packet may instead have no database identity at all.
+    news_item_id: item.news_item_id ?? item.newsItemId ?? (Number.isInteger(Number(item.id)) ? Number(item.id) : null),
     story_type: text(item.storyType ?? item.story_type) || 'STANDARD',
     editorial_priority: Math.min(5, Math.max(1, Math.round(Number(item.editorialPriority ?? item.editorial_priority) || 3))),
     title: text(item.headline ?? item.title), subheading: text(item.subheading),
@@ -25,6 +27,18 @@ function normalizeNewsroomSource(item = {}) {
   };
 }
 
+function sourceSnapshot(sources = []) {
+  const normalized = normalizeNewsroomSources(sources);
+  const crypto = require('crypto');
+  const identity = normalized.map((item) => ({ id: item.sourceId, newsItemId: item.news_item_id, storyType: item.story_type, priority: item.editorial_priority, title: item.title, body: item.body, desiredRole: item.desired_page_role }));
+  return { sources: normalized, sourceIds: normalized.map((item) => item.sourceId), hash: crypto.createHash('sha256').update(JSON.stringify(identity)).digest('hex') };
+}
+
+async function loadNewsroomSourcesForEdition(newspaperId, { repository = require('../repositories/news.repository') } = {}) {
+  const rows = await repository.findForComposition(newspaperId);
+  return sourceSnapshot(rows);
+}
+
 function normalizeNewsroomSources(items = []) {
   const seen = new Set();
   const normalized = items.map(normalizeNewsroomSource);
@@ -37,4 +51,4 @@ function normalizeNewsroomSources(items = []) {
   return normalized.sort((a, b) => a.sourceId.localeCompare(b.sourceId));
 }
 
-module.exports = { normalizeNewsroomSource, normalizeNewsroomSources };
+module.exports = { normalizeNewsroomSource, normalizeNewsroomSources, sourceSnapshot, loadNewsroomSourcesForEdition };

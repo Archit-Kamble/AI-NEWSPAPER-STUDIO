@@ -64,24 +64,39 @@ async function buildEditionCompositionPlan({ pages = [], newspaper = {}, sources
 // inbox simply has fewer compatible sources than writable frames; that is a
 // declared shortage, not a false claim that every frame was composed.
 function summarizeEditionComposition(plans = [], results = []) {
+  const ledger = plans.flatMap((plan, index) => {
+    const result = results[index] || {}; const outcomes = new Map((result.outcomes || []).map((item) => [item.frame, item]));
+    const assignmentByFrame = new Map((plan.assignments || []).map((item) => [String(item.frameId), item]));
+    return plan.frames.map((frame) => {
+      const key = String(frame.section_key); const outcome = outcomes.get(key); const assignment = assignmentByFrame.get(String(frame.id));
+      let state = 'SOURCE_SHORTAGE';
+      if (outcome?.state === 'PERSISTED') state = 'GENERATED_PERSISTED';
+      else if (outcome?.state === 'SOURCE_INSUFFICIENT' || outcome?.state === 'FIT_REJECTED') state = 'SOURCE_SHORTAGE';
+      else if (outcome?.state === 'QUALITY_REJECTED') state = 'QUALITY_REJECTED';
+      else if (outcome?.state === 'PREFLIGHT_REJECTED') state = 'PREFLIGHT_REJECTED';
+      else if (outcome && !['PLANNED', 'READY_TO_PERSIST'].includes(outcome.state)) state = 'PROVIDER_FAILURE';
+      else if (assignment) state = 'SEMANTICALLY_UNMATCHED';
+      const area = Math.max(0, Number(frame.width_px) || 0) * Math.max(0, Number(frame.height_px) || 0);
+      return { page: plan.page.page_number, frame: key, recommendedStoryType: frame.recommendedStoryType, semanticRole: plan.role,
+        editorialPriority: frame.editorialPriority, usableArea: area, state, sourceId: assignment?.storyId || null };
+    });
+  });
   const pages = plans.map((plan, index) => {
-    const result = results[index] || {}; const outcomes = result.outcomes || [];
-    const eligibleEditorialFrames = plan.frames.length;
-    const persistedCandidates = outcomes.filter((item) => item.state === 'PERSISTED').length;
-    const sourceInsufficient = outcomes.filter((item) => item.state === 'SOURCE_INSUFFICIENT' || item.state === 'FIT_REJECTED').length;
-    const assignedSources = plan.assignments.length;
-    const retainedOriginalFrames = Math.max(0, eligibleEditorialFrames - persistedCandidates);
-    const shortageFrames = Math.max(0, eligibleEditorialFrames - assignedSources) + sourceInsufficient;
-    const blocked = ['PAGE_BLOCKED', 'BUDGET_BLOCKED', 'PROVIDER_BLOCKED'].includes(result.state) || Boolean(result.error);
-    return { page: plan.page.page_number, eligibleEditorialFrames, candidateSources: plan.stories.length, assignedSources,
+    const result = results[index] || {}; const rows = ledger.filter((item) => item.page === plan.page.page_number); const outcomes = result.outcomes || [];
+    const persistedCandidates = rows.filter((item) => item.state === 'GENERATED_PERSISTED').length;
+    const totalArea = rows.reduce((sum, item) => sum + item.usableArea, 0); const persistedArea = rows.filter((item) => item.state === 'GENERATED_PERSISTED').reduce((sum, item) => sum + item.usableArea, 0);
+    const failures = rows.filter((item) => ['PROVIDER_FAILURE', 'QUALITY_REJECTED', 'PREFLIGHT_REJECTED'].includes(item.state)).length;
+    return { page: plan.page.page_number, eligibleEditorialFrames: rows.length, candidateSources: plan.stories.length, assignedSources: plan.assignments.length,
       generatedCandidates: result.generatedCandidates?.length ?? result.candidates?.length ?? 0, persistedCandidates,
-      retainedOriginalFrames, sourceInsufficient, providerOrCandidateFailures: outcomes.filter((item) => !['PERSISTED', 'READY_TO_PERSIST', 'PLANNED', 'SOURCE_INSUFFICIENT', 'FIT_REJECTED'].includes(item.state)).length,
-      editorialCoverageRatio: eligibleEditorialFrames ? Number((persistedCandidates / eligibleEditorialFrames).toFixed(4)) : 1,
-      shortageFrames, blocked };
+      retainedOriginalFrames: rows.length - persistedCandidates, sourceInsufficient: rows.filter((item) => item.state === 'SOURCE_SHORTAGE').length,
+      providerOrCandidateFailures: failures, editorialCoverageRatio: rows.length ? Number((persistedCandidates / rows.length).toFixed(4)) : 1,
+      weightedEditorialCoverageRatio: totalArea ? Number((persistedArea / totalArea).toFixed(4)) : 1,
+      unresolvedDemand: rows.filter((item) => item.state !== 'GENERATED_PERSISTED').length,
+      blocked: ['PAGE_BLOCKED', 'BUDGET_BLOCKED', 'PROVIDER_BLOCKED'].includes(result.state) || Boolean(result.error) };
   });
   const blocked = pages.some((page) => page.blocked);
-  const unresolved = pages.some((page) => page.retainedOriginalFrames > page.shortageFrames);
-  return { pages, state: blocked ? 'BLOCKED' : unresolved ? 'PARTIALLY_COMPOSED' : 'FULLY_COMPOSED' };
+  const unresolved = ledger.some((item) => item.state !== 'GENERATED_PERSISTED');
+  return { pages, ledger, state: blocked ? 'BLOCKED' : unresolved ? 'PARTIALLY_COMPOSED' : 'FULLY_COMPOSED' };
 }
 
 function composedStoryFromCandidate(candidate) {

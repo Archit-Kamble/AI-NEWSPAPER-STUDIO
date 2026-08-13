@@ -13,6 +13,7 @@ const { compileEditorialPresentation } = require('../src/services/editorialPacka
 const { validateGeneratedGrounding } = require('../src/services/generatedGrounding.service');
 const newsroomPool = require('./ai-test-news-pool');
 const genericNewsroomPool = require('./ai-test-news-generic-pool');
+const { loadNewsroomSourcesForEdition, sourceSnapshot } = require('../src/services/newsroomSource.service');
 const { buildEditionCompositionPlan, composePagePlan, summarizeEditionComposition } = require('../src/services/editionComposition.service');
 const { createRunJournal } = require('../src/services/compositionRunJournal.service');
 const { createCodexLocalWriter } = require('../src/services/codexLocalWriter.service');
@@ -134,15 +135,18 @@ async function main() {
   if (!edition) throw new Error('usage: node scripts/compose-ai-test-edition.js --edition <id>|--date YYYY-MM-DD [--page 2|--all-pages] [--source-mode newsroom-pool] [--ai-mode stub|codex-local|real] [--plan-only|--apply]');
   const newspaper = await newspapers.findById(edition); const page = (await pages.findByNewspaper(edition)).find((item) => item.page_number === pageNumber);
   if (!newspaper || !page) throw new Error('edition or requested page was not found');
-  if (['newsroom-pool', 'generic-newsroom-pool'].includes(sourceMode)) {
+  if (['newsroom-pool', 'generic-newsroom-pool', 'newsroom-db'].includes(sourceMode)) {
     assertDisposableEdition(newspaper, apply);
-    const sources = sourceMode === 'generic-newsroom-pool' ? genericNewsroomPool : newsroomPool;
+    const dbSnapshot = sourceMode === 'newsroom-db' ? await loadNewsroomSourcesForEdition(edition) : null;
+    const snapshot = dbSnapshot || sourceSnapshot(sourceMode === 'generic-newsroom-pool' ? genericNewsroomPool : newsroomPool);
+    const sources = snapshot.sources;
     const all = await pages.findByNewspaper(edition); const plan = await buildEditionCompositionPlan({ pages: all, newspaper, sources });
     const selected = plan.pages.filter((item) => allPages || item.page.page_number === pageNumber);
     const journal = createRunJournal({ date: newspaper.publication_date, allPages, pageNumber, mode: aiMode });
     console.log(`runJournal: ${journal.path}`);
-    journal.event('PLAN_READY', { sourceCount: newsroomPool.length, assigned: plan.assigned.length, pages: selected.length });
-    console.log(JSON.stringify({ edition, date: newspaper.publication_date, sourceMode, aiMode, planOnly, apply, pages: selected.map((item) => ({ page: item.page.page_number, role: item.role, eligibleEditorialFrames: item.frames.length, candidateSources: item.stories.length, assignments: item.assignments.length })), maxServiceCalls }));
+    journal.event('SOURCE_SNAPSHOT', { sourceCount: sources.length, sourceIds: snapshot.sourceIds, sourceSnapshotHash: snapshot.hash });
+    journal.event('PLAN_READY', { sourceCount: sources.length, assigned: plan.assigned.length, pages: selected.length });
+    console.log(JSON.stringify({ edition, date: newspaper.publication_date, sourceMode, aiMode, planOnly, apply, sourceSnapshot: { count: sources.length, hash: snapshot.hash }, pages: selected.map((item) => ({ page: item.page.page_number, role: item.role, eligibleEditorialFrames: item.frames.length, candidateSources: item.stories.length, assignments: item.assignments.length })), maxServiceCalls }));
     if (planOnly) { journal.finish('COMPLETE', { planOnly: true }); return; }
     const askForJson = aiMode === 'stub' ? async (_prompt, _schema) => ({ data: { headline: '', subheading: '', body: '' }, provider: 'stub', tier: 'basic' }) : aiMode === 'codex-local' ? createCodexLocalWriter() : require('../src/services/ai').askForJson;
     const stubAsk = async (_prompt, _schema) => {
@@ -163,7 +167,7 @@ async function main() {
     } catch (error) { journal.event('AI_FAILED', { error: error.message }); journal.finish('BLOCKED', { error: error.message }); throw error; }
     const report = {
       edition, date: newspaper.publication_date, aiMode, apply, serviceCalls: budget.used, journalPath: journal.path,
-      sourceCount: sources.length, routedCount: plan.routedCount, unassignedCount: plan.routed.length,
+      sourceCount: sources.length, sourceSnapshot: { count: sources.length, ids: snapshot.sourceIds, hash: snapshot.hash }, routedCount: plan.routedCount, unassignedCount: plan.routed.length,
       assignments: selected.flatMap((item) => item.assignments.map((assignment) => ({ page: item.page.page_number, sourceId: assignment.storyId, frame: assignment.frameId, score: assignment.score }))),
       pages: results.map((result, index) => ({
         page: selected[index].page.page_number, state: result.state, error: result.error || null, candidates: result.candidates?.length || 0,

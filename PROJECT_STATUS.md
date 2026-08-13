@@ -4,6 +4,43 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zw. Project B8B-PRODUCTION-INGRESS — truthful demand and database newsroom proof (2026-08-13)
+
+Autonomous completion is now strict: only `GENERATED_PERSISTED` ordinary
+editorial frames resolve demand. A source shortage, semantic mismatch, quality
+rejection, preflight rejection, or provider failure makes an edition
+`PARTIALLY_COMPOSED` or `BLOCKED`; inherited fixture text is never completion.
+The deterministic demand ledger reports each ordinary frame’s page, semantic
+role, treatment, area, source and state. It emits count and usable-area
+weighted coverage, both of which must equal one for `FULLY_COMPOSED`.
+
+The generic source contract now loads real `news_items` through
+`news.repository.findForComposition()` for explicit `--source-mode newsroom-db`.
+Only approved items attached to that edition are normalized, stably sorted and
+held in an in-memory snapshot whose count, IDs and SHA-256 hash are journalled
+before planning. This is the production ingress seam; fixture pools remain
+test-only modes. The `desired_page_role` field is additive in the existing
+news-item schema/repository/service, not a parallel database.
+
+Fresh disposable database-backed edition 12465 (2099-05-31) used 30 synthetic
+but source-grounded `news_items` created through the normal repository path.
+Plan-only used zero CODEX_LOCAL calls and zero composition writes. The full
+64-call-cap run used 54 CODEX_LOCAL calls and persisted all Pages 1–4 with
+30/30 ordinary frames `GENERATED_PERSISTED`, count coverage 1.0 and weighted
+coverage 1.0. Baseline/projected/reload preflight and post-save parity were
+all clean; the edition truthfully reports `FULLY_COMPOSED`. Browser evidence
+still uses canonical flow: Page 2’s lead/analysis/standard frames are
+approximately .81/.88/.85 canonical body fill and .84/.89/.86 visible fill.
+The untouched image companion centre column remains separately observable and
+does not enter the external editorial demand ledger.
+
+Evidence: `/tmp/sahas-b8b-full-report.json`,
+`/tmp/sahas-b8b-run-2099-05-31-all-pages.json`,
+`/tmp/sahas-rendered-occupancy-2099-05-31.json`, and
+`/tmp/sahas-b8b-newsroom-db-2099-05-31/`.
+
+---
+
 ## 0zv. Project B8B-PRODUCTION-CLOSEOUT — generic-source composition proof (2026-08-13)
 
 Edition composition now normalizes a generic editorial-only newsroom source

@@ -18,7 +18,7 @@ async function createNews({ body, files, sessionUser }) {
   if (semantic.error) return semantic;
 
   const item = await newsRepository.create({
-    newspaper_id: null,
+    newspaper_id: Number.isInteger(Number(body.newspaperId)) ? Number(body.newspaperId) : null,
     title: body.title || '',
     subheading: body.subheading || body.subtitle || '',
     description: body.description || '',
@@ -29,6 +29,7 @@ async function createNews({ body, files, sessionUser }) {
     reporter_name: body.reporterName || sessionUser?.name || '',
     story_type: semantic.storyType,
     editorial_priority: semantic.editorialPriority,
+    desired_page_role: body.desiredPageRole || body.desired_page_role || null,
     image_urls: buildImageUrls(files),
     status: body.status || 'draft',
     created_by: sessionUser?.id || Number.parseInt(body.reporterId, 10) || null,
@@ -74,6 +75,7 @@ async function updateNews(id, { body, files }) {
     reporter_name: body.reporterName || '',
     story_type: semantic.storyType,
     editorial_priority: semantic.editorialPriority,
+    desired_page_role: body.desiredPageRole || body.desired_page_role || existing.desired_page_role || null,
     image_urls: existing.image_urls || [],
     status: body.status || 'draft',
     created_by: existing.created_by,

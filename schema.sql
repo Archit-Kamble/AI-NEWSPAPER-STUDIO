@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS news_items (
   -- `block_type` still says what kind of physical slot it is.
   story_type VARCHAR(30) NOT NULL DEFAULT 'STANDARD',
   editorial_priority SMALLINT NOT NULL DEFAULT 3,
+  desired_page_role VARCHAR(30),
   image_urls TEXT[] NOT NULL DEFAULT '{}',
   status VARCHAR(20) NOT NULL DEFAULT 'draft',
   created_by INTEGER REFERENCES users(id),
@@ -57,6 +58,7 @@ ALTER TABLE news_items ADD COLUMN IF NOT EXISTS image_urls TEXT[] NOT NULL DEFAU
 ALTER TABLE news_items ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
 ALTER TABLE news_items ADD COLUMN IF NOT EXISTS story_type VARCHAR(30) NOT NULL DEFAULT 'STANDARD';
 ALTER TABLE news_items ADD COLUMN IF NOT EXISTS editorial_priority SMALLINT NOT NULL DEFAULT 3;
+ALTER TABLE news_items ADD COLUMN IF NOT EXISTS desired_page_role VARCHAR(30);
 
 CREATE TABLE IF NOT EXISTS templates (
   id SERIAL PRIMARY KEY,

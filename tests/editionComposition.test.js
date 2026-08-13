@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const { routeSourcesToEditionPages, storyPacketFromNewsItem, composePagePlan, projectComposedStoryIntoSection, buildEditionCompositionPlan, summarizeEditionComposition } = require('../src/services/editionComposition.service');
 const { getTemplate } = require('../src/layout/templates');
 const { normalizeNewsroomSources } = require('../src/services/newsroomSource.service');
+const { sourceSnapshot, loadNewsroomSourcesForEdition } = require('../src/services/newsroomSource.service');
 
 test('frame-independent sources route deterministically by semantic page role', () => {
   const pages = [{ page_number: 1 }, { page_number: 2 }, { page_number: 3 }, { page_number: 4 }];
@@ -94,6 +95,13 @@ test('generic newsroom contract normalizes aliases, optional fields, and stable 
   assert.equal(normalized[1].story_type, 'brief'); assert.equal(normalized[1].editorial_priority, 5); assert.equal(normalized[1].tags, 'एक, दोन');
 });
 
+test('database newsroom loading uses only approved edition items and journals a stable source snapshot', async () => {
+  const repository = { findForComposition: async (editionId) => [{ id: 12, newspaper_id: editionId, title: 'ब', description: 'प्रत', status: 'approved', story_type: 'STANDARD' }, { id: 3, newspaper_id: editionId, title: 'अ', description: 'प्रत', status: 'approved', story_type: 'BRIEF' }] };
+  const loaded = await loadNewsroomSourcesForEdition(88, { repository }); const reordered = sourceSnapshot([...loaded.sources].reverse());
+  assert.deepEqual(loaded.sourceIds, ['12', '3']); assert.equal(loaded.hash, reordered.hash);
+  assert.equal(loaded.sources.every((source) => !Object.hasOwn(source, 'x_px')), true);
+});
+
 test('edition planning is invariant across twenty input permutations of a generic source pool', async () => {
   const sources = [
     genericSource('inbox-a', 'FRONT', 'LEAD', 5), genericSource('inbox-b', 'FRONT', 'STANDARD', 3), genericSource('inbox-c', 'LOCAL', 'LEAD', 5),
@@ -108,13 +116,22 @@ test('edition planning is invariant across twenty input permutations of a generi
 });
 
 test('messy source pools report coverage and never relabel a safely partial edition as full', () => {
-  const plans = [{ page: { page_number: 1 }, frames: [{}, {}, {}], stories: [{}, {}], assignments: [{}, {}] }, { page: { page_number: 2 }, frames: [{}], stories: [], assignments: [] }];
-  const partial = summarizeEditionComposition(plans, [{ state: 'PERSISTED', outcomes: [{ state: 'PERSISTED' }, { state: 'SOURCE_INSUFFICIENT' }], candidates: [{}] }, { state: 'UNCHANGED_NO_ASSIGNMENTS', outcomes: [], candidates: [] }]);
-  assert.equal(partial.state, 'FULLY_COMPOSED');
+  const plans = [{ page: { page_number: 1 }, role: 'FRONT', frames: [{ id: 'a', section_key: 'a', width_px: 100, height_px: 100 }, { id: 'b', section_key: 'b', width_px: 100, height_px: 100 }, { id: 'c', section_key: 'c', width_px: 100, height_px: 100 }], stories: [{}, {}], assignments: [{ frameId: 'a', storyId: 'one' }, { frameId: 'b', storyId: 'two' }] }, { page: { page_number: 2 }, role: 'LOCAL', frames: [{ id: 'd', section_key: 'd', width_px: 100, height_px: 100 }], stories: [], assignments: [] }];
+  const partial = summarizeEditionComposition(plans, [{ state: 'PERSISTED', outcomes: [{ frame: 'a', state: 'PERSISTED' }, { frame: 'b', state: 'SOURCE_INSUFFICIENT' }], candidates: [{}] }, { state: 'UNCHANGED_NO_ASSIGNMENTS', outcomes: [], candidates: [] }]);
+  assert.equal(partial.state, 'PARTIALLY_COMPOSED');
   assert.equal(partial.pages[0].editorialCoverageRatio, 0.3333);
-  const unresolved = summarizeEditionComposition(plans, [{ state: 'PERSISTED', outcomes: [{ state: 'PERSISTED' }], candidates: [{}] }, { state: 'UNCHANGED_NO_ASSIGNMENTS', outcomes: [], candidates: [] }]);
+  const unresolved = summarizeEditionComposition(plans, [{ state: 'PERSISTED', outcomes: [{ frame: 'a', state: 'PERSISTED' }], candidates: [{}] }, { state: 'UNCHANGED_NO_ASSIGNMENTS', outcomes: [], candidates: [] }]);
   assert.equal(unresolved.state, 'PARTIALLY_COMPOSED');
   assert.equal(summarizeEditionComposition(plans, [{ state: 'PAGE_BLOCKED', error: 'PREFLIGHT_BLOCKED' }]).state, 'BLOCKED');
+});
+
+test('completion ledger reports weighted coverage and requires every ordinary frame to persist', () => {
+  const plans = [{ page: { page_number: 1 }, role: 'FRONT', frames: [{ id: 'large', section_key: 'large', width_px: 400, height_px: 200 }, { id: 'small', section_key: 'small', width_px: 100, height_px: 100 }], stories: [{}, {}], assignments: [{ frameId: 'large', storyId: 'a' }, { frameId: 'small', storyId: 'b' }] }];
+  const complete = summarizeEditionComposition(plans, [{ state: 'PERSISTED', outcomes: [{ frame: 'large', state: 'PERSISTED' }, { frame: 'small', state: 'PERSISTED' }], candidates: [{}, {}] }]);
+  assert.equal(complete.state, 'FULLY_COMPOSED'); assert.equal(complete.pages[0].weightedEditorialCoverageRatio, 1);
+  const partial = summarizeEditionComposition(plans, [{ state: 'PERSISTED', outcomes: [{ frame: 'small', state: 'PERSISTED' }], candidates: [{}] }]);
+  assert.equal(partial.state, 'PARTIALLY_COMPOSED'); assert.equal(partial.ledger.find((item) => item.frame === 'large').state, 'SEMANTICALLY_UNMATCHED');
+  assert.equal(partial.pages[0].weightedEditorialCoverageRatio, 0.1111);
 });
 
 test('production composition modules contain no B8B fixture source IDs', () => {

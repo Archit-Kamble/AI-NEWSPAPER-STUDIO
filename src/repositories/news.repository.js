@@ -14,12 +14,13 @@ async function create(news) {
             reporter_name,
             story_type,
             editorial_priority,
+            desired_page_role,
             image_urls,
             status,
             created_by
         )
         VALUES (
-            $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14
+            $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15
         )
         RETURNING *;
     `;
@@ -36,6 +37,7 @@ async function create(news) {
     news.reporter_name,
     news.story_type,
     news.editorial_priority,
+    news.desired_page_role || null,
     news.image_urls,
     news.status,
     news.created_by,
@@ -91,6 +93,19 @@ async function findByStatus(status) {
   return rows;
 }
 
+// A composition run owns a stable in-memory snapshot of this result. Only
+// desk-approved newsroom material attached to the requested edition is
+// eligible; drafts and rejected copy must never become autonomous output.
+async function findForComposition(newspaperId) {
+  const { rows } = await pool.query(
+    `SELECT * FROM news_items
+      WHERE newspaper_id = $1 AND status = 'approved'
+      ORDER BY id ASC`,
+    [newspaperId],
+  );
+  return rows;
+}
+
 async function update(id, news) {
   const query = `
         UPDATE news_items
@@ -106,9 +121,10 @@ async function update(id, news) {
             reporter_name=$9,
             story_type=$10,
             editorial_priority=$11,
-            image_urls=$12,
-            status=$13
-        WHERE id=$14
+            desired_page_role=$12,
+            image_urls=$13,
+            status=$14
+        WHERE id=$15
         RETURNING *;
     `;
 
@@ -124,6 +140,7 @@ async function update(id, news) {
     news.reporter_name,
     news.story_type,
     news.editorial_priority,
+    news.desired_page_role || null,
     news.image_urls,
     news.status,
     id,
@@ -143,6 +160,7 @@ module.exports = {
   findAll,
   findById,
   findByStatus,
+  findForComposition,
   update,
   remove,
 };

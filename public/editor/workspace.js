@@ -1162,14 +1162,16 @@ function renderCompositionPlan(plan, aiMode) {
   document.getElementById('compositionApply').addEventListener('click', async () => {
     const confirm = window.confirm(`Apply AI composition to ${store.getState().newspaper.publication_date}?\n${plan.expected.plannedFrames} planned frames, ${plan.expected.unresolvedDemand} unresolved, ${plan.writerTransport}.`); if (!confirm) return;
     const apply = document.getElementById('compositionApply'); apply.disabled = true; apply.textContent = 'Composing…';
-    try { const response = await fetch(`/api/newspapers/${plan.editionId}/composition/apply`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planToken: plan.planToken, aiMode, maxServiceCalls: aiMode === 'codex-local' ? 64 : 32 }) }); const result = await response.json(); if (!result.ok) { showNotice(result.code || 'Composition failed.'); return; } await renderWorkspace(plan.editionId); renderCompositionResult(result); }
+    try { const response = await fetch(`/api/newspapers/${plan.editionId}/composition/apply`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planToken: plan.planToken, aiMode, maxServiceCalls: aiMode === 'codex-local' ? 64 : 32 }) }); const result = await response.json(); if (!result.ok) { renderCompositionResult(result); return; } await renderWorkspace(plan.editionId); renderCompositionResult(result); }
     catch (error) { showNotice(`Composition failed: ${error.message}`); } finally { apply.disabled = false; apply.textContent = 'Apply AI Composition'; }
   });
 }
 
 function renderCompositionResult(result) {
   document.getElementById('compositionPanel')?.remove(); const panel = document.createElement('aside'); panel.id = 'compositionPanel'; panel.className = 'preflight-panel composition-panel';
-  panel.innerHTML = `<header><strong>AI composition — ${escapeHtml(result.state)}</strong><button type="button" id="compositionClose" aria-label="Close">×</button></header><p>${escapeHtml(result.writerTransport)} · ${result.writerCalls} calls · ${(result.durationMs / 1000).toFixed(1)}s</p><p>${result.completion.pages.map((page) => `p${page.page} ${Math.round(page.editorialCoverageRatio * 100)}%`).join(' · ')}</p><ul>${result.pages.map((page) => `<li><strong>p${page.page}</strong> · ${escapeHtml(page.state)}${page.error ? ` · ${escapeHtml(page.error)}` : ''}</li>`).join('')}</ul>`;
+  const duration = Number.isFinite(result.durationMs) ? ` · ${(result.durationMs / 1000).toFixed(1)}s` : ''; const coverage = result.completion?.pages?.map((page) => `p${page.page} ${Math.round(page.editorialCoverageRatio * 100)}%`).join(' · ') || '';
+  const safety = result.atomicallyApplied ? 'Applied atomically.' : result.nothingApplied ? 'Nothing was applied to the edition.' : 'Manual verification required.';
+  panel.innerHTML = `<header><strong>AI composition — ${escapeHtml(result.state)}</strong><button type="button" id="compositionClose" aria-label="Close">×</button></header><p>${escapeHtml(result.writerTransport || 'composition')} · ${result.writerCalls || 0} calls${duration}</p><p>${escapeHtml(safety)}</p>${coverage ? `<p>${coverage}</p>` : ''}<ul>${(result.pages || []).map((page) => `<li><strong>p${page.page}</strong> · ${escapeHtml(page.state)}${page.error ? ` · ${escapeHtml(page.error)}` : ''}</li>`).join('')}</ul>`;
   document.body.appendChild(panel); document.getElementById('compositionClose').addEventListener('click', closeOnEscape(() => panel.remove())); showNotice(`AI composition ${result.state}: ${result.writerCalls} ${result.writerTransport} calls.`);
 }
 

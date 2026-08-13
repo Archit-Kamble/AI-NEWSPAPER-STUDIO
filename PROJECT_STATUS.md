@@ -4,6 +4,41 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zy. Project B8B-EDITION-ATOMICITY — all-page composition transaction and run truth (2026-08-13)
+
+The earlier operator Apply path was audited and could commit Page 1 before a
+later page failed, because `composePagePlan(... apply: true)` owned a
+transaction per page. Apply now prepares every page with `apply: false` first:
+writer output, source grounding, exact fit, projected quality and projected
+preflight all complete with zero composition writes. Only after all pages are
+safe does the workflow recheck the source, geometry and composition-owned
+baseline fingerprints, open one transaction, stage every page batch through
+the repository's propagated `tx`, reload through that same transaction and
+verify persisted preflight/flow/quality parity. Any persistence or parity
+failure rolls the one transaction back and the response truthfully says
+“Nothing was applied to the edition.”
+
+`edition_composition_runs` is additive operational audit storage: it records
+the opaque run ID, edition, hash fingerprints, transport, state, page count,
+call count, completion/failure and commit timestamps—never prompts, keys or
+article bodies. Incomplete prepare records recover to `BLOCKED`; an uncertain
+persistence/verification record becomes `HUMAN_REQUIRED` rather than silently
+rerunning AI. Successful plan-token replay remains zero-write/idempotent.
+
+Fresh failure proof: edition 12719 (2099-06-03) used the normal DB plan and a
+deterministic Page-3 late provider failure. Pages 1–2 had already prepared
+(26 bounded calls), but the all-page composition snapshot before/after was
+identical, no batch committed, and the durable outcome was `BLOCKED` with
+`nothingApplied`. Fresh success proof: edition 12720 (2099-06-04) composed
+30/30 DB-backed frames with 54 CODEX_LOCAL calls, all four preflight/parity
+checks clean, count/area coverage 1.0, and durable state `COMMITTED`; replay
+was idempotent. Evidence: `/tmp/sahas-atomic-late-failure-2099-06-03.json`,
+`/tmp/sahas-atomic-success-2099-06-04.json`,
+`/tmp/sahas-atomic-2099-06-04/admin-committed.png`, and four print captures
+in that directory.
+
+---
+
 ## 0zx. Project B8B-OPERATOR-WORKFLOW — reviewed database composition in the desk (2026-08-13)
 
 The existing edition workspace now exposes the proven newsroom-database

@@ -80,6 +80,22 @@ CREATE TABLE IF NOT EXISTS pages (
   UNIQUE (newspaper_id, page_number)
 );
 
+-- A composition run stores operational truth only. Editorial content remains
+-- in page_sections; prompts and generated bodies never enter this audit row.
+CREATE TABLE IF NOT EXISTS edition_composition_runs (
+  run_id UUID PRIMARY KEY,
+  edition_id INTEGER NOT NULL REFERENCES newspapers(id) ON DELETE CASCADE,
+  plan_token_hash VARCHAR(128) NOT NULL,
+  source_snapshot_hash VARCHAR(128) NOT NULL,
+  baseline_fingerprint VARCHAR(128) NOT NULL,
+  writer_transport VARCHAR(40) NOT NULL,
+  state VARCHAR(40) NOT NULL,
+  page_count INTEGER NOT NULL,
+  writer_call_count INTEGER NOT NULL DEFAULT 0,
+  completion_state VARCHAR(40), failure_code VARCHAR(100), committed_at TIMESTAMPTZ,
+  started_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, finished_at TIMESTAMPTZ
+);
+
 -- Template rows are NOT seeded here. src/layout/templates.js is the single
 -- source of truth for layouts and src/layout/syncTemplates.js mirrors it into
 -- this table at boot, because pages.template_key has a foreign key onto it.

@@ -83,9 +83,10 @@ async function setColourForme(pageId, printsColour) {
   return rows[0] || null;
 }
 
-async function findByNewspaper(newspaperId) {
-  const { rows } = await pool.query('SELECT * FROM pages WHERE newspaper_id = $1 ORDER BY page_number', [newspaperId]);
-  return Promise.all(rows.map(hydrate));
+async function findByNewspaper(newspaperId, { tx } = {}) {
+  const db = tx || pool;
+  const { rows } = await db.query('SELECT * FROM pages WHERE newspaper_id = $1 ORDER BY page_number', [newspaperId]);
+  return Promise.all(rows.map((page) => hydrate(page, db)));
 }
 
 // The one join a rate quote needs: the section, joined to its page for the
@@ -100,18 +101,19 @@ async function findSectionForRate(pageId, sectionKey) {
   return rows[0] || null;
 }
 
-async function findById(id) {
-  const { rows } = await pool.query('SELECT * FROM pages WHERE id = $1', [id]);
-  return rows[0] ? hydrate(rows[0]) : null;
+async function findById(id, { tx } = {}) {
+  const db = tx || pool;
+  const { rows } = await db.query('SELECT * FROM pages WHERE id = $1', [id]);
+  return rows[0] ? hydrate(rows[0], db) : null;
 }
 
-async function hydrate(page) {
-  const { rows: sections } = await pool.query(
+async function hydrate(page, db = pool) {
+  const { rows: sections } = await db.query(
     `SELECT * FROM page_sections WHERE page_id = $1 ORDER BY z_index, id`, [page.id]
   );
   // Pictures placed in a block are layout, not an attachment: the page canvas
   // has to draw them or a composed page looks empty of photographs.
-  const { rows: images } = await pool.query(
+  const { rows: images } = await db.query(
     `SELECT si.*, ma.url
        FROM section_images si
        JOIN media_assets ma ON ma.id = si.media_asset_id
@@ -432,10 +434,13 @@ async function saveComposedStoryContent(pageId, sectionKey, story) {
   return rows[0] || null;
 }
 
-async function saveComposedStoryBatch(pageId, items = []) {
-  const client = await pool.connect();
+async function saveComposedStoryBatch(pageId, items = [], { tx } = {}) {
+  // The normal one-page caller still gets a self-contained transaction.  The
+  // edition composer supplies its own client so every page is staged under one
+  // outer COMMIT/ROLLBACK boundary.
+  const client = tx || await pool.connect(); const ownsTransaction = !tx;
   try {
-    await client.query('BEGIN');
+    if (ownsTransaction) await client.query('BEGIN');
     for (const item of items) {
       const story = item.story || {};
       const { rowCount } = await client.query(
@@ -452,9 +457,9 @@ async function saveComposedStoryBatch(pageId, items = []) {
       );
       if (rowCount !== 1) throw new Error(`Composition target not found: ${item.sectionKey}`);
     }
-    await client.query('COMMIT');
-  } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
-  return findById(pageId);
+    if (ownsTransaction) await client.query('COMMIT');
+  } catch (error) { if (ownsTransaction) await client.query('ROLLBACK'); throw error; } finally { if (ownsTransaction) client.release(); }
+  return findById(pageId, { tx: client });
 }
 
 module.exports = {

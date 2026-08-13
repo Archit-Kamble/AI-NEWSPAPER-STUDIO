@@ -170,6 +170,26 @@ async function composePagePlan({ pagePlan, sourcesById, newspaper, askForJson, m
   const noActiveState = outcomes.some((item) => item.state === 'PROVIDER_OUTPUT_EXHAUSTED') ? 'UNCHANGED_PROVIDER_FAILURE' : outcomes.some((item) => item.state === 'SOURCE_INSUFFICIENT') ? 'UNCHANGED_SOURCE_INSUFFICIENT' : pagePlan.assignments.length ? 'UNCHANGED_CANDIDATE_GUARD' : 'UNCHANGED_NO_ASSIGNMENTS';
   const state = apply ? (active.length ? 'PERSISTED' : noActiveState) : 'READY_TO_PERSIST';
   if (state === 'UNCHANGED_SOURCE_INSUFFICIENT') journal?.event('PAGE_UNCHANGED', { page: pagePlan.page.page_number });
-  return { state, candidates: active, generatedCandidates: candidates, activeCandidates: active, rejectedCandidates: candidates.filter((candidate) => !active.includes(candidate)), outcomes, before, baselinePreflight, projectedQuality, preflight, reloaded, reloadedPreflight, reloadedQuality, drift, serviceCalls: budget.used };
+  return { state, candidates: active, generatedCandidates: candidates, activeCandidates: active, rejectedCandidates: candidates.filter((candidate) => !active.includes(candidate)), outcomes, before, projected, baselinePreflight, projectedQuality, preflight, reloaded, reloadedPreflight, reloadedQuality, drift, serviceCalls: budget.used };
 }
-module.exports = { storyPacketFromNewsItem, eligibleEditorialFrames, fallbackRolesForSource, routeSourcesToEditionPages, buildEditionCompositionPlan, summarizeEditionComposition, composedStoryFromCandidate, projectComposedStoryIntoSection, persistenceStory, composePagePlan, roleForRung };
+
+// The edition workflow calls this only after *every* page is prepared.  It is
+// deliberately separate from generation: a late writer failure therefore has
+// no route to a page write.  `tx` is the one edition transaction.
+async function persistPreparedPageComposition({ pagePlan, prepared, newspaper, tx, journal = null }) {
+  const active = prepared.activeCandidates || prepared.candidates || [];
+  if (prepared.state !== 'READY_TO_PERSIST' || !active.length) return { ...prepared, state: 'PAGE_BLOCKED', error: prepared.error || 'PREPARATION_NOT_PERSISTABLE' };
+  journal?.event('PAGE_BATCH_STAGED', { page: pagePlan.page.page_number, candidates: active.length });
+  await pageRepository.saveComposedStoryBatch(pagePlan.page.id, active.map((candidate) => ({ sectionKey: candidate.frame.section_key, story: persistenceStory(candidate) })), { tx });
+  const reloaded = await pageRepository.findById(pagePlan.page.id, { tx });
+  const reloadedPreflight = await validatePageLayout(reloaded, newspaper);
+  const reloadedQuality = await analyzeComposedLayout(reloaded, newspaper);
+  const drift = await parityDifferences(prepared.projected, reloaded, active);
+  const preflightMatches = JSON.stringify([...errorKeys(prepared.preflight)].sort()) === JSON.stringify([...errorKeys(reloadedPreflight)].sort());
+  const qualityMatches = Math.abs(prepared.projectedQuality.score - reloadedQuality.score) <= 0.0001;
+  if (!preflightMatches || drift.length || !qualityMatches) return { ...prepared, state: 'PAGE_BLOCKED', error: 'POST_SAVE_DRIFT', reloaded, reloadedPreflight, reloadedQuality, drift };
+  prepared.outcomes.filter((item) => item.state === 'READY_TO_PERSIST').forEach((item) => { item.state = 'PERSISTED'; });
+  journal?.event('PAGE_PARITY_PASS', { page: pagePlan.page.page_number });
+  return { ...prepared, state: 'PERSISTED', reloaded, reloadedPreflight, reloadedQuality, drift };
+}
+module.exports = { storyPacketFromNewsItem, eligibleEditorialFrames, fallbackRolesForSource, routeSourcesToEditionPages, buildEditionCompositionPlan, summarizeEditionComposition, composedStoryFromCandidate, projectComposedStoryIntoSection, persistenceStory, composePagePlan, persistPreparedPageComposition, roleForRung };

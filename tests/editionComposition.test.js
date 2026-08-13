@@ -162,3 +162,15 @@ test('workflow fingerprints are geometry-sensitive and an active plan rejects a 
     workflow._plans.delete(token); workflow._activeRuns.delete(78);
   }
 });
+
+test('edition atomicity uses an explicit staged page persistence seam, never per-page apply during preparation', () => {
+  const fs = require('fs'); const path = require('path');
+  const composition = fs.readFileSync(path.join(__dirname, '..', 'src', 'services', 'editionComposition.service.js'), 'utf8');
+  const workflow = fs.readFileSync(path.join(__dirname, '..', 'src', 'services', 'editionCompositionWorkflow.service.js'), 'utf8');
+  assert.match(composition, /persistPreparedPageComposition/);
+  assert.match(workflow, /apply: false/);
+  assert.match(workflow, /await tx\.query\('BEGIN'\)/);
+  assert.match(workflow, /await tx\.query\('ROLLBACK'\)/);
+  assert.match(workflow, /COMPOSITION_BASELINE_STALE/);
+  assert.match(composition, /PAGE_BATCH_STAGED/);
+});

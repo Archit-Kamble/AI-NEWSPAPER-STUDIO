@@ -51,7 +51,7 @@ export function renderToolbar({ newspaper, hasSelection, storyPickerOpen, handle
       ${button("tbExport", "export", "Press file", {
         title: "Generate the Scribus document for this edition",
       })}
-      ${button("tbAI", "ai", "AI", { disabled: true, title: "Coming soon" })}
+      ${button("tbAI", "ai", "AI Compose", { title: "Plan AI composition from approved newsroom copy" })}
       ${button("tbPublish", "publish", "Publish", { primary: true })}
     </div>
   `;
@@ -63,6 +63,7 @@ export function renderToolbar({ newspaper, hasSelection, storyPickerOpen, handle
   document.getElementById("tbRedo").addEventListener("click", handlers.onRedo);
   document.getElementById("tbPreflight").addEventListener("click", handlers.onPreflight);
   document.getElementById("tbExport").addEventListener("click", handlers.onPressFile);
+  document.getElementById("tbAI").addEventListener("click", handlers.onCompose);
 }
 
 export function refreshHistoryButtons(canUndo, canRedo) {

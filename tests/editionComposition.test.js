@@ -139,3 +139,26 @@ test('production composition modules contain no B8B fixture source IDs', () => {
   const production = ['editionComposition.service.js', 'newsroomSource.service.js'].map((file) => fs.readFileSync(path.join(__dirname, '..', 'src', 'services', file), 'utf8')).join('\n');
   assert.doesNotMatch(production, /src-(?:front|local|features|back|general|opinion)-/);
 });
+
+test('production composition workflow never imports disposable fixture scripts', () => {
+  const fs = require('fs'); const path = require('path');
+  const workflow = fs.readFileSync(path.join(__dirname, '..', 'src', 'services', 'editionCompositionWorkflow.service.js'), 'utf8');
+  assert.doesNotMatch(workflow, /scripts\/|ai-test-news|compose-ai-test-edition|build-test-edition/);
+});
+
+test('workflow fingerprints are geometry-sensitive and an active plan rejects a double submit before any work', async () => {
+  const workflow = require('../src/services/editionCompositionWorkflow.service');
+  const paper = { id: 78 };
+  const base = [{ id: 1, template_key: 'front', sections: [{ section_key: 'lead', x_px: 10, y_px: 10, width_px: 100, height_px: 100, block_type: 'article', story_type: 'LEAD', images: [] }] }];
+  const moved = [{ ...base[0], sections: [{ ...base[0].sections[0], x_px: 11 }] }];
+  assert.notEqual(workflow.frameFingerprint(paper, base), workflow.frameFingerprint(paper, moved));
+  const token = 'operator-workflow-active-run-test';
+  workflow._plans.set(token, { editionId: 78, aiMode: 'codex-local', maxServiceCalls: 64 });
+  workflow._activeRuns.set(78, { runId: 'already-running' });
+  try {
+    const result = await workflow.applyEditionComposition({ editionId: 78, planToken: token, aiMode: 'codex-local', maxServiceCalls: 64 });
+    assert.deepEqual(result, { ok: false, code: 'RUN_ALREADY_ACTIVE', runId: 'already-running' });
+  } finally {
+    workflow._plans.delete(token); workflow._activeRuns.delete(78);
+  }
+});

@@ -4,6 +4,35 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zx. Project B8B-OPERATOR-WORKFLOW — reviewed database composition in the desk (2026-08-13)
+
+The existing edition workspace now exposes the proven newsroom-database
+composer as a deliberate `AI Compose` operation: Plan is read-only and returns
+only source counts, a snapshot hash, a geometry/template composition
+fingerprint, assignments, shortages and expected coverage. The operator reviews
+that panel and explicitly confirms Apply. Apply rehydrates and verifies both
+hashes before the first writer call; changed approved copy, changed page
+geometry, a changed template/section fingerprint, a changed transport/budget,
+or an expired/missing token returns a structured safe failure before composing.
+`CODEX_LOCAL` is accepted only for disposable 2099 editions, while production
+uses the configured provider path. A per-edition in-process run lock rejects a
+concurrent submit and a completed token returns its original result without
+rewriting the edition.
+
+The Apply response exposes the actual transport/call count, per-page state,
+baseline/projected/reload preflight state, post-save parity and grounding
+rejections; it is then reloaded in the same editor. Fresh edition 12552
+(2099-06-02) was composed from 30 approved database sources through the real
+browser toolbar: review was 30/30 planned, 0 unresolved, 100% count and area
+coverage; Apply was `FULLY_COMPOSED`, 54 bounded `CODEX_LOCAL` calls, Pages
+1–4 persisted and all four parity checks passed. Browser reload showed the
+four-page workspace without errors. Evidence is
+`/tmp/sahas-operator-workflow-2099-06-02/admin-plan.png`,
+`admin-result.png`, and the four `test-edition-page-*-print.png` captures;
+the run journal is `/tmp/sahas-b8b-run-2099-06-02-all-pages.json`.
+
+---
+
 ## 0zw. Project B8B-PRODUCTION-INGRESS — truthful demand and database newsroom proof (2026-08-13)
 
 Autonomous completion is now strict: only `GENERATED_PERSISTED` ordinary

@@ -47,5 +47,7 @@ router.get('/:id/scribus', requireDesk, newspaperController.scribus);
 router.get('/:id/press-package', requireDesk, newspaperController.pressPackage);
 
 router.post('/:id/features', newspaperController.features);
+router.post('/:id/composition/plan', newspaperController.compositionPlan);
+router.post('/:id/composition/apply', newspaperController.compositionApply);
 
 module.exports = router;

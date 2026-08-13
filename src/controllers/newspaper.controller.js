@@ -11,6 +11,7 @@ const editionFeaturesService = require('../services/editionFeatures.service');
 const plainTextModule = require('../layout/plain-text');
 const { ladderFor, getSupportedEditionPageCounts } = require('../layout/ladder');
 const editionResizeService = require('../services/editionResize.service');
+const compositionWorkflow = require('../services/editionCompositionWorkflow.service');
 
 async function create(req, res) {
   const newspaper = await newspaperService.createNewspaper(req.body, req.session.user);
@@ -136,6 +137,15 @@ async function features(req, res) {
   res.json(result);
 }
 
+async function compositionPlan(req, res) {
+  const result = await compositionWorkflow.planEditionComposition({ editionId: Number(req.params.id), aiMode: req.body?.aiMode || 'production', maxServiceCalls: req.body?.maxServiceCalls || 32 });
+  res.status(result.ok ? 200 : result.code === 'EDITION_NOT_FOUND' ? 404 : 409).json(result);
+}
+async function compositionApply(req, res) {
+  const result = await compositionWorkflow.applyEditionComposition({ editionId: Number(req.params.id), planToken: req.body?.planToken, aiMode: req.body?.aiMode || 'production', maxServiceCalls: req.body?.maxServiceCalls || 32 });
+  res.status(result.ok ? 200 : result.code === 'RUN_ALREADY_ACTIVE' ? 409 : 400).json(result);
+}
+
 // The Scribus document and the press package both start from the same
 // newspaper row and its printed pages, so they share how that is fetched.
 async function loadForOutput(id) {
@@ -183,6 +193,6 @@ async function pressPackage(req, res) {
 module.exports = {
   create, start, resize, ladder, supportedPageCounts, list, latest, getOne, update, saveFinalFiles,
   createDistrictEdition, listDistrictEditions, printedPages,
-  epaper, epaperHtml, preflight, worklist, status, history, features,
+  epaper, epaperHtml, preflight, worklist, status, history, features, compositionPlan, compositionApply,
   scribus, pressPackage,
 };

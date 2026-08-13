@@ -957,7 +957,7 @@ function renderShell() {
     hasSelection: false,
     storyPickerOpen: false,
     handlers: { onSave: saveNow, onPublish: openPublish, onToggleStoryPicker: toggleStoryPicker, onUndo: undo, onRedo: redo,
-      onPreflight: runPreflight, onPressFile: downloadPressFile },
+      onPreflight: runPreflight, onPressFile: downloadPressFile, onCompose: planComposition },
   });
 
   document.getElementById("sidebarBackdrop").addEventListener("click", () => store.setStoryPickerOpen(false));
@@ -1138,6 +1138,39 @@ function renderPreflight(report) {
       if (store.getSection(key)) selectSection(key);
     });
   });
+}
+
+// Edition-level composition is intentionally a reviewable plan before it is a
+// write.  This stays in the existing workspace, beside Preflight, rather than
+// becoming a second dashboard or a browser-side composer.
+async function planComposition() {
+  const newspaper = store.getState().newspaper; if (!newspaper) return;
+  const aiMode = String(newspaper.publication_date || '').startsWith('2099-') ? 'codex-local' : 'production';
+  const button = document.getElementById('tbAI'); if (button) button.disabled = true;
+  try {
+    const response = await fetch(`/api/newspapers/${newspaper.id}/composition/plan`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ aiMode, maxServiceCalls: aiMode === 'codex-local' ? 64 : 32 }) });
+    const plan = await response.json(); if (!plan.ok) return showNotice(plan.code || plan.error || 'Composition plan failed.');
+    renderCompositionPlan(plan, aiMode);
+  } catch (error) { showNotice(`Composition plan failed: ${error.message}`); } finally { if (button) button.disabled = false; }
+}
+
+function renderCompositionPlan(plan, aiMode) {
+  document.getElementById('compositionPanel')?.remove(); const panel = document.createElement('aside'); panel.id = 'compositionPanel'; panel.className = 'preflight-panel composition-panel';
+  const rows = plan.pages.map((page) => `<li><strong>p${page.page}</strong> · ${page.plannedAssignments.length}/${page.requiredFrames} planned · ${page.unresolvedDemand} unresolved</li>`).join('');
+  panel.innerHTML = `<header><strong>AI composition plan</strong><button type="button" id="compositionClose" aria-label="Close">×</button></header><p>${escapeHtml(plan.writerTransport)} · ${plan.sourceCount} approved sources · snapshot ${escapeHtml(plan.sourceSnapshotHash.slice(0, 12))}</p><p>${plan.expected.plannedFrames}/${plan.expected.requiredFrames} planned · coverage ${(plan.expected.editorialCoverageRatio * 100).toFixed(0)}% · area ${(plan.expected.weightedEditorialCoverageRatio * 100).toFixed(0)}%</p><ul>${rows}</ul><button type="button" class="btn-primary" id="compositionApply">Apply AI Composition</button><p class="composition-note">Apply writes this edition using ${escapeHtml(plan.writerTransport)}. Confirmed plan only; a changed newsroom snapshot is rejected.</p>`;
+  document.body.appendChild(panel); document.getElementById('compositionClose').addEventListener('click', closeOnEscape(() => panel.remove()));
+  document.getElementById('compositionApply').addEventListener('click', async () => {
+    const confirm = window.confirm(`Apply AI composition to ${store.getState().newspaper.publication_date}?\n${plan.expected.plannedFrames} planned frames, ${plan.expected.unresolvedDemand} unresolved, ${plan.writerTransport}.`); if (!confirm) return;
+    const apply = document.getElementById('compositionApply'); apply.disabled = true; apply.textContent = 'Composing…';
+    try { const response = await fetch(`/api/newspapers/${plan.editionId}/composition/apply`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planToken: plan.planToken, aiMode, maxServiceCalls: aiMode === 'codex-local' ? 64 : 32 }) }); const result = await response.json(); if (!result.ok) { showNotice(result.code || 'Composition failed.'); return; } await renderWorkspace(plan.editionId); renderCompositionResult(result); }
+    catch (error) { showNotice(`Composition failed: ${error.message}`); } finally { apply.disabled = false; apply.textContent = 'Apply AI Composition'; }
+  });
+}
+
+function renderCompositionResult(result) {
+  document.getElementById('compositionPanel')?.remove(); const panel = document.createElement('aside'); panel.id = 'compositionPanel'; panel.className = 'preflight-panel composition-panel';
+  panel.innerHTML = `<header><strong>AI composition — ${escapeHtml(result.state)}</strong><button type="button" id="compositionClose" aria-label="Close">×</button></header><p>${escapeHtml(result.writerTransport)} · ${result.writerCalls} calls · ${(result.durationMs / 1000).toFixed(1)}s</p><p>${result.completion.pages.map((page) => `p${page.page} ${Math.round(page.editorialCoverageRatio * 100)}%`).join(' · ')}</p><ul>${result.pages.map((page) => `<li><strong>p${page.page}</strong> · ${escapeHtml(page.state)}${page.error ? ` · ${escapeHtml(page.error)}` : ''}</li>`).join('')}</ul>`;
+  document.body.appendChild(panel); document.getElementById('compositionClose').addEventListener('click', closeOnEscape(() => panel.remove())); showNotice(`AI composition ${result.state}: ${result.writerCalls} ${result.writerTransport} calls.`);
 }
 
 // What is left on this edition.

@@ -30,8 +30,8 @@ test('news item adapter is pure and source/frame are never mutated', () => {
 
 test('initial and repair briefs carry numeric canonical targets, with at most two calls', async () => {
   const prompts = []; const result = await composeSourceToFrame({ source, storyType: 'LEAD', frame: frame(), notes: 'स्थानिक परिणाम ठळक करा', askForJson: asker([{ headline: 'अ'.repeat(180), subheading: '', body: 'अ'.repeat(5000) }, { headline: 'पाणी योजनेला गती', subheading: 'प्रशासनाचा सहा महिन्यांत पूर्णत्वाचा दावा', body: source.body }], prompts) });
-  assert.match(prompts[0], /Canonical BODY capacity: \d+ printable characters/); assert.match(prompts[0], /Acceptable BODY range: \d+–\d+ characters/); assert.match(prompts[0], /BODY only/); assert.match(prompts[0], /EDITORIAL GUIDANCE/);
-  assert.match(prompts[1], /Current body: \d+ characters/); assert.match(prompts[1], /Final canonical body budget: \d+/); assert.match(prompts[1], /Current headline lines:/); assert.match(prompts[1], /NOT factual authority/); assert.ok(result.attempts <= 2);
+  assert.match(prompts[0], /Canonical writable BODY capacity: \d+ printable characters/); assert.match(prompts[0], /excludes the automatic SAHAS dateline/); assert.match(prompts[0], /Acceptable BODY range: \d+–\d+ characters/); assert.match(prompts[0], /BODY only/); assert.match(prompts[0], /EDITORIAL GUIDANCE/);
+  assert.match(prompts[1], /Current body: \d+ characters/); assert.match(prompts[1], /Final writable BODY budget .*: \d+/); assert.match(prompts[1], /Current headline lines:/); assert.match(prompts[1], /NOT factual authority/); assert.ok(result.attempts <= 2);
 });
 
 test('zero capacity skips AI and headline line count ignores body font', async () => {

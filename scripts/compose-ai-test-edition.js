@@ -152,7 +152,7 @@ async function main() {
       const headline = String(source.title || 'चाचणी बातमी').split(/[,:।]/)[0].slice(0, 26);
       return { data: { headline, subheading: '', body, annotations: [] }, provider: 'stub', tier: 'basic' };
     };
-    const budget = { max: maxServiceCalls, used: 0 }; const byId = new Map(newsroomPool.map((source) => [String(source.id), source])); const results = [];
+    const budget = { max: maxServiceCalls, used: 0, events: [], onConsume(event) { journal.event('PROVIDER_CALL', event); } }; const byId = new Map(newsroomPool.map((source) => [String(source.id), source])); const results = [];
     try {
       for (const item of selected) results.push(await composePagePlan({ pagePlan: item, sourcesById: byId, newspaper, askForJson: aiMode === 'stub' ? stubAsk : askForJson, callBudget: budget, apply, journal }));
       journal.finish(results.every((result) => ['PERSISTED', 'UNCHANGED_SOURCE_INSUFFICIENT', 'READY_TO_PERSIST'].includes(result.state)) ? 'COMPLETE' : 'BLOCKED', { providerCalls: budget.used });

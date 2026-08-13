@@ -61,18 +61,18 @@ async function measureFlowUtilization(section, images = section?.images || []) {
     standOffPx: Number(image.stand_off_px) || 0, mask: image.mask || null,
   })));
   const { map } = measurement;
-  const headlineCells = cells(map, CELL.HEADLINE);
+  const kickerCells = cells(map, CELL.KICKER); const headlineCells = cells(map, CELL.HEADLINE);
   const subheadingCells = cells(map, CELL.SUBHEADING);
   const availableCells = map.cols * map.rows;
   const rawBodyFillRatio = measurement.authoredBodyFillRatio;
-  const usedCells = headlineCells + subheadingCells + map.imageCells + Math.min(measurement.totalBodyCharsUsed, map.bodyCharBudget);
+  const usedCells = kickerCells + headlineCells + subheadingCells + map.imageCells + Math.min(measurement.totalBodyCharsUsed, map.bodyCharBudget);
   return {
     map, bodyCharBudget: measurement.bodyCharBudget, bodyCharsUsed: measurement.bodyCharsUsed,
     fixedBodyPrefixChars: measurement.fixedBodyPrefixChars, writableBodyCharBudget: measurement.writableBodyCharBudget,
     authoredBodyCharsUsed: measurement.authoredBodyCharsUsed, totalBodyCharsUsed: measurement.totalBodyCharsUsed,
     authoredBodyFillRatio: measurement.authoredBodyFillRatio, physicalBodyFillRatio: measurement.physicalBodyFillRatio,
     bodyFillRatio: round(rawBodyFillRatio), normalizedBodyFillRatio: round(Math.min(1, rawBodyFillRatio)),
-    headlineRows: map.headlineRows, subheadingRows: map.subheadingRows, imageCells: map.imageCells,
+    kickerRows: map.kickerRows, kickerCells, headlineRows: map.headlineRows, subheadingRows: map.subheadingRows, imageCells: map.imageCells,
     imageRatio: round(availableCells ? map.imageCells / availableCells : 0),
     effectiveUsedCells: usedCells, effectiveAvailableCells: availableCells,
     effectiveContentRatio: round(availableCells ? Math.min(1, usedCells / availableCells) : 0),

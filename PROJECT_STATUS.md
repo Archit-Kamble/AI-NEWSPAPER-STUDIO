@@ -4,6 +4,51 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zz. Project B8B-IMAGE-COMPOSITION — source-grounded image packages (2026-08-13)
+
+The production edition planner now treats newsroom images as part of the same
+story package as copy. `news_items.image_urls` is normalized into deterministic
+source-image metadata; semantic policy declares required, preferred, optional
+and prohibited treatments; and physical `photo` slots remain companion frames
+rather than becoming duplicate prose assignments. A story already served by a
+companion does not also receive a decorative prose image.
+
+Planning remains observational: it validates local `/uploads/` paths, decodes
+dimensions, rejects unsafe/missing/low-resolution or unusably mismatched
+required assets, reports source/destination/treatment and required-image
+coverage, and performs zero writer calls and zero composition writes. Source
+snapshot identity includes both the image reference and file bytes/dimensions;
+the composition baseline includes the complete placement geometry, so changed
+copy, image content, frames or existing placements stale a reviewed plan.
+
+Text and `section_images` placements persist in the one edition transaction.
+Projection, canonical flow, same-transaction reload, preflight, quality and
+placement-field parity all see the same relative, aspect-preserving geometry.
+Any required-image failure blocks before generation; any later parity failure
+rolls back all four pages. `FULLY_COMPOSED` now additionally requires every
+required image treatment to be resolved. The workspace review shows required
+coverage and total planned source placements, then explicitly reports that text
+and images were applied atomically.
+
+Disposable browser proof `2099-06-10` used a generic 30-row database inbox and
+two source-owned portrait assets after removing only the rebuildable fixture
+placements from that edition. Plan: 30/30 frames, 2/2 required images, 2 source
+placements, zero calls/writes. Apply: 54 bounded `CODEX_LOCAL` calls, four
+pages persisted, 100% text/image coverage, clean preflight and post-save parity,
+durable `COMMITTED/FULLY_COMPOSED`. Admin plan/result and all four rendered-page
+captures are under `/tmp/sahas-image-2099-06-10/`. The failure proof
+`2099-06-08` used a missing local asset and ended `IMAGE_REQUIRED_MISSING` with
+zero writer calls and an identical before/after edition snapshot. A separate
+late transactional drift proof on `2099-06-11` staged all four pages (including
+the source-image placements), injected `INJECTED_IMAGE_PARITY_DRIFT` on Page 4,
+returned `ROLLED_BACK/nothingApplied`, and retained identical all-page
+text+image hashes before and after.
+
+The proof images are intentionally synthetic geometry fixtures, not a claim of
+news-photo aesthetic quality. Automated image recognition, crop generation,
+remote download and AI image creation remain outside this no-vision/no-external-
+generation stage; real newsroom photo content must still be supplied by the CMS.
+
 ## 0zy. Project B8B-EDITION-ATOMICITY — all-page composition transaction and run truth (2026-08-13)
 
 The earlier operator Apply path was audited and could commit Page 1 before a

@@ -7,8 +7,8 @@ const pool = require('../config/db');
 // one sits is what the character grid is computed from, so this is layout data,
 // not just an attachment list.
 
-async function listBySection(sectionId) {
-  const { rows } = await pool.query(
+async function listBySection(sectionId, { tx } = {}) {
+  const db = tx || pool; const { rows } = await db.query(
     `SELECT si.*, ma.url, ma.original_filename, ma.background_status
        FROM section_images si
        JOIN media_assets ma ON ma.id = si.media_asset_id
@@ -21,11 +21,11 @@ async function listBySection(sectionId) {
 
 // An uploaded file becomes a reusable asset, so the same photograph can be
 // placed in more than one block without being uploaded twice.
-async function findOrCreateAsset({ url, filename, mimeType, ownerId }) {
-  const { rows: existing } = await pool.query('SELECT * FROM media_assets WHERE url = $1', [url]);
+async function findOrCreateAsset({ url, filename, mimeType, ownerId }, { tx } = {}) {
+  const db = tx || pool; const { rows: existing } = await db.query('SELECT * FROM media_assets WHERE url = $1', [url]);
   if (existing[0]) return existing[0];
 
-  const { rows } = await pool.query(
+  const { rows } = await db.query(
     `INSERT INTO media_assets (original_filename, storage_path, mime_type, owner_id, url)
      VALUES ($1, $2, $3, $4, $5) RETURNING *`,
     [filename || url.split('/').pop(), url, mimeType || 'image/jpeg', ownerId || null, url],
@@ -33,12 +33,12 @@ async function findOrCreateAsset({ url, filename, mimeType, ownerId }) {
   return rows[0];
 }
 
-async function place(sectionId, assetId, placement) {
-  const { rows: z } = await pool.query(
+async function place(sectionId, assetId, placement, { tx } = {}) {
+  const db = tx || pool; const { rows: z } = await db.query(
     'SELECT COALESCE(MAX(z_index), 0) + 1 AS z FROM section_images WHERE page_section_id = $1',
     [sectionId],
   );
-  const { rows } = await pool.query(
+  const { rows } = await db.query(
     `INSERT INTO section_images
        (page_section_id, media_asset_id, x_px, y_px, width_px, height_px, shape, stand_off_px, z_index, caption)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
@@ -51,6 +51,11 @@ async function place(sectionId, assetId, placement) {
      placement.shape || 'rect', placement.standOffPx ?? 6, z[0].z, placement.caption || null],
   );
   return rows[0];
+}
+
+async function placePrepared(intent, { tx } = {}) {
+  const image = intent.image; const asset = await findOrCreateAsset({ url: image.url, filename: image.filename, mimeType: image.mimeType, ownerId: null }, { tx });
+  return place(intent.destinationSectionId, asset.id, { ...intent.placement, caption: intent.placement.caption || image.caption || null }, { tx });
 }
 
 async function update(imageId, patch) {
@@ -116,4 +121,4 @@ async function placementsByEdition(newspaperId) {
   return bySection;
 }
 
-module.exports = { listBySection, placementsByEdition, findOrCreateAsset, place, update, remove, replaceAsset };
+module.exports = { listBySection, placementsByEdition, findOrCreateAsset, place, placePrepared, update, remove, replaceAsset };

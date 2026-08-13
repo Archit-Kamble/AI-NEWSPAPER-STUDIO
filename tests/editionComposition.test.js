@@ -174,3 +174,64 @@ test('edition atomicity uses an explicit staged page persistence seam, never per
   assert.match(workflow, /COMPOSITION_BASELINE_STALE/);
   assert.match(composition, /PAGE_BATCH_STAGED/);
 });
+
+test('newsroom image policy is deterministic, semantic, and preserves aspect ratio', () => {
+  const { sourceImages, imageRequirement, selectSourceImage, placementFor } = require('../src/layout/newsroom-image-composition');
+  const source = { imageReferences: [{ url: '/uploads/square.png', width: 600, height: 600, order: 1 }, { url: '/uploads/wide.png', width: 1200, height: 600, primary: true }] };
+  assert.deepEqual(sourceImages(source).map((item) => item.url), ['/uploads/wide.png', '/uploads/square.png']);
+  const frame = { width_px: 400, height_px: 240, margin_px: 12, recommendedStoryType: 'PHOTO_FEATURE', block_type: 'photo' };
+  assert.equal(imageRequirement(source, frame), 'IMAGE_REQUIRED');
+  assert.equal(imageRequirement({}, { recommendedStoryType: 'BRIEF', block_type: 'briefs' }), 'NO_IMAGE');
+  const selected = selectSourceImage(source, frame); assert.equal(selected.url, '/uploads/wide.png');
+  const placed = placementFor(frame, selected, 'IMAGE_REQUIRED');
+  assert.ok(Math.abs((placed.width / placed.height) - 2) < 0.03);
+  assert.ok(placed.x >= 0 && placed.y >= 0 && placed.x + placed.width <= frame.width_px && placed.y + placed.height <= frame.height_px);
+});
+
+test('required portrait placement uses the available companion frame without distortion', () => {
+  const { placementFor } = require('../src/layout/newsroom-image-composition');
+  const frame = { width_px: 72, height_px: 248, margin_px: 12 };
+  const placed = placementFor(frame, { width: 500, height: 1800 }, 'IMAGE_REQUIRED');
+  assert.ok(placed.width * placed.height / ((72 - 24) * (248 - 24)) > 0.45);
+  assert.ok(Math.abs((placed.width / placed.height) - (500 / 1800)) < 0.01);
+  assert.ok(placed.x >= 0 && placed.y >= 0 && placed.x + placed.width <= frame.width_px && placed.y + placed.height <= frame.height_px);
+});
+
+test('newsroom source snapshot changes when its image reference changes', () => {
+  const { sourceSnapshot } = require('../src/services/newsroomSource.service');
+  const base = { id: 4, title: 'मथळा', description: 'प्रत', image_urls: ['/uploads/a.png'] };
+  assert.notEqual(sourceSnapshot([base]).hash, sourceSnapshot([{ ...base, image_urls: ['/uploads/b.png'] }]).hash);
+});
+
+test('photo slots remain image companions instead of becoming duplicate prose frames', () => {
+  const { eligibleEditorialFrames } = require('../src/services/editionComposition.service');
+  const page = syntheticPages()[0];
+  const photoKeys = new Set(page.sections.filter((section) => section.block_type === 'photo').map((section) => section.section_key));
+  const proseKeys = new Set(eligibleEditorialFrames(page).map((frame) => frame.section_key));
+  for (const key of photoKeys) assert.equal(proseKeys.has(key), false, `${key} must remain a companion`);
+});
+
+test('a story package uses photo companions once and does not duplicate the image in prose', () => {
+  const { buildImageIntents } = require('../src/layout/newsroom-image-composition');
+  const story = { id: 'lead', story_type: 'LEAD', editorial_priority: 5, images: [{ url: '/uploads/a.jpg', width: 500, height: 1800 }, { url: '/uploads/b.jpg', width: 500, height: 1800 }] };
+  const frame = { id: 10, section_id: 10, section_key: 'lead', block_type: 'article', recommendedStoryType: 'LEAD', width_px: 300, height_px: 250 };
+  const intents = buildImageIntents({ page: { page_number: 1, sections: [{ id: 20, section_key: 'left-photo', block_type: 'photo', y_px: 100, width_px: 72, height_px: 248, images: [] }] }, stories: [story], frames: [frame], assignments: [{ storyId: 'lead', frameId: 10 }] });
+  assert.equal(intents.find((item) => item.companion).state, 'IMAGE_PLANNED');
+  assert.equal(intents.find((item) => !item.companion).state, 'IMAGE_SATISFIED_BY_COMPANION');
+  assert.equal(intents.filter((item) => item.image).length, 1);
+});
+
+test('composition baseline fingerprint includes complete image placement, not just its count', () => {
+  const { baselineFingerprint } = require('../src/services/editionCompositionWorkflow.service');
+  const base = [{ id: 1, sections: [{ section_key: 'lead', images: [{ media_asset_id: 7, url: '/uploads/a.jpg', x_px: 10, y_px: 20, width_px: 100, height_px: 80, shape: 'rect', caption: 'कॅप्शन' }] }] }];
+  const moved = [{ ...base[0], sections: [{ ...base[0].sections[0], images: [{ ...base[0].sections[0].images[0], x_px: 11 }] }] }];
+  assert.notEqual(baselineFingerprint(base), baselineFingerprint(moved));
+});
+
+test('workflow image validation applies the press DPI floor at planned print size', async () => {
+  const { validateImageIntents } = require('../src/services/editionCompositionWorkflow.service');
+  const intent = { companion: true, requirement: 'IMAGE_REQUIRED', state: 'IMAGE_PLANNED', destinationSectionId: 1, image: { url: '/uploads/zz-test-edition-lead-1.jpg' } };
+  const plan = { pages: [{ frames: [], page: { sections: [{ id: 1, width_px: 2000, height_px: 3000, margin_px: 12 }] }, imageIntents: [intent] }] };
+  await validateImageIntents(plan);
+  assert.equal(intent.state, 'IMAGE_INSUFFICIENT_RESOLUTION');
+});

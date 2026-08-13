@@ -69,6 +69,8 @@ async function makePlaceholderImages() {
   const specs = [
     { name: 'zz-test-edition-lead-1.jpg', color: 0x2b4c7eff },
     { name: 'zz-test-edition-lead-2.jpg', color: 0x7e2b2bff },
+    { name: 'zz-test-edition-portrait-1.jpg', color: 0x234f71ff, width: 500, height: 1800 },
+    { name: 'zz-test-edition-portrait-2.jpg', color: 0x843b38ff, width: 500, height: 1800 },
     { name: 'zz-test-edition-p2-centre.jpg', color: 0x2b7e4cff },
     { name: 'zz-test-edition-p3-feature.jpg', color: 0x7e6b2bff },
     { name: 'zz-test-edition-p4-anchor.jpg', color: 0x5a2b7eff },
@@ -77,7 +79,7 @@ async function makePlaceholderImages() {
   for (const spec of specs) {
     const file = path.join(UPLOAD_DIR, spec.name);
     if (!fs.existsSync(file)) {
-      const image = new Jimp({ width: 2200, height: 1600, color: spec.color });
+      const image = new Jimp({ width: spec.width || 2200, height: spec.height || 1600, color: spec.color });
       await image.write(file);
     }
     urls[spec.name] = `/uploads/${spec.name}`;

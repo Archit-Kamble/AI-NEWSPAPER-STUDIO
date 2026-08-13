@@ -9,11 +9,13 @@ const { analyzeComposedLayout } = require('../layout/composed-layout-quality');
 const { validatePageLayout } = require('./preflight.service');
 const pageRepository = require('../repositories/page.repository');
 const { normalizeNewsroomSources } = require('./newsroomSource.service');
+const { buildImageIntents } = require('../layout/newsroom-image-composition');
+const sectionImages = require('../repositories/sectionImage.repository');
 
 const SPECIAL = new Set(['SMART_CARD', 'ADVERTISEMENT', 'QUOTE', 'DATA']);
 const roleForRung = (rung) => rung.role || (rung.pageNumber === rung.total ? 'BACK' : 'GENERAL');
-function storyPacketFromNewsItem(item = {}) { return { id: item.id, news_item_id: item.id, story_type: item.story_type || 'STANDARD', editorial_priority: item.editorial_priority || 3, headline: item.title || '', subheading: item.subheading || '', body: item.description ?? item.body ?? '', category: item.category || '', location: item.location || '', tags: Array.isArray(item.tags) ? item.tags.join(', ') : item.tags || '', reporter_name: item.reporter_name || '', desired_page_role: item.desired_page_role || null, routed_role: item.routed_role || null, routing_mode: item.routing_mode || null, images: [], imagePlacementNeedsReview: Boolean((item.image_urls || []).length) }; }
-function eligibleEditorialFrames(page, continuationSourceIds = new Set()) { const template = getTemplate(page.template_key); const byKey = new Map(template.sections.map((item) => [item.key, item])); return (page.sections || []).flatMap((section) => { const templateSection = byKey.get(section.section_key); const frame = frameDescriptorFromSection(section, templateSection); const type = String(frame.recommendedStoryType || '').toUpperCase(); const id = section.id ?? section.section_id; if (section.is_custom || section.continued_from_section_id || continuationSourceIds.has(id) || frame.feature_key || section.smart_card_key || frame.block_type === 'advert' || SPECIAL.has(type) || (section.images || []).length) return []; return [frame]; }); }
+function storyPacketFromNewsItem(item = {}) { return { id: item.id, news_item_id: item.id, story_type: item.story_type || 'STANDARD', editorial_priority: item.editorial_priority || 3, headline: item.title || '', subheading: item.subheading || '', body: item.description ?? item.body ?? '', category: item.category || '', location: item.location || '', tags: Array.isArray(item.tags) ? item.tags.join(', ') : item.tags || '', reporter_name: item.reporter_name || '', desired_page_role: item.desired_page_role || null, routed_role: item.routed_role || null, routing_mode: item.routing_mode || null, images: item.images || [], image_urls: item.image_urls || [], imagePlacementNeedsReview: Boolean((item.images || item.image_urls || []).length) }; }
+function eligibleEditorialFrames(page, continuationSourceIds = new Set()) { const template = getTemplate(page.template_key); const byKey = new Map(template.sections.map((item) => [item.key, item])); return (page.sections || []).flatMap((section) => { const templateSection = byKey.get(section.section_key); const frame = frameDescriptorFromSection(section, templateSection); const type = String(frame.recommendedStoryType || '').toUpperCase(); const id = section.id ?? section.section_id; if (section.is_custom || section.continued_from_section_id || continuationSourceIds.has(id) || frame.feature_key || section.smart_card_key || frame.block_type === 'advert' || frame.block_type === 'photo' || SPECIAL.has(type) || (section.images || []).length) return []; return [frame]; }); }
 function fallbackRolesForSource(source, availableRoles) {
   const desired = String(source.desired_page_role || '').toUpperCase();
   if (availableRoles.has(desired)) return [desired];
@@ -57,6 +59,7 @@ async function buildEditionCompositionPlan({ pages = [], newspaper = {}, sources
   }
   const assigned = plans.flatMap((plan) => plan.assignments.map((assignment) => ({ ...assignment, pageNumber: plan.page.page_number }))); const ids = assigned.map((item) => String(item.storyId)); const frames = assigned.map((item) => `${item.pageNumber}:${item.frameId}`);
   if (new Set(ids).size !== ids.length || new Set(frames).size !== frames.length) throw new Error('Invalid edition composition plan: duplicate story or frame');
+  const usedImages = new Set(); for (const plan of plans) plan.imageIntents = buildImageIntents(plan, usedImages);
   return { pages: plans, routed: routed.unassigned, assigned, sourceCount: canonicalSources.length, routedCount: [...routed.buckets.values()].reduce((sum, list) => sum + list.length, 0), continuationSourceIds };
 }
 
@@ -94,9 +97,11 @@ function summarizeEditionComposition(plans = [], results = []) {
       unresolvedDemand: rows.filter((item) => item.state !== 'GENERATED_PERSISTED').length,
       blocked: ['PAGE_BLOCKED', 'BUDGET_BLOCKED', 'PROVIDER_BLOCKED'].includes(result.state) || Boolean(result.error) };
   });
+  const imageLedger = plans.flatMap((plan, index) => { const result = results[index] || {}; const states = new Map((result.imageIntents || []).map((item) => [`${item.storyId}:${item.destinationSectionKey}`, item.state])); return (plan.imageIntents || []).map((intent) => ({ page: plan.page.page_number, storyId: intent.storyId, destinationSection: intent.destinationSectionKey, requirement: intent.requirement, sourceAsset: intent.image?.assetId || intent.image?.url || null, treatment: intent.placement?.treatment || null, cropMode: intent.placement?.cropMode || null, state: states.get(`${intent.storyId}:${intent.destinationSectionKey}`) || intent.state })); });
+  const requiredImages = imageLedger.filter((item) => item.requirement === 'IMAGE_REQUIRED'); const resolvedImages = requiredImages.filter((item) => ['IMAGE_GENERATED_PLACEMENT', 'IMAGE_EXISTING_PRESERVED'].includes(item.state));
   const blocked = pages.some((page) => page.blocked);
   const unresolved = ledger.some((item) => item.state !== 'GENERATED_PERSISTED');
-  return { pages, ledger, state: blocked ? 'BLOCKED' : unresolved ? 'PARTIALLY_COMPOSED' : 'FULLY_COMPOSED' };
+  return { pages, ledger, images: imageLedger, imageCoverageRatio: requiredImages.length ? Number((resolvedImages.length / requiredImages.length).toFixed(4)) : 1, unresolvedImageDemand: requiredImages.length - resolvedImages.length, state: blocked ? 'BLOCKED' : unresolved || resolvedImages.length !== requiredImages.length ? 'PARTIALLY_COMPOSED' : 'FULLY_COMPOSED' };
 }
 
 function composedStoryFromCandidate(candidate) {
@@ -112,12 +117,19 @@ function projectComposedStoryIntoSection(section, candidate) {
     news_item_id: story.newsItemId, story_type: story.storyType, editorial_priority: story.editorialPriority,
     kicker: story.kicker, headline: story.headline, subheading: story.subheading, body: story.body, caption: story.caption, category: story.category,
     location: story.location, tags: story.tags, reporter_name: story.reporterName, ai_notes: story.aiNotes, language: story.language, status: story.status, ai_generated: story.aiGenerated, editorial_presentation: story.editorialPresentation,
+    images: candidate.imageIntent?.placement ? [projectedImage(candidate.imageIntent)] : (section.images || []),
   };
 }
 const persistenceStory = composedStoryFromCandidate;
 function errorKeys(report) { return new Set([...(report?.collisions || []), ...(report?.overflow || [])].filter((finding) => finding.level === 'error').map((finding) => `${finding.type || finding.check}:${finding.sectionKey}`)); }
 const parityFields = ['news_item_id', 'story_type', 'editorial_priority', 'kicker', 'headline', 'subheading', 'body', 'caption', 'category', 'location', 'tags', 'reporter_name', 'ai_notes', 'language', 'status', 'ai_generated', 'editorial_presentation'];
 const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+function projectedImage(intent) {
+  const placement = intent.placement;
+  return { ...placement, url: intent.image.url,
+    x_px: placement.x, y_px: placement.y, width_px: placement.width, height_px: placement.height,
+    stand_off_px: placement.standOffPx, crop_mode: placement.cropMode };
+}
 async function parityDifferences(projected, reloaded, active) { const { measureSectionFlow } = await import('../../public/editor/layout/text-flow.js'); const flowFields = ['bodyCharBudget', 'fixedBodyPrefixChars', 'writableBodyCharBudget', 'authoredBodyCharsUsed', 'totalBodyCharsUsed']; return active.flatMap((candidate) => { const left = projected.sections.find((section) => section.section_key === candidate.frame.section_key); const right = reloaded.sections.find((section) => section.section_key === candidate.frame.section_key); const fields = parityFields.filter((field) => !same(left?.[field], right?.[field])); const leftFlow = measureSectionFlow(left || {}), rightFlow = measureSectionFlow(right || {}); const metrics = flowFields.filter((field) => leftFlow[field] !== rightFlow[field]); return fields.length || metrics.length ? [{ sectionKey: candidate.frame.section_key, fields, metrics }] : []; }); }
 
 async function composePagePlan({ pagePlan, sourcesById, newspaper, askForJson, maxServiceCalls = 32, callBudget = null, apply = false, compose = composeSourceToFrame, journal = null }) {
@@ -133,7 +145,9 @@ async function composePagePlan({ pagePlan, sourcesById, newspaper, askForJson, m
     journal?.event('STORY_STARTED', { page: pagePlan.page.page_number, sourceId: assignment.storyId, frame: frame?.section_key });
     if (!source || !frame) return { state: 'PAGE_BLOCKED', error: 'INVALID_ASSIGNMENT', candidates, outcomes, before };
     const providerCallsBefore = budget.used; const budgetedAsk = async (prompt, schema, options = {}) => { journal?.event('AI_ATTEMPT_STARTED', { page: pagePlan.page.page_number, sourceId: source.id, frame: frame.section_key }); const result = await askForJson(prompt, schema, { ...options, callBudget: budget }); if (result.error) journal?.event('AI_FAILED', { page: pagePlan.page.page_number, sourceId: source.id, frame: frame.section_key, error: result.error }); else journal?.event('AI_RETURNED', { page: pagePlan.page.page_number, sourceId: source.id, frame: frame.section_key, provider: result.provider }); return result; };
-    const input = await writerInputFromNewsItem(source); const result = await compose({ ...input, frame, language: 'Marathi', askForJson: budgetedAsk });
+    const input = await writerInputFromNewsItem(source); const imageIntent = (pagePlan.imageIntents || []).find((item) => !item.companion && String(item.storyId) === String(assignment.storyId) && String(item.frameId) === String(assignment.frameId));
+    if (imageIntent?.state === 'IMAGE_PLANNED' && imageIntent.placement) input.images = [{ ...imageIntent.placement, x_px: imageIntent.placement.x, y_px: imageIntent.placement.y, width_px: imageIntent.placement.width, height_px: imageIntent.placement.height, url: imageIntent.image.url, source_width_px: imageIntent.image.width, source_height_px: imageIntent.image.height }]; else input.images = [];
+    const result = await compose({ ...input, frame, language: 'Marathi', askForJson: budgetedAsk });
     outcome.editorialAttempts = result.attempts || 0; outcome.providerCalls = budget.used - providerCallsBefore; outcome.provider = result.provider || null; outcome.fellBackTo = result.fellBackTo || null; outcome.attemptDiagnostics = result.attemptDiagnostics || [];
     if (result.error) { if (result.providerFailure?.outputExhausted && !result.providerFailure?.callBudgetExhausted) { outcome.state = 'PROVIDER_OUTPUT_EXHAUSTED'; outcome.providerFailure = result.providerFailure; journal?.event('PROVIDER_OUTPUT_EXHAUSTED', { page: pagePlan.page.page_number, sourceId: source.id, frame: frame.section_key, providerCalls: outcome.providerCalls, editorialAttempts: outcome.editorialAttempts, conditions: result.providerFailure.conditions }); continue; } outcome.state = result.error === 'SERVICE_CALL_BUDGET_EXHAUSTED' ? 'SERVICE_CALL_BUDGET_EXHAUSTED' : 'PROVIDER_ERROR'; return { state: result.error === 'SERVICE_CALL_BUDGET_EXHAUSTED' ? 'BUDGET_BLOCKED' : 'PROVIDER_BLOCKED', error: result.error, candidates, outcomes, before, baselinePreflight, serviceCalls: budget.used }; }
     if (!result.assessment?.accepted) { outcome.state = 'FIT_REJECTED'; journal?.event('FIT_REJECTED', { page: pagePlan.page.page_number, sourceId: source.id, frame: frame.section_key, selectedAttempt: result.selectedAttempt, attempts: result.attempts, diagnostics: result.attemptDiagnostics || [] }); return { state: 'PAGE_BLOCKED', error: 'FIT_REJECTED', candidates, outcomes, before, baselinePreflight, serviceCalls: budget.used }; }
@@ -144,10 +158,10 @@ async function composePagePlan({ pagePlan, sourcesById, newspaper, askForJson, m
     journal?.event('SOURCE_SUFFICIENCY', { page: pagePlan.page.page_number, sourceId: source.id, status: outcome.sufficiency, authoredChars: result.fit.authoredBodyCharsUsed ?? result.fit.bodyCharsUsed, writableCapacity: result.fit.writableBodyCharBudget });
     if (result.sourceSufficiency.status === 'INSUFFICIENT_FOR_TREATMENT') { outcome.state = 'SOURCE_INSUFFICIENT'; continue; }
     const compiled = compileEditorialPresentation(result.proposal, result.editorial.storyType, { source: input.source });
-    candidates.push({ sourceId: source.id, frame, result, grounding, compiled, source: input.source });
+    candidates.push({ sourceId: source.id, frame, result, grounding, compiled, source: input.source, imageIntent });
     outcome.state = 'READY_TO_PERSIST'; outcome.fit = { writable: result.fit.writableBodyCharBudget, authored: result.fit.authoredBodyCharsUsed ?? result.fit.bodyCharsUsed, physical: result.fit.bodyCharBudget, total: result.fit.totalBodyCharsUsed ?? result.fit.bodyCharsUsed }; journal?.event('FIT_PASS', { page: pagePlan.page.page_number, sourceId: source.id, frame: frame.section_key, selectedAttempt: result.selectedAttempt, attempts: result.attempts, diagnostics: result.attemptDiagnostics || [] });
   }
-  const projectionFor = (active) => ({ ...pagePlan.page, sections: pagePlan.page.sections.map((section) => { const candidate = active.find((item) => item.frame.section_key === section.section_key); return candidate ? projectComposedStoryIntoSection(section, candidate) : section; }) });
+  const projectionFor = (active) => ({ ...pagePlan.page, sections: pagePlan.page.sections.map((section) => { const candidate = active.find((item) => item.frame.section_key === section.section_key); if (candidate) return projectComposedStoryIntoSection(section, candidate); const intent = (pagePlan.imageIntents || []).find((item) => item.companion && item.destinationSectionId === section.id && item.state === 'IMAGE_PLANNED'); return intent ? { ...section, images: [projectedImage(intent)] } : section; }) });
   let active = [...candidates], projected = projectionFor(active), preflight = await validatePageLayout(projected, newspaper), projectedQuality = await analyzeComposedLayout(projected, newspaper);
   const baselineErrors = errorKeys(baselinePreflight);
   const introducedErrors = [...errorKeys(preflight)].filter((key) => !baselineErrors.has(key));
@@ -170,7 +184,7 @@ async function composePagePlan({ pagePlan, sourcesById, newspaper, askForJson, m
   const noActiveState = outcomes.some((item) => item.state === 'PROVIDER_OUTPUT_EXHAUSTED') ? 'UNCHANGED_PROVIDER_FAILURE' : outcomes.some((item) => item.state === 'SOURCE_INSUFFICIENT') ? 'UNCHANGED_SOURCE_INSUFFICIENT' : pagePlan.assignments.length ? 'UNCHANGED_CANDIDATE_GUARD' : 'UNCHANGED_NO_ASSIGNMENTS';
   const state = apply ? (active.length ? 'PERSISTED' : noActiveState) : 'READY_TO_PERSIST';
   if (state === 'UNCHANGED_SOURCE_INSUFFICIENT') journal?.event('PAGE_UNCHANGED', { page: pagePlan.page.page_number });
-  return { state, candidates: active, generatedCandidates: candidates, activeCandidates: active, rejectedCandidates: candidates.filter((candidate) => !active.includes(candidate)), outcomes, before, projected, baselinePreflight, projectedQuality, preflight, reloaded, reloadedPreflight, reloadedQuality, drift, serviceCalls: budget.used };
+  return { state, candidates: active, generatedCandidates: candidates, activeCandidates: active, rejectedCandidates: candidates.filter((candidate) => !active.includes(candidate)), outcomes, imageIntents: pagePlan.imageIntents || [], before, projected, baselinePreflight, projectedQuality, preflight, reloaded, reloadedPreflight, reloadedQuality, drift, serviceCalls: budget.used };
 }
 
 // The edition workflow calls this only after *every* page is prepared.  It is
@@ -181,14 +195,19 @@ async function persistPreparedPageComposition({ pagePlan, prepared, newspaper, t
   if (prepared.state !== 'READY_TO_PERSIST' || !active.length) return { ...prepared, state: 'PAGE_BLOCKED', error: prepared.error || 'PREPARATION_NOT_PERSISTABLE' };
   journal?.event('PAGE_BATCH_STAGED', { page: pagePlan.page.page_number, candidates: active.length });
   await pageRepository.saveComposedStoryBatch(pagePlan.page.id, active.map((candidate) => ({ sectionKey: candidate.frame.section_key, story: persistenceStory(candidate) })), { tx });
+  const activeKeys = new Set(active.map((candidate) => `${candidate.sourceId}:${candidate.frame.id}`)); const activeStories = new Set(active.map((candidate) => String(candidate.sourceId)));
+  const imageIntents = (prepared.imageIntents || []).filter((intent) => intent.state === 'IMAGE_PLANNED' && (intent.companion ? activeStories.has(String(intent.storyId)) : activeKeys.has(`${intent.storyId}:${intent.frameId}`)));
+  for (const intent of imageIntents) await sectionImages.placePrepared(intent, { tx });
   const reloaded = await pageRepository.findById(pagePlan.page.id, { tx });
   const reloadedPreflight = await validatePageLayout(reloaded, newspaper);
   const reloadedQuality = await analyzeComposedLayout(reloaded, newspaper);
   const drift = await parityDifferences(prepared.projected, reloaded, active);
+  for (const intent of imageIntents) { const section = reloaded.sections.find((item) => item.id === intent.destinationSectionId); const image = section?.images?.find((item) => item.url === intent.image.url); const placement = intent.placement; const mismatch = !image || ['x_px','y_px','width_px','height_px'].some((field) => Number(image?.[field]) !== Number(placement[field.replace('_px','')])) || String(image?.shape) !== String(placement.shape) || Number(image?.stand_off_px) !== Number(placement.standOffPx) || String(image?.caption || '') !== String(placement.caption || ''); if (mismatch) drift.push({ sectionKey: intent.destinationSectionKey, fields: ['images'], metrics: [] }); }
   const preflightMatches = JSON.stringify([...errorKeys(prepared.preflight)].sort()) === JSON.stringify([...errorKeys(reloadedPreflight)].sort());
   const qualityMatches = Math.abs(prepared.projectedQuality.score - reloadedQuality.score) <= 0.0001;
   if (!preflightMatches || drift.length || !qualityMatches) return { ...prepared, state: 'PAGE_BLOCKED', error: 'POST_SAVE_DRIFT', reloaded, reloadedPreflight, reloadedQuality, drift };
   prepared.outcomes.filter((item) => item.state === 'READY_TO_PERSIST').forEach((item) => { item.state = 'PERSISTED'; });
+  imageIntents.forEach((item) => { item.state = 'IMAGE_GENERATED_PLACEMENT'; });
   journal?.event('PAGE_PARITY_PASS', { page: pagePlan.page.page_number });
   return { ...prepared, state: 'PERSISTED', reloaded, reloadedPreflight, reloadedQuality, drift };
 }

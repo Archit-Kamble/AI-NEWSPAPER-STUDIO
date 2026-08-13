@@ -4,6 +4,39 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zu. Project B8B-VISUAL-PARITY — canonical prose rendering and visual evidence (2026-08-13)
+
+The browser had a real composition-parity defect: a prose block without a
+placed image bypassed the canonical flow grid and used balancing CSS columns.
+Fit, preflight, and quality consequently reported the grid's fill while the
+browser balanced short copy at the top of the frame. The Page-2 lead banner,
+for example, measured 82% canonical body use but only about 31% visible body
+use. Ordinary prose now always uses the same flowed grid as image stories, so
+the refreshed browser measurement is 84% visible use for that same 82%
+canonical banner. Smart Cards and structured feature renderers retain their
+separate renderer path.
+
+`scripts/probe-rendered-occupancy.js` is a read-only Playwright probe that
+records rendered section/headline/body heights, remaining body space,
+canonical budgets/fill, renderer path, and a conservative visual status for a
+disposable edition. The source-aware exact-fit writer also rejects a
+source-rich proposal that remains below its policy minimum after its one
+permitted repair; thin reporter material remains explicitly marked and is
+never padded with invented copy.
+
+Fresh disposable edition 12294 (2099-05-26) completed the CODEX_LOCAL
+four-page run with all pages `PERSISTED`, 29 bounded calls, zero
+baseline/projected/reload preflight errors, and post-save quality parity on all
+four pages. Its report is `/tmp/sahas-b8b-full-report.json`, journal is
+`/tmp/sahas-b8b-run-2099-05-26-all-pages.json`, occupancy evidence is
+`/tmp/sahas-rendered-occupancy-2099-05-26.json`, and print captures are under
+`/tmp/sahas-b8b-visual-parity-2099-05-26/`. Some large ordinary frames remain
+visually light only where the source packet cannot support their semantic
+minimum; that is surfaced as source-scale evidence rather than being hidden by
+fabricated filler.
+
+---
+
 ## 0zt. Project B8B-CODEX-LOCAL — no-API disposable composition transport (2026-08-13)
 
 The disposable newsroom-pool runner now has an explicit `--ai-mode codex-local`

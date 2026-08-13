@@ -232,8 +232,11 @@ function bodyMarkup(view) {
 // what this function already does correctly. See PROJECT_STATUS.md, Bug #1/#3.
 export function flowedTextMarkup(section, view) {
   const images = (section?.images || []).map(flowImageFromRow);
-  if (!images.length) return null;
-
+  // The flow grid is the canonical composition plan for every prose story,
+  // not just for stories with a placed image. Falling back to CSS columns for
+  // no-image sections made the browser balance short copy across columns at
+  // the top of a frame, while fit/preflight assumed copy pours down the grid.
+  // That was why a canonical 82%-full banner visibly looked almost empty.
   const map = buildFlowMap(section, view, images);
   if (!map.cols || !map.rows) return null;
 

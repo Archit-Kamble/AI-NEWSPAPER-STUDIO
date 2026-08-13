@@ -90,6 +90,17 @@ test('bandBox: the canvas and the Block Editor call the exact same function - no
   assert.equal(typeof sectionThumb.flowedBodyMarkup, 'function');
 });
 
+test('ordinary no-image prose uses the canonical flowed renderer, not balancing CSS columns', async () => {
+  const sectionThumb = await import('../public/editor/canvas/section-thumb.js');
+  const markup = sectionThumb.flowedTextMarkup(
+    { width_px: 620, height_px: 200, images: [] },
+    { headline: 'मुख्य बातमी', subheading: '', body: 'अ'.repeat(220), marginPx: 12, columnCount: 1, lineHeight: 1.45, headlineFontPx: 32, subheadingFontPx: 16, bodyFontPx: 16 },
+  );
+  assert.match(markup, /section-flowed-band/, 'headline is placed in the grid band');
+  assert.match(markup, /section-flowed/, 'body is poured into canonical grid runs');
+  assert.doesNotMatch(markup, /section-body/, 'the CSS column fallback is not used for ordinary prose');
+});
+
 test('flowedBodyMarkup: body text is poured only into TEXT cells - never into a cell a picture occupies', async () => {
   const { buildFlowMap, CELL } = await loadTextFlow();
   const sectionThumb = await import('../public/editor/canvas/section-thumb.js');

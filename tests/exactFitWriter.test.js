@@ -56,3 +56,14 @@ test('writer accepts only validated semantic metadata and reports deterministic 
   assert.ok(calls <= 2); assert.equal(result.proposal.annotations.length, 1); assert.equal(result.proposal.kicker, 'स्थानिक');
   assert.equal(result.sourceSufficiency.status, 'INSUFFICIENT_FOR_TREATMENT');
 });
+
+test('source-rich underfill is rejected after the one permitted repair instead of silently becoming fit-ready', async () => {
+  const rich = { ...source, body: 'महापालिकेने पाणीपुरवठा योजनेचे काम वेगाने सुरू केले. '.repeat(20) };
+  const result = await composeSourceToFrame({ source: rich, storyType: 'STANDARD', frame: frame(), askForJson: asker([
+    { headline: 'पाणी योजनेला गती', subheading: '', body: 'थोडी प्रत.' },
+    { headline: 'पाणी योजनेला गती', subheading: '', body: 'अजूनही कमी प्रत.' },
+  ], []) });
+  assert.equal(result.attempts, 2);
+  assert.equal(result.assessment.accepted, false);
+  assert.ok(result.assessment.issues.includes('SOURCE_RICH_UNDERFILL'));
+});

@@ -18,6 +18,20 @@ page-count workflow, and live editions remain untouched.
 
 ---
 
+## 0zr. Project B8B-C — frame-independent newsroom planning (2026-08-13)
+
+The disposable B8B source input now has an 18-item synthetic Marathi newsroom
+pool, independent of section keys. `editionComposition.service` routes those
+records deterministically by semantic ladder role, converts supplied source
+copy into B6 packets, excludes locked/advert/structured/image frames, and
+uses the existing flow-aware balancer to produce one edition plan before any
+AI call. The page-plan executor preserves the B8B source-grounding,
+presentation, preflight, quality, and transactional persistence gates. Full
+CLI orchestration, stub four-page execution, and complete all-page real-AI
+run remain the next continuation; no live edition was changed.
+
+---
+
 ## 0zp. Project B7B-F5 — edition page-count integrity and clean footer (2026-08-12)
 
 Start/Open/Resize are now separate operations: start creates one edition for a

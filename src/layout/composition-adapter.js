@@ -37,7 +37,7 @@ function frameDescriptorFromSection(section = {}, templateSection = null) {
     block_type: section.block_type ?? section.blockType ?? 'article', recommendedStoryType: recommendation,
     editorialPriority: templateSection?.editorialPriority ?? 3, feature_key: section.feature_key ?? templateSection?.featureKey ?? null,
     headline_font_px: section.headline_font_px, subheading_font_px: section.subheading_font_px, body_font_px: section.body_font_px,
-    column_count: section.column_count, margin_px: section.margin_px, border_style: section.border_style, headline_style: section.headline_style,
+    column_count: section.column_count, margin_px: section.margin_px, line_height: section.line_height, border_style: section.border_style, headline_style: section.headline_style,
   };
 }
 

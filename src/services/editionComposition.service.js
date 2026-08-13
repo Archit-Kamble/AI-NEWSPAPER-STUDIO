@@ -11,7 +11,7 @@ const pageRepository = require('../repositories/page.repository');
 
 const SPECIAL = new Set(['SMART_CARD', 'ADVERTISEMENT', 'QUOTE', 'DATA']);
 const roleForRung = (rung) => rung.templateKey === 'front' ? 'FRONT' : rung.templateKey === 'local' ? 'LOCAL' : rung.templateKey === 'features' ? 'FEATURES' : rung.templateKey === 'opinion' ? 'OPINION' : rung.pageNumber === rung.total ? 'BACK' : 'GENERAL';
-function storyPacketFromNewsItem(item = {}) { return { id: item.id, news_item_id: item.id, story_type: item.story_type || 'STANDARD', editorial_priority: item.editorial_priority || 3, headline: item.title || '', subheading: item.description || '', body: item.body || item.description || '', category: item.category || '', location: item.location || '', tags: Array.isArray(item.tags) ? item.tags.join(', ') : item.tags || '', reporter_name: item.reporter_name || '', images: [], imagePlacementNeedsReview: Boolean((item.image_urls || []).length) }; }
+function storyPacketFromNewsItem(item = {}) { return { id: item.id, news_item_id: item.id, story_type: item.story_type || 'STANDARD', editorial_priority: item.editorial_priority || 3, headline: item.title || '', subheading: item.subheading || '', body: item.body || item.description || '', category: item.category || '', location: item.location || '', tags: Array.isArray(item.tags) ? item.tags.join(', ') : item.tags || '', reporter_name: item.reporter_name || '', images: [], imagePlacementNeedsReview: Boolean((item.image_urls || []).length) }; }
 function eligibleEditorialFrames(page) { const template = getTemplate(page.template_key); const byKey = new Map(template.sections.map((item) => [item.key, item])); return (page.sections || []).flatMap((section) => { const templateSection = byKey.get(section.section_key); const frame = frameDescriptorFromSection(section, templateSection); const type = String(frame.recommendedStoryType || '').toUpperCase(); if (section.is_custom || section.continued_from_section_id || frame.feature_key || section.smart_card_key || frame.block_type === 'advert' || SPECIAL.has(type) || (section.images || []).length) return []; return [frame]; }); }
 function routeSourcesToEditionPages({ sources = [], pages = [], ladder = ladderFor(pages.length) }) {
   const pageByRole = new Map(ladder.map((rung) => [roleForRung({ ...rung, total: ladder.length }), rung.pageNumber])); const buckets = new Map(pages.map((page) => [page.page_number, []])); const unassigned = [];
@@ -34,6 +34,7 @@ async function buildEditionCompositionPlan({ pages = [], newspaper = {}, sources
 async function composePagePlan({ pagePlan, sourcesById, newspaper, askForJson, maxServiceCalls = 32, callBudget = null, apply = false, compose = composeSourceToFrame }) {
   const budget = callBudget || { max: maxServiceCalls, used: 0 }; const frameById = new Map(pagePlan.frames.map((frame) => [String(frame.id), frame])); const candidates = [];
   const before = await analyzeComposedLayout(pagePlan.page, newspaper);
+  const baselinePreflight = await validatePageLayout(pagePlan.page, newspaper);
   for (const assignment of pagePlan.assignments) {
     const source = sourcesById.get(String(assignment.storyId)); const frame = frameById.get(String(assignment.frameId));
     if (!source || !frame) return { state: 'PAGE_BLOCKED', error: 'INVALID_ASSIGNMENT', candidates, before };
@@ -48,9 +49,12 @@ async function composePagePlan({ pagePlan, sourcesById, newspaper, askForJson, m
   }
   const projected = { ...pagePlan.page, sections: pagePlan.page.sections.map((section) => { const candidate = candidates.find((item) => item.frame.section_key === section.section_key); return candidate ? { ...section, ...candidate.compiled, editorial_presentation: candidate.compiled.presentation } : section; }) };
   const preflight = await validatePageLayout(projected, newspaper); const projectedQuality = await analyzeComposedLayout(projected, newspaper);
-  if (!preflight.valid || projectedQuality.score < before.score - 5) return { state: 'PAGE_BLOCKED', error: !preflight.valid ? 'PREFLIGHT_BLOCKED' : 'QUALITY_REGRESSION', candidates, before, projectedQuality, preflight, serviceCalls: budget.used };
+  const keyOf = (finding) => `${finding.type || finding.check}:${finding.sectionKey}`;
+  const baselineErrors = new Set([...baselinePreflight.collisions, ...baselinePreflight.overflow].filter((finding) => finding.level === 'error').map(keyOf));
+  const introducedErrors = [...preflight.collisions, ...preflight.overflow].filter((finding) => finding.level === 'error' && !baselineErrors.has(keyOf(finding)));
+  if (introducedErrors.length || projectedQuality.score < before.score - 5) return { state: 'PAGE_BLOCKED', error: introducedErrors.length ? 'PREFLIGHT_BLOCKED' : 'QUALITY_REGRESSION', candidates, before, baselinePreflight, projectedQuality, preflight, introducedErrors, serviceCalls: budget.used };
   if (apply && candidates.length) await pageRepository.saveComposedStoryBatch(pagePlan.page.id, candidates.map((candidate) => ({ sectionKey: candidate.frame.section_key, story: { newsItemId: null, storyType: candidate.result.editorial.storyType, editorialPriority: candidate.result.editorial.editorialPriority, ...candidate.compiled, category: candidate.source.category, location: candidate.source.location, tags: candidate.source.tags, reporterName: candidate.source.reporterName, language: 'Marathi', status: candidate.result.sourceSufficiency.status === 'THIN' ? 'needs_review' : 'needs_review', aiGenerated: true, editorialPresentation: candidate.compiled.presentation } })));
   const reloaded = apply ? await pageRepository.findById(pagePlan.page.id) : null;
-  return { state: apply ? 'PERSISTED' : 'READY_TO_PERSIST', candidates, before, projectedQuality, preflight, reloaded, serviceCalls: budget.used };
+  return { state: apply ? 'PERSISTED' : 'READY_TO_PERSIST', candidates, before, baselinePreflight, projectedQuality, preflight, reloaded, serviceCalls: budget.used };
 }
 module.exports = { storyPacketFromNewsItem, eligibleEditorialFrames, routeSourcesToEditionPages, buildEditionCompositionPlan, composePagePlan, roleForRung };

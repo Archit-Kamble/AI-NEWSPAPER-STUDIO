@@ -306,8 +306,11 @@ async function fillPage4(desk, pageId) {
   await write(desk, pageId, 'strip-right', { headline: 'तक्रार निवारण शिबिर', body: 'नागरिकांच्या तक्रारींचे निवारण करण्यासाठी शिबिर घेण्यात आले.' });
 
   await write(desk, pageId, 'foot-left', {
-    headline: 'जिल्ह्यातील सिंचन प्रकल्पांचा आढावा, कामांना गती देण्याचे निर्देश',
-    body: '■ प्रतिनिधी\nसिंचन प्रकल्पांचा आढावा घेण्यासाठी बैठक पार पडली. अधिकाऱ्यांना गती देण्याचे निर्देश देण्यात आले.',
+    // This narrow ANALYSIS frame has room for a compact brief treatment only;
+    // keeping the deterministic fixture inside its canonical flow budget
+    // ensures B8B never mistakes inherited overset for generated overset.
+    headline: 'सिंचन प्रकल्पांचा आढावा',
+    body: 'बैठकीत कामांचा आढावा घेऊन अधिकाऱ्यांना सूचना देण्यात आल्या.',
     reporterName: 'प्रतिनिधी',
   });
   await write(desk, pageId, 'foot-right', { headline: 'वर्षभर चालणारी खास ऑफर — आजच भेट द्या', body: 'अधिक माहितीसाठी संपर्क साधा.' });

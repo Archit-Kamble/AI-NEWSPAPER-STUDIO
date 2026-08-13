@@ -47,6 +47,21 @@ the required complete real-AI four-page run; no layout geometry was changed.
 
 ---
 
+## 0zt. Project B8B-PARITY — canonical composition parity repair (2026-08-13)
+
+The B8B preflight gate now distinguishes inherited baseline findings from
+candidate-introduced failures, while the disposable fixture itself was fixed
+to be canonically clean: its previous Page-4 `foot-left` copy was 50 printable
+characters overset before any B8B write. Planning packets no longer duplicate
+the full source body as a deck, frame descriptors carry persisted line height,
+and preflight compares canonical plain-text `usedChars` rather than raw markup
+length. A clean all-page stub run persisted every eligible page atomically with
+zero projected preflight errors. The real Page-2 provider attempt left no
+writes and the page remained preflight-clean; full real-AI continuation is
+blocked pending a provider/result-channel retry, not by an unsafe mutation.
+
+---
+
 ## 0zp. Project B7B-F5 — edition page-count integrity and clean footer (2026-08-12)
 
 Start/Open/Resize are now separate operations: start creates one edition for a

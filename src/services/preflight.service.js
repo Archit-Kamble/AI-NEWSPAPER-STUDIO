@@ -150,10 +150,10 @@ async function checkPage(page, newspaper, totalPages) {
         bodyFontPx: Number(section.body_font_px),
       }, (section.images || []).map(flowImageFromRow));
 
-      if (section.body.length > map.bodyCharBudget) {
+      if (map.usedChars > map.bodyCharBudget) {
         findings.push({
           level: 'error', check: 'overset', ...at(section),
-          message: `${section.body.length - map.bodyCharBudget} characters more than this block holds. Cut it, or carry it over.`,
+          message: `${map.usedChars - map.bodyCharBudget} characters more than this block holds. Cut it, or carry it over.`,
         });
       }
     }

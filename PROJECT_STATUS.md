@@ -32,6 +32,21 @@ run remain the next continuation; no live edition was changed.
 
 ---
 
+## 0zs. Project B8B-D — disposable execution orchestration (2026-08-13)
+
+The composition CLI now invokes the B8B-C newsroom-pool planner directly for
+safe plan-only, deterministic stub, and real-provider modes. It supports date
+or ID selection, page/all-page scope, explicit apply, and an edition-wide
+actual-call budget shared across pages. The all-page plan remains zero-AI and
+has 4/3/1/3 assignments for Front/Local/Features/Back after excluding a
+preflight-incompatible source. Stub execution demonstrated atomic persistence
+for Pages 1–3 and correctly blocked Page 4 rather than partially writing it:
+the existing exact-fit adapter accepted the narrow `foot-left` treatment while
+preflight measured body overset. This parity defect must be reconciled before
+the required complete real-AI four-page run; no layout geometry was changed.
+
+---
+
 ## 0zp. Project B7B-F5 — edition page-count integrity and clean footer (2026-08-12)
 
 Start/Open/Resize are now separate operations: start creates one edition for a

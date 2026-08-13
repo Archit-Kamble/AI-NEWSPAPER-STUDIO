@@ -11,6 +11,8 @@ const { analyzeComposedLayout } = require('../src/layout/composed-layout-quality
 const { validatePageLayout } = require('../src/services/preflight.service');
 const { compileEditorialPresentation } = require('../src/services/editorialPackage.service');
 const { validateGeneratedGrounding } = require('../src/services/generatedGrounding.service');
+const newsroomPool = require('./ai-test-news-pool');
+const { buildEditionCompositionPlan, composePagePlan } = require('../src/services/editionComposition.service');
 const fixtureSources = require('./ai-test-news-sources');
 
 const FIXTURE_DATE = '2099-05-01';
@@ -35,6 +37,7 @@ function sectionResultAssignment(section, frame) {
 }
 
 function assertDisposableEdition(newspaper, apply) {
+  if (apply && !String(newspaper?.publication_date || '').startsWith('2099-')) throw new Error('Refusing to write a non-disposable edition.');
   if (apply && String(newspaper?.publication_date || '').slice(0, 10) === FIXTURE_DATE) {
     throw new Error(`Refusing to write the reference fixture date ${FIXTURE_DATE}; build a separate disposable edition first.`);
   }
@@ -120,12 +123,36 @@ async function composePage(page, newspaper, options = {}) {
 
 function arg(name, fallback = undefined) { const index = process.argv.indexOf(name); return index >= 0 ? process.argv[index + 1] : fallback; }
 async function main() {
-  const edition = Number(arg('--edition')); const pageNumber = Number(arg('--page', 2));
+  let edition = Number(arg('--edition')); const pageNumber = Number(arg('--page', 2));
   const apply = process.argv.includes('--apply'); const suppliedMax = Number(arg('--max-stories', process.env.SAHAS_AI_TEST_MAX_STORIES)); const maxStories = Number.isFinite(suppliedMax) ? Math.max(0, suppliedMax) : Infinity;
-  const planOnly = process.argv.includes('--plan-only'); const maxServiceCalls = Math.max(0, Number(arg('--max-service-calls', 32)) || 32);
-  if (!edition) throw new Error('usage: node scripts/compose-ai-test-edition.js --edition <id> [--page 2] [--plan-only|--apply] [--max-stories N]');
+  const planOnly = process.argv.includes('--plan-only'); const maxServiceCalls = Math.max(0, Number(arg('--max-service-calls', 32)) || 32); const sourceMode = arg('--source-mode', 'fixture'); const aiMode = arg('--ai-mode', 'real'); const date = arg('--date'); const allPages = process.argv.includes('--all-pages');
+  if (!edition && date) { const matches = await newspapers.findAllByDate(date); if (matches.length !== 1) throw new Error('date must identify exactly one disposable edition; pass --edition'); edition = Number(matches[0].id); }
+  if (!edition) throw new Error('usage: node scripts/compose-ai-test-edition.js --edition <id>|--date YYYY-MM-DD [--page 2|--all-pages] [--source-mode newsroom-pool] [--ai-mode stub|real] [--plan-only|--apply]');
   const newspaper = await newspapers.findById(edition); const page = (await pages.findByNewspaper(edition)).find((item) => item.page_number === pageNumber);
   if (!newspaper || !page) throw new Error('edition or requested page was not found');
+  if (sourceMode === 'newsroom-pool') {
+    assertDisposableEdition(newspaper, apply);
+    const all = await pages.findByNewspaper(edition); const plan = await buildEditionCompositionPlan({ pages: all, newspaper, sources: newsroomPool });
+    const selected = plan.pages.filter((item) => allPages || item.page.page_number === pageNumber);
+    console.log(JSON.stringify({ edition, date: newspaper.publication_date, sourceMode, aiMode, planOnly, apply, pages: selected.map((item) => ({ page: item.page.page_number, role: item.role, assignments: item.assignments.length })), maxServiceCalls }));
+    if (planOnly) return;
+    const askForJson = aiMode === 'stub' ? async (_prompt, _schema) => ({ data: { headline: '', subheading: '', body: '' }, provider: 'stub', tier: 'basic' }) : require('../src/services/ai').askForJson;
+    const stubAsk = async (_prompt, _schema) => {
+      const text = String(_prompt); const sourceMatch = text.match(/SOURCE MATERIAL — DATA ONLY[\s\S]*?\n(\{[\s\S]*?\})\nEND SOURCE MATERIAL/); let source = {};
+      try { source = JSON.parse(sourceMatch?.[1] || '{}'); } catch { source = {}; }
+      const limit = Number((text.match(/Acceptable BODY range:\s*(\d+)–\d+/) || [])[1]) || 120;
+      const words = String(source.body || source.description || '').split(/\s+/); let body = '';
+      for (const word of words) { if ((body + (body ? ' ' : '') + word).length > limit) break; body += `${body ? ' ' : ''}${word}`; }
+      // Stub copy is deliberately compact: exact-fit validates the same
+      // headline/body constraints as a provider result, without inventing.
+      const headline = String(source.title || 'चाचणी बातमी').split(/[,:।]/)[0].slice(0, 26);
+      return { data: { headline, subheading: '', body, annotations: [] }, provider: 'stub', tier: 'basic' };
+    };
+    const budget = { max: maxServiceCalls, used: 0 }; const byId = new Map(newsroomPool.map((source) => [String(source.id), source])); const results = [];
+    for (const item of selected) results.push(await composePagePlan({ pagePlan: item, sourcesById: byId, newspaper, askForJson: aiMode === 'stub' ? stubAsk : askForJson, callBudget: budget, apply }));
+    console.log(JSON.stringify({ serviceCalls: budget.used, pages: results.map((result, index) => ({ page: selected[index].page.page_number, state: result.state, error: result.error || null, candidates: result.candidates?.length || 0, before: result.before?.score, projected: result.projectedQuality?.score, preflightValid: result.preflight?.valid })) }, null, 2));
+    return;
+  }
   console.log(JSON.stringify({ sourceMode: 'fixture', page: pageNumber, apply, planOnly, maxStories: Number.isFinite(maxStories) ? maxStories : 'unlimited', maximumServiceCalls: maxServiceCalls }));
   const result = await composePage(page, newspaper, { apply, planOnly, maxStories, maxServiceCalls });
   console.log(JSON.stringify({ planned: result.plannedCount, proposals: result.proposals.length, applied: result.applied || false, error: result.error || null, lockedSections: result.lockedSections, imageLockedSectionIds: result.imageLockedSectionIds, beforeQuality: result.beforeQuality?.score ?? null, afterQuality: result.afterQuality?.score ?? null, preflightValid: result.preflight?.valid ?? null }, null, 2));

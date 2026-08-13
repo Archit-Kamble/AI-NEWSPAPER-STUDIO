@@ -31,26 +31,26 @@ async function buildEditionCompositionPlan({ pages = [], newspaper = {}, sources
   return { pages: plans, routed: routed.unassigned, assigned };
 }
 
-async function composePagePlan({ pagePlan, sourcesById, newspaper, askForJson, maxServiceCalls = 32, apply = false, compose = composeSourceToFrame }) {
-  let used = 0; const frameById = new Map(pagePlan.frames.map((frame) => [String(frame.id), frame])); const candidates = [];
+async function composePagePlan({ pagePlan, sourcesById, newspaper, askForJson, maxServiceCalls = 32, callBudget = null, apply = false, compose = composeSourceToFrame }) {
+  const budget = callBudget || { max: maxServiceCalls, used: 0 }; const frameById = new Map(pagePlan.frames.map((frame) => [String(frame.id), frame])); const candidates = [];
   const before = await analyzeComposedLayout(pagePlan.page, newspaper);
   for (const assignment of pagePlan.assignments) {
     const source = sourcesById.get(String(assignment.storyId)); const frame = frameById.get(String(assignment.frameId));
     if (!source || !frame) return { state: 'PAGE_BLOCKED', error: 'INVALID_ASSIGNMENT', candidates, before };
-    const budgetedAsk = async (...args) => { if (used >= maxServiceCalls) return { error: 'SERVICE_CALL_BUDGET_EXHAUSTED' }; used += 1; return askForJson(...args); };
+    const budgetedAsk = async (...args) => { if (budget.used >= budget.max) return { error: 'SERVICE_CALL_BUDGET_EXHAUSTED' }; budget.used += 1; return askForJson(...args); };
     const input = await writerInputFromNewsItem(source); const result = await compose({ ...input, frame, language: 'Marathi', askForJson: budgetedAsk });
-    if (result.error || !result.assessment?.accepted) return { state: 'PAGE_BLOCKED', error: result.error || 'FIT_REJECTED', candidates, before, serviceCalls: used };
+    if (result.error || !result.assessment?.accepted) return { state: 'PAGE_BLOCKED', error: result.error || 'FIT_REJECTED', candidates, before, serviceCalls: budget.used };
     const grounding = validateGeneratedGrounding(result.proposal, input.source);
-    if (!grounding.valid) return { state: 'PAGE_BLOCKED', error: grounding.issues[0].code, candidates, before, serviceCalls: used };
+    if (!grounding.valid) return { state: 'PAGE_BLOCKED', error: grounding.issues[0].code, candidates, before, serviceCalls: budget.used };
     if (result.sourceSufficiency.status === 'INSUFFICIENT_FOR_TREATMENT') continue;
     const compiled = compileEditorialPresentation(result.proposal, result.editorial.storyType, { source: input.source });
     candidates.push({ sourceId: source.id, frame, result, grounding, compiled, source: input.source });
   }
   const projected = { ...pagePlan.page, sections: pagePlan.page.sections.map((section) => { const candidate = candidates.find((item) => item.frame.section_key === section.section_key); return candidate ? { ...section, ...candidate.compiled, editorial_presentation: candidate.compiled.presentation } : section; }) };
   const preflight = await validatePageLayout(projected, newspaper); const projectedQuality = await analyzeComposedLayout(projected, newspaper);
-  if (!preflight.valid || projectedQuality.score < before.score - 5) return { state: 'PAGE_BLOCKED', error: !preflight.valid ? 'PREFLIGHT_BLOCKED' : 'QUALITY_REGRESSION', candidates, before, projectedQuality, preflight, serviceCalls: used };
+  if (!preflight.valid || projectedQuality.score < before.score - 5) return { state: 'PAGE_BLOCKED', error: !preflight.valid ? 'PREFLIGHT_BLOCKED' : 'QUALITY_REGRESSION', candidates, before, projectedQuality, preflight, serviceCalls: budget.used };
   if (apply && candidates.length) await pageRepository.saveComposedStoryBatch(pagePlan.page.id, candidates.map((candidate) => ({ sectionKey: candidate.frame.section_key, story: { newsItemId: null, storyType: candidate.result.editorial.storyType, editorialPriority: candidate.result.editorial.editorialPriority, ...candidate.compiled, category: candidate.source.category, location: candidate.source.location, tags: candidate.source.tags, reporterName: candidate.source.reporterName, language: 'Marathi', status: candidate.result.sourceSufficiency.status === 'THIN' ? 'needs_review' : 'needs_review', aiGenerated: true, editorialPresentation: candidate.compiled.presentation } })));
   const reloaded = apply ? await pageRepository.findById(pagePlan.page.id) : null;
-  return { state: apply ? 'PERSISTED' : 'READY_TO_PERSIST', candidates, before, projectedQuality, preflight, reloaded, serviceCalls: used };
+  return { state: apply ? 'PERSISTED' : 'READY_TO_PERSIST', candidates, before, projectedQuality, preflight, reloaded, serviceCalls: budget.used };
 }
 module.exports = { storyPacketFromNewsItem, eligibleEditorialFrames, routeSourcesToEditionPages, buildEditionCompositionPlan, composePagePlan, roleForRung };

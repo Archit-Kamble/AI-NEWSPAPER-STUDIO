@@ -4,6 +4,38 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zv. Project B8B-PRODUCTION-CLOSEOUT — generic-source composition proof (2026-08-13)
+
+Edition composition now normalizes a generic editorial-only newsroom source
+contract in `newsroomSource.service.js` before routing. It carries stable
+source identity, semantics, priority, factual copy and optional newsroom
+metadata—not layout geometry or fixture keys—and stable-sorts identities before
+the existing semantic routing/B6 matching path. A twenty-permutation regression
+proves routing and assignment do not depend on input array order. Production
+composition modules are also checked for B8B fixture-ID references.
+
+The CLI has a deliberately shuffled and renamed generic disposable source mode,
+with extra LOCAL/GENERAL/BRIEF material, missing optional metadata, removed
+features, duplicate priorities, and thin copy. It reports page-level source /
+frame accounting, coverage, explicit shortages, and edition state:
+`FULLY_COMPOSED`, `PARTIALLY_COMPOSED`, or `BLOCKED`. `FULLY_COMPOSED` means
+every retained frame is explained by source shortage or a safe generated result;
+it does not mean 100% visual fill or invented copy.
+
+Fresh generic-pool edition 12379 (2099-05-28) completed with 29 bounded
+CODEX_LOCAL calls and Pages 1–4 `PERSISTED`; baseline/projected/reload
+preflight errors and post-save drift were all zero. It truthfully reports
+`FULLY_COMPOSED`: page coverage is P1 4/12, P2 4/5, P3 1/2, P4 4/16, with the
+remaining frames accounted for by no compatible candidate or explicit source
+insufficiency. The persisted generic copy is often visibly light by design of
+the messy source pool, while the browser still uses the canonical flowed
+renderer. Evidence: `/tmp/sahas-b8b-full-report.json`,
+`/tmp/sahas-b8b-run-2099-05-28-all-pages.json`,
+`/tmp/sahas-rendered-occupancy-2099-05-28.json`, and
+`/tmp/sahas-b8b-generic-2099-05-28/`.
+
+---
+
 ## 0zu. Project B8B-VISUAL-PARITY — canonical prose rendering and visual evidence (2026-08-13)
 
 The browser had a real composition-parity defect: a prose block without a

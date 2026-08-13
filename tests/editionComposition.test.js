@@ -1,6 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { routeSourcesToEditionPages, storyPacketFromNewsItem, composePagePlan, projectComposedStoryIntoSection } = require('../src/services/editionComposition.service');
+const { routeSourcesToEditionPages, storyPacketFromNewsItem, composePagePlan, projectComposedStoryIntoSection, buildEditionCompositionPlan, summarizeEditionComposition } = require('../src/services/editionComposition.service');
+const { getTemplate } = require('../src/layout/templates');
+const { normalizeNewsroomSources } = require('../src/services/newsroomSource.service');
 
 test('frame-independent sources route deterministically by semantic page role', () => {
   const pages = [{ page_number: 1 }, { page_number: 2 }, { page_number: 3 }, { page_number: 4 }];
@@ -69,4 +71,54 @@ test('composed projection mirrors persisted semantics but preserves frame geomet
   const projected = projectComposedStoryIntoSection(section, candidate);
   assert.equal(projected.story_type, 'LEAD'); assert.equal(projected.editorial_priority, 5);
   assert.equal(projected.width_px, 100); assert.equal(projected.y_px, 20);
+});
+
+function syntheticPages() {
+  return [1, 2, 3, 4].map((pageNumber) => {
+    const templateKey = pageNumber === 1 ? 'front' : pageNumber === 2 ? 'local' : pageNumber === 3 ? 'features' : 'back';
+    const template = getTemplate(templateKey);
+    return { id: `page-${pageNumber}`, page_number: pageNumber, template_key: templateKey, sections: template.sections.map((item, index) => ({
+      id: `${pageNumber}-${item.key}`, section_key: item.key, x_px: item.x, y_px: item.y, width_px: item.width, height_px: item.height,
+      z_index: index, block_type: item.blockType || 'article', story_type: item.storyType || 'STANDARD', editorial_priority: item.editorialPriority || 3, images: [],
+    })) };
+  });
+}
+function genericSource(id, role, type = 'STANDARD', priority = 3, body = 'पुरेशी संपादकीय प्रत '.repeat(40)) {
+  return { sourceId: id, headline: `${id} मथळा`, body, section: 'स्थानिक', storyType: type, editorialPriority: priority, desiredPageRole: role };
+}
+function planSignature(plan) { return plan.pages.map((page) => ({ page: page.page.page_number, routed: page.stories.map((story) => story.id), assignments: page.assignments.map((item) => [item.storyId, item.frameId]) })); }
+
+test('generic newsroom contract normalizes aliases, optional fields, and stable source identity', () => {
+  const normalized = normalizeNewsroomSources([{ id: 'z', title: 'Z', description: 'प्रत', story_type: 'brief', editorial_priority: 9, tags: ['एक', 'दोन'] }, { sourceId: 'a', headline: 'A', body: 'प्रत' }]);
+  assert.deepEqual(normalized.map((item) => item.sourceId), ['a', 'z']);
+  assert.equal(normalized[1].story_type, 'brief'); assert.equal(normalized[1].editorial_priority, 5); assert.equal(normalized[1].tags, 'एक, दोन');
+});
+
+test('edition planning is invariant across twenty input permutations of a generic source pool', async () => {
+  const sources = [
+    genericSource('inbox-a', 'FRONT', 'LEAD', 5), genericSource('inbox-b', 'FRONT', 'STANDARD', 3), genericSource('inbox-c', 'LOCAL', 'LEAD', 5),
+    genericSource('inbox-d', 'LOCAL', 'ANALYSIS', 4), genericSource('inbox-e', 'LOCAL', 'BRIEF', 2), genericSource('inbox-f', 'GENERAL', 'STANDARD', 3),
+    genericSource('inbox-g', 'GENERAL', 'BRIEF', 2), genericSource('inbox-h', 'OPINION', 'OPINION', 4), genericSource('inbox-i', 'BACK', 'STANDARD', 3),
+  ];
+  const pages = syntheticPages(); const baseline = planSignature(await buildEditionCompositionPlan({ pages, sources }));
+  for (let seed = 0; seed < 20; seed += 1) {
+    const shuffled = [...sources].sort((a, b) => ((a.sourceId.charCodeAt(6) * (seed + 3)) % 17) - ((b.sourceId.charCodeAt(6) * (seed + 3)) % 17));
+    assert.deepEqual(planSignature(await buildEditionCompositionPlan({ pages, sources: shuffled })), baseline, `seed ${seed}`);
+  }
+});
+
+test('messy source pools report coverage and never relabel a safely partial edition as full', () => {
+  const plans = [{ page: { page_number: 1 }, frames: [{}, {}, {}], stories: [{}, {}], assignments: [{}, {}] }, { page: { page_number: 2 }, frames: [{}], stories: [], assignments: [] }];
+  const partial = summarizeEditionComposition(plans, [{ state: 'PERSISTED', outcomes: [{ state: 'PERSISTED' }, { state: 'SOURCE_INSUFFICIENT' }], candidates: [{}] }, { state: 'UNCHANGED_NO_ASSIGNMENTS', outcomes: [], candidates: [] }]);
+  assert.equal(partial.state, 'FULLY_COMPOSED');
+  assert.equal(partial.pages[0].editorialCoverageRatio, 0.3333);
+  const unresolved = summarizeEditionComposition(plans, [{ state: 'PERSISTED', outcomes: [{ state: 'PERSISTED' }], candidates: [{}] }, { state: 'UNCHANGED_NO_ASSIGNMENTS', outcomes: [], candidates: [] }]);
+  assert.equal(unresolved.state, 'PARTIALLY_COMPOSED');
+  assert.equal(summarizeEditionComposition(plans, [{ state: 'PAGE_BLOCKED', error: 'PREFLIGHT_BLOCKED' }]).state, 'BLOCKED');
+});
+
+test('production composition modules contain no B8B fixture source IDs', () => {
+  const fs = require('fs'); const path = require('path');
+  const production = ['editionComposition.service.js', 'newsroomSource.service.js'].map((file) => fs.readFileSync(path.join(__dirname, '..', 'src', 'services', file), 'utf8')).join('\n');
+  assert.doesNotMatch(production, /src-(?:front|local|features|back|general|opinion)-/);
 });

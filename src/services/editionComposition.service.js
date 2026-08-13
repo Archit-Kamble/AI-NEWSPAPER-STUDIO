@@ -8,6 +8,7 @@ const { validateGeneratedGrounding } = require('./generatedGrounding.service');
 const { analyzeComposedLayout } = require('../layout/composed-layout-quality');
 const { validatePageLayout } = require('./preflight.service');
 const pageRepository = require('../repositories/page.repository');
+const { normalizeNewsroomSources } = require('./newsroomSource.service');
 
 const SPECIAL = new Set(['SMART_CARD', 'ADVERTISEMENT', 'QUOTE', 'DATA']);
 const roleForRung = (rung) => rung.role || (rung.pageNumber === rung.total ? 'BACK' : 'GENERAL');
@@ -43,11 +44,12 @@ function routeSourcesToEditionPages({ sources = [], pages = [], ladder = ladderF
   return { buckets, unassigned, pagesByRole, descriptors };
 }
 async function buildEditionCompositionPlan({ pages = [], newspaper = {}, sources = [], rebalance = rebalanceFlowAwarePageAssignments }) {
+  const canonicalSources = normalizeNewsroomSources(sources);
   const ladder = ladderFor(pages.length);
   const continuationSourceIds = new Set(pages.flatMap((page) => (page.sections || []).map((section) => section.continued_from_section_id).filter(Boolean)));
   const framesByPage = new Map(pages.map((page) => [page.page_number, eligibleEditorialFrames(page, continuationSourceIds)]));
   const capacities = new Map([...framesByPage].map(([number, frames]) => [number, frames.length]));
-  const routed = routeSourcesToEditionPages({ sources, pages, ladder, capacities }); const plans = [];
+  const routed = routeSourcesToEditionPages({ sources: canonicalSources, pages, ladder, capacities }); const plans = [];
   for (const page of [...pages].sort((a, b) => a.page_number - b.page_number)) {
     const frames = framesByPage.get(page.page_number) || []; const stories = (routed.buckets.get(page.page_number) || []).map(storyPacketFromNewsItem);
     const balance = stories.length && frames.length ? await rebalance(stories, frames, { page, newspaper, externalComposition: true }) : { finalPlan: { assignments: [], unassignedStories: stories.map((story) => ({ storyId: story.id })) } };
@@ -55,7 +57,31 @@ async function buildEditionCompositionPlan({ pages = [], newspaper = {}, sources
   }
   const assigned = plans.flatMap((plan) => plan.assignments.map((assignment) => ({ ...assignment, pageNumber: plan.page.page_number }))); const ids = assigned.map((item) => String(item.storyId)); const frames = assigned.map((item) => `${item.pageNumber}:${item.frameId}`);
   if (new Set(ids).size !== ids.length || new Set(frames).size !== frames.length) throw new Error('Invalid edition composition plan: duplicate story or frame');
-  return { pages: plans, routed: routed.unassigned, assigned, sourceCount: sources.length, routedCount: [...routed.buckets.values()].reduce((sum, list) => sum + list.length, 0), continuationSourceIds };
+  return { pages: plans, routed: routed.unassigned, assigned, sourceCount: canonicalSources.length, routedCount: [...routed.buckets.values()].reduce((sum, list) => sum + list.length, 0), continuationSourceIds };
+}
+
+// Truthful edition-level accounting.  A safe page batch can persist while the
+// inbox simply has fewer compatible sources than writable frames; that is a
+// declared shortage, not a false claim that every frame was composed.
+function summarizeEditionComposition(plans = [], results = []) {
+  const pages = plans.map((plan, index) => {
+    const result = results[index] || {}; const outcomes = result.outcomes || [];
+    const eligibleEditorialFrames = plan.frames.length;
+    const persistedCandidates = outcomes.filter((item) => item.state === 'PERSISTED').length;
+    const sourceInsufficient = outcomes.filter((item) => item.state === 'SOURCE_INSUFFICIENT' || item.state === 'FIT_REJECTED').length;
+    const assignedSources = plan.assignments.length;
+    const retainedOriginalFrames = Math.max(0, eligibleEditorialFrames - persistedCandidates);
+    const shortageFrames = Math.max(0, eligibleEditorialFrames - assignedSources) + sourceInsufficient;
+    const blocked = ['PAGE_BLOCKED', 'BUDGET_BLOCKED', 'PROVIDER_BLOCKED'].includes(result.state) || Boolean(result.error);
+    return { page: plan.page.page_number, eligibleEditorialFrames, candidateSources: plan.stories.length, assignedSources,
+      generatedCandidates: result.generatedCandidates?.length ?? result.candidates?.length ?? 0, persistedCandidates,
+      retainedOriginalFrames, sourceInsufficient, providerOrCandidateFailures: outcomes.filter((item) => !['PERSISTED', 'READY_TO_PERSIST', 'PLANNED', 'SOURCE_INSUFFICIENT', 'FIT_REJECTED'].includes(item.state)).length,
+      editorialCoverageRatio: eligibleEditorialFrames ? Number((persistedCandidates / eligibleEditorialFrames).toFixed(4)) : 1,
+      shortageFrames, blocked };
+  });
+  const blocked = pages.some((page) => page.blocked);
+  const unresolved = pages.some((page) => page.retainedOriginalFrames > page.shortageFrames);
+  return { pages, state: blocked ? 'BLOCKED' : unresolved ? 'PARTIALLY_COMPOSED' : 'FULLY_COMPOSED' };
 }
 
 function composedStoryFromCandidate(candidate) {
@@ -131,4 +157,4 @@ async function composePagePlan({ pagePlan, sourcesById, newspaper, askForJson, m
   if (state === 'UNCHANGED_SOURCE_INSUFFICIENT') journal?.event('PAGE_UNCHANGED', { page: pagePlan.page.page_number });
   return { state, candidates: active, generatedCandidates: candidates, activeCandidates: active, rejectedCandidates: candidates.filter((candidate) => !active.includes(candidate)), outcomes, before, baselinePreflight, projectedQuality, preflight, reloaded, reloadedPreflight, reloadedQuality, drift, serviceCalls: budget.used };
 }
-module.exports = { storyPacketFromNewsItem, eligibleEditorialFrames, fallbackRolesForSource, routeSourcesToEditionPages, buildEditionCompositionPlan, composedStoryFromCandidate, projectComposedStoryIntoSection, persistenceStory, composePagePlan, roleForRung };
+module.exports = { storyPacketFromNewsItem, eligibleEditorialFrames, fallbackRolesForSource, routeSourcesToEditionPages, buildEditionCompositionPlan, summarizeEditionComposition, composedStoryFromCandidate, projectComposedStoryIntoSection, persistenceStory, composePagePlan, roleForRung };

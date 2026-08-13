@@ -183,7 +183,6 @@ async function askForJson(prompt, schema, options = {}) {
 
   const tier = tiers.tierFor(options.tier);
   const attempts = [];
-  let exhausted = false;
   // Why the first choice did not write, kept so a desk that gets the
   // understudy's copy is told which of the several possible reasons it was.
   const failures = [];
@@ -223,7 +222,6 @@ async function askForJson(prompt, schema, options = {}) {
     // at again in the next half second, and asking twice is latency the desk
     // waits through and, on a metered account, a second charge.
     if (result.outputExhausted || conditions.isRetryable(result.condition)) {
-      exhausted = true;
       attempts.push(`${provider.name}: ${result.error}`);
       const wasRetryable = result.outputExhausted || conditions.isRetryable(result.condition);
       if (!wasRetryable) noteFailure(provider, result);
@@ -278,6 +276,7 @@ async function askForJson(prompt, schema, options = {}) {
       };
     }
 
+    if (result.outputExhausted && !result.condition) result.condition = 'outputExhausted';
     noteFailure(provider, result);
     attempts.push(result.error);
   }
@@ -286,12 +285,13 @@ async function askForJson(prompt, schema, options = {}) {
   // budget, it says what to DO - the two things a sub-editor can actually do -
   // rather than naming an environment variable. The provider's own words are
   // kept in `attempts` for whoever is looking after the newsroom.
-  if (exhausted) {
+  const finalConditions = failures.map((failure) => failure.condition);
+  const allFinalFailuresOutputExhausted = finalConditions.length > 0 && finalConditions.every((condition) => condition === 'outputExhausted');
+  if (allFinalFailuresOutputExhausted) {
     return {
       error: 'AI could not complete this request within the current output limit. '
         + 'Try Basic or Plus, or generate the story one section at a time.',
-      outputExhausted: true,
-      conditions: failures.map((f) => f.condition),
+      outputExhausted: true, condition: 'outputExhausted', conditions: finalConditions,
       attempts,
     };
   }
@@ -304,7 +304,7 @@ async function askForJson(prompt, schema, options = {}) {
     error: failures.length
       ? `${failures.map((f) => f.desk).join(' ')} Nothing could be written just now.`
       : attempts.join(' | '),
-    conditions: failures.map((f) => f.condition),
+    conditions: finalConditions,
     attempts,
   };
 }

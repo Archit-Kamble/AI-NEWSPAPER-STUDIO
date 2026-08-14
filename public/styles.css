@@ -940,6 +940,13 @@ body {
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
+
+  /* A story's printable content is a hard paint boundary in BOTH axes.
+     clip-path reinforces overflow:hidden even while the selected outer block
+     temporarily exposes its resize handles. Overset remains measured by the
+     flow engine/preflight; it simply cannot paint outside the frame. */
+  clip-path: inset(0);
+
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -4457,6 +4464,7 @@ body.print-view .page-imprint {
   top: 0;
   transform-origin: 0 0;
   overflow: hidden;
+  clip-path: inset(0);
   pointer-events: none;
   box-sizing: border-box;
   z-index: 0;
@@ -4504,7 +4512,12 @@ body.print-view .page-imprint {
   z-index: 2;
 }
 .frame-body {
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: text;
+  overflow: hidden;
+}
+.frame-body:hover {
+  background: rgba(196, 30, 58, 0.035);
 }
 .frame-pictures {
   z-index: 3;

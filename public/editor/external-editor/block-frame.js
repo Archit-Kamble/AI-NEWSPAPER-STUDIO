@@ -124,7 +124,8 @@ export function blockFrameMarkup() {
              of the words; the canonical layer above is the only visual copy. -->
         <div class="frame frame-headline" id="edHeadlineFrame" tabindex="-1" title="Double-click to edit the headline"></div>
         <div class="frame frame-subheading" id="edSubheadingFrame" tabindex="-1" title="Double-click to edit the subheading"></div>
-        <div class="frame frame-body" id="edBodyFrame" aria-hidden="true"></div>
+        <div class="frame frame-body" id="edBodyFrame" tabindex="-1"
+             title="Double-click to edit body copy"></div>
 
         <span class="frame-selection-label" id="edSelectionLabel" hidden></span>
       </div>
@@ -452,6 +453,7 @@ function beginInlineTextEdit(part) {
 function bindTextFrames() {
   const headline = document.getElementById("edHeadlineFrame");
   const subheading = document.getElementById("edSubheadingFrame");
+  const body = document.getElementById("edBodyFrame");
 
   headline?.addEventListener("click", () => hooks.onSelectPart?.("headline"));
   headline?.addEventListener("dblclick", (event) => {
@@ -463,6 +465,22 @@ function bindTextFrames() {
   subheading?.addEventListener("dblclick", (event) => {
     event.preventDefault();
     beginInlineTextEdit("subheading");
+  });
+
+  body?.addEventListener("click", () => hooks.onSelectPart?.("body"));
+  body?.addEventListener("dblclick", (event) => {
+    event.preventDefault();
+    hooks.onSelectPart?.("body");
+
+    // The printed body is many absolutely-positioned poured runs. Making each
+    // run contenteditable would create a second composition engine and destroy
+    // canonical flow. Double-clicking the visible body therefore activates the
+    // existing rich-text editing surface while leaving the canonical page
+    // visible above as the authoritative result.
+    const writing = document.getElementById("edWritingSurface");
+    const editor = writing?.querySelector(".ql-editor");
+    writing?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    queueMicrotask(() => editor?.focus());
   });
 
   document.getElementById("edFramePage")?.addEventListener("click", (event) => {

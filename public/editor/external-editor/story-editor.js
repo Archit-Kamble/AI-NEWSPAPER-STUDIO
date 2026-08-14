@@ -36,6 +36,50 @@ const BODY_SIZES = [7, 8, 8.5, 9, 9.5, 10, 11, 12, 13, 14, 16, 18, 20, 24];
 let budgetOf = null;
 let escapeBound = false;
 
+// The size control follows the text object selected on the canonical page.
+// These are genuinely separate persisted fields. Other typography such as
+// family/weight/alignment is still block-wide in the current page_sections
+// model and must not be falsely presented as object-specific.
+let selectedTextPart = "body";
+
+const TEXT_SIZE_FIELD = {
+  headline: "headlineFontPx",
+  subheading: "subheadingFontPx",
+  body: "bodyFontPx",
+  block: "bodyFontPx",
+};
+
+const TEXT_SIZE_LABEL = {
+  headline: "Headline size",
+  subheading: "Subheadline size",
+  body: "Body size",
+  block: "Body size",
+};
+
+const DISPLAY_SIZES = [
+  7, 8, 8.5, 9, 9.5, 10, 11, 12, 13, 14, 16, 18, 20, 24,
+  28, 32, 36, 40, 48, 56, 64, 72, 84, 96, 110, 120, 140,
+];
+
+function textSizeField(part = selectedTextPart) {
+  return TEXT_SIZE_FIELD[part] || "bodyFontPx";
+}
+
+function textSizeValue(view, part = selectedTextPart) {
+  return Number(view?.[textSizeField(part)]) || 0;
+}
+
+function textSizeOptions(current) {
+  const value = Number(current) || 0;
+  const sizes = DISPLAY_SIZES.includes(value) || !value
+    ? DISPLAY_SIZES
+    : [...DISPLAY_SIZES, value].sort((a, b) => a - b);
+
+  return sizes
+    .map((size) => `<option value="${size}"${size === value ? " selected" : ""}>${size} px</option>`)
+    .join("");
+}
+
 function options(list, current) {
   return list
     .map((o) => `<option value="${escapeAttribute(o.value)}"${String(current) === String(o.value) ? " selected" : ""}>${escapeAttribute(o.label)}</option>`)
@@ -43,9 +87,10 @@ function options(list, current) {
 }
 
 function sizeOptions(current) {
-  const value = Number(current) || 0;
-  const sizes = BODY_SIZES.includes(value) || !value ? BODY_SIZES : [...BODY_SIZES, value].sort((a, b) => a - b);
-  return sizes.map((size) => `<option value="${size}"${size === value ? " selected" : ""}>${size} px</option>`).join("");
+  // Kept as the initial body-size spelling used while the editor markup is
+  // first mounted. refreshBlockControls() immediately switches this same
+  // control to whichever text object is selected.
+  return textSizeOptions(current);
 }
 
 /**
@@ -205,8 +250,10 @@ export function bindStoryEditor({ onPatch, getBudget, getSection, getView, getIm
   // The block's own type. Same fields the Typography panel writes.
   document.getElementById("edStoryFont")?.addEventListener("change", (event) =>
     onPatch?.({ fontFamily: event.target.value }, "story-toolbar"));
-  document.getElementById("edStorySize")?.addEventListener("change", (event) =>
-    onPatch?.({ bodyFontPx: Number(event.target.value) }, "story-toolbar"));
+  document.getElementById("edStorySize")?.addEventListener("change", (event) => {
+    const field = textSizeField();
+    onPatch?.({ [field]: Number(event.target.value) }, "story-toolbar");
+  });
 
   toolbar?.addEventListener("click", (event) => {
     const align = event.target.closest("[data-align]");
@@ -241,7 +288,15 @@ export function bindStoryEditor({ onPatch, getBudget, getSection, getView, getIm
       onPatchImage,
       onRemoveImage,
       onSelectImage,
-      onSelectPart,
+      onSelectPart: (part) => {
+        if (part === "headline" || part === "subheading" || part === "body") {
+          selectedTextPart = part;
+        }
+        onSelectPart?.(part);
+
+        const currentView = getView?.();
+        if (currentView) refreshBlockControls(currentView, part);
+      },
       onToggleImageSelection,
     }).then(refreshStoryCount);
   }
@@ -268,6 +323,10 @@ export function refreshStoryPictures(images) {
 }
 
 export function refreshStoryEditor(view, section, images, source, selectedPart, selectedImageIds) {
+  if (selectedPart === "headline" || selectedPart === "subheading" || selectedPart === "body") {
+    selectedTextPart = selectedPart;
+  }
+
   const headline = document.getElementById("edStoryHeadline");
   const subheading = document.getElementById("edStorySubheading");
   if (headline && document.activeElement !== headline) headline.value = plainText(view.headline);
@@ -278,23 +337,29 @@ export function refreshStoryEditor(view, section, images, source, selectedPart, 
   refreshStoryCount();
   refreshFieldCounters(view);
   refreshStoryStats(view);
-  refreshBlockControls(view);
+  refreshBlockControls(view, selectedPart);
 }
 
-/** Keeps the toolbar's block controls in step with the Typography panel. */
-function refreshBlockControls(view) {
+/** Keeps the toolbar's controls in step with the object selected on the
+ * canonical newspaper page. */
+function refreshBlockControls(view, part = selectedTextPart) {
+  if (part === "headline" || part === "subheading" || part === "body") {
+    selectedTextPart = part;
+  }
+
   const font = document.getElementById("edStoryFont");
   if (font && document.activeElement !== font) font.value = view.fontFamily || "";
 
   const size = document.getElementById("edStorySize");
   if (size && document.activeElement !== size) {
-    const wanted = String(Number(view.bodyFontPx));
-    // A derived size is fractional and may not be on the list; add it rather
-    // than let the dropdown fall back and silently reset the block's type.
-    if (![...size.options].some((option) => option.value === wanted)) {
-      size.add(new Option(`${wanted} px`, wanted));
-    }
-    size.value = wanted;
+    const value = textSizeValue(view);
+    size.innerHTML = textSizeOptions(value);
+    size.value = String(value);
+    size.title = `${TEXT_SIZE_LABEL[selectedTextPart] || "Body size"} — selected object`;
+    size.setAttribute(
+      "aria-label",
+      `${TEXT_SIZE_LABEL[selectedTextPart] || "Body size"} for selected object`,
+    );
   }
   document.querySelectorAll("#edStoryToolbar [data-align]").forEach((control) => {
     control.classList.toggle("active", String(view.textAlign) === control.dataset.align);

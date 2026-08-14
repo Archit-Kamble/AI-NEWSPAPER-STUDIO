@@ -335,41 +335,139 @@ function layoutTextFrames() {
   }
 }
 
-/**
- * A single click targets the headline or deck frame - a selection, the way
- * clicking an object in a page-layout tool does, without jumping the desk's
- * focus (and the page's scroll) to a field elsewhere. A double click is what
- * starts typing: it focuses the real input that holds the words (still an
- * ordinary <input>, further down the page - see story-editor.js), because
- * that is where the character-limit counters and IME already live, and
- * duplicating a second live text surface just for this frame would be the
- * exact kind of second implementation CLAUDE.md warns against.
- */
+// Direct headline/deck editing happens on the SAME canonical newspaper
+// renderer used by Layout. The separate plain inputs remain only as the
+// existing state/persistence path and counter owner.
+let inlineTextEdit = null;
+
+const INLINE_TEXT = {
+  headline: {
+    selector: ".section-headline",
+    inputId: "edStoryHeadline",
+    frameId: "edHeadlineFrame",
+    label: "Edit headline",
+  },
+  subheading: {
+    selector: ".section-subheading",
+    inputId: "edStorySubheading",
+    frameId: "edSubheadingFrame",
+    label: "Edit subheading",
+  },
+};
+
+function finishInlineTextEdit({ cancel = false } = {}) {
+  const edit = inlineTextEdit;
+  if (!edit) return;
+
+  inlineTextEdit = null;
+
+  const { element, config } = edit;
+  const frame = document.getElementById(config.frameId);
+
+  frame?.classList.remove("is-inline-editing");
+
+  if (!element?.isConnected) return;
+
+  const value = String(element.textContent || "")
+    .replace(/\s*\n+\s*/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .trim();
+
+  element.removeAttribute("contenteditable");
+  element.removeAttribute("role");
+  element.removeAttribute("aria-label");
+  element.classList.remove("is-inline-text-editor");
+  element.style.pointerEvents = "";
+
+  if (cancel) {
+    layoutTextFrames();
+    return;
+  }
+
+  const input = document.getElementById(config.inputId);
+  if (!input) {
+    layoutTextFrames();
+    return;
+  }
+
+  // Reuse the existing story-editor input event. This keeps one state,
+  // counters and persistence path instead of inventing a second save path.
+  input.value = value;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function beginInlineTextEdit(part) {
+  finishInlineTextEdit();
+
+  const config = INLINE_TEXT[part];
+  if (!config) return;
+
+  hooks.onSelectPart?.(part);
+
+  // Selection can refresh the canonical renderer, so resolve its real text
+  // node after the selection update has completed.
+  queueMicrotask(() => {
+    const canonical = document.getElementById("edCanonicalContent");
+    const element = canonical?.querySelector(config.selector);
+    const frame = document.getElementById(config.frameId);
+    if (!element) return;
+
+    inlineTextEdit = { element, config };
+
+    frame?.classList.add("is-inline-editing");
+
+    element.classList.add("is-inline-text-editor");
+    element.setAttribute("contenteditable", "plaintext-only");
+    element.setAttribute("role", "textbox");
+    element.setAttribute("aria-label", config.label);
+    element.style.pointerEvents = "auto";
+
+    element.addEventListener(
+      "blur",
+      () => finishInlineTextEdit(),
+      { once: true },
+    );
+
+    element.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        element.blur();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        finishInlineTextEdit({ cancel: true });
+      }
+    });
+
+    element.focus();
+
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    range.collapse(false);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  });
+}
+
 function bindTextFrames() {
   const headline = document.getElementById("edHeadlineFrame");
   const subheading = document.getElementById("edSubheadingFrame");
 
   headline?.addEventListener("click", () => hooks.onSelectPart?.("headline"));
-  headline?.addEventListener("dblclick", () => {
-    hooks.onSelectPart?.("headline");
-    document.getElementById("edStoryHeadline")?.focus();
+  headline?.addEventListener("dblclick", (event) => {
+    event.preventDefault();
+    beginInlineTextEdit("headline");
   });
 
   subheading?.addEventListener("click", () => hooks.onSelectPart?.("subheading"));
-  subheading?.addEventListener("dblclick", () => {
-    hooks.onSelectPart?.("subheading");
-    document.getElementById("edStorySubheading")?.focus();
+  subheading?.addEventListener("dblclick", (event) => {
+    event.preventDefault();
+    beginInlineTextEdit("subheading");
   });
 
-  // Empty room on the page - inside the margins, outside every frame -
-  // targets the block as a whole. A click that landed on a frame or a
-  // picture already handled itself and never reaches here as a bubbled
-  // event on the page's own background, so checking target === currentTarget
-  // (rather than stopping propagation everywhere else) is enough.
   document.getElementById("edFramePage")?.addEventListener("click", (event) => {
     if (event.target === event.currentTarget) hooks.onSelectPart?.("block");
   });
-
 }
 
 // ---------------------------------------------------------- picture frames ---

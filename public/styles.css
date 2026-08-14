@@ -3384,12 +3384,27 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   position: absolute;
   white-space: nowrap;
   color: #1a1a1a;
+  max-width: 100%;
+
+  /* Never let a poured run paint outside its horizontal newspaper cell.
+     Extend the vertical clipping area so Devanagari vowel marks are not
+     cropped above/below the line box. */
+  clip-path: inset(-0.45em 0 -0.45em 0);
 }
 /* The headline and deck bands, set as wrapped type across the measure rather
    than poured cell by cell. */
 .section-flowed-band {
   white-space: normal;
   overflow: hidden;
+  min-width: 0;
+  max-width: 100%;
+}
+.section-flowed-band .section-headline,
+.section-flowed-band .section-subheading {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 .section-flowed-band .section-headline {
   line-height: var(--devanagari-line);
@@ -4450,6 +4465,37 @@ body.print-view .page-imprint {
   width: 100%;
   height: 100%;
   box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Direct editing is performed on the canonical headline/deck itself.
+   The transparent interaction frame steps aside while typing. */
+.frame-headline.is-inline-editing,
+.frame-subheading.is-inline-editing {
+  pointer-events: none;
+  background: transparent;
+}
+
+.frame-canonical-content .is-inline-text-editor {
+  pointer-events: auto;
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
+  caret-color: #111;
+  outline: 1px dashed rgba(196, 30, 58, 0.72);
+  outline-offset: -1px;
+}
+
+.frame-canonical-content .is-inline-text-editor:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* The physical story frame is always a hard paint boundary. Flow/preflight
+   still reports overset separately; this prevents hidden copy from escaping
+   visually in either Layout or the enlarged Editor. */
+.newspaper-section,
+.frame-canonical-content {
   overflow: hidden;
 }
 .frame-headline,

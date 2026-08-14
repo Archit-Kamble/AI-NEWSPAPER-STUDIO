@@ -1146,8 +1146,17 @@ async function planComposition() {
   const aiMode = String(newspaper.publication_date || '').startsWith('2099-') ? 'codex-local' : 'production';
   const button = document.getElementById('tbAI'); if (button) button.disabled = true;
   try {
-    const response = await fetch(`/api/newspapers/${newspaper.id}/composition/plan`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ aiMode, maxServiceCalls: aiMode === 'codex-local' ? 64 : 32 }) });
-    const plan = await response.json(); if (!plan.ok) return showNotice(plan.code || plan.error || 'Composition plan failed.');
+    // No maxServiceCalls here: the provider-call budget is demand-derived
+    // server-side (compositionCallBudget.service.js) from the plan's actual
+    // assignment count, not a number this file would have to keep in sync
+    // with the real editorial demand.
+    const response = await fetch(`/api/newspapers/${newspaper.id}/composition/plan`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ aiMode }) });
+    const plan = await response.json();
+    if (!plan.ok) {
+      const budget = plan.callBudget;
+      const detail = budget ? ` (${budget.plannedAssignments} planned stories need at least ${budget.minimumProviderCalls} provider calls; requested cap was ${budget.requestedProviderCallCap}.)` : '';
+      return showNotice(`${plan.code || plan.error || 'Composition plan failed.'}${detail}`);
+    }
     renderCompositionPlan(plan, aiMode);
   } catch (error) { showNotice(`Composition plan failed: ${error.message}`); } finally { if (button) button.disabled = false; }
 }
@@ -1158,12 +1167,18 @@ function renderCompositionPlan(plan, aiMode) {
   const imageSummary = `${plan.expected.resolvedImages}/${plan.expected.requiredImages} required images resolved · ${plan.expected.plannedImages} source placements planned${plan.expected.unresolvedImageDemand ? ` · ${plan.expected.unresolvedImageDemand} unresolved` : ''}`;
   const content = plan.contentSummary; const auxiliary = content
     ? `Standing features ${content.standingFeatures.ready}/${content.standingFeatures.required} ready · External adverts ${content.adverts.ready}/${content.adverts.required} present · Utility ${content.utility.ready}/${content.utility.required} ready · Publication content ${content.publicationContentState}` : '';
-  panel.innerHTML = `<header><strong>AI composition plan</strong><button type="button" id="compositionClose" aria-label="Close">×</button></header><p>${escapeHtml(plan.writerTransport)} · ${plan.sourceCount} approved sources · snapshot ${escapeHtml(plan.sourceSnapshotHash.slice(0, 12))}</p><p>Editorial composition: ${plan.expected.plannedFrames}/${plan.expected.requiredFrames} planned · coverage ${(plan.expected.editorialCoverageRatio * 100).toFixed(0)}% · area ${(plan.expected.weightedEditorialCoverageRatio * 100).toFixed(0)}%</p><p>${escapeHtml(imageSummary)}</p>${auxiliary ? `<p>${escapeHtml(auxiliary)}</p>` : ''}<ul>${rows}</ul><button type="button" class="btn-primary" id="compositionApply">Apply AI Composition</button><p class="composition-note">Apply writes text and source images in one edition transaction using ${escapeHtml(plan.writerTransport)}. Confirmed plan only; changed newsroom copy, image files, or page placement is rejected.</p>`;
+  const budget = plan.callBudget; const budgetLine = budget
+    ? `Provider-call budget: ${budget.selectedProviderCallCap} (minimum for ${budget.plannedAssignments} planned stories: ${budget.minimumProviderCalls} · exact-fit request ceiling: ${budget.exactFitRequestCeiling}${budget.risk === 'TIGHT' ? ' · TIGHT: not every story is guaranteed its repair attempt' : ''}). Provider retries/fallbacks also spend this cap.` : '';
+  panel.innerHTML = `<header><strong>AI composition plan</strong><button type="button" id="compositionClose" aria-label="Close">×</button></header><p>${escapeHtml(plan.writerTransport)} · ${plan.sourceCount} approved sources · snapshot ${escapeHtml(plan.sourceSnapshotHash.slice(0, 12))}</p><p>Editorial composition: ${plan.expected.plannedFrames}/${plan.expected.requiredFrames} planned · coverage ${(plan.expected.editorialCoverageRatio * 100).toFixed(0)}% · area ${(plan.expected.weightedEditorialCoverageRatio * 100).toFixed(0)}%</p><p>${escapeHtml(imageSummary)}</p>${auxiliary ? `<p>${escapeHtml(auxiliary)}</p>` : ''}${budgetLine ? `<p>${escapeHtml(budgetLine)}</p>` : ''}<ul>${rows}</ul><button type="button" class="btn-primary" id="compositionApply">Apply AI Composition</button><p class="composition-note">Apply writes text and source images in one edition transaction using ${escapeHtml(plan.writerTransport)}. Confirmed plan only; changed newsroom copy, image files, or page placement is rejected.</p>`;
   document.body.appendChild(panel); document.getElementById('compositionClose').addEventListener('click', closeOnEscape(() => panel.remove()));
   document.getElementById('compositionApply').addEventListener('click', async () => {
-    const confirm = window.confirm(`Apply AI composition to ${store.getState().newspaper.publication_date}?\n${plan.expected.plannedFrames} planned frames, ${plan.expected.unresolvedDemand} unresolved, ${plan.expected.resolvedImages}/${plan.expected.requiredImages} required images resolved, ${plan.writerTransport}.`); if (!confirm) return;
+    const confirm = window.confirm(`Apply AI composition to ${store.getState().newspaper.publication_date}?\n${plan.expected.plannedFrames} planned frames, ${plan.expected.unresolvedDemand} unresolved, ${plan.expected.resolvedImages}/${plan.expected.requiredImages} required images resolved, ${plan.writerTransport}, provider-call cap ${budget?.selectedProviderCallCap ?? 'unknown'}.`); if (!confirm) return;
     const apply = document.getElementById('compositionApply'); apply.disabled = true; apply.textContent = 'Composing…';
-    try { const response = await fetch(`/api/newspapers/${plan.editionId}/composition/apply`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planToken: plan.planToken, aiMode, maxServiceCalls: aiMode === 'codex-local' ? 64 : 32 }) }); const result = await response.json(); if (!result.ok) { renderCompositionResult(result); return; } await renderWorkspace(plan.editionId); renderCompositionResult(result); }
+    // No maxServiceCalls sent here either - Apply consumes the exact cap the
+    // desk already reviewed and confirmed above, bound into the plan token
+    // server-side. Resupplying a number here would just be a second place
+    // this file could drift from what was actually reviewed.
+    try { const response = await fetch(`/api/newspapers/${plan.editionId}/composition/apply`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planToken: plan.planToken, aiMode }) }); const result = await response.json(); if (!result.ok) { renderCompositionResult(result); return; } await renderWorkspace(plan.editionId); renderCompositionResult(result); }
     catch (error) { showNotice(`Composition failed: ${error.message}`); } finally { apply.disabled = false; apply.textContent = 'Apply AI Composition'; }
   });
 }
@@ -1176,7 +1191,10 @@ function renderCompositionResult(result) {
   const review = result.ok && result.review ? `<p><strong>Composition complete.</strong> ${result.review.required} blocks require editorial review. <strong>Not ready for press.</strong></p>` : '';
   const summary = result.contentSummary; const content = summary
     ? `<p>Editorial composition: <strong>${escapeHtml(result.editorialCompositionState || result.state)}</strong> · Publication content: <strong>${escapeHtml(result.publicationContentState || 'UNKNOWN')}</strong></p><p>Editorial ${summary.editorialDemand.present}/${summary.editorialDemand.required} complete · Image companions ${summary.imagePackages.resolved}/${summary.imagePackages.required} · Standing features ${summary.standingFeatures.ready}/${summary.standingFeatures.required} · External adverts ${summary.adverts.ready}/${summary.adverts.required} · Utility ${summary.utility.ready}/${summary.utility.required}</p>` : '';
-  panel.innerHTML = `<header><strong>AI composition — ${escapeHtml(result.editorialCompositionState || result.state)}</strong><button type="button" id="compositionClose" aria-label="Close">×</button></header>${review}${content}<p>${escapeHtml(result.writerTransport || 'composition')} · ${result.writerCalls || 0} calls${duration}</p><p>${escapeHtml(safety)}</p>${imageCoverage ? `<p>${escapeHtml(imageCoverage)}</p>` : ''}${coverage ? `<p>${coverage}</p>` : ''}<ul>${(result.pages || []).map((page) => `<li><strong>p${page.page}</strong> · ${escapeHtml(page.state)}${page.error ? ` · ${escapeHtml(page.error)}` : ''}</li>`).join('')}</ul>`;
+  const breakdown = result.writerCallBreakdown ? Object.entries(result.writerCallBreakdown.byProvider || {}).map(([provider, count]) => `${provider} ${count}`).join(' · ') : '';
+  const callBudgetLine = Number.isFinite(result.providerCallCap)
+    ? `<p>Provider calls: ${result.writerCalls || 0} of ${result.providerCallCap} (${result.providerCallsRemaining ?? 0} remaining)${breakdown ? ` · ${escapeHtml(breakdown)}` : ''}</p>` : '';
+  panel.innerHTML = `<header><strong>AI composition — ${escapeHtml(result.editorialCompositionState || result.state)}</strong><button type="button" id="compositionClose" aria-label="Close">×</button></header>${review}${content}<p>${escapeHtml(result.writerTransport || 'composition')} · ${result.writerCalls || 0} calls${duration}</p>${callBudgetLine}<p>${escapeHtml(safety)}</p>${imageCoverage ? `<p>${escapeHtml(imageCoverage)}</p>` : ''}${coverage ? `<p>${coverage}</p>` : ''}<ul>${(result.pages || []).map((page) => `<li><strong>p${page.page}</strong> · ${escapeHtml(page.state)}${page.error ? ` · ${escapeHtml(page.error)}` : ''}</li>`).join('')}</ul>`;
   document.body.appendChild(panel); document.getElementById('compositionClose').addEventListener('click', closeOnEscape(() => panel.remove())); showNotice(`AI composition ${result.state}: ${result.writerCalls} ${result.writerTransport} calls.`);
 }
 

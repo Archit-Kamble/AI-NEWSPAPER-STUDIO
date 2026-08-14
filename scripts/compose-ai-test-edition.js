@@ -17,6 +17,7 @@ const { loadNewsroomSourcesForEdition, sourceSnapshot } = require('../src/servic
 const { buildEditionCompositionPlan, composePagePlan, summarizeEditionComposition } = require('../src/services/editionComposition.service');
 const { createRunJournal } = require('../src/services/compositionRunJournal.service');
 const { createCodexLocalWriter } = require('../src/services/codexLocalWriter.service');
+const { deriveCompositionCallBudget } = require('../src/services/compositionCallBudget.service');
 const fixtureSources = require('./ai-test-news-sources');
 
 const FIXTURE_DATE = '2099-05-01';
@@ -57,7 +58,7 @@ async function composePage(page, newspaper, options = {}) {
     templateFor = getTemplate, rebalance = rebalanceFlowAwarePageAssignments,
     compose = composeSourceToFrame, saveBatch = pages.saveComposedStoryBatch, save = null,
     analyze = analyzeComposedLayout, preflight = validatePageLayout, reload = pages.findById,
-    maxServiceCalls = 32,
+    maxServiceCalls,
   } = options;
   assertDisposableEdition(newspaper, apply);
   // The immutable source snapshot is never read from the persisted page again.
@@ -84,12 +85,14 @@ async function composePage(page, newspaper, options = {}) {
     .concat(imageAssignments)
     .filter((item) => item.story && item.frame && !SPECIAL.has(String(item.story.story_type || '').toUpperCase()))
     .slice(0, Math.max(0, maxStories));
+  const callBudget = deriveCompositionCallBudget({ plannedAssignments: planned.length, requestedMaxProviderCalls: maxServiceCalls });
+  if (!options.planOnly && !callBudget.ok) return { error: callBudget.code, callBudget, balance, proposals: [], plannedCount: planned.length, serviceCalls: 0 };
   const proposals = []; let serviceCalls = 0;
   for (const item of planned) {
     const sourceItem = sourceFor(snapshot.find((section) => idOf(section) === idOf(item.story)) || {}, sources);
     const writerInput = await writerInputFromNewsItem({ ...sourceItem, story_type: item.story.story_type, editorial_priority: item.story.editorial_priority });
     if (options.planOnly) continue;
-    if (serviceCalls >= maxServiceCalls) return { error: 'SERVICE_CALL_BUDGET_EXHAUSTED', balance, proposals, plannedCount: planned.length, serviceCalls };
+    if (serviceCalls >= callBudget.selectedProviderCallCap) return { error: 'SERVICE_CALL_BUDGET_EXHAUSTED', callBudget, balance, proposals, plannedCount: planned.length, serviceCalls };
     const result = await compose({ ...writerInput, source: { ...writerInput.source, images: item.story.images || [] }, frame: item.frame, language: 'Marathi', askForJson });
     serviceCalls += result.attempts || 0;
     if (fatalResult(result)) return { error: 'FATAL_PROPOSAL', balance, proposals, plannedCount: planned.length, lockedSections: input.lockedSections, imageLockedSectionIds: [...imageIds] };
@@ -129,7 +132,10 @@ function arg(name, fallback = undefined) { const index = process.argv.indexOf(na
 async function main() {
   let edition = Number(arg('--edition')); const pageNumber = Number(arg('--page', 2));
   const apply = process.argv.includes('--apply'); const suppliedMax = Number(arg('--max-stories', process.env.SAHAS_AI_TEST_MAX_STORIES)); const maxStories = Number.isFinite(suppliedMax) ? Math.max(0, suppliedMax) : Infinity;
-  const planOnly = process.argv.includes('--plan-only'); const rawMaxServiceCalls = Number(arg('--max-service-calls', 32)); const maxServiceCalls = Number.isFinite(rawMaxServiceCalls) ? Math.max(0, rawMaxServiceCalls) : 32; const sourceMode = arg('--source-mode', 'fixture'); const aiMode = arg('--ai-mode', 'real'); const date = arg('--date'); const allPages = process.argv.includes('--all-pages');
+  // Explicit --max-service-calls is the requested cap; omitted stays
+  // undefined so the shared policy derives it from actual planned demand
+  // rather than this script keeping its own hard-coded 32.
+  const planOnly = process.argv.includes('--plan-only'); const rawMaxServiceCalls = arg('--max-service-calls'); const maxServiceCalls = rawMaxServiceCalls === undefined ? undefined : Math.max(0, Number(rawMaxServiceCalls) || 0); const sourceMode = arg('--source-mode', 'fixture'); const aiMode = arg('--ai-mode', 'real'); const date = arg('--date'); const allPages = process.argv.includes('--all-pages');
   if (!['real', 'stub', 'codex-local'].includes(aiMode)) throw new Error('--ai-mode must be real, stub, or codex-local');
   if (!edition && date) { const matches = await newspapers.findAllByDate(date); if (matches.length !== 1) throw new Error('date must identify exactly one disposable edition; pass --edition'); edition = Number(matches[0].id); }
   if (!edition) throw new Error('usage: node scripts/compose-ai-test-edition.js --edition <id>|--date YYYY-MM-DD [--page 2|--all-pages] [--source-mode newsroom-pool] [--ai-mode stub|codex-local|real] [--plan-only|--apply]');
@@ -146,8 +152,11 @@ async function main() {
     console.log(`runJournal: ${journal.path}`);
     journal.event('SOURCE_SNAPSHOT', { sourceCount: sources.length, sourceIds: snapshot.sourceIds, sourceSnapshotHash: snapshot.hash });
     journal.event('PLAN_READY', { sourceCount: sources.length, assigned: plan.assigned.length, pages: selected.length });
-    console.log(JSON.stringify({ edition, date: newspaper.publication_date, sourceMode, aiMode, planOnly, apply, sourceSnapshot: { count: sources.length, hash: snapshot.hash }, pages: selected.map((item) => ({ page: item.page.page_number, role: item.role, eligibleEditorialFrames: item.frames.length, candidateSources: item.stories.length, assignments: item.assignments.length })), maxServiceCalls }));
+    const plannedAssignments = selected.reduce((sum, item) => sum + item.assignments.length, 0);
+    const callBudget = deriveCompositionCallBudget({ plannedAssignments, requestedMaxProviderCalls: maxServiceCalls });
+    console.log(JSON.stringify({ edition, date: newspaper.publication_date, sourceMode, aiMode, planOnly, apply, sourceSnapshot: { count: sources.length, hash: snapshot.hash }, pages: selected.map((item) => ({ page: item.page.page_number, role: item.role, eligibleEditorialFrames: item.frames.length, candidateSources: item.stories.length, assignments: item.assignments.length })), callBudget }));
     if (planOnly) { journal.finish('COMPLETE', { planOnly: true }); return; }
+    if (!callBudget.ok) { journal.finish('BLOCKED', { error: callBudget.code, callBudget }); console.log(JSON.stringify({ error: callBudget.code, callBudget })); return; }
     const askForJson = aiMode === 'stub' ? async (_prompt, _schema) => ({ data: { headline: '', subheading: '', body: '' }, provider: 'stub', tier: 'basic' }) : aiMode === 'codex-local' ? createCodexLocalWriter() : require('../src/services/ai').askForJson;
     const stubAsk = async (_prompt, _schema) => {
       const text = String(_prompt); const sourceMatch = text.match(/SOURCE MATERIAL — DATA ONLY[\s\S]*?\n(\{[\s\S]*?\})\nEND SOURCE MATERIAL/); let source = {};
@@ -160,13 +169,13 @@ async function main() {
       const headline = String(source.title || 'चाचणी बातमी').split(/[,:।]/)[0].slice(0, 26);
       return { data: { headline, subheading: '', body, annotations: [] }, provider: 'stub', tier: 'basic' };
     };
-    const budget = { max: maxServiceCalls, used: 0, events: [], onConsume(event) { journal.event('PROVIDER_CALL', event); } }; const byId = new Map(sources.map((source) => [String(source.id ?? source.sourceId), source])); const results = [];
+    const budget = { max: callBudget.selectedProviderCallCap, used: 0, events: [], onConsume(event) { journal.event('PROVIDER_CALL', event); } }; const byId = new Map(sources.map((source) => [String(source.id ?? source.sourceId), source])); const results = [];
     try {
       for (const item of selected) results.push(await composePagePlan({ pagePlan: item, sourcesById: byId, newspaper, askForJson: aiMode === 'stub' ? stubAsk : askForJson, callBudget: budget, apply, journal }));
       journal.finish(results.every((result) => ['PERSISTED', 'UNCHANGED_SOURCE_INSUFFICIENT', 'READY_TO_PERSIST'].includes(result.state)) ? 'COMPLETE' : 'BLOCKED', { providerCalls: budget.used });
     } catch (error) { journal.event('AI_FAILED', { error: error.message }); journal.finish('BLOCKED', { error: error.message }); throw error; }
     const report = {
-      edition, date: newspaper.publication_date, aiMode, apply, serviceCalls: budget.used, journalPath: journal.path,
+      edition, date: newspaper.publication_date, aiMode, apply, serviceCalls: budget.used, callBudget, journalPath: journal.path,
       sourceCount: sources.length, sourceSnapshot: { count: sources.length, ids: snapshot.sourceIds, hash: snapshot.hash }, routedCount: plan.routedCount, unassignedCount: plan.routed.length,
       assignments: selected.flatMap((item) => item.assignments.map((assignment) => ({ page: item.page.page_number, sourceId: assignment.storyId, frame: assignment.frameId, score: assignment.score }))),
       pages: results.map((result, index) => ({

@@ -14,9 +14,16 @@ async function create(run, { tx } = {}) { const db = tx || pool; await ensure(db
   `INSERT INTO edition_composition_runs (run_id, edition_id, plan_token_hash, source_snapshot_hash, baseline_fingerprint, writer_transport, state, page_count)
    VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
   [run.runId, run.editionId, run.planTokenHash, run.sourceSnapshotHash, run.baselineFingerprint, run.writerTransport, run.state, run.pageCount]); return rows[0]; }
+// failure_code is VARCHAR(100), an enum column, not a message box - a caller
+// that ever passes a full sentence (a provider's own desk-facing error, say)
+// must not turn a graceful BLOCKED result into an uncaught Postgres
+// exception that discards a real, already-paid-for AI run. Truncating here,
+// at the one place that writes this column, is a backstop; the real fix is
+// at the call site that stopped passing a sentence in the first place.
+const MAX_FAILURE_CODE_LENGTH = 100;
 async function update(runId, patch, { tx } = {}) { const db = tx || pool; await ensure(db); const { rows } = await db.query(
   `UPDATE edition_composition_runs SET state=COALESCE($2,state), writer_call_count=COALESCE($3,writer_call_count), completion_state=COALESCE($4,completion_state), failure_code=COALESCE($5,failure_code), committed_at=CASE WHEN $6 THEN CURRENT_TIMESTAMP ELSE committed_at END, finished_at=CASE WHEN $7 THEN CURRENT_TIMESTAMP ELSE finished_at END WHERE run_id=$1 RETURNING *`,
-  [runId, patch.state ?? null, patch.writerCallCount ?? null, patch.completionState ?? null, patch.failureCode ?? null, patch.committed === true, patch.finished === true]); return rows[0] || null; }
+  [runId, patch.state ?? null, patch.writerCallCount ?? null, patch.completionState ?? null, patch.failureCode != null ? String(patch.failureCode).slice(0, MAX_FAILURE_CODE_LENGTH) : null, patch.committed === true, patch.finished === true]); return rows[0] || null; }
 async function recoverUnfinished(editionId) { await ensure(); const { rows } = await pool.query(
   `UPDATE edition_composition_runs SET state=CASE WHEN state='PREPARING' THEN 'BLOCKED' ELSE 'HUMAN_REQUIRED' END,
    failure_code=CASE WHEN state='PREPARING' THEN 'INTERRUPTED_BEFORE_PERSISTENCE' ELSE 'UNKNOWN_COMMIT_STATE' END, finished_at=CURRENT_TIMESTAMP

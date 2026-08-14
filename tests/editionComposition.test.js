@@ -1,9 +1,13 @@
+require('dotenv').config();
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { routeSourcesToEditionPages, storyPacketFromNewsItem, composePagePlan, projectComposedStoryIntoSection, buildEditionCompositionPlan, summarizeEditionComposition } = require('../src/services/editionComposition.service');
 const { getTemplate } = require('../src/layout/templates');
 const { normalizeNewsroomSources } = require('../src/services/newsroomSource.service');
 const { sourceSnapshot, loadNewsroomSourcesForEdition } = require('../src/services/newsroomSource.service');
+const pool = require('../src/config/db');
+const { createApp } = require('../server');
+const { newEdition, removeEdition } = require('./helpers/desk');
 
 test('frame-independent sources route deterministically by semantic page role', () => {
   const pages = [{ page_number: 1 }, { page_number: 2 }, { page_number: 3 }, { page_number: 4 }];
@@ -160,6 +164,147 @@ test('workflow fingerprints are geometry-sensitive and an active plan rejects a 
     assert.deepEqual(result, { ok: false, code: 'RUN_ALREADY_ACTIVE', runId: 'already-running' });
   } finally {
     workflow._plans.delete(token); workflow._activeRuns.delete(78);
+  }
+});
+
+// RUN_ALREADY_ACTIVE is checked before the reviewed-cap binding, so an
+// unresolvable fake editionId is fine for that one existing test above. The
+// cap-binding checks below need a REAL edition: a fake editionId also fails
+// (for an unrelated reason - material() finds no such edition) at the exact
+// same COMPOSITION_PLAN_STALE code, which would make a fake-ID test pass
+// whether or not the binding check existed at all. A real, matching Plan is
+// what actually distinguishes "rejected for a stale cap" from "rejected
+// because the edition changed underneath the token".
+test('the reviewed provider-call cap is bound into the Plan token; Apply cannot silently raise or lower it, but may omit it', async () => {
+  const workflow = require('../src/services/editionCompositionWorkflow.service');
+  const server = createApp().listen(0); const port = server.address().port; let editionId;
+  try {
+    const { newspaper, pages } = await newEdition(port, 'call-budget binding test', { pages: [[1, 'front']] });
+    editionId = newspaper.id;
+    await pool.query(
+      `INSERT INTO news_items (newspaper_id,title,description,status,story_type,editorial_priority,desired_page_role)
+       VALUES ($1,'बजेट बंधन चाचणी बातमी','ही बातमी वास्तविक वृत्त पुरवठा साखळीतून पुरवली गेली आहे, त्यामुळे रचना खरी मागणी नोंदवते.','approved','LEAD',5,'FRONT')`,
+      [editionId],
+    );
+
+    const derived = await workflow.planEditionComposition({ editionId, aiMode: 'production' });
+    assert.equal(derived.ok, true);
+    assert.ok(derived.callBudget.plannedAssignments >= 1, 'the one approved, FRONT-routed source was actually assigned to a frame');
+    assert.equal(derived.callBudget.selectedProviderCallCap, derived.callBudget.plannedAssignments * 2, 'derived default is the exact-fit ceiling');
+    const boundCap = derived.callBudget.selectedProviderCallCap;
+    const refuse = async () => ({ error: 'stub refuses to write', condition: 'unavailable' });
+
+    // Mismatched-cap Apply calls reject before touching the record at all
+    // (before material(), before any preparation), so the SAME token is safe
+    // to reuse for both. A call that gets PAST the binding check, though,
+    // marks the token failed on its own stubbed refusal - so "matched" and
+    // "omitted" each need their own fresh token, or the second would see
+    // record.failed from the first and (mis)report the very code being ruled
+    // out here for an unrelated reason.
+    const raised = await workflow.applyEditionComposition({ editionId, planToken: derived.planToken, aiMode: 'production', maxServiceCalls: boundCap + 50 });
+    assert.equal(raised.ok, false);
+    assert.equal(raised.code, 'COMPOSITION_PLAN_STALE');
+    const lowered = await workflow.applyEditionComposition({ editionId, planToken: derived.planToken, aiMode: 'production', maxServiceCalls: 0 });
+    assert.equal(lowered.ok, false);
+    assert.equal(lowered.code, 'COMPOSITION_PLAN_STALE');
+
+    const forMatch = await workflow.planEditionComposition({ editionId, aiMode: 'production' });
+    const matched = await workflow.applyEditionComposition({ editionId, planToken: forMatch.planToken, aiMode: 'production', maxServiceCalls: boundCap, _askForJson: refuse });
+    assert.notEqual(matched.code, 'COMPOSITION_PLAN_STALE', 'the exact bound value is not a mismatch');
+
+    const forOmit = await workflow.planEditionComposition({ editionId, aiMode: 'production' });
+    const omitted = await workflow.applyEditionComposition({ editionId, planToken: forOmit.planToken, aiMode: 'production', _askForJson: refuse });
+    assert.notEqual(omitted.code, 'COMPOSITION_PLAN_STALE', 'omitting it reuses the bound value, same as supplying it exactly');
+
+    const afterHeadlines = (await pool.query('SELECT headline FROM page_sections WHERE page_id = $1', [pages[0].id])).rows;
+    assert.ok(afterHeadlines.every((row) => !row.headline), 'none of the rejected/stubbed-refusal attempts wrote anything');
+  } finally {
+    if (editionId) await pool.query('DELETE FROM news_items WHERE newspaper_id = $1', [editionId]);
+    await removeEdition(editionId); server.close();
+  }
+});
+
+test('a too-low explicit provider-call cap is rejected before Plan creates a token - zero AI calls, zero writes, nothing to Apply', async () => {
+  const workflow = require('../src/services/editionCompositionWorkflow.service');
+  const result = await workflow.planEditionComposition({ editionId: 999999, aiMode: 'production', maxServiceCalls: 1 });
+  // EDITION_NOT_FOUND fires first for a nonexistent edition - the budget
+  // check only ever runs once a real plan (with a real assignment count) has
+  // been built, exactly so it reflects true demand rather than a guess.
+  assert.equal(result.ok, false);
+  assert.ok(['EDITION_NOT_FOUND', 'COMPOSITION_CALL_BUDGET_TOO_LOW'].includes(result.code));
+});
+
+test('on a real disposable edition, Plan derives the budget from actual assigned demand and a too-low cap writes nothing', async () => {
+  const workflow = require('../src/services/editionCompositionWorkflow.service');
+  const server = createApp().listen(0); const port = server.address().port; let editionId;
+  try {
+    const { newspaper, pages } = await newEdition(port, 'call-budget policy test', { pages: [[1, 'front']] });
+    editionId = newspaper.id;
+    await pool.query(
+      `INSERT INTO news_items (newspaper_id,title,description,status,story_type,editorial_priority,desired_page_role)
+       VALUES ($1,'बजेट चाचणी बातमी','ही बातमी वास्तविक वृत्त पुरवठा साखळीतून पुरवली गेली आहे, त्यामुळे रचना खरी मागणी नोंदवते.','approved','LEAD',5,'FRONT')`,
+      [editionId],
+    );
+    const before = (await pool.query('SELECT headline FROM page_sections WHERE page_id = $1', [pages[0].id])).rows;
+    assert.ok(before.every((row) => !row.headline), 'fixture starts with no headlines written');
+
+    const derived = await workflow.planEditionComposition({ editionId, aiMode: 'production' });
+    assert.equal(derived.ok, true);
+    assert.ok(derived.callBudget.plannedAssignments >= 1, 'the one approved source was actually assigned to a frame');
+    assert.equal(derived.callBudget.selectedProviderCallCap, derived.callBudget.plannedAssignments * 2);
+    assert.equal(derived.callBudget.selectionMode, 'DERIVED');
+
+    const tooLow = await workflow.planEditionComposition({ editionId, aiMode: 'production', maxServiceCalls: 0 });
+    assert.equal(tooLow.ok, false);
+    assert.equal(tooLow.code, 'COMPOSITION_CALL_BUDGET_TOO_LOW');
+    assert.equal(tooLow.callBudget.requestedProviderCallCap, 0);
+    assert.equal(tooLow.aiCalls, 0);
+    assert.equal(tooLow.writes, 0);
+
+    const after = (await pool.query('SELECT headline FROM page_sections WHERE page_id = $1', [pages[0].id])).rows;
+    assert.ok(after.every((row) => !row.headline), 'a rejected budget must never have written anything - Plan makes zero AI calls either way');
+  } finally {
+    if (editionId) await pool.query('DELETE FROM news_items WHERE newspaper_id = $1', [editionId]);
+    await removeEdition(editionId); server.close();
+  }
+});
+
+// Found by the real B8B-PRODUCTION-MODEL-CLOSEOUT configured-provider proof:
+// a hard preparation failure's desk-facing sentence (askForJson()'s error can
+// legitimately run past 100 characters - "Google Gemini's quota is used up
+// for now. Sarvam AI is busy. Nothing could be written just now.") was being
+// written into edition_composition_runs.failure_code, a VARCHAR(100) enum
+// column. Postgres rejected the UPDATE outright, turning a real, already
+// budget-spent provider run into an uncaught exception instead of a graceful
+// BLOCKED result - discarding real paid API work for a code-level defect
+// that had nothing to do with the provider.
+test('a hard preparation failure with a long desk-facing message persists cleanly - the full message survives, the DB column never overflows', async () => {
+  const workflow = require('../src/services/editionCompositionWorkflow.service');
+  const server = createApp().listen(0); const port = server.address().port; let editionId;
+  try {
+    // 'local' (unlike 'front') has no REQUIRED image-companion frames, so an
+    // edition with zero approved sources still plans cleanly rather than
+    // blocking earlier on IMAGE_REQUIRED_MISSING - this test is about the
+    // hard-preparation-failure path specifically.
+    const { newspaper } = await newEdition(port, 'long failure message test', { pages: [[2, 'local']] });
+    editionId = newspaper.id;
+    const plan = await workflow.planEditionComposition({ editionId, aiMode: 'production' });
+    assert.equal(plan.ok, true, 'an edition with no approved sources still plans cleanly, at zero required calls');
+
+    const longSentence = 'Google Gemini’s quota is used up for now. '.repeat(4).trim();
+    assert.ok(longSentence.length > 100, 'the fixture message must actually exceed the column width to prove anything');
+    const result = await workflow.applyEditionComposition({
+      editionId, planToken: plan.planToken, aiMode: 'production',
+      _composePagePlan: async () => ({ state: 'PROVIDER_BLOCKED', error: longSentence, candidates: [], outcomes: [] }),
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.code, 'PROVIDER_BLOCKED', 'the top-level code is the short state, never the raw sentence');
+    assert.equal(result.pages[0].error, longSentence, 'the full desk-facing sentence still reaches the caller, just not the DB enum column');
+
+    const { rows } = await pool.query('SELECT failure_code FROM edition_composition_runs WHERE run_id = $1', [result.runId]);
+    assert.equal(rows[0].failure_code, 'PROVIDER_BLOCKED');
+  } finally {
+    await removeEdition(editionId); server.close();
   }
 });
 

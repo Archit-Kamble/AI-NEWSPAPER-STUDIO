@@ -18,6 +18,7 @@ const { safeLocalAssetPath, placementFor } = require('../layout/newsroom-image-c
 const { pxToMm } = require('../layout/geometry');
 const { MIN_EFFECTIVE_DPI } = require('./preflight.service');
 const { buildEditionContentManifest } = require('../layout/edition-content-manifest');
+const { deriveCompositionCallBudget, summarizeProviderCallEvents } = require('./compositionCallBudget.service');
 
 const plans = new Map(); const activeRuns = new Map();
 const RESOLVED_IMAGE_STATES = new Set(['IMAGE_PLANNED', 'IMAGE_EXISTING_PRESERVED', 'IMAGE_GENERATED_PLACEMENT']);
@@ -63,15 +64,21 @@ function summarizePurpose(manifest, purpose) {
     needsReview: frames.filter((frame) => /NEEDS_REVIEW/.test(frame.contentState)).length,
     missing: frames.filter((frame) => /MISSING/.test(frame.contentState)).length };
 }
-async function planEditionComposition({ editionId, aiMode = 'production', maxServiceCalls = 32 } = {}) {
+async function planEditionComposition({ editionId, aiMode = 'production', maxServiceCalls } = {}) {
   const loaded = await material(Number(editionId)); if (!loaded) return reject('EDITION_NOT_FOUND');
   await runRepository.recoverUnfinished(loaded.paper.id);
   if (aiMode === 'codex-local' && !disposable(loaded.paper)) return reject('CODEX_LOCAL_DISPOSABLE_ONLY');
   const compositionPlan = await buildEditionCompositionPlan({ pages: loaded.editionPages, newspaper: loaded.paper, sources: loaded.sourceSnapshot.sources });
   await validateImageIntents(compositionPlan);
-  const data = preview(compositionPlan, loaded.sourceSnapshot, loaded.fingerprint); const token = hash({ v: 1, editionId: loaded.paper.id, snapshot: data.sourceSnapshotHash, fingerprint: data.compositionFingerprint, assignments: data.pages.map((p) => p.plannedAssignments), aiMode, maxServiceCalls });
-  plans.set(token, { token, editionId: loaded.paper.id, aiMode, maxServiceCalls, sourceSnapshot: loaded.sourceSnapshot, fingerprint: loaded.fingerprint, compositionPlan, preview: data, createdAt: Date.now() });
-  return { ok: true, planToken: token, editionId: loaded.paper.id, writerTransport: aiMode === 'codex-local' ? 'CODEX_LOCAL' : 'configured-provider', ...data, aiCalls: 0, writes: 0 };
+  const data = preview(compositionPlan, loaded.sourceSnapshot, loaded.fingerprint);
+  // The Plan makes zero provider calls, so the whole-edition demand truth
+  // (frame-purpose.js) is already known before spending anything: reject an
+  // impossible cap here, not partway through Page 4's exact-fit writer.
+  const callBudget = deriveCompositionCallBudget({ plannedAssignments: data.expected.plannedFrames, requestedMaxProviderCalls: maxServiceCalls });
+  if (!callBudget.ok) return reject(callBudget.code, { callBudget, aiCalls: 0, writes: 0 });
+  const token = hash({ v: 1, editionId: loaded.paper.id, snapshot: data.sourceSnapshotHash, fingerprint: data.compositionFingerprint, assignments: data.pages.map((p) => p.plannedAssignments), aiMode, selectedProviderCallCap: callBudget.selectedProviderCallCap });
+  plans.set(token, { token, editionId: loaded.paper.id, aiMode, selectedProviderCallCap: callBudget.selectedProviderCallCap, sourceSnapshot: loaded.sourceSnapshot, fingerprint: loaded.fingerprint, compositionPlan, preview: data, createdAt: Date.now() });
+  return { ok: true, planToken: token, editionId: loaded.paper.id, writerTransport: aiMode === 'codex-local' ? 'CODEX_LOCAL' : 'configured-provider', ...data, callBudget, aiCalls: 0, writes: 0 };
 }
 function isHardPreparationFailure(result) { return !result || ['PAGE_BLOCKED', 'BUDGET_BLOCKED', 'PROVIDER_BLOCKED'].includes(result.state) || result.state !== 'READY_TO_PERSIST'; }
 function pageResult(pagePlan, result) { return { page: pagePlan.page.page_number, state: result.state, error: result.error || null, preflight: { baseline: result.baselinePreflight?.valid ?? null, projected: result.preflight?.valid ?? null, reload: result.reloadedPreflight?.valid ?? null }, parity: !(result.drift || []).length, groundingRejected: result.outcomes?.filter((outcome) => outcome.state === 'GROUNDING_REJECTED').length || 0 }; }
@@ -86,14 +93,19 @@ async function validateImageIntents(compositionPlan) {
   }
   return compositionPlan.pages.flatMap((page) => page.imageIntents || []);
 }
-async function applyEditionComposition({ editionId, planToken, aiMode = 'production', maxServiceCalls = 32, _askForJson, _beforePersist, _composePagePlan = composePagePlan, _persistPreparedPage = persistPreparedPageComposition } = {}) {
+async function applyEditionComposition({ editionId, planToken, aiMode = 'production', maxServiceCalls, _askForJson, _beforePersist, _composePagePlan = composePagePlan, _persistPreparedPage = persistPreparedPageComposition } = {}) {
   const record = plans.get(String(planToken)); if (!record || record.editionId !== Number(editionId)) return reject('COMPOSITION_PLAN_NOT_FOUND');
   // A browser retry after a completed request must be observationally safe.  A
   // plan token names one composition run, not permission to compose it again.
   if (record.result) return { ...record.result, idempotentReplay: true };
   if (record.failed) return reject('COMPOSITION_PLAN_STALE');
   if (activeRuns.has(record.editionId)) return reject('RUN_ALREADY_ACTIVE', { runId: activeRuns.get(record.editionId).runId });
-  if (record.aiMode !== aiMode || record.maxServiceCalls !== Number(maxServiceCalls)) return reject('COMPOSITION_PLAN_STALE');
+  // The reviewed cap is bound into the Plan token; Apply consumes it rather
+  // than re-deriving it. An omitted maxServiceCalls simply reuses the bound
+  // value. An explicit one that disagrees is a stale/conflicting review, not
+  // a silent raise (or lowering) of what was actually reviewed at Plan time.
+  if (record.aiMode !== aiMode) return reject('COMPOSITION_PLAN_STALE');
+  if (maxServiceCalls !== undefined && maxServiceCalls !== null && Number(maxServiceCalls) !== record.selectedProviderCallCap) return reject('COMPOSITION_PLAN_STALE');
   const loaded = await material(record.editionId); if (!loaded || loaded.fingerprint !== record.fingerprint || loaded.sourceSnapshot.hash !== record.sourceSnapshot.hash) return reject('COMPOSITION_PLAN_STALE');
   if (aiMode === 'codex-local' && !disposable(loaded.paper)) return reject('CODEX_LOCAL_DISPOSABLE_ONLY');
   await runRepository.recoverUnfinished(record.editionId);
@@ -101,7 +113,8 @@ async function applyEditionComposition({ editionId, planToken, aiMode = 'product
   const journal = createRunJournal({ date: loaded.paper.publication_date, allPages: true, mode: aiMode }); journal.event('SOURCE_SNAPSHOT', { sourceCount: record.sourceSnapshot.sources.length, sourceIds: record.sourceSnapshot.sourceIds, sourceSnapshotHash: record.sourceSnapshot.hash });
   await runRepository.create({ runId, editionId: record.editionId, planTokenHash: hash(record.token), sourceSnapshotHash: record.sourceSnapshot.hash, baselineFingerprint: loaded.baselineFingerprint, writerTransport: aiMode === 'codex-local' ? 'CODEX_LOCAL' : 'configured-provider', state: 'PREPARING', pageCount: record.compositionPlan.pages.length });
   try {
-    const budget = { max: Number(maxServiceCalls), used: 0, events: [], onConsume(event) { journal.event('PROVIDER_CALL', event); } }; const sourceById = new Map(record.sourceSnapshot.sources.map((source) => [String(source.id), source]));
+    const budget = { max: record.selectedProviderCallCap, used: 0, events: [], onConsume(event) { journal.event('PROVIDER_CALL', event); } }; const sourceById = new Map(record.sourceSnapshot.sources.map((source) => [String(source.id), source]));
+    journal.event('CALL_BUDGET_SELECTED', { plannedAssignments: record.preview.expected.plannedFrames, selectedProviderCallCap: budget.max });
     const ask = _askForJson || (aiMode === 'codex-local' ? createCodexLocalWriter() : askForJson); const prepared = [];
     journal.event('EDITION_PREPARE_STARTED');
     const validatedImages = await validateImageIntents(record.compositionPlan);
@@ -109,7 +122,15 @@ async function applyEditionComposition({ editionId, planToken, aiMode = 'product
     if (missingRequiredImage) { const result = { ok: false, runId, state: 'BLOCKED', code: 'IMAGE_REQUIRED_MISSING', nothingApplied: true, writerTransport: aiMode === 'codex-local' ? 'CODEX_LOCAL' : 'configured-provider', writerCalls: 0, pages: [], imagePlan: record.preview.imagePlan, journalPath: journal.path }; record.failed = true; await runRepository.update(runId, { state: 'BLOCKED', writerCallCount: 0, failureCode: result.code, finished: true }); journal.finish('BLOCKED', { providerCalls: 0, completion: result.code }); return result; }
     for (const pagePlan of record.compositionPlan.pages) { const result = await _composePagePlan({ pagePlan, sourcesById: sourceById, newspaper: loaded.paper, askForJson: ask, callBudget: budget, apply: false, journal }); prepared.push(result); journal.event('PAGE_PREPARED', { page: pagePlan.page.page_number, state: result.state }); if (isHardPreparationFailure(result)) break; }
     if (prepared.length !== record.compositionPlan.pages.length || prepared.some(isHardPreparationFailure)) {
-      const completion = summarizeEditionComposition(record.compositionPlan.pages, prepared); const result = { ok: false, runId, state: 'BLOCKED', code: prepared.find(isHardPreparationFailure)?.error || 'PREPARATION_BLOCKED', nothingApplied: true, writerTransport: aiMode === 'codex-local' ? 'CODEX_LOCAL' : 'configured-provider', writerCalls: budget.used, pages: prepared.map((item, index) => pageResult(record.compositionPlan.pages[index], item)), completion, journalPath: journal.path };
+      const completion = summarizeEditionComposition(record.compositionPlan.pages, prepared);
+      // A short, stable state code, not the desk-facing failure sentence
+      // (askForJson()'s error can legitimately run to a full paragraph -
+      // "Google Gemini's quota is used up for now. Sarvam AI is busy." - and
+      // that sentence belongs in pages[].error, which pageResult() already
+      // carries. failure_code is a VARCHAR(100) enum column, not a message
+      // box; writing the sentence into it is what actually crashed this run.
+      const failurePage = prepared.find(isHardPreparationFailure);
+      const result = { ok: false, runId, state: 'BLOCKED', code: failurePage?.state || 'PREPARATION_BLOCKED', nothingApplied: true, writerTransport: aiMode === 'codex-local' ? 'CODEX_LOCAL' : 'configured-provider', writerCalls: budget.used, pages: prepared.map((item, index) => pageResult(record.compositionPlan.pages[index], item)), completion, journalPath: journal.path };
       record.failed = true; await runRepository.update(runId, { state: 'BLOCKED', writerCallCount: budget.used, completionState: completion.state, failureCode: result.code, finished: true }); journal.finish('BLOCKED', { providerCalls: budget.used, completion: result.code }); return result;
     }
     await runRepository.update(runId, { state: 'PREPARED', writerCallCount: budget.used }); journal.event('EDITION_PREPARED');
@@ -131,7 +152,7 @@ async function applyEditionComposition({ editionId, planToken, aiMode = 'product
     const completion = summarizeEditionComposition(record.compositionPlan.pages, persisted); const pageResults = persisted.map((item, index) => pageResult(record.compositionPlan.pages[index], item));
     const reloadedPages = persisted.map((item) => item.reloaded).filter(Boolean); const contentManifest = buildEditionContentManifest(reloadedPages);
     journal.event('EDITION_COMMITTED'); journal.finish('COMPLETE', { providerCalls: budget.used, completion: completion.state }); await runRepository.update(runId, { state: 'COMMITTED', writerCallCount: budget.used, completionState: completion.state, committed: true, finished: true });
-    const result = { ok: true, runId, state: completion.state, editorialCompositionState: completion.editorialCompositionState, publicationContentState: contentManifest.publicationContentState, atomicallyApplied: true, writerTransport: aiMode === 'codex-local' ? 'CODEX_LOCAL' : 'configured-provider', writerCalls: budget.used, sourceSnapshotHash: record.sourceSnapshot.hash, durationMs: Date.now() - started, pages: pageResults, imagePlan: completion.images, contentSummary: { physicalFrameCount: contentManifest.physicalFrameCount, framePurposeCounts: contentManifest.framePurposeCounts, editorialDemand: contentManifest.editorialDemand, imagePackages: contentManifest.imagePackages, standingFeatures: summarizePurpose(contentManifest, 'STANDING_FEATURE'), adverts: summarizePurpose(contentManifest, 'ADVERT'), utility: summarizePurpose(contentManifest, 'UTILITY') }, review: { required: completion.ledger.filter((item) => item.state === 'GENERATED_PERSISTED').length, approved: 0, readyForPress: false }, checks: { preflightClean: pageResults.every((page) => page.preflight.baseline !== false && page.preflight.projected !== false && page.preflight.reload !== false), postSaveParity: pageResults.every((page) => page.parity), imageParity: pageResults.every((page) => page.parity), groundingRejected: pageResults.reduce((sum, page) => sum + page.groundingRejected, 0) }, completion, journalPath: journal.path };
+    const result = { ok: true, runId, state: completion.state, editorialCompositionState: completion.editorialCompositionState, publicationContentState: contentManifest.publicationContentState, atomicallyApplied: true, writerTransport: aiMode === 'codex-local' ? 'CODEX_LOCAL' : 'configured-provider', writerCalls: budget.used, writerCallBreakdown: summarizeProviderCallEvents(budget.events), providerCallCap: budget.max, providerCallsRemaining: Math.max(0, budget.max - budget.used), sourceSnapshotHash: record.sourceSnapshot.hash, durationMs: Date.now() - started, pages: pageResults, imagePlan: completion.images, contentSummary: { physicalFrameCount: contentManifest.physicalFrameCount, framePurposeCounts: contentManifest.framePurposeCounts, editorialDemand: contentManifest.editorialDemand, imagePackages: contentManifest.imagePackages, standingFeatures: summarizePurpose(contentManifest, 'STANDING_FEATURE'), adverts: summarizePurpose(contentManifest, 'ADVERT'), utility: summarizePurpose(contentManifest, 'UTILITY') }, review: { required: completion.ledger.filter((item) => item.state === 'GENERATED_PERSISTED').length, approved: 0, readyForPress: false }, checks: { preflightClean: pageResults.every((page) => page.preflight.baseline !== false && page.preflight.projected !== false && page.preflight.reload !== false), postSaveParity: pageResults.every((page) => page.parity), imageParity: pageResults.every((page) => page.parity), groundingRejected: pageResults.reduce((sum, page) => sum + page.groundingRejected, 0) }, completion, journalPath: journal.path };
     record.result = result;
     return result;
   } finally { activeRuns.delete(record.editionId); }

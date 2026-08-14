@@ -33,9 +33,21 @@ async function main() {
         description: body(seed.title, [seed.body, 'निर्धारित वेळापत्रकानुसार कामाची माहिती संबंधित विभागाने दिली.', 'नोंदवलेल्या अडचणींसाठी स्वतंत्र संपर्क व्यवस्था ठेवण्यात आली आहे.'], storyType === 'ANALYSIS' ? 4 : storyType === 'LEAD' ? 2 : 1),
         category: seed.category, location: seed.location, city: seed.location, tags: seed.tags, reporter_name: seed.reporter_name,
         story_type: storyType, editorial_priority: Math.max(1, 5 - Math.min(index, 4)), desired_page_role: role,
-        // The standard features-page photo story has its own newsroom image;
-        // companion photo slots remain owned by their parent story packages.
-        image_urls: storyType === 'PHOTO_FEATURE' ? ['/uploads/zz-test-edition-feature-package.jpg'] : [],
+        // The standard features-page photo story has its own newsroom image.
+        // The front page's lead package owns two REQUIRED image-companion
+        // frames (lead-pictures, lead-side - src/layout/templates.js); only
+        // whichever story is actually assigned to 'lead' can feed them, so
+        // the FRONT lead source is the one that needs two distinct images.
+        // Companion photo slots otherwise remain owned by their parent
+        // story packages, never duplicated as decorative prose images.
+        image_urls: storyType === 'PHOTO_FEATURE' ? ['/uploads/zz-test-edition-feature-package.jpg']
+          // Portrait, not the wide lead-1/lead-2 pair: lead-pictures/lead-side
+          // are narrow 2-column strips, and a landscape image placed with
+          // 'contain' fails the workflow's own >=45% room-coverage floor
+          // (IMAGE_UNSUITABLE_ASPECT) - measured against the real check, not
+          // assumed.
+          : role === 'FRONT' && storyType === 'LEAD' ? ['/uploads/zz-test-edition-portrait-1.jpg', '/uploads/zz-test-edition-portrait-2.jpg']
+          : [],
         status: 'approved', newspaper_id: editionId, created_by: null,
       });
     }

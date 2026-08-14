@@ -139,12 +139,18 @@ async function features(req, res) {
   res.json(result);
 }
 
+// maxServiceCalls is passed through exactly as supplied - undefined when the
+// caller omits it, never defaulted here. The provider-call budget policy
+// (compositionCallBudget.service.js) owns the default and the too-low
+// rejection; a `|| 32` here would turn both "no preference" and an explicit
+// 0 into the same wrong number, and would let this route silently outrun
+// whatever the workflow actually derives from the real planned demand.
 async function compositionPlan(req, res) {
-  const result = await compositionWorkflow.planEditionComposition({ editionId: Number(req.params.id), aiMode: req.body?.aiMode || 'production', maxServiceCalls: req.body?.maxServiceCalls || 32 });
+  const result = await compositionWorkflow.planEditionComposition({ editionId: Number(req.params.id), aiMode: req.body?.aiMode || 'production', maxServiceCalls: req.body?.maxServiceCalls });
   res.status(result.ok ? 200 : result.code === 'EDITION_NOT_FOUND' ? 404 : 409).json(result);
 }
 async function compositionApply(req, res) {
-  const result = await compositionWorkflow.applyEditionComposition({ editionId: Number(req.params.id), planToken: req.body?.planToken, aiMode: req.body?.aiMode || 'production', maxServiceCalls: req.body?.maxServiceCalls || 32 });
+  const result = await compositionWorkflow.applyEditionComposition({ editionId: Number(req.params.id), planToken: req.body?.planToken, aiMode: req.body?.aiMode || 'production', maxServiceCalls: req.body?.maxServiceCalls });
   res.status(result.ok ? 200 : result.code === 'RUN_ALREADY_ACTIVE' ? 409 : 400).json(result);
 }
 

@@ -34,7 +34,7 @@ import { smartCardMarkup } from "../smart-cards/smart-cards.js";
 // body with - so the WYSIWYG frame and the newspaper page can never drift
 // onto two different renderings of the same block, the way the
 // headline/subheading inputs and the canvas once did.
-import { headlineMarkup, subheadingMarkup, flowedBodyMarkup } from "../canvas/section-thumb.js";
+import { sectionContentMarkup } from "../canvas/section-thumb.js";
 // The same six words the Typography panel's "Editing: X" label uses - one
 // catalog for what a selected object is called, not two that could drift.
 import { PART_LABEL } from "./typography-panel.js";
@@ -110,43 +110,34 @@ export function blockFrameMarkup() {
         </span>
       </div>
       <div class="frame-page" id="edFramePage">
-        <!-- ONE label, moved to whichever object is currently selected
-             (updateSelectionLabel()) rather than one copy per object - the
-             same "one source of truth" reasoning as the selection state
-             itself. Not shown for a selected picture: its handles already
-             make "this is selected" unambiguous without a chip over the
-             photograph. -->
-        <span class="frame-selection-label" id="edSelectionLabel" hidden></span>
-        <!-- The headline and deck are drawn here, in the block's own type, at
-             the page's scale - not a separate generic input elsewhere that
-             happens to hold the same words. Clicking either focuses the real
-             input (below the page), which is still where the typing and the
-             character-limit counters live - see story-editor.js. -->
-        <div class="frame frame-headline" id="edHeadlineFrame" tabindex="-1" title="Click to edit the headline"></div>
-        <div class="frame frame-subheading" id="edSubheadingFrame" tabindex="-1" title="Click to edit the subheading"></div>
+        <!-- The exact same printable text/card markup as the newspaper canvas.
+             It keeps the block's LOGICAL pixel dimensions and the whole layer
+             is zoomed as one object; text therefore never reflows merely
+             because the editor has more room. -->
+        <div class="frame-canonical-content" id="edCanonicalContent"></div>
+
+        <!-- Interactive picture frames sit over the canonical text layer. They
+             use the same persisted block-pixel geometry as the page canvas. -->
         <div class="frame-pictures" id="edFramePictures"></div>
-        <div class="frame frame-body" id="edBodyFrame">
-          <!-- A block holding a Smart Card draws the CARD here, not its copy.
-               The card is a grid or a table of twelve signs; typing into it as
-               prose is not an edit anybody wants, and showing the desk the
-               flattened text while the page shows squares is the exact
-               mismatch this whole change exists to remove. Quill stays mounted
-               underneath - the moment the card is removed the block is an
-               ordinary block again. -->
-          <div class="frame-card" id="edFrameCard" hidden></div>
-          <div id="edQuill"></div>
-        </div>
-        <!-- Only shown when a picture actually reaches into the body area -
-             most blocks never need it. Quill cannot show real runaround live
-             (see this file's own header note), so this is the honest
-             alternative: the exact render the canvas will print, read-only,
-             a click away rather than silently different. -->
-        <div class="frame-flowed-preview" id="edFlowedPreview" hidden></div>
+
+        <!-- Transparent hit/selection frames. They do not render a second copy
+             of the words; the canonical layer above is the only visual copy. -->
+        <div class="frame frame-headline" id="edHeadlineFrame" tabindex="-1" title="Double-click to edit the headline"></div>
+        <div class="frame frame-subheading" id="edSubheadingFrame" tabindex="-1" title="Double-click to edit the subheading"></div>
+        <div class="frame frame-body" id="edBodyFrame" aria-hidden="true"></div>
+
+        <span class="frame-selection-label" id="edSelectionLabel" hidden></span>
       </div>
-      <div class="frame-preview-toggle" id="edPreviewToggle" hidden>
-        <button type="button" class="ext-editor-btn" id="edPreviewToggleBtn"></button>
-        <span class="muted">A picture reaches into the copy - Quill cannot show the real wrap live.</span>
+
+      <!-- Quill is an EDITING CONTROL, not a second newspaper renderer. Keeping
+           it outside the printable page means the enlarged page can remain
+           pixel-for-pixel canonical while the desk still gets a comfortable
+           rich-text writing surface. -->
+      <div class="frame-writing-surface" id="edWritingSurface">
+        <div class="frame-writing-label">Body copy</div>
+        <div id="edQuill"></div>
       </div>
+
       <p class="frame-note muted" id="edFrameNote"></p>
     </div>
   `;
@@ -201,16 +192,10 @@ function layoutPage() {
  * the same card.
  */
 function layoutCard() {
-  const host = document.getElementById("edFrameCard");
-  const quill = document.getElementById("edQuill");
-  if (!host) return false;
-
-  const markup = smartCardMarkup(state.view?.smartCardKey, state.view?.smartCardData);
-  host.hidden = !markup;
-  host.innerHTML = markup || "";
-  if (quill) quill.hidden = Boolean(markup);
-  host.classList.toggle("frame-selected", Boolean(markup) && state.selectedPart === "smartCard");
-  return Boolean(markup);
+  const writing = document.getElementById("edWritingSurface");
+  const hasCard = Boolean(smartCardMarkup(state.view?.smartCardKey, state.view?.smartCardData));
+  if (writing) writing.hidden = hasCard;
+  return hasCard;
 }
 
 // ---------------------------------------------------------- selection UI ---
@@ -227,7 +212,7 @@ const LABEL_HOST_ID = {
   headline: "edHeadlineFrame",
   subheading: "edSubheadingFrame",
   body: "edBodyFrame",
-  smartCard: "edFrameCard",
+  smartCard: "edCanonicalContent",
 };
 
 function updateSelectionLabel() {
@@ -277,157 +262,77 @@ function applyBlockSelection() {
 // canvas does. The body cannot: see renderFlowedPreview() below.
 function layoutTextFrames() {
   const page = document.getElementById("edFramePage");
+  const canonical = document.getElementById("edCanonicalContent");
   const headlineFrame = document.getElementById("edHeadlineFrame");
   const subheadingFrame = document.getElementById("edSubheadingFrame");
   const bodyFrame = document.getElementById("edBodyFrame");
-  if (!page || !state.section || !state.view) return;
+  if (!page || !canonical || !state.section || !state.view) return;
 
   const scale = pageScale();
+  const zoom = 1 / scale;
   const margin = Number(state.view.marginPx) || 12;
   const images = (state.images || []).map(flowImageFromRow);
-  const map = buildFlowMap(state.section, state.view, images);
+  const renderSection = { ...state.section, images: state.images || [] };
+  const map = buildFlowMap(renderSection, state.view, images);
   const measure = map.cols * map.cellWidth;
+  const kickerHeight = map.kickerRows * map.cellHeight;
   const headlineHeight = map.headlineRows * map.cellHeight;
   const subheadingHeight = map.subheadingRows * map.cellHeight;
   const band = (kind, fallbackLeft) => bandBox(map, kind, margin, measure, fallbackLeft);
 
-  // The font size baked into headlineMarkup()/subheadingMarkup() is the
-  // block's real, unscaled size (the same number the canvas sets) - scaled
-  // down here, once, for the page's own on-screen size, exactly as the body
-  // editor already scales bodyFontPx below.
-  const scaledView = (fontField) => ({ ...state.view, [fontField]: (Number(state.view[fontField]) || 0) / scale });
+  // Render once at the section's TRUE logical dimensions, then zoom the whole
+  // composition. This is the key parity rule: editor size changes can never
+  // change line breaks, column flow or the amount of copy that fits.
+  canonical.style.width = `${Number(state.section.width_px)}px`;
+  canonical.style.height = `${Number(state.section.height_px)}px`;
+  canonical.style.transform = `scale(${zoom})`;
+  canonical.innerHTML = sectionContentMarkup(renderSection, state.view);
 
+  // These frames are interaction/selection hit targets only; the words inside
+  // them are rendered by the canonical layer above.
   if (headlineFrame) {
-    const box = state.view.headline && headlineHeight > 0 ? band(CELL.HEADLINE, margin) : { left: margin, width: measure };
+    const box = state.view.headline && headlineHeight > 0
+      ? band(CELL.HEADLINE, margin)
+      : { left: margin, width: measure };
     headlineFrame.style.left = `${box.left / scale}px`;
     headlineFrame.style.width = `${box.width / scale}px`;
     headlineFrame.style.right = "";
-    headlineFrame.style.top = `${margin / scale}px`;
+    headlineFrame.style.top = `${(margin + kickerHeight) / scale}px`;
     headlineFrame.style.height = `${headlineHeight / scale}px`;
     headlineFrame.style.display = state.view.headline ? "" : "none";
-    headlineFrame.innerHTML = headlineMarkup(scaledView("headlineFontPx"));
     headlineFrame.classList.toggle("frame-selected", state.selectedPart === "headline");
   }
 
   if (subheadingFrame) {
-    const top = margin + headlineHeight;
     const box = state.view.subheading && subheadingHeight > 0
       ? band(CELL.SUBHEADING, margin)
       : { left: margin, width: measure };
     subheadingFrame.style.left = `${box.left / scale}px`;
     subheadingFrame.style.width = `${box.width / scale}px`;
     subheadingFrame.style.right = "";
-    subheadingFrame.style.top = `${top / scale}px`;
+    subheadingFrame.style.top = `${(margin + kickerHeight + headlineHeight) / scale}px`;
     subheadingFrame.style.height = `${subheadingHeight / scale}px`;
     subheadingFrame.style.display = state.view.subheading ? "" : "none";
     subheadingFrame.classList.toggle("frame-selected", state.selectedPart === "subheading");
-    subheadingFrame.innerHTML = subheadingMarkup(scaledView("subheadingFontPx"));
   }
 
   if (bodyFrame) {
-    const top = margin + headlineHeight + subheadingHeight;
     bodyFrame.style.left = `${margin / scale}px`;
     bodyFrame.style.right = `${margin / scale}px`;
-    bodyFrame.style.top = `${top / scale}px`;
+    bodyFrame.style.top = `${(margin + kickerHeight + headlineHeight + subheadingHeight) / scale}px`;
     bodyFrame.style.bottom = `${margin / scale}px`;
     bodyFrame.classList.toggle("frame-selected", state.selectedPart === "body");
-
-    const editor = bodyFrame.querySelector(".ql-editor");
-    if (editor) {
-      editor.style.fontSize = `${(Number(state.view.bodyFontPx) || 10) / scale}px`;
-      editor.style.lineHeight = String(Math.max(1.45, Number(state.view.lineHeight) || 1.45));
-      editor.style.columnCount = String(Math.max(1, Number(state.view.columnCount) || 1));
-      editor.style.textAlign = state.view.textAlign || "left";
-      if (state.view.fontFamily) editor.style.fontFamily = state.view.fontFamily;
-    }
   }
 
-  layoutFlowedPreview(map, images, scale);
-}
-
-// A picture that reaches into the BODY's own rows (not just the headline/deck
-// bands above, which already dodge it) is the one case Quill cannot show
-// live - see this file's header note. Rather than let text render invisibly
-// under the picture (the bug this replaces), offer the exact render the
-// canvas will print, a click away, only when it is actually needed.
-//
-// `map` (real, unscaled block pixels) only decides WHETHER a picture reaches
-// the body - the preview itself is built from a SEPARATE map whose section,
-// view and images are all pre-divided by `scale`, so every value buildFlowMap()
-// derives (cellWidth, cellHeight, every run's left/top) already comes out in
-// on-screen pixels. A single CSS transform on top of that would scale the
-// same geometry twice; scaling the inputs once, the way headlineMarkup()'s
-// font size already is above, is the one correct way to do this.
-function layoutFlowedPreview(map, images, scale) {
-  const toggle = document.getElementById("edPreviewToggle");
-  const toggleBtn = document.getElementById("edPreviewToggleBtn");
-  const preview = document.getElementById("edFlowedPreview");
-  const bodyFrame = document.getElementById("edBodyFrame");
-  if (!toggle || !toggleBtn || !preview || !bodyFrame) return;
-
-  const bodyStartRow = map.headlineRows + map.subheadingRows;
-  const bodyCollision = images.length > 0 && map.grid.slice(bodyStartRow).some((row) => row.includes(CELL.IMAGE));
-
-  if (!bodyCollision) {
-    toggle.hidden = true;
-    preview.hidden = true;
-    bodyFrame.style.visibility = "";
-    return;
+  // Quill is deliberately comfortable editing chrome, outside the newspaper
+  // page. The canonical preview above remains the authority for actual fit.
+  const editor = document.querySelector("#edWritingSurface .ql-editor");
+  if (editor) {
+    editor.style.fontSize = `${Math.max(15, Number(state.view.bodyFontPx) || 10)}px`;
+    editor.style.lineHeight = String(Math.max(1.45, Number(state.view.lineHeight) || 1.45));
+    editor.style.textAlign = state.view.textAlign || "left";
+    if (state.view.fontFamily) editor.style.fontFamily = state.view.fontFamily;
   }
-
-  toggle.hidden = false;
-  toggleBtn.textContent = state.previewMode ? "Back to writing" : "Show how this will print";
-
-  if (!state.previewMode) {
-    preview.hidden = true;
-    bodyFrame.style.visibility = "";
-    return;
-  }
-
-  preview.hidden = false;
-  // The plain writing surface stays mounted (Quill keeps its own state and
-  // undo stack) but out of the way, rather than being torn down and rebuilt
-  // on every toggle.
-  bodyFrame.style.visibility = "hidden";
-
-  const margin = (Number(state.view.marginPx) || 12) / scale;
-  const scaledSection = {
-    ...state.section,
-    width_px: Number(state.section.width_px) / scale,
-    height_px: Number(state.section.height_px) / scale,
-  };
-  const scaledView = {
-    ...state.view,
-    marginPx: margin,
-    headlineFontPx: (Number(state.view.headlineFontPx) || 0) / scale,
-    subheadingFontPx: (Number(state.view.subheadingFontPx) || 0) / scale,
-    bodyFontPx: (Number(state.view.bodyFontPx) || 0) / scale,
-  };
-  const scaledImages = images.map((image) => ({
-    ...image,
-    x: image.x / scale,
-    y: image.y / scale,
-    width: image.width / scale,
-    height: image.height / scale,
-    standOffPx: (Number(image.standOffPx) || 0) / scale,
-  }));
-  const previewMap = buildFlowMap(scaledSection, scaledView, scaledImages);
-
-  preview.style.left = `${margin}px`;
-  preview.style.top = `${margin}px`;
-  preview.style.width = `${previewMap.cols * previewMap.cellWidth}px`;
-  preview.style.height = `${previewMap.rows * previewMap.cellHeight}px`;
-  preview.innerHTML = flowedBodyMarkup(previewMap, scaledView, margin);
-}
-
-/** Bound once at mount, like bindPictureFrames()/bindTextFrames() - the
- * button is part of the static blockFrameMarkup() template, never rebuilt by
- * a refresh, so binding it again on every refresh would stack listeners. */
-function bindPreviewToggle() {
-  document.getElementById("edPreviewToggleBtn")?.addEventListener("click", () => {
-    state.previewMode = !state.previewMode;
-    layoutTextFrames();
-  });
 }
 
 /**
@@ -465,7 +370,6 @@ function bindTextFrames() {
     if (event.target === event.currentTarget) hooks.onSelectPart?.("block");
   });
 
-  document.getElementById("edFrameCard")?.addEventListener("click", () => hooks.onSelectPart?.("smartCard"));
 }
 
 // ---------------------------------------------------------- picture frames ---
@@ -704,7 +608,6 @@ export async function mountFrame(section, view, images, callbacks, selectedPart 
   renderPictures(state.images);
   bindPictureFrames();
   bindTextFrames();
-  bindPreviewToggle();
 
   if (!window.__sahasFrameResize) {
     window.__sahasFrameResize = true;

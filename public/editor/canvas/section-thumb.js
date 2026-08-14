@@ -307,16 +307,21 @@ export function flowedBodyMarkup(map, view, pad) {
   }).join("");
 }
 
+// The printable content inside a section, without editor chrome or placed
+// picture elements. This is the canonical text/card renderer shared by the
+// newspaper canvas and the enlarged Block Editor preview. The editor may add
+// selection overlays and picture handles, but it must never re-compose the
+// story with a second text renderer.
+export function sectionContentMarkup(section, view) {
+  const hasCard = Boolean(smartCardMarkup(view.smartCardKey, view.smartCardData));
+  const flowed = hasCard ? null : flowedTextMarkup(section, view);
+  return flowed === null ? contentMarkup(section, view) : flowed;
+}
+
 export function sectionInnerHtml(section, view, { dirty = false, selected = false } = {}) {
   const status = statusOf(view, Boolean((section.images || []).length));
   const type = sectionType(section.section_key);
   const metrics = computeMetrics(section, view);
-  // A Smart Card is a grid or a table. It is not copy, so it is not poured
-  // through the character cells around the pictures - a sudoku with a
-  // photograph on the block was drawing as nine lines of text because the
-  // flowed path never asked whether the block held a card at all.
-  const hasCard = Boolean(smartCardMarkup(view.smartCardKey, view.smartCardData));
-  const flowed = hasCard ? null : flowedTextMarkup(section, view);
 
   return `
     <div class="section-chrome">
@@ -330,7 +335,7 @@ export function sectionInnerHtml(section, view, { dirty = false, selected = fals
       </span>
       <span class="section-status-badge ${statusClass(status)}">${statusLabel(status)}</span>
     </div>
-    ${flowed === null ? contentMarkup(section, view) : flowed}
+    ${sectionContentMarkup(section, view)}
     ${placedImagesMarkup(section)}
     <div class="section-hover-toolbar">
       <button type="button" class="section-hover-btn" data-section-action="story" title="Attach a reporter story">Story</button>

@@ -4432,6 +4432,72 @@ body.print-view .page-imprint {
   box-shadow: 0 10px 30px rgba(20, 20, 30, 0.10);
   overflow: hidden;
 }
+
+/* RENDER-TRUTH: the enlarged editor page contains the same logical-pixel
+   composition as the newspaper canvas. The layer is zoomed as a whole, never
+   reflowed to the editor's available width. */
+.frame-canonical-content {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  overflow: hidden;
+  pointer-events: none;
+  box-sizing: border-box;
+  z-index: 0;
+}
+.frame-canonical-content .section-content {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.frame-headline,
+.frame-subheading,
+.frame-body {
+  z-index: 2;
+}
+.frame-body {
+  pointer-events: none;
+}
+.frame-pictures {
+  z-index: 3;
+}
+
+/* The rich-text control is intentionally outside the printable page. It edits
+   the same persisted body, while the page above is the exact print/layout
+   truth and refreshes live from that value. */
+.frame-writing-surface {
+  box-sizing: border-box;
+  width: min(100%, 920px);
+  padding: 10px;
+  border: 1px solid #d8d8de;
+  border-radius: 7px;
+  background: #fff;
+}
+.frame-writing-surface[hidden] { display: none; }
+.frame-writing-label {
+  margin-bottom: 6px;
+  color: #7a7a84;
+  font-size: .68rem;
+  font-weight: 750;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.frame-writing-surface .ql-container {
+  min-height: 220px;
+  max-height: 52vh;
+  overflow: auto;
+  border: 0;
+  font-family: "Noto Serif Devanagari", Georgia, serif;
+}
+.frame-writing-surface .ql-editor {
+  min-height: 220px;
+  padding: 8px;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
 .frame-note { margin: 0; font-size: 0.7rem; }
 
 .frame { position: absolute; }

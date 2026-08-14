@@ -467,23 +467,49 @@ function bindTextFrames() {
     beginInlineTextEdit("subheading");
   });
 
+  const activateBodyEditor = () => {
+    hooks.onSelectPart?.("body");
+
+    const writing = document.getElementById("edWritingSurface");
+    const editor = writing?.querySelector(".ql-editor");
+
+    writing?.classList.add("is-body-target");
+    writing?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    requestAnimationFrame(() => editor?.focus());
+  };
+
   body?.addEventListener("click", () => hooks.onSelectPart?.("body"));
   body?.addEventListener("dblclick", (event) => {
     event.preventDefault();
-    hooks.onSelectPart?.("body");
-
-    // The printed body is many absolutely-positioned poured runs. Making each
-    // run contenteditable would create a second composition engine and destroy
-    // canonical flow. Double-clicking the visible body therefore activates the
-    // existing rich-text editing surface while leaving the canonical page
-    // visible above as the authoritative result.
-    const writing = document.getElementById("edWritingSurface");
-    const editor = writing?.querySelector(".ql-editor");
-    writing?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    queueMicrotask(() => editor?.focus());
+    event.stopPropagation();
+    activateBodyEditor();
   });
 
-  document.getElementById("edFramePage")?.addEventListener("click", (event) => {
+  const page = document.getElementById("edFramePage");
+
+  // Canonical poured runs can receive the pointer instead of the transparent
+  // body hit frame. Use the body's actual geometry as the authority so a
+  // double-click anywhere in the body area reliably activates editing.
+  page?.addEventListener("dblclick", (event) => {
+    if (event.target.closest(".pic-frame")) return;
+
+    const rect = body?.getBoundingClientRect();
+    if (!rect) return;
+
+    const inside =
+      event.clientX >= rect.left &&
+      event.clientX <= rect.right &&
+      event.clientY >= rect.top &&
+      event.clientY <= rect.bottom;
+
+    if (!inside) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    activateBodyEditor();
+  }, true);
+
+  page?.addEventListener("click", (event) => {
     if (event.target === event.currentTarget) hooks.onSelectPart?.("block");
   });
 }

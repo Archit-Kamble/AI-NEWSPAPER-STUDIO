@@ -3405,6 +3405,11 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   overflow: hidden;
   min-width: 0;
   max-width: 100%;
+
+  /* Each headline/deck flow-map band is a hard paint boundary. Oversized type
+     remains measurable as overset, but it cannot paint into the next band. */
+  contain: paint;
+  clip-path: inset(0);
 }
 .section-flowed-band .section-headline,
 .section-flowed-band .section-subheading {
@@ -4533,6 +4538,14 @@ body.print-view .page-imprint {
   border: 1px solid #d8d8de;
   border-radius: 7px;
   background: #fff;
+  transition: border-color .12s ease, box-shadow .12s ease;
+}
+.frame-writing-surface.is-body-target {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(196, 30, 58, 0.10);
+}
+.frame-writing-surface:focus-within {
+  border-color: var(--accent);
 }
 .frame-writing-surface[hidden] { display: none; }
 .frame-writing-label {

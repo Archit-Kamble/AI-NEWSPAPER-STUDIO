@@ -373,7 +373,19 @@ function pourBody(bodyInput, {
   const text = typeof bodyInput === 'object' && bodyInput ? String(bodyInput.text || '') : String(bodyInput || '');
   const marks = (typeof bodyInput === 'object' && bodyInput && bodyInput.marks) || [];
 
-  const bandHeight = fontPx * lineHeight;
+  // A selected size run can ask for a font bigger than the body's own - the
+  // band grid is fixed-height (every gap-intersection, gutter and obstacle
+  // lookup in this engine assumes it), so a per-line variable height is not
+  // an option without a second reflow pass over the obstacle geometry. The
+  // grid is instead sized for the TALLEST font that appears anywhere in this
+  // flow, uniformly - a 28px word inside a 16px body raises every band, not
+  // just the one it lands on. That costs a little extra air on ordinary
+  // lines but guarantees the one thing that must never happen: a line's own
+  // glyphs overlapping the line below it.
+  const maxInlineFontPx = marks.reduce((max, mark) => (
+    mark.tag === 'size' && Number.isFinite(Number(mark.value)) ? Math.max(max, Number(mark.value)) : max
+  ), fontPx);
+  const bandHeight = maxInlineFontPx * lineHeight;
   const minCorridor = MIN_CORRIDOR_EM * fontPx;
 
   // Every band's raw free space first: whether a gap is usable depends on

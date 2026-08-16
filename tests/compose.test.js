@@ -695,6 +695,23 @@ test('the same mask content always hashes the same, and a missing mask is "none"
   assert.equal(exclusion.maskHash(null), 'none');
 });
 
+test('a large inline size mark raises the whole flow\'s line height, so it cannot overlap the line below', () => {
+  const text = 'साधा मजकूर आणि ठळक शब्द येथे लिहिला आहे.';
+  const marked = compose.composeBlock({
+    width: 300, height: 300, padding: 10, bodyFontPx: 16, lineHeight: 1.25, columnCount: 1,
+    body: { text, marks: [{ start: 12, end: 22, tag: 'size', value: 40 }] },
+  });
+  const plain = compose.composeBlock({ width: 300, height: 300, padding: 10, bodyFontPx: 16, lineHeight: 1.25, columnCount: 1, body: text });
+  assert.ok(marked.bodyLines[0].height >= 40 * 1.25, 'the line carrying a 40px word must be at least as tall as 40px needs');
+  // Uniform across the WHOLE flow, not just the one line the run happens to
+  // land on - the fixed band grid every obstacle lookup assumes has one
+  // height for the whole pour, so a later line (even with no sized text)
+  // must sit exactly bandHeight below the last, or the grid and the actual
+  // pixels disagree.
+  if (marked.bodyLines[1]) assert.equal(marked.bodyLines[1].height, marked.bodyLines[0].height);
+  assert.ok(marked.bodyLines[0].height > plain.bodyLines[0].height, 'a plain flow with no sized run keeps the ordinary, smaller line height');
+});
+
 test('a mask fingerprint change is a different block fingerprint, at the same box geometry', () => {
   const frame = { width: 300, height: 300, padding: 10, bodyFontPx: 16, columnCount: 1, body: 'साधा मजकूर सातारा जिल्ह्यातील.' };
   const image = { x: 20, y: 20, width: 100, height: 100, shape: 'cutout' };

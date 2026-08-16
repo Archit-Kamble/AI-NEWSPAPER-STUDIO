@@ -14,10 +14,26 @@ async function sectionRow(pageId, sectionKey) {
   return rows[0] || null;
 }
 
-let flowModule = null;
-async function textFlow() {
-  if (!flowModule) flowModule = await import('../../public/editor/layout/text-flow.js');
-  return flowModule;
+// The exact composition engine - the SAME module composeSection() the page
+// canvas, the Block Editor, fit and preflight all measure against (see
+// fit.service.js's own comment on why: "would this fit" and "does this fit"
+// have to be the same question asked twice). This used to be measured on
+// text-flow.js's approximate character grid, a second geometry truth that
+// could - and did - disagree with what the block actually composes to.
+let adapterModule = null;
+let metricsModule = null;
+let shaperModule = null;
+async function ensureComposeReady() {
+  if (!adapterModule) adapterModule = await import('../../public/editor/compose/section-adapter.js');
+  if (!metricsModule) metricsModule = await import('../../public/editor/compose/font-metrics.js');
+  if (!shaperModule) shaperModule = await import('../../public/editor/compose/shaper.js');
+  await Promise.all([metricsModule.ensureFontsLoaded(), shaperModule.ensureShaperReady()]);
+  // A picture's landing spot decides real page geometry. Placing it against
+  // summed hmtx advances because the shaper silently failed to load would
+  // land it somewhere a real composition never puts the body - loud failure
+  // here, not a quiet downgrade.
+  shaperModule.requireShaperReady();
+  return adapterModule;
 }
 
 /**
@@ -30,24 +46,14 @@ async function textFlow() {
  * the top of the body puts it in the copy, where a photograph on a news block
  * actually sits, and the budget moves the moment it lands.
  *
- * Measured on the one character grid, so the picture lands on the same rows the
- * grid will later say it occupies.
+ * Composed with NO images and no body text - exactly the question "where
+ * would the body start if nothing had been placed yet", which is what
+ * deciding where to place the FIRST picture actually needs to know.
  */
 async function copyStartsAt(section) {
-  const { buildFlowMap } = await textFlow();
-  const padding = Number(section.margin_px) || 12;
-  const map = buildFlowMap(section, {
-    headline: section.headline || '',
-    subheading: section.subheading || '',
-    body: '',
-    marginPx: padding,
-    columnCount: Number(section.column_count) || 1,
-    lineHeight: Number(section.line_height) || 1.45,
-    headlineFontPx: Number(section.headline_font_px) || 24,
-    subheadingFontPx: Number(section.subheading_font_px) || 14,
-    bodyFontPx: Number(section.body_font_px) || 10,
-  }, []);
-  return Math.round(padding + (map.headlineRows + map.subheadingRows) * map.cellHeight);
+  const adapter = await ensureComposeReady();
+  const result = adapter.composeSection({ ...section, images: [] }, { ...section, body: '' });
+  return Math.round(result.bodyTop);
 }
 
 function clampToBlock(section, placement) {

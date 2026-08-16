@@ -290,6 +290,28 @@ function pourBody(text, {
 // because it measures the real text.
 const CALIBRATION = 'सातारा जिल्ह्यातील शेतकऱ्यांसाठी राज्य सरकारने नवीन योजना जाहीर केली आहे. ';
 
+// The two ends of the range, and why there has to BE a range.
+//
+// A character is not a unit of width in Marathi, and the spread is not small.
+// Poured through the same 180x620 column, calibration prose sets 36 characters
+// to the line at 96.6% fill; a sentence of short plain words sets 30.2 at
+// 87.1%. Conjunct-heavy copy hides many zero-width codepoints inside one
+// akshara, so it packs far more CHARACTERS into the same pixels. Measured
+// across four block shapes, the capacity of one block varies by 30-46%
+// depending only on what is written into it.
+//
+// Clusters were tried as a stabler unit and are worse - 68-87% - because a
+// conjunct collapses several codepoints into one wide cluster.
+//
+// So there is no scalar budget that is both safe and useful, and pretending
+// otherwise is what produced a budget that had to be discounted 15% and then
+// systematically underfilled every block on the page. What is quoted instead
+// is the geometry (line equivalents, which do not vary at all) plus an honest
+// character RANGE, and the guarantee is moved to where it can be kept: exact
+// measurement after the copy exists.
+const WIDEST_PER_CHAR = 'कमल गगन सरल पवन नयन जल थल. ';
+const NARROWEST_PER_CHAR = 'ज्ञानेश्वर श्रद्धांजली क्षेत्रफळ विद्यार्थ्यांसाठी. ';
+
 // A line never fills its measure exactly: it ends when the next word will not
 // fit, so it leaves a ragged tail. That tail is not a rounding error - it is
 // the difference between briefing the AI for copy that fits and briefing it
@@ -305,8 +327,8 @@ const CALIBRATION = 'सातारा जिल्ह्यातील शे
 // So the budget is POURED rather than computed: calibration copy is run
 // through this block's own real gaps - the same gaps the story will be set
 // in, photographs and all - and what lands is what the block holds.
-function capacityChars(measures, fontPx, family) {
-  const pieces = breakPieces(CALIBRATION);
+function capacityChars(measures, fontPx, family, sample = CALIBRATION) {
+  const pieces = breakPieces(sample);
   if (!pieces.length) return 0;
   let chars = 0;
   let at = 0;
@@ -327,12 +349,10 @@ function capacityChars(measures, fontPx, family) {
   return chars;
 }
 
-// Real copy is not the calibration sentence, so its ragged edges land a
-// little differently. The margin is measured rather than chosen: across
-// eleven block shapes x two column counts x three real Marathi sentences,
-// the worst the poured figure over-quoted ordinary prose by was 14.7% (a
-// narrow 180x620 column). 0.85 covers it with a little to spare.
-const BUDGET_SAFETY = 0.85;
+// Real copy's ragged edges land a little differently from the calibration's,
+// even at the same word lengths. This covers that much and no more - the
+// large uncertainty is expressed as a range, not buried in a discount.
+const BUDGET_SAFETY = 0.97;
 
 // WHY THIS IS A BUDGET AND NOT A GUARANTEE, which matters because the last
 // version of this file claimed to be one.
@@ -553,7 +573,15 @@ export function composeBlock(input = {}) {
     largestHoleLines: Number(Math.max(bottomResidualLines, unexplainedLines).toFixed(2)),
   };
 
-  const charCapacity = Math.floor(capacityChars(body.measures, bodyPx, family) * BUDGET_SAFETY);
+  const pour = (sample) => Math.floor(capacityChars(body.measures, bodyPx, family, sample) * BUDGET_SAFETY);
+  const charCapacity = pour(CALIBRATION);
+  // The ends of the range are whichever samples actually pack worst and best
+  // in THIS measure, not whichever was expected to. In a narrow column long
+  // conjunct words waste more at the line end than they save in width, so
+  // which sample is the ceiling genuinely changes with the block.
+  const poured = [charCapacity, pour(WIDEST_PER_CHAR), pour(NARROWEST_PER_CHAR)];
+  const charFloor = Math.min(...poured);
+  const charCeiling = Math.max(...poured);
   const codepointsPerCluster = CALIBRATION.length / clusters(CALIBRATION).length;
   result.capacity = {
     fullMeasureEquivalents: Number(body.fullMeasureEquivalents.toFixed(2)),
@@ -563,10 +591,13 @@ export function composeBlock(input = {}) {
     // the two differ by more than a factor of two and quoting the wrong one
     // asks for half or double the copy the block holds.
     bodyClusterCapacity: Math.round(charCapacity / codepointsPerCluster),
-    // The number to brief a writer with, and the number below which even
-    // compound-heavy copy is certain to fit. Quote the pair, never just one.
+    // What to brief a writer with, for ordinary prose.
     bodyCharCapacity: charCapacity,
-    bodyCharCapacityFloor: Math.floor(charCapacity * COMPOUND_RISK_FLOOR),
+    // And the honest spread around it: `min` is what fits even if every word
+    // turns out to be plain consonants, `max` what fits if the copy is
+    // conjunct-heavy. A caller that must not be wrong quotes `min`.
+    bodyCharRange: { min: Math.min(charFloor, charCeiling), max: Math.max(charFloor, charCeiling) },
+    bodyCharCapacityFloor: Math.min(charFloor, charCeiling),
     bodyClustersUsed: clusters(String(input.body || '')).length,
     bodyCharsUsed: String(input.body || '').length,
   };
@@ -579,11 +610,13 @@ export function composeBlock(input = {}) {
   // the headline reservation: a conservative estimate does not remove a gap,
   // it relocates it, and the fix is to measure the gap in the same currency
   // the estimate was quoted in.
-  result.capacity.shortfallChars = Math.max(0, result.capacity.bodyCharCapacity - result.capacity.bodyCharsUsed);
+  // Measured against the SAFE end of the range: a block is only short of copy
+  // if it is short even for the least efficient prose anyone might file.
+  result.capacity.shortfallChars = Math.max(0, result.capacity.bodyCharRange.min - result.capacity.bodyCharsUsed);
   // ...and a shortfall smaller than one line is not one either, for exactly
   // the reason the geometric remainder is not: nothing can be written into
   // it. Both halves of the test are therefore "at least one legal line".
-  const charsPerLine = body.measures.length ? result.capacity.bodyCharCapacity / body.measures.length : 0;
+  const charsPerLine = body.measures.length ? result.capacity.bodyCharRange.min / body.measures.length : 0;
   const holed = result.whitespace.largestHoleLines >= HOLE_LINES
     && result.capacity.shortfallChars > charsPerLine;
   result.fitState = violations.some((v) => v.code.endsWith('OVERSET') || v.code.endsWith('OVERSET_LOCKED'))

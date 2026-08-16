@@ -3422,6 +3422,68 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   line-height: var(--devanagari-line);
 }
 
+/* --- the exact composition ------------------------------------------------
+   One line, placed where compose.js said it goes.
+
+   These rules are deliberately almost empty, and that is the point. The line's
+   left, top, width, size and leading are all written as inline styles from
+   numbers the engine computed; there is nothing left for CSS to decide. In
+   particular there is NO wrapping here - a composed line was measured against
+   the real font's advances and is already known to fit its measure, so asking
+   the browser to wrap it could only produce a second, different answer.
+
+   `white-space: pre` rather than `nowrap` so a run's own spaces are kept
+   exactly as they were measured. */
+.section-composed {
+  position: absolute;
+  white-space: pre;
+  color: #1a1a1a;
+  overflow: visible;
+
+  /* Devanagari stacks vowel signs above the shirorekha and below the baseline.
+     The line box is already tall enough for them (the floor comes from the
+     face's own ascent + descent, read out of the font), but the paint box is
+     opened a little further so nothing is cropped at a band edge. */
+  clip-path: inset(-0.45em -0.1em -0.45em -0.1em);
+}
+.section-composed.section-headline,
+.section-composed.section-subheading,
+.section-composed.section-kicker {
+  /* A display line is one already-broken line, not a paragraph. */
+  display: block;
+  margin: 0;
+}
+.section-body-line.has-dateline .section-dateline {
+  font-weight: 700;
+}
+
+/* What did not fit, and what is still empty. Editing chrome, never printed. */
+.section-diagnostic {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  z-index: 6;
+  font-size: 8px;
+  line-height: 1.4;
+  padding: 0 3px;
+  border-radius: 2px;
+  pointer-events: none;
+  font-family: "Sahas Sans", Arial, sans-serif;
+}
+.section-diagnostic.is-overset {
+  background: #fdecec;
+  color: #a3121f;
+  border: 1px solid #f0b6b6;
+}
+.section-diagnostic.is-underfilled {
+  background: #f4f1e6;
+  color: #7a6a2f;
+  border: 1px solid #ddd3ab;
+}
+body.print-view .section-diagnostic {
+  display: none;
+}
+
 /* ===========================================================================
    The printed page
    ===========================================================================

@@ -20,10 +20,52 @@
 // heights the way they used to (layout-metrics.js's own copy was 1.25;
 // text-flow.js's was the Devanagari-safe 1.45).
 import { estimateHeight } from "./text-flow.js";
+// The exact composition, when the publication font is measurable. This module
+// used to be a THIRD independent answer to "is this block overflowing" -
+// beside the character grid and the canvas's own reckoning - and an estimate
+// built from character counts cannot be right about a script whose vowel
+// signs take no width. Where there is a real composition, it wins; the
+// estimate below survives only for the moment before the font has loaded.
+import { composeSection } from "../compose/section-adapter.js";
+import { fontsReady } from "../compose/font-metrics.js";
 
 const PADDING_PX = 12;
 
 export function computeMetrics(section, view) {
+  if (fontsReady() && Number(section?.width_px) > 0) {
+    const composition = composeSection(section, view);
+    const contentWidthPx = composition.content.measure;
+    const availableAreaPx = Math.max(0, contentWidthPx * composition.content.room);
+    const bandHeight = (key) => composition.bands[key]?.height || 0;
+    const usedHeightPx = Math.max(0, (composition.bodyLines.at(-1)?.y ?? composition.bodyTop) + (composition.bodyLines.at(-1)?.height ?? 0) - composition.content.top);
+
+    return {
+      widthPx: composition.frame.width,
+      heightPx: composition.frame.height,
+      contentWidthPx,
+      headlineHeightPx: bandHeight('headline'),
+      subheadingHeightPx: bandHeight('deck'),
+      bodyHeightPx: Math.max(0, usedHeightPx - (composition.bodyTop - composition.content.top)),
+      captionHeightPx: 0,
+      imageHeightPx: 0,
+      imageRatio: view?.imageUrl ? 3 / 2 : 0,
+      usedHeightPx,
+      remainingHeightPx: composition.whitespace.bottomResidualPx,
+      availableAreaPx,
+      usedAreaPx: Math.max(0, availableAreaPx - composition.whitespace.unexplained),
+      remainingAreaPx: composition.whitespace.unexplained,
+      fillRatio: availableAreaPx ? Math.min(1, (availableAreaPx - composition.whitespace.unexplained) / availableAreaPx) : 0,
+      // Truthful at last: a block overflows when copy had no room, which the
+      // engine knows for certain because it is the thing that placed the lines.
+      overflowing: composition.fitState === 'OVERSET',
+      composition,
+    };
+  }
+
+  return estimatedMetrics(section, view);
+}
+
+function estimatedMetrics(section, view) {
   const widthPx = Number(section?.width_px) || 0;
   const heightPx = Number(section?.height_px) || 0;
   const contentWidthPx = Math.max(0, widthPx - PADDING_PX * 2);

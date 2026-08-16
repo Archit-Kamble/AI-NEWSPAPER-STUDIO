@@ -14,6 +14,9 @@ import { imageTransformCss } from "../image/image-manager.js";
 import { buildFlowMap, CELL, flowRuns, bandBox, pourIntoRuns, flowImageFromRow, datelineText, captionBox } from "../layout/text-flow.js";
 import { textWithMarks, markRun, plainText } from "../layout/rich-text.js";
 import { presentationRanges, renderPresentation } from "../layout/editorial-presentation.js";
+import { composeSection } from "../compose/section-adapter.js";
+import { composedMarkup, diagnosticMarkup } from "../compose/render.js";
+import { fontsReady } from "../compose/font-metrics.js";
 
 const ICONS = {
   article:
@@ -312,10 +315,42 @@ export function flowedBodyMarkup(map, view, pad) {
 // newspaper canvas and the enlarged Block Editor preview. The editor may add
 // selection overlays and picture handles, but it must never re-compose the
 // story with a second text renderer.
+// The one canonical render of a block's printable content.
+//
+// Both the newspaper canvas and the Block Editor call this, so there is a
+// single renderer rather than two that have to be kept in step. It draws the
+// exact composition (compose/) - a list of lines that already know exactly
+// where they sit - which is what makes the two surfaces the same picture
+// instead of two pictures that agree most of the time.
+//
+// A block whose type is not yet measurable falls back to the older character
+// grid for one paint; ensureComposition() re-renders as soon as the
+// publication font has loaded, so a fallback measurement never becomes what
+// the desk approves.
 export function sectionContentMarkup(section, view) {
   const hasCard = Boolean(smartCardMarkup(view.smartCardKey, view.smartCardData));
-  const flowed = hasCard ? null : flowedTextMarkup(section, view);
-  return flowed === null ? contentMarkup(section, view) : flowed;
+  if (hasCard) return contentMarkup(section, view);
+
+  if (!fontsReady()) {
+    const flowed = flowedTextMarkup(section, view);
+    return flowed === null ? contentMarkup(section, view) : flowed;
+  }
+
+  const composition = composeSection(section, view);
+  if (!composition.bodyLines.length && !Object.keys(composition.bands).length) {
+    return contentMarkup(section, view);
+  }
+  return composedMarkup(composition, view, { datelinePrefix: datelineText(view) })
+    + diagnosticMarkup(composition);
+}
+
+/**
+ * The composition of a block, for anything that needs the numbers rather
+ * than the markup - the Space read-out, the overflow flag, the Block Editor's
+ * hit frames.
+ */
+export function sectionComposition(section, view) {
+  return fontsReady() ? composeSection(section, view) : null;
 }
 
 export function sectionInnerHtml(section, view, { dirty = false, selected = false } = {}) {

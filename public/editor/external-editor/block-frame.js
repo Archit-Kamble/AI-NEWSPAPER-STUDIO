@@ -19,22 +19,25 @@
 // The copy inside the body frame is edited with Quill (vendored under
 // public/vendor/quill, BSD-3-Clause), so the writing surface is a real word
 // processor rather than a hand-rolled contenteditable. Quill cannot show the
-// real runaround live, so it does not try to fake it: the headline and deck
-// frames position themselves clear of a picture exactly as the canvas does
-// (bandBox(), text-flow.js), and the body frame shows the canvas's own,
-// proven-correct flowed render (flowedBodyMarkup()) as an accurate, read-only
-// "how this prints" strip above the plain writing surface, rather than
-// silently letting a picture sit over text with no relationship to it at all.
+// real runaround live, so it does not try to fake it - it stays outside the
+// printable page as editing chrome.
+//
+// What the desk LOOKS at is the exact composition (compose/), rendered by the
+// same function the newspaper canvas renders with, at the block's own logical
+// pixels, with a CSS scale() over the whole layer. The frames below it are
+// transparent hit targets positioned from that same composition. So the
+// editor is the page, enlarged - not a second rendering of it, and nothing
+// about being enlarged can move a line.
 
 import { sanitise } from "../layout/rich-text.js";
-import { buildFlowMap, bandBox, CELL, flowImageFromRow } from "../layout/text-flow.js";
+
 import { placedPictureStyle } from "../layout/picture-style.js";
 import { smartCardMarkup } from "../smart-cards/smart-cards.js";
 // The same functions the page canvas draws a headline, a deck and a flowed
 // body with - so the WYSIWYG frame and the newspaper page can never drift
 // onto two different renderings of the same block, the way the
 // headline/subheading inputs and the canvas once did.
-import { sectionContentMarkup } from "../canvas/section-thumb.js";
+import { sectionContentMarkup, sectionComposition } from "../canvas/section-thumb.js";
 // The same six words the Typography panel's "Editing: X" label uses - one
 // catalog for what a selected object is called, not two that could drift.
 import { PART_LABEL } from "./typography-panel.js";
@@ -272,14 +275,28 @@ function layoutTextFrames() {
   const scale = pageScale();
   const zoom = 1 / scale;
   const margin = Number(state.view.marginPx) || 12;
-  const images = (state.images || []).map(flowImageFromRow);
   const renderSection = { ...state.section, images: state.images || [] };
-  const map = buildFlowMap(renderSection, state.view, images);
-  const measure = map.cols * map.cellWidth;
-  const kickerHeight = map.kickerRows * map.cellHeight;
-  const headlineHeight = map.headlineRows * map.cellHeight;
-  const subheadingHeight = map.subheadingRows * map.cellHeight;
-  const band = (kind, fallbackLeft) => bandBox(map, kind, margin, measure, fallbackLeft);
+
+  // The SAME composition the canonical layer below is drawn from, so a hit
+  // frame can never sit somewhere the words are not. This used to build its
+  // own flow map with its own defaults, which is precisely how the editor
+  // came to disagree with the page about where a headline was.
+  const composition = sectionComposition(renderSection, state.view);
+  const measure = composition ? composition.content.measure : (Number(state.section.width_px) || 0) - margin * 2;
+
+  // Where each flow actually ended up. An absent flow has no band at all -
+  // nothing reserves a rectangle it is not using.
+  const bandOf = (key, fallback) => {
+    const band = composition?.bands?.[key];
+    if (!band || !band.lines.length) return fallback;
+    const left = Math.min(...band.lines.map((line) => line.x));
+    const right = Math.max(...band.lines.map((line) => line.x + line.measure));
+    return { left, width: right - left, top: band.top, height: band.height };
+  };
+
+  const headlineBox = bandOf('headline', { left: margin, width: measure, top: margin, height: 0 });
+  const deckBox = bandOf('deck', { left: margin, width: measure, top: margin, height: 0 });
+  const bodyTop = composition ? composition.bodyTop : margin;
 
   // Render once at the section's TRUE logical dimensions, then zoom the whole
   // composition. This is the key parity rule: editor size changes can never
@@ -291,36 +308,24 @@ function layoutTextFrames() {
 
   // These frames are interaction/selection hit targets only; the words inside
   // them are rendered by the canonical layer above.
-  if (headlineFrame) {
-    const box = state.view.headline && headlineHeight > 0
-      ? band(CELL.HEADLINE, margin)
-      : { left: margin, width: measure };
-    headlineFrame.style.left = `${box.left / scale}px`;
-    headlineFrame.style.width = `${box.width / scale}px`;
-    headlineFrame.style.right = "";
-    headlineFrame.style.top = `${(margin + kickerHeight) / scale}px`;
-    headlineFrame.style.height = `${headlineHeight / scale}px`;
-    headlineFrame.style.display = state.view.headline ? "" : "none";
-    headlineFrame.classList.toggle("frame-selected", state.selectedPart === "headline");
-  }
+  const placeFrame = (frame, box, part, present) => {
+    if (!frame) return;
+    frame.style.left = `${box.left / scale}px`;
+    frame.style.width = `${box.width / scale}px`;
+    frame.style.right = "";
+    frame.style.top = `${box.top / scale}px`;
+    frame.style.height = `${box.height / scale}px`;
+    frame.style.display = present ? "" : "none";
+    frame.classList.toggle("frame-selected", state.selectedPart === part);
+  };
 
-  if (subheadingFrame) {
-    const box = state.view.subheading && subheadingHeight > 0
-      ? band(CELL.SUBHEADING, margin)
-      : { left: margin, width: measure };
-    subheadingFrame.style.left = `${box.left / scale}px`;
-    subheadingFrame.style.width = `${box.width / scale}px`;
-    subheadingFrame.style.right = "";
-    subheadingFrame.style.top = `${(margin + kickerHeight + headlineHeight) / scale}px`;
-    subheadingFrame.style.height = `${subheadingHeight / scale}px`;
-    subheadingFrame.style.display = state.view.subheading ? "" : "none";
-    subheadingFrame.classList.toggle("frame-selected", state.selectedPart === "subheading");
-  }
+  placeFrame(headlineFrame, headlineBox, "headline", Boolean(state.view.headline) && headlineBox.height > 0);
+  placeFrame(subheadingFrame, deckBox, "subheading", Boolean(state.view.subheading) && deckBox.height > 0);
 
   if (bodyFrame) {
     bodyFrame.style.left = `${margin / scale}px`;
     bodyFrame.style.right = `${margin / scale}px`;
-    bodyFrame.style.top = `${(margin + kickerHeight + headlineHeight + subheadingHeight) / scale}px`;
+    bodyFrame.style.top = `${bodyTop / scale}px`;
     bodyFrame.style.bottom = `${margin / scale}px`;
     bodyFrame.classList.toggle("frame-selected", state.selectedPart === "body");
   }

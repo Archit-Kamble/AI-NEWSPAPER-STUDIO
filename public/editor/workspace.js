@@ -23,6 +23,10 @@ import { refreshRulers } from "./canvas/ruler.js";
 import { setGuidesVisible } from "./canvas/page-guides.js";
 import { loadGeometry, findFreeRect, getGeometry } from "./canvas/grid.js";
 import { loadIdentity } from "./canvas/masthead.js";
+// The real advance widths of the publication faces. Every measurement in the
+// workspace - what fits, where a line breaks, how full a block is - is made
+// against these, so they are loaded before the first paint.
+import { ensureFontsLoaded } from "./compose/font-metrics.js";
 import { zoomControlMarkup, bindZoomControl, syncZoomControl, pageIndicatorMarkup } from "./canvas/canvas-toolbar.js";
 import { renderPageNavigator } from "./page-navigator.js";
 import { renderLayoutSidebar } from "./layout-sidebar.js";
@@ -67,6 +71,12 @@ export async function renderWorkspace(newspaperId) {
       // The column grid and the px-per-mm scale come from the server; nothing is
       // laid out until they are known.
       loadGeometry(),
+      // The publication font's own advance widths, which every measurement in
+      // the edition is made against. Awaited before the first paint for the
+      // same reason the identity is: a page composed against a fallback font
+      // and then repainted when the real one arrives is two different pages,
+      // and only one of them was the one the desk looked at.
+      ensureFontsLoaded(),
     ]);
 
     // The paper's standing furniture, and this edition's volume and issue number

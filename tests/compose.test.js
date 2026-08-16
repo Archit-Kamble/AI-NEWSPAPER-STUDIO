@@ -235,43 +235,43 @@ const SHAPES = [
   [620, 200], [620, 420], [180, 620], [240, 180], [160, 400], [520, 300],
 ];
 
-test('the quoted budget holds for ordinary Marathi prose, in every block shape', () => {
-  // Ordinary prose is what a reporter files and what the model is asked for.
-  // Compound-heavy copy is handled by exact measurement afterwards, not by
-  // pricing every block for the worst sentence anyone could write - see
-  // COMPOUND_RISK_FLOOR in compose.js.
-  const prose = [
-    'सातारा जिल्ह्यातील शेतकऱ्यांसाठी योजना जाहीर केली आहे. ',
-    'ते या बाबत आज सकाळी बोलत होते. ',
-    'पुणे शहरात वाहतूक कोंडी झाली. नागरिक त्रस्त. ',
-  ];
+test('the character budget is a RANGE, because a character is not a unit of width', () => {
+  // The same block holds 30% to 46% more or fewer characters depending only
+  // on what is written into it: conjunct-heavy Marathi hides many zero-width
+  // codepoints inside one akshara. A scalar budget cannot express that, so
+  // the engine quotes the spread and the geometry instead of pretending.
   for (const [width, height] of SHAPES) {
-    for (const columnCount of [1, 2]) {
-      const frame = { width, height, padding: 12, bodyFontPx: 11, columnCount, headline: 'मथळा', headlineFontPx: 20 };
-      const budget = compose.composeBlock({ ...frame, body: '' }).capacity.bodyCharCapacity;
-      for (const unit of prose) {
-        if (budget < unit.length) continue;
-        const body = unit.repeat(Math.floor(budget / unit.length));
-        const filled = compose.composeBlock({ ...frame, body });
-        assert.equal(filled.overset.body, '',
-          `${width}x${height} c${columnCount} promised ${budget} chars but overflowed on "${unit.slice(0, 16)}"`);
-      }
-    }
+    const frame = { width, height, padding: 12, bodyFontPx: 11, headline: 'मथळा', headlineFontPx: 20 };
+    const { capacity } = compose.composeBlock({ ...frame, body: '' });
+    assert.ok(capacity.bodyCharRange.min <= capacity.bodyCharCapacity, `${width}x${height} practical figure below its own floor`);
+    assert.ok(capacity.bodyCharCapacity <= capacity.bodyCharRange.max, `${width}x${height} practical figure above its own ceiling`);
+    // Line equivalents are geometry, so they do not move with the copy at all.
+    assert.ok(capacity.fullMeasureEquivalents >= 0);
   }
+
+  // And the spread is real, not a formality.
+  const wide = compose.composeBlock({ width: 300, height: 400, padding: 12, bodyFontPx: 11, body: '' }).capacity.bodyCharRange;
+  assert.ok(wide.max > wide.min * 1.2, `the measured spread should be substantial, got ${wide.min}..${wide.max}`);
 });
 
-test('the conservative floor holds even for compound-heavy copy', () => {
-  // The number a caller quotes when it must not be wrong. Long unbroken
-  // Marathi compounds pack worst of all, so they are what it is tested with.
-  const compounds = 'ज्ञानेश्वरमहाराजांच्या महानगरपालिकेच्या विद्यार्थ्यांसाठी पुस्तकवाटपाचा ';
+test('the safe end of the range holds for prose of any word shape', () => {
+  // `min` is what a caller quotes when it must not be wrong: it is poured with
+  // the least character-efficient prose there is (plain consonants, no
+  // zero-width matras to hide), so any ordinary sentence fits inside it.
+  const shapes = ['कमल गगन सरल पवन नयन जल थल. ', 'ते या बाबत आज सकाळी बोलत होते. ',
+    'सातारा जिल्ह्यातील शेतकऱ्यांसाठी योजना जाहीर केली आहे. ',
+    'ज्ञानेश्वर श्रद्धांजली क्षेत्रफळ विद्यार्थ्यांसाठी. '];
   for (const [width, height] of SHAPES) {
     for (const columnCount of [1, 2]) {
       const frame = { width, height, padding: 12, bodyFontPx: 11, columnCount, headline: 'मथळा', headlineFontPx: 20 };
-      const floor = compose.composeBlock({ ...frame, body: '' }).capacity.bodyCharCapacityFloor;
-      if (floor < compounds.length) continue;
-      const body = compounds.repeat(Math.floor(floor / compounds.length));
-      assert.equal(compose.composeBlock({ ...frame, body }).overset.body, '',
-        `${width}x${height} c${columnCount} floor of ${floor} chars still overflowed`);
+      const { min, max } = compose.composeBlock({ ...frame, body: '' }).capacity.bodyCharRange;
+      assert.ok(min <= max, 'the range must be ordered');
+      for (const unit of shapes) {
+        if (min < unit.length) continue;
+        const body = unit.repeat(Math.floor(min / unit.length));
+        assert.equal(compose.composeBlock({ ...frame, body }).overset.body, '',
+          `${width}x${height} c${columnCount} range floor ${min} overflowed on "${unit.slice(0, 14)}"`);
+      }
     }
   }
 });

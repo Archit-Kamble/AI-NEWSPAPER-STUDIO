@@ -12,11 +12,12 @@
 // composeBlock() takes a frame, its copy, its type and its photographs and
 // returns ONE object saying exactly where every line sits. It touches no DOM,
 // no canvas and no layout engine: it is arithmetic over the real font's own
-// advance widths (font-metrics.js) and over interval geometry (intervals.js,
-// exclusion.js). So it produces the same numbers in Node and in the browser,
-// and "the editor renders the same as the page" stops being a property that
-// has to be tested and becomes one that cannot fail - both draw the same
-// list of positioned lines.
+// SHAPED advances (shaper.js, real HarfBuzz - see that file's header for why
+// summed hmtx advances are not the same number) and over interval geometry
+// (intervals.js, exclusion.js). So it produces the same numbers in Node and
+// in the browser, and "the editor renders the same as the page" stops being a
+// property that has to be tested and becomes one that cannot fail - both
+// draw the same list of positioned lines.
 //
 // THE VERTICAL MODEL IS DYNAMIC. Nothing reserves a fixed rectangle. The
 // headline is shaped, its real line count is counted, and the deck starts
@@ -24,12 +25,41 @@
 // instead of leaving it empty. Reserved-rectangle thinking is what produced
 // the phantom rows this replaces.
 
-import { measureWidth, minLineHeightFor, faceAscent, faceDescent, fontsReady } from './font-metrics.js';
+import { measureWidth as hmtxWidth, minLineHeightFor, faceAscent, faceDescent, fontsReady } from './font-metrics.js';
+import { shapeWidthPx, isShaperReady } from './shaper.js';
 import { breakPieces, clusters, trimEndClusters } from './graphemes.js';
-import { normalise, subtract, viableIntervals, widest, MIN_CORRIDOR_EM } from './intervals.js';
+import { subtract, viableIntervals, MIN_CORRIDOR_EM } from './intervals.js';
 import { bandObstacles } from './exclusion.js';
 
-export const ENGINE_VERSION = 'sahas-compose/1';
+export const ENGINE_VERSION = 'sahas-compose/2';
+
+// One measurement function, everywhere in this file. Real HarfBuzz shaping
+// when it has loaded; the font's own hmtx advances (font-metrics.js) as a
+// same-shape, slightly-wide fallback for the moment before it has - never a
+// guessed constant. See shaper.js for exactly how much this matters for
+// conjunct-heavy Marathi (up to +80% on a bare summed-advance measurement).
+function measure(text, fontPx, family, weight) {
+  if (isShaperReady()) {
+    const shaped = shapeWidthPx(text, fontPx, family, weight);
+    if (shaped !== null) return shaped;
+  }
+  return hmtxWidth(text, fontPx, family, weight);
+}
+
+// Headline, kicker and deck are always set in the sans face, at the weights
+// the stylesheet actually declares (.section-headline/.section-kicker are
+// font-weight:700, .section-subheading is 400) - this is not a per-block
+// choice, it is the paper's own type system, the same way a real newspaper's
+// headline face is not the reporter's to pick. Composing them in whatever
+// family the body happened to be reserved room in was reserving room for the
+// wrong glyphs; Latin and Devanagari faces at the same size do not agree on
+// width (a Georgia body override does not touch the headline at all - see
+// styles.css, which never makes that face conditional).
+const DISPLAY_TYPOGRAPHY = {
+  kicker: { family: 'sans', weight: 700 },
+  headline: { family: 'sans', weight: 700 },
+  deck: { family: 'sans', weight: 400 },
+};
 
 // Optical space between one editorial flow and the next, in ems of the
 // LARGER of the two - a gap under a 34px headline and a gap under a 16px deck
@@ -84,12 +114,22 @@ function setDisplayFlow(text, {
   top, bottomLimit, column, images, fontPx, lineHeight, family, weight, maxLines,
 }) {
   const pieces = breakPieces(text);
-  if (!pieces.length) return { lines: [], height: 0, overset: '', lineCount: 0 };
+  if (!pieces.length) return { lines: [], height: 0, bottom: top, overset: '', lineCount: 0, violations: [] };
 
   const bandHeight = fontPx * lineHeight;
   const lines = [];
+  const violations = [];
   let index = 0;
   let y = top;
+  // The band's real bottom edge, tracked from what was actually PLACED - not
+  // from lines.length * bandHeight, which undercounts whenever a photograph
+  // forces a band to be skipped (y advances with nothing placed in it). A
+  // wrong consumed height here is not cosmetic: it is what the next flow
+  // (the deck, or the body) uses to decide where IT starts, and an
+  // undercounted headline bottom put the deck's first line inside the
+  // headline's own last line - found by composing a headline forced down one
+  // band by an image and checking where the deck landed.
+  let occupiedBottom = top;
 
   while (index < pieces.length) {
     if (lines.length >= maxLines) break;
@@ -105,17 +145,23 @@ function setDisplayFlow(text, {
     const measure = gap.end - gap.start;
     let line = '';
     let width = 0;
+    let hardOverset = false;
 
     while (index < pieces.length) {
       const piece = pieces[index];
-      const pieceWidth = measureWidth(piece, fontPx, family, weight);
+      const pieceWidth = measure2(piece, fontPx, family, weight);
       if (line && width + pieceWidth > measure + 0.5) break;
       if (!line && pieceWidth > measure + 0.5) {
         // One unbreakable token wider than every legal measure. It is set
-        // anyway and reported - inventing a hyphen inside a Marathi word is
-        // the one thing this engine will not do.
+        // anyway - inventing a hyphen inside a Marathi word is the one thing
+        // this engine will not do - but it is a real violation, not a quiet
+        // success: the token PHYSICALLY does not fit the frame, and a caller
+        // that only checked `overset` (leftover, undrawn pieces) never saw
+        // this, because the token WAS drawn. `fitState` must read OVERSET
+        // for a block that painted past its own measure, not FITS.
         line = piece;
         width = pieceWidth;
+        hardOverset = true;
         index += 1;
         break;
       }
@@ -126,26 +172,41 @@ function setDisplayFlow(text, {
 
     const trimmed = trimEndClusters(line);
     if (trimmed) {
+      const drawnWidth = measure2(trimmed, fontPx, family, weight);
       lines.push({
         text: trimmed,
         x: gap.start,
         y,
-        width: measureWidth(trimmed, fontPx, family, weight),
+        width: drawnWidth,
         measure,
         height: bandHeight,
         baseline: y + fontPx * faceAscent(family, weight),
         fontPx,
       });
+      occupiedBottom = Math.max(occupiedBottom, y + bandHeight);
+      if (hardOverset) {
+        violations.push({
+          code: 'UNBREAKABLE_TOKEN_OVERSET',
+          detail: `"${trimmed}" is ${Math.round(drawnWidth)}px, wider than the ${Math.round(measure)}px this band offers anywhere.`,
+        });
+      }
     }
     y += bandHeight;
   }
 
   return {
     lines,
-    height: lines.length * bandHeight,
+    height: occupiedBottom - top,
+    bottom: occupiedBottom,
     lineCount: lines.length,
     overset: pieces.slice(index).join(''),
+    violations,
   };
+
+  // measure2: a small local alias so this closure does not have to thread
+  // `measure` through every call site above by name collision with the
+  // module-level `measure()` - kept local to make the diff obvious.
+  function measure2(t, px, fam, w) { return measure(t, px, fam, w); }
 }
 
 /**
@@ -158,11 +219,12 @@ function setDisplayFlow(text, {
  */
 function fitDisplayFlow(text, options, { locked, minPx }) {
   const first = setDisplayFlow(text, options);
-  if (locked || !first.overset) return { ...first, resolvedPx: options.fontPx, shrunk: false };
+  const failed = (attempt) => attempt.overset || attempt.violations.length > 0;
+  if (locked || !failed(first)) return { ...first, resolvedPx: options.fontPx, shrunk: false };
 
   for (let px = options.fontPx - 1; px >= minPx; px -= 1) {
     const attempt = setDisplayFlow(text, { ...options, fontPx: px });
-    if (!attempt.overset) return { ...attempt, resolvedPx: px, shrunk: true };
+    if (!failed(attempt)) return { ...attempt, resolvedPx: px, shrunk: true };
   }
   const floor = setDisplayFlow(text, { ...options, fontPx: minPx });
   return { ...floor, resolvedPx: minPx, shrunk: true };
@@ -180,19 +242,108 @@ function columnsOf(content, count, gutter) {
   }));
 }
 
+// ------------------------------------------------------ rich-run measurement ---
+//
+// A piece (breakPieces()'s unit - a word plus its trailing space) is set in
+// ONE weight almost always, but a sub-editor's bold mark can start or end
+// mid-word ("प्रचंड **यश**"), so a piece can straddle a mark boundary. Width
+// has to be measured per RUN of one weight, not per piece, or a bold phrase
+// is reserved the width of its own regular-weight ghost - measured against
+// the real fonts, a bold Devanagari word is 5-8% wider than the same word
+// regular. That gap was invisible in this engine until now because marks
+// were stripped before composition ever saw them (plainText()); the browser
+// then painted the bold word into a box sized for the unbolded one.
+function boldRunsIn(marks, start, end) {
+  return marks
+    .filter((mark) => mark.tag === 'b' && mark.end > start && mark.start < end)
+    .map((mark) => ({ start: Math.max(start, mark.start), end: Math.min(end, mark.end) }));
+}
+
+/** The real, mark-aware width of one piece, given its offset in the flow. */
+function measurePieceWidth(piece, at, fontPx, family, weight, marks) {
+  if (!marks || !marks.length) return measure(piece, fontPx, family, weight);
+  const bold = boldRunsIn(marks, at, at + piece.length);
+  if (!bold.length) return measure(piece, fontPx, family, weight);
+
+  // Split the piece at every bold boundary and shape each run at its own
+  // weight - this is the same "measure a run, not a codepoint" principle
+  // font-metrics.js already used, just extended across a weight change
+  // rather than only across a font file.
+  const cuts = new Set([0, piece.length]);
+  for (const range of bold) {
+    cuts.add(Math.max(0, range.start - at));
+    cuts.add(Math.min(piece.length, range.end - at));
+  }
+  const points = [...cuts].sort((a, b) => a - b);
+  let width = 0;
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const from = points[i];
+    const to = points[i + 1];
+    const isBold = bold.some((range) => range.start - at <= from && range.end - at >= to);
+    width += measure(piece.slice(from, to), fontPx, family, isBold ? 700 : weight);
+  }
+  return width;
+}
+
+// -------------------------------------------------------- forced breaks ---
+//
+// A paragraph is a stronger thing than a legal break opportunity: it must
+// end the line even when more of the next paragraph would otherwise fit in
+// the same gap, or two paragraphs read as one run-on block - exactly the
+// failure a body of `plainText(story)` with a bare `\n`/`\n\n` inside it
+// produced, because breakPieces() (correctly) treats a newline as ONE MORE
+// optional break character among `\s`, not as a mandatory one. Splitting the
+// flow into paragraphs here, before any pouring happens, is what makes a
+// forced break forced: each paragraph gets its own pour, and the pour is
+// never allowed to carry the next paragraph's first piece into a gap the
+// previous paragraph left short.
+//
+// `\n\n` (a real paragraph: <p>/<div> in the source) and a bare `\n` (a
+// <br> or a <li>) are both forced breaks; only the first also asks for
+// `paragraphSpacingPx` of visual air before it. Splitting the vertical band
+// grid to make room for that spacing precisely would break the fixed-height
+// band grid every obstacle lookup in this engine relies on, so this pass
+// forces the break (the correctness bug - paragraphs running together) and
+// marks the resulting line `paragraphBreak: true` for a caller to style,
+// without yet spending a partial band on the gap itself. That is a scoped,
+// documented gap, not a silent one.
+function splitParagraphs(text, marks) {
+  const paragraphs = [];
+  const re = /\n+/g;
+  let start = 0;
+  let match;
+  while ((match = re.exec(text)) !== null) {
+    paragraphs.push({
+      text: text.slice(start, match.index),
+      offset: start,
+      paragraphBreak: match[0].length >= 2,
+    });
+    start = re.lastIndex;
+  }
+  paragraphs.push({ text: text.slice(start), offset: start, paragraphBreak: false });
+  return paragraphs.filter((p, i) => p.text.length > 0 || i === 0).map((p, i) => ({
+    ...p,
+    // The break BEFORE this paragraph (irrelevant for the first).
+    forcedBreak: i > 0,
+  }));
+}
+
 /**
  * Pours the body into whatever the photographs leave, column by column.
  *
  * Reading order is down a column and then into the next, never across a
  * gutter - a gutter is forbidden ground however free its pixels are. Within a
- * column, a band's gaps are used left to right.
+ * column, a band's gaps are used left to right. Paragraph boundaries force a
+ * fresh row; ordinary word-space boundaries do not.
  */
-function pourBody(text, {
-  top, bottom, columns, images, fontPx, lineHeight, family, weight,
+function pourBody(bodyInput, {
+  top, bottom, columns, images, fontPx, lineHeight, family, weight, align,
 }) {
+  const text = typeof bodyInput === 'object' && bodyInput ? String(bodyInput.text || '') : String(bodyInput || '');
+  const marks = (typeof bodyInput === 'object' && bodyInput && bodyInput.marks) || [];
+
   const bandHeight = fontPx * lineHeight;
   const minCorridor = MIN_CORRIDOR_EM * fontPx;
-  const pieces = breakPieces(text);
 
   // Every band's raw free space first: whether a gap is usable depends on
   // whether it persists into its neighbours, so no band can be judged alone.
@@ -205,72 +356,176 @@ function pourBody(text, {
     return bands.map((band, index) => ({ y: band.y, gaps: viableIntervals(raw, index, minCorridor), raw: band.free }));
   });
 
+  // One flat, reading-order sequence of every usable gap in the flow: column
+  // by column, band by band, left to right within a band. A forced break
+  // advances the pointer to the first gap whose `y` differs from the current
+  // one - i.e. a genuinely new row - which is what makes "start a new line"
+  // mean the same thing whether the row holds one gap or two (text either
+  // side of a picture).
+  const sequence = [];
+  for (const strip of strips) for (const band of strip) for (const gap of band.gaps) sequence.push({ y: band.y, gap });
+
+  // The frame's total capacity - every gap it offers, whatever is or is not
+  // written into it. This has to be independent of the actual body text: an
+  // empty block's `capacity` is exactly what tells a writer how much to
+  // write, and a block with no copy yet must still report a real number
+  // (the geometry the calibration pour below is measured against), not zero
+  // because nothing had been poured yet to visit these gaps.
+  const measures = sequence.map((s) => s.gap.end - s.gap.start);
+  const usableWidth = measures.reduce((sum, width) => sum + width, 0);
+
   const lines = [];
-  let index = 0;
-  let consumed = 0;
+  const violations = [];
+  let pointer = 0;
   let usedWidth = 0;
-  let usableWidth = 0;
-  const measures = [];
   // Room that no line was set on AT ALL. Deliberately not the same as
   // "usable minus used": every ragged line leaves a little at its right end,
   // and summing that across a column reports two or three lines of "hole"
   // for a column that is completely full. Ragged right is how type is set,
   // not a defect. Only a gap that received nothing is unexplained.
   let emptyGapWidth = 0;
+  let overset = '';
 
-  for (const strip of strips) {
-    for (const band of strip) {
-      for (const gap of band.gaps) {
-        const measure = gap.end - gap.start;
-        usableWidth += measure;
-        measures.push(measure);
-        if (index >= pieces.length) { emptyGapWidth += measure; continue; }
+  const paragraphs = splitParagraphs(text, marks);
 
-        let line = '';
-        let width = 0;
-        while (index < pieces.length) {
-          const piece = pieces[index];
-          const pieceWidth = measureWidth(piece, fontPx, family, weight);
-          if (line && width + pieceWidth > measure + 0.5) break;
-          if (!line && pieceWidth > measure + 0.5) {
-            // Wider than this gap. If some other gap could hold it, wait for
-            // one rather than cutting a word in half; if nothing anywhere can,
-            // set it here and report the violation.
-            const anywhere = strips.some((other) => other.some((b) => widest(b.gaps) >= pieceWidth - 0.5));
-            if (anywhere) break;
-            line = piece;
-            width = pieceWidth;
-            index += 1;
-            break;
-          }
-          line += piece;
-          width += pieceWidth;
+  for (const paragraph of paragraphs) {
+    // A forced break (this paragraph's predecessor ended with `\n`/`\n\n`)
+    // burns the rest of the CURRENT row rather than letting this paragraph's
+    // first piece slot into whatever gap comes next in reading order - that
+    // is what makes it a forced new line rather than an ordinary optional
+    // one. Any gaps skipped this way are genuinely unused room, so they are
+    // charged to `emptyGapWidth` exactly like a gap a short line left short.
+    if (paragraph.forcedBreak && pointer > 0 && pointer < sequence.length) {
+      const currentY = sequence[pointer - 1].y;
+      while (pointer < sequence.length && sequence[pointer].y === currentY) {
+        emptyGapWidth += sequence[pointer].gap.end - sequence[pointer].gap.start;
+        pointer += 1;
+      }
+    }
+
+    const pieces = breakPieces(paragraph.text);
+    let index = 0;
+    let firstLineOfParagraph = true;
+    // Characters of paragraph.text actually consumed so far - NOT the piece
+    // index. A piece is a word plus its trailing space, almost never one
+    // character, so the two cannot stand in for each other: `at` (and every
+    // `line.at` a caller uses to re-locate a rendered line back into the
+    // original body text, which render.js's mark re-application depends on)
+    // has to be a real character offset or it points at the wrong text
+    // entirely once a paragraph is more than a few words long.
+    let paraCharOffset = 0;
+
+    while (index < pieces.length && pointer < sequence.length) {
+      const { y, gap } = sequence[pointer];
+      const measureWidthPx = gap.end - gap.start;
+      pointer += 1;
+
+      let line = '';
+      let width = 0;
+      const lineStartOffset = paragraph.offset + paraCharOffset;
+      let hardOverset = false;
+
+      while (index < pieces.length) {
+        const piece = pieces[index];
+        const at = paragraph.offset + paraCharOffset;
+        const pieceWidth = measurePieceWidth(piece, at, fontPx, family, weight, marks);
+        if (line && width + pieceWidth > measureWidthPx + 0.5) break;
+        if (!line && pieceWidth > measureWidthPx + 0.5) {
+          // Wider than this gap. If some other upcoming gap could hold it,
+          // wait rather than cutting a word in half; if nothing anywhere
+          // can, set it here and report it - never silently.
+          const anywhere = sequence.slice(pointer).some((s) => s.gap.end - s.gap.start >= pieceWidth - 0.5);
+          if (anywhere) break;
+          line = piece;
+          width = pieceWidth;
+          hardOverset = true;
+          paraCharOffset += piece.length;
           index += 1;
+          break;
         }
+        line += piece;
+        width += pieceWidth;
+        paraCharOffset += piece.length;
+        index += 1;
+      }
 
-        const trimmed = trimEndClusters(line);
-        if (!trimmed) { emptyGapWidth += measure; continue; }
-        const drawn = measureWidth(trimmed, fontPx, family, weight);
-        lines.push({
-          text: trimmed,
-          at: consumed,
-          x: gap.start,
-          y: band.y,
-          width: drawn,
-          measure,
-          height: bandHeight,
-          baseline: band.y + fontPx * faceAscent(family, weight),
-          fontPx,
+      const trimmed = trimEndClusters(line);
+      if (!trimmed) { emptyGapWidth += measureWidthPx; continue; }
+      const drawn = measurePieceWidth(trimmed, lineStartOffset, fontPx, family, weight, marks);
+      lines.push({
+        text: trimmed,
+        at: lineStartOffset,
+        x: gap.start,
+        y,
+        width: drawn,
+        measure: measureWidthPx,
+        height: bandHeight,
+        baseline: y + fontPx * faceAscent(family, weight),
+        fontPx,
+        paragraphBreak: firstLineOfParagraph && paragraph.forcedBreak,
+      });
+      firstLineOfParagraph = false;
+      usedWidth += drawn;
+      if (hardOverset) {
+        violations.push({
+          code: 'UNBREAKABLE_TOKEN_OVERSET',
+          detail: `"${trimmed}" is ${Math.round(drawn)}px, wider than the ${Math.round(measureWidthPx)}px this line offers anywhere.`,
         });
-        usedWidth += drawn;
-        consumed += line.length;
+      }
+    }
+
+    if (index < pieces.length) {
+      // Ran out of room inside this paragraph. Everything from here on,
+      // including every later paragraph, is overset - reported, not painted.
+      overset = paragraphs
+        .slice(paragraphs.indexOf(paragraph))
+        .map((p, i) => (i === 0 ? pieces.slice(index).join('') : (p.forcedBreak ? '\n' : '') + p.text))
+        .join('');
+      break;
+    }
+  }
+
+  // Any gap the pour never reached at all - the copy ran out before the
+  // frame did - is exactly as unexplained as a gap a short line left short.
+  // This is what makes a genuinely short story on a wide multi-column block
+  // show up as a hole in every column it left untouched, not only in the
+  // last column a line happened to be set in (which is all `bottomResidual`,
+  // below, can see - it is a single scalar over the whole frame).
+  for (; pointer < sequence.length; pointer += 1) {
+    emptyGapWidth += sequence[pointer].gap.end - sequence[pointer].gap.start;
+  }
+
+  // Apply horizontal alignment. This never changes which text is on which
+  // line - line-breaking above already decided that at natural (ragged)
+  // width - only where that already-decided line is placed and, for
+  // `justify`, how the SPACE inside it is stretched to fill the measure.
+  // The last line of a paragraph is never justified, matching ordinary
+  // typesetting: a short last line stretched to the full measure reads as a
+  // mistake, not as "full".
+  if (align && align !== 'left') {
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i];
+      const isLastOfParagraph = i === lines.length - 1 || lines[i + 1].paragraphBreak;
+      const slack = Math.max(0, line.measure - line.width);
+      if (align === 'right') line.x = line.x + slack;
+      else if (align === 'center') line.x = line.x + slack / 2;
+      else if (align === 'justify' && !isLastOfParagraph) {
+        const spaceCount = (line.text.match(/\s/gu) || []).length;
+        // Never stretch a single-word line (nothing to distribute space
+        // across) and never stretch past a typographically sane amount -
+        // both are the "keep ragged rather than distort" rule the brief
+        // asks for, applied as a bound rather than a separate code path.
+        if (spaceCount > 0 && slack / spaceCount <= fontPx * 0.6) {
+          line.wordSpacingPx = Number((slack / spaceCount).toFixed(2));
+        }
       }
     }
   }
 
   return {
     lines,
-    overset: pieces.slice(index).join(''),
+    overset,
+    violations,
     // Room, expressed the way the AI brief and the worklist want it: how many
     // full-measure lines of this type the block still has. Derived from real
     // geometry rather than from a cell count.
@@ -332,14 +587,14 @@ function capacityChars(measures, fontPx, family, sample = CALIBRATION) {
   if (!pieces.length) return 0;
   let chars = 0;
   let at = 0;
-  for (const measure of measures) {
+  for (const measureWidthPx of measures) {
     let line = '';
     let width = 0;
     while (true) {
       const piece = pieces[at % pieces.length];
-      const pieceWidth = measureWidth(piece, fontPx, family, 400);
-      if (line && width + pieceWidth > measure + 0.5) break;
-      if (!line && pieceWidth > measure + 0.5) { line = piece; at += 1; break; }
+      const pieceWidth = measure(piece, fontPx, family, 400);
+      if (line && width + pieceWidth > measureWidthPx + 0.5) break;
+      if (!line && pieceWidth > measureWidthPx + 0.5) { line = piece; at += 1; break; }
       line += piece;
       width += pieceWidth;
       at += 1;
@@ -353,26 +608,6 @@ function capacityChars(measures, fontPx, family, sample = CALIBRATION) {
 // even at the same word lengths. This covers that much and no more - the
 // large uncertainty is expressed as a range, not buried in a discount.
 const BUDGET_SAFETY = 0.97;
-
-// WHY THIS IS A BUDGET AND NOT A GUARANTEE, which matters because the last
-// version of this file claimed to be one.
-//
-// How much a ragged edge wastes depends on the word lengths of the copy that
-// has not been written yet. Measured across eleven block shapes x three
-// column counts x five real Marathi sentences, the poured budget lands within
-// 3% of the true capacity for ordinary prose - but a sentence built from long
-// unbroken compounds ("ज्ञानेश्वरमहाराजांच्या", "महानगरपालिकेच्या") in a narrow
-// three-column measure came in 46% under it. No single character count can
-// cover both, and pricing the budget for the compound case would cost a third
-// of every ordinary block's capacity to save a repair that rarely fires.
-//
-// So the budget is the PRACTICAL figure, and the guarantee lives where it can
-// actually be kept: the copy is composed and measured exactly after it is
-// written, overflow is detected with certainty, and the pipeline's one
-// bounded shortening repairs it. That is the arrangement the whole engine
-// exists to make possible - before it there was no exact measurement to
-// repair against, so the budget had to pretend to be a promise.
-const COMPOUND_RISK_FLOOR = 0.7;
 
 // ---------------------------------------------------------------- the call ---
 
@@ -396,12 +631,22 @@ function hash(value) {
  * Everything is in the block's own logical pixels. A surface that wants it
  * bigger scales the whole result; it must never re-run this with different
  * numbers, because that is a different composition.
+ *
+ * `input.body` may be a plain string (no marks, as before) or
+ * `{ text, marks }` (rich-text.js's `textWithMarks()` shape) - the latter
+ * lets a bold or italic run be measured at its own real width rather than
+ * measured plain and painted bold afterwards.
  */
 export function composeBlock(input = {}) {
   const width = num(input.width, 0);
   const height = num(input.height, 0);
   const padding = Number.isFinite(Number(input.padding)) ? Number(input.padding) : 12;
-  const family = input.fontFamily || 'serif';
+  // Body family only - headline/kicker/deck are always the paper's own sans
+  // face at the paper's own weights, matching the stylesheet exactly (see
+  // DISPLAY_TYPOGRAPHY above). A whole-story font-family override (the
+  // Typography panel's "Georgia" etc.) is a body-only control in the actual
+  // CSS too: it never touches `.section-headline`.
+  const bodyFamily = input.fontFamily || 'serif';
 
   const content = {
     left: padding,
@@ -409,7 +654,7 @@ export function composeBlock(input = {}) {
     right: Math.max(padding, width - padding),
     bottom: Math.max(padding, height - padding),
   };
-  const measure = content.right - content.left;
+  const measureAvail = content.right - content.left;
   const room = content.bottom - content.top;
 
   const bodyPx = Math.max(MIN_LEGIBLE_PX, num(input.bodyFontPx, 16));
@@ -417,27 +662,29 @@ export function composeBlock(input = {}) {
   // stacks signs above the shirorekha and below the baseline; a box tighter
   // than ascent + descent crops them, which is a property of the script and
   // not a taste setting. Read from the font rather than guessed.
-  const floor = minLineHeightFor(family, 400);
+  const floor = minLineHeightFor(bodyFamily, 400);
   const lineHeight = Math.max(floor, num(input.lineHeight, floor));
 
   const images = (input.images || []).filter(Boolean);
   const violations = [];
   const warnings = [];
 
+  const shaperReady = isShaperReady();
   const result = {
     engineVersion: ENGINE_VERSION,
     fontReady: fontsReady(),
+    exactShaping: shaperReady,
     frame: { width, height, padding },
-    content: { ...content, measure, room },
+    content: { ...content, measure: measureAvail, room },
     bands: {},
     bodyLines: [],
     columns: [],
-    typography: { bodyPx, lineHeight, family },
+    typography: { bodyPx, lineHeight, family: bodyFamily },
     violations,
     warnings,
   };
 
-  if (measure <= 0 || room <= 0) {
+  if (measureAvail <= 0 || room <= 0) {
     result.fitState = 'NO_ROOM';
     result.whitespace = { intentional: width * height, unexplained: 0, bottomResidualPx: 0, bottomResidualLines: 0, unexplainedLines: 0, largestHoleLines: 0 };
     result.capacity = { fullMeasureEquivalents: 0, bodyClusterCapacity: 0 };
@@ -447,14 +694,16 @@ export function composeBlock(input = {}) {
   }
 
   // A block whose type is not ready to be measured must say so. A page
-  // composed against a fallback font and then repainted when the real one
-  // arrives is two different pages, and only one of them was approved.
+  // composed against a fallback measurement and then repainted when the real
+  // shaper/font arrives is two different pages, and only one of them was
+  // approved.
   if (!result.fontReady) warnings.push({ code: 'FONT_NOT_READY', detail: 'Composed before the publication font was measurable; sizes are estimated.' });
+  else if (!shaperReady) warnings.push({ code: 'SHAPING_NOT_READY', detail: 'Composed with summed advances, not real shaping - conjunct-heavy Marathi may be reserved wider than it prints.' });
 
   const flows = [
-    { key: 'kicker', text: String(input.kicker || ''), px: Math.round(bodyPx * 1.05), min: MIN_LEGIBLE_PX, maxLines: 2, locked: true, weight: 700 },
-    { key: 'headline', text: String(input.headline || ''), px: num(input.headlineFontPx, 34), min: Math.max(MIN_LEGIBLE_PX, bodyPx * 1.1), maxLines: num(input.headlineMaxLines, 4), locked: Boolean(input.headlineLocked), weight: 700 },
-    { key: 'deck', text: String(input.subheading || ''), px: num(input.subheadingFontPx, 20), min: Math.max(MIN_LEGIBLE_PX, bodyPx), maxLines: num(input.deckMaxLines, 3), locked: Boolean(input.subheadingLocked), weight: 400 },
+    { key: 'kicker', text: String(input.kicker || ''), px: Math.round(bodyPx * 1.05), min: MIN_LEGIBLE_PX, maxLines: 2, locked: true, ...DISPLAY_TYPOGRAPHY.kicker },
+    { key: 'headline', text: String(input.headline || ''), px: num(input.headlineFontPx, 34), min: Math.max(MIN_LEGIBLE_PX, bodyPx * 1.1), maxLines: num(input.headlineMaxLines, 4), locked: Boolean(input.headlineLocked), ...DISPLAY_TYPOGRAPHY.headline },
+    { key: 'deck', text: String(input.subheading || ''), px: num(input.subheadingFontPx, 20), min: Math.max(MIN_LEGIBLE_PX, bodyPx), maxLines: num(input.deckMaxLines, 3), locked: Boolean(input.subheadingLocked), ...DISPLAY_TYPOGRAPHY.deck },
   ].filter((flow) => flow.text.trim());
 
   let y = content.top;
@@ -473,7 +722,7 @@ export function composeBlock(input = {}) {
       images,
       fontPx: flow.px,
       lineHeight: Math.max(1.1, lineHeight - 0.15),
-      family,
+      family: flow.family,
       weight: flow.weight,
       maxLines: flow.maxLines,
     }, { locked: flow.locked, minPx: flow.min });
@@ -495,11 +744,12 @@ export function composeBlock(input = {}) {
         detail: `${set.overset.length} characters of the ${flow.key} have no legal room in this block.`,
       });
     }
+    for (const v of set.violations) violations.push({ ...v, code: `${flow.key.toUpperCase()}_${v.code}` });
     if (set.shrunk) {
       warnings.push({ code: `${flow.key.toUpperCase()}_AUTO_FITTED`, detail: `Set at ${set.resolvedPx}px rather than the requested ${flow.px}px.` });
     }
 
-    y += set.height;
+    y = set.bottom;
     previous = flow.key;
   }
 
@@ -507,21 +757,32 @@ export function composeBlock(input = {}) {
   result.bodyTop = bodyTop;
 
   const gutter = num(input.gutterPx, Math.round(bodyPx * 0.9));
-  const columns = columnsOf(content, num(input.columnCount, 1), gutter);
+  // An explicit column count means exactly that count, including 1 - a
+  // desk's own "set this in one column" is not the same request as "no
+  // opinion, work it out". Only a genuinely missing/non-finite value falls
+  // through to the width-based auto-inference.
+  const requestedColumns = Number(input.columnCount);
+  const columnCount = Number.isFinite(requestedColumns) && requestedColumns >= 1
+    ? requestedColumns
+    : Math.max(1, Math.min(4, Math.floor(Math.max(0, measureAvail - 2 * (Number(input.marginPx) || 12)) / 150)));
+  const columns = columnsOf(content, columnCount, gutter);
   result.columns = columns;
 
-  const body = pourBody(String(input.body || ''), {
+  const bodyInput = input.body && typeof input.body === 'object' ? input.body : String(input.body || '');
+  const body = pourBody(bodyInput, {
     top: bodyTop,
     bottom: content.bottom,
     columns,
     images,
     fontPx: bodyPx,
     lineHeight,
-    family,
+    family: bodyFamily,
     weight: 400,
+    align: input.textAlign || 'left',
   });
 
   result.bodyLines = body.lines;
+  const bodyPlainText = typeof bodyInput === 'object' ? bodyInput.text : bodyInput;
   result.overset = {
     kicker: result.bands.kicker?.overset || '',
     headline: result.bands.headline?.overset || '',
@@ -531,6 +792,7 @@ export function composeBlock(input = {}) {
   if (body.overset) {
     violations.push({ code: 'BODY_OVERSET', detail: `${clusters(body.overset).length} clusters of copy have no room in this block.` });
   }
+  for (const v of body.violations) violations.push({ ...v, code: `BODY_${v.code}` });
 
   // ------------------------------------------------------------ whitespace ---
   //
@@ -557,9 +819,9 @@ export function composeBlock(input = {}) {
   // Space that is doing a job: the margins, the gutters, and the room the
   // display type and its optical transitions legitimately take off the top.
   const intentionalArea =
-    width * height - measure * room
+    width * height - measureAvail * room
     + gutter * Math.max(0, columns.length - 1) * Math.max(0, content.bottom - bodyTop)
-    + measure * Math.max(0, bodyTop - content.top);
+    + measureAvail * Math.max(0, bodyTop - content.top);
 
   result.whitespace = {
     intentional: Math.round(intentionalArea),
@@ -573,7 +835,7 @@ export function composeBlock(input = {}) {
     largestHoleLines: Number(Math.max(bottomResidualLines, unexplainedLines).toFixed(2)),
   };
 
-  const pour = (sample) => Math.floor(capacityChars(body.measures, bodyPx, family, sample) * BUDGET_SAFETY);
+  const pour = (sample) => Math.floor(capacityChars(body.measures, bodyPx, bodyFamily, sample) * BUDGET_SAFETY);
   const charCapacity = pour(CALIBRATION);
   // The ends of the range are whichever samples actually pack worst and best
   // in THIS measure, not whichever was expected to. In a narrow column long
@@ -598,18 +860,15 @@ export function composeBlock(input = {}) {
     // conjunct-heavy. A caller that must not be wrong quotes `min`.
     bodyCharRange: { min: Math.min(charFloor, charCeiling), max: Math.max(charFloor, charCeiling) },
     bodyCharCapacityFloor: Math.min(charFloor, charCeiling),
-    bodyClustersUsed: clusters(String(input.body || '')).length,
-    bodyCharsUsed: String(input.body || '').length,
+    bodyClustersUsed: clusters(String(bodyPlainText || '')).length,
+    bodyCharsUsed: String(bodyPlainText || '').length,
   };
 
   // A hole is only a hole if there is something a writer could actually do
   // about it. The budget is deliberately conservative, so copy written
   // exactly to it leaves a little geometric room over - counting that as a
   // hole would flag every correctly-filled block and spend a repair call
-  // chasing the safety margin. That is the same trap CLAUDE.md records for
-  // the headline reservation: a conservative estimate does not remove a gap,
-  // it relocates it, and the fix is to measure the gap in the same currency
-  // the estimate was quoted in.
+  // chasing the safety margin.
   // Measured against the SAFE end of the range: a block is only short of copy
   // if it is short even for the least efficient prose anyone might file.
   result.capacity.shortfallChars = Math.max(0, result.capacity.bodyCharRange.min - result.capacity.bodyCharsUsed);
@@ -619,16 +878,25 @@ export function composeBlock(input = {}) {
   const charsPerLine = body.measures.length ? result.capacity.bodyCharRange.min / body.measures.length : 0;
   const holed = result.whitespace.largestHoleLines >= HOLE_LINES
     && result.capacity.shortfallChars > charsPerLine;
-  result.fitState = violations.some((v) => v.code.endsWith('OVERSET') || v.code.endsWith('OVERSET_LOCKED'))
+
+  // A block is OVERSET if any flow ran out of room for its own text
+  // (`overset`, leftover pieces) OR if it painted a token wider than its
+  // frame allowed anywhere (a hard violation - see setDisplayFlow/pourBody).
+  // The second case used to be invisible: the token was drawn, `overset`
+  // stayed empty, and the block reported FITS or UNDERFILLED while
+  // physically painting outside its own measure.
+  const oversetCodes = ['_OVERSET', '_OVERSET_LOCKED', 'UNBREAKABLE_TOKEN_OVERSET'];
+  result.fitState = violations.some((v) => oversetCodes.some((code) => v.code.endsWith(code)))
     ? 'OVERSET'
     : (!flows.length && !body.lines.length ? 'EMPTY' : (holed ? 'UNDERFILLED' : 'FITS'));
 
   result.fingerprint = hash([
-    ENGINE_VERSION, width, height, padding, bodyPx, lineHeight, family,
+    ENGINE_VERSION, width, height, padding, bodyPx, lineHeight, bodyFamily, input.textAlign,
     input.headlineFontPx, input.subheadingFontPx, input.columnCount,
-    input.kicker, input.headline, input.subheading, input.body,
+    input.kicker, input.headline, input.subheading, bodyPlainText,
+    JSON.stringify((typeof bodyInput === 'object' && bodyInput.marks) || []),
     images.map((i) => `${i.x},${i.y},${i.width},${i.height},${i.shape},${i.rotation || 0},${i.mask ? `${i.mask.rows}x${i.mask.cols}` : ''}`).join('|'),
-  ].join(''));
+  ].join(''));
 
   return result;
 }

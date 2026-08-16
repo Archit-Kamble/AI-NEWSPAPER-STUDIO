@@ -11,7 +11,7 @@
 // the page canvas, the Block Editor, the worklist, preflight or the AI brief.
 
 import { composeBlock } from './compose.js';
-import { plainText } from '../layout/rich-text.js';
+import { plainText, textWithMarks } from '../layout/rich-text.js';
 // The dateline opens the body and therefore occupies the body's room, so it
 // is composed as part of the flow. One definition, in the module that has
 // always owned it - a second copy here is exactly the drift this codebase
@@ -44,10 +44,19 @@ function positive(value, fallback) {
  * A newspaper column is about 40mm; at 2px/mm that is 80px. A block three or
  * four grid columns wide carries one text column, a seven-column lead carries
  * three - a 620px line of 11px type is unreadable and no paper prints one.
+ *
+ * An EXPLICIT column count is honoured exactly, including 1 - a sub-editor
+ * setting a block to one column is a real instruction, not "no opinion, work
+ * it out". The old `explicit > 1` guard silently threw an explicit 1 away and
+ * fell through to auto-inference, which could (and, on a wide single-column
+ * block, did) infer more than one column for a block the desk had explicitly
+ * locked to one - text the desk was looking at as a single unbroken column
+ * composed as two. Only a genuinely missing/non-integer value now falls
+ * through.
  */
 export function measureColumns(view, widthPx) {
   const explicit = Number(view?.columnCount ?? view?.column_count);
-  if (Number.isFinite(explicit) && explicit > 1) return explicit;
+  if (Number.isInteger(explicit) && explicit >= 1) return explicit;
   const usable = Math.max(0, widthPx - 2 * positive(view?.marginPx ?? view?.margin_px, 12));
   return Math.max(1, Math.min(4, Math.floor(usable / 150)));
 }
@@ -103,6 +112,21 @@ export function composeSection(section = {}, view = {}) {
   const bodyFontPx = positive(pick(section, view, 'bodyFontPx', 'body_font_px', 16), 16);
   const prefix = datelineText(view);
 
+  // Bold/italic/underline runs, not flattened away before composition sees
+  // them. `plainText()` and `textWithMarks()` share the same tag/newline/
+  // entity normalisation pipeline (rich-text.js), so `withMarks.text` is
+  // character-for-character the same string `plainText()` would have
+  // produced - only marks are additionally carried. The dateline prefix has
+  // no marks of its own, so every mark's offset shifts forward by exactly
+  // its length.
+  const withMarks = textWithMarks(pick(section, view, 'body', 'body', ''));
+  const bodyText = prefix + withMarks.text;
+  const bodyMarks = withMarks.marks.map((mark) => ({
+    ...mark,
+    start: mark.start + prefix.length,
+    end: mark.end + prefix.length,
+  }));
+
   return composeBlock({
     width,
     height,
@@ -111,12 +135,19 @@ export function composeSection(section = {}, view = {}) {
     headline: plainText(pick(section, view, 'headline', 'headline', '')),
     subheading: plainText(pick(section, view, 'subheading', 'subheading', '')),
     // The dateline is part of the flow it opens.
-    body: prefix + plainText(pick(section, view, 'body', 'body', '')),
+    body: { text: bodyText, marks: bodyMarks },
     headlineFontPx: positive(pick(section, view, 'headlineFontPx', 'headline_font_px', 34), 34),
     subheadingFontPx: positive(pick(section, view, 'subheadingFontPx', 'subheading_font_px', 20), 20),
     bodyFontPx,
     lineHeight: Number(pick(section, view, 'lineHeight', 'line_height', 0)) || 0,
     fontFamily: pick(section, view, 'fontFamily', 'font_family', 'serif'),
+    // The persisted alignment field (typography-panel.js's ALIGNMENTS,
+    // page.repository.js's text_align column) - previously read by nothing
+    // in this engine, because composed lines render as standalone spans
+    // outside the `.section-body{text-align:justify}` container the CSS rule
+    // assumes. Wiring it here is what makes a desk's "justify" choice
+    // actually change the geometry rather than being silently ignored.
+    textAlign: pick(section, view, 'textAlign', 'text_align', 'left'),
     columnCount: measureColumns(view, width),
     headlineLocked: Boolean(pick(section, view, 'headlineLocked', 'headline_locked', false)),
     subheadingLocked: Boolean(pick(section, view, 'subheadingLocked', 'subheading_locked', false)),

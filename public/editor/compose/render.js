@@ -109,11 +109,18 @@ export function composedMarkup(composition, view, { datelinePrefix = '' } = {}) 
     // part of the flow and part of what was measured - but it is SAHAS
     // furniture, not copy, and is marked so it can be set differently.
     const dateline = datelinePrefix && (line.at || 0) < datelinePrefix.length;
+    // `left`/`x` already carries right/center alignment - composeBlock()
+    // repositioned the whole line, so nothing extra is drawn for those.
+    // `justify` is different: the line stays where it was broken and the
+    // SPACE inside it stretches, which is a real CSS property, not a
+    // position - `word-spacing` is the one property that does that without
+    // this renderer having to re-lay out the individual words itself.
+    const wordSpacing = Number.isFinite(line.wordSpacingPx) ? `word-spacing:${line.wordSpacingPx.toFixed(2)}px;` : '';
     pieces.push(
       `<span class="section-composed section-body-line${dateline ? ' has-dateline' : ''}"`
       + ` style="left:${line.x.toFixed(2)}px;top:${line.y.toFixed(2)}px;`
       + `width:${(line.measure + 1).toFixed(2)}px;height:${line.height.toFixed(2)}px;`
-      + `font-size:${line.fontPx}px;line-height:${line.height.toFixed(2)}px">${html}</span>`,
+      + `font-size:${line.fontPx}px;line-height:${line.height.toFixed(2)}px;${wordSpacing}">${html}</span>`,
     );
   }
 

@@ -188,6 +188,7 @@ function setDisplayFlow(text, {
         violations.push({
           code: 'UNBREAKABLE_TOKEN_OVERSET',
           detail: `"${trimmed}" is ${Math.round(drawnWidth)}px, wider than the ${Math.round(measure)}px this band offers anywhere.`,
+          charsOver: clusters(trimmed).length,
         });
       }
     }
@@ -353,7 +354,8 @@ function pourBody(bodyInput, {
       bands.push({ y, free: subtract([column], bandObstacles(images, y, y + bandHeight, fontPx)) });
     }
     const raw = bands.map((band) => band.free);
-    return bands.map((band, index) => ({ y: band.y, gaps: viableIntervals(raw, index, minCorridor), raw: band.free }));
+    const fullWidthPx = column.end - column.start;
+    return bands.map((band, index) => ({ y: band.y, gaps: viableIntervals(raw, index, minCorridor, fullWidthPx), raw: band.free }));
   });
 
   // One flat, reading-order sequence of every usable gap in the flow: column
@@ -470,6 +472,12 @@ function pourBody(bodyInput, {
         violations.push({
           code: 'UNBREAKABLE_TOKEN_OVERSET',
           detail: `"${trimmed}" is ${Math.round(drawn)}px, wider than the ${Math.round(measureWidthPx)}px this line offers anywhere.`,
+          // Structured, not just in the message: a caller reporting "cut N
+          // characters" needs this number without parsing English out of
+          // `detail`. This token was drawn (it is not in `overset`, the
+          // leftover text), so it is the only place its own length is
+          // recorded.
+          charsOver: clusters(trimmed).length,
         });
       }
     }

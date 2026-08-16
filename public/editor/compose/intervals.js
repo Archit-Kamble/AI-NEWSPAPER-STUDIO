@@ -105,18 +105,36 @@ export const MIN_CORRIDOR_BANDS = 2;
  * `bands` is every band's raw free intervals, in order; `index` is the band
  * being judged. Returns the subset of that band's gaps that are both wide
  * enough and part of a run of at least MIN_CORRIDOR_BANDS bands.
+ *
+ * `fullWidthPx`, if given, exempts a gap that is (near enough) the WHOLE
+ * column from the persistence test below. A notch is inherently a PARTIAL
+ * shape - it exists only because something already narrowed that specific
+ * band - so a gap spanning the full column cannot be one, whatever the band
+ * next to it looks like. Without this, the ordinary case of a full-width
+ * line sitting directly above a photograph that starts on the very next row
+ * was being discarded as a "stranded single line": its downward neighbour
+ * (now cut down to a sliver by the photograph, or gone entirely) never finds
+ * a wide-enough match, so `persists(1)` failed and the line - real,
+ * printable, no obstacle anywhere on its own band - was silently dropped.
+ * Found on a real fixture: one short line of body copy directly over a
+ * placed photograph composed to zero body lines at all, the block reporting
+ * total overset despite having an genuinely printable row.
  */
-export function viableIntervals(bands, index, minWidthPx) {
+export function viableIntervals(bands, index, minWidthPx, fullWidthPx = Infinity) {
   const here = bands[index] || [];
   return here.filter((piece) => {
     if (piece.end - piece.start < minWidthPx) return false;
     if (MIN_CORRIDOR_BANDS <= 1) return true;
+    if (piece.end - piece.start >= fullWidthPx - 0.5) return true;
 
     // A corridor has to continue in BOTH directions, not either. Requiring
     // only one was not enough: a pocket that opens off the full-width lines
     // above a photograph and then closes immediately satisfies "continues
     // upward" while still being a single stranded line at the right of one
     // row - which is precisely the shoulder notch this rule exists to refuse.
+    // (This is why the full-width exemption above checks the gap's OWN
+    // width, not merely that it "connects upward" to a wide gap - a notch
+    // can do that too, and still be a notch.)
     //
     // The top and bottom of the block count as satisfied. A column of copy
     // running from the top edge down to a picture is a real corridor; it has

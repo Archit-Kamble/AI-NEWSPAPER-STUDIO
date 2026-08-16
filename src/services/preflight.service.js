@@ -77,9 +77,33 @@ async function textFlow() {
   return flowModule;
 }
 
+// The exact composition engine, for the one check that has to agree with
+// fit.service.js exactly: whether a block's REAL copy actually fits. Both
+// used to ask text-flow.js's approximate character grid, each with its own
+// call - close enough to agree in the ordinary case, but "fit says this
+// fits" and "preflight still fails it" is exactly the two-numbers-disagree
+// bug this engine exists to remove, and a sign-off is the worst place to
+// find it. The rest of this file's checks (band-vs-image collisions, caption
+// placement) stay on the existing box-based geometry below; only the overset
+// question moves, because it is the one both services must answer alike.
+let composeModule = null;
+async function compose() {
+  if (!composeModule) composeModule = await import('../../public/editor/compose/section-adapter.js');
+  return composeModule;
+}
+let metricsModule = null;
+let shaperModule = null;
+async function ensureComposeReady() {
+  if (!metricsModule) metricsModule = await import('../../public/editor/compose/font-metrics.js');
+  if (!shaperModule) shaperModule = await import('../../public/editor/compose/shaper.js');
+  await Promise.all([metricsModule.ensureFontsLoaded(), shaperModule.ensureShaperReady()]);
+}
+
 async function checkPage(page, newspaper, totalPages) {
   const g = geometryOf(newspaper);
-  const { measureSectionFlow, flowViewFromSection, buildFlowMap, flowImageFromRow, bandBox, captionBox, CELL } = await textFlow();
+  const { flowViewFromSection, buildFlowMap, flowImageFromRow, bandBox, captionBox, CELL } = await textFlow();
+  await ensureComposeReady();
+  const adapter = await compose();
   const findings = [];
   const at = (section) => ({ pageNumber: page.page_number, sectionKey: section.section_key });
 
@@ -148,13 +172,16 @@ async function checkPage(page, newspaper, totalPages) {
     }
 
     // --- copy that does not fit -------------------------------------------
+    // The exact engine, not the character grid: the same composeSection()
+    // fit.service.js measures a fix against, so a block fit just approved can
+    // never fail this check the way an approximate-grid-vs-approximate-grid
+    // comparison could.
     if (section.body) {
-      const measurement = measureSectionFlow(section);
-
-      if (measurement.overflowing) {
+      const composed = adapter.composeSection(section, {});
+      if (adapter.bodyOverset(composed)) {
         findings.push({
           level: 'error', check: 'overset', ...at(section),
-          message: `${measurement.overflowChars} characters more than this block holds. Cut it, or carry it over.`,
+          message: `${adapter.bodyOversetChars(composed)} characters more than this block holds. Cut it, or carry it over.`,
         });
       }
     }

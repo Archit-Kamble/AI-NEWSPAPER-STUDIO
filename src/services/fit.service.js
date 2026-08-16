@@ -30,28 +30,33 @@ const MIN_BODY_PX = 4.6;
 const MIN_HEADLINE_PX = 12;
 const STEP_PX = 0.5;
 
-let flowModule = null;
-async function textFlow() {
-  if (!flowModule) flowModule = await import('../../public/editor/layout/text-flow.js');
-  return flowModule;
+// The exact composition engine - the same module composeSection() the page
+// canvas, the Block Editor and preflight's own overset check all measure
+// against (see preflight.service.js). "Would this fit?" and "does this fit?"
+// have to be the same question asked twice, or a proposal fit approves can
+// still fail preflight - which was possible while this measured through
+// text-flow.js's approximate character grid and preflight measured through
+// the same grid's OWN separate call, close enough in the common case to go
+// unnoticed and exactly the kind of two-numbers-that-should-agree bug this
+// engine exists to remove.
+let composeModule = null;
+async function compose() {
+  if (!composeModule) composeModule = await import('../../public/editor/compose/section-adapter.js');
+  return composeModule;
+}
+let metricsModule = null;
+let shaperModule = null;
+async function ensureComposeReady() {
+  if (!metricsModule) metricsModule = await import('../../public/editor/compose/font-metrics.js');
+  if (!shaperModule) shaperModule = await import('../../public/editor/compose/shaper.js');
+  await Promise.all([metricsModule.ensureFontsLoaded(), shaperModule.ensureShaperReady()]);
 }
 
-function budgetFor(flow, section, overrides = {}) {
-  const map = flow.buildFlowMap(
-    { width_px: section.width_px, height_px: section.height_px },
-    {
-      marginPx: Number(section.margin_px) || 12,
-      lineHeight: Number(section.line_height) || 1.25,
-      headline: section.headline || '',
-      headlineFontPx: overrides.headlineFontPx ?? Number(section.headline_font_px),
-      subheading: section.subheading || '',
-      subheadingFontPx: overrides.subheadingFontPx ?? Number(section.subheading_font_px),
-      body: section.body || '',
-      bodyFontPx: overrides.bodyFontPx ?? Number(section.body_font_px),
-    },
-    (section.images || []).map(flow.flowImageFromRow),
-  );
-  return map.bodyCharBudget;
+// Composes the block's REAL, already-written copy at a candidate type size
+// and reports whether it actually fits - not an estimate compared against a
+// character count, but the same pour that will print, run again at this size.
+function composeAt(adapter, section, overrides = {}) {
+  return adapter.composeSection(section, overrides);
 }
 
 /**
@@ -76,14 +81,22 @@ async function fitSection(pageId, sectionKey, { apply = false } = {}) {
   // against - a block with a photograph in it holds far less copy.
   section.images = await sectionImageRepository.listBySection(section.id);
 
-  const flow = await textFlow();
+  await ensureComposeReady();
+  const adapter = await compose();
   const written = String(section.body || '').length;
-  const budget = budgetFor(flow, section);
 
-  if (written <= budget) {
+  const base = composeAt(adapter, section);
+  if (!adapter.bodyOverset(base)) {
+    // `budget` is deliberately the SAFE floor (bodyCharRange.min - see
+    // compose.js), not a hard ceiling: this story's own real word shapes can
+    // genuinely pack more than that and still fit, which the exact pour
+    // above just confirmed. Saying "holds N" as if N were a limit this text
+    // exceeded would read as a contradiction on the exact cases where the
+    // safe estimate is at its most conservative.
+    const budget = base.capacity.bodyCharRange.min;
     return {
       sectionKey, fits: true, applied: false, written, budget,
-      message: `This block holds ${budget} characters and ${written} are written. It fits.`,
+      message: `${written} characters are written and it fits. (This block's guaranteed-safe capacity is at least ${budget}.)`,
     };
   }
 
@@ -104,8 +117,13 @@ async function fitSection(pageId, sectionKey, { apply = false } = {}) {
 
   for (const headlinePx of [startHeadline, ...(headlineFloor < startHeadline ? [headlineFloor] : [])]) {
     for (let bodyPx = startBody - STEP_PX; bodyPx >= MIN_BODY_PX; bodyPx -= STEP_PX) {
-      const candidate = budgetFor(flow, section, { bodyFontPx: bodyPx, headlineFontPx: headlinePx });
-      if (written > candidate) continue;
+      // The real body text, poured at this candidate size - exact, not a
+      // count compared against an estimate. A range-based capacity number
+      // would have to guess whether THIS story's actual word shapes pack
+      // efficiently or not; composing it removes the guess entirely.
+      const attempt = composeAt(adapter, section, { bodyFontPx: bodyPx, headlineFontPx: headlinePx });
+      if (adapter.bodyOverset(attempt)) continue;
+      const candidate = attempt.capacity.bodyCharRange.min;
 
       if (apply) {
         await pool.query(
@@ -133,12 +151,14 @@ async function fitSection(pageId, sectionKey, { apply = false } = {}) {
     }
   }
 
-  // Nothing legal fits it. Say by how much, in the units a sub-editor cuts in.
-  const floorBudget = budgetFor(flow, section, {
-    bodyFontPx: MIN_BODY_PX,
-    headlineFontPx: headlineFloor,
-  });
-  const cut = written - floorBudget;
+  // Nothing legal fits it. Say by how much, in the units a sub-editor cuts in -
+  // the real leftover text at the smallest legal size, not a subtraction
+  // against the safe-range estimate (which would either over- or
+  // under-quote the cut depending on this story's own word shapes).
+  const floor = composeAt(adapter, section, { bodyFontPx: MIN_BODY_PX, headlineFontPx: headlineFloor });
+  const floorBudget = floor.capacity.bodyCharRange.min;
+  const exact = adapter.bodyOversetChars(floor);
+  const cut = exact > 0 ? exact : Math.max(0, written - floorBudget);
   return {
     sectionKey,
     fits: false,

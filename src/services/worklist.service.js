@@ -20,12 +20,24 @@
 const pool = require('../config/db');
 const sectionImages = require('../repositories/sectionImage.repository');
 
-// The character grid, from the one module that defines it - the same numbers
-// the editor uses on every keystroke. Never a second copy (see CLAUDE.md).
-let flowModule = null;
-async function textFlow() {
-  if (!flowModule) flowModule = await import('../../public/editor/layout/text-flow.js');
-  return flowModule;
+// The exact composition engine, from the one module that defines it - the
+// same geometry the page canvas and the Block Editor measure against, real
+// shaped Marathi advances and all. text-flow.js's character grid remains the
+// fast, approximate planner (the editor's live-typing feedback still uses
+// it), but a number the desk is TOLD - "this block holds N characters" - is a
+// final-authority answer and has to come from the engine that actually knows,
+// not the constant-based estimate that motivated building this one.
+let composeModule = null;
+async function compose() {
+  if (!composeModule) composeModule = await import('../../public/editor/compose/section-adapter.js');
+  return composeModule;
+}
+let metricsModule = null;
+let shaperModule = null;
+async function ensureComposeReady() {
+  if (!metricsModule) metricsModule = await import('../../public/editor/compose/font-metrics.js');
+  if (!shaperModule) shaperModule = await import('../../public/editor/compose/shaper.js');
+  await Promise.all([metricsModule.ensureFontsLoaded(), shaperModule.ensureShaperReady()]);
 }
 
 // What each kind of block is for, from the one module that defines it - the
@@ -88,7 +100,8 @@ async function forEdition(newspaperId) {
   // brief) already passes its pictures; this one did not.
   const placements = await sectionImages.placementsByEdition(newspaperId);
 
-  const flow = await textFlow();
+  await ensureComposeReady();
+  const adapter = await compose();
   const kinds = await blockKinds();
   const pages = new Map();
   const totals = { blocks: 0, done: 0, empty: 0, started: 0, needsCaption: 0, charactersWanted: 0 };
@@ -107,30 +120,33 @@ async function forEdition(newspaperId) {
     const page = pages.get(row.page_number);
     const state = stateOf(row);
 
-    // How much copy the block holds, measured by the same character grid the
-    // editor uses on every keystroke - so the number quoted here is the number
-    // the block will actually enforce.
+    // How much copy the block holds, measured by the exact engine - real
+    // shaped advances, the block's own headline/deck/photographs and all - so
+    // the number quoted here is the number the block will actually enforce.
     //
     // Measured against the headline the block ALREADY has: a headline eats
     // lines out of the body's budget, so "how much copy fits" is only a real
-    // answer once you know what is above it.
-    const map = flow.buildFlowMap(
-      { width_px: row.width_px, height_px: row.height_px },
-      {
-        marginPx: Number(row.margin_px) || 12,
-        lineHeight: Number(row.line_height) || 1.25,
-        headline: row.headline || '',
-        headlineFontPx: Number(row.headline_font_px),
-        subheading: row.subheading || '',
-        subheadingFontPx: Number(row.subheading_font_px),
-        body: row.body || '',
-        bodyFontPx: Number(row.body_font_px),
-      },
-      (placements.get(row.id) || []).map(flow.flowImageFromRow),
+    // answer once you know what is above it. `bodyCharRange.min` rather than
+    // the practical figure: this is a number the desk is TOLD, and the safe
+    // end of the range is the one that is never wrong (see compose.js).
+    const composed = adapter.composeSection(
+      { ...row, images: placements.get(row.id) || [] },
+      {},
     );
-    const capacity = map.bodyCharBudget;
+    const capacity = composed.capacity.bodyCharRange.min;
     const written = (row.body || '').length;
-    const over = Math.max(0, written - capacity);
+    // Overset is asked of the engine directly rather than re-derived from the
+    // character count: the range exists because a scalar comparison is only
+    // ever approximate, but composing the block's REAL, already-written body
+    // text is exact - it is the same geometry the page prints from.
+    const trulyOverset = adapter.bodyOverset(composed);
+    // Exact, not a subtraction against the safe-end estimate: the desk is
+    // told precisely how many visible units have no room, the same count
+    // diagnosticMarkup() shows on the canvas itself (render.js), because
+    // "cut about N characters" only means something if N is real. Covers
+    // both leftover text AND a single word too wide for the block (which
+    // has no leftover at all - see bodyOversetChars()).
+    const over = trulyOverset ? adapter.bodyOversetChars(composed) : 0;
 
     totals.blocks += 1;
     if (state === 'done') totals.done += 1;

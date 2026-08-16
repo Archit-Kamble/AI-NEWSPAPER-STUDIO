@@ -11,6 +11,7 @@
 // the page canvas, the Block Editor, the worklist, preflight or the AI brief.
 
 import { composeBlock } from './compose.js';
+import { clusters } from './graphemes.js';
 import { plainText, textWithMarks } from '../layout/rich-text.js';
 // The dateline opens the body and therefore occupies the body's room, so it
 // is composed as part of the flow. One definition, in the module that has
@@ -53,11 +54,20 @@ function positive(value, fallback) {
  * locked to one - text the desk was looking at as a single unbroken column
  * composed as two. Only a genuinely missing/non-integer value now falls
  * through.
+ *
+ * Reads `view` first and `section` (the persisted row) second, exactly like
+ * every other field this adapter picks - NOT `view` alone. A caller that
+ * passes a small overrides object rather than a fully-hydrated draft (every
+ * server-side caller: worklist, fit, preflight) would otherwise have a
+ * persisted `column_count` silently vanish and fall through to width-based
+ * guessing, which is the same class of bug as the `explicit > 1` guard this
+ * sits beside - an explicit choice discarded because the code only looked in
+ * one of the two places it can legally live.
  */
-export function measureColumns(view, widthPx) {
-  const explicit = Number(view?.columnCount ?? view?.column_count);
+export function measureColumns(section, view, widthPx) {
+  const explicit = Number(pick(section, view, 'columnCount', 'column_count', undefined));
   if (Number.isInteger(explicit) && explicit >= 1) return explicit;
-  const usable = Math.max(0, widthPx - 2 * positive(view?.marginPx ?? view?.margin_px, 12));
+  const usable = Math.max(0, widthPx - 2 * positive(pick(section, view, 'marginPx', 'margin_px', 12), 12));
   return Math.max(1, Math.min(4, Math.floor(usable / 150)));
 }
 
@@ -148,9 +158,41 @@ export function composeSection(section = {}, view = {}) {
     // assumes. Wiring it here is what makes a desk's "justify" choice
     // actually change the geometry rather than being silently ignored.
     textAlign: pick(section, view, 'textAlign', 'text_align', 'left'),
-    columnCount: measureColumns(view, width),
+    columnCount: measureColumns(section, view, width),
     headlineLocked: Boolean(pick(section, view, 'headlineLocked', 'headline_locked', false)),
     subheadingLocked: Boolean(pick(section, view, 'subheadingLocked', 'subheading_locked', false)),
     images: obstaclesOf(section),
   });
+}
+
+/**
+ * Is the BODY specifically overset - not the block as a whole.
+ *
+ * `result.overset.body` alone is not the whole answer: it is the LEFTOVER
+ * text a pour never reached, but a single word wider than every legal gap in
+ * the frame (Marathi has no hyphenation - see graphemes.js) is drawn anyway,
+ * never left over, and shows up only as a violation. `result.fitState` sees
+ * both correctly, but it is whole-block: a headline that cannot fit is also
+ * OVERSET, and that is not a reason to shrink the BODY. This is the one
+ * check fit.service.js, worklist.service.js and preflight.service.js all
+ * need and must ask identically, or "fit approved this" and "preflight still
+ * fails it" can disagree again over exactly this edge case.
+ */
+export function bodyOverset(result) {
+  return Boolean(result?.overset?.body)
+    || Boolean(result?.violations?.some((v) => v.code === 'BODY_UNBREAKABLE_TOKEN_OVERSET'));
+}
+
+/**
+ * How many visible units of the body have no room - real leftover text plus
+ * any unbreakable token that was drawn past its own measure (see
+ * `bodyOverset()`). "Cut about N characters" only means something if N
+ * accounts for both, not just whichever one happens to be the leftover.
+ */
+export function bodyOversetChars(result) {
+  const leftover = clusters(result?.overset?.body || '').length;
+  const hard = (result?.violations || [])
+    .filter((v) => v.code === 'BODY_UNBREAKABLE_TOKEN_OVERSET')
+    .reduce((sum, v) => sum + (v.charsOver || 0), 0);
+  return leftover + hard;
 }

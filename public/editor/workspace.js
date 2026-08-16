@@ -435,31 +435,46 @@ async function patchSectionImage(imageId, patch) {
 }
 
 // Brings the placed pictures back to what a history snapshot says they were -
-// undo/redo of a resize or a move. Pictures the snapshot doesn't know about
-// (added or removed since) are left alone: that is a different, wider kind of
-// undo this stage does not cover - see block-frame.js's own note on scope.
-// Row shape (GET, and what a snapshot stores) is x_px/y_px/width_px/height_px -
-// the database's own column names (sectionImage.repository.js's `SELECT si.*`).
-// The PATCH body the move/resize endpoint accepts is camelCase x/y/width/height
-// instead (sectionImage.service.js's `move()`) - an existing asymmetry this
-// function has to bridge, not one it introduces.
+// undo/redo of a resize, a move, or any of the other patches that share the
+// same one choke point (patchSectionImage(): fit mode, rotation, flip, shape,
+// stand-off). Pictures the snapshot doesn't know about (added or removed
+// since) are left alone: that is a different, wider kind of undo this stage
+// does not cover - see block-frame.js's own note on scope.
+// Row shape (GET, and what a snapshot stores) is the database's own column
+// names (sectionImage.repository.js's `SELECT si.*`: x_px/y_px/width_px/
+// height_px/rotation/flip_h/flip_v/shape/stand_off_px/fit_mode). The PATCH
+// body the move/resize endpoint accepts is camelCase instead
+// (sectionImage.service.js's `move()`) - an existing asymmetry this function
+// has to bridge for every field it restores, not only geometry: undoing a
+// fit-mode or rotation change used to be silently ignored, because only
+// x_px/y_px/width_px/height_px were ever compared.
+const UNDO_FIELDS = [
+  ["x_px", "x", Number],
+  ["y_px", "y", Number],
+  ["width_px", "width", Number],
+  ["height_px", "height", Number],
+  ["rotation", "rotation", Number],
+  ["flip_h", "flipH", Boolean],
+  ["flip_v", "flipV", Boolean],
+  ["shape", "shape", String],
+  ["stand_off_px", "standOffPx", Number],
+  ["fit_mode", "fitMode", String],
+];
+
 async function reconcileImages(images) {
   if (!Array.isArray(images)) return;
   const current = new Map(sectionImages.map((image) => [image.id, image]));
-  const GEOMETRY_KEYS = ["x_px", "y_px", "width_px", "height_px"];
 
   for (const wanted of images) {
     const now = current.get(wanted.id);
     if (!now) continue;
-    const changed = GEOMETRY_KEYS.some((k) => Number(now[k] ?? 0) !== Number(wanted[k] ?? 0));
-    if (changed) {
-      await persistImagePatch(wanted.id, {
-        x: Number(wanted.x_px) || 0,
-        y: Number(wanted.y_px) || 0,
-        width: Number(wanted.width_px) || 0,
-        height: Number(wanted.height_px) || 0,
-      });
+    const patch = {};
+    for (const [rowKey, patchKey, coerce] of UNDO_FIELDS) {
+      const wasValue = coerce(now[rowKey] ?? (coerce === Number ? 0 : ""));
+      const wantValue = coerce(wanted[rowKey] ?? (coerce === Number ? 0 : ""));
+      if (wasValue !== wantValue) patch[patchKey] = wanted[rowKey];
     }
+    if (Object.keys(patch).length) await persistImagePatch(wanted.id, patch);
   }
   redrawCompose();
 }

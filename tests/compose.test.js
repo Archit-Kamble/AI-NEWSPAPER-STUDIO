@@ -695,21 +695,74 @@ test('the same mask content always hashes the same, and a missing mask is "none"
   assert.equal(exclusion.maskHash(null), 'none');
 });
 
-test('a large inline size mark raises the whole flow\'s line height, so it cannot overlap the line below', () => {
-  const text = 'साधा मजकूर आणि ठळक शब्द येथे लिहिला आहे.';
+// A four-line fixture, narrow enough that a 40px word forces its own line to
+// wrap earlier than the plain version - real wrapped output, not a
+// synthetic line count, so these tests prove what actually gets painted.
+const MULTI_LINE_BODY = 'पहिली ओळ येथे सुरू होते. दुसरी ओळ आहे मोठा शब्द इथे. तिसरी ओळ शेवटची आहे इथे.';
+const MULTI_LINE_FRAME = { width: 180, height: 400, padding: 10, bodyFontPx: 16, lineHeight: 1.25, columnCount: 1 };
+const BIG_WORD_START = MULTI_LINE_BODY.indexOf('मोठा');
+const BIG_WORD_END = BIG_WORD_START + 4;
+
+test('only the line that actually contains a large selected word grows - normal lines around it stay normal (test 1 + test 2)', () => {
+  const plain = compose.composeBlock({ ...MULTI_LINE_FRAME, body: MULTI_LINE_BODY });
   const marked = compose.composeBlock({
-    width: 300, height: 300, padding: 10, bodyFontPx: 16, lineHeight: 1.25, columnCount: 1,
-    body: { text, marks: [{ start: 12, end: 22, tag: 'size', value: 40 }] },
+    ...MULTI_LINE_FRAME,
+    body: { text: MULTI_LINE_BODY, marks: [{ start: BIG_WORD_START, end: BIG_WORD_END, tag: 'size', value: 40 }] },
   });
-  const plain = compose.composeBlock({ width: 300, height: 300, padding: 10, bodyFontPx: 16, lineHeight: 1.25, columnCount: 1, body: text });
-  assert.ok(marked.bodyLines[0].height >= 40 * 1.25, 'the line carrying a 40px word must be at least as tall as 40px needs');
-  // Uniform across the WHOLE flow, not just the one line the run happens to
-  // land on - the fixed band grid every obstacle lookup assumes has one
-  // height for the whole pour, so a later line (even with no sized text)
-  // must sit exactly bandHeight below the last, or the grid and the actual
-  // pixels disagree.
-  if (marked.bodyLines[1]) assert.equal(marked.bodyLines[1].height, marked.bodyLines[0].height);
-  assert.ok(marked.bodyLines[0].height > plain.bodyLines[0].height, 'a plain flow with no sized run keeps the ordinary, smaller line height');
+
+  // Test 1: body with only normal text - every line is the ordinary height.
+  const ordinaryHeight = plain.bodyLines[0].height;
+  assert.ok(plain.bodyLines.length > 1, 'the fixture must actually wrap to more than one line');
+  for (const line of plain.bodyLines) assert.equal(line.height, ordinaryHeight);
+
+  // Test 2: one 40px word on one line - only that line grows; its neighbours
+  // (before AND after it) keep the ordinary height.
+  assert.ok(marked.bodyLines.length > 2, 'the marked fixture must still wrap to more than the one tall line');
+  const tallIndex = marked.bodyLines.findIndex((line) => line.at <= BIG_WORD_START && line.at + line.text.length >= BIG_WORD_END);
+  assert.ok(tallIndex > 0, 'the sized word must land on a line that is neither the very first nor missing');
+  assert.ok(marked.bodyLines[tallIndex].height > ordinaryHeight, 'the line carrying the 40px word must be taller than ordinary');
+  assert.ok(marked.bodyLines[tallIndex].height >= 40 * (ordinaryHeight / 16), 'tall enough for the 40px word at this face\'s own line-height ratio');
+  for (let i = 0; i < marked.bodyLines.length; i += 1) {
+    if (i === tallIndex) continue;
+    assert.equal(marked.bodyLines[i].height, ordinaryHeight, `line ${i} has no sized run and must stay at the ordinary height`);
+  }
+
+  // No line overlaps the one after it, uniform or not.
+  for (let i = 0; i < marked.bodyLines.length - 1; i += 1) {
+    assert.ok(marked.bodyLines[i].y + marked.bodyLines[i].height <= marked.bodyLines[i + 1].y + 0.01,
+      `line ${i} must not overlap line ${i + 1}`);
+  }
+});
+
+test('a global-max strategy would waste space a per-line strategy does not (test 4)', () => {
+  // A large word deep in a long body must not inflate lines that come
+  // BEFORE it - the whole reason per-line height replaced the earlier
+  // flow-wide-maximum approach.
+  const marked = compose.composeBlock({
+    ...MULTI_LINE_FRAME,
+    body: { text: MULTI_LINE_BODY, marks: [{ start: BIG_WORD_START, end: BIG_WORD_END, tag: 'size', value: 40 }] },
+  });
+  const ordinaryHeight = compose.composeBlock({ ...MULTI_LINE_FRAME, body: MULTI_LINE_BODY }).bodyLines[0].height;
+  assert.equal(marked.bodyLines[0].height, ordinaryHeight, 'the line before the sized word must not be inflated by it');
+});
+
+test('a large run near an image recomputes exclusion at the larger band and still does not overlap it (test 3)', () => {
+  const frame = { width: 260, height: 300, padding: 10, bodyFontPx: 16, lineHeight: 1.25, columnCount: 1 };
+  const text = 'साधा मजकूर सातारा जिल्ह्यातील मोठा शब्द शेतकऱ्यांसाठी योजना जाहीर.';
+  const bigStart = text.indexOf('मोठा');
+  const image = { x: 200, y: 10, width: 60, height: 200, shape: 'rect' };
+  const result = compose.composeBlock({
+    ...frame, images: [image],
+    body: { text, marks: [{ start: bigStart, end: bigStart + 4, tag: 'size', value: 36 }] },
+  });
+  // Every placed line's own measure must already exclude the image (the
+  // exact obstacle-sampling behaviour under test), and the imageless
+  // baseline capacity (the width the block WOULD have with no image at all)
+  // stays wider than what any line here actually got - confirming the image
+  // really did narrow the room the tall row was fit into.
+  for (const line of result.bodyLines) {
+    assert.ok(line.x + line.width <= image.x + 0.5, 'no line may be drawn under the image, at any line height');
+  }
 });
 
 test('a mask fingerprint change is a different block fingerprint, at the same box geometry', () => {

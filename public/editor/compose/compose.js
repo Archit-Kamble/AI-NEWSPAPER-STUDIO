@@ -373,23 +373,22 @@ function pourBody(bodyInput, {
   const text = typeof bodyInput === 'object' && bodyInput ? String(bodyInput.text || '') : String(bodyInput || '');
   const marks = (typeof bodyInput === 'object' && bodyInput && bodyInput.marks) || [];
 
-  // A selected size run can ask for a font bigger than the body's own - the
-  // band grid is fixed-height (every gap-intersection, gutter and obstacle
-  // lookup in this engine assumes it), so a per-line variable height is not
-  // an option without a second reflow pass over the obstacle geometry. The
-  // grid is instead sized for the TALLEST font that appears anywhere in this
-  // flow, uniformly - a 28px word inside a 16px body raises every band, not
-  // just the one it lands on. That costs a little extra air on ordinary
-  // lines but guarantees the one thing that must never happen: a line's own
-  // glyphs overlapping the line below it.
-  const maxInlineFontPx = marks.reduce((max, mark) => (
-    mark.tag === 'size' && Number.isFinite(Number(mark.value)) ? Math.max(max, Number(mark.value)) : max
-  ), fontPx);
-  const bandHeight = maxInlineFontPx * lineHeight;
+  // The ORDINARY line height. `result.capacity`/`result.whitespace` are
+  // measured against this constant, never against what a particular size
+  // mark happens to need - capacity is what tells a writer how much room a
+  // block holds BEFORE a word exists, so it cannot depend on a mark that
+  // does not exist yet either. A selected size run instead grows the height
+  // of the ONE ROW it actually lands on, in the real pour below - see
+  // `fillRow()`.
+  const bandHeight = fontPx * lineHeight;
   const minCorridor = MIN_CORRIDOR_EM * fontPx;
 
-  // Every band's raw free space first: whether a gap is usable depends on
-  // whether it persists into its neighbours, so no band can be judged alone.
+  // ---------------------------------------------------- capacity calibration ---
+  // Every band's raw free space at the ordinary height, whatever is or is
+  // not written into it - independent of `marks` on purpose (see above).
+  // Only `result.capacity`/`result.whitespace` read this; the real pour
+  // below never does, because a row it actually places a tall run on may
+  // legitimately need more room than this grid assumes.
   const strips = columns.map((column) => {
     const bands = [];
     for (let y = top; y + bandHeight <= bottom + 0.5; y += bandHeight) {
@@ -399,28 +398,162 @@ function pourBody(bodyInput, {
     const fullWidthPx = column.end - column.start;
     return bands.map((band, index) => ({ y: band.y, gaps: viableIntervals(raw, index, minCorridor, fullWidthPx), raw: band.free }));
   });
-
-  // One flat, reading-order sequence of every usable gap in the flow: column
-  // by column, band by band, left to right within a band. A forced break
-  // advances the pointer to the first gap whose `y` differs from the current
-  // one - i.e. a genuinely new row - which is what makes "start a new line"
-  // mean the same thing whether the row holds one gap or two (text either
-  // side of a picture).
-  const sequence = [];
-  for (const strip of strips) for (const band of strip) for (const gap of band.gaps) sequence.push({ y: band.y, gap });
-
-  // The frame's total capacity - every gap it offers, whatever is or is not
-  // written into it. This has to be independent of the actual body text: an
-  // empty block's `capacity` is exactly what tells a writer how much to
-  // write, and a block with no copy yet must still report a real number
-  // (the geometry the calibration pour below is measured against), not zero
-  // because nothing had been poured yet to visit these gaps.
-  const measures = sequence.map((s) => s.gap.end - s.gap.start);
+  const calibrationSequence = [];
+  for (const strip of strips) for (const band of strip) for (const gap of band.gaps) calibrationSequence.push({ y: band.y, gap });
+  const measures = calibrationSequence.map((s) => s.gap.end - s.gap.start);
   const usableWidth = measures.reduce((sum, width) => sum + width, 0);
+
+  // ------------------------------------------------------------- real pour ---
+  // The band grid above cannot be reused for the actual text: a row that
+  // holds a selected size run needs more height than the grid assumed, and
+  // once one row grows, every row AFTER it in that column has to start
+  // later. There is no way to know which rows those are before the text is
+  // actually placed, so - unlike the calibration grid, and unlike every
+  // other geometry in this engine - rows here are generated one at a time,
+  // in reading order, each queried against the real obstacle geometry only
+  // once its own final height is known.
+
+  /** The largest size mark active anywhere in [start, end), or null. */
+  function maxSizeIn(start, end) {
+    let found = null;
+    for (const mark of marks) {
+      if (mark.tag !== 'size' || mark.end <= start || mark.start >= end) continue;
+      const value = Number(mark.value);
+      if (Number.isFinite(value) && (found === null || value > found)) found = value;
+    }
+    return found;
+  }
+
+  // One row's viable gaps at a given height, at a given y - the same
+  // obstacle-sampling and neighbour-persistence rule viableIntervals() has
+  // always used (unchanged), just asked of the row's own real y/height
+  // instead of an index into a precomputed uniform array. `isFirstRow`/
+  // `isLastRow` reproduce viableIntervals()'s own block-edge exemption ("the
+  // top and bottom of the block count as satisfied").
+  function rowGaps(column, y, height, isFirstRow, isLastRow) {
+    if (y + height > bottom + 0.5) return null;
+    const here = subtract([column], bandObstacles(images, y, y + height, fontPx));
+    const fullWidthPx = column.end - column.start;
+    const bands = [];
+    let index = 0;
+    if (!isFirstRow) {
+      bands.push(subtract([column], bandObstacles(images, y - height, y, fontPx)));
+      index = 1;
+    }
+    bands.push(here);
+    if (!isLastRow) {
+      bands.push(subtract([column], bandObstacles(images, y + height, y + 2 * height, fontPx)));
+    }
+    return { y, gaps: viableIntervals(bands, index, minCorridor, fullWidthPx) };
+  }
+
+  // One column's cursor. `y` advances only by a row's own FINALIZED height
+  // once that row is committed - a tall row pushes every later row in THIS
+  // column down; other columns are unaffected, matching "reading order is
+  // down a column and then into the next" exactly as before.
+  function makeCursor(column) {
+    let y = top;
+    let first = true;
+    return {
+      probe(height) { return rowGaps(column, y, height, first, y + height + height > bottom + 0.5); },
+      commit(height) { y += height; first = false; },
+      hasRoom(height) { return y + height <= bottom + 0.5; },
+      get y() { return y; },
+    };
+  }
+  const cursors = columns.map(makeCursor);
+
+  // A hard-overset piece's "is there room ANYWHERE" check, against the
+  // calibration grid's real widths - a taller row changes HEIGHT, never
+  // width, unless an obstacle happens to sit in exactly the extra vertical
+  // room, the same rare edge case `result.capacity` already accepts by
+  // being calibration-based rather than pour-exact.
+  function anywhereWideEnough(pieceWidth) {
+    return calibrationSequence.some((s) => s.gap.end - s.gap.start >= pieceWidth - 0.5);
+  }
+
+  /**
+   * Fills one row - all of its gaps, left to right - with as much of
+   * `pieces` (from `index`/`paraCharOffset`) as fits. Re-measured once at a
+   * taller height if any run actually placed needs more than the row was
+   * opened at (bounded: at most two passes, matching every other budget in
+   * this engine). If there is no room for the taller height, the first
+   * pass's placement is kept rather than discarded - the text it already
+   * fit is real and correct; only the reported line box may be a little
+   * short in that narrow, bottom-of-frame corner case.
+   */
+  function fillRow(cursor, pieces, index, paraCharOffset, paragraphOffset) {
+    let height = bandHeight;
+    let attempt = null;
+
+    for (let pass = 0; pass < 2; pass += 1) {
+      const row = cursor.probe(height);
+      if (!row) return attempt;
+
+      const placed = [];
+      let cursorIndex = index;
+      let cursorOffset = paraCharOffset;
+
+      for (let gapIndex = 0; gapIndex < row.gaps.length; gapIndex += 1) {
+        if (cursorIndex >= pieces.length) {
+          for (let rest = gapIndex; rest < row.gaps.length; rest += 1) {
+            placed.push({ empty: true, width: row.gaps[rest].end - row.gaps[rest].start });
+          }
+          break;
+        }
+        const gap = row.gaps[gapIndex];
+        const measureWidthPx = gap.end - gap.start;
+        let line = '';
+        let width = 0;
+        const lineStartOffset = paragraphOffset + cursorOffset;
+        let hardOverset = false;
+
+        while (cursorIndex < pieces.length) {
+          const piece = pieces[cursorIndex];
+          const at = paragraphOffset + cursorOffset;
+          const pieceWidth = measurePieceWidth(piece, at, fontPx, family, weight, marks, letterSpacingPx);
+          if (line && width + pieceWidth > measureWidthPx + 0.5) break;
+          if (!line && pieceWidth > measureWidthPx + 0.5) {
+            // Wider than this gap. If some other gap anywhere could hold it,
+            // wait rather than cutting a word in half; if nothing anywhere
+            // can, set it here and report it - never silently.
+            if (anywhereWideEnough(pieceWidth)) break;
+            line = piece;
+            width = pieceWidth;
+            hardOverset = true;
+            cursorOffset += piece.length;
+            cursorIndex += 1;
+            break;
+          }
+          line += piece;
+          width += pieceWidth;
+          cursorOffset += piece.length;
+          cursorIndex += 1;
+        }
+
+        const trimmed = trimEndClusters(line);
+        if (!trimmed) { placed.push({ empty: true, width: measureWidthPx }); continue; }
+        const drawn = measurePieceWidth(trimmed, lineStartOffset, fontPx, family, weight, marks, letterSpacingPx);
+        placed.push({ text: trimmed, at: lineStartOffset, x: gap.start, width: drawn, measure: measureWidthPx, hardOverset });
+      }
+
+      attempt = { row, placed, cursorIndex, cursorOffset, height };
+
+      const requiredHeight = placed.reduce((max, p) => {
+        if (p.empty) return max;
+        const size = maxSizeIn(p.at, p.at + p.text.length);
+        return size ? Math.max(max, size * lineHeight) : max;
+      }, bandHeight);
+
+      if (Math.abs(requiredHeight - height) < 0.25 || pass === 1 || !cursor.hasRoom(requiredHeight)) break;
+      height = requiredHeight;
+    }
+
+    return attempt;
+  }
 
   const lines = [];
   const violations = [];
-  let pointer = 0;
   let usedWidth = 0;
   // Room that no line was set on AT ALL. Deliberately not the same as
   // "usable minus used": every ragged line leaves a little at its right end,
@@ -429,35 +562,25 @@ function pourBody(bodyInput, {
   // not a defect. Only a gap that received nothing is unexplained.
   let emptyGapWidth = 0;
   let overset = '';
+  let colIndex = 0;
 
   const paragraphs = splitParagraphs(text, marks);
 
   for (const paragraph of paragraphs) {
-    // A forced break (this paragraph's predecessor ended with `\n`/`\n\n`)
-    // burns the rest of the CURRENT row rather than letting this paragraph's
-    // first piece slot into whatever gap comes next in reading order - that
-    // is what makes it a forced new line rather than an ordinary optional
-    // one. Any gaps skipped this way are genuinely unused room, so they are
-    // charged to `emptyGapWidth` exactly like a gap a short line left short.
-    if (paragraph.forcedBreak && pointer > 0 && pointer < sequence.length) {
-      const currentY = sequence[pointer - 1].y;
-      while (pointer < sequence.length && sequence[pointer].y === currentY) {
-        emptyGapWidth += sequence[pointer].gap.end - sequence[pointer].gap.start;
-        pointer += 1;
-      }
-
-      // Paragraph spacing: the new paragraph's first line must start at or
-      // after the previous line's bottom plus the air a real paragraph gets
-      // between it and the next. The band grid is fixed-height, so this is
-      // expressed as "skip whole bands until one starts late enough" rather
-      // than a partial-band offset, which would break the grid every
-      // obstacle lookup in this engine assumes.
-      if (paragraphSpacingPx > 0) {
-        const nextY = currentY + bandHeight + paragraphSpacingPx;
-        while (pointer < sequence.length && sequence[pointer].y < nextY) {
-          emptyGapWidth += sequence[pointer].gap.end - sequence[pointer].gap.start;
-          pointer += 1;
-        }
+    // Paragraph spacing: this paragraph's first row must start at or after
+    // the PREVIOUS row's real bottom (whatever that row's own finalized
+    // height turned out to be - it may have been a tall one) plus the air a
+    // real paragraph gets. A forced break already lands on a fresh row (see
+    // below), so this only ever skips whole rows, never a partial one.
+    if (paragraph.forcedBreak && paragraphSpacingPx > 0 && lines.length) {
+      const nextY = lines[lines.length - 1].y + lines[lines.length - 1].height + paragraphSpacingPx;
+      while (colIndex < cursors.length) {
+        if (!cursors[colIndex].hasRoom(bandHeight)) { colIndex += 1; continue; }
+        if (cursors[colIndex].y >= nextY - 0.5) break;
+        const row = cursors[colIndex].probe(bandHeight);
+        if (!row) { colIndex += 1; continue; }
+        for (const gap of row.gaps) emptyGapWidth += gap.end - gap.start;
+        cursors[colIndex].commit(bandHeight);
       }
     }
 
@@ -473,82 +596,65 @@ function pourBody(bodyInput, {
     // entirely once a paragraph is more than a few words long.
     let paraCharOffset = 0;
 
-    while (index < pieces.length && pointer < sequence.length) {
-      const { y, gap } = sequence[pointer];
-      const measureWidthPx = gap.end - gap.start;
-      pointer += 1;
+    while (index < pieces.length) {
+      while (colIndex < cursors.length && !cursors[colIndex].hasRoom(bandHeight)) colIndex += 1;
+      // Out of room in every column - the trailing `if (index < pieces.length)`
+      // below records everything still unplaced as overset. Exiting the
+      // row-filling loop here (not the paragraph loop) is what lets that
+      // check still run for THIS paragraph before the paragraph loop's own
+      // `break` stops the whole pour.
+      if (colIndex >= cursors.length) break;
 
-      let line = '';
-      let width = 0;
-      const lineStartOffset = paragraph.offset + paraCharOffset;
-      let hardOverset = false;
+      const cursor = cursors[colIndex];
+      const result = fillRow(cursor, pieces, index, paraCharOffset, paragraph.offset);
+      if (!result) { colIndex += 1; continue; }
 
-      while (index < pieces.length) {
-        const piece = pieces[index];
-        const at = paragraph.offset + paraCharOffset;
-        const pieceWidth = measurePieceWidth(piece, at, fontPx, family, weight, marks, letterSpacingPx);
-        if (line && width + pieceWidth > measureWidthPx + 0.5) break;
-        if (!line && pieceWidth > measureWidthPx + 0.5) {
-          // Wider than this gap. If some other upcoming gap could hold it,
-          // wait rather than cutting a word in half; if nothing anywhere
-          // can, set it here and report it - never silently.
-          const anywhere = sequence.slice(pointer).some((s) => s.gap.end - s.gap.start >= pieceWidth - 0.5);
-          if (anywhere) break;
-          line = piece;
-          width = pieceWidth;
-          hardOverset = true;
-          paraCharOffset += piece.length;
-          index += 1;
-          break;
-        }
-        line += piece;
-        width += pieceWidth;
-        paraCharOffset += piece.length;
-        index += 1;
-      }
-
-      const trimmed = trimEndClusters(line);
-      if (!trimmed) { emptyGapWidth += measureWidthPx; continue; }
-      const drawn = measurePieceWidth(trimmed, lineStartOffset, fontPx, family, weight, marks, letterSpacingPx);
-      lines.push({
-        text: trimmed,
-        at: lineStartOffset,
-        x: gap.start,
-        y,
-        width: drawn,
-        measure: measureWidthPx,
-        height: bandHeight,
-        baseline: y + fontPx * faceAscent(family, weight),
-        fontPx,
-        // The base family/weight this line was measured in (a bold RUN inside
-        // the line is carried separately, as a real <b> mark - see
-        // measurePieceWidth() - and needs no per-line override; only the base
-        // face a renderer would otherwise have to re-derive from `view` itself
-        // does).
-        family,
-        weight,
-        // Whole-body paint decisions (Typography panel's Italic/Underline
-        // toggles), not per-mark - neither changes a glyph's advance width
-        // (no italic face is bundled; underline is ink under the baseline),
-        // so they ride along on every line rather than affecting `measure()`.
-        italic,
-        underline,
-        paragraphBreak: firstLineOfParagraph && paragraph.forcedBreak,
-      });
-      firstLineOfParagraph = false;
-      usedWidth += drawn;
-      if (hardOverset) {
-        violations.push({
-          code: 'UNBREAKABLE_TOKEN_OVERSET',
-          detail: `"${trimmed}" is ${Math.round(drawn)}px, wider than the ${Math.round(measureWidthPx)}px this line offers anywhere.`,
-          // Structured, not just in the message: a caller reporting "cut N
-          // characters" needs this number without parsing English out of
-          // `detail`. This token was drawn (it is not in `overset`, the
-          // leftover text), so it is the only place its own length is
-          // recorded.
-          charsOver: clusters(trimmed).length,
+      for (const p of result.placed) {
+        if (p.empty) { emptyGapWidth += p.width; continue; }
+        lines.push({
+          text: p.text,
+          at: p.at,
+          x: p.x,
+          y: result.row.y,
+          width: p.width,
+          measure: p.measure,
+          height: result.height,
+          baseline: result.row.y + fontPx * faceAscent(family, weight),
+          fontPx,
+          // The base family/weight this line was measured in (a bold RUN inside
+          // the line is carried separately, as a real <b> mark - see
+          // measurePieceWidth() - and needs no per-line override; only the base
+          // face a renderer would otherwise have to re-derive from `view` itself
+          // does).
+          family,
+          weight,
+          // Whole-body paint decisions (Typography panel's Italic/Underline
+          // toggles), not per-mark - neither changes a glyph's advance width
+          // (no italic face is bundled; underline is ink under the baseline),
+          // so they ride along on every line rather than affecting `measure()`.
+          italic,
+          underline,
+          paragraphBreak: firstLineOfParagraph && paragraph.forcedBreak,
         });
+        firstLineOfParagraph = false;
+        usedWidth += p.width;
+        if (p.hardOverset) {
+          violations.push({
+            code: 'UNBREAKABLE_TOKEN_OVERSET',
+            detail: `"${p.text}" is ${Math.round(p.width)}px, wider than the ${Math.round(p.measure)}px this line offers anywhere.`,
+            // Structured, not just in the message: a caller reporting "cut N
+            // characters" needs this number without parsing English out of
+            // `detail`. This token was drawn (it is not in `overset`, the
+            // leftover text), so it is the only place its own length is
+            // recorded.
+            charsOver: clusters(p.text).length,
+          });
+        }
       }
+
+      cursor.commit(result.height);
+      index = result.cursorIndex;
+      paraCharOffset = result.cursorOffset;
     }
 
     if (index < pieces.length) {
@@ -568,8 +674,13 @@ function pourBody(bodyInput, {
   // show up as a hole in every column it left untouched, not only in the
   // last column a line happened to be set in (which is all `bottomResidual`,
   // below, can see - it is a single scalar over the whole frame).
-  for (; pointer < sequence.length; pointer += 1) {
-    emptyGapWidth += sequence[pointer].gap.end - sequence[pointer].gap.start;
+  for (; colIndex < cursors.length; colIndex += 1) {
+    while (cursors[colIndex].hasRoom(bandHeight)) {
+      const row = cursors[colIndex].probe(bandHeight);
+      if (!row) break;
+      for (const gap of row.gaps) emptyGapWidth += gap.end - gap.start;
+      cursors[colIndex].commit(bandHeight);
+    }
   }
 
   // Apply horizontal alignment. This never changes which text is on which

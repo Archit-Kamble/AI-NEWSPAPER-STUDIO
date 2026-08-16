@@ -28,7 +28,16 @@ import { publicationFamily } from './font-metrics.js';
 // different faces.
 function faceStyle(line) {
   const { css } = publicationFamily(line.family);
-  return `font-family:${css};font-weight:${line.weight || 400};`;
+  // Italic/underline are the Typography panel's whole-body toggles
+  // (compose.js's pourBody carries them per line, unchanged from measurement
+  // since neither affects a glyph's advance width - see compose.js). Painted
+  // here for the first time: previously these persisted and even had their
+  // own isolated preview widget, but never reached the canonical block a
+  // desk actually looks at.
+  const style = `font-family:${css};font-weight:${line.weight || 400};`;
+  return line.italic || line.underline
+    ? `${style}${line.italic ? 'font-style:italic;' : ''}${line.underline ? 'text-decoration:underline;' : ''}`
+    : style;
 }
 
 // Marks and semantic ranges are held against the whole flow's plain text, and

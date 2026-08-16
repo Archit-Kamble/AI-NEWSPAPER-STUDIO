@@ -25,11 +25,11 @@
 // instead of leaving it empty. Reserved-rectangle thinking is what produced
 // the phantom rows this replaces.
 
-import { measureWidth as hmtxWidth, minLineHeightFor, faceAscent, faceDescent, fontsReady } from './font-metrics.js';
+import { measureWidth as hmtxWidth, minLineHeightFor, faceAscent, faceDescent, fontsReady, publicationWeight } from './font-metrics.js';
 import { shapeWidthPx, isShaperReady } from './shaper.js';
 import { breakPieces, clusters, trimEndClusters } from './graphemes.js';
 import { subtract, viableIntervals, MIN_CORRIDOR_EM } from './intervals.js';
-import { bandObstacles } from './exclusion.js';
+import { bandObstacles, maskHash } from './exclusion.js';
 
 export const ENGINE_VERSION = 'sahas-compose/2';
 
@@ -368,6 +368,7 @@ function splitParagraphs(text, marks) {
  */
 function pourBody(bodyInput, {
   top, bottom, columns, images, fontPx, lineHeight, family, weight, align, paragraphSpacingPx = 0, letterSpacingPx = 0,
+  italic = false, underline = false,
 }) {
   const text = typeof bodyInput === 'object' && bodyInput ? String(bodyInput.text || '') : String(bodyInput || '');
   const marks = (typeof bodyInput === 'object' && bodyInput && bodyInput.marks) || [];
@@ -514,6 +515,12 @@ function pourBody(bodyInput, {
         // does).
         family,
         weight,
+        // Whole-body paint decisions (Typography panel's Italic/Underline
+        // toggles), not per-mark - neither changes a glyph's advance width
+        // (no italic face is bundled; underline is ink under the baseline),
+        // so they ride along on every line rather than affecting `measure()`.
+        italic,
+        underline,
         paragraphBreak: firstLineOfParagraph && paragraph.forcedBreak,
       });
       firstLineOfParagraph = false;
@@ -705,6 +712,16 @@ export function composeBlock(input = {}) {
   // Typography panel's "Georgia" etc.) is a body-only control in the actual
   // CSS too: it never touches `.section-headline`.
   const bodyFamily = input.fontFamily || 'serif';
+  // Same body-only scope as bodyFamily above: the Typography panel's weight/
+  // italic/underline map onto `.section-body` in the real stylesheet, never
+  // `.section-headline`/`.section-subheading`, which stay the paper's own
+  // fixed weights (DISPLAY_TYPOGRAPHY). Canonicalised to the two weights a
+  // physical bundled face exists for - the same rule faceMetrics() enforces,
+  // so a block asking for "Semibold" (600) measures and paints in the same
+  // face it will actually get.
+  const bodyWeight = publicationWeight(input.fontWeight);
+  const bodyItalic = Boolean(input.fontItalic);
+  const bodyUnderline = Boolean(input.fontUnderline);
 
   const content = {
     left: padding,
@@ -742,7 +759,7 @@ export function composeBlock(input = {}) {
     bands: {},
     bodyLines: [],
     columns: [],
-    typography: { bodyPx, lineHeight, family: bodyFamily },
+    typography: { bodyPx, lineHeight, family: bodyFamily, weight: bodyWeight, italic: bodyItalic, underline: bodyUnderline },
     violations,
     warnings,
   };
@@ -841,10 +858,12 @@ export function composeBlock(input = {}) {
     fontPx: bodyPx,
     lineHeight,
     family: bodyFamily,
-    weight: 400,
+    weight: bodyWeight,
     align: input.textAlign || 'left',
     paragraphSpacingPx,
     letterSpacingPx,
+    italic: bodyItalic,
+    underline: bodyUnderline,
   });
 
   result.bodyLines = body.lines;
@@ -958,11 +977,12 @@ export function composeBlock(input = {}) {
 
   result.fingerprint = hash([
     ENGINE_VERSION, width, height, padding, bodyPx, lineHeight, bodyFamily, input.textAlign,
+    bodyWeight, bodyItalic, bodyUnderline,
     input.headlineFontPx, input.subheadingFontPx, input.columnCount,
     letterSpacingPx, paragraphSpacingPx,
     input.kicker, input.headline, input.subheading, bodyPlainText,
     JSON.stringify((typeof bodyInput === 'object' && bodyInput.marks) || []),
-    images.map((i) => `${i.x},${i.y},${i.width},${i.height},${i.shape},${i.rotation || 0},${i.mask ? `${i.mask.rows}x${i.mask.cols}` : ''}`).join('|'),
+    images.map((i) => `${i.x},${i.y},${i.width},${i.height},${i.shape},${i.rotation || 0},${maskHash(i.mask)},${i.standOffPx || 0}`).join('|'),
   ].join(''));
 
   return result;

@@ -633,3 +633,72 @@ test('composed lines carry the family/weight they were measured in, for the rend
   // agrees with what was actually measured.
   assert.equal(metrics.publicationFamily(result.bodyLines[0].family).key, 'sans');
 });
+
+// --------------------------------------------------- whole-body typography ---
+// schema.sql's font_weight/font_italic/font_underline, exposed by the
+// Typography panel and persisted, but never read by composeBlock() before
+// this - not a measure/paint mismatch, a fully inert control on both counts.
+
+test('a whole-body Bold setting measures wider, exactly like a bold selected run', () => {
+  const text = 'सातारा जिल्ह्यातील शेतकऱ्यांसाठी राज्य सरकारने नवीन योजना जाहीर केली आहे.';
+  const regular = compose.composeBlock({ width: 260, height: 200, padding: 10, body: text, bodyFontPx: 16, columnCount: 1, fontWeight: 'normal' });
+  const bold = compose.composeBlock({ width: 260, height: 200, padding: 10, body: text, bodyFontPx: 16, columnCount: 1, fontWeight: 'bold' });
+  assert.equal(regular.bodyLines[0].weight, 400);
+  assert.equal(bold.bodyLines[0].weight, 700);
+  assert.ok(bold.bodyLines[0].width > regular.bodyLines[0].width || bold.bodyLines[0].text.length < regular.bodyLines[0].text.length,
+    'a bold body must measure wider (or wrap sooner) than the same text regular, same as a bold RUN does');
+});
+
+test('whole-body italic/underline are retained onto every composed line, for the renderer to paint', () => {
+  const result = compose.composeBlock({
+    width: 260, height: 200, padding: 10, body: 'साधा मजकूर.', bodyFontPx: 16, columnCount: 1,
+    fontItalic: true, fontUnderline: true,
+  });
+  assert.equal(result.typography.italic, true);
+  assert.equal(result.typography.underline, true);
+  assert.equal(result.bodyLines[0].italic, true);
+  assert.equal(result.bodyLines[0].underline, true);
+});
+
+test('italic/underline do not change measurement - no bundled italic face, underline is ink only', () => {
+  const text = 'सातारा जिल्ह्यातील शेतकऱ्यांसाठी राज्य सरकारने नवीन योजना जाहीर केली आहे.';
+  const plain = compose.composeBlock({ width: 260, height: 200, padding: 10, body: text, bodyFontPx: 16, columnCount: 1 });
+  const styled = compose.composeBlock({
+    width: 260, height: 200, padding: 10, body: text, bodyFontPx: 16, columnCount: 1, fontItalic: true, fontUnderline: true,
+  });
+  assert.equal(plain.bodyLines[0].text, styled.bodyLines[0].text);
+  assert.equal(plain.bodyLines[0].width, styled.bodyLines[0].width);
+});
+
+test('a whole-body weight/italic/underline change is a different fingerprint', () => {
+  const body = 'साधा मजकूर.';
+  const base = compose.composeBlock({ width: 260, height: 200, padding: 10, body, bodyFontPx: 16, columnCount: 1 });
+  const boldFp = compose.composeBlock({ width: 260, height: 200, padding: 10, body, bodyFontPx: 16, columnCount: 1, fontWeight: 'bold' });
+  const italicFp = compose.composeBlock({ width: 260, height: 200, padding: 10, body, bodyFontPx: 16, columnCount: 1, fontItalic: true });
+  const underlineFp = compose.composeBlock({ width: 260, height: 200, padding: 10, body, bodyFontPx: 16, columnCount: 1, fontUnderline: true });
+  const fingerprints = new Set([base.fingerprint, boldFp.fingerprint, italicFp.fingerprint, underlineFp.fingerprint]);
+  assert.equal(fingerprints.size, 4, 'four different whole-body typography choices must produce four different fingerprints');
+});
+
+// ------------------------------------------------------------- mask hash ---
+
+test('two masks of the same dimensions but different content hash differently', () => {
+  const a = { rows: 2, cols: 2, cells: [[1, 1], [0, 0]] };
+  const b = { rows: 2, cols: 2, cells: [[1, 0], [1, 0]] };
+  assert.notEqual(exclusion.maskHash(a), exclusion.maskHash(b));
+});
+
+test('the same mask content always hashes the same, and a missing mask is "none"', () => {
+  const a = { rows: 2, cols: 2, cells: [[1, 1], [0, 0]] };
+  const again = { rows: 2, cols: 2, cells: [[1, 1], [0, 0]] };
+  assert.equal(exclusion.maskHash(a), exclusion.maskHash(again));
+  assert.equal(exclusion.maskHash(null), 'none');
+});
+
+test('a mask fingerprint change is a different block fingerprint, at the same box geometry', () => {
+  const frame = { width: 300, height: 300, padding: 10, bodyFontPx: 16, columnCount: 1, body: 'साधा मजकूर सातारा जिल्ह्यातील.' };
+  const image = { x: 20, y: 20, width: 100, height: 100, shape: 'cutout' };
+  const withMaskA = compose.composeBlock({ ...frame, images: [{ ...image, mask: { rows: 2, cols: 2, cells: [[1, 1], [0, 0]] } }] });
+  const withMaskB = compose.composeBlock({ ...frame, images: [{ ...image, mask: { rows: 2, cols: 2, cells: [[1, 0], [1, 0]] } }] });
+  assert.notEqual(withMaskA.fingerprint, withMaskB.fingerprint);
+});

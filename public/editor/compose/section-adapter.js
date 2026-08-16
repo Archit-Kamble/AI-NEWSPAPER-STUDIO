@@ -151,6 +151,16 @@ export function composeSection(section = {}, view = {}) {
     bodyFontPx,
     lineHeight: Number(pick(section, view, 'lineHeight', 'line_height', 0)) || 0,
     fontFamily: pick(section, view, 'fontFamily', 'font_family', 'serif'),
+    // Body-only, matching fontFamily above: these map onto `.section-body` in
+    // the real stylesheet, never the headline/subheading (compose.js's
+    // DISPLAY_TYPOGRAPHY keeps those at the paper's own fixed weights). Real,
+    // persisted, desk-facing Typography-panel controls (schema.sql's
+    // font_weight/font_italic/font_underline) that composeBlock() previously
+    // never read at all - not a measure/paint mismatch but a fully inert
+    // control, on both counts.
+    fontWeight: pick(section, view, 'fontWeight', 'font_weight', 'normal'),
+    fontItalic: Boolean(pick(section, view, 'fontItalic', 'font_italic', false)),
+    fontUnderline: Boolean(pick(section, view, 'fontUnderline', 'font_underline', false)),
     // The persisted alignment field (typography-panel.js's ALIGNMENTS,
     // page.repository.js's text_align column) - previously read by nothing
     // in this engine, because composed lines render as standalone spans

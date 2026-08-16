@@ -151,6 +151,32 @@ export function exclusionEnvelope(mask) {
   return envelope;
 }
 
+/**
+ * A stable content hash of a mask, for the composition fingerprint.
+ *
+ * `${rows}x${cols}` alone (what the fingerprint used before this) says two
+ * masks are the SAME composition whenever they happen to share dimensions -
+ * a cutout re-run through background removal a second time, landing on a
+ * differently-shaped silhouette at the same resolution, would report an
+ * unchanged fingerprint despite text wrapping around a different shape. This
+ * walks every cell, so two masks of identical size but different content
+ * hash differently.
+ */
+export function maskHash(mask) {
+  if (!mask?.rows || !mask?.cols || !mask?.cells) return 'none';
+  let h = 2166136261;
+  const push = (n) => {
+    h ^= Number(n) & 255;
+    h = Math.imul(h, 16777619);
+  };
+  push(mask.rows);
+  push(mask.cols);
+  for (const row of mask.cells) {
+    for (const value of row) push(value ? 1 : 0);
+  }
+  return (h >>> 0).toString(16);
+}
+
 // ---------------------------------------------------------- band intervals ---
 
 function boxOf(image, pad) {

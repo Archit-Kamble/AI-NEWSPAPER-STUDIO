@@ -12,6 +12,14 @@ test('semantic presentation is exact-phrase based, escaped, and preserves rich m
   assert.doesNotMatch(html, /font-size/);
 });
 
+test('a selected size mark paints as a real font-size, unlike the stored data-sahas-size attribute', async () => {
+  const presentation = await import('../public/editor/layout/editorial-presentation.js');
+  const text = 'ठळक शब्द येथे आहे.';
+  const html = presentation.renderPresentation(text, [{ start: 0, end: 8, tag: 'size', value: 28 }], [], (value) => value);
+  assert.match(html, /font-size:28px/);
+  assert.match(html, /ठळक शब्द/);
+});
+
 test('stale, duplicate, malformed and unknown presentation annotations are ignored', async () => {
   const presentation = await import('../public/editor/layout/editorial-presentation.js');
   assert.equal(presentation.presentationRanges('१३ कोटी रुपये', { annotations: [{ target: 'body', phrase: '१२ कोटी रुपये', treatmentToken: 'ACCENT' }] }, 'body').length, 0);

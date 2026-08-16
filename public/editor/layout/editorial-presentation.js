@@ -30,6 +30,15 @@ export function renderPresentation(text, richMarks = [], semanticRanges = [], es
     let piece = escape(source.slice(start, end));
     const semantic = semanticRanges.find((range) => range.start <= start && range.end >= end);
     if (semantic && semantic.treatmentToken !== 'CALLOUT') piece = `<span class="editorial-token editorial-token-${semantic.treatmentToken.toLowerCase()}">${piece}</span>`;
+    // A selected size (rich-text.js's `data-sahas-size` mark) was measured by
+    // compose.js at its real width - it changed where the line wraps, see
+    // compose.js's measurePieceWidth()/styleRunsIn() - but until this, it was
+    // never painted at all: this loop only ever knew u/i/b, so the word
+    // compose.js reserved extra room for rendered at the block's ordinary
+    // body size. The stored mark stays style-free (`data-sahas-size`); this
+    // is the one place that becomes a real, visible font-size.
+    const sized = richMarks.find((mark) => mark.tag === 'size' && mark.start <= start && mark.end >= end);
+    if (sized) piece = `<span style="font-size:${sized.value}px">${piece}</span>`;
     for (const tag of ['u', 'i', 'b']) if (richMarks.some((mark) => mark.tag === tag && mark.start <= start && mark.end >= end)) piece = `<${tag}>${piece}</${tag}>`;
     html += piece;
   }

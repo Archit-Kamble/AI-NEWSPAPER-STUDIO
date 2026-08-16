@@ -650,6 +650,41 @@ export function renderPictures(images) {
   });
 }
 
+// A screen-space rectangle (what resizeRect() and the pointer both work in)
+// converted to the block's own logical pixels - the SAME space state.images
+// rows are stored in (x_px/y_px/width_px/height_px). `scale` is pageScale():
+// how many block pixels one screen pixel is worth.
+function logicalRectFromScreen(rect, scale) {
+  return {
+    x: Math.round(rect.x * scale),
+    y: Math.round(rect.y * scale),
+    width: Math.round(rect.width * scale),
+    height: Math.round(rect.height * scale),
+  };
+}
+
+// Writes a local preview geometry into state.images - never the server. This
+// is what lets layoutTextFrames() recompose against where the picture is
+// ABOUT to be while the pointer is still down, without a PATCH per frame.
+function previewImageRect(id, logical) {
+  state.images = state.images.map((image) =>
+    Number(image.id) === Number(id)
+      ? { ...image, x_px: logical.x, y_px: logical.y, width_px: logical.width, height_px: logical.height }
+      : image,
+  );
+}
+
+// Recomposing on every pointermove would run the exact engine dozens of
+// times inside one browser frame - coalesce to one recomposition per paint.
+let reflowFrame = null;
+function requestImagePreviewReflow() {
+  if (reflowFrame !== null) return;
+  reflowFrame = requestAnimationFrame(() => {
+    reflowFrame = null;
+    layoutTextFrames();
+  });
+}
+
 /**
  * Dragging and sizing a picture frame.
  *
@@ -704,33 +739,61 @@ function bindPictureFrames() {
     // position, only its size.
     const bounds = { x: 0, y: 0, width: pageBounds.width, height: pageBounds.height };
 
+    // Snapshot the row as it stood before this drag, so a cancelled drag
+    // (Esc, or the pointer leaving the surface some other way) can put it
+    // back exactly - never mutated in place, only ever replaced.
+    const imageIndex = state.images.findIndex((image) => Number(image.id) === id);
+    const originalImage = imageIndex >= 0 ? { ...state.images[imageIndex] } : null;
+
     frame.classList.add("is-dragging");
 
     const move = (moveEvent) => {
       const dx = moveEvent.clientX - start.x;
       const dy = moveEvent.clientY - start.y;
 
+      let screenRect;
       if (sizing) {
         // Read fresh on every move, not just at pointerdown - a desk holding
         // or releasing Shift mid-drag sees the aspect lock engage or let go
         // immediately, the way every page-layout tool's own handles do.
-        const next = resizeRect(from, corner, dx, dy, { bounds, preserveAspect: moveEvent.shiftKey });
-        frame.style.width = `${next.width}px`;
-        frame.style.height = `${next.height}px`;
-        frame.style.left = `${next.x}px`;
-        frame.style.top = `${next.y}px`;
-        return;
+        screenRect = resizeRect(from, corner, dx, dy, { bounds, preserveAspect: moveEvent.shiftKey });
+      } else {
+        // Kept on the page: a frame dragged off the block would print off
+        // the page, and the character grid would count cells that do not
+        // exist.
+        screenRect = {
+          x: Math.round(Math.max(0, Math.min(bounds.width - from.width, from.x + dx))),
+          y: Math.round(Math.max(0, Math.min(bounds.height - from.height, from.y + dy))),
+          width: from.width,
+          height: from.height,
+        };
       }
-      // Kept on the page: a frame dragged off the block would print off the
-      // page, and the character grid would count cells that do not exist.
-      frame.style.left = `${Math.round(Math.max(0, Math.min(bounds.width - from.width, from.x + dx)))}px`;
-      frame.style.top = `${Math.round(Math.max(0, Math.min(bounds.height - from.height, from.y + dy)))}px`;
+
+      frame.style.width = `${screenRect.width}px`;
+      frame.style.height = `${screenRect.height}px`;
+      frame.style.left = `${screenRect.x}px`;
+      frame.style.top = `${screenRect.y}px`;
+
+      // Local preview only - no network. This is what makes copy visibly
+      // reflow around the picture WHILE it is being dragged, not only after
+      // the pointer comes up: layoutTextFrames() recomposes from state.images,
+      // so writing the in-progress rectangle there before asking for that
+      // recomposition is the whole mechanism.
+      if (imageIndex >= 0) {
+        previewImageRect(id, logicalRectFromScreen(screenRect, scale));
+        requestImagePreviewReflow();
+      }
+    };
+
+    const cleanup = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", done);
+      window.removeEventListener("pointercancel", cancel);
+      frame.classList.remove("is-dragging");
     };
 
     const done = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", done);
-      frame.classList.remove("is-dragging");
+      cleanup();
       hooks.onPatchImage?.(id, {
         x: Math.round((parseFloat(frame.style.left) || 0) * scale),
         y: Math.round((parseFloat(frame.style.top) || 0) * scale),
@@ -739,8 +802,20 @@ function bindPictureFrames() {
       });
     };
 
+    const cancel = () => {
+      cleanup();
+      if (originalImage && imageIndex >= 0) {
+        state.images = state.images.map((image) =>
+          Number(image.id) === Number(id) ? originalImage : image,
+        );
+        renderPictures(state.images);
+        layoutTextFrames();
+      }
+    };
+
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", done);
+    window.addEventListener("pointercancel", cancel);
   });
 
   page.addEventListener("click", (event) => {

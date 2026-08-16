@@ -30,6 +30,16 @@
 // crude without the page looking crude.
 
 import { normalise } from './intervals.js';
+// The SAME crop/fit/flip transform paint (picture-style.js) and resize
+// (image-resize.js) already resolve a placement through - a cutout's
+// exclusion envelope follows it too, computed straight from the obstacle
+// object itself (resolvePlacedImage() already reads camelCase x/y/width/
+// height/fitMode/flipH/flipV/sourceWidth/sourceHeight with sane defaults for
+// whatever a caller omits), so a test or caller that builds a bare
+// {x,y,width,height,shape:'cutout',mask} object still gets the same
+// behaviour this file had before - just resolved through one function
+// instead of duplicating its defaults here.
+import { resolvePlacedImage } from '../layout/image-geometry.js';
 
 // How far copy stays off a subject, in ems of the body type. A stand-off in
 // pixels would be one thing at 9pt and another at 24pt; in ems it is the same
@@ -236,30 +246,77 @@ export function obstacleIntervals(image, top, bottom, bodyFontPx) {
   if (shape === 'cutout' && !Number(image.rotation)) {
     const envelope = exclusionEnvelope(image.mask);
     if (envelope) {
-      // The mask is sampled in the picture's own frame; the stand-off is
-      // applied afterwards, by widening each occupied run and by widening the
-      // band that is queried. That is a dilation by an axis-aligned box, the
-      // Minkowski sum of the subject with the text's own clearance.
-      const x = Number(image.x) || 0;
-      const y = Number(image.y) || 0;
-      const width = Number(image.width) || 0;
-      const height = Number(image.height) || 0;
-      if (width <= 0 || height <= 0) return [];
+      // The mask was rasterised over the TRIMMED cutout's own pixels
+      // (cutout.service.js's occupancyMask(), at the cut-out media asset's
+      // own width/height - D1 made that the SAME number image-geometry.js
+      // reads as sourceWidth/sourceHeight). A naive `frameWidth /
+      // envelope.cols` only agreed with that once the frame happened to
+      // share the source's aspect ratio - true by construction the moment a
+      // picture is first placed, but not any more once Phase E's
+      // independent-axis resize or a non-'contain' fit mode can make the
+      // frame a different shape than its source. Routing through the same
+      // resolvePlacedImage() paint and resize already use keeps the runs
+      // this returns matching the subject that is actually drawn: cropped,
+      // fitted (contain/cover/stretch), then flipped about the frame's own
+      // centre exactly as picture-style.js's CSS transform does. Rotation
+      // stays out of scope here exactly as it already was for the box path
+      // above (guarded by the same `!Number(image.rotation)`).
+      const geometry = resolvePlacedImage(image);
+      const frame = geometry.frame;
+      const content = geometry.localContentRect;
+      const crop = geometry.crop;
+      const source = geometry.source;
+      if (frame.width <= 0 || frame.height <= 0 || content.width <= 0 || content.height <= 0) return [];
 
-      const cellW = width / envelope.cols;
-      const cellH = height / envelope.rows;
-      const first = Math.max(0, Math.floor((top - pad - y) / cellH));
-      const last = Math.min(envelope.rows - 1, Math.ceil((bottom + pad - y) / cellH) - 1);
-      if (last < first) return [];
+      const cellW = (source.width || 1) / envelope.cols;
+      const cellH = (source.height || 1) / envelope.rows;
+      // Mask-space (source pixels) into the frame's own local space: subtract
+      // the crop origin, scale into localContentRect, offset by where that
+      // content sits within the frame. Cells outside the crop rectangle
+      // contribute nothing - inert today (no UI sets a non-default crop, so
+      // crop is always the whole source), exact the day one does.
+      const toLocalX = (sourcePx) => content.x + (sourcePx - crop.x) * geometry.scaleX;
+      const toLocalY = (sourcePx) => content.y + (sourcePx - crop.y) * geometry.scaleY;
+      // Flip mirrors the whole content box about the FRAME's own centre -
+      // the same transform-origin the CSS `scaleX(-1)`/`scaleY(-1)` on the
+      // picture element itself uses (picture-style.js), applied here after
+      // the fit mapping above, matching paint's own order: fit, then flip.
+      const mirrorX = (localPx) => (geometry.flipH ? frame.width - localPx : localPx);
+      const mirrorY = (localPx) => (geometry.flipV ? frame.height - localPx : localPx);
 
+      // Only 'cover' can place content outside [0,frame.width]x[0,frame.height]
+      // (contain and stretch never do) - the SAME no-op-for-the-other-two clip
+      // resolvePlacedImage()'s own clipRect declares. object-fit:cover on the
+      // real <img> never paints past its own box, so a mask cell mapping
+      // outside it is not just off-frame, it is invisible: nothing is there
+      // for copy to avoid.
+      const visibleTop = Math.max(0, top - pad - frame.y);
+      const visibleBottom = Math.min(frame.height, bottom + pad - frame.y);
+      if (visibleBottom <= visibleTop) return [];
+
+      // The mask grid is fixed and small (occupancyMask()'s own 44 rows), so
+      // rather than invert flip+scale to find which rows the query band
+      // could touch, every row is mapped forward and kept only if its own
+      // frame-local extent overlaps the band - cheaper to read correctly
+      // than to invert.
       const runs = [];
-      for (let r = first; r <= last; r += 1) {
+      for (let r = 0; r < envelope.rows; r += 1) {
+        const rowA = mirrorY(toLocalY(r * cellH));
+        const rowB = mirrorY(toLocalY((r + 1) * cellH));
+        const rowTop = Math.min(rowA, rowB);
+        const rowBottom = Math.max(rowA, rowB);
+        if (rowBottom <= visibleTop || rowTop >= visibleBottom) continue;
+
         let start = -1;
         for (let c = 0; c <= envelope.cols; c += 1) {
           const solid = c < envelope.cols && envelope.cells[r][c];
           if (solid && start === -1) start = c;
           if (!solid && start !== -1) {
-            runs.push({ start: x + start * cellW - pad, end: x + c * cellW + pad });
+            const localStartX = mirrorX(toLocalX(start * cellW));
+            const localEndX = mirrorX(toLocalX(c * cellW));
+            const runLeft = Math.max(0, Math.min(localStartX, localEndX));
+            const runRight = Math.min(frame.width, Math.max(localStartX, localEndX));
+            if (runRight > runLeft) runs.push({ start: frame.x + runLeft - pad, end: frame.x + runRight + pad });
             start = -1;
           }
         }

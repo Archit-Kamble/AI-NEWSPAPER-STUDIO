@@ -386,6 +386,76 @@ test('a cut-out is its silhouette, not its canvas - copy enters the transparent 
     'the transparent field beside the subject must become usable room');
 });
 
+// Phase F: a cutout's exclusion envelope resolved through the SAME
+// image-geometry.js transform paint and resize already use, so the shape
+// copy wraps matches the shape actually drawn - not a raw, untransformed
+// mask that stays put when the picture itself flips or is fitted into a
+// frame of a different aspect ratio.
+test('a flipped cutout mirrors its exclusion, not just its paint', () => {
+  const cols = 10;
+  const rows = 10;
+  // Solid subject occupies only the LEFT half of the mask.
+  const cells = Array.from({ length: rows }, () => Array.from({ length: cols }, (u, c) => (c < 4 ? 1 : 0)));
+  const mask = { rows, cols, cells };
+  const image = { x: 0, y: 0, width: 100, height: 100, shape: 'cutout', mask, standOffPx: 3 };
+
+  const unflipped = exclusion.obstacleIntervals(image, 0, 100, 12);
+  assert.ok(unflipped.length, 'the unflipped mask produces an obstacle');
+  assert.ok(unflipped[0].start < 50, 'unflipped, the subject sits on the LEFT of the frame');
+
+  const flipped = exclusion.obstacleIntervals({ ...image, flipH: true }, 0, 100, 12);
+  assert.ok(flipped.length, 'the flipped mask still produces an obstacle');
+  assert.ok(flipped[0].start > 50, 'flipped, the subject must sit on the RIGHT of the frame - mirrored, not left in place');
+
+  // Exact mirror about the frame's own centre (matching picture-style.js's
+  // CSS scaleX(-1) transform-origin): the flipped run is the unflipped run
+  // reflected through width/2, pad included on both.
+  const expectedFlippedStart = image.width - unflipped[0].end;
+  const expectedFlippedEnd = image.width - unflipped[0].start;
+  assert.ok(Math.abs(flipped[0].start - expectedFlippedStart) < 0.01, 'flipped start is the exact mirror of the unflipped end');
+  assert.ok(Math.abs(flipped[0].end - expectedFlippedEnd) < 0.01, 'flipped end is the exact mirror of the unflipped start');
+});
+
+test('a flipV mirrors the exclusion vertically - a subject drawn at the mask\'s top is excluded at the frame\'s bottom', () => {
+  const cols = 10;
+  const rows = 10;
+  // Solid subject occupies only the TOP quarter of the mask.
+  const cells = Array.from({ length: rows }, (u, r) => Array.from({ length: cols }, () => (r < 3 ? 1 : 0)));
+  const mask = { rows, cols, cells };
+  const image = { x: 0, y: 0, width: 100, height: 100, shape: 'cutout', mask, standOffPx: 0 };
+
+  // Query only the frame's bottom half.
+  const unflippedBottom = exclusion.obstacleIntervals(image, 50, 100, 12);
+  assert.equal(unflippedBottom.length, 0, 'unflipped, the subject (top quarter) leaves the bottom half completely clear');
+
+  const flippedBottom = exclusion.obstacleIntervals({ ...image, flipV: true }, 50, 100, 12);
+  assert.ok(flippedBottom.length > 0, 'flipped vertically, the subject now occupies the bottom half');
+});
+
+test('a cutout fitted (contain) into a frame of a different aspect ratio letterboxes the exclusion, it does not stretch it', () => {
+  const cols = 10;
+  const rows = 10;
+  // The whole mask is solid - a square subject, no transparent margin.
+  const cells = Array.from({ length: rows }, () => new Uint8Array(cols).fill(1));
+  const mask = { rows, cols, cells };
+  // Source is square (100x100); the frame is TWICE as wide (200x100) - under
+  // 'contain', the content must be centred at 100x100 with 50px of blank
+  // margin on each side, never stretched to fill the full 200px width.
+  const image = {
+    x: 0, y: 0, width: 200, height: 100, shape: 'cutout',
+    sourceWidth: 100, sourceHeight: 100, fitMode: 'contain', mask,
+  };
+  // standOffPx: 0 would not disable the default stand-off (0 fails the ">0"
+  // check standOffPx() itself uses to tell "unset" from "explicitly zero"),
+  // so the expected edges include it rather than assuming it away.
+  const pad = exclusion.standOffPx(image, 12);
+
+  const middleBand = exclusion.obstacleIntervals(image, 40, 60, 12);
+  assert.ok(middleBand.length, 'the subject still produces an obstacle');
+  assert.ok(Math.abs(middleBand[0].start - (50 - pad)) < 1, `contain must letterbox at x=50, not stretch from 0 (got ${middleBand[0].start})`);
+  assert.ok(Math.abs(middleBand[0].end - (150 + pad)) < 1, `contain must letterbox to x=150, not stretch to 200 (got ${middleBand[0].end})`);
+});
+
 test('an internal hole in a silhouette is occupied - text never threads an arm gap', () => {
   const rows = 16;
   const cols = 16;

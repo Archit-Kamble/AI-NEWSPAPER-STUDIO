@@ -82,6 +82,20 @@ export function obstacleFromImage(row) {
     rotation: Number(row.rotation) || 0,
     standOffPx: Number(row.stand_off_px ?? row.standOffPx) || 0,
     mask: row.mask || null,
+    // Only read by the 'cutout' branch of obstacleIntervals(), which resolves
+    // these through the SAME image-geometry.js transform paint and resize
+    // already use - a rectangle or ellipse's exclusion is legitimately its
+    // whole frame regardless of fit mode (a picture's box is reserved even
+    // where 'contain' leaves it blank), so those two never read these.
+    fitMode: row.fit_mode ?? row.fitMode,
+    flipH: row.flip_h ?? row.flipH,
+    flipV: row.flip_v ?? row.flipV,
+    sourceWidth: row.source_width_px ?? row.sourceWidth,
+    sourceHeight: row.source_height_px ?? row.sourceHeight,
+    cropX: row.crop_x_px ?? row.cropX,
+    cropY: row.crop_y_px ?? row.cropY,
+    cropWidth: row.crop_width_px ?? row.cropWidth,
+    cropHeight: row.crop_height_px ?? row.cropHeight,
   };
 }
 

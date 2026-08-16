@@ -68,9 +68,14 @@ async function createSection(pageId, body) {
 // corner prints blank - so only removal is refused.
 const STRUCTURAL_SECTION_KEYS = new Set(['masthead-advert']);
 
+/** Is this frame part of the page itself rather than a hole in the matter? */
+function isStructuralSection(sectionKey) {
+  return STRUCTURAL_SECTION_KEYS.has(String(sectionKey));
+}
+
 async function deleteSection(pageId, sectionKey) {
   const id = parseInt(pageId, 10);
-  if (STRUCTURAL_SECTION_KEYS.has(String(sectionKey))) {
+  if (isStructuralSection(sectionKey)) {
     return { error: 'STRUCTURAL_FRAME_PROTECTED', sectionKey: String(sectionKey) };
   }
   const removed = await pageRepository.deleteSection(id, sectionKey);
@@ -173,4 +178,4 @@ async function rateFor(pageId, sectionKey) {
   return quote(section, section, { totalPages: pages.length, newspaper });
 }
 
-module.exports = { saveSection, createSection, deleteSection, moveSection, snapGeometry, rateFor };
+module.exports = { saveSection, createSection, deleteSection, moveSection, snapGeometry, rateFor, isStructuralSection };

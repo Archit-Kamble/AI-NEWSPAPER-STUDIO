@@ -137,7 +137,7 @@ When adding a new template, add it to `src/layout/templates.js` only — both th
 
 Three things are defined once in `public/editor/layout/` and imported by **both** sides — the server reaches them with a dynamic `import()`, exactly as `worklist`, `fit`, `jump`, `preflight` and the AI brief all reach the character grid:
 
-- `text-flow.js` — the character grid. One cell = one body character wide × one line tall. The single source of every measurement.
+- `text-flow.js` — the character grid. One cell = one body character wide × one line tall. **No longer the measurement authority** — see "The composition engine" below. It survives as the fast planner and as the fallback for the moment before the publication font has loaded.
 - `block-kinds.js` — what each `block_type` is and what work it wants (article, briefs, photo, advert, feature). The worklist and the block's own heading must say the same thing; `tests/edition.test.js` asserts it.
 - `picture-style.js` — how a placed picture is drawn. The page canvas and the editor read the one rule, or the same photograph looks like two different pictures.
 
@@ -221,6 +221,40 @@ Freshness (`information/freshness.js`) is two windows, not dozens — 15 minutes
 Not yet built, on purpose: weather, sports, election and paid-news providers all sit behind the same `information/` interface and were deliberately deferred to keep this phase provably small — see `PROJECT_STATUS.md` for what was measured and what is still open.
 
 A second copy of any of these is the failure mode this project has already been bitten by twice (the drifted template keys, and `object-fit: cover` on the page against `contain` in the editor).
+
+### The composition engine — one answer, in `public/editor/compose/`
+
+`composeBlock()` takes a frame, its copy, its type and its photographs and returns **one** object saying exactly where every line sits. It touches no DOM, no canvas and no layout engine, so it produces the same numbers in Node and in the browser. "The editor renders the same as the page" is therefore not a property kept true by tests — both surfaces draw the same list of positioned lines, and neither breaks a line at all.
+
+| module | what it owns |
+|---|---|
+| `font-metrics.js` | a small hand-rolled TrueType reader (`head`/`hhea`/`hmtx`/`cmap`) over the real publication TTFs |
+| `graphemes.js` | UAX #29 clusters via `Intl.Segmenter`. Text is only ever cut at an akshara boundary |
+| `intervals.js` | the scanline representation, and corridor viability |
+| `exclusion.js` | a photograph as an exclusion envelope: closing, hole filling, stand-off dilation |
+| `compose.js` | the solver → CompositionResult |
+| `render.js` | that result as absolutely positioned spans |
+| `section-adapter.js` | the one translation from a persisted row or a live draft into a composition |
+
+**A constant cannot measure Marathi, and the reason it went unnoticed is that its average was nearly right.** `AVG_CHAR_WIDTH_RATIO = 0.4` overstates real Marathi width by 7.8% across a 419-codepoint sample. Per *line* it is out by ±18–22%: a matra-heavy line sets 18% narrower than it believed, a plain-consonant line 18% wider, Devanagari digits 22% wider. Both errors sit in the same block and cancel in the total, which is the signature of the whole family of complaints — a block reporting itself full while visibly short of its own bottom edge, and copy escaping a frame the budget said had room. A Devanagari vowel sign takes **no advance width**: in `NotoSerifDevanagari-Regular.ttf` क is 711 and म 556, but े ं ु ् are all 0. Do not tune the constant again.
+
+**What is exact and what is not.** Advances are the font's own numbers. GSUB/GPOS are *not* modelled, so a substituted conjunct measures slightly wide — the safe direction, deliberately. Never "fix" that by scaling the result down.
+
+**The character budget is a range, not a scalar, and this is settled.** The same block holds 30–46% more or fewer characters depending only on what is written into it, because conjunct-heavy Marathi hides zero-width codepoints inside one akshara. Clusters were measured as a candidate stabler unit and are **worse** (68–87%). An attempt to keep one safe scalar needed a 15% discount, which would have underfilled every block on the page to protect a single outlier. So `capacity` quotes the geometry (`fullMeasureEquivalents`, which does not vary at all) plus `bodyCharRange.min/max`, and the guarantee lives where it can be kept: **overflow is detected exactly, after the copy exists**, which is what the existing bounded shortening repairs against. Quote `bodyCharRange.min` when you must not be wrong.
+
+**Font readiness is real.** Measurement before `ensureFontsLoaded()` resolves falls back to the old grid and sets `fontReady: false` with a `FONT_NOT_READY` warning. A page composed against a fallback font and then repainted is two different pages, and only one of them was approved. `workspace.js` awaits the fonts before the first paint, beside the identity, for that reason.
+
+**Whitespace is classified, not counted.** A ragged right end is how type is set and is never a hole; a gap a photograph made unusable was never counted as usable in the first place. `largestHoleLines` is the one number the desk and the writer act on, and `HOLE_LINES` (4) matches `storyWriter.service.js` deliberately.
+
+### The page reserves its own furniture
+
+`geometry.js`'s `regionsFor` owns the footer band **and** page one's top-left corner (`header.earWidthPx`). The corner used to be reserved only by the presence of the `masthead-advert` block, so deleting that block moved the newspaper's name into the corner and stretched it across the space — found live on edition 13542. A region the page owns cannot be removed by deleting something out of it. `pageSection.service.js` additionally refuses to delete a structurally reserved frame (409; clear its contents instead), narrowly — ordinary editorial frames stay freely deletable.
+
+The page foot carries the paper, the date and the page number, and nothing else. The Act printline belongs to the page-two imprint, which already prints it; setting it on every page duplicated a legal statement and read as an unwanted rule.
+
+### Looking at the page without spending AI calls
+
+`node scripts/fill-edition-copy.js <editionId>` writes deterministic Marathi copy into a disposable `2099-*` edition, sized to each block's own measured capacity, and refuses any other date. Composition work has to be looked at to be believed, and driving a real edition through the AI writer costs money, is rate limited, and gives different copy every run so two screenshots cannot be compared.
 
 ## Page model
 

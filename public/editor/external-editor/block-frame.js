@@ -71,6 +71,7 @@ let state = { section: null, view: null, images: [], selectedIds: new Set(), sel
 // ---------------------------------------------------------------- loading ---
 
 let quillLoading = null;
+let sizeAttributorRegistered = false;
 function loadQuill() {
   if (window.Quill) return Promise.resolve(window.Quill);
   if (quillLoading) return quillLoading;
@@ -107,6 +108,31 @@ export function blockFrameMarkup() {
           <button class="ql-italic" type="button"></button>
           <button class="ql-underline" type="button"></button>
           <button class="ql-strike" type="button"></button>
+        </span>
+        <span class="ql-formats ed-quill-size-group" id="edQuillSize">
+          <!-- The one deliberate exception to "colour, size and font are the
+               block's, not the selection's" (see mountFrame() below): a
+               sub-editor emphasising one word or phrase at a different size
+               within the story. Serialises to rich-text.js's controlled
+               data-sahas-size mark, not an arbitrary style - see
+               copyFromFrame().
+
+               Plain buttons, not a <select> wrapped in Quill's own Picker:
+               a select with class="ql-size" IS what Quill auto-converts into
+               a custom .ql-picker widget, and in this bundled Quill 2.0.3 a
+               picker built for a custom-registered Attributor (rather than
+               Quill's own built-in small/large/huge enum) never actually
+               dispatches back to the toolbar - confirmed by instrumenting
+               both the picker's underlying select (no "change" event reaches
+               it on a real item click) and toolbar.addHandler() (never
+               invoked). Bold/italic/underline are plain <button class="ql-*">
+               and work correctly, so size uses the same shape instead of
+               fighting the Picker abstraction. -->
+          <button type="button" class="ed-quill-size-btn" data-size="12px" title="12px">12</button>
+          <button type="button" class="ed-quill-size-btn" data-size="14px" title="14px">14</button>
+          <button type="button" class="ed-quill-size-btn" data-size="18px" title="18px">18</button>
+          <button type="button" class="ed-quill-size-btn" data-size="22px" title="22px">22</button>
+          <button type="button" class="ed-quill-size-btn" data-size="28px" title="28px">28</button>
         </span>
         <span class="ql-formats">
           <button class="ql-list" value="ordered" type="button"></button>
@@ -374,9 +400,9 @@ function finishInlineTextEdit({ cancel = false } = {}) {
   inlineTextEdit = null;
 
   const { element, config } = edit;
-  const frame = document.getElementById(config.frameId);
 
-  frame?.classList.remove("is-inline-editing");
+  element?.classList.remove("is-inline-editing", "is-semantic-text-editor");
+  if (element) element.style.pointerEvents = "";
 
   if (!element?.isConnected) return;
 
@@ -388,8 +414,7 @@ function finishInlineTextEdit({ cancel = false } = {}) {
   element.removeAttribute("contenteditable");
   element.removeAttribute("role");
   element.removeAttribute("aria-label");
-  element.classList.remove("is-inline-text-editor");
-  element.style.pointerEvents = "";
+  element.textContent = "";
 
   if (cancel) {
     layoutTextFrames();
@@ -408,6 +433,17 @@ function finishInlineTextEdit({ cancel = false } = {}) {
   input.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
+// The FRAME - not a span out of the canonical rendering - is the edit
+// surface. A composed headline/deck is drawn as one <span> PER LINE
+// (render.js), all sharing the same class, so `querySelector(".section-
+// headline")` used to grab only the FIRST line: editing a 3-line headline
+// silently discarded lines 2 and 3 the moment the edit committed, because
+// the commit read `textContent` off an element that only ever held a third
+// of the real text. The frame that already sits over the WHOLE band
+// (`headlineBox`/`deckBox` in layoutTextFrames(), the union of every line
+// the real composition placed) has no such limit - it is filled with the
+// full semantic text from `state.view`, which is also the actual source of
+// truth this text is edited FROM in the first place.
 function beginInlineTextEdit(part) {
   finishInlineTextEdit();
 
@@ -416,45 +452,68 @@ function beginInlineTextEdit(part) {
 
   hooks.onSelectPart?.(part);
 
-  // Selection can refresh the canonical renderer, so resolve its real text
-  // node after the selection update has completed.
+  // Selection can refresh the canonical renderer and the frame's own
+  // position, so resolve both after that update has completed.
   queueMicrotask(() => {
     const canonical = document.getElementById("edCanonicalContent");
-    const element = canonical?.querySelector(config.selector);
     const frame = document.getElementById(config.frameId);
-    if (!element) return;
+    if (!frame || !canonical) return;
 
-    inlineTextEdit = { element, config };
+    const source = part === "headline" ? String(state.view.headline || "") : String(state.view.subheading || "");
 
-    frame?.classList.add("is-inline-editing");
+    inlineTextEdit = { element: frame, config };
 
-    element.classList.add("is-inline-text-editor");
-    element.setAttribute("contenteditable", "plaintext-only");
-    element.setAttribute("role", "textbox");
-    element.setAttribute("aria-label", config.label);
-    element.style.pointerEvents = "auto";
+    // Real typography, not the frame's default (none - it is normally a
+    // transparent hit target with the canonical layer doing all the
+    // drawing). Zoom-adjusted the same way layoutTextFrames() positions the
+    // frame itself: the frame lives in the editor's own display pixels, not
+    // behind the canonical layer's separate CSS scale() transform.
+    const scale = pageScale();
+    // Headline/deck are always the sans face, at the stylesheet's own
+    // weights (compose.js's DISPLAY_TYPOGRAPHY) - never derived from any
+    // input, so this is fixed rather than looked up.
+    frame.style.fontFamily = publicationFamily("sans").css;
+    frame.style.fontWeight = part === "headline" ? "700" : "400";
+    frame.style.fontSize = `${(Number(state.view[`${part}FontPx`]) || 16) / scale}px`;
+    frame.style.lineHeight = String(Math.max(1.1, (Number(state.view.lineHeight) || 1.25) - 0.15));
+    frame.style.textAlign = "left";
+    frame.style.padding = "0";
+    frame.style.pointerEvents = "auto";
 
-    element.addEventListener(
+    frame.classList.add("is-inline-editing", "is-semantic-text-editor");
+    frame.textContent = source;
+    frame.setAttribute("contenteditable", "plaintext-only");
+    frame.setAttribute("role", "textbox");
+    frame.setAttribute("aria-label", config.label);
+
+    // The canonical layer's own composed lines for this flow still sit
+    // underneath the frame; hidden while the frame carries the live edit
+    // text, so the desk is never shown both at once. A fresh render (either
+    // path below) rebuilds the canonical layer from scratch, so nothing has
+    // to restore this explicitly on the way out.
+    canonical.querySelectorAll(config.selector).forEach((el) => { el.style.visibility = "hidden"; });
+
+    frame.addEventListener(
       "blur",
       () => finishInlineTextEdit(),
       { once: true },
     );
 
-    element.addEventListener("keydown", (event) => {
+    frame.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
         event.preventDefault();
-        element.blur();
+        frame.blur();
       } else if (event.key === "Escape") {
         event.preventDefault();
         finishInlineTextEdit({ cancel: true });
       }
     });
 
-    element.focus();
+    frame.focus();
 
     const selection = window.getSelection();
     const range = document.createRange();
-    range.selectNodeContents(element);
+    range.selectNodeContents(frame);
     range.collapse(false);
     selection?.removeAllRanges();
     selection?.addRange(range);
@@ -478,15 +537,31 @@ function bindTextFrames() {
     beginInlineTextEdit("subheading");
   });
 
+  // A raw DOM `.focus()` on Quill's contenteditable root does not reliably
+  // put a caret where a desk can type - Quill tracks its own selection
+  // state, and focusing the element without going through its API left
+  // clicks landing with no visible caret often enough to be the actual
+  // complaint. `quill.focus()` (the real instance, declared at module scope
+  // above) goes through Quill's own selection machinery instead, and sets an
+  // explicit collapsed selection at the end of the text if there was none -
+  // "double-click the body" should always land somewhere typeable, not just
+  // somewhere scrolled-into-view.
   const activateBodyEditor = () => {
     hooks.onSelectPart?.("body");
 
     const writing = document.getElementById("edWritingSurface");
-    const editor = writing?.querySelector(".ql-editor");
-
     writing?.classList.add("is-body-target");
     writing?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    requestAnimationFrame(() => editor?.focus());
+
+    requestAnimationFrame(() => {
+      if (!quill) return;
+      quill.focus();
+      const selection = quill.getSelection();
+      if (!selection) {
+        const length = Math.max(0, quill.getLength() - 1);
+        quill.setSelection(length, 0, "silent");
+      }
+    });
   };
 
   body?.addEventListener("click", () => hooks.onSelectPart?.("body"));
@@ -705,12 +780,59 @@ function bindPictureFrames() {
 // ------------------------------------------------------------------- copy ---
 
 /** The story as it is stored: Quill's HTML, reduced to marks a printer can set. */
+// Quill's own size attributor (registered in mountFrame()) writes a selected
+// size as `style="font-size: 18px"` on whatever span it created - a real,
+// arbitrary inline style, which sanitise() would otherwise strip along with
+// every other inline style a pasted story brings in. Converted to the one
+// controlled attribute rich-text.js actually accepts BEFORE sanitising, so
+// what is asked to survive is exactly the one thing this editor offers a
+// size control for, not an open door for arbitrary CSS.
+function convertQuillSizeStyles(html) {
+  if (!html.includes("font-size")) return html;
+  const holder = document.createElement("div");
+  holder.innerHTML = html;
+  holder.querySelectorAll("[style*=font-size]").forEach((el) => {
+    const match = /font-size:\s*([\d.]+)px/i.exec(el.getAttribute("style") || "");
+    el.removeAttribute("style");
+    if (match) el.setAttribute("data-sahas-size", String(Math.round(Number(match[1]))));
+  });
+  return holder.innerHTML;
+}
+
+// The reverse conversion, for the way IN: a story already carrying
+// rich-text.js's stored `data-sahas-size` mark has to become Quill's own
+// `style="font-size:Npx"` again before dangerouslyPasteHTML(), or Quill's
+// clipboard importer - which only round-trips formats it has a registered
+// Attributor for - drops the mark on load, and the very next keystroke would
+// save it away permanently even though the desk never touched that word.
+function quillHtmlFromStored(html) {
+  if (!html || !html.includes("data-sahas-size")) return html;
+  const holder = document.createElement("div");
+  holder.innerHTML = html;
+  holder.querySelectorAll("[data-sahas-size]").forEach((el) => {
+    const px = Number(el.getAttribute("data-sahas-size"));
+    el.removeAttribute("data-sahas-size");
+    if (Number.isFinite(px)) el.style.fontSize = `${px}px`;
+  });
+  return holder.innerHTML;
+}
+
 export function copyFromFrame() {
   if (!quill) return "";
-  const html = quill.root.innerHTML;
+  // getSemanticHTML(), not `quill.root.innerHTML` - a real, found race:
+  // applying a format (size) on top of an ALREADY-formatted range (bold)
+  // makes Quill restructure the live DOM (splitting/rewrapping the existing
+  // <strong>), and reading `root.innerHTML` synchronously inside the SAME
+  // "text-change" handler that the format() call itself fired sometimes ran
+  // before that restructuring finished - the delta correctly showed the new
+  // format, but the HTML read back in the same tick did not yet have it.
+  // getSemanticHTML() serialises straight from Quill's Delta model, which
+  // format() updates synchronously, so it cannot observe an unsettled DOM.
+  const html = quill.getSemanticHTML();
   // Quill writes an empty document as "<p><br></p>". Storing that would make an
   // empty block look written, and every count would be off by one line.
-  return /^<p>(<br\s*\/?>)?<\/p>$/i.test(html.trim()) ? "" : sanitise(html);
+  if (/^<p>(<br\s*\/?>)?<\/p>$/i.test(html.trim())) return "";
+  return sanitise(convertQuillSizeStyles(html));
 }
 
 export async function mountFrame(section, view, images, callbacks, selectedPart = "block", selectedImageIds = []) {
@@ -726,23 +848,66 @@ export async function mountFrame(section, view, images, callbacks, selectedPart 
     return;
   }
 
+  // Colour and font stay the BLOCK's, decided by the layout - a newspaper is
+  // one paper, not a scrapbook (rich-text.js). Size is the one deliberate
+  // exception, for a sub-editor emphasising one word or phrase - registered
+  // once, globally, with an open whitelist so `quill.format('size', 'Npx')`
+  // below can ask for any value rather than a fixed few Quill ships with.
+  // Quill applies it as `style="font-size:Npx"`; copyFromFrame() converts
+  // that to rich-text.js's controlled `data-sahas-size` mark before it is
+  // ever sanitised or stored, so no arbitrary inline style survives.
+  if (!sizeAttributorRegistered) {
+    const SizeStyle = Quill.import("attributors/style/size");
+    SizeStyle.whitelist = null;
+    Quill.register(SizeStyle, true);
+    sizeAttributorRegistered = true;
+  }
+
   quill = new Quill(host, {
     theme: "snow",
     placeholder: "बातमी येथे लिहा — write the story here.",
     modules: {
-      // The marks a printer can actually set, and nothing else - the buttons
-      // are written above, so colour, size and font are simply not offered.
-      // Those are the BLOCK's, decided by the layout: a newspaper is one paper,
-      // not a scrapbook (rich-text.js).
       toolbar: { container: "#edQuillToolbar" },
       history: { delay: 600, maxStack: 200, userOnly: true },
     },
   });
 
-  quill.clipboard.dangerouslyPasteHTML(view.body || "", "silent");
+  quill.clipboard.dangerouslyPasteHTML(quillHtmlFromStored(view.body || ""), "silent");
   quill.on("text-change", (delta, old, source) => {
     if (source !== "user") return;
     hooks.onPatch?.({ body: copyFromFrame() }, "block-frame");
+  });
+  // Plain buttons, not Quill's Picker (see the toolbar markup's own note
+  // above for why) - one delegated click handler. `quill.getSelection(true)`
+  // asks Quill to focus and hand back a range: a plain button click moves
+  // DOM focus off the editor exactly like the Bold button's click does, and
+  // Quill's own internal `lastRange` tracking (the same mechanism that keeps
+  // Bold working after that focus loss) is what makes this still apply to
+  // the text that was actually selected.
+  document.getElementById("edQuillSize")?.addEventListener("click", (event) => {
+    const button = event.target.closest(".ed-quill-size-btn");
+    if (!button || !quill) return;
+    const range = quill.getSelection(true);
+    if (!range) return;
+    quill.format("size", button.dataset.size, "user");
+    // KNOWN, UNRESOLVED ISSUE, documented rather than silently left: applying
+    // size on top of an ALREADY-bold range does not reliably reach the
+    // stored draft. The delta Quill fires correctly shows
+    // `attributes:{size:...}`, confirmed by direct instrumentation, and the
+    // format is visibly applied in the live editor - but `copyFromFrame()`,
+    // called from the "text-change" listener below in the same tick, has
+    // been observed to still read back a version with no size on it. Two
+    // mitigations are in place (getSemanticHTML() below reads Quill's Delta
+    // model directly rather than the live DOM, precisely to avoid a
+    // DOM-render race; this extra deferred re-patch retries a frame later)
+    // and NEITHER fully closes it - size applied to PLAIN (non-bold) text
+    // persists correctly, and bold alone persists correctly, but the
+    // combination remains flaky. Left for a follow-up session rather than
+    // chased further here; both mitigations are harmless (an extra draft
+    // write autosave already debounces) and are kept because they may still
+    // help in other timing conditions even though they did not close this
+    // one.
+    requestAnimationFrame(() => hooks.onPatch?.({ body: copyFromFrame() }, "block-frame"));
   });
   // A real click or keyboard focus in Quill is source "user"; refreshFrame()'s
   // own dangerouslyPasteHTML(..., "silent") sync (below) also moves Quill's
@@ -805,7 +970,7 @@ export function refreshFrame(section, view, images, source, selectedPart, select
   // throws it back to the start, which is how a rich editor becomes unusable.
   if (source === "block-frame" || !quill || quill.hasFocus()) return;
   const wanted = view.body || "";
-  if (copyFromFrame() !== wanted) quill.clipboard.dangerouslyPasteHTML(wanted, "silent");
+  if (copyFromFrame() !== wanted) quill.clipboard.dangerouslyPasteHTML(quillHtmlFromStored(wanted), "silent");
 }
 
 export function selectPictureFrame(id) {

@@ -321,7 +321,17 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
 
     await page.locator('#edHeadlineFrame').dblclick();
     await page.waitForTimeout(200);
-    say((await focusedId()) === 'edStoryHeadline', 'a double click on the headline enters text editing');
+    // The FRAME itself is now the edit surface (block-frame.js's
+    // beginInlineTextEdit()), not the plain #edStoryHeadline input - it is
+    // filled with the full semantic headline and made contenteditable
+    // directly, because the canonical rendering is one <span> PER LINE and
+    // could only ever give back a third of a three-line headline's real text
+    // if editing happened on a rendered fragment instead of the frame that
+    // spans the whole band. The input still receives the committed value on
+    // blur (unchanged - see the "did not steal focus" assertions below).
+    say((await focusedId()) === 'edHeadlineFrame', 'a double click on the headline enters text editing');
+    say(await page.locator('#edHeadlineFrame').evaluate((el) => el.getAttribute('contenteditable') === 'plaintext-only'),
+      'the headline frame itself becomes the semantic edit surface');
     say((await partOf()) === 'headline', 'and the headline is still what is selected');
 
     say(await page.locator('#edHeadlineFrame').evaluate((el) => !el.querySelector('.pic-handle')),

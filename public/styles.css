@@ -4557,25 +4557,29 @@ body.print-view .page-imprint {
   overflow: hidden;
 }
 
-/* Direct editing is performed on the canonical headline/deck itself.
-   The transparent interaction frame steps aside while typing. */
-.frame-headline.is-inline-editing,
-.frame-subheading.is-inline-editing {
-  pointer-events: none;
-  background: transparent;
-}
-
-.frame-canonical-content .is-inline-text-editor {
+/* Direct editing is performed on the FRAME itself (block-frame.js's
+   beginInlineTextEdit()), not a span out of the canonical rendering - a
+   composed headline/deck is one <span> per LINE, and a per-line element can
+   only ever give back a third of a three-line headline's real text. The
+   frame already sits over the WHOLE band (it is a hit target sized to it),
+   so it carries the full semantic text instead, and stays interactive
+   rather than stepping aside. */
+.frame-headline.is-semantic-text-editor,
+.frame-subheading.is-semantic-text-editor {
   pointer-events: auto;
   cursor: text;
   user-select: text;
   -webkit-user-select: text;
   caret-color: #111;
+  background: rgba(255, 255, 255, 0.92);
   outline: 1px dashed rgba(196, 30, 58, 0.72);
   outline-offset: -1px;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
-.frame-canonical-content .is-inline-text-editor:focus {
+.frame-headline.is-semantic-text-editor:focus,
+.frame-subheading.is-semantic-text-editor:focus {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
@@ -4734,6 +4738,31 @@ body.print-view .page-imprint {
   border-bottom: 1px solid #e4e4ea;
   padding: 2px 0 6px;
   text-align: center;
+}
+
+/* Plain buttons, not Quill's own Picker widget - see block-frame.js's
+   blockFrameMarkup() for why. Styled to sit quietly among Quill's real
+   ql-formats groups rather than announce itself as a different kind of
+   control. */
+.ed-quill-size-group {
+  display: inline-flex;
+  gap: 2px;
+}
+.ed-quill-size-btn {
+  width: 22px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: none;
+  color: #444;
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+}
+.ed-quill-size-btn:hover {
+  background: #f0f0f4;
+  border-color: #e4e4ea;
 }
 
 /* A picture is a frame on the page: dragged anywhere, sized by its corner. */

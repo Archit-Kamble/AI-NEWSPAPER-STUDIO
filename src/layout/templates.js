@@ -436,6 +436,24 @@ function reconcileSectionsForPage(sections = [], pageNumber, newspaper = {}) {
   });
 }
 
+// Frames that hold a region the PAGE itself reserves, rather than a hole in
+// the editorial matter - the sold corner of page one is the only one today
+// (deleting it used to let the nameplate stretch across the space it had
+// held; see geometry.js). The template catalog is the one place a section
+// key is defined at all, so it is the one place this classification can live
+// without a second copy drifting from it - pageSection.service.js's deletion
+// guard and page.repository.js's structural-repair both read this, not a
+// local Set of their own.
+const STRUCTURAL_FRAME_KEYS = new Set(['masthead-advert']);
+
+/** Is this frame part of the page itself rather than a hole in the matter? */
+function isStructuralTemplateFrame(sectionOrKey) {
+  const key = typeof sectionOrKey === 'string'
+    ? sectionOrKey
+    : sectionOrKey?.key || sectionOrKey?.section_key;
+  return STRUCTURAL_FRAME_KEYS.has(String(key || ''));
+}
+
 function comparePageGeometryToTemplate(pageSections = [], template = {}) {
   const expected = new Map((template.sections || []).map((section) => [section.key, section]));
   const differences = [];
@@ -458,6 +476,8 @@ module.exports = {
   getTemplateForPage,
   reconcileSectionsForPage,
   comparePageGeometryToTemplate,
+  STRUCTURAL_FRAME_KEYS,
+  isStructuralTemplateFrame,
   templates,
   colX,
   colW,

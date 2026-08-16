@@ -134,7 +134,6 @@ test('geometry drift reports persisted/template differences rather than pretendi
 
 const { regionsFor } = require('../src/layout/geometry');
 const templates = require('../src/layout/templates');
-const pageSectionService = require('../src/services/pageSection.service');
 
 test('page one reserves its top-left corner in the region model, not in a block', () => {
   const g = geometryOf({});
@@ -157,11 +156,17 @@ test('the reserved corner and the template block that fills it describe the SAME
 test('a frame the page reserves cannot be deleted, and ordinary frames still can', () => {
   // The reported failure exactly: the corner block was removed and nothing
   // stopped it. Emptying it stays fine - an unsold corner prints blank.
-  assert.equal(pageSectionService.isStructuralSection('masthead-advert'), true);
+  // Classification now lives in templates.js (the one catalog of section
+  // keys, per its own module comment) - pageSection.service.js's deletion
+  // guard and page.repository.js's structural repair both read the same
+  // function, rather than each keeping a local copy of the key set.
+  assert.equal(templates.isStructuralTemplateFrame('masthead-advert'), true);
+  assert.equal(templates.isStructuralTemplateFrame({ key: 'masthead-advert' }), true);
+  assert.equal(templates.isStructuralTemplateFrame({ section_key: 'masthead-advert' }), true);
 
   // The protection must stay narrow. A page whose blocks could not be removed
   // would be a worse tool than one whose furniture could.
   for (const key of ['second-lead', 'lead', 'anchor', 'top-advert', 'brief-one']) {
-    assert.equal(pageSectionService.isStructuralSection(key), false, `${key} must stay deletable`);
+    assert.equal(templates.isStructuralTemplateFrame(key), false, `${key} must stay deletable`);
   }
 });

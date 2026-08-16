@@ -40,4 +40,13 @@ async function reapplyFixtureGeometry(req, res) {
   res.json(page);
 }
 
-module.exports = { create, list, update, colour, state, reapplyFixtureGeometry };
+// Recreates a page's required structural furniture (the sold corner beside
+// the nameplate today) when its row is missing - repairing a known
+// invariant, not a layout decision, so it is safe to call on any real page.
+async function repairStructuralFrames(req, res) {
+  const result = await pageService.repairStructuralFrames(req.params.pageId);
+  if (!result) return res.status(404).json({ error: 'No such page.' });
+  res.json(result);
+}
+
+module.exports = { create, list, update, colour, state, reapplyFixtureGeometry, repairStructuralFrames };

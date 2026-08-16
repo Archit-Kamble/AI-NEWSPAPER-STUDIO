@@ -66,6 +66,16 @@ async function fetchJson(url, options) {
   return response.json();
 }
 
+// See the call site in renderWorkspace() for why this asks unconditionally
+// rather than checking for a missing frame itself - the endpoint is the one
+// place that knows which keys are structural.
+async function repairPageOneStructuralFrames(pages) {
+  const pageOne = (pages || []).find((page) => Number(page.page_number) === 1);
+  if (!pageOne) return;
+  const result = await fetchJson(`/api/pages/${pageOne.id}/repair-structural-frames`, { method: "POST" });
+  if (result?.created?.length) store.replacePage(result.page, { structural: true });
+}
+
 export async function renderWorkspace(newspaperId) {
   let newspaper, pages, reporterNews;
   try {
@@ -99,6 +109,16 @@ export async function renderWorkspace(newspaperId) {
   }
 
   store.setEdition({ newspaper, pages, reporterNews });
+  // A page whose structural-furniture row (the sold corner beside the
+  // nameplate) was deleted before deletion was guarded still shows a blank
+  // reserved area rather than an actual frame. Repairing that is restoring a
+  // known invariant, not a layout choice, so it is safe to ask for
+  // unconditionally on load - the endpoint itself is the one place that
+  // knows which frames are structural (see templates.js), and it is a no-op
+  // (`created: []`) on every page that already has them, which is every
+  // page after the first repair. Page one only: no other page reserves any
+  // structural furniture today.
+  repairPageOneStructuralFrames(pages).catch(() => {});
   autosave.configure({ save: persistDraft, onStateChange: onAutosaveState });
   history.configure(() => {
     refreshHistoryButtons(history.canUndo(), history.canRedo());

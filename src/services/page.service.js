@@ -1,5 +1,6 @@
 const pageRepository = require('../repositories/page.repository');
 const newspaperRepository = require('../repositories/newspaper.repository');
+const reviewInvalidation = require('./reviewInvalidation.service');
 
 async function createPage(newspaperId, body) {
   return pageRepository.create(
@@ -31,4 +32,20 @@ async function reapplyFixtureGeometry(id) {
   return pageRepository.reapplyTemplateGeometry(page.id);
 }
 
-module.exports = { createPage, listPages, updatePage, setColour, reapplyFixtureGeometry };
+// Recreates a page's required structural furniture (see templates.js's
+// STRUCTURAL_FRAME_KEYS) when its row is missing - a repair of a known
+// invariant, never a creative layout choice, so it never touches an
+// editorial frame. Idempotent: a page already carrying every structural
+// frame reports `created: []` on every call.
+async function repairStructuralFrames(id) {
+  const pageId = parseInt(id, 10);
+  const page = await pageRepository.findById(pageId);
+  if (!page) return null;
+
+  const repair = await pageRepository.ensureStructuralTemplateFrames(pageId);
+  if (repair.created.length) await reviewInvalidation.invalidatePage(pageId);
+
+  return { ...repair, page: await pageRepository.findById(pageId) };
+}
+
+module.exports = { createPage, listPages, updatePage, setColour, reapplyFixtureGeometry, repairStructuralFrames };

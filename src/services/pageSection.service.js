@@ -4,6 +4,7 @@ const { normalizeStoryMetadata } = require('./storyType.service');
 const { geometryOf, snapPointsX } = require('../layout/geometry');
 const { quote } = require('../layout/rateCard');
 const reviewInvalidation = require('./reviewInvalidation.service');
+const { isStructuralTemplateFrame } = require('../layout/templates');
 
 const PRINTABLE_FIELDS = ['news_item_id','kicker','headline','subheading','body','caption','image_url','smart_card_key','smart_card_data'];
 const comparable = (value) => JSON.stringify(value ?? null);
@@ -63,19 +64,15 @@ async function createSection(pageId, body) {
 // this was found on: it was deleted, and the nameplate stretched the paper's
 // own title across the space where it had been.
 //
-// Keyed by the template's own section key, which templates.js remains the
-// only catalog of. Emptying such a block is fine and normal - an unsold
-// corner prints blank - so only removal is refused.
-const STRUCTURAL_SECTION_KEYS = new Set(['masthead-advert']);
-
-/** Is this frame part of the page itself rather than a hole in the matter? */
-function isStructuralSection(sectionKey) {
-  return STRUCTURAL_SECTION_KEYS.has(String(sectionKey));
-}
-
+// Classification lives in templates.js now (isStructuralTemplateFrame) -
+// the template catalog remains the only place a section key is defined, so
+// it is the only place this can live without a second copy drifting from it
+// (page.repository.js's structural-repair reads the same function). Emptying
+// such a block is fine and normal - an unsold corner prints blank - so only
+// removal is refused here.
 async function deleteSection(pageId, sectionKey) {
   const id = parseInt(pageId, 10);
-  if (isStructuralSection(sectionKey)) {
+  if (isStructuralTemplateFrame(sectionKey)) {
     return { error: 'STRUCTURAL_FRAME_PROTECTED', sectionKey: String(sectionKey) };
   }
   const removed = await pageRepository.deleteSection(id, sectionKey);
@@ -178,4 +175,4 @@ async function rateFor(pageId, sectionKey) {
   return quote(section, section, { totalPages: pages.length, newspaper });
 }
 
-module.exports = { saveSection, createSection, deleteSection, moveSection, snapGeometry, rateFor, isStructuralSection };
+module.exports = { saveSection, createSection, deleteSection, moveSection, snapGeometry, rateFor };

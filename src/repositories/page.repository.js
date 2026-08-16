@@ -1,5 +1,5 @@
 const pool = require('../config/db');
-const { getTemplate, getTemplateForPage } = require('../layout/templates');
+const { getTemplate, getTemplateForPage, isStructuralTemplateFrame } = require('../layout/templates');
 const { typeScaleFor } = require('../layout/geometry');
 const { printsColourByDefault } = require('../layout/formes');
 
@@ -278,6 +278,39 @@ async function reapplyTemplateGeometry(pageId) {
   } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
 }
 
+// Recreates a page's REQUIRED structural furniture (templates.js's
+// STRUCTURAL_FRAME_KEYS - today just the sold corner beside the nameplate)
+// when its row is missing, without touching anything else on the page. An
+// edition whose masthead-advert row was deleted before deletion was guarded
+// (pageSection.service.js) still shows a blank reserved area rather than an
+// actual frame; this repairs that, idempotently, on request.
+//
+// Deliberately not createSection() above: that assigns a `block-N` key and
+// is_custom = TRUE, exactly the shape of a desk's own hand-drawn block. A
+// structural frame is template-owned furniture, not custom editorial
+// content, and must insert with the template's OWN key and geometry through
+// the same statement `create()` uses for a brand new page - one insertion
+// path, not a second copy of it for the repair case.
+async function ensureStructuralTemplateFrames(pageId, { tx } = {}) {
+  const db = tx || pool;
+  const { rows: pages } = await db.query('SELECT id, page_number, template_key FROM pages WHERE id = $1', [pageId]);
+  const page = pages[0];
+  if (!page) return null;
+
+  const template = getTemplateForPage(page.template_key, page.page_number);
+  const { rows: existing } = await db.query('SELECT section_key FROM page_sections WHERE page_id = $1', [pageId]);
+  const existingKeys = new Set(existing.map((row) => row.section_key));
+
+  const created = [];
+  for (let index = 0; index < template.sections.length; index += 1) {
+    const section = template.sections[index];
+    if (!isStructuralTemplateFrame(section) || existingKeys.has(section.key)) continue;
+    await db.query(insertSectionSql, insertSectionValues(page.id, section, index));
+    created.push(section.key);
+  }
+  return { created };
+}
+
 // Blocks drawn by hand on the canvas. A page is no longer limited to whatever
 // its template declared - a dense inside page needs fifteen or twenty items,
 // and an editor adds them where the page needs them.
@@ -481,4 +514,5 @@ module.exports = {
   createSection,
   deleteSection,
   saveSectionGeometry,
+  ensureStructuralTemplateFrames,
 };

@@ -84,11 +84,16 @@ async function removeBackground(sectionId, imageId, origin) {
   if (!result.url) return { error: 'Background removal returned no picture' };
 
   // The cut-out replaces the original as a new asset, so the untouched
-  // photograph is still there if the desk wants it back.
+  // photograph is still there if the desk wants it back. Its own natural
+  // dimensions are the TRIMMED file writeCutout() actually wrote (see its
+  // own comment) - never the original photograph's, which describe a
+  // rectangle that no longer exists once the subject has been trimmed.
   const asset = await repo.findOrCreateAsset({
     url: result.url,
     filename: `cutout-${image.original_filename || 'picture'}`,
     mimeType: 'image/png',
+    width: result.width,
+    height: result.height,
   });
 
   // The mask is what makes copy wrap the subject instead of its box.

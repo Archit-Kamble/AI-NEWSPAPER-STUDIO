@@ -281,6 +281,17 @@ ALTER TABLE section_images ADD COLUMN IF NOT EXISTS z_index INTEGER NOT NULL DEF
 ALTER TABLE section_images ADD COLUMN IF NOT EXISTS shape VARCHAR(20) NOT NULL DEFAULT 'rect';
 ALTER TABLE section_images ADD COLUMN IF NOT EXISTS stand_off_px INTEGER NOT NULL DEFAULT 6;
 ALTER TABLE section_images ADD COLUMN IF NOT EXISTS caption TEXT;
+-- How the source (after crop) resolves into the placement frame - contain
+-- (the whole cropped source, never cut), cover (fills the frame, excess
+-- clipped) or stretch (fills both axes independently, distortion intended).
+-- One shared resolver (public/editor/layout/image-geometry.js) is the only
+-- place that reads this; paint, resize preview and alpha exclusion all
+-- consume its one answer rather than each deciding fit for themselves.
+-- Allowed values ('contain'/'cover'/'stretch') are validated at the one
+-- place that reads them (image-geometry.js's normaliseFitMode()), not by a
+-- CHECK constraint here - ALTER TABLE ... ADD CONSTRAINT has no idempotent
+-- IF NOT EXISTS form in Postgres, and this file is re-run on every boot.
+ALTER TABLE section_images ADD COLUMN IF NOT EXISTS fit_mode VARCHAR(20) NOT NULL DEFAULT 'contain';
 -- Direct newsroom provenance for composition-created placements. A companion
 -- photo section has no prose story from which this can safely be guessed.
 ALTER TABLE section_images ADD COLUMN IF NOT EXISTS source_news_item_id INTEGER

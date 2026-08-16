@@ -196,6 +196,13 @@ async function writeCutout(publicDir, image, alpha, relative) {
     mask: occupancyMask(alpha, cut.width, cut.height),
     removedShare: Number((1 - opaque / (width * height)).toFixed(3)),
     trim,
+    // The cutout's own natural dimensions - the TRIMMED file this actually
+    // wrote, not the original photograph it was cut from. This is what a new
+    // media_assets row for the cutout must record; the original's own
+    // dimensions would describe a rectangle that no longer exists once the
+    // subject has been trimmed to its bounds.
+    width: cut.width,
+    height: cut.height,
   };
 }
 

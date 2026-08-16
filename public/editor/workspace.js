@@ -292,9 +292,9 @@ async function addSectionImage(file) {
   // upright portrait was placed in a landscape box and the top and bottom of it
   // were simply cut off. The block decides how WIDE a picture may be; the
   // picture decides how tall that makes it.
-  const shape = await naturalShape(url);
+  const source = await naturalImageSize(url);
   const section = page.sections?.find((row) => row.section_key === key);
-  const placement = section && shape ? placeInside(section, shape) : null;
+  const placement = section && source ? placeInside(section, source.ratio) : null;
 
   const response = await fetch(`/api/pages/${page.id}/sections/${encodeURIComponent(key)}/images`, {
     method: "POST",
@@ -303,6 +303,13 @@ async function addSectionImage(file) {
       url,
       filename: file.name,
       mimeType: file.type,
+      // The browser already decoded the file it just uploaded - handing its
+      // real natural size to media_assets means the source dimensions
+      // image-geometry.js needs for contain/cover/stretch are known from the
+      // moment the picture exists, not left null until something backfills
+      // them later.
+      sourceWidth: source?.width,
+      sourceHeight: source?.height,
       ...(placement || {}),
     }),
   });
@@ -376,13 +383,16 @@ function placeInside(section, shape) {
   return { width: Math.max(20, width), height: Math.max(20, height) };
 }
 
-/** The picture's own width ÷ height, or null if the browser cannot read it. */
-function naturalShape(url) {
+/** The picture's own natural width/height and their ratio, or null if the
+ * browser cannot read it. */
+function naturalImageSize(url) {
   return new Promise((resolve) => {
     const probe = new Image();
-    probe.onload = () => resolve(probe.naturalWidth && probe.naturalHeight
-      ? probe.naturalWidth / probe.naturalHeight
-      : null);
+    probe.onload = () => {
+      const width = Number(probe.naturalWidth);
+      const height = Number(probe.naturalHeight);
+      resolve(width > 0 && height > 0 ? { width, height, ratio: width / height } : null);
+    };
     probe.onerror = () => resolve(null);
     probe.src = url;
   });

@@ -15,6 +15,7 @@ const assert = require('node:assert/strict');
 const { createApp } = require('../server');
 const pool = require('../src/config/db');
 const { signIn, removeEdition } = require('./helpers/desk');
+const sectionImageRepository = require('../src/repositories/sectionImage.repository');
 
 async function withEdition(run) {
   const server = createApp().listen(0);
@@ -148,4 +149,46 @@ test('a new picture lands exactly at the exact compositor\'s own bodyTop, for a 
     const expected = Math.round(adapter.composeSection({ ...section, images: [] }, { ...section, body: '' }).bodyTop);
     assert.equal(Number(images[0].y_px), expected);
   });
+});
+
+// D1: media_assets.width_px/height_px already existed in schema but were
+// never populated consistently - findOrCreateAsset() is the one place every
+// creation path (upload, composition, cutout) goes through, so it is the
+// one place backfill has to be correct: a genuinely new asset records what
+// it is told, an existing asset with real dimensions is never clobbered by
+// a caller that does not happen to know them, and one missing only its
+// dimensions gets them filled in without disturbing anything else about it.
+test('findOrCreateAsset records source dimensions on a new asset, backfills a missing one, never overwrites a known one', async () => {
+  const freshUrl = `/uploads/dims-test-${Date.now()}.jpg`;
+  try {
+    const created = await sectionImageRepository.findOrCreateAsset({ url: freshUrl, filename: 'x.jpg', mimeType: 'image/jpeg', width: 400, height: 300 });
+    assert.equal(created.width_px, 400);
+    assert.equal(created.height_px, 300);
+
+    const sameNoDims = await sectionImageRepository.findOrCreateAsset({ url: freshUrl, filename: 'x.jpg', mimeType: 'image/jpeg' });
+    assert.equal(sameNoDims.id, created.id);
+    assert.equal(sameNoDims.width_px, 400, 'a caller with no dimensions of its own must never blank out a known size');
+    assert.equal(sameNoDims.height_px, 300);
+
+    const differentDims = await sectionImageRepository.findOrCreateAsset({ url: freshUrl, filename: 'x.jpg', mimeType: 'image/jpeg', width: 999, height: 999 });
+    assert.equal(differentDims.width_px, 400, 'a known dimension is never overwritten by a different one either');
+    assert.equal(differentDims.height_px, 300);
+  } finally {
+    await pool.query('DELETE FROM media_assets WHERE url = $1', [freshUrl]);
+  }
+});
+
+test('findOrCreateAsset backfills a real asset whose dimensions were never recorded', async () => {
+  const undimensionedUrl = `/uploads/no-dims-${Date.now()}.jpg`;
+  try {
+    await pool.query(
+      'INSERT INTO media_assets (original_filename, storage_path, mime_type, url) VALUES ($1, $2, $3, $4)',
+      ['x.jpg', undimensionedUrl, 'image/jpeg', undimensionedUrl],
+    );
+    const backfilled = await sectionImageRepository.findOrCreateAsset({ url: undimensionedUrl, filename: 'x.jpg', mimeType: 'image/jpeg', width: 640, height: 480 });
+    assert.equal(backfilled.width_px, 640);
+    assert.equal(backfilled.height_px, 480);
+  } finally {
+    await pool.query('DELETE FROM media_assets WHERE url = $1', [undimensionedUrl]);
+  }
 });

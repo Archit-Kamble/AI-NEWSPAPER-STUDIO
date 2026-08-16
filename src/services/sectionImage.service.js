@@ -115,6 +115,11 @@ async function add(pageId, sectionKey, body, ownerId) {
     filename: body.filename,
     mimeType: body.mimeType,
     ownerId,
+    // The browser already measured the file it just uploaded
+    // (naturalWidth/naturalHeight) - kept on media_assets, the source's own
+    // record, never on section_images, which is the placement frame.
+    width: body.sourceWidth,
+    height: body.sourceHeight,
   });
 
   // A new picture defaults to half the block's width, at the left of the copy -
@@ -127,6 +132,7 @@ async function add(pageId, sectionKey, body, ownerId) {
     height: body.height ?? Math.round(Number(section.height_px) / 3),
     shape: body.shape,
     standOffPx: body.standOffPx,
+    fitMode: body.fitMode,
   });
 
   // A photograph arrives with its caption; it should not need a second call to

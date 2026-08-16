@@ -9,7 +9,13 @@ const pool = require('../config/db');
 
 async function listBySection(sectionId, { tx } = {}) {
   const db = tx || pool; const { rows } = await db.query(
-    `SELECT si.*, ma.url, ma.original_filename, ma.background_status
+    // `si.width_px/height_px` is the PLACEMENT frame; `ma.width_px/height_px`
+    // (aliased, never sharing the bare name) is the SOURCE photograph's own
+    // natural size - image-geometry.js needs both, and never the same one
+    // twice under one name, or a caller reading `.width_px` off this row
+    // cannot tell which one it got.
+    `SELECT si.*, ma.url, ma.original_filename, ma.background_status,
+            ma.width_px AS source_width_px, ma.height_px AS source_height_px
        FROM section_images si
        JOIN media_assets ma ON ma.id = si.media_asset_id
       WHERE si.page_section_id = $1
@@ -20,15 +26,38 @@ async function listBySection(sectionId, { tx } = {}) {
 }
 
 // An uploaded file becomes a reusable asset, so the same photograph can be
-// placed in more than one block without being uploaded twice.
-async function findOrCreateAsset({ url, filename, mimeType, ownerId }, { tx } = {}) {
+// placed in more than one block without being uploaded twice. `width`/
+// `height` are the source's own natural pixels (the browser's naturalWidth/
+// naturalHeight on upload, a composition intent's already-known dimensions,
+// or a cutout's own written PNG size) - never the placement frame, which is
+// section_images' concern, not media_assets'.
+async function findOrCreateAsset({ url, filename, mimeType, ownerId, width, height }, { tx } = {}) {
   const db = tx || pool; const { rows: existing } = await db.query('SELECT * FROM media_assets WHERE url = $1', [url]);
-  if (existing[0]) return existing[0];
+  if (existing[0]) {
+    // Backfill only what is genuinely missing - an asset already carrying
+    // real dimensions is never overwritten by a caller that does not
+    // happen to know them (findOrCreateAsset is called from several paths,
+    // not all of which measure the source).
+    if ((!existing[0].width_px || !existing[0].height_px) && Number(width) > 0 && Number(height) > 0) {
+      return updateAssetDimensions(existing[0].id, Number(width), Number(height), { tx });
+    }
+    return existing[0];
+  }
 
   const { rows } = await db.query(
-    `INSERT INTO media_assets (original_filename, storage_path, mime_type, owner_id, url)
-     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [filename || url.split('/').pop(), url, mimeType || 'image/jpeg', ownerId || null, url],
+    `INSERT INTO media_assets (original_filename, storage_path, mime_type, owner_id, url, width_px, height_px)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+    [filename || url.split('/').pop(), url, mimeType || 'image/jpeg', ownerId || null, url,
+     Number(width) > 0 ? Number(width) : null, Number(height) > 0 ? Number(height) : null],
+  );
+  return rows[0];
+}
+
+async function updateAssetDimensions(assetId, width, height, { tx } = {}) {
+  const db = tx || pool;
+  const { rows } = await db.query(
+    'UPDATE media_assets SET width_px = $2, height_px = $3 WHERE id = $1 RETURNING *',
+    [assetId, width, height],
   );
   return rows[0];
 }
@@ -40,23 +69,33 @@ async function place(sectionId, assetId, placement, { tx } = {}) {
   );
   const { rows } = await db.query(
     `INSERT INTO section_images
-       (page_section_id, media_asset_id, x_px, y_px, width_px, height_px, shape, stand_off_px, z_index, caption, source_news_item_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       (page_section_id, media_asset_id, x_px, y_px, width_px, height_px, shape, stand_off_px, z_index, caption, source_news_item_id, fit_mode)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, COALESCE($12, 'contain'))
      ON CONFLICT (page_section_id, media_asset_id)
      DO UPDATE SET x_px = EXCLUDED.x_px, y_px = EXCLUDED.y_px,
                    width_px = EXCLUDED.width_px, height_px = EXCLUDED.height_px,
                    caption = COALESCE(EXCLUDED.caption, section_images.caption),
-                   source_news_item_id = COALESCE(EXCLUDED.source_news_item_id, section_images.source_news_item_id)
+                   source_news_item_id = COALESCE(EXCLUDED.source_news_item_id, section_images.source_news_item_id),
+                   -- $12 (the raw, possibly-null argument), not EXCLUDED.fit_mode:
+                   -- EXCLUDED.fit_mode is already the INSERT's own
+                   -- COALESCE(..., 'contain') and would silently reset an
+                   -- existing row's real fit_mode back to 'contain' on
+                   -- every re-place that does not explicitly ask to change it.
+                   fit_mode = CASE WHEN $12 IS NOT NULL THEN $12 ELSE section_images.fit_mode END
      RETURNING *`,
     [sectionId, assetId, placement.x, placement.y, placement.width, placement.height,
      placement.shape || 'rect', placement.standOffPx ?? 6, z[0].z, placement.caption || null,
-     placement.sourceNewsItemId || null],
+     placement.sourceNewsItemId || null, placement.fitMode || null],
   );
   return rows[0];
 }
 
 async function placePrepared(intent, { tx } = {}) {
-  const image = intent.image; const asset = await findOrCreateAsset({ url: image.url, filename: image.filename, mimeType: image.mimeType, ownerId: null }, { tx });
+  const image = intent.image;
+  const asset = await findOrCreateAsset(
+    { url: image.url, filename: image.filename, mimeType: image.mimeType, ownerId: null, width: image.width, height: image.height },
+    { tx },
+  );
   return place(intent.destinationSectionId, asset.id, { ...intent.placement, caption: intent.placement.caption || image.caption || null, sourceNewsItemId: intent.sourceNewsItemId || null }, { tx });
 }
 
@@ -76,12 +115,13 @@ async function update(imageId, patch) {
             stand_off_px = COALESCE($10, stand_off_px), caption = COALESCE($11, caption),
             crop_x_px = COALESCE($12, crop_x_px), crop_y_px = COALESCE($13, crop_y_px),
             crop_width_px = COALESCE($14, crop_width_px), crop_height_px = COALESCE($15, crop_height_px),
-            mask = COALESCE($16, mask), z_index = COALESCE($17, z_index)
+            mask = COALESCE($16, mask), z_index = COALESCE($17, z_index),
+            fit_mode = COALESCE($18, fit_mode)
       WHERE id = $1 RETURNING *`,
     [imageId, patch.x, patch.y, patch.width, patch.height, patch.rotation,
      patch.flipH, patch.flipV, patch.shape, patch.standOffPx, patch.caption,
      patch.cropX, patch.cropY, patch.cropWidth, patch.cropHeight,
-     patch.mask ? JSON.stringify(patch.mask) : null, patch.zIndex],
+     patch.mask ? JSON.stringify(patch.mask) : null, patch.zIndex, patch.fitMode],
   );
   return rows[0] || null;
 }
@@ -112,7 +152,7 @@ async function remove(imageId) {
 async function placementsByEdition(newspaperId) {
   const { rows } = await pool.query(
     `SELECT si.page_section_id, si.x_px, si.y_px, si.width_px, si.height_px,
-            si.rotation, si.shape, si.stand_off_px, si.mask
+            si.rotation, si.shape, si.stand_off_px, si.mask, si.fit_mode
        FROM section_images si
        JOIN page_sections s ON s.id = si.page_section_id
        JOIN pages p ON p.id = s.page_id
@@ -129,4 +169,7 @@ async function placementsByEdition(newspaperId) {
   return bySection;
 }
 
-module.exports = { listBySection, placementsByEdition, findOrCreateAsset, place, placePrepared, linkSectionSource, update, remove, replaceAsset };
+module.exports = {
+  listBySection, placementsByEdition, findOrCreateAsset, updateAssetDimensions,
+  place, placePrepared, linkSectionSource, update, remove, replaceAsset,
+};

@@ -77,11 +77,23 @@ export function mastheadMarkup(newspaper, page, geometry, { advertWidthPx = 0 } 
   const top = geometry?.marginYPx ?? 20;
   const matterWidth = geometry?.matterWidthPx ?? 620;
 
-  // The paper sells the top-left corner of page one. That is an ADVERT BLOCK on
-  // the page, not furniture, so the nameplate begins where the advert ends -
-  // exactly as it does in the printed edition.
-  const left = matterLeft + advertWidthPx;
-  const width = matterWidth - advertWidthPx;
+  // The paper sells the top-left corner of page one. What sits in it is an
+  // advert BLOCK, but the corner itself is reserved by the PAGE - it is part
+  // of the region model (geometry.js's regionsFor, `header.earWidthPx`), the
+  // same way the footer band is.
+  //
+  // That distinction is the whole fix for the missing top-left block. This
+  // used to take the reserved width from the advert block's own width, and
+  // fall back to nothing when no such block was found. So a page whose corner
+  // block had been deleted did not print an empty corner: the nameplate began
+  // at the matter's edge and stretched the newspaper's name across the space
+  // the corner had held. The name is never allowed there, whether or not
+  // anything has been sold. Reserve first, and let the block fill it.
+  const reserved = geometry?.regions?.front?.header;
+  const pageReserve = reserved ? (reserved.earWidthPx || 0) + (reserved.earGapPx || 0) : 0;
+  const ear = Math.max(advertWidthPx, pageReserve);
+  const left = matterLeft + ear;
+  const width = matterWidth - ear;
 
   return `
     <div class="page-masthead" style="left:${left}px;top:${top}px;width:${width}px;">
@@ -182,11 +194,22 @@ export function pageFootMarkup(newspaper, page, geometry) {
   // The foot follows the same outer-edge rule as the folio.
   const verso = Number(page.page_number) % 2 === 0;
 
+  // Three things and nothing else: the paper, the date, the page number.
+  //
+  // The printline used to be set here as well - the Press and Registration of
+  // Books Act declaration, a long sentence naming the printer, the publisher
+  // and the address of the press. It is a legal requirement, but it is a
+  // requirement to print it ONCE, and this paper already prints it as the
+  // imprint at the foot of page two (imprintMarkup below). Setting it again
+  // on every page did two things: it duplicated a legal statement, and it
+  // squeezed the foot into an 8px ruled strip of dense grey type that read as
+  // a border under the page rather than as a folio line.
   return `
     <div class="page-foot ${verso ? "foot-verso" : "foot-recto"}"
          style="left:${left}px;top:${band.footTop}px;width:${width}px;height:${band.footHeightPx}px;">
-      <span class="foot-printline">${escapeHtml(identity.printline || "")}</span>
-      <span class="foot-page">${escapeHtml(identity.title || "")} । ${escapeHtml(dateText)} । पृष्ठ ${escapeHtml(devanagari(page.page_number))}</span>
+      <span class="foot-title">${escapeHtml(identity.title || "")}</span>
+      <span class="foot-date">${escapeHtml(dateText)}</span>
+      <span class="foot-page">पृष्ठ ${escapeHtml(devanagari(page.page_number))}</span>
     </div>
   `;
 }

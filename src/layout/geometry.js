@@ -94,6 +94,18 @@ const HEADER = {
   // One compact ruled folio line plus a small editorial gutter.
   folioHeightPx: 32,
   folioContentGapPx: PAGE_FURNITURE_GAP_PX,
+  // The sold corner of page one, to the left of the nameplate. Four columns
+  // of the grid, and RESERVED BY THE PAGE rather than by the block that sits
+  // in it - which is the whole point of it living here.
+  //
+  // It used to be reserved only in the sense that the front template shipped
+  // a `masthead-advert` block at those coordinates, and the nameplate worked
+  // out its own left edge from whether that block happened to be present. So
+  // deleting the block - which nothing stopped a desk from doing - did not
+  // leave an empty corner, it moved the newspaper's name into the corner and
+  // stretched it across the space. The name is not allowed to be there. A
+  // region the page owns cannot be deleted by removing something from it.
+  nameplateEarColumns: 4,
 };
 
 const FOOTER = {
@@ -137,8 +149,23 @@ function regionsFor(g, kind = 'inside', pageNumber = kind === 'front' ? 1 : 3) {
   const footTop = matterBottom - FOOTER.footHeightPx;
   const imprintTop = hasLegalImprint(pageNumber) ? footTop - FOOTER.imprintGapPx - imprintHeightPx : footTop;
 
+  // The reserved corner, in the same units and from the same grid the front
+  // template lays its blocks on, so the two cannot describe different corners.
+  const grid = columnGrid(g);
+  const earSpan = HEADER.nameplateEarColumns;
+  const earWidthPx = kind === 'front'
+    ? Math.round((earSpan - 1) * (grid.columnPx + grid.gutterPx) + grid.columnPx)
+    : 0;
+
   return {
-    header: { top: g.marginYPx, bottom: headerBottom },
+    header: {
+      top: g.marginYPx,
+      bottom: headerBottom,
+      // How far in from the matter's left edge the nameplate may begin. Zero
+      // on an inside page, which carries a folio and has no ear.
+      earWidthPx,
+      earGapPx: kind === 'front' ? grid.gutterPx : 0,
+    },
     content: { top: headerBottom, bottom: footerTop },
     footer: {
       top: footerTop,

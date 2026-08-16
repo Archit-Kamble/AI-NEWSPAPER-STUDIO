@@ -56,8 +56,23 @@ async function createSection(pageId, body) {
   return pageRepository.findById(id);
 }
 
+// Frames that hold a region the PAGE reserves rather than a hole in the
+// editorial matter. Deleting one does not leave an empty corner - the
+// furniture beside it moves in, and the page is silently wrong in a way
+// nobody notices until it prints. The sold corner of page one is the case
+// this was found on: it was deleted, and the nameplate stretched the paper's
+// own title across the space where it had been.
+//
+// Keyed by the template's own section key, which templates.js remains the
+// only catalog of. Emptying such a block is fine and normal - an unsold
+// corner prints blank - so only removal is refused.
+const STRUCTURAL_SECTION_KEYS = new Set(['masthead-advert']);
+
 async function deleteSection(pageId, sectionKey) {
   const id = parseInt(pageId, 10);
+  if (STRUCTURAL_SECTION_KEYS.has(String(sectionKey))) {
+    return { error: 'STRUCTURAL_FRAME_PROTECTED', sectionKey: String(sectionKey) };
+  }
   const removed = await pageRepository.deleteSection(id, sectionKey);
   if (!removed) return null;
   await reviewInvalidation.invalidatePage(id);

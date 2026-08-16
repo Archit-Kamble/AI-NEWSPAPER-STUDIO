@@ -29,7 +29,7 @@
 // editor is the page, enlarged - not a second rendering of it, and nothing
 // about being enlarged can move a line.
 
-import { sanitise } from "../layout/rich-text.js";
+import { sanitise, sanitiseSize } from "../layout/rich-text.js";
 
 import { placedPictureStyle } from "../layout/picture-style.js";
 import { smartCardMarkup } from "../smart-cards/smart-cards.js";
@@ -107,7 +107,6 @@ export function blockFrameMarkup() {
           <button class="ql-bold" type="button"></button>
           <button class="ql-italic" type="button"></button>
           <button class="ql-underline" type="button"></button>
-          <button class="ql-strike" type="button"></button>
         </span>
         <span class="ql-formats ed-quill-size-group" id="edQuillSize">
           <!-- The one deliberate exception to "colour, size and font are the
@@ -139,8 +138,6 @@ export function blockFrameMarkup() {
           <button class="ql-list" value="bullet" type="button"></button>
         </span>
         <span class="ql-formats">
-          <button class="ql-link" type="button"></button>
-          <button class="ql-blockquote" type="button"></button>
           <button class="ql-clean" type="button"></button>
         </span>
       </div>
@@ -779,26 +776,7 @@ function bindPictureFrames() {
 
 // ------------------------------------------------------------------- copy ---
 
-/** The story as it is stored: Quill's HTML, reduced to marks a printer can set. */
-// Quill's own size attributor (registered in mountFrame()) writes a selected
-// size as `style="font-size: 18px"` on whatever span it created - a real,
-// arbitrary inline style, which sanitise() would otherwise strip along with
-// every other inline style a pasted story brings in. Converted to the one
-// controlled attribute rich-text.js actually accepts BEFORE sanitising, so
-// what is asked to survive is exactly the one thing this editor offers a
-// size control for, not an open door for arbitrary CSS.
-function convertQuillSizeStyles(html) {
-  if (!html.includes("font-size")) return html;
-  const holder = document.createElement("div");
-  holder.innerHTML = html;
-  holder.querySelectorAll("[style*=font-size]").forEach((el) => {
-    const match = /font-size:\s*([\d.]+)px/i.exec(el.getAttribute("style") || "");
-    el.removeAttribute("style");
-    if (match) el.setAttribute("data-sahas-size", String(Math.round(Number(match[1]))));
-  });
-  return holder.innerHTML;
-}
-
+/** The story as it is stored: Quill's Delta, serialised to marks a printer can set. */
 // The reverse conversion, for the way IN: a story already carrying
 // rich-text.js's stored `data-sahas-size` mark has to become Quill's own
 // `style="font-size:Npx"` again before dangerouslyPasteHTML(), or Quill's
@@ -817,22 +795,96 @@ function quillHtmlFromStored(html) {
   return holder.innerHTML;
 }
 
+// ------------------------------------------------- Delta -> canonical HTML ---
+// Quill's Delta, not its DOM, is the truth for what is actually selected and
+// formatted: `format()` updates it synchronously, whereas the live DOM is
+// restructured asynchronously relative to that call (splitting/rewrapping an
+// existing <strong> to nest a new size span). Reading `root.innerHTML` or
+// even `getSemanticHTML()` - which still serialises off the DOM one layer
+// down - inside the same "text-change" tick that the format() call itself
+// fired could observe that restructuring mid-flight: the Delta already
+// showed `attributes:{bold:true,size:"28px"}`, confirmed by direct
+// instrumentation, but the HTML read back in the same tick sometimes did
+// not yet have the size. Walking the Delta directly cannot observe an
+// unsettled DOM, because it never reads the DOM at all.
+function escapeCanonicalText(text) {
+  return text.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+}
+
+function canonicalInlineHtml(text, attrs) {
+  let html = escapeCanonicalText(text);
+  const size = attrs.size ? sanitiseSize(Number.parseFloat(attrs.size)) : null;
+  if (size !== null) html = `<span data-sahas-size="${size}">${html}</span>`;
+  if (attrs.underline) html = `<u>${html}</u>`;
+  if (attrs.italic) html = `<em>${html}</em>`;
+  if (attrs.bold) html = `<strong>${html}</strong>`;
+  return html;
+}
+
+function renderCanonicalBlocks(blocks) {
+  let html = "";
+  let currentList = null;
+  const closeList = () => {
+    if (!currentList) return;
+    html += `</${currentList}>`;
+    currentList = null;
+  };
+  for (const block of blocks) {
+    if (block.type === "ol-item" || block.type === "ul-item") {
+      const tag = block.type === "ol-item" ? "ol" : "ul";
+      if (currentList !== tag) {
+        closeList();
+        html += `<${tag}>`;
+        currentList = tag;
+      }
+      html += `<li>${block.html}</li>`;
+      continue;
+    }
+    closeList();
+    html += `<p>${block.html}</p>`;
+  }
+  closeList();
+  return html;
+}
+
+/** Quill's Delta into rich-text.js's stored marks, one paragraph/list-item
+ * per line break op. Quill attaches block-level attributes (list) to the
+ * newline that ends the line, matching Quill's own Delta convention. */
+function quillDeltaToCanonicalHtml(delta) {
+  const blocks = [];
+  let inline = [];
+
+  const flushParagraph = (attrs = {}) => {
+    const content = inline.join("") || "<br>";
+    if (attrs.list === "ordered") blocks.push({ type: "ol-item", html: content });
+    else if (attrs.list === "bullet") blocks.push({ type: "ul-item", html: content });
+    else blocks.push({ type: "p", html: content });
+    inline = [];
+  };
+
+  for (const op of delta.ops || []) {
+    if (typeof op.insert !== "string") continue; // embeds carry no printable text
+    const attrs = op.attributes || {};
+    const pieces = op.insert.split("\n");
+    for (let i = 0; i < pieces.length; i += 1) {
+      const text = pieces[i];
+      if (text) inline.push(canonicalInlineHtml(text, attrs));
+      if (i < pieces.length - 1) flushParagraph(attrs);
+    }
+  }
+  if (inline.length) flushParagraph();
+
+  return renderCanonicalBlocks(blocks);
+}
+
 export function copyFromFrame() {
   if (!quill) return "";
-  // getSemanticHTML(), not `quill.root.innerHTML` - a real, found race:
-  // applying a format (size) on top of an ALREADY-formatted range (bold)
-  // makes Quill restructure the live DOM (splitting/rewrapping the existing
-  // <strong>), and reading `root.innerHTML` synchronously inside the SAME
-  // "text-change" handler that the format() call itself fired sometimes ran
-  // before that restructuring finished - the delta correctly showed the new
-  // format, but the HTML read back in the same tick did not yet have it.
-  // getSemanticHTML() serialises straight from Quill's Delta model, which
-  // format() updates synchronously, so it cannot observe an unsettled DOM.
-  const html = quill.getSemanticHTML();
-  // Quill writes an empty document as "<p><br></p>". Storing that would make an
-  // empty block look written, and every count would be off by one line.
+  const html = quillDeltaToCanonicalHtml(quill.getContents());
+  // Quill's empty document is one line with no marks, which renders here as
+  // "<p><br></p>". Storing that would make an empty block look written, and
+  // every count would be off by one line.
   if (/^<p>(<br\s*\/?>)?<\/p>$/i.test(html.trim())) return "";
-  return sanitise(convertQuillSizeStyles(html));
+  return sanitise(html);
 }
 
 export async function mountFrame(section, view, images, callbacks, selectedPart = "block", selectedImageIds = []) {
@@ -853,9 +905,9 @@ export async function mountFrame(section, view, images, callbacks, selectedPart 
   // exception, for a sub-editor emphasising one word or phrase - registered
   // once, globally, with an open whitelist so `quill.format('size', 'Npx')`
   // below can ask for any value rather than a fixed few Quill ships with.
-  // Quill applies it as `style="font-size:Npx"`; copyFromFrame() converts
-  // that to rich-text.js's controlled `data-sahas-size` mark before it is
-  // ever sanitised or stored, so no arbitrary inline style survives.
+  // Quill applies it as a `size` Delta attribute (`"28px"`); copyFromFrame()
+  // reads that straight off the Delta into rich-text.js's controlled
+  // `data-sahas-size` mark, so no arbitrary inline style ever survives.
   if (!sizeAttributorRegistered) {
     const SizeStyle = Quill.import("attributors/style/size");
     SizeStyle.whitelist = null;
@@ -889,25 +941,12 @@ export async function mountFrame(section, view, images, callbacks, selectedPart 
     if (!button || !quill) return;
     const range = quill.getSelection(true);
     if (!range) return;
+    // format() fires "text-change" synchronously (source "user"), which the
+    // listener above already turns into a copyFromFrame() patch - no extra
+    // re-patch needed now that copyFromFrame() reads the Delta directly (see
+    // quillDeltaToCanonicalHtml()) rather than a DOM serialization that could
+    // still be mid-restructure when a size lands on an already-bold range.
     quill.format("size", button.dataset.size, "user");
-    // KNOWN, UNRESOLVED ISSUE, documented rather than silently left: applying
-    // size on top of an ALREADY-bold range does not reliably reach the
-    // stored draft. The delta Quill fires correctly shows
-    // `attributes:{size:...}`, confirmed by direct instrumentation, and the
-    // format is visibly applied in the live editor - but `copyFromFrame()`,
-    // called from the "text-change" listener below in the same tick, has
-    // been observed to still read back a version with no size on it. Two
-    // mitigations are in place (getSemanticHTML() below reads Quill's Delta
-    // model directly rather than the live DOM, precisely to avoid a
-    // DOM-render race; this extra deferred re-patch retries a frame later)
-    // and NEITHER fully closes it - size applied to PLAIN (non-bold) text
-    // persists correctly, and bold alone persists correctly, but the
-    // combination remains flaky. Left for a follow-up session rather than
-    // chased further here; both mitigations are harmless (an extra draft
-    // write autosave already debounces) and are kept because they may still
-    // help in other timing conditions even though they did not close this
-    // one.
-    requestAnimationFrame(() => hooks.onPatch?.({ body: copyFromFrame() }, "block-frame"));
   });
   // A real click or keyboard focus in Quill is source "user"; refreshFrame()'s
   // own dangerouslyPasteHTML(..., "silent") sync (below) also moves Quill's

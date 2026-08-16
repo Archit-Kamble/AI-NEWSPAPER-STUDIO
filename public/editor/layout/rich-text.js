@@ -54,7 +54,7 @@ const SIZE_MIN = 6;
 const SIZE_MAX = 96;
 
 /** A finite, in-range size, or null if the attribute was not a real number. */
-function sanitiseSize(value) {
+export function sanitiseSize(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return null;
   return Math.min(SIZE_MAX, Math.max(SIZE_MIN, n));

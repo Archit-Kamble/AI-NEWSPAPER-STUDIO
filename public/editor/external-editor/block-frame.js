@@ -32,6 +32,7 @@
 import { sanitise, sanitiseSize } from "../layout/rich-text.js";
 
 import { placedPictureStyle } from "../layout/picture-style.js";
+import { resizeRect, RESIZE_HANDLES } from "../layout/image-resize.js";
 import { smartCardMarkup } from "../smart-cards/smart-cards.js";
 // The same functions the page canvas draws a headline, a deck and a flowed
 // body with - so the WYSIWYG frame and the newspaper page can never drift
@@ -599,13 +600,12 @@ function bindTextFrames() {
 
 // ---------------------------------------------------------- picture frames ---
 
-// Four corners, at minimum, per Stage 2's own spec - a single bottom-right
-// handle let a desk grow a picture but never shrink it from the top or left
-// without also dragging it back into place afterwards.
-const RESIZE_CORNERS = ["tl", "tr", "bl", "br"];
-
 function pictureMarkup(row) {
-  const handles = RESIZE_CORNERS.map(
+  // Eight handles - the four corners (independent X/Y, Shift locks aspect)
+  // and the four edges (one axis only) - see image-resize.js's own header
+  // for why a corner-only set could never do a width-only or height-only
+  // resize at all.
+  const handles = RESIZE_HANDLES.map(
     (corner) => `<span class="pic-handle pic-handle-${corner}" data-pic-size data-corner="${corner}" aria-hidden="true"></span>`,
   ).join("");
   return `
@@ -650,36 +650,6 @@ export function renderPictures(images) {
   });
 }
 
-// Resizing from one of the four corners keeps the OPPOSITE corner still, the
-// way every page-layout tool does it - drag the top-left in and the picture's
-// bottom-right edge does not move. Aspect ratio is preserved by default (the
-// spec's own instruction), so only width is dragged directly; height follows
-// it, and left/top are re-derived from whichever corner is the anchor.
-function resizeFromCorner(corner, from, ratio, bounds, dx) {
-  const minSize = 24;
-  const growsRight = corner === "tr" || corner === "br";
-  // The anchor edge that must not cross page 0, expressed as a max WIDTH
-  // (height follows width via ratio, so a height limit becomes a width limit
-  // too) - only relevant on corners whose anchor is the far edge from that
-  // side. Corners that anchor the near edge (br's top-left, tr's bottom-left
-  // "left" side, etc.) already can't go negative because dx is clamped
-  // against the room to the right instead.
-  const maxWidthByLeft = corner === "tl" || corner === "bl" ? from.left + from.width : Infinity;
-  const maxWidthByTop = corner === "tl" || corner === "tr" ? (from.top + from.height) / ratio : Infinity;
-  const maxWidthByRight = growsRight ? bounds.width - from.left : Infinity;
-
-  const requested = growsRight ? from.width + dx : from.width - dx;
-  const width = Math.max(minSize, Math.min(requested, maxWidthByLeft, maxWidthByTop, maxWidthByRight));
-  const height = width * ratio;
-
-  return {
-    width,
-    height,
-    left: corner === "tl" || corner === "bl" ? from.left + from.width - width : from.left,
-    top: corner === "tl" || corner === "tr" ? from.top + from.height - height : from.top,
-  };
-}
-
 /**
  * Dragging and sizing a picture frame.
  *
@@ -718,17 +688,21 @@ function bindPictureFrames() {
     page.querySelectorAll(".pic-frame").forEach((f) => f.classList.toggle("is-selected", f === frame));
 
     const sizing = Boolean(handle);
-    const corner = handle?.dataset.corner || "br";
+    const corner = handle?.dataset.corner || "se";
     const scale = pageScale();
     const start = { x: event.clientX, y: event.clientY };
     const from = {
-      left: parseFloat(frame.style.left) || 0,
-      top: parseFloat(frame.style.top) || 0,
+      x: parseFloat(frame.style.left) || 0,
+      y: parseFloat(frame.style.top) || 0,
       width: frame.offsetWidth,
       height: frame.offsetHeight,
     };
-    const ratio = from.height / Math.max(1, from.width);
-    const bounds = page.getBoundingClientRect();
+    const pageBounds = page.getBoundingClientRect();
+    // The SAME local coordinate space `frame.style.left/top` are already in
+    // (the page's own top-left as 0,0) - resizeRect()'s bounds are compared
+    // directly against `from`, so this must not be the page's on-screen
+    // position, only its size.
+    const bounds = { x: 0, y: 0, width: pageBounds.width, height: pageBounds.height };
 
     frame.classList.add("is-dragging");
 
@@ -737,17 +711,20 @@ function bindPictureFrames() {
       const dy = moveEvent.clientY - start.y;
 
       if (sizing) {
-        const next = resizeFromCorner(corner, from, ratio, bounds, dx);
-        frame.style.width = `${Math.round(next.width)}px`;
-        frame.style.height = `${Math.round(next.height)}px`;
-        frame.style.left = `${Math.round(next.left)}px`;
-        frame.style.top = `${Math.round(next.top)}px`;
+        // Read fresh on every move, not just at pointerdown - a desk holding
+        // or releasing Shift mid-drag sees the aspect lock engage or let go
+        // immediately, the way every page-layout tool's own handles do.
+        const next = resizeRect(from, corner, dx, dy, { bounds, preserveAspect: moveEvent.shiftKey });
+        frame.style.width = `${next.width}px`;
+        frame.style.height = `${next.height}px`;
+        frame.style.left = `${next.x}px`;
+        frame.style.top = `${next.y}px`;
         return;
       }
       // Kept on the page: a frame dragged off the block would print off the
       // page, and the character grid would count cells that do not exist.
-      frame.style.left = `${Math.round(Math.max(0, Math.min(bounds.width - from.width, from.left + dx)))}px`;
-      frame.style.top = `${Math.round(Math.max(0, Math.min(bounds.height - from.height, from.top + dy)))}px`;
+      frame.style.left = `${Math.round(Math.max(0, Math.min(bounds.width - from.width, from.x + dx)))}px`;
+      frame.style.top = `${Math.round(Math.max(0, Math.min(bounds.height - from.height, from.y + dy)))}px`;
     };
 
     const done = () => {

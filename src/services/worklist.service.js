@@ -38,6 +38,11 @@ async function ensureComposeReady() {
   if (!metricsModule) metricsModule = await import('../../public/editor/compose/font-metrics.js');
   if (!shaperModule) shaperModule = await import('../../public/editor/compose/shaper.js');
   await Promise.all([metricsModule.ensureFontsLoaded(), shaperModule.ensureShaperReady()]);
+  // The worklist quotes a capacity the desk writes to. A number from summed
+  // hmtx advances because the shaper silently failed to load is not a
+  // rougher version of the real number, it is a different one - loud
+  // failure, not a quiet downgrade.
+  shaperModule.requireShaperReady();
 }
 
 // What each kind of block is for, from the one module that defines it - the

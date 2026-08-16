@@ -24,9 +24,16 @@
 const pool = require('../config/db');
 const sectionImageRepository = require('../repositories/sectionImage.repository');
 
-// 6.5 pt on newsprint, in editor px. Below this the block would fail preflight,
-// so offering it would be offering a page that cannot go to press.
-const MIN_BODY_PX = 4.6;
+// MIN_BODY_PX is imported from compose.js (see ensureComposeReady() below),
+// not redeclared here - it used to be, at the same 4.6 value, and compose.js
+// separately hard-coded its OWN floor at a literal 6.5 (a units bug: 6.5 is
+// the PT limit, not the logical-px one - see MIN_LEGIBLE_PX's own comment).
+// Every composeAt() call below with a candidate size under 6.5 was therefore
+// silently re-clamped UP to 6.5 inside compose.js, so this shrink loop's own
+// "does 5.0px fit?" question was actually being answered by a block composed
+// at 6.5px - a different question, and the reason this is imported now
+// rather than merely kept equal by two people remembering to.
+let MIN_BODY_PX = 4.6;
 const MIN_HEADLINE_PX = 12;
 const STEP_PX = 0.5;
 
@@ -40,6 +47,7 @@ const STEP_PX = 0.5;
 // unnoticed and exactly the kind of two-numbers-that-should-agree bug this
 // engine exists to remove.
 let composeModule = null;
+let engineModule = null;
 async function compose() {
   if (!composeModule) composeModule = await import('../../public/editor/compose/section-adapter.js');
   return composeModule;
@@ -49,7 +57,14 @@ let shaperModule = null;
 async function ensureComposeReady() {
   if (!metricsModule) metricsModule = await import('../../public/editor/compose/font-metrics.js');
   if (!shaperModule) shaperModule = await import('../../public/editor/compose/shaper.js');
+  if (!engineModule) engineModule = await import('../../public/editor/compose/compose.js');
   await Promise.all([metricsModule.ensureFontsLoaded(), shaperModule.ensureShaperReady()]);
+  // Fit decides real type sizes for print. A block fitted against summed
+  // hmtx advances because the shaper silently failed to load is a fit for a
+  // page that will not print the way this said it does - loud failure here,
+  // not a quiet downgrade.
+  shaperModule.requireShaperReady();
+  MIN_BODY_PX = engineModule.MIN_LEGIBLE_PX;
 }
 
 // Composes the block's REAL, already-written copy at a candidate type size

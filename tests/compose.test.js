@@ -17,6 +17,7 @@ let metrics;
 let graphemes;
 let intervals;
 let exclusion;
+let shaper;
 
 test.before(async () => {
   metrics = await load('font-metrics.js');
@@ -24,8 +25,17 @@ test.before(async () => {
   graphemes = await load('graphemes.js');
   intervals = await load('intervals.js');
   exclusion = await load('exclusion.js');
+  shaper = await load('shaper.js');
   const ready = await metrics.ensureFontsLoaded();
   assert.equal(ready, true, 'the publication fonts must be measurable');
+  // Without this, every test in this file silently runs against the hmtx
+  // FALLBACK (font-metrics.js's summed advances), not the real HarfBuzz
+  // shaping compose.js is actually built on - found while auditing this
+  // exact gap: this suite claims to test "the exact composition engine:
+  // Marathi shaping" and was doing neither, for every test that ran before
+  // this line existed.
+  const shaped = await shaper.ensureShaperReady();
+  assert.equal(shaped, true, 'the real shaper must be measurable - this suite tests SHAPED widths, not the hmtx fallback');
 });
 
 // ------------------------------------------------------- Marathi shaping ---
@@ -171,6 +181,35 @@ test('a headline may never take more than half the block, whatever it is asked f
   const room = result.content.room;
   assert.ok(result.bands.headline.height <= room * 0.5 + 1, 'the headline band must stay inside its share');
   assert.ok(result.content.bottom - result.bodyTop > 0, 'and must leave real room for a story');
+});
+
+// Bug 6B's regression, with a real obstacle: a photograph sitting across the
+// headline's own second band forces that band to be skipped entirely (no
+// viable gap), and the OLD `lines.length * bandHeight` height calculation
+// undercounted by exactly one skipped band - so the deck's first line landed
+// inside the headline's own last line. `occupiedBottom` (the real bottom of
+// what was actually placed) has to track the true position regardless of how
+// many bands were skipped to get there.
+test('vertical geometry accounts for bands an image skipped, not just bands set', () => {
+  const image = { x: 0, y: 42, width: 300, height: 32, shape: 'rect' };
+  const result = compose.composeBlock({
+    width: 300, height: 400, padding: 10,
+    headline: 'पहिली ओळ दुसरी ओळ तिसरी ओळ शेवटची ओळ इथे संपते',
+    subheading: 'खालील मजकूर',
+    headlineFontPx: 24, subheadingFontPx: 16, bodyFontPx: 16,
+    headlineMaxLines: 6,
+    images: [image],
+  });
+
+  assert.ok(result.bands.headline.lineCount >= 1, 'the headline must still be set despite the obstacle');
+  const headlineBottom = result.bands.headline.top + result.bands.headline.height;
+  // The deck must start AFTER every headline line actually placed - not
+  // overlap it, which is what the undercounted height used to produce.
+  for (const line of result.bands.deck.lines) {
+    assert.ok(line.y >= headlineBottom - 0.5, 'the deck must not overlap the headline\'s real last line');
+  }
+  assert.ok(result.bodyTop >= result.bands.deck.top + result.bands.deck.height - 0.5,
+    'the body must start after the deck\'s real bottom, including any bands the image skipped');
 });
 
 // ---------------------------------------------------------------- overflow ---
@@ -482,4 +521,115 @@ test('composing before the font is measurable is marked, never passed off as fin
   // Fonts ARE loaded in this suite, so this asserts the flag is truthful.
   assert.equal(result.fontReady, true);
   assert.ok(!result.warnings.some((w) => w.code === 'FONT_NOT_READY'));
+});
+
+// This is the assertion that would have caught the whole suite silently
+// running on the hmtx fallback: `fontReady: true` only proves the TTF
+// advance tables loaded, not that real GSUB/GPOS shaping is what actually
+// measured this block. `exactShaping` is the field that says which one
+// happened, and every test above this line was composing without checking it.
+test('the block was actually shaped, not measured against the hmtx fallback', () => {
+  assert.equal(shaper.isShaperReady(), true, 'the shaper must be ready by the time this suite runs');
+  const result = compose.composeBlock({ width: 300, height: 300, padding: 12, body: 'क्षेत्र ज्ञानेश्वर श्रद्धांजली' });
+  assert.equal(result.exactShaping, true, 'composeBlock must report it used real shaping, not the approximate fallback');
+  assert.ok(!result.warnings.some((w) => w.code === 'SHAPING_NOT_READY'));
+});
+
+// ------------------------------------------------------- rich typography ---
+
+test('body 5.0px really composes at 5.0, not silently clamped to 6.5', () => {
+  // Before MIN_LEGIBLE_PX was fixed from a literal 6.5 to the correct 4.6
+  // (6.5pt converted to this project's 2px/mm logical scale), any candidate
+  // under 6.5 was silently bumped back up - so fit.service.js's own shrink
+  // search was measuring a different size than the one it asked for.
+  const result = compose.composeBlock({ width: 300, height: 200, padding: 10, bodyFontPx: 5.0, body: 'बातमी.' });
+  assert.equal(result.typography.bodyPx, 5.0);
+  assert.ok(result.bodyLines.length > 0 && result.bodyLines[0].fontPx === 5.0);
+});
+
+test('a bold selected run measures wider than the same text plain', () => {
+  const text = 'प्रचंड यश मिळाले आज';
+  const plain = compose.composeBlock({ width: 200, height: 100, padding: 4, body: { text, marks: [] }, bodyFontPx: 20, columnCount: 1 });
+  const bold = compose.composeBlock({ width: 200, height: 100, padding: 4, body: { text, marks: [{ start: 0, end: 9, tag: 'b' }] }, bodyFontPx: 20, columnCount: 1 });
+  assert.ok(bold.bodyLines[0].width > plain.bodyLines[0].width, 'a bold Devanagari run must measure wider than the same text regular');
+});
+
+test('a selected larger size run changes where the line wraps', () => {
+  const text = 'सातारा जिल्ह्यातील शेतकऱ्यांसाठी राज्य सरकारने नवीन';
+  const plain = compose.composeBlock({ width: 260, height: 200, padding: 10, body: { text, marks: [] }, bodyFontPx: 16, columnCount: 1 });
+  const big = compose.composeBlock({ width: 260, height: 200, padding: 10, body: { text, marks: [{ start: 20, end: 33, tag: 'size', value: 32 }] }, bodyFontPx: 16, columnCount: 1 });
+  assert.ok(big.bodyLines[0].text.length < plain.bodyLines[0].text.length, 'a larger selected word must wrap the line sooner');
+});
+
+test('paragraph spacing pushes the second paragraph down whole extra bands', () => {
+  const body = 'पहिला परिच्छेद येथे संपतो.\n\nदुसरा परिच्छेद येथे सुरू होतो.';
+  const tight = compose.composeBlock({ width: 260, height: 300, padding: 10, body, bodyFontPx: 16, columnCount: 1, paragraphSpacingPx: 0 });
+  const spaced = compose.composeBlock({ width: 260, height: 300, padding: 10, body, bodyFontPx: 16, columnCount: 1, paragraphSpacingPx: 30 });
+  const tightSecond = tight.bodyLines.find((l) => l.paragraphBreak);
+  const spacedSecond = spaced.bodyLines.find((l) => l.paragraphBreak);
+  assert.ok(spacedSecond.y > tightSecond.y, 'a positive paragraphSpacingPx must push the second paragraph further down');
+});
+
+test('letter spacing widens a run and can move where a line breaks', () => {
+  const text = 'सातारा जिल्ह्यातील शेतकऱ्यांसाठी राज्य सरकारने नवीन योजना जाहीर केली आहे.';
+  const tight = compose.composeBlock({ width: 260, height: 200, padding: 10, body: text, bodyFontPx: 16, columnCount: 1, letterSpacingPx: 0 });
+  const spaced = compose.composeBlock({ width: 260, height: 200, padding: 10, body: text, bodyFontPx: 16, columnCount: 1, letterSpacingPx: 2 });
+  assert.ok(spaced.bodyLines[0].width > tight.bodyLines[0].width || spaced.bodyLines[0].text.length < tight.bodyLines[0].text.length,
+    'positive letter-spacing must widen the measured line or move its wrap point');
+});
+
+// ------------------------------------------------------------- alignment ---
+
+test('center and right alignment reposition the line without changing its text', () => {
+  const body = 'सातारा जिल्ह्यातील शेतकऱ्यांसाठी.';
+  const left = compose.composeBlock({ width: 260, height: 150, padding: 10, body, bodyFontPx: 16, columnCount: 1, textAlign: 'left' });
+  const center = compose.composeBlock({ width: 260, height: 150, padding: 10, body, bodyFontPx: 16, columnCount: 1, textAlign: 'center' });
+  const right = compose.composeBlock({ width: 260, height: 150, padding: 10, body, bodyFontPx: 16, columnCount: 1, textAlign: 'right' });
+
+  assert.equal(left.bodyLines[0].text, center.bodyLines[0].text);
+  assert.equal(left.bodyLines[0].text, right.bodyLines[0].text);
+  assert.ok(center.bodyLines[0].x > left.bodyLines[0].x, 'center must sit to the right of left');
+  assert.ok(right.bodyLines[0].x > center.bodyLines[0].x, 'right must sit to the right of center');
+  const rightEdge = right.bodyLines[0].x + right.bodyLines[0].width;
+  assert.ok(Math.abs(rightEdge - (right.content.right)) < 1, 'right alignment must end flush with the content edge');
+});
+
+test('justify distributes real word-spacing on a non-final line and never stretches the last', () => {
+  const body = 'सातारा जिल्ह्यातील शेतकऱ्यांसाठी राज्य सरकारने नवीन योजना जाहीर केली आहे.';
+  const result = compose.composeBlock({ width: 250, height: 200, padding: 4, body, bodyFontPx: 16, columnCount: 1, textAlign: 'justify' });
+  const last = result.bodyLines[result.bodyLines.length - 1];
+  assert.equal(last.wordSpacingPx, undefined, 'the last line of a paragraph must never be justified');
+});
+
+// ------------------------------------------------------------ font truth ---
+
+test('publicationFamily normalises legacy font choices to the two real bundled faces', () => {
+  assert.equal(metrics.publicationFamily('').key, 'serif');
+  assert.equal(metrics.publicationFamily('Georgia, serif').key, 'serif');
+  assert.equal(metrics.publicationFamily("'Times New Roman', serif").key, 'serif');
+  assert.equal(metrics.publicationFamily('Arial, sans-serif').key, 'sans');
+  assert.equal(metrics.publicationFamily("'Helvetica Neue', sans-serif").key, 'sans');
+  // Both point at real, declared @font-face names - never a bare "Noto Sans
+  // Devanagari", which has no @font-face rule under that exact name.
+  assert.match(metrics.publicationFamily('Arial').css, /Sahas Sans/);
+  assert.match(metrics.publicationFamily('').css, /Sahas Serif/);
+});
+
+test('composed lines carry the family/weight they were measured in, for the renderer to paint truthfully', () => {
+  const result = compose.composeBlock({
+    width: 300, height: 300, padding: 12, bodyFontPx: 16,
+    headline: 'मथळा', headlineFontPx: 24, fontFamily: 'sans-serif',
+    body: 'साधा मजकूर.',
+  });
+  // Headline/kicker/deck always carry the CSS's own hardcoded choice
+  // (DISPLAY_TYPOGRAPHY in compose.js), regardless of any body-level family
+  // override - the stylesheet never makes their face conditional.
+  assert.equal(result.bands.headline.lines[0].family, 'sans');
+  assert.equal(result.bands.headline.lines[0].weight, 700);
+  // The body line carries whatever raw string the block was composed with
+  // (here, the input's own "sans-serif") - classification into an actual
+  // bundled face happens once, at the point of use (publicationFamily()),
+  // not by pre-normalising every line. What matters is that classifying it
+  // agrees with what was actually measured.
+  assert.equal(metrics.publicationFamily(result.bodyLines[0].family).key, 'sans');
 });

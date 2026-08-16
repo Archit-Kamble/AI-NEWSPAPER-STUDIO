@@ -41,6 +41,12 @@ import { sectionContentMarkup, sectionComposition } from "../canvas/section-thum
 // The same six words the Typography panel's "Editing: X" label uses - one
 // catalog for what a selected object is called, not two that could drift.
 import { PART_LABEL } from "./typography-panel.js";
+// The same serif/sans classification the exact engine measures a body with
+// (compose/font-metrics.js) - Quill is comfort-typing chrome, not the
+// canonical preview (see above), so it does not have to pixel-match, but it
+// should not paint a DIFFERENT face family than the one the story was
+// actually measured in either.
+import { publicationFamily } from "../compose/font-metrics.js";
 
 let quill = null;
 let hooks = {};
@@ -337,7 +343,7 @@ function layoutTextFrames() {
     editor.style.fontSize = `${Math.max(15, Number(state.view.bodyFontPx) || 10)}px`;
     editor.style.lineHeight = String(Math.max(1.45, Number(state.view.lineHeight) || 1.45));
     editor.style.textAlign = state.view.textAlign || "left";
-    if (state.view.fontFamily) editor.style.fontFamily = state.view.fontFamily;
+    editor.style.fontFamily = publicationFamily(state.view.fontFamily).css;
   }
 }
 

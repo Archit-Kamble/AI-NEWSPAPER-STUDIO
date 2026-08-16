@@ -20,11 +20,15 @@
 //    <u>            underline     — rare in body copy, real in a standfirst
 //    <br> <p>       line breaks   — paragraphs
 //    <ul> <ol> <li> lists         — briefs columns are set as lists
+//    <span data-sahas-size="N">   a selected run set at N px instead of the
+//                                 block's own body size
 //
-// Colour, font family and font size are deliberately NOT offered in body copy.
-// They are decided by the layout for the whole block (see typeScaleFor) because
-// that is how a newspaper keeps a page looking like one paper rather than a
-// scrapbook. Typography for the block lives in the Typography panel.
+// Colour and font family stay decided by the layout for the whole block, not
+// per selection - a newspaper keeps a page looking like one paper rather than
+// a scrapbook. A selected SIZE is the one exception, and it is deliberately
+// narrow: one controlled attribute, one finite numeric value, nothing else on
+// the span - never an arbitrary `style=` or `class=`, which is exactly what
+// `sanitise()` exists to strip out of everything else that arrives here.
 
 // Only the marks this editor produces are stripped - never "anything between
 // angle brackets". Copy legitimately contains them: a price "<२०%", a headline
@@ -32,7 +36,7 @@
 // a story, and the words would be gone from the printed page with nothing to
 // show they had ever been there. The sanitiser is what removes foreign tags, on
 // the way in; by the time text is stored, the only tags left are these.
-const MARKS = 'b|strong|i|em|u|br|p|div|ul|ol|li';
+const MARKS = 'b|strong|i|em|u|br|p|div|ul|ol|li|span';
 // A paragraph ends with a BLANK line, not a single break. Everything
 // downstream splits paragraphs on two newlines - the e-paper renders them as
 // <p>, the press file as separate paragraphs - so collapsing them to one would
@@ -41,6 +45,20 @@ const PARAGRAPH_TAGS = /<\/(p|div)\s*>/gi;
 const LIST_TAGS = /<\/li\s*>/gi;
 const BREAK_TAGS = /<br\s*\/?>/gi;
 const ANY_TAG = new RegExp(`</?(${MARKS})(\\s[^>]*)?>`, 'gi');
+
+// The one attribute value this module ever trusts out of arbitrary markup -
+// everything else on a tag is dropped by sanitise() below. Bounded to what a
+// newspaper actually sets in a body: below 6px nothing prints legibly, above
+// 96px is a poster headline size, not a selected word.
+const SIZE_MIN = 6;
+const SIZE_MAX = 96;
+
+/** A finite, in-range size, or null if the attribute was not a real number. */
+function sanitiseSize(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.min(SIZE_MAX, Math.max(SIZE_MIN, n));
+}
 
 const ENTITIES = {
   '&nbsp;': ' ', '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'",
@@ -77,7 +95,7 @@ export function textLength(value) {
 
 /** Whether the value carries any markup at all. */
 export function isMarkedUp(value) {
-  return /<(b|strong|i|em|u|ul|ol|li|p|br)\b/i.test(String(value ?? ''));
+  return /<(b|strong|i|em|u|ul|ol|li|p|br|span)\b/i.test(String(value ?? ''));
 }
 
 // --- sanitising ---------------------------------------------------------------
@@ -87,7 +105,7 @@ export function isMarkedUp(value) {
 // colours, background shading and sometimes scripts. None of that may reach a
 // page, so what comes in is reduced to the marks above and nothing else.
 
-const ALLOWED = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'BR', 'P', 'DIV', 'UL', 'OL', 'LI']);
+const ALLOWED = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'BR', 'P', 'DIV', 'UL', 'OL', 'LI', 'SPAN']);
 
 /**
  * Reduces arbitrary HTML to the few marks a printer can set.
@@ -114,6 +132,20 @@ export function sanitise(html) {
         child.replaceWith(...child.childNodes);
         return;
       }
+
+      // A SPAN is only ever a carrier for the one controlled size attribute -
+      // never an arbitrary `style=`/`class=`, which is exactly what a pasted
+      // story's own inline styling would otherwise smuggle in through it. A
+      // span that does not carry a real size is not a mark at all, so it is
+      // unwrapped like any other tag not on the list.
+      if (child.tagName === 'SPAN') {
+        const size = sanitiseSize(child.getAttribute('data-sahas-size'));
+        if (size === null) { child.replaceWith(...child.childNodes); return; }
+        [...child.attributes].forEach((attribute) => child.removeAttribute(attribute.name));
+        child.setAttribute('data-sahas-size', String(size));
+        return;
+      }
+
       // Even an allowed tag arrives dressed up. Strip every attribute:
       // inline styles are exactly how a pasted story brings a website's fonts
       // and colours onto a newspaper page.
@@ -173,7 +205,10 @@ export function textWithMarks(html) {
   let text = '';
   let index = 0;
 
-  const TAG = new RegExp(`<(/?)(${MARKS})(?:\\s[^>]*)?>`, 'gi');
+  // SPAN's attributes are captured (group 3) - it is the one tag whose mark
+  // needs a VALUE, not just presence, so it cannot reuse the discard-the-
+  // attributes shape every other tag here uses.
+  const TAG = new RegExp(`<(/?)(${MARKS})(\\s[^>]*)?>`, 'gi');
   let match;
 
   while ((match = TAG.exec(source)) !== null) {
@@ -182,12 +217,22 @@ export function textWithMarks(html) {
 
     const closing = match[1] === '/';
     const name = match[2].toUpperCase();
-    const mark = MARK_TAGS[name];
+    const mark = name === 'SPAN' ? 'size' : MARK_TAGS[name];
 
     if (name === 'BR') { text += '\n'; continue; }
 
     if (!closing) {
-      if (mark) open.push({ tag: mark, start: text.length });
+      if (name === 'SPAN') {
+        const attrMatch = /data-sahas-size="([^"]*)"/.exec(match[3] || '');
+        const size = attrMatch ? sanitiseSize(attrMatch[1]) : null;
+        // A span with no valid size carries no mark - it still opens/closes
+        // in the source, but nothing is pushed for it, so its content reads
+        // as plain, unmarked text (matching what sanitise() would have
+        // reduced it to anyway).
+        if (size !== null) open.push({ tag: mark, start: text.length, value: size });
+      } else if (mark) {
+        open.push({ tag: mark, start: text.length });
+      }
       continue;
     }
 
@@ -196,7 +241,7 @@ export function textWithMarks(html) {
       // paste must not throw away the rest of the story.
       for (let i = open.length - 1; i >= 0; i -= 1) {
         if (open[i].tag !== mark) continue;
-        if (text.length > open[i].start) marks.push({ start: open[i].start, end: text.length, tag: mark });
+        if (text.length > open[i].start) marks.push({ start: open[i].start, end: text.length, tag: mark, value: open[i].value });
         open.splice(i, 1);
         break;
       }
@@ -240,11 +285,11 @@ export function markRun(runText, at, marks, escape) {
     const from = points[index];
     const to = points[index + 1];
     const piece = escape(runText.slice(from, to));
-    const tags = relevant
-      .filter((mark) => mark.start <= at + from && mark.end >= at + to)
-      .map((mark) => mark.tag);
-    out += tags.length
-      ? tags.reduce((inner, tag) => `<${tag}>${inner}</${tag}>`, piece)
+    const active = relevant.filter((mark) => mark.start <= at + from && mark.end >= at + to);
+    out += active.length
+      ? active.reduce((inner, mark) => (
+        mark.tag === 'size' ? `<span data-sahas-size="${mark.value}">${inner}</span>` : `<${mark.tag}>${inner}</${mark.tag}>`
+      ), piece)
       : piece;
   }
   return out;

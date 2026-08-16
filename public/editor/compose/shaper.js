@@ -41,8 +41,15 @@ const FONT_FILES = {
   'sans/700': '/assets/fonts/NotoSansDevanagari-Bold.ttf',
 };
 
+// Kept identical to font-metrics.js's own classification (which this
+// duplicates, same reason font-metrics.js's original hmtx path does: two
+// runtimes, one for the server's own font reader and one for this shaper).
+// "Arial"/"Helvetica Neue" - two of the Typography panel's six choices -
+// contain neither "serif" nor "sans" as a substring; a version of this that
+// checked for "sans" alone always silently measured them as serif.
 function faceKey(family = 'serif', weight = 400) {
-  const stack = String(family).toLowerCase().includes('sans') ? 'sans' : 'serif';
+  const v = String(family).toLowerCase();
+  const stack = v.includes('sans') || v.includes('arial') || v.includes('helvetica') ? 'sans' : 'serif';
   return `${stack}/${Number(weight) >= 600 ? 700 : 400}`;
 }
 
@@ -110,6 +117,21 @@ export function ensureShaperReady() {
 
 export function isShaperReady() {
   return fonts.size > 0;
+}
+
+// For the paths that must never quietly become approximate: Layout, the
+// Block Editor, fit and preflight all measure a page that is about to be
+// shown to a desk or sent to a plate. A composition made from summed hmtx
+// advances there is not a slightly-rough version of the real page, it is a
+// DIFFERENT page - and the previous behaviour (fall back silently, push a
+// warning nobody reads) let that happen without anyone knowing which one
+// they were looking at. These callers ask for this instead of `isShaperReady()`
+// so a shaper that failed to load is a loud, visible failure, not a quiet
+// downgrade.
+export function requireShaperReady() {
+  if (!isShaperReady()) {
+    throw new Error('EXACT_SHAPER_NOT_READY');
+  }
 }
 
 function shapedFace(family, weight) {

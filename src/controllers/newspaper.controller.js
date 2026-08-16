@@ -108,17 +108,31 @@ async function epaperHtml(req, res) {
 
 // Preflight: everything that must be true before a page reaches the plate.
 async function preflight(req, res) {
-  const report = await preflightService.checkEdition(parseInt(req.params.id, 10));
-  if (!report) return res.status(404).json({ error: 'No such edition.' });
-  res.json(report);
+  try {
+    const report = await preflightService.checkEdition(parseInt(req.params.id, 10));
+    if (!report) return res.status(404).json({ error: 'No such edition.' });
+    res.json(report);
+  } catch (error) {
+    if (error.message === 'EXACT_SHAPER_NOT_READY') {
+      return res.status(503).json({ error: 'Real Marathi text shaping is not available right now. Try again in a moment.' });
+    }
+    throw error;
+  }
 }
 
 // What this edition still needs, in page order, with the exact character
 // count each unfinished block holds.
 async function worklist(req, res) {
-  const list = await worklistService.forEdition(parseInt(req.params.id, 10));
-  if (!list) return res.status(404).json({ error: 'No such edition.' });
-  res.json(list);
+  try {
+    const list = await worklistService.forEdition(parseInt(req.params.id, 10));
+    if (!list) return res.status(404).json({ error: 'No such edition.' });
+    res.json(list);
+  } catch (error) {
+    if (error.message === 'EXACT_SHAPER_NOT_READY') {
+      return res.status(503).json({ error: 'Real Marathi text shaping is not available right now. Try again in a moment.' });
+    }
+    throw error;
+  }
 }
 
 async function status(req, res) {

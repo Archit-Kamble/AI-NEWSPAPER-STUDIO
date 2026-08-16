@@ -15,6 +15,21 @@
 import { escapeHtml } from '../format.js';
 import { textWithMarks, plainText } from '../layout/rich-text.js';
 import { presentationRanges, renderPresentation } from '../layout/editorial-presentation.js';
+import { publicationFamily } from './font-metrics.js';
+
+// The measured font, painted. Every line now carries the family/weight
+// compose.js actually measured it in (see compose.js); this turns that back
+// into real CSS instead of leaving the browser to inherit whatever face the
+// container's stylesheet happens to declare. Before this, a body measured in
+// "sans" (an Arial/Helvetica selection - see font-metrics.js's
+// publicationFamily()) still painted inheriting "Sahas Serif" from
+// `.newspaper-canvas`, because nothing here ever emitted `font-family` at
+// all - the measured font and the painted font could silently be two
+// different faces.
+function faceStyle(line) {
+  const { css } = publicationFamily(line.family);
+  return `font-family:${css};font-weight:${line.weight || 400};`;
+}
 
 // Marks and semantic ranges are held against the whole flow's plain text, and
 // a line is a slice of it. This clips both to the slice and rebases them onto
@@ -95,7 +110,7 @@ export function composedMarkup(composition, view, { datelinePrefix = '' } = {}) 
       pieces.push(
         `<span class="section-composed ${className}" style="left:${line.x.toFixed(2)}px;top:${line.y.toFixed(2)}px;`
         + `width:${line.measure.toFixed(2)}px;height:${line.height.toFixed(2)}px;`
-        + `font-size:${line.fontPx}px;line-height:${line.height.toFixed(2)}px">${html}</span>`,
+        + `font-size:${line.fontPx}px;line-height:${line.height.toFixed(2)}px;${faceStyle(line)}">${html}</span>`,
       );
     }
   }
@@ -120,7 +135,7 @@ export function composedMarkup(composition, view, { datelinePrefix = '' } = {}) 
       `<span class="section-composed section-body-line${dateline ? ' has-dateline' : ''}"`
       + ` style="left:${line.x.toFixed(2)}px;top:${line.y.toFixed(2)}px;`
       + `width:${(line.measure + 1).toFixed(2)}px;height:${line.height.toFixed(2)}px;`
-      + `font-size:${line.fontPx}px;line-height:${line.height.toFixed(2)}px;${wordSpacing}">${html}</span>`,
+      + `font-size:${line.fontPx}px;line-height:${line.height.toFixed(2)}px;${wordSpacing}${faceStyle(line)}">${html}</span>`,
     );
   }
 
@@ -143,7 +158,17 @@ export function diagnosticMarkup(composition) {
     .map(([key, value]) => `${key} +${plainText(value).length}`);
 
   if (composition.fitState === 'OVERSET') {
-    return `<span class="section-diagnostic is-overset" title="This copy has no room in this block">⚠ ${escapeHtml(overset.join(', '))}</span>`;
+    // A hard-unbreakable-token violation (a single word wider than every
+    // legal line in the frame - Marathi has no hyphenation, so it is drawn
+    // rather than damaged, see graphemes.js) leaves `overset` EMPTY: nothing
+    // was left over, the word itself was placed. Without this, that case
+    // rendered as a bare "⚠" with no text after it - a real diagnostic
+    // telling the desk nothing about what to actually do.
+    const tokenViolations = (composition.violations || [])
+      .filter((v) => v.code.endsWith('UNBREAKABLE_TOKEN_OVERSET'))
+      .map((v) => `${v.code.replace('_UNBREAKABLE_TOKEN_OVERSET', '').toLowerCase()}: word too wide for this block`);
+    const detail = [...overset, ...tokenViolations].join(', ') || 'this copy has no room in this block';
+    return `<span class="section-diagnostic is-overset" title="This copy has no room in this block">⚠ ${escapeHtml(detail)}</span>`;
   }
   return `<span class="section-diagnostic is-underfilled" title="Room left that a writer could still fill">◌ ${composition.whitespace.largestHoleLines.toFixed(1)} lines</span>`;
 }

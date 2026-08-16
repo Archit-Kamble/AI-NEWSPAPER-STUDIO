@@ -171,9 +171,50 @@ export const FONT_FILES = {
 const loaded = new Map();
 let loading = null;
 
+// A real, pre-existing bug this classification had: "Arial" and "Helvetica
+// Neue" (two of the Typography panel's own six choices - typography-panel.js)
+// contain neither "serif" nor "sans" as a substring, so they fell through to
+// the `serif` default here - meaning selecting them has always silently
+// measured Noto SERIF Devanagari widths, not Noto Sans, for as long as this
+// function has existed. Found only once `publicationFamily()` (below) was
+// written against the SAME two entries and a test caught the two disagreeing.
+function stackOf(family) {
+  const v = String(family).toLowerCase();
+  return v.includes('sans') || v.includes('arial') || v.includes('helvetica') ? 'sans' : 'serif';
+}
+
 function faceKey(family = 'serif', weight = 400) {
-  const stack = String(family).toLowerCase().includes('sans') ? 'sans' : 'serif';
-  return `${stack}/${Number(weight) >= 600 ? 700 : 400}`;
+  return `${stackOf(family)}/${Number(weight) >= 600 ? 700 : 400}`;
+}
+
+// The one place "which face" is decided, for MEASUREMENT (this file,
+// shaper.js) and for PAINT (render.js, and anything else that has to draw a
+// CSS font-family that matches). A desk can still pick "Georgia" or "Arial"
+// in the Typography panel - real system fonts, with no Devanagari glyphs at
+// all, that a browser would silently substitute for anyway - but every one of
+// those choices was always secretly EITHER the serif or the sans publication
+// face for measurement purposes (faceKey() above). The bug this closes is
+// that nothing made the PAINTED font agree: the canonical renderer never
+// applied `fontFamily` as CSS at all, so a block measured as "sans" (Arial
+// selected) still rendered inheriting "Sahas Serif" from its container - a
+// different face than the one its width was computed from. `publicationFamily()`
+// is the SAME classification as `faceKey()`, returned as real CSS pointing at
+// the actual @font-face names this project declares (styles.css) - not a
+// bare "Noto Sans Devanagari", which has no @font-face rule under that exact
+// name and would silently fall through to a browser default.
+export function publicationFamily(value = '') {
+  const key = stackOf(value);
+  return key === 'sans'
+    ? { key: 'sans', css: "'Sahas Sans', 'Noto Sans Devanagari', sans-serif" }
+    : { key: 'serif', css: "'Sahas Serif', 'Noto Serif Devanagari', serif" };
+}
+
+/** Canonicalised to the only two weights a physical bundled face exists for. */
+export function publicationWeight(value) {
+  if (value === 'bold') return 700;
+  if (value === 'normal') return 400;
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 600 ? 700 : 400;
 }
 
 async function readFontFile(path) {

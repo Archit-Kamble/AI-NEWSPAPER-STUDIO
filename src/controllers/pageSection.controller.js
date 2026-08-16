@@ -95,15 +95,29 @@ async function reunite(req, res) {
 // Making a story fit. GET answers what would fit it; POST does it. A desk
 // sees the change before it happens rather than after.
 async function fitPreview(req, res) {
-  const result = await fit.fitSection(parseInt(req.params.pageId, 10), req.params.sectionKey);
-  if (!result) return res.status(404).json({ error: 'No such block.' });
-  res.json(result);
+  try {
+    const result = await fit.fitSection(parseInt(req.params.pageId, 10), req.params.sectionKey);
+    if (!result) return res.status(404).json({ error: 'No such block.' });
+    res.json(result);
+  } catch (error) {
+    if (error.message === 'EXACT_SHAPER_NOT_READY') {
+      return res.status(503).json({ error: 'Real Marathi text shaping is not available right now. Try again in a moment.' });
+    }
+    throw error;
+  }
 }
 
 async function fitApply(req, res) {
-  const result = await fit.fitSection(parseInt(req.params.pageId, 10), req.params.sectionKey, { apply: true });
-  if (!result) return res.status(404).json({ error: 'No such block.' });
-  res.json(result);
+  try {
+    const result = await fit.fitSection(parseInt(req.params.pageId, 10), req.params.sectionKey, { apply: true });
+    if (!result) return res.status(404).json({ error: 'No such block.' });
+    res.json(result);
+  } catch (error) {
+    if (error.message === 'EXACT_SHAPER_NOT_READY') {
+      return res.status(503).json({ error: 'Real Marathi text shaping is not available right now. Try again in a moment.' });
+    }
+    throw error;
+  }
 }
 
 // What a block of space is worth, by column-centimetre and position.

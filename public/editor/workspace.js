@@ -27,6 +27,11 @@ import { loadIdentity } from "./canvas/masthead.js";
 // workspace - what fits, where a line breaks, how full a block is - is made
 // against these, so they are loaded before the first paint.
 import { ensureFontsLoaded } from "./compose/font-metrics.js";
+// Real Devanagari shaping (see compose/shaper.js). Awaited alongside the
+// fonts, before the first paint, for the same reason: a page composed from
+// summed hmtx advances and then repainted once real shaping loads is two
+// different pages, and this workspace must never show the desk the wrong one.
+import { ensureShaperReady, requireShaperReady } from "./compose/shaper.js";
 import { zoomControlMarkup, bindZoomControl, syncZoomControl, pageIndicatorMarkup } from "./canvas/canvas-toolbar.js";
 import { renderPageNavigator } from "./page-navigator.js";
 import { renderLayoutSidebar } from "./layout-sidebar.js";
@@ -77,7 +82,12 @@ export async function renderWorkspace(newspaperId) {
       // and then repainted when the real one arrives is two different pages,
       // and only one of them was the one the desk looked at.
       ensureFontsLoaded(),
+      // Real shaping, same reasoning. requireShaperReady() below turns a
+      // failed load into a loud error instead of every block on the page
+      // silently composing from approximate widths.
+      ensureShaperReady(),
     ]);
+    requireShaperReady();
 
     // The paper's standing furniture, and this edition's volume and issue number
     // worked out from its date. Fetched before the first paint so page one is
@@ -113,10 +123,19 @@ function renderWorkspaceLoadError(newspaperId, error) {
   console.error("Workspace load failed:", error);
   const content = document.getElementById("content");
   if (!content) return;
+  // The shaper failing to load is a real, distinct failure - not a dropped
+  // connection - and showing it as one would send a desk retrying something
+  // that will not fix itself. Composing a page from approximate widths and
+  // saying nothing was the earlier behaviour this exists to replace.
+  const isShaperFailure = error?.message === "EXACT_SHAPER_NOT_READY";
+  const heading = isShaperFailure ? "The publication font could not be measured" : "This edition could not be opened";
+  const body = isShaperFailure
+    ? "Real Marathi text shaping failed to load, so nothing was drawn rather than risk showing sizes that would not match print."
+    : "The connection may have dropped, or the edition may no longer exist. Nothing was lost — the edition itself is unchanged.";
   content.innerHTML = `
     <div class="workspace-load-error">
-      <h2>This edition could not be opened</h2>
-      <p>The connection may have dropped, or the edition may no longer exist. Nothing was lost — the edition itself is unchanged.</p>
+      <h2>${heading}</h2>
+      <p>${body}</p>
       <button type="button" class="btn-secondary" id="workspaceLoadRetry">Try again</button>
     </div>
   `;

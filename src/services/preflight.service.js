@@ -97,6 +97,11 @@ async function ensureComposeReady() {
   if (!metricsModule) metricsModule = await import('../../public/editor/compose/font-metrics.js');
   if (!shaperModule) shaperModule = await import('../../public/editor/compose/shaper.js');
   await Promise.all([metricsModule.ensureFontsLoaded(), shaperModule.ensureShaperReady()]);
+  // Preflight is the last check before the plate. An overset verdict reached
+  // from approximate widths because the shaper silently failed to load is
+  // not a conservative check, it is a wrong one - loud failure, not a quiet
+  // downgrade.
+  shaperModule.requireShaperReady();
 }
 
 async function checkPage(page, newspaper, totalPages) {

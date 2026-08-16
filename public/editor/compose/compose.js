@@ -38,12 +38,16 @@ export const ENGINE_VERSION = 'sahas-compose/2';
 // same-shape, slightly-wide fallback for the moment before it has - never a
 // guessed constant. See shaper.js for exactly how much this matters for
 // conjunct-heavy Marathi (up to +80% on a bare summed-advance measurement).
-function measure(text, fontPx, family, weight) {
-  if (isShaperReady()) {
-    const shaped = shapeWidthPx(text, fontPx, family, weight);
-    if (shaped !== null) return shaped;
-  }
-  return hmtxWidth(text, fontPx, family, weight);
+function measure(text, fontPx, family, weight, letterSpacingPx = 0) {
+  const base = isShaperReady() ? shapeWidthPx(text, fontPx, family, weight) : null;
+  const width = base !== null ? base : hmtxWidth(text, fontPx, family, weight);
+  if (!letterSpacingPx) return width;
+  // Applied between clusters, not codepoints - a matra sits on its base and
+  // must not be pushed away from it by its own extra gap, the same akshara
+  // boundary graphemes.js already enforces for line-breaking. N clusters have
+  // N-1 gaps between them; letter-spacing is never added after the last one.
+  const gaps = Math.max(0, clusters(text).length - 1);
+  return width + gaps * letterSpacingPx;
 }
 
 // Headline, kicker and deck are always set in the sans face, at the weights
@@ -82,9 +86,18 @@ const GAP_EM = {
 // be written into.
 const MAX_HEADLINE_SHARE = 0.5;
 
-// The floor preflight fails a page for. Nothing here may go below it, however
-// badly the copy wants to fit.
-export const MIN_LEGIBLE_PX = 6.5;
+// The floor preflight fails a page for: newsprint will not legibly hold
+// anything under 6.5 PT. This project's logical px is 2 per mm (see
+// geometry.js/pxToMm), so 6.5pt converts to 6.5 * 25.4/72 * 2 = 4.6 logical
+// px - NOT 6.5 taken directly as a pixel count, which was this constant's
+// actual bug: it enforced a floor 41% too high, and silently disagreed with
+// fit.service.js's own separately-hand-derived 4.6, which was correct. A
+// candidate size fit.service.js considered legal (say 5.0px, comfortably
+// above 4.6) was being silently clamped back up to 6.5 the moment it reached
+// composeBlock() - so fit's own "does 5.0px fit?" question was actually
+// answered by composing at 6.5px, a different question. One shared constant,
+// imported by both, so this cannot happen again.
+export const MIN_LEGIBLE_PX = 4.6;
 
 // More than this many body lines of usable room left unfilled is a hole
 // somebody has to answer for rather than the natural remainder of setting
@@ -111,7 +124,7 @@ function num(value, fallback) {
  * as the copy does.
  */
 function setDisplayFlow(text, {
-  top, bottomLimit, column, images, fontPx, lineHeight, family, weight, maxLines,
+  top, bottomLimit, column, images, fontPx, lineHeight, family, weight, maxLines, letterSpacingPx = 0,
 }) {
   const pieces = breakPieces(text);
   if (!pieces.length) return { lines: [], height: 0, bottom: top, overset: '', lineCount: 0, violations: [] };
@@ -182,6 +195,13 @@ function setDisplayFlow(text, {
         height: bandHeight,
         baseline: y + fontPx * faceAscent(family, weight),
         fontPx,
+        // Carried on the line itself so a renderer paints the SAME face this
+        // was measured with, rather than re-deriving it (and risking a second,
+        // drifted classification) or leaving it to CSS inheritance, which is
+        // how the canonical renderer used to always paint the container's
+        // default face regardless of what this flow was actually measured in.
+        family,
+        weight,
       });
       occupiedBottom = Math.max(occupiedBottom, y + bandHeight);
       if (hardOverset) {
@@ -207,7 +227,7 @@ function setDisplayFlow(text, {
   // measure2: a small local alias so this closure does not have to thread
   // `measure` through every call site above by name collision with the
   // module-level `measure()` - kept local to make the diff obvious.
-  function measure2(t, px, fam, w) { return measure(t, px, fam, w); }
+  function measure2(t, px, fam, w) { return measure(t, px, fam, w, letterSpacingPx); }
 }
 
 /**
@@ -246,32 +266,35 @@ function columnsOf(content, count, gutter) {
 // ------------------------------------------------------ rich-run measurement ---
 //
 // A piece (breakPieces()'s unit - a word plus its trailing space) is set in
-// ONE weight almost always, but a sub-editor's bold mark can start or end
-// mid-word ("प्रचंड **यश**"), so a piece can straddle a mark boundary. Width
-// has to be measured per RUN of one weight, not per piece, or a bold phrase
-// is reserved the width of its own regular-weight ghost - measured against
-// the real fonts, a bold Devanagari word is 5-8% wider than the same word
-// regular. That gap was invisible in this engine until now because marks
-// were stripped before composition ever saw them (plainText()); the browser
-// then painted the bold word into a box sized for the unbolded one.
-function boldRunsIn(marks, start, end) {
+// ONE style almost always, but a sub-editor's bold mark - or a selected-size
+// mark, see rich-text.js's `data-sahas-size` - can start or end mid-word
+// ("प्रचंड **यश**"), so a piece can straddle a mark boundary. Width has to be
+// measured per RUN of one style, not per piece, or a bold phrase is reserved
+// the width of its own regular-weight ghost - measured against the real
+// fonts, a bold Devanagari word is 5-8% wider than the same word regular -
+// and a selected larger word is reserved the width of its own SMALLER ghost,
+// which is worse: that word then visibly overruns the line it was measured
+// to fit on. Italic and underline do not change width (no italic face is
+// bundled - see shaper.js's header; underline is a paint decision only), so
+// neither participates here.
+function styleRunsIn(marks, start, end) {
   return marks
-    .filter((mark) => mark.tag === 'b' && mark.end > start && mark.start < end)
-    .map((mark) => ({ start: Math.max(start, mark.start), end: Math.min(end, mark.end) }));
+    .filter((mark) => (mark.tag === 'b' || mark.tag === 'size') && mark.end > start && mark.start < end)
+    .map((mark) => ({ start: Math.max(start, mark.start), end: Math.min(end, mark.end), tag: mark.tag, value: mark.value }));
 }
 
 /** The real, mark-aware width of one piece, given its offset in the flow. */
-function measurePieceWidth(piece, at, fontPx, family, weight, marks) {
-  if (!marks || !marks.length) return measure(piece, fontPx, family, weight);
-  const bold = boldRunsIn(marks, at, at + piece.length);
-  if (!bold.length) return measure(piece, fontPx, family, weight);
+function measurePieceWidth(piece, at, fontPx, family, weight, marks, letterSpacingPx = 0) {
+  if (!marks || !marks.length) return measure(piece, fontPx, family, weight, letterSpacingPx);
+  const runs = styleRunsIn(marks, at, at + piece.length);
+  if (!runs.length) return measure(piece, fontPx, family, weight, letterSpacingPx);
 
-  // Split the piece at every bold boundary and shape each run at its own
-  // weight - this is the same "measure a run, not a codepoint" principle
-  // font-metrics.js already used, just extended across a weight change
-  // rather than only across a font file.
+  // Split the piece at every style boundary and shape each run at its own
+  // weight/size - this is the same "measure a run, not a codepoint" principle
+  // font-metrics.js already used, just extended across a style change rather
+  // than only across a font file.
   const cuts = new Set([0, piece.length]);
-  for (const range of bold) {
+  for (const range of runs) {
     cuts.add(Math.max(0, range.start - at));
     cuts.add(Math.min(piece.length, range.end - at));
   }
@@ -280,9 +303,15 @@ function measurePieceWidth(piece, at, fontPx, family, weight, marks) {
   for (let i = 0; i < points.length - 1; i += 1) {
     const from = points[i];
     const to = points[i + 1];
-    const isBold = bold.some((range) => range.start - at <= from && range.end - at >= to);
-    width += measure(piece.slice(from, to), fontPx, family, isBold ? 700 : weight);
+    const active = runs.filter((range) => range.start - at <= from && range.end - at >= to);
+    const isBold = active.some((range) => range.tag === 'b');
+    const sized = active.find((range) => range.tag === 'size');
+    // Letter-spacing NOT applied per sub-run here (that would double it at
+    // every style seam and miss the gap exactly AT the seam) - applied once
+    // below, over the whole piece's own cluster count instead.
+    width += measure(piece.slice(from, to), sized ? sized.value : fontPx, family, isBold ? 700 : weight, 0);
   }
+  if (letterSpacingPx) width += Math.max(0, clusters(piece).length - 1) * letterSpacingPx;
   return width;
 }
 
@@ -338,7 +367,7 @@ function splitParagraphs(text, marks) {
  * fresh row; ordinary word-space boundaries do not.
  */
 function pourBody(bodyInput, {
-  top, bottom, columns, images, fontPx, lineHeight, family, weight, align,
+  top, bottom, columns, images, fontPx, lineHeight, family, weight, align, paragraphSpacingPx = 0, letterSpacingPx = 0,
 }) {
   const text = typeof bodyInput === 'object' && bodyInput ? String(bodyInput.text || '') : String(bodyInput || '');
   const marks = (typeof bodyInput === 'object' && bodyInput && bodyInput.marks) || [];
@@ -403,6 +432,20 @@ function pourBody(bodyInput, {
         emptyGapWidth += sequence[pointer].gap.end - sequence[pointer].gap.start;
         pointer += 1;
       }
+
+      // Paragraph spacing: the new paragraph's first line must start at or
+      // after the previous line's bottom plus the air a real paragraph gets
+      // between it and the next. The band grid is fixed-height, so this is
+      // expressed as "skip whole bands until one starts late enough" rather
+      // than a partial-band offset, which would break the grid every
+      // obstacle lookup in this engine assumes.
+      if (paragraphSpacingPx > 0) {
+        const nextY = currentY + bandHeight + paragraphSpacingPx;
+        while (pointer < sequence.length && sequence[pointer].y < nextY) {
+          emptyGapWidth += sequence[pointer].gap.end - sequence[pointer].gap.start;
+          pointer += 1;
+        }
+      }
     }
 
     const pieces = breakPieces(paragraph.text);
@@ -430,7 +473,7 @@ function pourBody(bodyInput, {
       while (index < pieces.length) {
         const piece = pieces[index];
         const at = paragraph.offset + paraCharOffset;
-        const pieceWidth = measurePieceWidth(piece, at, fontPx, family, weight, marks);
+        const pieceWidth = measurePieceWidth(piece, at, fontPx, family, weight, marks, letterSpacingPx);
         if (line && width + pieceWidth > measureWidthPx + 0.5) break;
         if (!line && pieceWidth > measureWidthPx + 0.5) {
           // Wider than this gap. If some other upcoming gap could hold it,
@@ -453,7 +496,7 @@ function pourBody(bodyInput, {
 
       const trimmed = trimEndClusters(line);
       if (!trimmed) { emptyGapWidth += measureWidthPx; continue; }
-      const drawn = measurePieceWidth(trimmed, lineStartOffset, fontPx, family, weight, marks);
+      const drawn = measurePieceWidth(trimmed, lineStartOffset, fontPx, family, weight, marks, letterSpacingPx);
       lines.push({
         text: trimmed,
         at: lineStartOffset,
@@ -464,6 +507,13 @@ function pourBody(bodyInput, {
         height: bandHeight,
         baseline: y + fontPx * faceAscent(family, weight),
         fontPx,
+        // The base family/weight this line was measured in (a bold RUN inside
+        // the line is carried separately, as a real <b> mark - see
+        // measurePieceWidth() - and needs no per-line override; only the base
+        // face a renderer would otherwise have to re-derive from `view` itself
+        // does).
+        family,
+        weight,
         paragraphBreak: firstLineOfParagraph && paragraph.forcedBreak,
       });
       firstLineOfParagraph = false;
@@ -590,7 +640,7 @@ const NARROWEST_PER_CHAR = 'ज्ञानेश्वर श्रद्धा
 // So the budget is POURED rather than computed: calibration copy is run
 // through this block's own real gaps - the same gaps the story will be set
 // in, photographs and all - and what lands is what the block holds.
-function capacityChars(measures, fontPx, family, sample = CALIBRATION) {
+function capacityChars(measures, fontPx, family, sample = CALIBRATION, letterSpacingPx = 0) {
   const pieces = breakPieces(sample);
   if (!pieces.length) return 0;
   let chars = 0;
@@ -600,7 +650,7 @@ function capacityChars(measures, fontPx, family, sample = CALIBRATION) {
     let width = 0;
     while (true) {
       const piece = pieces[at % pieces.length];
-      const pieceWidth = measure(piece, fontPx, family, 400);
+      const pieceWidth = measure(piece, fontPx, family, 400, letterSpacingPx);
       if (line && width + pieceWidth > measureWidthPx + 0.5) break;
       if (!line && pieceWidth > measureWidthPx + 0.5) { line = piece; at += 1; break; }
       line += piece;
@@ -672,6 +722,11 @@ export function composeBlock(input = {}) {
   // not a taste setting. Read from the font rather than guessed.
   const floor = minLineHeightFor(bodyFamily, 400);
   const lineHeight = Math.max(floor, num(input.lineHeight, floor));
+  // Zero is the ordinary case and a real, legal choice - never clamped to a
+  // minimum the way font sizes are. A negative value (tracking IN, not out)
+  // is bounded so a run cannot be measured as narrower than its own glyphs.
+  const letterSpacingPx = Math.max(-2, Number(input.letterSpacingPx) || 0);
+  const paragraphSpacingPx = Math.max(0, num(input.paragraphSpacingPx, 0));
 
   const images = (input.images || []).filter(Boolean);
   const violations = [];
@@ -733,6 +788,7 @@ export function composeBlock(input = {}) {
       family: flow.family,
       weight: flow.weight,
       maxLines: flow.maxLines,
+      letterSpacingPx,
     }, { locked: flow.locked, minPx: flow.min });
 
     result.bands[flow.key] = {
@@ -787,6 +843,8 @@ export function composeBlock(input = {}) {
     family: bodyFamily,
     weight: 400,
     align: input.textAlign || 'left',
+    paragraphSpacingPx,
+    letterSpacingPx,
   });
 
   result.bodyLines = body.lines;
@@ -843,7 +901,7 @@ export function composeBlock(input = {}) {
     largestHoleLines: Number(Math.max(bottomResidualLines, unexplainedLines).toFixed(2)),
   };
 
-  const pour = (sample) => Math.floor(capacityChars(body.measures, bodyPx, bodyFamily, sample) * BUDGET_SAFETY);
+  const pour = (sample) => Math.floor(capacityChars(body.measures, bodyPx, bodyFamily, sample, letterSpacingPx) * BUDGET_SAFETY);
   const charCapacity = pour(CALIBRATION);
   // The ends of the range are whichever samples actually pack worst and best
   // in THIS measure, not whichever was expected to. In a narrow column long
@@ -901,6 +959,7 @@ export function composeBlock(input = {}) {
   result.fingerprint = hash([
     ENGINE_VERSION, width, height, padding, bodyPx, lineHeight, bodyFamily, input.textAlign,
     input.headlineFontPx, input.subheadingFontPx, input.columnCount,
+    letterSpacingPx, paragraphSpacingPx,
     input.kicker, input.headline, input.subheading, bodyPlainText,
     JSON.stringify((typeof bodyInput === 'object' && bodyInput.marks) || []),
     images.map((i) => `${i.x},${i.y},${i.width},${i.height},${i.shape},${i.rotation || 0},${i.mask ? `${i.mask.rows}x${i.mask.cols}` : ''}`).join('|'),

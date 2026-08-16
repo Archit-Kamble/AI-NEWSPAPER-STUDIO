@@ -158,6 +158,12 @@ export function composeSection(section = {}, view = {}) {
     // assumes. Wiring it here is what makes a desk's "justify" choice
     // actually change the geometry rather than being silently ignored.
     textAlign: pick(section, view, 'textAlign', 'text_align', 'left'),
+    // The persisted paragraph gap (schema.sql: paragraph_spacing_px, default
+    // 8) - previously read by nothing in this engine, the same class of gap
+    // as textAlign above: a real, already-wired desk control with no effect
+    // on the actual geometry.
+    paragraphSpacingPx: positive(pick(section, view, 'paragraphSpacingPx', 'paragraph_spacing_px', 0), 0),
+    letterSpacingPx: Number(pick(section, view, 'letterSpacingPx', 'letter_spacing_px', 0)) || 0,
     columnCount: measureColumns(section, view, width),
     headlineLocked: Boolean(pick(section, view, 'headlineLocked', 'headline_locked', false)),
     subheadingLocked: Boolean(pick(section, view, 'subheadingLocked', 'subheading_locked', false)),

@@ -18,6 +18,19 @@ const SHAPES = [
   ["cutout", "Cut-out"],
 ];
 
+// How the picture (after crop) resolves into its placement frame - one
+// shared resolver (image-geometry.js) is the only place fit math actually
+// happens; this only renders the choice and forwards it. Distinct from
+// "Fit to block"/"Fit inside block" below, which move/resize the FRAME
+// itself - frame geometry and how the source fills that frame are different
+// axes, and conflating them was exactly Problem #10 (paint always drew
+// `contain` no matter what a desk chose here).
+const FIT_MODES = [
+  ["contain", "Contain"],
+  ["cover", "Cover"],
+  ["stretch", "Stretch"],
+];
+
 const ALIGN_BUTTONS = [
   ["left", "Align left"], ["center", "Align center"], ["right", "Align right"],
   ["top", "Align top"], ["middle", "Align middle"], ["bottom", "Align bottom"],
@@ -106,6 +119,14 @@ export function renderPictureControls(images, selectedId, block, selectedIds = [
       ${SHAPES.map(
         ([key, label]) =>
           `<button type="button" class="segment${(image.shape || "rect") === key ? " active" : ""}" data-picture-shape="${key}">${label}</button>`,
+      ).join("")}
+    </div>
+
+    <label class="preview-label">Fit</label>
+    <div class="segmented">
+      ${FIT_MODES.map(
+        ([key, label]) =>
+          `<button type="button" class="segment${(image.fit_mode || "contain") === key ? " active" : ""}" data-picture-fit="${key}">${label}</button>`,
       ).join("")}
     </div>
 
@@ -236,6 +257,9 @@ export function bindPictureControls(callbacks) {
 
     const shape = event.target.closest("[data-picture-shape]");
     if (shape) return callbacks.onPatchImage?.(image.id, { shape: shape.dataset.pictureShape });
+
+    const fit = event.target.closest("[data-picture-fit]");
+    if (fit) return callbacks.onPatchImage?.(image.id, { fitMode: fit.dataset.pictureFit });
 
     const action = event.target.closest("[data-picture-do]")?.dataset.pictureDo;
     if (!action) return;

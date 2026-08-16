@@ -9,6 +9,29 @@
 //
 // This is the same rule the template catalog learned (CLAUDE.md): one
 // definition, read by everyone, or the copies drift.
+//
+// Fit itself now reads image-geometry.js's one resolver rather than
+// hardcoding `contain` - the desk's actual Contain/Cover/Stretch choice
+// (section_images.fit_mode) finally has an effect on the page, not only on
+// its own isolated preview.
+//
+// The frame/box math (size, rotation axis-swap, translate+rotate+flip) is
+// unchanged from before this - image-geometry.js computes the SAME
+// rotation-aware local target this file already turned a quarter-turned
+// picture into. What changed is which native `object-fit` value fills that
+// box, driven by fitMode instead of always `contain`.
+//
+// This paints correctly for the crop-is-the-whole-source case, which is
+// every row today - nothing in the UI sets a non-default crop yet (D1 only
+// makes the COLUMNS real; a crop UI is explicitly out of scope for this
+// phase). object-fit/object-position cannot represent an arbitrary crop
+// RECTANGLE combined with cover/stretch on its own; when a crop UI exists,
+// this needs to move to explicit background-image sizing instead of relying
+// on the browser's own fit math. Documented here rather than silently
+// getting it wrong the day a crop control ships.
+import { resolvePlacedImage } from "./image-geometry.js";
+
+const OBJECT_FIT = { contain: "contain", cover: "cover", stretch: "fill" };
 
 /**
  * The frame and the picture inside it, as inline styles.
@@ -17,17 +40,15 @@
  * in block pixels already, and the page's magnification in the editor.
  */
 export function placedPictureStyle(row, scale = 1) {
-  const width = Number(row.width_px) / scale;
-  const height = Number(row.height_px) / scale;
-  const turn = (((Number(row.rotation) || 0) % 360) + 360) % 360;
-  // A quarter turn swaps the box, so the picture inside is set to the box's
-  // other way round and then turned into place. Without this a portrait turned
-  // on its side was squeezed into a landscape box instead of lying down in it.
-  const quarter = turn % 180 !== 0;
+  const resolved = resolvePlacedImage(row);
+  const { frame: frameBox, localTarget, rotation, flipH, flipV } = resolved;
+
+  const width = frameBox.width / scale;
+  const height = frameBox.height / scale;
 
   const frame = [
-    `left:${Number(row.x_px) / scale}px`,
-    `top:${Number(row.y_px) / scale}px`,
+    `left:${frameBox.x / scale}px`,
+    `top:${frameBox.y / scale}px`,
     `width:${width}px`,
     `height:${height}px`,
     `z-index:${Number(row.z_index) || 1}`,
@@ -37,16 +58,12 @@ export function placedPictureStyle(row, scale = 1) {
     "position:absolute",
     "left:50%",
     "top:50%",
-    `width:${quarter ? height : width}px`,
-    `height:${quarter ? width : height}px`,
-    // Never `cover`. A placement carries the picture's own proportions, so
-    // there is nothing to crop - and where it does not, cropping silently
-    // throws away the top of somebody's head rather than showing the desk that
-    // the box is wrong.
-    "object-fit:contain",
-    `transform:translate(-50%, -50%) rotate(${turn}deg)`
-      + (row.flip_h ? " scaleX(-1)" : "")
-      + (row.flip_v ? " scaleY(-1)" : ""),
+    `width:${localTarget.width / scale}px`,
+    `height:${localTarget.height / scale}px`,
+    `object-fit:${OBJECT_FIT[resolved.fitMode]}`,
+    `transform:translate(-50%, -50%) rotate(${rotation}deg)`
+      + (flipH ? " scaleX(-1)" : "")
+      + (flipV ? " scaleY(-1)" : ""),
     row.shape === "ellipse" ? "border-radius:50%" : "",
   ].filter(Boolean).join(";");
 

@@ -420,6 +420,7 @@ function imagePatchLabel(patch) {
   if ("width" in patch || "height" in patch) return "Picture resized";
   if ("x" in patch || "y" in patch) return "Picture moved";
   if ("shape" in patch) return "Picture shape changed";
+  if ("fitMode" in patch) return "Picture fit changed";
   return "Picture changed";
 }
 

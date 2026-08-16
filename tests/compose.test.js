@@ -772,3 +772,110 @@ test('a mask fingerprint change is a different block fingerprint, at the same bo
   const withMaskB = compose.composeBlock({ ...frame, images: [{ ...image, mask: { rows: 2, cols: 2, cells: [[1, 0], [1, 0]] } }] });
   assert.notEqual(withMaskA.fingerprint, withMaskB.fingerprint);
 });
+
+// ------------------------------------------ variable-row bottom safety (bug 1) ---
+// dfd57ee's per-line geometry could keep a pass-0 (base-height) attempt even
+// when the run actually placed needed more height than the column had left -
+// silently painting a run outside its own line box while still reporting
+// FITS. A row must never be committed shorter than what it actually holds.
+
+test('a tall run that cannot fit the current column bottom is never painted undersized - it is real overset instead (test A)', () => {
+  const text = 'साधा मजकूर आणि शेवटी मोठाशब्द';
+  const bigStart = text.indexOf('मोठाशब्द');
+  const result = compose.composeBlock({
+    width: 180, height: 95, padding: 10, bodyFontPx: 16, lineHeight: 1.25, columnCount: 1,
+    body: { text, marks: [{ start: bigStart, end: bigStart + 8, tag: 'size', value: 40 }] },
+  });
+  assert.equal(result.fitState, 'OVERSET', 'a run with no column tall enough for it must never report FITS');
+  assert.ok(result.overset.body.includes('मोठाशब्द'), 'the unplaceable run must be real overset, not a shrunk-to-fit line');
+  assert.ok(!result.bodyLines.some((l) => l.text.includes('मोठाशब्द')), 'it must not be painted into an undersized line box either');
+});
+
+test('a tall run retries at the next column instead of being clipped in the first (test A, positive case)', () => {
+  const text = 'साधा मजकूर आणि शेवटी मोठाशब्द';
+  const bigStart = text.indexOf('मोठाशब्द');
+  const result = compose.composeBlock({
+    width: 380, height: 95, padding: 10, bodyFontPx: 16, lineHeight: 1.25, columnCount: 2,
+    body: { text, marks: [{ start: bigStart, end: bigStart + 8, tag: 'size', value: 40 }] },
+  });
+  assert.equal(result.fitState, 'FITS', 'a second column with room must be used rather than giving up');
+  const tall = result.bodyLines.find((l) => l.text.includes('मोठाशब्द'));
+  assert.ok(tall, 'the run must actually be placed');
+  assert.ok(tall.x > result.bodyLines[0].x, 'it must land in the SECOND column, not the first');
+  assert.equal(tall.y, result.content.top, 'a retried column starts at its own natural top, not a carried-over Y');
+});
+
+test('every placed line owns at least as much height as the tallest run on it (test B)', () => {
+  const text = 'पहिली ओळ येथे सुरू होते. दुसरी ओळ आहे मोठा शब्द इथे. तिसरी ओळ शेवटची आहे इथे.';
+  const bigStart = text.indexOf('मोठा');
+  const result = compose.composeBlock({
+    width: 180, height: 400, padding: 10, bodyFontPx: 16, lineHeight: 1.25, columnCount: 1,
+    body: { text, marks: [{ start: bigStart, end: bigStart + 4, tag: 'size', value: 40 }] },
+  });
+  const floor = compose.composeBlock({ width: 180, height: 400, padding: 10, bodyFontPx: 16, lineHeight: 1.25, columnCount: 1, body: text }).bodyLines[0].height;
+  for (const line of result.bodyLines) {
+    const required = line.text.includes('मोठा') ? 40 * (floor / 16) : floor;
+    assert.ok(line.height >= required - 0.5, `line ${JSON.stringify(line.text)} must own at least ${required}px, got ${line.height}`);
+  }
+});
+
+test('no placed line extends below the frame\'s own content bottom (test C)', () => {
+  const text = 'पहिली ओळ येथे सुरू होते. दुसरी ओळ आहे मोठा शब्द इथे. तिसरी ओळ शेवटची आहे इथे.';
+  const bigStart = text.indexOf('मोठा');
+  const result = compose.composeBlock({
+    width: 180, height: 130, padding: 10, bodyFontPx: 16, lineHeight: 1.25, columnCount: 1,
+    body: { text, marks: [{ start: bigStart, end: bigStart + 4, tag: 'size', value: 40 }] },
+  });
+  for (const line of result.bodyLines) {
+    assert.ok(line.y + line.height <= result.content.bottom + 0.5,
+      `line ${JSON.stringify(line.text)} bottom ${line.y + line.height} must not exceed content.bottom ${result.content.bottom}`);
+  }
+});
+
+// ---------------------------------------- cross-column paragraph spacing (bug 2) ---
+
+const TWO_COLUMN_FRAME = { width: 400, height: 260, padding: 10, bodyFontPx: 14, lineHeight: 1.25, columnCount: 2 };
+const FIRST_PARAGRAPH = 'पहिला परिच्छेद मजकूर '.repeat(15);
+const SECOND_PARAGRAPH = 'दुसरा परिच्छेद नवीन स्तंभात सुरू होतो.';
+const TWO_PARAGRAPH_BODY = `${FIRST_PARAGRAPH}\n\n${SECOND_PARAGRAPH}`;
+
+test('paragraph spacing still applies normally within the same column (test D)', () => {
+  const tight = compose.composeBlock({ ...TWO_COLUMN_FRAME, body: 'एक.\n\nदोन.', paragraphSpacingPx: 0 });
+  const spaced = compose.composeBlock({ ...TWO_COLUMN_FRAME, body: 'एक.\n\nदोन.', paragraphSpacingPx: 8 });
+  const tightSecond = tight.bodyLines.find((l) => l.paragraphBreak);
+  const spacedSecond = spaced.bodyLines.find((l) => l.paragraphBreak);
+  assert.equal(tightSecond.x, spacedSecond.x, 'both must still land in the same (first) column');
+  assert.ok(spacedSecond.y > tightSecond.y, 'a positive paragraphSpacingPx must still push the second paragraph down within that column');
+});
+
+test('a paragraph that exhausts a column starts the next paragraph at the natural top of the next column, not a carried-over Y (test E)', () => {
+  const result = compose.composeBlock({ ...TWO_COLUMN_FRAME, body: TWO_PARAGRAPH_BODY, paragraphSpacingPx: 8 });
+  assert.equal(result.overset.body, '', 'the second paragraph must actually be placed, not lost to a phantom cross-column gap (BUG 2)');
+  const first = result.bodyLines.filter((l) => !l.paragraphBreak);
+  const second = result.bodyLines.find((l) => l.paragraphBreak);
+  assert.ok(second, 'the second paragraph must have a line at all');
+  assert.ok(second.x > first[0].x, 'the second paragraph must be in the SECOND column');
+  assert.equal(second.y, result.content.top, 'it must start at that column\'s own natural top, not near the first column\'s old bottom');
+});
+
+test('the same cross-column transition after a tall inline run does not inherit that run\'s column Y either (test F)', () => {
+  // Enough filler that the tall run lands late in column 1 - but still
+  // WITHIN it - so paragraph spacing is what pushes paragraph 2 out to
+  // column 2, not the tall run itself (a different case from BUG 1's own
+  // retry-next-column path, already covered above).
+  const filler = 'पहिला परिच्छेद मजकूर '.repeat(11);
+  const bigWord = 'मोठाशब्द';
+  const body = `${filler}${bigWord}\n\n${SECOND_PARAGRAPH}`;
+  const bigStart = filler.length;
+  const result = compose.composeBlock({
+    ...TWO_COLUMN_FRAME, paragraphSpacingPx: 8,
+    body: { text: body, marks: [{ start: bigStart, end: bigStart + bigWord.length, tag: 'size', value: 32 }] },
+  });
+  const tall = result.bodyLines.find((l) => l.text.includes('मोठाशब्द'));
+  assert.ok(tall, 'the tall run itself must still land in the FIRST column for this fixture');
+  assert.equal(tall.x, result.bodyLines[0].x);
+  const second = result.bodyLines.find((l) => l.paragraphBreak);
+  assert.ok(second, 'the second paragraph must still be placed after a tall run precedes it');
+  assert.ok(second.x > tall.x, 'the second paragraph must be pushed into the SECOND column');
+  assert.equal(second.y, result.content.top, 'no absolute Y from the tall run\'s column may leak into the next paragraph\'s column');
+});

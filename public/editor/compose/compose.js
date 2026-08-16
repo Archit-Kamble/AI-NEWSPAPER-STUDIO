@@ -477,18 +477,22 @@ function pourBody(bodyInput, {
    * `pieces` (from `index`/`paraCharOffset`) as fits. Re-measured once at a
    * taller height if any run actually placed needs more than the row was
    * opened at (bounded: at most two passes, matching every other budget in
-   * this engine). If there is no room for the taller height, the first
-   * pass's placement is kept rather than discarded - the text it already
-   * fit is real and correct; only the reported line box may be a little
-   * short in that narrow, bottom-of-frame corner case.
+   * this engine).
+   *
+   * If the column does not have room for the height a run actually needs,
+   * this row is never committed at the wrong (undersized) height - that
+   * would silently paint a line box a run overflows while still reporting
+   * FITS. Instead this returns `{ retryNextColumn: true }`: no text is
+   * consumed, so the caller can retry the exact same unplaced text at the
+   * top of the next column, or - if there is no next column - let it fall
+   * through to ordinary overset accounting.
    */
   function fillRow(cursor, pieces, index, paraCharOffset, paragraphOffset) {
     let height = bandHeight;
-    let attempt = null;
 
     for (let pass = 0; pass < 2; pass += 1) {
       const row = cursor.probe(height);
-      if (!row) return attempt;
+      if (!row) return null;
 
       const placed = [];
       let cursorIndex = index;
@@ -537,19 +541,33 @@ function pourBody(bodyInput, {
         placed.push({ text: trimmed, at: lineStartOffset, x: gap.start, width: drawn, measure: measureWidthPx, hardOverset });
       }
 
-      attempt = { row, placed, cursorIndex, cursorOffset, height };
-
       const requiredHeight = placed.reduce((max, p) => {
         if (p.empty) return max;
         const size = maxSizeIn(p.at, p.at + p.text.length);
         return size ? Math.max(max, size * lineHeight) : max;
       }, bandHeight);
 
-      if (Math.abs(requiredHeight - height) < 0.25 || pass === 1 || !cursor.hasRoom(requiredHeight)) break;
+      if (Math.abs(requiredHeight - height) < 0.25) {
+        return { row, placed, cursorIndex, cursorOffset, height };
+      }
+
+      if (pass === 1) {
+        // Bounded: no third pass. Accept the already-fitted placement only
+        // if the column genuinely has room for what it needs; a row can
+        // never be committed shorter than the tallest run actually placed
+        // on it (see BUG 1) - `height` is stamped to `requiredHeight`
+        // itself here rather than queried a third time, the same bounded
+        // imprecision this engine already accepts elsewhere (GSUB/GPOS not
+        // modelled, "the safe direction, deliberately").
+        if (cursor.hasRoom(requiredHeight)) return { row, placed, cursorIndex, cursorOffset, height: requiredHeight };
+        return { retryNextColumn: true };
+      }
+
+      if (!cursor.hasRoom(requiredHeight)) return { retryNextColumn: true };
       height = requiredHeight;
     }
 
-    return attempt;
+    return null;
   }
 
   const lines = [];
@@ -563,6 +581,15 @@ function pourBody(bodyInput, {
   let emptyGapWidth = 0;
   let overset = '';
   let colIndex = 0;
+  // Which column the last COMMITTED line actually landed in - paragraph
+  // spacing below is only ever meaningful as "more air in the column this
+  // paragraph is already sitting in". Once `colIndex` has moved past that
+  // column (the previous paragraph ran out of room there, or a tall run got
+  // retried into a later column - BUG 1's path), the OLD column's absolute Y
+  // means nothing in the new column's own coordinate space; carrying it
+  // across silently ate the whole next column trying to reach a Y position
+  // that column will never have (BUG 2).
+  let lastLineColumnIndex = null;
 
   const paragraphs = splitParagraphs(text, marks);
 
@@ -570,15 +597,18 @@ function pourBody(bodyInput, {
     // Paragraph spacing: this paragraph's first row must start at or after
     // the PREVIOUS row's real bottom (whatever that row's own finalized
     // height turned out to be - it may have been a tall one) plus the air a
-    // real paragraph gets. A forced break already lands on a fresh row (see
-    // below), so this only ever skips whole rows, never a partial one.
-    if (paragraph.forcedBreak && paragraphSpacingPx > 0 && lines.length) {
+    // real paragraph gets - but ONLY while still in the same column the
+    // previous paragraph ended in. A forced break already lands on a fresh
+    // row (see below), so this only ever skips whole rows, never a partial
+    // one, and a column change always lands at that column's own natural
+    // top, never at an imported Y from the column before it.
+    if (paragraph.forcedBreak && paragraphSpacingPx > 0 && lines.length && colIndex === lastLineColumnIndex) {
       const nextY = lines[lines.length - 1].y + lines[lines.length - 1].height + paragraphSpacingPx;
-      while (colIndex < cursors.length) {
-        if (!cursors[colIndex].hasRoom(bandHeight)) { colIndex += 1; continue; }
+      while (colIndex === lastLineColumnIndex && colIndex < cursors.length) {
+        if (!cursors[colIndex].hasRoom(bandHeight)) { colIndex += 1; break; }
         if (cursors[colIndex].y >= nextY - 0.5) break;
         const row = cursors[colIndex].probe(bandHeight);
-        if (!row) { colIndex += 1; continue; }
+        if (!row) { colIndex += 1; break; }
         for (const gap of row.gaps) emptyGapWidth += gap.end - gap.start;
         cursors[colIndex].commit(bandHeight);
       }
@@ -607,7 +637,11 @@ function pourBody(bodyInput, {
 
       const cursor = cursors[colIndex];
       const result = fillRow(cursor, pieces, index, paraCharOffset, paragraph.offset);
-      if (!result) { colIndex += 1; continue; }
+      // Either no room at the ordinary height at all, or a run on this row
+      // needs more height than this column has left (BUG 1) - either way,
+      // nothing was consumed, so the same text is retried at the next
+      // column rather than committed into an undersized line box.
+      if (!result || result.retryNextColumn) { colIndex += 1; continue; }
 
       for (const p of result.placed) {
         if (p.empty) { emptyGapWidth += p.width; continue; }
@@ -653,6 +687,7 @@ function pourBody(bodyInput, {
       }
 
       cursor.commit(result.height);
+      lastLineColumnIndex = colIndex;
       index = result.cursorIndex;
       paraCharOffset = result.cursorOffset;
     }

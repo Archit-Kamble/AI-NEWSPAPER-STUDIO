@@ -77,6 +77,17 @@ async function textFlow() {
   return flowModule;
 }
 
+// A Smart Card too small for its own block used to just clip (or, before
+// that, silently render at whichever of three disagreeing hardcoded sizes
+// its container happened to apply) - never a signal a press-readiness check
+// could see. smartCardFitState() answers the same question smartCardMarkup()
+// already does while drawing, without drawing anything.
+let smartCardModule = null;
+async function smartCards() {
+  if (!smartCardModule) smartCardModule = await import('../../public/editor/smart-cards/smart-cards.js');
+  return smartCardModule;
+}
+
 // The exact composition engine, for the one check that has to agree with
 // fit.service.js exactly: whether a block's REAL copy actually fits. Both
 // used to ask text-flow.js's approximate character grid, each with its own
@@ -187,6 +198,28 @@ async function checkPage(page, newspaper, totalPages) {
         findings.push({
           level: 'error', check: 'overset', ...at(section),
           message: `${adapter.bodyOversetChars(composed)} characters more than this block holds. Cut it, or carry it over.`,
+        });
+      }
+    }
+
+    // --- a Smart Card too small for its own block --------------------------
+    // The same geometry solve smartCardMarkup() draws from (layout.js),
+    // asked without drawing anything - a card that would print at a legible
+    // FLOOR size rather than its block's true measure is a real press
+    // problem (SMART_CARD_OVERSET), not a cosmetic one, so it is an error
+    // for a printable page exactly like text overset is above.
+    if (section.smart_card_key && section.smart_card_data) {
+      const { smartCardFitState } = await smartCards();
+      const view = flowViewFromSection(section);
+      const padding = Number(view.marginPx) || 12;
+      const map = buildFlowMap(section, view, []);
+      const reservedHeight = ((map.kickerRows || 0) + (map.headlineRows || 0) + (map.subheadingRows || 0)) * (map.cellHeight || 0);
+      const contentHeight = Math.max(0, Number(section.height_px) - padding * 2 - reservedHeight);
+      const frame = { width: Number(section.width_px) || 0, height: contentHeight + padding * 2, padding };
+      if (smartCardFitState(section.smart_card_key, section.smart_card_data, frame) === 'OVERSET') {
+        findings.push({
+          level: 'error', check: 'smart-card-overset', ...at(section),
+          message: 'This Smart Card does not fit its block at a legible size. Widen or heighten the block, or reduce what the card holds.',
         });
       }
     }
@@ -393,7 +426,7 @@ const COLLISION_TYPES = {
   'image-companion-orphan': 'IMAGE_COMPANION_ORPHAN',
   'required-frame-policy-missing': 'REQUIRED_FRAME_POLICY_MISSING',
 };
-const OVERFLOW_TYPES = { overset: 'TEXT_OVERFLOW' };
+const OVERFLOW_TYPES = { overset: 'TEXT_OVERFLOW', 'smart-card-overset': 'SMART_CARD_OVERSET' };
 
 /**
  * The general collision layer for one page, in the shape a layout engine (or

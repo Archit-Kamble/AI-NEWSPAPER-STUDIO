@@ -3208,7 +3208,7 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
    Smart Card there is. `flex:1` fills the same remaining space `inset:0`
    claimed when there is no headline to share it with, so a card-only block
    (no separate heading) is unchanged. */
-.section-feature { flex: 1 1 auto; min-height: 0; display: grid; place-items: center; padding: 2px; overflow: hidden; }
+.section-feature { flex: 1 1 auto; min-height: 0; padding: 2px; }
 .feature-grid {
   border-collapse: collapse;
   table-layout: fixed;
@@ -3245,11 +3245,17 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 /* ---------------------------------------------------------------------------
    Smart Cards, drawn from their own data.
 
-   One set of rules, used by the page canvas and by the editor's preview, so
-   the card a desk approves is the card that prints. Sizes are given in `em` so
-   the same markup can be set at 7px inside a block on the page and at reading
-   size in the editor - the shape of the thing does not change, only its
-   measure. See public/editor/smart-cards/smart-cards.js.
+   One renderer (public/editor/smart-cards/smart-cards.js) used by the page
+   canvas, the Block Editor and the AI proposal preview, and ONE geometry
+   solver (public/editor/smart-cards/layout.js) that decides the actual
+   font-size and cell/row geometry from the block's own logical width and
+   height - not a CSS class. This file used to hardcode three disagreeing
+   sizes for three contexts (7px on the page, 9px in a dead editor rule,
+   13-15px in the preview); font-size is now an INLINE style the renderer
+   writes per block, and the rules below are structural only (borders,
+   spacing, alignment) - a Smart Card's actual measure lives in JS, where the
+   block's real size is, so the page and the editor cannot disagree about it
+   again the way they did before.
    --------------------------------------------------------------------------- */
 .smart-card {
   width: 100%;
@@ -3283,7 +3289,6 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   vertical-align: middle;
   padding: 0;
   line-height: 1;
-  font-size: 0.95em;
 }
 .smart-card-grid-table td.box-right { border-right-width: 1.2px; border-right-color: #333; }
 .smart-card-grid-table td.box-bottom { border-bottom-width: 1.2px; border-bottom-color: #333; }
@@ -3321,14 +3326,17 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 
 .smart-card-list { margin: 0; padding-left: 1em; display: grid; gap: 0.2em; line-height: var(--devanagari-line); }
 
-/* On the page a card is set at the block's own small measure. */
-.section-feature .smart-card { font-size: 7px; }
-.section-feature .smart-card-table,
-.section-feature .smart-card-rashi,
-.section-feature .smart-card-list,
-.section-feature .smart-card-quote { font-size: 6.5px; }
+/* A card too small for its own block - still drawn at a legible minimum
+   (layout.js clamps rather than shrinking past it), flagged rather than
+   silently clipped or deleted. */
+.smart-card.is-overset { outline: 1px dashed #c41e3a; outline-offset: -1px; }
+.smart-card-overset-note { margin: 0 0 0.3em; padding: 0.15em 0.3em; font-size: 0.72em; font-weight: 700; color: #8a1428; background: #fdecee; }
 
-/* In the editor's proposal it is read at reading size. */
+/* The AI proposal's own review copy of the card - solved against the SAME
+   logical frame the real block uses (smart-card-panel.js passes result.frame
+   straight through), then the whole drawn card is scaled up as one object
+   for comfortable reading here. The font-size a desk sees while reviewing is
+   therefore not a separate number - it is the same solve, enlarged. */
 .smart-card-preview {
   margin: var(--s2) 0;
   padding: var(--s3);
@@ -3337,22 +3345,10 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   background: #fcfcfd;
   max-height: 420px;
   overflow: auto;
+  position: relative;
 }
-.smart-card-preview .smart-card { font-size: 13px; }
-.smart-card-preview .smart-card-grid-table { max-width: 320px; margin: 0 auto; }
-.smart-card-preview .smart-card-grid-table td { height: 30px; font-size: 15px; }
 
 /* What card this block is already holding, and the way to take it back off. */
-/* The card inside the block's own page in the editor. Set at the block's real
-   measure, so what is on screen is the size it prints. */
-.frame-card {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  display: grid;
-  place-items: stretch;
-}
-.frame-card .smart-card { font-size: 9px; }
 
 /* The batch, as a list the desk works down one block at a time. */
 .bulk-list { margin: 0; padding: 0; list-style: none; }

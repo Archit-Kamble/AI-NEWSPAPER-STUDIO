@@ -187,6 +187,26 @@ function contentMarkup(section, view) {
 }
 
 /**
+ * The logical frame a Smart Card in this block has to solve against -
+ * layoutSmartCard()'s own `{width, height, padding}` contract, in newspaper
+ * pixels (never screen or editor-zoomed pixels - the caller's own
+ * transform:scale() enlarges the WHOLE resulting card afterward, same as it
+ * already does for headline/body).
+ */
+export function smartCardFrame(section, view) {
+  const padding = Number(view.marginPx) || 12;
+  const blockHeight = Number(section?.height_px) || 0;
+  // No pictures on a Smart Card block - buildFlowMap() is asked only for its
+  // kicker/headline/subheading row reservation, the same estimate the
+  // non-exact character grid already relies on elsewhere in this file.
+  const map = buildFlowMap(section, view, []);
+  const reservedRows = (map.kickerRows || 0) + (map.headlineRows || 0) + (map.subheadingRows || 0);
+  const reservedHeight = reservedRows * (map.cellHeight || 0);
+  const contentHeight = Math.max(0, blockHeight - padding * 2 - reservedHeight);
+  return { width: Number(section?.width_px) || 0, height: contentHeight + padding * 2, padding };
+}
+
+/**
  * The block's copy - as a TABLE when it is a feature that is read as one.
  *
  * A sudoku reached the page as nine lines of "१ २ · · · ४" because a feature's
@@ -199,7 +219,15 @@ function bodyOrTableMarkup(section, view, columns) {
   // A Smart Card first, and from its OWN data. This is the same renderer the
   // editor's preview draws with, so the block on the page and the card the desk
   // approved cannot be two different things.
-  const card = smartCardMarkup(view.smartCardKey, view.smartCardData);
+  //
+  // The frame it solves against is the block's own logical size, minus the
+  // room a kicker/headline/subheading above it already claims - reused from
+  // buildFlowMap()'s existing row-reservation estimate (the same one the
+  // non-exact character grid already uses for this) rather than a second,
+  // new estimate. Padding is folded back into the passed height so
+  // layoutSmartCard()'s own `frame.height - padding*2` still lands on the
+  // correct remaining space.
+  const card = smartCardMarkup(view.smartCardKey, view.smartCardData, smartCardFrame(section, view));
   if (card) return `<div class="section-feature">${card}</div>`;
 
   if (!view.body) return "";
@@ -328,7 +356,7 @@ export function flowedBodyMarkup(map, view, pad) {
 // publication font has loaded, so a fallback measurement never becomes what
 // the desk approves.
 export function sectionContentMarkup(section, view) {
-  const hasCard = Boolean(smartCardMarkup(view.smartCardKey, view.smartCardData));
+  const hasCard = Boolean(smartCardMarkup(view.smartCardKey, view.smartCardData, smartCardFrame(section, view)));
   if (hasCard) return contentMarkup(section, view);
 
   if (!fontsReady()) {

@@ -54,6 +54,7 @@ import * as history from "./history/history.js";
 import * as autosave from "./autosave/autosave.js";
 import { draftFromSection, draftFromStory, payloadFromDraft, viewOfSection } from "./section-model.js";
 import { canRenderSmartCard, smartCardText } from "./smart-cards/smart-cards.js";
+import { smartCardFrame } from "./canvas/section-thumb.js";
 import { candidatesOn, runBulk } from "./external-editor/bulk-generate.js";
 import { computeAlignment } from "./external-editor/align.js";
 import { escapeHtml, closeOnEscape } from "./format.js";
@@ -568,6 +569,11 @@ async function requestSmartCard({ key, variant }) {
     proposal: { headline: result.title || "", subheading: result.subtitle || "", body },
     source: result.writtenBy ? "written" : key === "dinvishesh" ? "curated" : "computed",
     fit: { bodyCharBudget: budget, charsUsed, charsRemaining: Math.max(0, budget - charsUsed) },
+    // The SAME logical frame the block will solve the card against once
+    // accepted - the proposal preview draws from this too (scaled up as one
+    // object for comfortable reading), so a desk reviews the card at the
+    // size and shape it will actually print, not a differently-solved one.
+    frame: smartCardFrame(section, view),
   };
 }
 

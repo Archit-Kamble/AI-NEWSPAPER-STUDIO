@@ -37,8 +37,11 @@ import { smartCardMarkup } from "../smart-cards/smart-cards.js";
 // The same functions the page canvas draws a headline, a deck and a flowed
 // body with - so the WYSIWYG frame and the newspaper page can never drift
 // onto two different renderings of the same block, the way the
-// headline/subheading inputs and the canvas once did.
-import { sectionContentMarkup, sectionComposition } from "../canvas/section-thumb.js";
+// headline/subheading inputs and the canvas once did. smartCardFrame() is
+// the SAME logical width/height/padding solve the page canvas passes a
+// Smart Card - reused rather than re-derived, so "does this card fit" can
+// never disagree between the two.
+import { sectionContentMarkup, sectionComposition, smartCardFrame } from "../canvas/section-thumb.js";
 // The same six words the Typography panel's "Editing: X" label uses - one
 // catalog for what a selected object is called, not two that could drift.
 import { PART_LABEL } from "./typography-panel.js";
@@ -227,7 +230,8 @@ function layoutPage() {
  */
 function layoutCard() {
   const writing = document.getElementById("edWritingSurface");
-  const hasCard = Boolean(smartCardMarkup(state.view?.smartCardKey, state.view?.smartCardData));
+  const frame = state.section && state.view ? smartCardFrame(state.section, state.view) : undefined;
+  const hasCard = Boolean(smartCardMarkup(state.view?.smartCardKey, state.view?.smartCardData, frame));
   if (writing) writing.hidden = hasCard;
   return hasCard;
 }

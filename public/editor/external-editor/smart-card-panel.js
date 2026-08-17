@@ -64,18 +64,33 @@ function proposalMarkup(result) {
   const proposal = result.proposal;
   const source = result.source === "written" ? "AI draft — review required" : result.source === "curated" ? "Checked desk data" : "Calculated in SAHAS";
 
-  // The card, drawn as it will print. Only falls back to the text when there is
-  // no renderer for this key - and a new card must never need that.
+  // The card, drawn as it will print - solved against the SAME logical
+  // frame (result.frame, from workspace.js's requestSmartCard()) the real
+  // block will use once accepted, then the WHOLE drawn object is scaled up
+  // here for comfortable reading. Never re-solved at a different width -
+  // that would hand rashi a different column count, or every card a
+  // different font size, than what the block will actually get once
+  // accepted, so a desk would be approving a card that isn't quite the one
+  // that prints. Only falls back to the text when there is no renderer for
+  // this key - and a new card must never need that.
+  const frame = result.frame || { width: 260, height: 260, padding: 8 };
   const drawn = result.smartCardKey && canRenderSmartCard(result.smartCardKey)
-    ? smartCardMarkup(result.smartCardKey, result.smartCardData)
+    ? smartCardMarkup(result.smartCardKey, result.smartCardData, frame)
     : null;
+
+  // Enlarged for reading, capped so a small block's card is not blown up to
+  // something absurd - the point here is legibility, not a magnifying glass.
+  const PREVIEW_WIDTH_PX = 280;
+  const scale = drawn && frame.width > 0 ? Math.min(2.6, Math.max(1, PREVIEW_WIDTH_PX / frame.width)) : 1;
+  const previewInner = drawn
+    ? `<div style="width:${frame.width}px;height:${frame.height}px;transform:scale(${scale});transform-origin:top left">${drawn}</div>`
+    : `<p>${escapeHtml(proposal.body).replace(/\n/g, "<br>")}</p>`;
+  const previewHeightPx = drawn ? Math.ceil(frame.height * scale) : null;
 
   return `<h4>${escapeHtml(proposal.headline)} <span class="muted">${source}</span></h4>
     ${proposal.subheading ? `<p class="smart-card-subtitle">${escapeHtml(proposal.subheading)}</p>` : ""}
     <p class="ai-proposal-fit">${result.fit.charsUsed} of ${result.fit.bodyCharBudget} characters · ${result.fit.charsRemaining} left</p>
-    <div class="smart-card-preview" id="smartCardPreview">${
-      drawn || `<p>${escapeHtml(proposal.body).replace(/\n/g, "<br>")}</p>`
-    }</div>
+    <div class="smart-card-preview" id="smartCardPreview"${previewHeightPx ? ` style="height:${previewHeightPx}px"` : ""}>${previewInner}</div>
     <div class="ext-editor-toolbar"><button type="button" class="ext-editor-btn ext-editor-btn-primary" id="smartCardAccept">Accept card</button><button type="button" class="ext-editor-btn" id="smartCardDismiss">Discard</button></div>`;
 }
 

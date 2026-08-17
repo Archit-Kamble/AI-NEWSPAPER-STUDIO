@@ -218,7 +218,9 @@ test('panchang and suvichar draw as a table and a quote', async () => {
   const built = await panchang.build(DATE);
 
   const table = smartCardMarkup('panchang', built.card);
-  assert.equal((table.match(/<tr>/g) || []).length, 5, 'five rows');
+  // <tr followed by a space or > - a row now carries its own solved height as
+  // an inline style (layoutSmartCard()), so it is no longer a bare tag.
+  assert.equal((table.match(/<tr[ >]/g) || []).length, 5, 'five rows');
   assert.ok(table.includes('<th>सूर्योदय</th>'));
 
   const quote = smartCardMarkup('suvichar', { text: 'प्रयत्ने वाळूचे कण रगडिता तेलही गळे.', attribution: 'समर्थ रामदास' });

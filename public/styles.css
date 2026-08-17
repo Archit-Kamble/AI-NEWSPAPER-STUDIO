@@ -4642,6 +4642,20 @@ body.print-view .page-imprint {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px rgba(196, 30, 58, 0.10);
 }
+/* A brief pulse when a double-click on the canonical (read-only) frame jumps
+   focus HERE - `is-body-target`'s static border alone was easy to miss,
+   especially once scrolled into view "nearest" (sometimes barely moving),
+   which read as "double-clicking the body does nothing" to a desk who never
+   noticed the jump. Removed again after ~700ms (block-frame.js), so this is
+   a moment, not a permanent look. */
+@keyframes frame-writing-pulse {
+  0%   { box-shadow: 0 0 0 2px rgba(196, 30, 58, 0.10); }
+  30%  { box-shadow: 0 0 0 5px rgba(196, 30, 58, 0.35); }
+  100% { box-shadow: 0 0 0 2px rgba(196, 30, 58, 0.10); }
+}
+.frame-writing-surface.just-activated {
+  animation: frame-writing-pulse 0.7s ease-out;
+}
 .frame-writing-surface:focus-within {
   border-color: var(--accent);
 }

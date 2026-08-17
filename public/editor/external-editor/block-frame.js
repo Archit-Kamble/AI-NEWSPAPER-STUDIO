@@ -552,8 +552,22 @@ function bindTextFrames() {
     hooks.onSelectPart?.("body");
 
     const writing = document.getElementById("edWritingSurface");
-    writing?.classList.add("is-body-target");
-    writing?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    // The canonical frame the desk just double-clicked is a READ-ONLY replica
+    // of the printed page (block-frame.js's own comment above: "the canonical
+    // layer above is the only visual copy") - it cannot become the editable
+    // surface itself without reintroducing a second copy of the words that
+    // could drift from what actually prints, which is the exact bug class
+    // this whole engine exists to prevent. So a double-click has always had
+    // to JUMP to the real Quill box below rather than edit in place - but
+    // `is-body-target`'s static border was too easy to miss, and "nearest"
+    // scrolling can mean barely moving at all when the writing surface is
+    // already partly on screen. A desk who does not notice either cue reads
+    // the whole interaction as "double-clicking the body does nothing" -
+    // this is that report, not a different bug: `just-activated` is a brief,
+    // impossible-to-miss pulse rather than a permanent border colour.
+    writing?.classList.add("is-body-target", "just-activated");
+    writing?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(() => writing?.classList.remove("just-activated"), 700);
 
     requestAnimationFrame(() => {
       if (!quill) return;

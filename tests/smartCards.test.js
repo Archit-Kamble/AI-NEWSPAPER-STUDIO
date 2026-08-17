@@ -204,9 +204,16 @@ test('panchang: a tiny frame returns OVERSET', () => {
 // ---------------------------------------------------------------- suvichar ---
 
 test('suvichar: the quote and its attribution are both present', () => {
+  // A quote this short, in a frame this roomy, now solves at a large enough
+  // font (CANDIDATE_FONT_PX's raised ceiling - the whole point of a "fill
+  // the card" fix) that it legitimately wraps onto more than one
+  // smart-card-line span, exactly like any other Smart Card text - so this
+  // strips markup and compares words, rather than asserting the quote
+  // survives as one unbroken string.
   const data = { text: 'प्रयत्ने वाळूचे कण रगडिता तेलही गळे.', attribution: 'समर्थ रामदास' };
   const html = cards.smartCardMarkup('suvichar', data, FRAME);
-  assert.ok(html.includes('प्रयत्ने वाळूचे कण रगडिता तेलही गळे.'));
+  const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  assert.ok(text.includes('प्रयत्ने वाळूचे कण रगडिता तेलही गळे.'), `quote words missing or reordered: ${text}`);
   assert.ok(html.includes('समर्थ रामदास'));
 });
 
@@ -221,9 +228,15 @@ test('suvichar: fit state is explicit, both ways', () => {
 // -------------------------------------------------------------- dinvishesh ---
 
 test('dinvishesh: all entries are present, in order', () => {
+  // A raised font ceiling (CANDIDATE_FONT_PX) means a short entry list in a
+  // roomy frame can legitimately wrap each entry across several
+  // smart-card-line spans now, not one bare text run per <li> - so this
+  // extracts each <li>'s full text across any nested spans, rather than
+  // assuming no markup ever sits between the tags.
   const data = dinvisheshData();
   const html = cards.smartCardMarkup('dinvishesh', data, FRAME);
-  const items = [...html.matchAll(/<li>([^<]*)<\/li>/g)].map((m) => m[1]);
+  const items = [...html.matchAll(/<li>(.*?)<\/li>/g)]
+    .map((m) => m[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
   assert.equal(items.length, data.entries.length);
   assert.deepEqual(items, data.entries.map((e) => e.text), 'entries must print in the SAME order they were stored');
 });

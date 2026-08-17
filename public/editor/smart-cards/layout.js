@@ -50,7 +50,19 @@ function devanagariDigits(value) {
 }
 
 const MIN_CARD_FONT_PX = 5.5;
-const CANDIDATE_FONT_PX = [9, 8, 7.5, 7, 6.5, 6, MIN_CARD_FONT_PX];
+// solveFont() below already does the right thing - try the LARGEST candidate
+// first, fall back only when it genuinely does not fit - so raising this
+// ladder's ceiling can only ever help a card that has room to spare; a dense
+// card (rashi's twelve signs, a five-row panchang) simply fails every large
+// candidate exactly as before and falls through to the same small sizes this
+// ladder always had. But the ceiling itself used to stop at 9px for every
+// card type alike, tuned against rashi's worst case and never revisited for
+// the others - so a short card in a large frame (a one-line suvichar quote,
+// a two-entry dinvishesh) had no candidate above 9px to grow into and left
+// most of its own block blank. Confirmed live: a real suvichar card (one
+// short quote + attribution) solved at 9px in a frame with room for far
+// more, using under half the block's height.
+const CANDIDATE_FONT_PX = [32, 28, 24, 20, 18, 16, 14, 12, 11, 10, 9, 8, 7.5, 7, 6.5, 6, MIN_CARD_FONT_PX];
 const MIN_SUDOKU_CELL_PX = 10;
 
 // One comfortable-reading multiplier over the face's own clip-free minimum

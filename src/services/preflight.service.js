@@ -212,26 +212,26 @@ async function checkPage(page, newspaper, totalPages) {
       }
     }
 
-    // --- italic/underline copy going to press -------------------------------
-    // Bold and a selected size both reach the press file as a real,
-    // documented Scribus attribute this codebase can verify (a genuinely
-    // separate bold font file; FONTSIZE is just a number). Italic has no
-    // separate font file shipped at all, and underline's Scribus attribute
-    // (FEATURES="underline") has not been checked against a real Scribus
-    // render - there is no Scribus binary in this environment to open the
-    // generated file against. Rather than silently ship copy whose emphasis
-    // may not survive to paper, this is a real, desk-visible warning - "do
-    // not silently drop them" (see scribus.service.js's own note on this).
+    // --- italic copy going to press ------------------------------------------
+    // Bold, underline and a selected size all reach the press file as real,
+    // documented Scribus CharStyle attributes (a genuinely separate bold font
+    // file; FEATURES="underline"; FONTSIZE is just a number) - confirmed
+    // against the actual Scribus 1.6.1 binary's own CharStyle flag names, not
+    // assumed. Italic is different in kind, not just unverified: no Devanagari
+    // face in this publication - or upstream in Noto Serif/Sans Devanagari at
+    // all - ships a true italic style, so `FEATURES="italic"` in the press
+    // file is a synthetic oblique (the same slant Scribus's own Italic toggle
+    // would apply to any font lacking one), and a slanted conjunct can read
+    // worse than an unslanted one. This is a real, desk-visible caution, not
+    // a dropped feature - see scribus.service.js's own note on this.
     if (section.body) {
       const { textWithMarks } = await richText();
       const { marks } = textWithMarks(section.body);
       const hasItalic = marks.some((m) => m.tag === 'i');
-      const hasUnderline = marks.some((m) => m.tag === 'u');
-      if (hasItalic || hasUnderline) {
-        const kinds = [hasItalic && 'italic', hasUnderline && 'underline'].filter(Boolean).join(' and ');
+      if (hasItalic) {
         findings.push({
-          level: 'warning', check: 'unverified-print-emphasis', ...at(section),
-          message: `This story has ${kinds} copy. That emphasis has not been verified against a real Scribus render - check the press file before it goes to plate.`,
+          level: 'warning', check: 'synthetic-italic-print', ...at(section),
+          message: 'This story has italic copy. No Devanagari face this publication ships has a true italic style, so the press file slants the upright letterforms instead - check that it stays legible before it goes to plate.',
         });
       }
     }

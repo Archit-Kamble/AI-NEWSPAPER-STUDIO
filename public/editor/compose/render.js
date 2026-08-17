@@ -16,6 +16,7 @@ import { escapeHtml } from '../format.js';
 import { textWithMarks, plainText } from '../layout/rich-text.js';
 import { presentationRanges, renderPresentation } from '../layout/editorial-presentation.js';
 import { publicationFamily } from './font-metrics.js';
+import { headlineSegments } from './accent.js';
 
 // The measured font, painted. Every line now carries the family/weight
 // compose.js actually measured it in (see compose.js); this turns that back
@@ -68,23 +69,25 @@ function lineHtml(line, { marks, semantic, offset }) {
 // explicitly by the desk with asterisks - the software must never guess which
 // word matters - or, failing that, the last word when the layout asked for
 // the accent treatment.
-function headlineHtml(text, view) {
+//
+// Decided once per BAND, not per line - see accent.js's headlineSegments()
+// for why: compose.js breaks the headline into display lines with no idea
+// where the desk's asterisks fall, so matching line-by-line (as this used
+// to) missed an accent phrase split across that break, and coloured the
+// last word of every line instead of the headline's true last word under
+// `headlineStyle: 'accent'`.
+function headlineBandSegments(lines, view) {
+  return headlineSegments(lines.map((line) => line.text), { accentStyle: view.headlineStyle === 'accent' });
+}
+
+function headlineLineHtml(text, view, segments) {
   const accent = escapeHtml(view.accentColor || '#c8102e');
   const semantic = presentationRanges(text, view.editorialPresentation, 'headline');
   if (semantic.length) return renderPresentation(text, [], semantic, escapeHtml);
-
-  if (text.includes('*')) {
-    return text
-      .split(/\*([^*]+)\*/g)
-      .map((part, index) => (index % 2 ? `<span style="color:${accent}">${escapeHtml(part)}</span>` : escapeHtml(part)))
+  if (segments) {
+    return segments
+      .map((segment) => (segment.accent ? `<span style="color:${accent}">${escapeHtml(segment.text)}</span>` : escapeHtml(segment.text)))
       .join('');
-  }
-  if (view.headlineStyle === 'accent') {
-    const words = text.trim().split(/\s+/);
-    if (words.length > 1) {
-      const last = words.pop();
-      return `${escapeHtml(words.join(' '))} <span style="color:${accent}">${escapeHtml(last)}</span>`;
-    }
   }
   return escapeHtml(text);
 }
@@ -107,9 +110,10 @@ export function composedMarkup(composition, view, { datelinePrefix = '' } = {}) 
 
   for (const [key, band] of Object.entries(composition.bands || {})) {
     const className = BAND_CLASS[key] || 'section-flowed-band';
-    for (const line of band.lines) {
+    const headlineSegments = key === 'headline' ? headlineBandSegments(band.lines, view) : null;
+    band.lines.forEach((line, lineIndex) => {
       const html = key === 'headline'
-        ? headlineHtml(line.text, view)
+        ? headlineLineHtml(line.text, view, headlineSegments?.[lineIndex])
         : renderPresentation(
           line.text,
           [],
@@ -121,7 +125,7 @@ export function composedMarkup(composition, view, { datelinePrefix = '' } = {}) 
         + `width:${line.measure.toFixed(2)}px;height:${line.height.toFixed(2)}px;`
         + `font-size:${line.fontPx}px;line-height:${line.height.toFixed(2)}px;${faceStyle(line)}">${html}</span>`,
       );
-    }
+    });
   }
 
   const { text: bodyText, marks } = textWithMarks(view.body);

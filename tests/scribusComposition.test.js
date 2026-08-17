@@ -253,23 +253,46 @@ test('a transparent PNG is referenced, not re-encoded - the press box gets the s
   assert.match(xml, /PFILE="\.\/uploads\/zz-scribus-alpha\.png"/, 'the exact same file is referenced - no derived raster, no format change');
 });
 
-test('italic or underlined copy is flagged for a desk to check before press, since neither has been verified against a real Scribus render', async () => {
+test('italic copy is flagged for a desk to check before press - no Devanagari face ships a true italic style, so the press file slants the upright letterforms', async () => {
   const preflight = require('../src/services/preflight.service');
   const section = {
     id: 1, section_key: 'lead', x_px: 20, y_px: 20, width_px: 200, height_px: 200, margin_px: 12,
-    headline: 'खबर', body: '<p>हा <i>तिरका</i> आणि <u>अधोरेखित</u> मजकूर आहे.</p>', images: [],
+    headline: 'खबर', body: '<p>हा <i>तिरका</i> मजकूर आहे.</p>', images: [],
   };
   const page = { page_number: 3, prints_colour: true, sections: [section] };
   const newspaper = { publication_date: '2031-01-01' };
   const findings = await preflight.checkPage(page, newspaper, 4);
-  const finding = findings.find((f) => f.check === 'unverified-print-emphasis');
-  assert.ok(finding, 'italic/underline copy must be flagged');
-  assert.equal(finding.level, 'warning', 'it does not block press - the text is correct, only the visual emphasis is unverified');
+  const finding = findings.find((f) => f.check === 'synthetic-italic-print');
+  assert.ok(finding, 'italic copy must be flagged');
+  assert.equal(finding.level, 'warning', 'it does not block press - the text is correct, only the slant is synthetic');
   assert.match(finding.message, /italic/);
-  assert.match(finding.message, /underline/);
 });
 
-test('plain bold copy with no italic or underline raises no such warning', async () => {
+test('underlined copy raises no warning - FEATURES="underline" is a real, unambiguous Scribus CharStyle flag, not a font substitute', async () => {
+  const preflight = require('../src/services/preflight.service');
+  const section = {
+    id: 1, section_key: 'lead', x_px: 20, y_px: 20, width_px: 200, height_px: 200, margin_px: 12,
+    headline: 'खबर', body: '<p>हा <u>अधोरेखित</u> मजकूर आहे.</p>', images: [],
+  };
+  const page = { page_number: 3, prints_colour: true, sections: [section] };
+  const newspaper = { publication_date: '2031-01-01' };
+  const findings = await preflight.checkPage(page, newspaper, 4);
+  assert.ok(!findings.some((f) => f.check === 'synthetic-italic-print'), 'underline alone raises no italic warning');
+
+  const xml = await scribus.blockFrames(section);
+  assert.match(xml, /CH="अधोरेखित"[^/]*FEATURES="underline"/, 'the underlined run must actually carry FEATURES="underline" in the press file');
+});
+
+test('italic copy carries FEATURES="italic" in the press file - a real, verified Scribus CharStyle flag, not a dropped attribute', async () => {
+  const section = {
+    id: 1, section_key: 'lead', x_px: 20, y_px: 20, width_px: 200, height_px: 200, margin_px: 12,
+    headline: 'खबर', body: '<p>हा <i>तिरका</i> मजकूर आहे.</p>', images: [],
+  };
+  const xml = await scribus.blockFrames(section);
+  assert.match(xml, /CH="तिरका"[^/]*FEATURES="italic"/, 'the italic run must carry FEATURES="italic" in the press file');
+});
+
+test('plain bold copy with no italic raises no synthetic-italic warning', async () => {
   const preflight = require('../src/services/preflight.service');
   const section = {
     id: 1, section_key: 'lead', x_px: 20, y_px: 20, width_px: 200, height_px: 200, margin_px: 12,
@@ -278,7 +301,7 @@ test('plain bold copy with no italic or underline raises no such warning', async
   const page = { page_number: 3, prints_colour: true, sections: [section] };
   const newspaper = { publication_date: '2031-01-01' };
   const findings = await preflight.checkPage(page, newspaper, 4);
-  assert.ok(!findings.some((f) => f.check === 'unverified-print-emphasis'), 'bold alone is a verified, real font - no warning needed');
+  assert.ok(!findings.some((f) => f.check === 'synthetic-italic-print'), 'bold alone is a verified, real font - no warning needed');
 });
 
 // -------------------------------------------------------------- footer ---

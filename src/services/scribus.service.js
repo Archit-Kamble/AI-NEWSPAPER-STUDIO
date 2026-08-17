@@ -108,6 +108,7 @@ let smartCardsModule = null;
 let smartCardLayoutModule = null;
 let textFlowModule = null;
 let imageGeometryModule = null;
+let accentModule = null;
 
 async function ensureComposeReady() {
   if (!metricsModule) metricsModule = await import('../../public/editor/compose/font-metrics.js');
@@ -118,6 +119,7 @@ async function ensureComposeReady() {
   if (!smartCardLayoutModule) smartCardLayoutModule = await import('../../public/editor/smart-cards/layout.js');
   if (!textFlowModule) textFlowModule = await import('../../public/editor/layout/text-flow.js');
   if (!imageGeometryModule) imageGeometryModule = await import('../../public/editor/layout/image-geometry.js');
+  if (!accentModule) accentModule = await import('../../public/editor/compose/accent.js');
   await Promise.all([metricsModule.ensureFontsLoaded(), shaperModule.ensureShaperReady()]);
   shaperModule.requireShaperReady();
   return {
@@ -127,6 +129,7 @@ async function ensureComposeReady() {
     smartCardLayout: smartCardLayoutModule,
     textFlow: textFlowModule,
     imageGeometry: imageGeometryModule,
+    accent: accentModule,
   };
 }
 
@@ -152,7 +155,19 @@ function lineFrame({ xMm, yMm, widthMm, heightMm, runs, align = 0, ownPage = 0 }
     .map((run) => {
       const font = fontNameFor(run.family, run.weight, run.bold);
       const colour = run.colour || 'Black';
-      const features = run.underline ? ' FEATURES="underline"' : '';
+      // Space-separated CharStyle feature tokens (confirmed against the real
+      // Scribus 1.6.1 binary: its CharStyle class carries BOLD/ITALIC/
+      // UNDERLINE/STRIKETHROUGH/... as named style flags, each serialised as
+      // its lowercase name). Bold gets its own real bold font file
+      // (fontNameFor() above) rather than a synthetic weight - the publication
+      // ships one. Italic does not: no italic Devanagari face exists to ship
+      // (confirmed - Noto Serif/Sans Devanagari publish no italic style at
+      // all, on this system or upstream), so `italic` here is the same
+      // synthetic oblique Scribus's own Italic toggle already applies to any
+      // font lacking a true italic weight - not a fake attribute invented for
+      // this exporter.
+      const styleFeatures = [run.italic ? 'italic' : '', run.underline ? 'underline' : ''].filter(Boolean).join(' ');
+      const features = styleFeatures ? ` FEATURES="${styleFeatures}"` : '';
       return `<ITEXT CH="${escapeXml(run.text)}" FONT="${escapeXml(font)}" FONTSIZE="${pxToPt(run.fontPx)}" FCOLOR="None" TXTFILL="${colour}"${features}/>`;
     })
     .join('');
@@ -217,32 +232,24 @@ function imageFrame({ resolved, xMm, yMm, file, ownPage = 0 }) {
 // ------------------------------------------------------ headline accent ----
 //
 // The painted word: one phrase of the headline set in the paper's accent
-// colour. Marked by the desk with asterisks in the stored text - the same
-// mechanism render.js's headlineHtml() strips and re-colours at paint time,
-// per COMPOSED LINE (a phrase split across a line break is the one case
-// neither this nor the browser handles, because compose.js measured the
-// asterisks as literal characters when it wrapped the line - the identical,
-// already-accepted approximation the canvas itself already carries).
-function accentRuns(text, { family, weight }, colour) {
-  if (!text.includes('*')) return [{ text, family, weight, bold: false, italic: false, underline: false, fontPx: null }];
-  // Colour is decided from the split's OWN index (odd = inside a pair of
-  // asterisks) before any empty piece is dropped - an accent phrase at the
-  // very start or end of the headline splits into a leading/trailing empty
-  // string, and filtering first would shift every later index by one,
-  // silently colouring the wrong half of the headline.
-  return text
-    .split(/\*([^*]+)\*/g)
-    .map((part, index) => ({
-      text: part,
-      family,
-      weight,
-      bold: false,
-      italic: false,
-      underline: false,
-      fontPx: null,
-      colour: index % 2 === 1 ? colour : undefined,
-    }))
-    .filter((run) => run.text !== '');
+// colour. Marked by the desk with asterisks in the stored text, or - failing
+// that - the true last word of the headline under `headline_style: 'accent'`.
+// Decided band-wide by accent.js's headlineSegments(), the SAME function
+// render.js uses, so a phrase split across a composed line break (compose.js
+// has no idea where the asterisks fall when it wraps the line) still gets
+// coloured on both halves here exactly as it does on the canvas - not a
+// second, independently-drifting implementation of the same rule.
+function segmentRuns(segments, { family, weight }, colour) {
+  return segments.map((segment) => ({
+    text: segment.text,
+    family,
+    weight,
+    bold: false,
+    italic: false,
+    underline: false,
+    fontPx: null,
+    colour: segment.accent ? colour : undefined,
+  }));
 }
 
 // -------------------------------------------------------------- body runs ---
@@ -360,7 +367,7 @@ function smartCardFrames({ key, data, frame, xMm, yMm, ownPage, cardLayout, fami
  * offset the page itself is drawn at.
  */
 async function blockFrames(section, { pageIndex = 0, pageOffsetMm = 0 } = {}) {
-  const { adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry } = await ensureComposeReady();
+  const { adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry, accent } = await ensureComposeReady();
   const parts = [];
 
   const holdsCard = Boolean(section.smart_card_key) && Boolean(section.smart_card_data)
@@ -374,7 +381,7 @@ async function blockFrames(section, { pageIndex = 0, pageOffsetMm = 0 } = {}) {
     ? adapter.composeSection({ ...section, images: [], body: '' }, { ...section, body: '' })
     : adapter.composeSection(section, section);
 
-  parts.push(displayBandFrames(composition, section, {
+  parts.push(displayBandFrames(composition, section, accent, {
     xBaseMm: mm(section.x_px), yBaseMm: mm(section.y_px), pageOffsetMm, ownPage: pageIndex,
   }));
 
@@ -394,9 +401,14 @@ async function blockFrames(section, { pageIndex = 0, pageOffsetMm = 0 } = {}) {
     const prefix = textFlow.datelineText(section);
     for (const line of composition.bodyLines) {
       const runs = styledBodyRuns(line, marks, prefix.length, richText);
+      // Same hard-overset case as displayBandFrames(): a body piece wider
+      // than every legal gap in the frame (BODY_UNBREAKABLE_TOKEN_OVERSET)
+      // is drawn past its own measure in the browser, not wrapped or
+      // clipped - so the press frame must be at least as wide as what was
+      // actually drawn, not just the measure it was offered.
       parts.push(lineFrame({
         xMm: mm(section.x_px + line.x), yMm: mm(section.y_px + line.y) + pageOffsetMm,
-        widthMm: mm(line.measure + 1), heightMm: mm(line.height),
+        widthMm: mm(Math.max(line.width || 0, line.measure) + 1), heightMm: mm(line.height),
         runs, align: 0, ownPage: pageIndex,
       }));
     }
@@ -424,23 +436,33 @@ async function blockFrames(section, { pageIndex = 0, pageOffsetMm = 0 } = {}) {
 }
 
 /** The kicker/headline/deck bands, each composed LINE as its own frame - the
- * headline's own accent phrase (asterisk-marked) split into its own run so
- * it paints in the paper's colour, exactly as headlineHtml() already does
- * for the browser. */
-function displayBandFrames(composition, section, { xBaseMm, yBaseMm, pageOffsetMm, ownPage }) {
+ * headline's own accent phrase (asterisk-marked, or the true last word under
+ * `headline_style: 'accent'`) split into its own run so it paints in the
+ * paper's colour, decided band-wide by accent.js's headlineSegments() -
+ * exactly as render.js's composedMarkup() already does for the browser. */
+function displayBandFrames(composition, section, accent, { xBaseMm, yBaseMm, pageOffsetMm, ownPage }) {
   const parts = [];
-  const accented = String(section.headline || '').includes('*') || section.headline_style === 'accent';
+  const headlineBand = composition.bands?.headline;
+  const headlineTexts = headlineBand ? headlineBand.lines.map((line) => line.text) : [];
+  const headline = accent.headlineSegments(headlineTexts, { accentStyle: section.headline_style === 'accent' });
   for (const [key, band] of Object.entries(composition.bands || {})) {
-    for (const line of band.lines) {
-      const runs = key === 'headline' && accented
-        ? accentRuns(line.text, { family: line.family, weight: line.weight }, 'SahasRed').map((run) => ({ ...run, fontPx: run.fontPx || line.fontPx }))
+    band.lines.forEach((line, lineIndex) => {
+      const runs = key === 'headline' && headline
+        ? segmentRuns(headline[lineIndex], { family: line.family, weight: line.weight }, 'SahasRed').map((run) => ({ ...run, fontPx: run.fontPx || line.fontPx }))
         : [{ text: line.text, family: line.family, weight: line.weight, bold: false, italic: false, underline: false, fontPx: line.fontPx }];
+      // `line.measure` is the band's own gap; `line.width` is what was
+      // actually drawn there. A one-word headline wider than the whole
+      // measure is set anyway (compose.js will not invent a hyphen inside a
+      // Marathi word) and the browser lets it spill past its box
+      // (`.section-composed{overflow:visible}`, styles.css). A frame sized
+      // to `measure` alone would let Scribus wrap or clip exactly that word
+      // - the one case the browser and the press must not disagree on.
       parts.push(lineFrame({
         xMm: xBaseMm + mm(line.x), yMm: yBaseMm + mm(line.y) + pageOffsetMm,
-        widthMm: mm(line.measure), heightMm: mm(line.height),
+        widthMm: mm(Math.max(line.width || 0, line.measure)), heightMm: mm(line.height),
         runs, align: 0, ownPage,
       }));
-    }
+    });
   }
   return parts.join('');
 }

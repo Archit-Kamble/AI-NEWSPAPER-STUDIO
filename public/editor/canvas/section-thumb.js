@@ -6,7 +6,8 @@
 
 import { placedPictureStyle } from "../layout/picture-style.js";
 import { featureTableMarkup } from "../layout/feature-table.js";
-import { smartCardMarkup, smartCardFitState, SMART_CARD_OVERSET_NOTE } from "../smart-cards/smart-cards.js";
+import { smartCardMarkup, smartCardFitState, canRenderSmartCard, SMART_CARD_OVERSET_NOTE } from "../smart-cards/smart-cards.js";
+import { smartCardFrameFromComposition } from "../smart-cards/layout.js";
 import { escapeHtml } from "../format.js";
 import { statusOf, statusLabel, statusClass } from "../status/section-status.js";
 import { computeMetrics } from "../layout/layout-metrics.js";
@@ -187,23 +188,36 @@ function contentMarkup(section, view) {
 }
 
 /**
+ * The exact composition a Smart Card's own frame is read from - the block's
+ * real kicker/headline/deck, poured exactly as they would be for prose, but
+ * with an EMPTY body and no images: a Smart Card is never prose, so it must
+ * not be measured through the body-pouring/whitespace logic that exists for
+ * continuous copy. `body` is cleared on both the persisted row and the draft
+ * view - composeSection()'s field picker falls through an empty-string
+ * override to the other source, so both have to say so, or a block saved
+ * before it held a card (with real body text still in the row) would still
+ * measure against that leftover text.
+ */
+function smartCardComposition(section, view) {
+  return composeSection({ ...section, images: [], body: '' }, { ...view, body: '' });
+}
+
+/**
  * The logical frame a Smart Card in this block has to solve against -
  * layoutSmartCard()'s own `{width, height, padding}` contract, in newspaper
  * pixels (never screen or editor-zoomed pixels - the caller's own
  * transform:scale() enlarges the WHOLE resulting card afterward, same as it
  * already does for headline/body).
+ *
+ * Read directly off the EXACT composition (compose/) rather than a second,
+ * approximate estimate - this used to ask buildFlowMap() only for its
+ * kicker/headline/subheading row count, which could disagree with the real
+ * composition: a headline that auto-fit to a smaller size changes its real
+ * line count, and the row-count estimate never tracked that, so a card
+ * measured against a frame that was already wrong.
  */
 export function smartCardFrame(section, view) {
-  const padding = Number(view.marginPx) || 12;
-  const blockHeight = Number(section?.height_px) || 0;
-  // No pictures on a Smart Card block - buildFlowMap() is asked only for its
-  // kicker/headline/subheading row reservation, the same estimate the
-  // non-exact character grid already relies on elsewhere in this file.
-  const map = buildFlowMap(section, view, []);
-  const reservedRows = (map.kickerRows || 0) + (map.headlineRows || 0) + (map.subheadingRows || 0);
-  const reservedHeight = reservedRows * (map.cellHeight || 0);
-  const contentHeight = Math.max(0, blockHeight - padding * 2 - reservedHeight);
-  return { width: Number(section?.width_px) || 0, height: contentHeight + padding * 2, padding };
+  return smartCardFrameFromComposition(smartCardComposition(section, view));
 }
 
 /**
@@ -217,16 +231,16 @@ export function smartCardFrame(section, view) {
  */
 function bodyOrTableMarkup(section, view, columns) {
   // A Smart Card first, and from its OWN data. This is the same renderer the
-  // editor's preview draws with, so the block on the page and the card the desk
-  // approved cannot be two different things.
+  // editor's preview draws with, so the block on the page and the card the
+  // desk approved cannot be two different things.
   //
-  // The frame it solves against is the block's own logical size, minus the
-  // room a kicker/headline/subheading above it already claims - reused from
-  // buildFlowMap()'s existing row-reservation estimate (the same one the
-  // non-exact character grid already uses for this) rather than a second,
-  // new estimate. Padding is folded back into the passed height so
-  // layoutSmartCard()'s own `frame.height - padding*2` still lands on the
-  // correct remaining space.
+  // sectionContentMarkup() normally handles a Smart Card block entirely on
+  // its own exact-composition path (bands + an absolutely-positioned card at
+  // bodyTop) and never reaches this function at all. This branch only runs
+  // for the moment before the publication font has loaded (contentMarkup()'s
+  // own fallback, same as the prose path below) - smartCardFrame() still
+  // reads the exact composition, just composed against the same graceful
+  // hmtx fallback compose.js itself uses before the shaper is ready.
   const card = smartCardMarkup(view.smartCardKey, view.smartCardData, smartCardFrame(section, view));
   if (card) return `<div class="section-feature">${card}</div>`;
 
@@ -356,8 +370,36 @@ export function flowedBodyMarkup(map, view, pad) {
 // publication font has loaded, so a fallback measurement never becomes what
 // the desk approves.
 export function sectionContentMarkup(section, view) {
-  const hasCard = Boolean(smartCardMarkup(view.smartCardKey, view.smartCardData, smartCardFrame(section, view)));
-  if (hasCard) return contentMarkup(section, view);
+  const mayHoldCard = Boolean(view.smartCardKey) && Boolean(view.smartCardData) && canRenderSmartCard(view.smartCardKey);
+
+  // A Smart Card is drawn from the SAME exact composition its kicker/headline/
+  // deck already use - not a second, browser-flow rendering of those bands
+  // sitting above an independently-measured card. composedMarkup() draws the
+  // display bands as already-positioned spans (an empty body composes to no
+  // body lines at all), and the card is placed in the exact rectangle the
+  // composition itself says is left: from `bodyTop` to `content.bottom`, at
+  // `content.left`/`content.measure`. Editor zoom is a CSS transform over the
+  // whole layer, so this frame - and therefore the card's own font size and
+  // geometry - never changes with it.
+  if (mayHoldCard && fontsReady()) {
+    const composition = smartCardComposition(section, view);
+    const frame = smartCardFrameFromComposition(composition);
+    const card = smartCardMarkup(view.smartCardKey, view.smartCardData, frame);
+    if (card) {
+      const bands = composedMarkup(composition, view, { datelinePrefix: '' });
+      const box = `left:${composition.content.left.toFixed(2)}px;top:${composition.bodyTop.toFixed(2)}px;`
+        + `width:${frame.width.toFixed(2)}px;height:${frame.height.toFixed(2)}px;`;
+      return bands + `<div class="section-feature-card" style="${box}">${card}</div>`;
+    }
+  }
+
+  if (mayHoldCard) {
+    // The publication font has not loaded yet (a Node caller that skipped
+    // ensureFontsLoaded(), or the moment before the browser's own await
+    // resolves) - fall back to the old flow-based rendering for one paint,
+    // same principle as the prose path below.
+    return contentMarkup(section, view);
+  }
 
   if (!fontsReady()) {
     const flowed = flowedTextMarkup(section, view);

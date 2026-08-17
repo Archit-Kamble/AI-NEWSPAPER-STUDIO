@@ -87,6 +87,11 @@ async function smartCards() {
   if (!smartCardModule) smartCardModule = await import('../../public/editor/smart-cards/smart-cards.js');
   return smartCardModule;
 }
+let smartCardLayoutModule = null;
+async function smartCardLayout() {
+  if (!smartCardLayoutModule) smartCardLayoutModule = await import('../../public/editor/smart-cards/layout.js');
+  return smartCardLayoutModule;
+}
 
 // The exact composition engine, for the one check that has to agree with
 // fit.service.js exactly: whether a block's REAL copy actually fits. Both
@@ -208,14 +213,20 @@ async function checkPage(page, newspaper, totalPages) {
     // FLOOR size rather than its block's true measure is a real press
     // problem (SMART_CARD_OVERSET), not a cosmetic one, so it is an error
     // for a printable page exactly like text overset is above.
+    //
+    // The frame is read off the SAME exact composition the page canvas draws
+    // a card's kicker/headline/deck from (composeSection() with an empty
+    // body and no images - a Smart Card is never prose) - not a second,
+    // approximate buildFlowMap() row count that could disagree with it. A
+    // headline that auto-fit smaller changes its real line count; the old
+    // estimate never tracked that, so preflight could be checking a
+    // different frame than the one the page actually drew.
     if (section.smart_card_key && section.smart_card_data) {
       const { smartCardFitState } = await smartCards();
+      const { smartCardFrameFromComposition } = await smartCardLayout();
       const view = flowViewFromSection(section);
-      const padding = Number(view.marginPx) || 12;
-      const map = buildFlowMap(section, view, []);
-      const reservedHeight = ((map.kickerRows || 0) + (map.headlineRows || 0) + (map.subheadingRows || 0)) * (map.cellHeight || 0);
-      const contentHeight = Math.max(0, Number(section.height_px) - padding * 2 - reservedHeight);
-      const frame = { width: Number(section.width_px) || 0, height: contentHeight + padding * 2, padding };
+      const composition = adapter.composeSection({ ...section, images: [], body: '' }, { ...view, body: '' });
+      const frame = smartCardFrameFromComposition(composition);
       if (smartCardFitState(section.smart_card_key, section.smart_card_data, frame) === 'OVERSET') {
         findings.push({
           level: 'error', check: 'smart-card-overset', ...at(section),

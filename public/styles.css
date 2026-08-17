@@ -3209,6 +3209,17 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
    claimed when there is no headline to share it with, so a card-only block
    (no separate heading) is unchanged. */
 .section-feature { flex: 1 1 auto; min-height: 0; padding: 2px; }
+
+/* The exact-composition Smart Card path (section-thumb.js's
+   sectionContentMarkup()): positioned at composition.content.left/bodyTop,
+   sized to composition.content.measure × (content.bottom - bodyTop) - the
+   same absolute-positioning convention .section-composed's spans use, so a
+   card sits exactly where the exact kicker/headline/deck bands above it say
+   there is room, never a second, approximate reservation. No padding here -
+   the solver's own frame padding is 0 for exactly this reason (see
+   smartCardFrameFromComposition() in smart-cards/layout.js): what is
+   reserved is what is drawn, with nothing hidden in either place. */
+.section-feature-card { position: absolute; overflow: visible; }
 .feature-grid {
   border-collapse: collapse;
   table-layout: fixed;

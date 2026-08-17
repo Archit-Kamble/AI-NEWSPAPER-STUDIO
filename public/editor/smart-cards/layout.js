@@ -431,3 +431,37 @@ export function layoutSmartCard(key, data, frame) {
 }
 
 export const SMART_CARD_LAYOUT_KEYS = Object.keys(LAYOUTS);
+
+/**
+ * The frame a Smart Card has to solve against, taken directly from an EXACT
+ * composition (public/editor/compose/, composeSection() with an empty body
+ * and no images - the display bands still reserve their own real room, the
+ * card just takes over where the body would otherwise start).
+ *
+ * This replaces a second, approximate estimate (text-flow.js's buildFlowMap(),
+ * asked only for its kicker/headline/subheading row count) that could - and
+ * did - disagree with the exact composition every other measurement in this
+ * project already uses: a headline that auto-fit to a smaller size changed
+ * its real line count, but the row-count estimate did not track that, so the
+ * card above/below it was solving against a frame that was already wrong.
+ *
+ * `padding` defaults to 0 deliberately - `composition.content` has ALREADY
+ * had the block's own edge padding (marginPx) subtracted on every side, and
+ * `bodyTop` already accounts for whatever kicker/headline/deck came before,
+ * so there is nothing left for this solver to reserve a second time. A
+ * caller that passes a non-zero padding here is asking for real DOM padding
+ * the card's own wrapper actually applies - the rule the whole redesign
+ * exists to hold: solver padding equals rendered padding, exactly, never a
+ * hidden second number.
+ */
+export function smartCardFrameFromComposition(composition, { padding = 0 } = {}) {
+  const left = Number(composition?.content?.left) || 0;
+  const right = Number(composition?.content?.right) || 0;
+  const bottom = Number(composition?.content?.bottom) || 0;
+  const top = Number(composition?.bodyTop ?? composition?.content?.top) || 0;
+  return {
+    width: Math.max(0, right - left),
+    height: Math.max(0, bottom - top),
+    padding,
+  };
+}

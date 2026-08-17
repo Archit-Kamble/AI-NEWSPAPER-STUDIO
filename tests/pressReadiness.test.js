@@ -56,3 +56,32 @@ test('all production output endpoints consume the same PRESS_NOT_READY gate', as
     }
   } finally { await removeEdition(editionId); server.close(); }
 });
+
+// Gap 3 (image truth #9): a signed-off page's fingerprint used to omit
+// fit_mode/mask/source dimensions - a desk could switch Contain -> Stretch,
+// or a cutout could be re-run against a different mask, on an ALREADY
+// SIGNED-OFF page without the fingerprint (and therefore PAGE_SIGNOFF_STALE)
+// ever noticing.
+test('press signoff fingerprint changes when fit mode, mask, or source dimensions change - not only geometry', () => {
+  const image = {
+    media_asset_id: 7, url: '/uploads/a.jpg', x_px: 10, y_px: 20, width_px: 100, height_px: 80,
+    rotation: 0, flip_h: false, flip_v: false, shape: 'cutout', stand_off_px: 6, caption: 'कॅप्शन',
+    fit_mode: 'contain', mask: { rows: 2, cols: 2, cells: [[1, 1], [0, 0]] },
+    source_width_px: 200, source_height_px: 100,
+  };
+  const page = { id: 1, page_number: 1, template_key: 'front', prints_colour: true, sections: [{ section_key: 'lead', images: [image] }] };
+  const withImage = (overrides) => readiness.pageFingerprint({
+    ...page,
+    sections: [{ ...page.sections[0], images: [{ ...image, ...overrides }] }],
+  });
+
+  const base = withImage({});
+  const stretch = withImage({ fit_mode: 'stretch' });
+  const flipped = withImage({ flip_h: true });
+  const rerunMask = withImage({ mask: { rows: 2, cols: 2, cells: [[1, 0], [1, 0]] } });
+  const widerSource = withImage({ source_width_px: 400 });
+
+  const fingerprints = new Set([base, stretch, flipped, rerunMask, widerSource]);
+  assert.equal(fingerprints.size, 5, 'fit mode, flip, mask and source dimensions must each change the signoff fingerprint');
+  assert.equal(withImage({}), base, 'the same image identity remains deterministic');
+});

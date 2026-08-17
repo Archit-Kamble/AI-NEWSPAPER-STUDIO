@@ -145,15 +145,29 @@ async function remove(imageId) {
  * Every placement in one edition, grouped by the block it sits on.
  *
  * The worklist measures every block of a paper in one pass, and asking for each
- * block's pictures one block at a time would be a query per block. The media
- * asset is not joined: this answers "what is placed and where", which is what
- * the character grid needs.
+ * block's pictures one block at a time would be a query per block.
+ *
+ * `media_assets` IS now joined, for its source width/height - a cutout's
+ * exclusion is resolved through image-geometry.js's contain/cover/stretch
+ * fit math (exclusion.js), which needs the source's own natural dimensions
+ * to know what a mask cell's source-pixel coordinates mean. Omitting them
+ * used to fall back to the placement frame's own size (imageInput()'s
+ * "no known natural size" default), silently assuming a 1:1 aspect ratio
+ * match between source and frame that Phase E's independent resize or a
+ * non-'contain' fit mode can break - the worklist's character budget could
+ * then disagree with what the browser actually composes for the same
+ * block. Crop and flip are included for the same reason: they are read by
+ * the same resolver.
  */
 async function placementsByEdition(newspaperId) {
   const { rows } = await pool.query(
-    `SELECT si.page_section_id, si.x_px, si.y_px, si.width_px, si.height_px,
-            si.rotation, si.shape, si.stand_off_px, si.mask, si.fit_mode
+    `SELECT si.id, si.page_section_id, si.x_px, si.y_px, si.width_px, si.height_px,
+            si.crop_x_px, si.crop_y_px, si.crop_width_px, si.crop_height_px,
+            si.rotation, si.flip_h, si.flip_v,
+            si.shape, si.stand_off_px, si.mask, si.fit_mode,
+            ma.width_px AS source_width_px, ma.height_px AS source_height_px
        FROM section_images si
+       JOIN media_assets ma ON ma.id = si.media_asset_id
        JOIN page_sections s ON s.id = si.page_section_id
        JOIN pages p ON p.id = s.page_id
       WHERE p.newspaper_id = $1

@@ -149,3 +149,120 @@ export function resolvePlacedImage(row) {
     scaleY: content.scaleY,
   };
 }
+
+/**
+ * The crop rectangle IS the whole source - the one case picture-style.js's
+ * native object-fit paints exactly (see its own header note: an arbitrary
+ * crop rectangle combined with cover/stretch cannot be expressed as
+ * object-fit/object-position, so it is out of scope until a crop UI ships).
+ * A caller doing exact geometry off of `resolved` (alpha exclusion, print)
+ * must fall back conservatively rather than compute a crop paint does not
+ * yet draw - not because the arithmetic is hard, but because agreeing with
+ * a picture that has not been painted that way yet would be a NEW
+ * disagreement, the exact failure mode this module exists to close.
+ */
+export function isWholeSourceCrop(resolved) {
+  const { crop, source } = resolved;
+  return crop.x === 0 && crop.y === 0 && crop.width === source.width && crop.height === source.height;
+}
+
+/**
+ * One point in the picture's own PRE-transform local space (localContentRect
+ * coordinates - the space object-fit places content into, before any CSS
+ * transform) mapped into the FRAME's coordinate space - algebraically the
+ * same result as picture-style.js's CSS chain
+ * (`translate(-50%,-50%) rotate(Ndeg) scaleX/Y(-1)`, all sharing the
+ * default centre transform-origin) actually paints.
+ *
+ * Derivation once, so nobody re-derives the sign conventions by trial and
+ * error against a screenshot: transform-origin is `localTarget`'s own
+ * centre; CSS composes the transform list right-to-left, so flip (rightmost)
+ * applies first, rotate second, and `translate(-50%,-50%)` (leftmost) last.
+ * The percentage translate resolves once, to a FIXED vector of
+ * (-localTarget.width/2, -localTarget.height/2) - added to a point already
+ * expressed relative to that same centre, which exactly cancels the centre
+ * offset back out. What survives is: rotate(flip(p - centre)), re-added to
+ * the frame's OWN centre (where `left:50%;top:50%` anchored the box before
+ * the transform moved it). Checked against a concrete case (a symmetric
+ * square, centred content, frame 100x200, rotate 90) landing exactly on the
+ * frame's own centre, not offset from it.
+ */
+export function localPointToFrame(resolved, x, y) {
+  const { frame, localTarget, rotation, flipH, flipV } = resolved;
+  const cx = localTarget.width / 2;
+  const cy = localTarget.height / 2;
+  let dx = x - cx;
+  let dy = y - cy;
+  if (flipH) dx = -dx;
+  if (flipV) dy = -dy;
+
+  const angle = (normaliseRotation(rotation) * Math.PI) / 180;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  // CSS rotate() is clockwise in screen space (Y down) - verified against
+  // rotate(90deg) sending a point directly "above" centre to "right of"
+  // centre, the same direction the picture itself visibly turns.
+  const rx = dx * cos - dy * sin;
+  const ry = dx * sin + dy * cos;
+
+  return {
+    x: frame.x + frame.width / 2 + rx,
+    y: frame.y + frame.height / 2 + ry,
+  };
+}
+
+/** A point in SOURCE pixels (mask/alpha space), mapped through crop and the
+ * fitted content rect, then into the frame via localPointToFrame(). */
+export function sourcePointToFrame(resolved, sourceX, sourceY) {
+  const { crop, localContentRect } = resolved;
+  if (!crop.width || !crop.height) return null;
+  const u = (sourceX - crop.x) / crop.width;
+  const v = (sourceY - crop.y) / crop.height;
+  const localX = localContentRect.x + u * localContentRect.width;
+  const localY = localContentRect.y + v * localContentRect.height;
+  return localPointToFrame(resolved, localX, localY);
+}
+
+/**
+ * A source-pixel rectangle (one occupied mask cell, or a run of them) mapped
+ * to its axis-aligned bounds in frame space - exact only at a quarter turn:
+ * an axis-aligned rectangle rotated by any multiple of 90 degrees is still
+ * axis-aligned, so the bounding box of its four transformed corners IS the
+ * transformed rectangle, not merely an approximation of it. Any other
+ * persisted rotation is refused (returns null) rather than silently drawing
+ * a skewed shape as if it were the straight line-band intervals this feeds -
+ * the caller's job is to fall back to the frame's own conservative box.
+ */
+export function sourceRectToFrameBounds(resolved, rect) {
+  if (normaliseRotation(resolved.rotation) % 90 !== 0) return null;
+
+  // Intersect with the crop rectangle first - a mask cell outside the crop
+  // is not part of what is painted at all.
+  const crop = resolved.crop;
+  const left = Math.max(rect.x, crop.x);
+  const top = Math.max(rect.y, crop.y);
+  const right = Math.min(rect.x + rect.width, crop.x + crop.width);
+  const bottom = Math.min(rect.y + rect.height, crop.y + crop.height);
+  if (right <= left || bottom <= top) return null;
+
+  const corners = [
+    sourcePointToFrame(resolved, left, top),
+    sourcePointToFrame(resolved, right, top),
+    sourcePointToFrame(resolved, left, bottom),
+    sourcePointToFrame(resolved, right, bottom),
+  ];
+  if (corners.some((c) => !c)) return null;
+
+  const xs = corners.map((c) => c.x);
+  const ys = corners.map((c) => c.y);
+  const frame = resolved.frame;
+  // Only 'cover' can place content outside the frame (contain/stretch
+  // never do); object-fit never paints past the picture element's own box,
+  // so this clip matches what is actually visible, not merely a tidy-up.
+  return {
+    left: Math.max(frame.x, Math.min(...xs)),
+    top: Math.max(frame.y, Math.min(...ys)),
+    right: Math.min(frame.x + frame.width, Math.max(...xs)),
+    bottom: Math.min(frame.y + frame.height, Math.max(...ys)),
+  };
+}

@@ -113,8 +113,17 @@ async function hydrate(page, db = pool) {
   );
   // Pictures placed in a block are layout, not an attachment: the page canvas
   // has to draw them or a composed page looks empty of photographs.
+  //
+  // ma.width_px/height_px are aliased in too - `si.*` alone leaves a cutout's
+  // exclusion (exclusion.js, through image-geometry.js's resolvePlacedImage())
+  // to fall back to the placement frame's own size for "the source's natural
+  // dimensions", which is only right while the frame happens to share the
+  // source's aspect ratio. A server consumer of a hydrated page (preflight,
+  // press readiness, any exact composition) needs the SAME source dimensions
+  // the browser already has, or it can silently compose a different Contain/
+  // Cover fit than what a desk is actually looking at.
   const { rows: images } = await db.query(
-    `SELECT si.*, ma.url
+    `SELECT si.*, ma.url, ma.width_px AS source_width_px, ma.height_px AS source_height_px
        FROM section_images si
        JOIN media_assets ma ON ma.id = si.media_asset_id
        JOIN page_sections ps ON ps.id = si.page_section_id

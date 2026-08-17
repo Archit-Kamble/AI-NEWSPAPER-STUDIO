@@ -29,7 +29,7 @@ import { measureWidth as hmtxWidth, minLineHeightFor, faceAscent, faceDescent, f
 import { shapeWidthPx, isShaperReady } from './shaper.js';
 import { breakPieces, clusters, trimEndClusters } from './graphemes.js';
 import { subtract, viableIntervals, MIN_CORRIDOR_EM } from './intervals.js';
-import { bandObstacles, maskHash } from './exclusion.js';
+import { bandObstacles, imageFingerprint } from './exclusion.js';
 
 export const ENGINE_VERSION = 'sahas-compose/2';
 
@@ -1140,7 +1140,7 @@ export function composeBlock(input = {}) {
     letterSpacingPx, paragraphSpacingPx,
     input.kicker, input.headline, input.subheading, bodyPlainText,
     JSON.stringify((typeof bodyInput === 'object' && bodyInput.marks) || []),
-    images.map((i) => `${i.x},${i.y},${i.width},${i.height},${i.shape},${i.rotation || 0},${maskHash(i.mask)},${i.standOffPx || 0}`).join('|'),
+    images.map(imageFingerprint).join('|'),
   ].join(''));
 
   return result;

@@ -10,7 +10,12 @@ const PUBLIC_DIR = path.resolve(__dirname, '..', '..', 'public');
 const ACTIVE_RUN_STATES = ['PREPARING', 'PREPARED', 'PERSISTING', 'VERIFYING', 'HUMAN_REQUIRED'];
 const COUNTS = Object.freeze({ preflightErrors: 0, needsReview: 0, provenanceMissing: 0, imageSafetyErrors: 0, pagesNotPassed: 0, staleSignoffs: 0, missingAssets: 0, uncertainRuns: 0, publicationContentIncomplete: 0 });
 const PRINT_FIELDS = ['news_item_id','story_type','editorial_priority','kicker','headline','subheading','body','caption','category','location','tags','reporter_name','language','status','ai_generated','image_url','headline_font_px','subheading_font_px','body_font_px','column_count','margin_px','line_height','editorial_presentation'];
-const imageIdentity = (image) => [image.media_asset_id,image.source_news_item_id,image.url,image.x_px,image.y_px,image.width_px,image.height_px,image.crop_x_px,image.crop_y_px,image.crop_width_px,image.crop_height_px,image.rotation,image.flip_h,image.flip_v,image.shape,image.stand_off_px,image.caption];
+// fit_mode/mask/source_width_px/source_height_px are read here too - a
+// signed-off page's fingerprint must change the moment any of the fields
+// that can change what a picture actually prints changes, and Contain ->
+// Stretch or a re-run cutout mask are real prints, not metadata. Source
+// dimensions come from page.repository.js#hydrate()'s media_assets join.
+const imageIdentity = (image) => [image.media_asset_id,image.source_news_item_id,image.url,image.x_px,image.y_px,image.width_px,image.height_px,image.crop_x_px,image.crop_y_px,image.crop_width_px,image.crop_height_px,image.rotation,image.flip_h,image.flip_v,image.shape,image.stand_off_px,image.caption,image.fit_mode,image.mask,image.source_width_px,image.source_height_px];
 function pageFingerprint(page) {
   const value = [page.id,page.page_number,page.template_key,page.prints_colour,(page.sections || []).map((section) => [section.section_key,section.x_px,section.y_px,section.width_px,section.height_px,section.block_type,...PRINT_FIELDS.map((field) => section[field] ?? null),(section.images || []).map(imageIdentity)])];
   return crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');

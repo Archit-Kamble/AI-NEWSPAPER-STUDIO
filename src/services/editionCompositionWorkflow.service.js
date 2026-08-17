@@ -25,7 +25,11 @@ const RESOLVED_IMAGE_STATES = new Set(['IMAGE_PLANNED', 'IMAGE_EXISTING_PRESERVE
 const stable = (value) => JSON.stringify(value);
 const hash = (value) => crypto.createHash('sha256').update(stable(value)).digest('hex');
 const disposable = (paper) => String(paper?.publication_date || '').startsWith('2099-') && String(paper?.publication_date || '').slice(0, 10) !== '2099-05-01';
-function imageIdentity(image) { return [image.media_asset_id, image.url, image.source_news_item_id, image.x_px, image.y_px, image.width_px, image.height_px, image.crop_x_px, image.crop_y_px, image.crop_width_px, image.crop_height_px, image.rotation, image.shape, image.caption]; }
+// fit_mode/flip_h/flip_v/stand_off_px/mask/source_width_px/source_height_px
+// are read here too - alongside placement, crop, rotation and shape,
+// changing any printable image transformation must invalidate the
+// composition baseline/frame fingerprint, not only a geometry move.
+function imageIdentity(image) { return [image.media_asset_id, image.url, image.source_news_item_id, image.x_px, image.y_px, image.width_px, image.height_px, image.crop_x_px, image.crop_y_px, image.crop_width_px, image.crop_height_px, image.rotation, image.shape, image.caption, image.fit_mode, image.flip_h, image.flip_v, image.stand_off_px, image.mask, image.source_width_px, image.source_height_px]; }
 function frameFingerprint(paper, editionPages) { return hash({ edition: paper.id, pageCount: editionPages.length, pages: editionPages.map((page) => ({ id: page.id, template: page.template_key, sections: page.sections.map((s) => [s.section_key, s.x_px, s.y_px, s.width_px, s.height_px, s.block_type, s.story_type, s.feature_key, s.continued_from_section_id, (s.images || []).map(imageIdentity)]) })) }); }
 const COMPOSITION_FIELDS = ['news_item_id', 'story_type', 'editorial_priority', 'kicker', 'headline', 'subheading', 'body', 'caption', 'category', 'location', 'tags', 'reporter_name', 'ai_notes', 'language', 'status', 'ai_generated', 'editorial_presentation'];
 function baselineFingerprint(editionPages) { return hash(editionPages.map((page) => ({ id: page.id, sections: page.sections.map((section) => [section.section_key, ...COMPOSITION_FIELDS.map((field) => section[field] ?? null), (section.images || []).map(imageIdentity)]) }))); }

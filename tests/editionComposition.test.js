@@ -373,6 +373,41 @@ test('composition baseline fingerprint includes complete image placement, not ju
   assert.notEqual(baselineFingerprint(base), baselineFingerprint(moved));
 });
 
+// Gap 3 (image truth #9): fit_mode/flip_h/flip_v/stand_off_px/mask/source
+// dimensions used to be entirely absent from imageIdentity() - a Contain ->
+// Stretch change, a flip, a re-run cutout mask, or a wider source asset
+// could all change what actually prints while leaving BOTH the baseline
+// and the frame fingerprint unchanged, so the composition workflow never
+// saw a printable image transformation as a reason to re-plan.
+test('composition baseline and frame fingerprints change on fit mode, flip, mask, or source dimension changes', () => {
+  const { baselineFingerprint, frameFingerprint } = require('../src/services/editionCompositionWorkflow.service');
+  const image = {
+    media_asset_id: 7, url: '/uploads/a.jpg', source_news_item_id: null,
+    x_px: 10, y_px: 20, width_px: 100, height_px: 80,
+    crop_x_px: 0, crop_y_px: 0, crop_width_px: null, crop_height_px: null,
+    rotation: 0, shape: 'cutout', caption: 'कॅप्शन',
+    fit_mode: 'contain', flip_h: false, flip_v: false, stand_off_px: 6,
+    mask: { rows: 2, cols: 2, cells: [[1, 1], [0, 0]] },
+    source_width_px: 200, source_height_px: 100,
+  };
+  const pageWith = (overrides) => [{
+    id: 1, template_key: 'front',
+    sections: [{ section_key: 'lead', x_px: 0, y_px: 0, width_px: 300, height_px: 300, block_type: 'article', story_type: null, feature_key: null, continued_from_section_id: null, images: [{ ...image, ...overrides }] }],
+  }];
+
+  const base = pageWith({});
+  for (const [label, overrides] of [
+    ['fit mode', { fit_mode: 'stretch' }],
+    ['flip', { flip_h: true }],
+    ['mask', { mask: { rows: 2, cols: 2, cells: [[1, 0], [1, 0]] } }],
+    ['source dimensions', { source_width_px: 400 }],
+  ]) {
+    const changed = pageWith(overrides);
+    assert.notEqual(baselineFingerprint(base), baselineFingerprint(changed), `${label}: baseline fingerprint must change`);
+    assert.notEqual(frameFingerprint({ id: 1 }, base), frameFingerprint({ id: 1 }, changed), `${label}: frame fingerprint must change`);
+  }
+});
+
 test('workflow image validation applies the press DPI floor at planned print size', async () => {
   const { validateImageIntents } = require('../src/services/editionCompositionWorkflow.service');
   const intent = { companion: true, requirement: 'IMAGE_REQUIRED', state: 'IMAGE_PLANNED', destinationSectionId: 1, image: { url: '/uploads/zz-test-edition-lead-1.jpg' } };

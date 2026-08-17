@@ -456,6 +456,135 @@ test('a cutout fitted (contain) into a frame of a different aspect ratio letterb
   assert.ok(Math.abs(middleBand[0].end - (150 + pad)) < 1, `contain must letterbox to x=150, not stretch to 200 (got ${middleBand[0].end})`);
 });
 
+// Gap 1 (image truth #9): a rotated cutout used to fall back to its full
+// rectangle - paint rotated the visible silhouette, exclusion did not.
+test('a quarter-turn cutout exactly follows its rotated silhouette, not a full-box fallback', () => {
+  const cols = 8;
+  const rows = 8;
+  // Subject concentrated in the SOURCE's upper-left quadrant only.
+  const cells = Array.from({ length: rows }, (u, r) => Array.from({ length: cols }, (u2, c) => (r < 4 && c < 4 ? 1 : 0)));
+  const mask = { rows, cols, cells };
+  const FRAME = 100; // square frame, square source - no letterboxing to reason about.
+
+  const caseFor = (rotation) => ({
+    x: 0, y: 0, width: FRAME, height: FRAME, shape: 'cutout',
+    sourceWidth: FRAME, sourceHeight: FRAME, fitMode: 'contain', rotation, mask,
+  });
+  // Bands sit well clear of the FRAME/2 midline (default stand-off is
+  // ~7.2px at bodyFontPx 12) - a band starting exactly at the subject's own
+  // edge is DELIBERATELY still excluded (that is what stand-off is for), so
+  // testing right at that boundary would conflate "rotation is wrong" with
+  // "stand-off is working as designed". Comfortable margin avoids that.
+  const topBand = (image) => exclusion.obstacleIntervals(image, 5, 35, 12);
+  const bottomBand = (image) => exclusion.obstacleIntervals(image, 65, 95, 12);
+
+  // 0deg: upper-left stays upper-left.
+  {
+    const image = caseFor(0);
+    const top = topBand(image);
+    assert.ok(top.length > 0, '0deg: top band has an obstacle');
+    assert.ok(top[0].end < FRAME / 2 + 15, `0deg: obstacle stays on the LEFT (end=${top[0].end})`);
+    assert.equal(bottomBand(image).length, 0, '0deg: bottom band is clear - not a full-box fallback');
+  }
+
+  // 90deg clockwise: upper-left -> upper-right (verified algebraically and
+  // numerically against localPointToFrame() before this branch was wired in).
+  {
+    const image = caseFor(90);
+    const top = topBand(image);
+    assert.ok(top.length > 0, '90deg: top band still has an obstacle (rotation kept it in the upper half)');
+    assert.ok(top[0].start > FRAME / 2 - 15, `90deg: obstacle moved to the RIGHT (start=${top[0].start})`);
+    assert.equal(bottomBand(image).length, 0, '90deg: bottom band is clear - exact rotation, not a full-box fallback');
+  }
+
+  // 180deg: upper-left -> bottom-right.
+  {
+    const image = caseFor(180);
+    assert.equal(topBand(image).length, 0, '180deg: top band is now clear');
+    const bottom = bottomBand(image);
+    assert.ok(bottom.length > 0, '180deg: bottom band has the obstacle');
+    assert.ok(bottom[0].start > FRAME / 2 - 15, `180deg: obstacle is on the RIGHT (start=${bottom[0].start})`);
+  }
+
+  // 270deg: upper-left -> bottom-left.
+  {
+    const image = caseFor(270);
+    assert.equal(topBand(image).length, 0, '270deg: top band is clear');
+    const bottom = bottomBand(image);
+    assert.ok(bottom.length > 0, '270deg: bottom band has the obstacle');
+    assert.ok(bottom[0].end < FRAME / 2 + 15, `270deg: obstacle stays on the LEFT (end=${bottom[0].end})`);
+  }
+});
+
+test('a non-quarter rotation on a cutout falls back to the conservative full-frame box, never a stale silhouette', () => {
+  const cols = 4;
+  const rows = 4;
+  const cells = Array.from({ length: rows }, (u, r) => Array.from({ length: cols }, (u2, c) => (r < 2 && c < 2 ? 1 : 0)));
+  const mask = { rows, cols, cells };
+  const image = {
+    x: 0, y: 0, width: 100, height: 100, shape: 'cutout',
+    sourceWidth: 100, sourceHeight: 100, fitMode: 'contain', rotation: 45, mask,
+  };
+  const asRect = { ...image, shape: 'rect', rotation: 45, mask: undefined };
+
+  const full = exclusion.obstacleIntervals(image, 40, 60, 12);
+  const rectFallback = exclusion.obstacleIntervals(asRect, 40, 60, 12);
+  assert.deepEqual(full, rectFallback, '45deg is not a quarter turn - exclusion must match the plain rotated-rect fallback exactly');
+});
+
+test('a non-default crop on a cutout falls back conservatively - paint does not draw an arbitrary crop yet', () => {
+  const cols = 4;
+  const rows = 4;
+  const cells = Array.from({ length: rows }, (u, r) => Array.from({ length: cols }, (u2, c) => (r < 2 && c < 2 ? 1 : 0)));
+  const mask = { rows, cols, cells };
+  const image = {
+    x: 0, y: 0, width: 100, height: 100, shape: 'cutout',
+    sourceWidth: 100, sourceHeight: 100, fitMode: 'contain', rotation: 0, mask,
+    cropX: 10, cropY: 10, cropWidth: 50, cropHeight: 50,
+  };
+  const asRect = { ...image, shape: 'rect', mask: undefined };
+
+  const full = exclusion.obstacleIntervals(image, 40, 60, 12);
+  const rectFallback = exclusion.obstacleIntervals(asRect, 40, 60, 12);
+  assert.deepEqual(full, rectFallback, 'a non-default crop must fall back to the same box a plain rect gets - never a mismatched exact silhouette');
+});
+
+// Section 16: fit mode + rotation combined - the class of bug that survives
+// isolated single-axis tests but shows up the moment two transforms compose
+// in the wrong order.
+test('fit mode and rotation compose correctly together, not just in isolation', () => {
+  const cols = 8;
+  const rows = 8;
+  const cells = Array.from({ length: rows }, (u, r) => Array.from({ length: cols }, (u2, c) => (r < 4 && c < 4 ? 1 : 0)));
+  const mask = { rows, cols, cells };
+  // A non-square source (200x100) into a non-square, rotated frame - forces
+  // fit + rotation to interact rather than each independently no-op'ing on
+  // a square case.
+  const combos = [
+    { fitMode: 'contain', rotation: 90, flipH: false },
+    { fitMode: 'cover', rotation: 90, flipH: false },
+    { fitMode: 'stretch', rotation: 90, flipH: false },
+    { fitMode: 'contain', rotation: 90, flipH: true },
+  ];
+  for (const combo of combos) {
+    const image = {
+      x: 0, y: 0, width: 100, height: 200, shape: 'cutout',
+      sourceWidth: 200, sourceHeight: 100, mask, ...combo,
+    };
+    const asBox = { x: 0, y: 0, width: 100, height: 200, shape: 'rect', rotation: 0 };
+    const result = exclusion.obstacleIntervals(image, 0, 200, 12);
+    const boxResult = exclusion.obstacleIntervals(asBox, 0, 200, 12);
+    assert.ok(result.length > 0, `${JSON.stringify(combo)}: produces a real obstacle, not nothing`);
+    // The exact silhouette must be a NARROWER exclusion than the whole
+    // rotated frame box (the subject is only one quadrant of the source) -
+    // proof this combination did not silently collapse to the conservative
+    // fallback.
+    const resultWidth = result.reduce((sum, r) => sum + (r.end - r.start), 0);
+    const boxWidth = boxResult.reduce((sum, r) => sum + (r.end - r.start), 0);
+    assert.ok(resultWidth < boxWidth, `${JSON.stringify(combo)}: exact silhouette (${resultWidth}) must be narrower than the full box (${boxWidth})`);
+  }
+});
+
 test('an internal hole in a silhouette is occupied - text never threads an arm gap', () => {
   const rows = 16;
   const cols = 16;
@@ -841,6 +970,31 @@ test('a mask fingerprint change is a different block fingerprint, at the same bo
   const withMaskA = compose.composeBlock({ ...frame, images: [{ ...image, mask: { rows: 2, cols: 2, cells: [[1, 1], [0, 0]] } }] });
   const withMaskB = compose.composeBlock({ ...frame, images: [{ ...image, mask: { rows: 2, cols: 2, cells: [[1, 0], [1, 0]] } }] });
   assert.notEqual(withMaskA.fingerprint, withMaskB.fingerprint);
+});
+
+// Gap 3 (image truth #9): the fingerprint used to hash only x/y/width/
+// height/shape/rotation/maskHash/standOffPx - fit mode, flip and source
+// dimensions could all change what a cutout's exclusion actually is
+// (image-geometry.js's resolvePlacedImage()) while leaving the fingerprint
+// untouched, so "Contain -> Stretch" looked like no change at all to
+// anything that only trusted the fingerprint.
+test('fit mode, flip, rotation and source dimensions each change the fingerprint, at the same box geometry', () => {
+  const frame = { width: 300, height: 300, padding: 10, bodyFontPx: 16, columnCount: 1, body: 'साधा मजकूर सातारा जिल्ह्यातील.' };
+  const mask = { rows: 2, cols: 2, cells: [[1, 1], [0, 0]] };
+  const base = { x: 20, y: 20, width: 100, height: 100, shape: 'cutout', mask, sourceWidth: 200, sourceHeight: 100, fitMode: 'contain' };
+  const composeWith = (overrides) => compose.composeBlock({ ...frame, images: [{ ...base, ...overrides }] }).fingerprint;
+
+  const baseFp = composeWith({});
+  const stretchFp = composeWith({ fitMode: 'stretch' });
+  const flipFp = composeWith({ flipH: true });
+  const rotatedFp = composeWith({ rotation: 90 });
+  const sourceFp = composeWith({ sourceWidth: 400, sourceHeight: 100 });
+
+  const fingerprints = new Set([baseFp, stretchFp, flipFp, rotatedFp, sourceFp]);
+  assert.equal(fingerprints.size, 5, 'fit mode, flip, rotation and source dimensions must each produce a distinct fingerprint');
+
+  // Determinism: the exact same input, called twice, must still agree.
+  assert.equal(composeWith({}), baseFp, 'the same image input remains deterministic');
 });
 
 // ------------------------------------------ variable-row bottom safety (bug 1) ---

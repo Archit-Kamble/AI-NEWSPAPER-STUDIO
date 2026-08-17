@@ -102,6 +102,11 @@ function deskSentence(condition, providerName) {
 function fromHttpStatus(status, body = '') {
   const text = String(body);
   if (status === 401 || status === 403) return 'auth';
+  // DeepSeek's real response to a zero-balance account - "Insufficient
+  // Balance", confirmed against the live API. Nothing about it clears on its
+  // own; the account needs topping up, the same non-retryable shape as a
+  // quota that resets on a clock the desk cannot turn.
+  if (status === 402) return 'quotaExhausted';
   if (status === 429) {
     // Google names the exhausted metric; a per-day quota is not a busy minute,
     // and calling it one would send the desk back to press the button again.

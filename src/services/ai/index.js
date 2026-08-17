@@ -34,6 +34,7 @@ const PROVIDERS = {
   gemini: require('./providers/gemini'),
   anthropic: require('./providers/anthropic'),
   openai: require('./providers/openai-compatible'),
+  deepseek: require('./providers/deepseek'),
 };
 
 // Who writes when `.env` does not say. Gemini: it has the room for a full-page

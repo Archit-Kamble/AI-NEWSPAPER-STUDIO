@@ -107,6 +107,11 @@ async function compose() {
   if (!composeModule) composeModule = await import('../../public/editor/compose/section-adapter.js');
   return composeModule;
 }
+let richTextModule = null;
+async function richText() {
+  if (!richTextModule) richTextModule = await import('../../public/editor/layout/rich-text.js');
+  return richTextModule;
+}
 let metricsModule = null;
 let shaperModule = null;
 async function ensureComposeReady() {
@@ -203,6 +208,30 @@ async function checkPage(page, newspaper, totalPages) {
         findings.push({
           level: 'error', check: 'overset', ...at(section),
           message: `${adapter.bodyOversetChars(composed)} characters more than this block holds. Cut it, or carry it over.`,
+        });
+      }
+    }
+
+    // --- italic/underline copy going to press -------------------------------
+    // Bold and a selected size both reach the press file as a real,
+    // documented Scribus attribute this codebase can verify (a genuinely
+    // separate bold font file; FONTSIZE is just a number). Italic has no
+    // separate font file shipped at all, and underline's Scribus attribute
+    // (FEATURES="underline") has not been checked against a real Scribus
+    // render - there is no Scribus binary in this environment to open the
+    // generated file against. Rather than silently ship copy whose emphasis
+    // may not survive to paper, this is a real, desk-visible warning - "do
+    // not silently drop them" (see scribus.service.js's own note on this).
+    if (section.body) {
+      const { textWithMarks } = await richText();
+      const { marks } = textWithMarks(section.body);
+      const hasItalic = marks.some((m) => m.tag === 'i');
+      const hasUnderline = marks.some((m) => m.tag === 'u');
+      if (hasItalic || hasUnderline) {
+        const kinds = [hasItalic && 'italic', hasUnderline && 'underline'].filter(Boolean).join(' and ');
+        findings.push({
+          level: 'warning', check: 'unverified-print-emphasis', ...at(section),
+          message: `This story has ${kinds} copy. That emphasis has not been verified against a real Scribus render - check the press file before it goes to plate.`,
         });
       }
     }

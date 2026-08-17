@@ -260,6 +260,48 @@ function decode(value) {
 }
 
 /**
+ * The same run, split at every mark boundary markRun() already finds - but as
+ * STRUCTURED style runs, `{text, bold, italic, underline, fontPx}`, rather
+ * than nested HTML tags. A browser draws marks by nesting `<b>`/`<i>` around
+ * a slice of `innerHTML`; a press format that applies a character style to a
+ * span of a text frame (Scribus's ITEXT runs) needs the same boundary cuts
+ * but as data, not markup - this reuses markRun()'s own cut-point logic
+ * rather than a second, independent implementation of it.
+ */
+export function styledRuns(runText, at, marks, baseFontPx) {
+  const plain = () => [{ text: runText, bold: false, italic: false, underline: false, fontPx: baseFontPx }];
+  if (!marks.length || !runText) return plain();
+
+  const end = at + runText.length;
+  const relevant = marks.filter((mark) => mark.start < end && mark.end > at);
+  if (!relevant.length) return plain();
+
+  const cuts = new Set([0, runText.length]);
+  for (const mark of relevant) {
+    if (mark.start > at) cuts.add(mark.start - at);
+    if (mark.end < end) cuts.add(mark.end - at);
+  }
+  const points = [...cuts].sort((a, b) => a - b);
+
+  const runs = [];
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const from = points[index];
+    const to = points[index + 1];
+    if (to <= from) continue;
+    const active = relevant.filter((mark) => mark.start <= at + from && mark.end >= at + to);
+    const sizeMark = active.find((mark) => mark.tag === 'size');
+    runs.push({
+      text: runText.slice(from, to),
+      bold: active.some((mark) => mark.tag === 'b'),
+      italic: active.some((mark) => mark.tag === 'i'),
+      underline: active.some((mark) => mark.tag === 'u'),
+      fontPx: sizeMark ? sizeMark.value : baseFontPx,
+    });
+  }
+  return runs.length ? runs : plain();
+}
+
+/**
  * Puts the marks back on one poured run.
  *
  * `at` is where the run's text starts in the plain text; the run is split at

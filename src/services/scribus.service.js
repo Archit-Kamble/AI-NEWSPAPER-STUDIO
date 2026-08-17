@@ -18,12 +18,23 @@
 //
 // Everything below is in MILLIMETRES. The editor works at 2 px/mm and CLAUDE.md
 // forbids mixing the two silently, so px→mm happens once, here, at the boundary.
+//
+// THE INVARIANT THIS FILE EXISTS TO HOLD: Layout, the Block Editor, preflight
+// and Scribus consume ONE composition truth. This used to be a second,
+// independent text-layout engine - `body_font_px * 1.6` for a kicker's height,
+// `Math.floor(innerWidth / 38)` for how many columns a body sets in, and then
+// the whole body handed to Scribus as ONE paragraph for Scribus's own text
+// engine to wrap a second time. None of those numbers came from anywhere; they
+// could not help disagreeing with what the desk had actually approved on
+// screen. Every line that reaches a press frame now is a line
+// public/editor/compose/ already decided, at an x/y/width/height/fontPx it
+// already computed - this file only converts px to mm and writes XML.
 
-const { geometryOf, pxToMm } = require('../layout/geometry');
-// A story is stored with the marks a printer can set; a text frame takes the
-// text. Without this a page goes to press with "<b>" set in type.
+const { geometryOf, pxToMm, regionForPage } = require('../layout/geometry');
+// Captions are plain strings, not rich copy - the one place `strip()` (the
+// server's cached view of rich-text.js's plainText()) is still used directly.
 const { strip } = require('../layout/plain-text');
-const { identityFor, dateLine } = require('../layout/identity');
+const { identityFor, dateLine, devanagari } = require('../layout/identity');
 const { captionBox, PLACED_CAPTION_METRICS } = require('../../public/editor/layout/caption-geometry');
 
 const escapeXml = (value) =>
@@ -35,7 +46,10 @@ const escapeXml = (value) =>
     .replace(/'/g, '&apos;');
 
 const mm = (px) => Number(pxToMm(px).toFixed(4));
-// Scribus works in points for type sizes. The editor's px are 2 per mm.
+// Scribus works in points for type sizes. The editor's px are 2 per mm - the
+// SAME conversion every persisted *_font_px column already uses, so a
+// selected-size mark (rich-text.js's `data-sahas-size`, also stored in that
+// px convention) converts with this one function too, not a second one.
 const pxToPt = (px) => Number(((Number(px) / 2) * 72 / 25.4).toFixed(2));
 
 // The paper's inks, as separations rather than as screen colours. A newspaper
@@ -48,136 +62,446 @@ const COLOURS = `
   <COLOR NAME="SahasRed" CMYK="#00ffe61a" Spot="0" Register="0"/>
   <COLOR NAME="None" CMYK="#00000000" Spot="0" Register="0"/>`;
 
-// Type. Scribus needs a real family name that exists on the machine that opens
-// the file; these are the ones the workspace itself sets and that ship with the
-// application in public/assets/fonts.
-const BODY_FONT = 'Noto Serif Devanagari Regular';
-const HEAD_FONT = 'Noto Sans Devanagari Bold';
+// The four faces the publication actually ships (public/assets/fonts/, the
+// same registry compose/font-metrics.js reads under FONT_FILES) - keyed the
+// same way, "stack/weight", so a composed line's own `family`/`weight`
+// (compose.js's DISPLAY_TYPOGRAPHY, or the block's own Typography-panel
+// choice for body copy) maps onto a real name Scribus can resolve on the
+// machine that opens the file, never a second, invented font name.
+const FONT_NAMES = {
+  'serif/400': 'Noto Serif Devanagari Regular',
+  'serif/700': 'Noto Serif Devanagari Bold',
+  'sans/400': 'Noto Sans Devanagari Regular',
+  'sans/700': 'Noto Sans Devanagari Bold',
+};
+const BODY_FONT = FONT_NAMES['serif/400'];
+const HEAD_FONT = FONT_NAMES['sans/700'];
+
+function faceKey(family, weight) {
+  const stack = String(family || 'serif').toLowerCase().includes('sans') ? 'sans' : 'serif';
+  return `${stack}/${Number(weight) >= 600 ? 700 : 400}`;
+}
+/** The real font NAME for a composed line's own family/weight - `forceBold`
+ * is a per-RUN override (a `<b>`/`<strong>` mark inside otherwise-regular
+ * body copy), never a second classification. */
+function fontNameFor(family, weight, forceBold = false) {
+  return FONT_NAMES[faceKey(family, forceBold ? 700 : weight)] || BODY_FONT;
+}
 
 let frameId = 1;
 const nextId = () => (frameId += 1);
 
-// A Scribus text frame. PTYPE 4 is text; PTYPE 2 is an image.
-function textFrame({ xMm, yMm, widthMm, heightMm, text, fontPt, font, colour = 'Black', align = 0, columns = 1, gapMm = 3 }) {
-  if (!String(text || '').trim()) return '';
-  const paragraphs = String(text)
-    .split(/\n+/)
-    .filter((line) => line.trim())
-    .map(
-      (line) =>
-        `<ITEXT CH="${escapeXml(line)}" FONT="${escapeXml(font)}" FONTSIZE="${fontPt}" FCOLOR="None" TXTFILL="${colour}"/><para ALIGN="${align}"/>`,
-    )
+// --------------------------------------------------------- compose loader ---
+//
+// The same lazy-import pattern fit.service.js and preflight.service.js
+// already use for these ES modules (public/editor/compose/ has no CommonJS
+// build). "No fallback geometry is allowed at press export" - a page that
+// went to the plate composed against the hmtx fallback, because the shaper
+// silently failed to load, is not a conservative press file, it is a WRONG
+// one; requireShaperReady() makes that a loud failure at build time instead.
+
+let metricsModule = null;
+let shaperModule = null;
+let adapterModule = null;
+let richTextModule = null;
+let smartCardsModule = null;
+let smartCardLayoutModule = null;
+let textFlowModule = null;
+let imageGeometryModule = null;
+
+async function ensureComposeReady() {
+  if (!metricsModule) metricsModule = await import('../../public/editor/compose/font-metrics.js');
+  if (!shaperModule) shaperModule = await import('../../public/editor/compose/shaper.js');
+  if (!adapterModule) adapterModule = await import('../../public/editor/compose/section-adapter.js');
+  if (!richTextModule) richTextModule = await import('../../public/editor/layout/rich-text.js');
+  if (!smartCardsModule) smartCardsModule = await import('../../public/editor/smart-cards/smart-cards.js');
+  if (!smartCardLayoutModule) smartCardLayoutModule = await import('../../public/editor/smart-cards/layout.js');
+  if (!textFlowModule) textFlowModule = await import('../../public/editor/layout/text-flow.js');
+  if (!imageGeometryModule) imageGeometryModule = await import('../../public/editor/layout/image-geometry.js');
+  await Promise.all([metricsModule.ensureFontsLoaded(), shaperModule.ensureShaperReady()]);
+  shaperModule.requireShaperReady();
+  return {
+    adapter: adapterModule,
+    richText: richTextModule,
+    smartCards: smartCardsModule,
+    smartCardLayout: smartCardLayoutModule,
+    textFlow: textFlowModule,
+    imageGeometry: imageGeometryModule,
+  };
+}
+
+// -------------------------------------------------------------- XML frames ---
+
+/**
+ * One already-positioned composed LINE, as one Scribus text frame - never a
+ * paragraph Scribus is asked to wrap again. `runs` are the line's own styled
+ * pieces (rich-text.js's styledRuns(), or a single plain run for a band line
+ * with no marks); every run becomes one ITEXT inside the SAME frame, so
+ * several styles can sit on one physical line without Scribus ever breaking
+ * it onto two.
+ *
+ * EXTRA/TEXTRA/BEXTRA/REXTRA are all 0: the compositor already owns every
+ * pixel of padding a line needed (the frame's own x/y/width/height IS the
+ * line's exact measure), so Scribus's own default text-frame inset (1.5mm on
+ * every side in the old per-band frames) would silently re-introduce a
+ * second, un-composed margin around type that was already placed exactly.
+ */
+function lineFrame({ xMm, yMm, widthMm, heightMm, runs, align = 0, ownPage = 0 }) {
+  const itext = runs
+    .filter((run) => run.text)
+    .map((run) => {
+      const font = fontNameFor(run.family, run.weight, run.bold);
+      const colour = run.colour || 'Black';
+      const features = run.underline ? ' FEATURES="underline"' : '';
+      return `<ITEXT CH="${escapeXml(run.text)}" FONT="${escapeXml(font)}" FONTSIZE="${pxToPt(run.fontPx)}" FCOLOR="None" TXTFILL="${colour}"${features}/>`;
+    })
     .join('');
+  if (!itext) return '';
 
   return `
   <PAGEOBJECT XPOS="${xMm}" YPOS="${yMm}" WIDTH="${widthMm}" HEIGHT="${heightMm}"
-              OwnPage="0" ItemID="${nextId()}" PTYPE="4" ANNAME="" FRTYPE="0"
+              OwnPage="${ownPage}" ItemID="${nextId()}" PTYPE="4" ANNAME="" FRTYPE="0"
               PWIDTH="0" PCOLOR="None" PCOLOR2="None" LOCALSCX="1" LOCALSCY="1"
-              COLUMNS="${columns}" COLGAP="${gapMm}" TEXTFLOWMODE="1"
-              EXTRA="1.5" TEXTRA="1.5" BEXTRA="1.5" REXTRA="1.5">${paragraphs}
+              COLUMNS="1" COLGAP="0" TEXTFLOWMODE="0"
+              EXTRA="0" TEXTRA="0" BEXTRA="0" REXTRA="0">${itext}<para ALIGN="${align}"/>
   </PAGEOBJECT>`;
 }
 
 // An image frame. `PFILE` is a path the press box has to be able to resolve, so
 // it is written relative to the .sla - the export ships the pictures beside it.
-function imageFrame({ xMm, yMm, widthMm, heightMm, file, rotation = 0 }) {
+//
+// The frame itself (position, size, rotation) is the ONE geometry every other
+// surface already agrees on - public/editor/layout/image-geometry.js's
+// resolvePlacedImage(), the same function paint, resize and the exclusion
+// mask all read. `LOCALSCX`/`LOCALSCY`/`LOCALX`/`LOCALY` place the embedded
+// picture inside that unrotated frame the way Contain/Cover/Stretch already
+// scale and centre it in the browser (resolvePlacedImage()'s own
+// localContentRect, before rotation is applied - Scribus's `ROT` rotates the
+// frame and its content together, matching how the browser applies rotation
+// as a transform around the frame's own centre).
+//
+// CAVEAT, stated rather than hidden: LOCALSCX/LOCALSCY/LOCALX/LOCALY are
+// documented Scribus 1.5 image-frame attributes, applied here from that
+// documentation - there is no Scribus binary in this environment to render
+// and compare a generated frame against, so this has not been visually
+// verified against a real Scribus render the way the rest of this project's
+// geometry claims are. The frame's OWN position/size/rotation (the part
+// every other surface already renders identically) IS exact; the crop/scale
+// of the picture WITHIN that frame is a best-effort, deterministic
+// derivation from resolvePlacedImage(), not a verified one.
+function imageFrame({ resolved, xMm, yMm, file, ownPage = 0 }) {
+  const { frame, localContentRect, rotation, scaleX, scaleY } = resolved;
+  const widthMm = mm(frame.width);
+  const heightMm = mm(frame.height);
+  // Scribus scales the embedded picture by a factor of the FRAME's own
+  // pre-rotation local target, not the source pixels - LOCALSCX/Y are that
+  // ratio directly (resolvePlacedImage() already expresses Contain/Cover/
+  // Stretch as exactly this scale for the cropped source into localTarget).
+  const localScX = Number.isFinite(scaleX) && scaleX > 0 ? scaleX : 1;
+  const localScY = Number.isFinite(scaleY) && scaleY > 0 ? scaleY : 1;
+  // The offset of the scaled picture's own top-left corner from the frame's
+  // local origin, in the frame's PRE-rotation space (localContentRect is
+  // already exactly that - image-geometry.js's own derivation).
+  const localXMm = mm(localContentRect.x);
+  const localYMm = mm(localContentRect.y);
+
   return `
   <PAGEOBJECT XPOS="${xMm}" YPOS="${yMm}" WIDTH="${widthMm}" HEIGHT="${heightMm}"
-              ROT="${rotation}" OwnPage="0" ItemID="${nextId()}" PTYPE="2" FRTYPE="0"
+              ROT="${rotation || 0}" OwnPage="${ownPage}" ItemID="${nextId()}" PTYPE="2" FRTYPE="0"
               PWIDTH="0" PCOLOR="None" PCOLOR2="None"
-              PFILE="${escapeXml(file)}" LOCALSCX="1" LOCALSCY="1" SCALETYPE="0" RATIO="1"
+              PFILE="${escapeXml(file)}" LOCALSCX="${localScX}" LOCALSCY="${localScY}"
+              LOCALX="${localXMm}" LOCALY="${localYMm}" SCALETYPE="0" RATIO="1"
               TEXTFLOWMODE="2"/>`;
 }
 
-// Every block on a page becomes frames: a headline, a deck, the body, and one
-// frame per placed picture. TEXTFLOWMODE="2" on the pictures is what makes
-// Scribus run the copy round them the way the workspace already does.
-function blockFrames(section, publicDir) {
-  const xMm = mm(section.x_px);
-  const yMm = mm(section.y_px);
-  const widthMm = mm(section.width_px);
-  const heightMm = mm(section.height_px);
-  const padMm = mm(Number(section.margin_px) || 12);
+// ------------------------------------------------------ headline accent ----
+//
+// The painted word: one phrase of the headline set in the paper's accent
+// colour. Marked by the desk with asterisks in the stored text - the same
+// mechanism render.js's headlineHtml() strips and re-colours at paint time,
+// per COMPOSED LINE (a phrase split across a line break is the one case
+// neither this nor the browser handles, because compose.js measured the
+// asterisks as literal characters when it wrapped the line - the identical,
+// already-accepted approximation the canvas itself already carries).
+function accentRuns(text, { family, weight }, colour) {
+  if (!text.includes('*')) return [{ text, family, weight, bold: false, italic: false, underline: false, fontPx: null }];
+  // Colour is decided from the split's OWN index (odd = inside a pair of
+  // asterisks) before any empty piece is dropped - an accent phrase at the
+  // very start or end of the headline splits into a leading/trailing empty
+  // string, and filtering first would shift every later index by one,
+  // silently colouring the wrong half of the headline.
+  return text
+    .split(/\*([^*]+)\*/g)
+    .map((part, index) => ({
+      text: part,
+      family,
+      weight,
+      bold: false,
+      italic: false,
+      underline: false,
+      fontPx: null,
+      colour: index % 2 === 1 ? colour : undefined,
+    }))
+    .filter((run) => run.text !== '');
+}
 
-  const innerX = xMm + padMm;
-  const innerWidth = Math.max(1, widthMm - padMm * 2);
-  let cursor = yMm + padMm;
+// -------------------------------------------------------------- body runs ---
+
+/** The rich-mark runs for one composed body line, in the SAME coordinate
+ * space markRun()/composedMarkup() already establish: marks are held against
+ * the plain body text alone (no dateline prefix), and `line.at` is an offset
+ * into the text WITH the prefix - shifted back by the prefix length, exactly
+ * as render.js's lineHtml() already does, so the two renderers can never
+ * slice a mark at two different characters. */
+function styledBodyRuns(line, marks, prefixLength, richText) {
+  const at = (line.at || 0) - prefixLength;
+  return richText.styledRuns(line.text, at, marks, line.fontPx).map((run) => ({
+    ...run,
+    family: line.family,
+    weight: line.weight,
+  }));
+}
+
+// --------------------------------------------------------- smart cards -----
+//
+// A Smart Card is never flattened through smartCardText() for the press the
+// way it briefly was for prose - it is a STRUCTURED layout (a grid, a table
+// of rows, a quote), and layoutSmartCard() has already resolved every line
+// it will draw. This reads that SAME resolved geometry, not a second Scribus-
+// only solver: a sudoku exports as its exact square cells, a rashi as its
+// resolved reading/lucky lines, panchang as its resolved label/value rows, a
+// suvichar as its resolved quote/attribution lines, dinvishesh as its
+// resolved entries - never a re-flattened paragraph.
+function smartCardFrames({ key, data, frame, xMm, yMm, ownPage, cardLayout, family = 'serif', weight = 400 }) {
+  const layout = cardLayout.layoutSmartCard(key, data, frame);
+  if (layout.fitState === 'EMPTY') return '';
   const parts = [];
-
-  const advance = (h) => {
-    const at = cursor;
-    cursor += h;
-    return at;
+  const plainRun = (text, fontPx) => [{ text, family, weight, bold: false, italic: false, underline: false, fontPx }];
+  const oneLine = (text, atXPx, atYPx, widthPx, fontPx, align = 0) => {
+    if (!text) return;
+    parts.push(lineFrame({
+      xMm: xMm + mm(atXPx), yMm: yMm + mm(atYPx), widthMm: mm(widthPx), heightMm: mm(layout.geometry?.lineHeightPx || fontPx * 1.5),
+      runs: plainRun(text, fontPx), align, ownPage,
+    }));
   };
 
-  if (section.kicker) {
-    const h = mm(Number(section.body_font_px) * 1.6);
-    parts.push(textFrame({
-      xMm: innerX, yMm: advance(h), widthMm: innerWidth, heightMm: h,
-      text: strip(section.kicker), fontPt: pxToPt(section.body_font_px), font: HEAD_FONT,
+  if (layout.subtitle?.lines?.length) {
+    layout.subtitle.lines.forEach((line, i) => oneLine(line, 0, i * layout.subtitle.lineHeightPx, frame.width, layout.subtitle.fontPx, 1));
+  }
+  const subtitleOffsetPx = layout.subtitle?.height || 0;
+
+  if (key === 'sudoku' || key === 'sudoku-solution') {
+    const { cell, top } = layout.geometry;
+    const isGrid = (value) => Array.isArray(value) && value.length === 9 && value.every((row) => Array.isArray(row) && row.length === 9);
+    const rows = isGrid(data?.grid) ? data.grid : isGrid(data?.solution) ? data.solution : [];
+    rows.forEach((row, y) => row.forEach((value, x) => {
+      const n = Number(value);
+      if (!(n > 0)) return;
+      oneLine(devanagari(n), x * cell, subtitleOffsetPx + top + y * cell, cell, layout.fontPx, 1);
     }));
+    return parts.join('');
   }
 
-  if (section.headline) {
-    // The painted word is marked with asterisks in the workspace. Scribus takes
-    // a separate colour per run, so the marks come out and the whole headline is
-    // set in the accent when the layout asked for it.
-    const accented = strip(section.headline).includes('*') || section.headline_style === 'accent';
-    const h = mm(Number(section.headline_font_px) * 2.6);
-    parts.push(textFrame({
-      xMm: innerX, yMm: advance(h), widthMm: innerWidth, heightMm: h,
-      text: strip(section.headline).replace(/\*/g, ''),
-      fontPt: pxToPt(section.headline_font_px), font: HEAD_FONT,
-      colour: accented ? 'SahasRed' : 'Black',
-    }));
+  if (key === 'rashi') {
+    const { columns, rows, rowHeights, columnWidth, nameWidth, lineHeightPx } = layout.geometry;
+    layout.items.forEach((item, index) => {
+      const column = Math.floor(index / rows);
+      const row = index % rows;
+      const rowTop = rowHeights.slice(0, row).reduce((sum, h) => sum + h, 0);
+      const colX = column * columnWidth;
+      oneLine(item.name, colX, subtitleOffsetPx + rowTop, nameWidth, layout.fontPx);
+      const lines = [...item.readingLines, ...item.luckLines];
+      lines.forEach((line, i) => oneLine(line, colX + nameWidth, subtitleOffsetPx + rowTop + i * lineHeightPx, columnWidth - nameWidth, layout.fontPx));
+    });
+    return parts.join('');
   }
 
-  if (section.subheading) {
-    const h = mm(Number(section.subheading_font_px) * 2.4);
-    parts.push(textFrame({
-      xMm: innerX, yMm: advance(h), widthMm: innerWidth, heightMm: h,
-      text: strip(section.subheading), fontPt: pxToPt(section.subheading_font_px), font: HEAD_FONT,
+  if (key === 'panchang') {
+    const { labelWidth, valueWidth, lineHeightPx } = layout.geometry;
+    let top = subtitleOffsetPx;
+    for (const item of layout.items) {
+      oneLine(item.labelLines[0] || '', 0, top, labelWidth, layout.fontPx);
+      item.valueLines.forEach((line, i) => oneLine(line, labelWidth, top + i * lineHeightPx, valueWidth, layout.fontPx));
+      top += item.rowHeight;
+    }
+    return parts.join('');
+  }
+
+  if (key === 'suvichar') {
+    const { lineHeightPx, attributionFontPx, attributionLineHeightPx, ruleReservePx } = layout.geometry;
+    let top = subtitleOffsetPx + ruleReservePx;
+    layout.quoteLines.forEach((line, i) => oneLine(line, 0, top + i * lineHeightPx, frame.width, layout.fontPx, 1));
+    top += layout.quoteLines.length * lineHeightPx;
+    layout.attributionLines.forEach((line, i) => oneLine(line, 0, top + i * attributionLineHeightPx, frame.width, attributionFontPx, 1));
+    return parts.join('');
+  }
+
+  if (key === 'dinvishesh') {
+    const { lineHeightPx } = layout.geometry;
+    let top = subtitleOffsetPx;
+    for (const item of layout.items) {
+      item.lines.forEach((line, i) => oneLine(line, 0, top + i * lineHeightPx, frame.width, layout.fontPx));
+      top += item.height;
+    }
+    return parts.join('');
+  }
+
+  return parts.join('');
+}
+
+// ------------------------------------------------------------ one block ----
+
+/**
+ * Every block on a page becomes frames: one per composed kicker/headline/deck
+ * LINE, one per body LINE, one per placed picture (with its caption), or -
+ * for a Smart Card - its own resolved structured geometry. `pageIndex` is the
+ * real Scribus page this block's frames belong to (see buildDocument()'s own
+ * note on OwnPage); `pageOffsetMm` is the same continuous-document vertical
+ * offset the page itself is drawn at.
+ */
+async function blockFrames(section, { pageIndex = 0, pageOffsetMm = 0 } = {}) {
+  const { adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry } = await ensureComposeReady();
+  const parts = [];
+
+  const holdsCard = Boolean(section.smart_card_key) && Boolean(section.smart_card_data)
+    && smartCards.canRenderSmartCard(section.smart_card_key);
+
+  // A Smart Card is never prose: composed with an empty body and no images
+  // (smartCardFrame()'s own rule, section-thumb.js), so its kicker/headline/
+  // deck bands are exact and the card takes over from exactly where the
+  // body would otherwise have started.
+  const composition = holdsCard
+    ? adapter.composeSection({ ...section, images: [], body: '' }, { ...section, body: '' })
+    : adapter.composeSection(section, section);
+
+  parts.push(displayBandFrames(composition, section, {
+    xBaseMm: mm(section.x_px), yBaseMm: mm(section.y_px), pageOffsetMm, ownPage: pageIndex,
+  }));
+
+  if (holdsCard) {
+    const frame = smartCardLayout.smartCardFrameFromComposition(composition);
+    parts.push(smartCardFrames({
+      key: section.smart_card_key, data: section.smart_card_data, frame,
+      xMm: mm(section.x_px + composition.content.left),
+      yMm: mm(section.y_px + composition.bodyTop) + pageOffsetMm,
+      ownPage: pageIndex, cardLayout: smartCardLayout,
     }));
+    return parts.filter(Boolean).join('');
   }
 
   if (section.body) {
-    const remaining = Math.max(4, yMm + heightMm - padMm - cursor);
-    // The same measure rule the canvas uses: a wide block sets its copy in
-    // several narrow columns rather than one unreadable line.
-    const columns = Math.max(1, Math.min(4, Math.floor(innerWidth / 38)));
-    const dateline = [section.location, section.reporter_name].filter(Boolean).join(', ');
-    parts.push(textFrame({
-      xMm: innerX, yMm: cursor, widthMm: innerWidth, heightMm: remaining,
-      text: `${dateline ? `■ ${dateline} ` : ''}${strip(section.body)}`,
-      fontPt: pxToPt(section.body_font_px), font: BODY_FONT,
-      align: 3, // justified, as a newspaper sets body copy
-      columns,
-    }));
+    const { marks } = richText.textWithMarks(section.body);
+    const prefix = textFlow.datelineText(section);
+    for (const line of composition.bodyLines) {
+      const runs = styledBodyRuns(line, marks, prefix.length, richText);
+      parts.push(lineFrame({
+        xMm: mm(section.x_px + line.x), yMm: mm(section.y_px + line.y) + pageOffsetMm,
+        widthMm: mm(line.measure + 1), heightMm: mm(line.height),
+        runs, align: 0, ownPage: pageIndex,
+      }));
+    }
   }
 
   for (const image of section.images || []) {
+    const resolved = imageGeometry.resolvePlacedImage(image);
     parts.push(imageFrame({
-      xMm: xMm + mm(image.x_px),
-      yMm: yMm + mm(image.y_px),
-      widthMm: mm(image.width_px),
-      heightMm: mm(image.height_px),
-      rotation: Number(image.rotation) || 0,
-      file: `.${image.url}`,
-      publicDir,
+      resolved,
+      xMm: mm(section.x_px + image.x_px), yMm: mm(section.y_px + image.y_px) + pageOffsetMm,
+      file: `.${image.url}`, ownPage: pageIndex,
     }));
     const caption = captionBox(image);
-    if (caption) parts.push(textFrame({
-      xMm: xMm + mm(caption.x),
-      yMm: yMm + mm(caption.y),
-      widthMm: mm(caption.width),
-      heightMm: mm(caption.height),
-      text: strip(image.caption),
-      fontPt: pxToPt(PLACED_CAPTION_METRICS.fontPx),
-      font: BODY_FONT,
-    }));
+    if (caption && image.caption) {
+      parts.push(lineFrame({
+        xMm: mm(section.x_px) + mm(caption.x), yMm: mm(section.y_px) + mm(caption.y) + pageOffsetMm,
+        widthMm: mm(caption.width), heightMm: mm(caption.height),
+        runs: [{ text: strip(image.caption), family: 'serif', weight: 400, bold: false, italic: false, underline: false, fontPx: PLACED_CAPTION_METRICS.fontPx }],
+        ownPage: pageIndex,
+      }));
+    }
   }
 
   return parts.filter(Boolean).join('');
+}
+
+/** The kicker/headline/deck bands, each composed LINE as its own frame - the
+ * headline's own accent phrase (asterisk-marked) split into its own run so
+ * it paints in the paper's colour, exactly as headlineHtml() already does
+ * for the browser. */
+function displayBandFrames(composition, section, { xBaseMm, yBaseMm, pageOffsetMm, ownPage }) {
+  const parts = [];
+  const accented = String(section.headline || '').includes('*') || section.headline_style === 'accent';
+  for (const [key, band] of Object.entries(composition.bands || {})) {
+    for (const line of band.lines) {
+      const runs = key === 'headline' && accented
+        ? accentRuns(line.text, { family: line.family, weight: line.weight }, 'SahasRed').map((run) => ({ ...run, fontPx: run.fontPx || line.fontPx }))
+        : [{ text: line.text, family: line.family, weight: line.weight, bold: false, italic: false, underline: false, fontPx: line.fontPx }];
+      parts.push(lineFrame({
+        xMm: xBaseMm + mm(line.x), yMm: yBaseMm + mm(line.y) + pageOffsetMm,
+        widthMm: mm(line.measure), heightMm: mm(line.height),
+        runs, align: 0, ownPage,
+      }));
+    }
+  }
+  return parts.join('');
+}
+
+// ------------------------------------------------------------- furniture ---
+//
+// The footer band: the SAME three things the browser prints
+// (masthead.js's pageFootMarkup()) - the paper's name, the edition's date,
+// the page number - from the SAME reserved region (geometry.js's
+// regionsFor()) and the SAME identity (identity.js). No rule, no border, no
+// extra legal sentence: the footer band is furniture, not a second imprint.
+function footerFrames(newspaper, page, geometry, identity, { pageOffsetMm, ownPage }) {
+  const parts = [];
+  const region = regionForPage(geometry, page.page_number);
+  const date = dateLine(newspaper.publication_date);
+  const dateText = date.day ? `${date.day} ${date.monthYear}` : '';
+  const verso = Number(page.page_number) % 2 === 0;
+
+  const leftMm = mm(geometry.marginXPx);
+  const widthMm = mm(geometry.matterWidthPx);
+  const footYMm = mm(region.footer.footTop) + pageOffsetMm;
+  const footHeightMm = mm(region.footer.footHeightPx);
+
+  // Three even columns across the foot, left to right in VISUAL order - the
+  // browser achieves the verso flip with CSS `flex-direction:row-reverse`
+  // (masthead.js/styles.css's .foot-verso); Scribus has no flex, so the
+  // three frames are placed directly in the order a reader would actually
+  // see them, recto (title, date, page) or verso (page, date, title).
+  const thirdMm = widthMm / 3;
+  const pageLabel = `पृष्ठ ${devanagari(page.page_number)}`;
+  const columns = verso ? [pageLabel, dateText, identity.title] : [identity.title, dateText, pageLabel];
+
+  columns.forEach((text, index) => {
+    if (!text) return;
+    const weight = index === 1 ? 400 : 700; // the date column is regular; title/page are bold
+    parts.push(lineFrame({
+      xMm: leftMm + index * thirdMm, yMm: footYMm,
+      widthMm: thirdMm, heightMm: footHeightMm,
+      runs: [{ text, family: 'sans', weight, bold: false, italic: false, underline: false, fontPx: 18 }],
+      align: 0, ownPage,
+    }));
+  });
+
+  // The legal imprint - printed ONCE, on identity.imprintPage (page two),
+  // never duplicated into every page's footer.
+  if (Number(page.page_number) === Number(identity.imprintPage || 2) && region.footer.imprintHeightPx > 0) {
+    const imprintYMm = mm(region.footer.imprintTop) + pageOffsetMm;
+    const imprintHeightMm = mm(region.footer.imprintHeightPx);
+    parts.push(lineFrame({
+      xMm: leftMm, yMm: imprintYMm, widthMm, heightMm: imprintHeightMm / 2,
+      runs: [{ text: identity.imprint, family: 'sans', weight: 400, bold: false, italic: false, underline: false, fontPx: 9 }],
+      align: 1, ownPage,
+    }));
+    parts.push(lineFrame({
+      xMm: leftMm, yMm: imprintYMm + imprintHeightMm / 2, widthMm, heightMm: imprintHeightMm / 2,
+      runs: [{ text: identity.imprintEnglish, family: 'sans', weight: 400, bold: false, italic: false, underline: false, fontPx: 8 }],
+      align: 1, ownPage,
+    }));
+  }
+
+  return parts.join('');
 }
 
 /**
@@ -187,7 +511,8 @@ function blockFrames(section, publicDir) {
  * opens the paper, not eight separate jobs, and Scribus's own page navigation
  * is what they already know.
  */
-function buildDocument(newspaper, pages) {
+async function buildDocument(newspaper, pages) {
+  await ensureComposeReady();
   frameId = 1;
   const g = geometryOf(newspaper);
   const identity = identityFor(newspaper.publication_date, pages.length);
@@ -197,25 +522,28 @@ function buildDocument(newspaper, pages) {
   const pageHeightMm = g.pageHeightMm;
   const marginXMm = (pageWidthMm - g.matterWidthMm) / 2;
   const marginYMm = (pageHeightMm - g.matterHeightMm) / 2;
+  const pageStepMm = pageHeightMm + 20;
 
   const pageElements = pages
     .map(
       (page, index) => `
-  <PAGE PAGEXPOS="0" PAGEYPOS="${index * (pageHeightMm + 20)}" PAGEWIDTH="${pageWidthMm}" PAGEHEIGHT="${pageHeightMm}"
+  <PAGE PAGEXPOS="0" PAGEYPOS="${index * pageStepMm}" PAGEWIDTH="${pageWidthMm}" PAGEHEIGHT="${pageHeightMm}"
         BORDERLEFT="${marginXMm}" BORDERRIGHT="${marginXMm}" BORDERTOP="${marginYMm}" BORDERBOTTOM="${marginYMm}"
         NUM="${index}" NAM="" MNAM="Normal" Size="Custom" Orientation="0"
         LEFT="0" PRESET="0" VerticalGuides="" HorizontalGuides=""/>`,
     )
     .join('');
 
-  const objects = pages
-    .map((page, index) => {
-      const offset = index * (pageHeightMm + 20);
-      return (page.sections || [])
-        .map((section) => blockFrames(section).replace(/YPOS="([\d.]+)"/g, (_, y) => `YPOS="${(Number(y) + offset).toFixed(4)}"`))
-        .join('');
-    })
-    .join('');
+  const objectParts = [];
+  for (let index = 0; index < pages.length; index += 1) {
+    const page = pages[index];
+    const pageOffsetMm = index * pageStepMm;
+    for (const section of page.sections || []) {
+      // eslint-disable-next-line no-await-in-loop
+      objectParts.push(await blockFrames(section, { pageIndex: index, pageOffsetMm }));
+    }
+    objectParts.push(footerFrames(newspaper, page, g, identity, { pageOffsetMm, ownPage: index }));
+  }
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <SCRIBUSUTF8NEW Version="1.5.8">
@@ -230,10 +558,13 @@ function buildDocument(newspaper, pages) {
           BLEEDTOP="${g.bleedMm}" BLEEDLEFT="${g.bleedMm}" BLEEDRIGHT="${g.bleedMm}" BLEEDBOTTOM="${g.bleedMm}">
 ${COLOURS}
 ${pageElements}
-${objects}
+${objectParts.join('')}
 </DOCUMENT>
 </SCRIBUSUTF8NEW>
 `;
 }
 
-module.exports = { buildDocument, blockFrames, escapeXml, mm, pxToPt, BODY_FONT, HEAD_FONT };
+module.exports = {
+  buildDocument, blockFrames, escapeXml, mm, pxToPt, BODY_FONT, HEAD_FONT, fontNameFor,
+  ensureComposeReady,
+};

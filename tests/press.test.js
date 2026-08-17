@@ -243,14 +243,14 @@ test('the press file is well-formed Scribus, in millimetres, with every page', a
   }
 });
 
-test('the press file escapes copy that would otherwise break the XML', () => {
+test('the press file escapes copy that would otherwise break the XML', async () => {
   const section = {
     x_px: 20, y_px: 20, width_px: 200, height_px: 200, margin_px: 12,
     headline: 'दर <वाढले> & "घसरले"',
     headline_font_px: 24, subheading_font_px: 14, body_font_px: 10,
     body: "a & b < c > d 'e'", images: [],
   };
-  const xml = scribus.blockFrames(section);
+  const xml = await scribus.blockFrames(section);
   assert.ok(!/CH="[^"]*[<>][^"]*"/.test(xml), 'raw angle brackets would break the document');
   assert.match(xml, /&amp;/);
   assert.match(xml, /&lt;/);
@@ -260,7 +260,7 @@ test('Scribus emits canonical Marathi placed-caption geometry and escaped text',
   const { captionBox } = await import('../public/editor/layout/text-flow.js');
   const image = { x_px: 20, y_px: 40, width_px: 100, height_px: 60, url: '/uploads/test.jpg', caption: 'नदी & पूर <स्थिती>' };
   const section = { x_px: 30, y_px: 50, width_px: 240, height_px: 240, margin_px: 12, images: [image] };
-  const xml = scribus.blockFrames(section);
+  const xml = await scribus.blockFrames(section);
   const box = captionBox(image);
   assert.match(xml, /नदी &amp; पूर &lt;स्थिती&gt;/);
   assert.match(xml, new RegExp(`XPOS="${scribus.mm(section.x_px) + scribus.mm(box.x)}"`));

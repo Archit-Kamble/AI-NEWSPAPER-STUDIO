@@ -110,9 +110,9 @@ test('the server strips the same marks the browser does', async () => {
   }
 });
 
-test('the press file never sets an angle bracket in type', () => {
+test('the press file never sets an angle bracket in type', async () => {
   const scribus = require('../src/services/scribus.service');
-  const xml = scribus.blockFrames({
+  const xml = await scribus.blockFrames({
     x_px: 20, y_px: 20, width_px: 200, height_px: 200, margin_px: 12,
     headline: 'ठळक <b>मथळा</b>',
     headline_font_px: 24, subheading_font_px: 14, body_font_px: 10,

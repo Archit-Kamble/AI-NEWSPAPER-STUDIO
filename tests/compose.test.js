@@ -585,6 +585,44 @@ test('fit mode and rotation compose correctly together, not just in isolation', 
   }
 });
 
+// A real bug found by source audit after the quarter-turn work above
+// shipped: boxOf()'s early vertical-rejection gate (the first thing
+// obstacleIntervals() checks, BEFORE the exact cutout path runs at all)
+// widened/swapped its box for ANY rotation, as if the placement FRAME
+// itself had rotated. It has not - block-frame.js never moves the frame;
+// only the content inside it rotates, about the frame's own fixed centre,
+// and a quarter turn always exactly refills the SAME frame it started in
+// (image-geometry.js's own derivation). For a non-square frame this made
+// boxOf() report a narrower, shifted vertical gate than the frame's real
+// footprint, silently rejecting a query band near the frame's own top/
+// bottom edge before the exact silhouette was ever evaluated - invisible
+// to every prior test here because they either used a SQUARE frame (where
+// the old widening was a no-op) or queried the FULL frame height (where
+// the narrowed gate never excluded anything anyway).
+test('a narrow query band near a non-square rotated frame\'s own edge is not wrongly rejected before the exact silhouette runs', () => {
+  const rows = 8;
+  const cols = 8;
+  const cells = Array.from({ length: rows }, (u, r) => Array.from({ length: cols }, (u2, c) => (r < 4 && c < 4 ? 1 : 0)));
+  const mask = { rows, cols, cells };
+  // Portrait frame (100x200), landscape source (200x100) - exactly matched
+  // after the 90deg axis swap, so 'contain' fills the rotated content with
+  // no letterboxing to reason about.
+  const image = {
+    x: 0, y: 0, width: 100, height: 200, shape: 'cutout',
+    sourceWidth: 200, sourceHeight: 100, fitMode: 'contain', rotation: 90, mask,
+  };
+
+  const fullBand = exclusion.obstacleIntervals(image, 0, 200, 12);
+  assert.ok(fullBand.length > 0, 'sanity: a real obstacle exists somewhere in the frame');
+
+  // A narrow band near the frame's own TOP edge - well inside the frame's
+  // true y:[0,200] footprint, but outside the old, wrongly-narrowed
+  // boxOf() gate (which used to report roughly y:[43,157] for this exact
+  // width/height/rotation combination).
+  const topBand = exclusion.obstacleIntervals(image, 10, 40, 12);
+  assert.deepEqual(topBand, fullBand, 'a narrow band near the frame\'s own top edge must see the SAME obstacle the full-height band sees - it must not be rejected before the exact path runs');
+});
+
 test('an internal hole in a silhouette is occupied - text never threads an arm gap', () => {
   const rows = 16;
   const cols = 16;

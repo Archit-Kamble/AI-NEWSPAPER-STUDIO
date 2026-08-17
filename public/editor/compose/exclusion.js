@@ -216,15 +216,28 @@ function boxOf(image, pad) {
   const y = Number(image.y) || 0;
   const width = Number(image.width) || 0;
   const height = Number(image.height) || 0;
-  const rotation = Number(image.rotation) || 0;
+  const rotation = (((Number(image.rotation) || 0) % 360) + 360) % 360;
 
-  if (!rotation) {
+  // A quarter turn (0/90/180/270 - the only angles the Editor's Rotate
+  // control ever persists) never grows the picture's OUTER footprint: the
+  // placement frame itself is fixed (block-frame.js never moves it), and
+  // picture-style.js/image-geometry.js rotate only the CONTENT inside it,
+  // about the frame's own fixed centre, after swapping the inner target's
+  // axes - a landscape localTarget rotated 90 degrees exactly refills the
+  // SAME portrait frame it started in, never more or less of it (verified
+  // numerically when sourceRectToFrameBounds() was built). Widening the box
+  // here anyway - as if the frame itself had rotated and swapped its own
+  // width/height - used to compute a NARROWER-in-one-axis, shifted gate
+  // that could reject a query band the exact cutout path further down would
+  // otherwise have found a real obstacle in, before that path ever ran.
+  if (rotation % 90 === 0) {
     return { left: x - pad, top: y - pad, right: x + width + pad, bottom: y + height + pad };
   }
-  // A rotated picture is bounded rather than followed. Copy keeps clear of
-  // slightly more than it strictly must, which is the safe direction; exact
-  // rotated silhouettes are not worth the arithmetic for a case the desk
-  // almost never uses.
+  // A genuinely in-between angle DOES grow the visual footprint beyond the
+  // frame's own rectangle, so it is bounded rather than followed here. Copy
+  // keeps clear of slightly more than it strictly must, which is the safe
+  // direction; exact rotated silhouettes are not worth the arithmetic for a
+  // case the Editor's own Rotate control cannot even produce.
   const angle = (rotation * Math.PI) / 180;
   const cos = Math.abs(Math.cos(angle));
   const sin = Math.abs(Math.sin(angle));

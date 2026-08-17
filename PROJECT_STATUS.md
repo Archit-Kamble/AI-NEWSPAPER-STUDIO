@@ -4,6 +4,76 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zzd. Release gate — SAHAS original 11-problem v1 closed (2026-08-17)
+
+The original 11 problems this repair project set out to close are all PASS,
+verified against current tests/source/the running app, not reopened: (1)
+top-left structural block, (2) Layout = Editor, (3) exact fill, (4) Editor
+zoom-only, (5) overflow truth, (6) editing/rich-text contract, (7) footer +
+Scribus canonical export, (8) Smart Cards, (9) transparent/cutout image
+transforms, (10) Contain/Cover/Stretch, (11) independent resize + live
+reflow.
+
+The one remaining suite failure (`tests/editionFeatures.test.js`) is fixed -
+it was never a missing review-state implementation. Every `fillEdition()`
+integration test in that file was silently making a real call to whatever
+AI provider `.env` had configured, and network to the real endpoint is
+reachable from this environment; the call was failing for an unconfirmed
+reason, so राशिभविष्य/सुविचार were absent from the result entirely
+(`features.buildAll()` never fakes a feature it could not build - correct
+behaviour, just untested until now). `installAiStub()`/
+`installNoProviderStub()` (the same `ai.PROVIDERS`-map stub pattern already
+used by `tests/aiConditions.test.js`/`tests/geminiPrimary.test.js`) make the
+whole file deterministic - applied to every `fillEdition()` test, not only
+the one that was failing. Added: a suvichar DB-persistence assertion beside
+the existing rashi one, an assertion that written.js's whole day of copy
+costs exactly one model call, and the missing failure-mode test (no
+provider configured → computed features still fill, written ones are
+skipped with a reason, no fake horoscope is ever persisted).
+
+Full suite: **724 tests, 724 pass, 0 fail** - no hand-waved historical
+failure remains.
+
+Final acceptance used the existing disposable edition 13742 (2099-09-01,
+still present). Its page 3 held six stray `block-1`..`block-6` rows -
+identical geometry, created in a tight sequence, not part of the `features`
+template - debris from earlier sessions' fixture use; deleted as
+unambiguous test debris on a disposable edition, never a real one. A
+pre-existing `masthead-advert`/`lead-pictures` overlap on page 1 was left
+alone and reported rather than hand-fixed: it is exactly the "legacy pages
+saved before the compact masthead clearance" case `templates.js`'s own
+`getTemplateForPage()` comment already documents, on a fixture edition
+whose page-1 rows predate that fix - not a regression, and not one of the
+11 problems this project closed. Preflight correctly reported both classes
+of issue, which is itself the proof preflight works, not a gate failure.
+
+Scribus structural export against the real (cleaned) edition: valid XML,
+`ANZPAGES="4"`, `OwnPage` spanning all four real pages, 376 text frames, the
+legal imprint appearing exactly once (page 2 only), zero literal asterisks
+in any `CH` attribute, a real bold run and a real rotated/cover-fit image
+frame present. No Scribus binary is installed in this environment (`apt-get
+install` needs a password not available this session, per instruction not
+re-attempted) - **Scribus raster/PDF render is NOT AVAILABLE, deployment/
+manual QA, not a reason to reopen composition.**
+
+A UI smoke against the same edition (Chromium via `playwright-core`)
+confirmed: page 1's structural masthead corner, no ordinary block overflow,
+a Bold run and a 28px selected-size run both visibly rendered, a rotated
+placed image, Block Editor/Layout line-break parity, a Rashi Smart Card
+fitting its block without clipping, and a footer with no rule - zero
+console/page errors. (Note, unrelated to this pass: the older comprehensive
+`tests/browser/workspace.browser.js` has one stale selector -
+`.section-content` - left over from the composition-engine migration that
+predates this whole session; ordinary composed blocks render as bare
+`.section-composed` spans with no wrapper div now, and the script was never
+updated for it. Not fixed here - out of scope for a release-closeout pass -
+but worth a narrow follow-up so the net stays live.)
+
+V1 is ready. The next work on this project is product polish for live
+newsroom use, not continuation of the original 11-problem repair.
+
+---
+
 ## 0zzc. Closure — press-parity overflow, cross-line headline accent, real italic (2026-08-17)
 
 Closed the two edge cases left open after Scribus/print-parity landed

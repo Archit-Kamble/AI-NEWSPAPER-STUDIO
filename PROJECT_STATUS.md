@@ -4,6 +4,61 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zzc. Closure — press-parity overflow, cross-line headline accent, real italic (2026-08-17)
+
+Closed the two edge cases left open after Scribus/print-parity landed
+(commits `0aeac8d`/`a116105`): a body/headline word wider than every legal
+gap in its own frame (Marathi has no hyphenation) is drawn anyway by the
+browser (`.section-composed{overflow:visible}`), never wrapped or clipped -
+but `scribus.service.js` sized every text frame to the composed `measure`
+alone, so the press file could wrap or clip exactly the word the browser
+shows in full. Both `displayBandFrames()` and the body-line loop in
+`blockFrames()` now size a frame to `max(line.width, line.measure)` -
+`line.width` (the real drawn width) was already on every composed line,
+unused until now.
+
+The headline's accent phrase (`"*word*"`) and its no-asterisk fallback
+(`headline_style: 'accent'`, colouring the true last word) were both decided
+one composed LINE at a time, independently in `render.js` and again in
+`scribus.service.js`. `compose.js` breaks a headline into display lines with
+no idea where the asterisks fall, so a phrase landing across that break
+matched neither half (both literal asterisks printed), and the last-word
+fallback coloured the last word of every line on a multi-line headline, not
+the headline's true last word - undiscovered until now because Scribus
+never actually implemented the last-word fallback at all before this. New
+`public/editor/compose/accent.js` (`accentSegments()`/`headlineSegments()`)
+decides this once, band-wide; `render.js` and `scribus.service.js` both call
+it, so the browser and the press cannot drift onto two answers again.
+
+The italic/underline "unverified" blocker from the Scribus commit is
+resolved, not just re-documented: `apt-get download scribus` (extraction
+needs no root, only installation does) pulled the real Scribus 1.6.1 binary,
+and its own linker symbols confirm `CharStyle::ITALIC`/`CharStyle::UNDERLINE`
+are real style-flag members alongside BOLD/STRIKETHROUGH/SHADOWED/etc, each
+serialised by its lowercase name - `FEATURES="italic underline"` is a real,
+documented Scribus attribute. Underline's preflight warning is removed
+outright. Italic keeps a narrower, honest warning: no Devanagari face this
+publication ships - or Noto Serif/Sans Devanagari upstream at all - has a
+true italic style, so `FEATURES="italic"` is a synthetic oblique (the same
+slant Scribus's own Italic toggle applies to any font lacking one), which
+can read worse on a conjunct than upright text. A real typographic caution
+for a desk, not a dropped feature.
+
+A full local Scribus install (Qt5, GraphicsMagick, podofo, OpenSceneGraph -
+none present, none installable without a password this session) was not
+completed, so no rendered-PDF proof exists; the italic/underline attribute
+names are verified against the shipped binary's own compiled symbols, not a
+running instance.
+
+11 new tests (`tests/headlineAccent.test.js`, `tests/scribusComposition.test.js`),
+all against real font shaping. Verified against the disposable 2099-09-01
+edition (13742): a regenerated 190KB `.sla` is valid XML, has zero literal
+asterisks in any `CH` attribute, and carries 4 real `SahasRed` accent runs.
+Full suite: 723 tests, 722 pass, 1 fail - the same pre-existing
+`editionFeatures.test.js` gap, unrelated to this change.
+
+---
+
 ## 0zzb. Project B8B-WHOLE-EDITION-DEMAND-TRUTH — canonical frame ownership (2026-08-13)
 
 The 2099-06-12 “33 required / 30 composed” result was audited frame by frame.

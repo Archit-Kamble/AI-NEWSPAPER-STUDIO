@@ -81,18 +81,24 @@ test('an unrecognised card key falls through rather than vanishing', () => {
 });
 
 test('a good card still draws — the guard did not blunt the renderer', () => {
+  // A real block-sized frame - layoutSmartCard() now wraps every field
+  // against its actual measured width, so a call with no frame at all (as
+  // this test used to make) degenerates every line to its own word, same as
+  // a genuinely too-narrow block would; every real caller always has one.
+  const FRAME = { width: 260, height: 300, padding: 8 };
+
   const rashi = cards.smartCardMarkup('rashi', {
     signs: [{ key: 'mesh', name: 'मेष', text: 'आजचा दिवस चांगला.', luckyNumber: 7, luckyColour: 'निळा' }],
-  });
+  }, FRAME);
   assert.match(rashi, /मेष/);
   assert.match(rashi, /आजचा दिवस चांगला/);
 
-  const suvichar = cards.smartCardMarkup('suvichar', { text: 'प्रयत्ने वाळूचे कण रगडिता तेलही गळे.', attribution: 'समर्थ रामदास' });
+  const suvichar = cards.smartCardMarkup('suvichar', { text: 'प्रयत्ने वाळूचे कण रगडिता तेलही गळे.', attribution: 'समर्थ रामदास' }, FRAME);
   assert.match(suvichar, /प्रयत्ने/);
   assert.match(suvichar, /रामदास/);
 
   const grid = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => 0));
   grid[0][0] = 5;
-  const sudoku = cards.smartCardMarkup('sudoku', { grid });
+  const sudoku = cards.smartCardMarkup('sudoku', { grid }, FRAME);
   assert.equal((sudoku.match(/<td/g) || []).length, 81, 'nine rows of nine, still');
 });

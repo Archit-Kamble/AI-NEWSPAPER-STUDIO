@@ -42,6 +42,24 @@ export function devanagari(value) {
   return String(value ?? "").replace(/\d/g, (d) => DIGITS[Number(d)]);
 }
 
+/**
+ * One or more already-resolved lines, printed verbatim - layoutSmartCard()
+ * did the wrapping (real shaped widths, akshara-safe breaks), so this never
+ * re-wraps. A single line prints as plain text (the common case for a short
+ * label or a sign's name), so a field that always resolves to one line - as
+ * every panchang label and every rashi name does, by construction: their
+ * column width is sized to the widest one - keeps printing as bare escaped
+ * text rather than growing a span wrapper it never needed. Multiple lines
+ * print as their own blocks, each pinned to `white-space:nowrap` so the
+ * browser cannot re-wrap a line this module already measured onto a second,
+ * different one.
+ */
+function linesMarkup(lines) {
+  if (!lines || !lines.length) return "";
+  if (lines.length === 1) return escapeHtml(lines[0]);
+  return lines.map((line) => `<span class="smart-card-line">${escapeHtml(line)}</span>`).join("");
+}
+
 // ----------------------------------------------------------------- sudoku ---
 
 function isGrid(grid) {
@@ -85,7 +103,6 @@ function sudokuMarkup(data, layout) {
 
 // --------------------------------------------------------------- label/value ---
 
-/** `label : value` down a column - the almanac's five lines. */
 /**
  * A stored card's list, or an empty one.
  *
@@ -99,12 +116,23 @@ function asList(value) {
   return Array.isArray(value) ? value : [];
 }
 
-function labelledMarkup(items, layout) {
-  const rows = asList(items).filter((item) => item && item.label);
-  if (!rows.length || !layout.geometry) return null;
-  const { rowHeight } = layout.geometry;
-  return `<table class="smart-card-table" style="font-size:${layout.fontPx}px">${rows
-    .map((item) => `<tr style="height:${rowHeight}px"><th>${escapeHtml(item.label)}</th><td>${escapeHtml(item.text ?? "")}</td></tr>`)
+/**
+ * `label : value` down a column - the almanac's rows. Each row's own
+ * `labelLines`/`valueLines` and `rowHeight` were solved in layoutSmartCard()
+ * against the label column's REAL shaped width, not a font-height check
+ * alone - a value column that used to report FITS while its own text ran
+ * off the edge of the block.
+ */
+function labelledMarkup(layout) {
+  if (!layout.items || !layout.items.length || !layout.geometry) return null;
+  // The label column's real width - measured in layoutSmartCard() against
+  // the widest actual label, not CSS's own guessed percentage - set through
+  // a <colgroup> so <th> itself stays bare (the label text is what a printed
+  // page reads, not a style attribute) while the rendered column still
+  // matches the width every value line was wrapped against.
+  const colgroup = `<colgroup><col style="width:${layout.geometry.labelWidth}px"><col></colgroup>`;
+  return `<table class="smart-card-table" style="font-size:${layout.fontPx}px">${colgroup}${layout.items
+    .map((item) => `<tr style="height:${item.rowHeight}px"><th>${linesMarkup(item.labelLines)}</th><td>${linesMarkup(item.valueLines)}</td></tr>`)
     .join("")}</table>`;
 }
 
@@ -121,28 +149,29 @@ function labelledMarkup(items, layout) {
  * (layoutRashi()'s own call) - never twelve separate web cards, a grid of
  * newspaper rows either way.
  */
+/**
+ * The twelve signs, each as its own row - one column of twelve in a narrow
+ * block, two columns of six in a wide one (layoutRashi()'s own call). Every
+ * sign's reading text and lucky-metadata line were wrapped in
+ * layoutSmartCard() against its REAL column width; the row grid's own track
+ * heights (`rowHeights`, one per visual row, each the taller of that row's
+ * two signs when the card is two columns wide) carry that content-aware
+ * height rather than dividing the block evenly and hoping.
+ */
 function rashiMarkup(data, layout) {
-  const signs = Array.isArray(data?.signs) ? data.signs : null;
-  if (!signs || !signs.length || !layout.geometry) return null;
-  const { columns, rows, rowHeight } = layout.geometry;
+  if (!layout.items || !layout.items.length || !layout.geometry) return null;
+  const { columns, rowHeights, nameWidth } = layout.geometry;
 
-  const items = signs
-    .filter(Boolean)
-    .map((sign) => {
-      const luck = [
-        sign.luckyNumber != null ? `शुभ अंक ${devanagari(sign.luckyNumber)}` : "",
-        sign.luckyColour ? `शुभ रंग ${escapeHtml(sign.luckyColour)}` : "",
-      ].filter(Boolean).join(" · ");
-      return `<li class="smart-card-rashi-sign" style="height:${rowHeight}px">
-        <strong class="rashi-name">${escapeHtml(sign.name || "")}</strong>
-        <span class="rashi-text">${escapeHtml(sign.text || "")}</span>
-        ${luck ? `<small class="rashi-luck">${luck}</small>` : ""}
-      </li>`;
-    })
+  const items = layout.items
+    .map((item) => `<li class="smart-card-rashi-sign">
+        <strong class="rashi-name" style="width:${nameWidth}px">${escapeHtml(item.name)}</strong>
+        <span class="rashi-text">${linesMarkup(item.readingLines)}</span>
+        ${item.luckLines.length ? `<small class="rashi-luck">${linesMarkup(item.luckLines)}</small>` : ""}
+      </li>`)
     .join("");
 
   const gridStyle = `font-size:${layout.fontPx}px;grid-template-columns:repeat(${columns},1fr);`
-    + `grid-auto-flow:column;grid-template-rows:repeat(${rows},${rowHeight}px)`;
+    + `grid-auto-flow:column;grid-template-rows:${rowHeights.map((h) => `${h}px`).join(" ")}`;
   return `<ul class="smart-card-rashi" style="${gridStyle}">${items}</ul>`;
 }
 
@@ -150,19 +179,21 @@ function rashiMarkup(data, layout) {
 
 function suvicharMarkup(data, layout) {
   if (!data?.text || !layout.geometry) return null;
+  const attribution = layout.attributionLines?.length
+    ? `<cite style="font-size:${layout.geometry.attributionFontPx}px">— ${linesMarkup(layout.attributionLines)}</cite>`
+    : "";
   return `<blockquote class="smart-card-quote" style="font-size:${layout.fontPx}px">
-    <p>${escapeHtml(data.text)}</p>
-    ${data.attribution ? `<cite>— ${escapeHtml(data.attribution)}</cite>` : ""}
+    <p>${linesMarkup(layout.quoteLines)}</p>
+    ${attribution}
   </blockquote>`;
 }
 
 // -------------------------------------------------------------- dinvishesh ---
 
 function dinvisheshMarkup(data, layout) {
-  const entries = asList(data?.entries).filter(Boolean);
-  if (!entries.length || !layout.geometry) return null;
-  return `<ul class="smart-card-list" style="font-size:${layout.fontPx}px">${entries
-    .map((entry) => `<li>${escapeHtml(typeof entry === "string" ? entry : entry.text || "")}</li>`)
+  if (!layout.items || !layout.items.length || !layout.geometry) return null;
+  return `<ul class="smart-card-list" style="font-size:${layout.fontPx}px">${layout.items
+    .map((item) => `<li>${linesMarkup(item.lines)}</li>`)
     .join("")}</ul>`;
 }
 
@@ -171,7 +202,7 @@ function dinvisheshMarkup(data, layout) {
 const RENDERERS = {
   sudoku: sudokuMarkup,
   "sudoku-solution": sudokuMarkup,
-  panchang: (data, layout) => labelledMarkup(data?.items, layout),
+  panchang: (data, layout) => labelledMarkup(layout),
   rashi: rashiMarkup,
   suvichar: suvicharMarkup,
   dinvishesh: dinvisheshMarkup,
@@ -186,10 +217,15 @@ export const SMART_CARD_KEYS = Object.keys(RENDERERS);
 
 // A card the block is genuinely too small for. Still drawn - never deleted,
 // never silently clipped (layoutSmartCard() clamps to a legible minimum
-// rather than shrinking past it) - but flagged, both in the class a
-// stylesheet or a screenshot can key off of and in a short desk-facing line
-// preflight can also surface as an error for a printable card.
-const OVERSET_NOTE = "या ब्लॉकमध्ये हे कार्ड नीट बसत नाही — अधिक जागा आवश्यक आहे.";
+// rather than shrinking past it) - but flagged only as a `data-fit-state`
+// attribute and an `is-overset` class, both CSS-only. This sentence used to
+// be printed INSIDE the card's own returned markup - the same markup the
+// newspaper canvas draws with - which meant a desk diagnostic could end up
+// as a line of Marathi baked into the page itself. A desk sees this instead
+// as a `section-flags` badge (section-thumb.js's sectionInnerHtml(), the
+// same place the overflow flag already lives), which is editor chrome, not
+// content the card carries.
+export const SMART_CARD_OVERSET_NOTE = "या ब्लॉकमध्ये हे कार्ड नीट बसत नाही — अधिक जागा आवश्यक आहे.";
 
 /**
  * A Smart Card as it prints, or `null` when there is nothing to draw.
@@ -211,12 +247,15 @@ export function smartCardMarkup(key, data, frame) {
   const inside = render(data, layout);
   if (!inside) return null;
 
-  const subtitle = data.subtitle ? `<p class="smart-card-subtitle">${escapeHtml(data.subtitle)}</p>` : "";
-  const overset = layout.fitState === "OVERSET"
-    ? `<p class="smart-card-overset-note">${escapeHtml(OVERSET_NOTE)}</p>`
+  // The subtitle's own resolved lines - layoutSmartCard() already measured
+  // and wrapped them against the card's real width and deducted their real
+  // height before solving the body, so this prints exactly what was
+  // reserved rather than asking the browser to wrap the raw string again.
+  const subtitle = layout.subtitle?.lines.length
+    ? `<p class="smart-card-subtitle" style="font-size:${layout.subtitle.fontPx}px">${linesMarkup(layout.subtitle.lines)}</p>`
     : "";
   const cls = `smart-card smart-card-${escapeHtml(key)}${layout.fitState === "OVERSET" ? " is-overset" : ""}`;
-  return `<div class="${cls}">${subtitle}${overset}${inside}</div>`;
+  return `<div class="${cls}" data-fit-state="${escapeHtml(layout.fitState)}">${subtitle}${inside}</div>`;
 }
 
 /**

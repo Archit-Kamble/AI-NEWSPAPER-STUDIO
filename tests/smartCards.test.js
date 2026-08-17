@@ -90,7 +90,12 @@ test('sudoku: a tiny frame returns OVERSET, not a silently shrunk grid', () => {
   assert.ok(result.geometry.cell >= 10, `cell must not go below the legible floor, got ${result.geometry.cell}`);
   const html = cards.smartCardMarkup('sudoku', sudokuData(), TINY_FRAME);
   assert.ok(html.includes('is-overset'), 'the markup must carry the overset flag');
-  assert.ok(html.includes('smart-card-overset-note'), 'and a visible diagnostic - the card still draws, it is not deleted');
+  assert.ok(html.includes('data-fit-state="OVERSET"'), 'and a machine-readable fit state - the card still draws, it is not deleted');
+  // The desk-facing warning sentence is NOT here - it would be printable
+  // newspaper content if it were. It surfaces instead as editor chrome
+  // (section-thumb.js's section-flags badge) and in the AI proposal preview
+  // before acceptance (smart-card-panel.js), never inside the card itself.
+  assert.ok(!html.includes('smart-card-overset-note'), 'a desk diagnostic must never become printable card content');
 });
 
 // ------------------------------------------------------------------- rashi ---
@@ -121,6 +126,42 @@ test('rashi: no clipping - overflow is flagged (OVERSET), never hidden', () => {
   assert.ok(result.fontPx >= 5.5, 'still a real, legible font - not shrunk to nothing to hide the overflow');
 });
 
+test('rashi: a false FITS is closed - twenty repetitions of real reading copy cannot fit in a fixed 3-line row', () => {
+  // The exact repro that exposed the bug: layoutRashi() used to charge every
+  // sign a FIXED three lines regardless of what it actually held, so this
+  // reported FITS at 9px. It cannot - the reading text alone is roughly
+  // twenty real sentences.
+  const data = {
+    signs: Array.from({ length: 12 }, (u, i) => ({
+      key: `sign${i}`,
+      name: `राशी${i}`,
+      text: 'अत्यंत लांब राशिभविष्य मजकूर '.repeat(20),
+      luckyNumber: i + 1,
+      luckyColour: 'निळा',
+    })),
+  };
+  const result = layout.layoutSmartCard('rashi', data, { width: 260, height: 400, padding: 8 });
+  assert.equal(result.fitState, 'OVERSET', 'twenty repeated sentences per sign cannot fit a 400px-tall card');
+  // And the height actually reflects the real text - each item's resolved
+  // reading is many lines deep, not the old fixed count of one.
+  assert.ok(result.items[0].readingLines.length > 3, `expected many wrapped lines, got ${result.items[0].readingLines.length}`);
+});
+
+test('rashi: row height is content-aware - a sign with more real text gets a taller row, not a uniform share', () => {
+  const data = {
+    signs: [
+      { key: 'short', name: 'अ', text: 'ठीक.', luckyNumber: 1, luckyColour: 'लाल' },
+      { key: 'long', name: 'ब', text: 'हा एक खूप मोठा आणि तपशीलवार मजकूर आहे जो अनेक ओळींमध्ये विभागला जाईल.', luckyNumber: 2, luckyColour: 'निळा' },
+    ],
+  };
+  // One column (narrow frame), so both signs are separate rows - the row
+  // heights must differ, because the old code gave every row an identical
+  // frame.innerHeight / rows share regardless of content.
+  const result = layout.layoutSmartCard('rashi', data, { width: 140, height: 300, padding: 8 });
+  const [shortHeight, longHeight] = result.geometry.rowHeights;
+  assert.ok(longHeight > shortHeight, `the row with more real text must be taller: short=${shortHeight} long=${longHeight}`);
+});
+
 // ---------------------------------------------------------------- panchang ---
 
 test('panchang: all rows are present', () => {
@@ -134,6 +175,25 @@ test('panchang: all rows are present', () => {
 test('panchang: fits a deterministic frame', () => {
   const result = layout.layoutSmartCard('panchang', panchangData(), FRAME);
   assert.equal(result.fitState, 'FITS');
+});
+
+test('panchang: a false FITS is closed - a value column is measured by its real width, not by font height alone', () => {
+  // The exact repro: the old solver only checked candidate font height
+  // against a uniform row height, never the value text's own width - so a
+  // row holding a genuinely long value could still report FITS.
+  const data = {
+    items: [
+      { label: 'सूर्योदय', text: '०६:३०' },
+      { label: 'सूर्यास्त', text: '१८:४५' },
+      { label: 'दिनमान', text: '१२ तास' },
+      { label: 'राहुकाळ', text: 'ही एक अत्यंत लांब आणि तपशीलवार नोंद आहे जी अनेक ओळींमध्ये मोडेल कारण ती एका ओळीत मुळीच बसत नाही. '.repeat(30) },
+      { label: 'शके', text: '१९४६' },
+    ],
+  };
+  const result = layout.layoutSmartCard('panchang', data, FRAME);
+  assert.equal(result.fitState, 'OVERSET', 'one genuinely long value cannot fit a five-row 300px card');
+  const raahukaal = result.items.find((item) => item.label === 'राहुकाळ');
+  assert.ok(raahukaal.valueLines.length > 1, `expected the long value to wrap onto several real lines, got ${raahukaal.valueLines.length}`);
 });
 
 test('panchang: a tiny frame returns OVERSET', () => {
@@ -174,6 +234,43 @@ test('dinvishesh: fit state is explicit, both ways', () => {
   assert.equal(fits.fitState, 'FITS');
   const oversets = layout.layoutSmartCard('dinvishesh', data, TINY_FRAME);
   assert.equal(oversets.fitState, 'OVERSET');
+});
+
+// --------------------------------------------------------------- subtitle ---
+
+test('the subtitle is measured BEFORE the card body, and its real height is deducted, not added afterward', () => {
+  const withoutSubtitle = layout.layoutSmartCard('panchang', panchangData(), FRAME);
+  const longSubtitle = { ...panchangData(), subtitle: 'ही एक तपशीलवार उपशीर्षक ओळ आहे जी दोन ओळींमध्ये मोडेल.' };
+  const withSubtitle = layout.layoutSmartCard('panchang', longSubtitle, FRAME);
+
+  assert.ok(withSubtitle.subtitle.lines.length > 0, 'the subtitle resolves to real lines');
+  assert.ok(withSubtitle.subtitle.height > 0);
+  // Same body content, less room left over once the subtitle's real height
+  // is taken out first - so the body's own row heights must not be taller
+  // than the no-subtitle case (they have less available height to solve
+  // against), proving the deduction happened before the body was solved
+  // rather than the subtitle being drawn on top of an unchanged answer.
+  const bodyHeight = (r) => r.items.reduce((sum, item) => sum + item.rowHeight, 0);
+  assert.ok(bodyHeight(withSubtitle) <= bodyHeight(withoutSubtitle) + 1, 'the subtitle must have taken real room from the body');
+});
+
+test('a subtitle so long it cannot fit at any legible size still draws, flagged OVERSET, never dropped', () => {
+  const data = { ...panchangData(), subtitle: 'शब्द '.repeat(200) };
+  const result = layout.layoutSmartCard('panchang', data, FRAME);
+  assert.equal(result.fitState, 'OVERSET');
+  assert.ok(result.subtitle.lines.length > 0, 'the subtitle is still drawn, not silently removed');
+});
+
+// ---------------------------------------------------------- overlong token ---
+
+test('one legal piece wider than the whole card is reported, never invented a mid-word break', () => {
+  // A single "word" (no internal break opportunity) far wider than any
+  // reasonable card - graphemes.js deliberately has no hyphenator, so this
+  // must become hardOverset rather than a silently clipped or broken line.
+  const data = { text: 'अ'.repeat(200), attribution: '' };
+  const result = layout.layoutSmartCard('suvichar', data, FRAME);
+  assert.equal(result.fitState, 'OVERSET');
+  assert.equal(result.quoteLines.length, 1, 'one unbreakable piece stays one line - it is reported, not fragmented');
 });
 
 // ------------------------------------------------------ cross-cutting rules ---

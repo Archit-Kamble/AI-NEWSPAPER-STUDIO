@@ -3294,6 +3294,12 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 .smart-card-grid-table td.box-bottom { border-bottom-width: 1.2px; border-bottom-color: #333; }
 .smart-card-grid-table td.blank { background: #fcfcfd; }
 
+/* Every wrap decision - which words share a line, how many lines a field
+   takes - was already made in JS (layoutSmartCard(), against the font's own
+   real shaped widths). A resolved line therefore never re-wraps here; it is
+   pinned to one row of its own measure and never re-flowed by the browser. */
+.smart-card-line { display: block; white-space: nowrap; }
+
 .smart-card-table { border-collapse: collapse; width: 100%; }
 .smart-card-table th,
 .smart-card-table td {
@@ -3303,21 +3309,26 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   text-align: left;
   vertical-align: top;
 }
-.smart-card-table th { width: 34%; font-weight: 700; white-space: nowrap; }
+/* The label column's width is set per-card by a <colgroup> (smart-cards.js) -
+   the real measured width, not a guessed share of the table - so this only
+   sets what CSS can own: weight and no accidental mid-word wrap. */
+.smart-card-table th { font-weight: 700; }
 
 /* The twelve signs. Each is its own row: the name, the reading, and the two
    things a reader looks for kept on their own line rather than welded to the
-   end of the sentence. */
+   end of the sentence. The name column's width is the block's own inline
+   style (rashiMarkup(), from layoutRashi()'s real measured nameWidth) - the
+   grid track just follows it rather than guessing a second number. */
 .smart-card-rashi { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.25em; }
 .smart-card-rashi-sign {
   display: grid;
-  grid-template-columns: minmax(3.5em, auto) 1fr;
+  grid-template-columns: auto 1fr;
   gap: 0 0.4em;
   line-height: var(--devanagari-line);
   border-bottom: 0.4px solid #eeeef2;
   padding-bottom: 0.2em;
 }
-.smart-card-rashi-sign .rashi-name { grid-row: 1 / span 2; font-weight: 700; }
+.smart-card-rashi-sign .rashi-name { grid-row: 1 / span 2; font-weight: 700; white-space: nowrap; }
 .smart-card-rashi-sign .rashi-luck { color: #6a6a72; font-size: 0.85em; }
 
 .smart-card-quote { margin: 0; display: grid; gap: 0.3em; place-content: center; height: 100%; text-align: center; }

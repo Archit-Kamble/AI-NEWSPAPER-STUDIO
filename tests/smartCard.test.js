@@ -216,14 +216,19 @@ test('an unknown card falls through to the block\'s copy rather than vanishing',
 test('panchang and suvichar draw as a table and a quote', async () => {
   const { smartCardMarkup } = await import('../public/editor/smart-cards/smart-cards.js');
   const built = await panchang.build(DATE);
+  // A real block-sized frame - layoutSmartCard() now measures every line's
+  // real shaped width against it (a width-0 call, as this test used to make,
+  // wraps even a two-word attribution onto separate lines, same as it would
+  // in a genuinely too-narrow block; every real caller always has a frame).
+  const FRAME = { width: 260, height: 300, padding: 8 };
 
-  const table = smartCardMarkup('panchang', built.card);
+  const table = smartCardMarkup('panchang', built.card, FRAME);
   // <tr followed by a space or > - a row now carries its own solved height as
   // an inline style (layoutSmartCard()), so it is no longer a bare tag.
   assert.equal((table.match(/<tr[ >]/g) || []).length, 5, 'five rows');
   assert.ok(table.includes('<th>सूर्योदय</th>'));
 
-  const quote = smartCardMarkup('suvichar', { text: 'प्रयत्ने वाळूचे कण रगडिता तेलही गळे.', attribution: 'समर्थ रामदास' });
+  const quote = smartCardMarkup('suvichar', { text: 'प्रयत्ने वाळूचे कण रगडिता तेलही गळे.', attribution: 'समर्थ रामदास' }, FRAME);
   assert.ok(quote.includes('<blockquote'));
   assert.ok(quote.includes('समर्थ रामदास'));
 });

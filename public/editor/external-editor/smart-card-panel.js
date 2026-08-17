@@ -9,7 +9,7 @@
 // like on the page.
 
 import { escapeHtml } from "../format.js";
-import { smartCardMarkup, canRenderSmartCard } from "../smart-cards/smart-cards.js";
+import { smartCardMarkup, canRenderSmartCard, smartCardFitState, SMART_CARD_OVERSET_NOTE } from "../smart-cards/smart-cards.js";
 
 const CARDS = [
   { key: "panchang", icon: "☀", label: "पंचांग", detail: "सूर्योदय, सूर्यास्त, राहुकाळ", source: "Calculated" },
@@ -87,9 +87,18 @@ function proposalMarkup(result) {
     : `<p>${escapeHtml(proposal.body).replace(/\n/g, "<br>")}</p>`;
   const previewHeightPx = drawn ? Math.ceil(frame.height * scale) : null;
 
+  // The overset warning is desk chrome around the preview, never inside the
+  // drawn card itself (smartCardMarkup() no longer carries it - a diagnostic
+  // must not become printable newspaper content). Checked here, before
+  // acceptance, so a sub-editor sees it while the choice to accept or
+  // discard is still open.
+  const overset = result.smartCardKey && result.smartCardData
+    && smartCardFitState(result.smartCardKey, result.smartCardData, frame) === "OVERSET";
+
   return `<h4>${escapeHtml(proposal.headline)} <span class="muted">${source}</span></h4>
     ${proposal.subheading ? `<p class="smart-card-subtitle">${escapeHtml(proposal.subheading)}</p>` : ""}
     <p class="ai-proposal-fit">${result.fit.charsUsed} of ${result.fit.bodyCharBudget} characters · ${result.fit.charsRemaining} left</p>
+    ${overset ? `<p class="smart-card-overset-note">${escapeHtml(SMART_CARD_OVERSET_NOTE)}</p>` : ""}
     <div class="smart-card-preview" id="smartCardPreview"${previewHeightPx ? ` style="height:${previewHeightPx}px"` : ""}>${previewInner}</div>
     <div class="ext-editor-toolbar"><button type="button" class="ext-editor-btn ext-editor-btn-primary" id="smartCardAccept">Accept card</button><button type="button" class="ext-editor-btn" id="smartCardDismiss">Discard</button></div>`;
 }

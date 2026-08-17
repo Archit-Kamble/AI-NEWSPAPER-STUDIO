@@ -6,7 +6,7 @@
 
 import { placedPictureStyle } from "../layout/picture-style.js";
 import { featureTableMarkup } from "../layout/feature-table.js";
-import { smartCardMarkup } from "../smart-cards/smart-cards.js";
+import { smartCardMarkup, smartCardFitState, SMART_CARD_OVERSET_NOTE } from "../smart-cards/smart-cards.js";
 import { escapeHtml } from "../format.js";
 import { statusOf, statusLabel, statusClass } from "../status/section-status.js";
 import { computeMetrics } from "../layout/layout-metrics.js";
@@ -385,6 +385,12 @@ export function sectionInnerHtml(section, view, { dirty = false, selected = fals
   const status = statusOf(view, Boolean((section.images || []).length));
   const type = sectionType(section.section_key);
   const metrics = computeMetrics(section, view);
+  // The SAME question smartCardMarkup() already answered while drawing the
+  // block, exposed here as desk-facing chrome rather than as a sentence
+  // baked into the card's own printable markup (see SMART_CARD_OVERSET_NOTE).
+  const cardOverset = view.smartCardKey && view.smartCardData
+    ? smartCardFitState(view.smartCardKey, view.smartCardData, smartCardFrame(section, view)) === "OVERSET"
+    : false;
 
   return `
     <div class="section-chrome">
@@ -394,6 +400,7 @@ export function sectionInnerHtml(section, view, { dirty = false, selected = fals
         ${view.newsItemId ? `<span class="section-flag flag-reporter" title="Linked to a reporter story">${ICONS.reporter}</span>` : ""}
         ${view.aiGenerated ? `<span class="section-flag flag-ai" title="AI generated">${ICONS.ai}</span>` : ""}
         ${metrics.overflowing ? `<span class="section-flag flag-overflow" title="Content overflows this section">${ICONS.overflow}</span>` : ""}
+        ${cardOverset ? `<span class="section-flag flag-overflow" title="${escapeHtml(SMART_CARD_OVERSET_NOTE)}">${ICONS.overflow}</span>` : ""}
         ${dirty ? `<span class="section-flag flag-unsaved" title="Unsaved changes"></span>` : ""}
       </span>
       <span class="section-status-badge ${statusClass(status)}">${statusLabel(status)}</span>

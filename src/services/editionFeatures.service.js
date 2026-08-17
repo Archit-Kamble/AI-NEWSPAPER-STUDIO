@@ -147,10 +147,11 @@ async function fillEdition(newspaperId, { tier } = {}) {
       // reader would see if the card were ever removed. It does not also trim
       // `result.card`'s own entries, so a card that is CURRENTLY rendering
       // still shows all twelve signs; only the text underneath it, which is
-      // what is actually oversized, is protected. Revisit if a card's own
-      // rendered height is ever found to overflow its block too - today
-      // `.section-feature`'s `overflow:hidden` (styles.css) already makes
-      // that structurally impossible, so there is nothing to protect there.
+      // what is actually oversized, is protected. That is fine, and not a gap
+      // to close here: the flattened body trim is a writer-budget/fallback
+      // safety mechanism, and the structured Smart Card's own final printable
+      // fit is decided by layoutSmartCard()/preflight (SMART_CARD_OVERSET),
+      // never by CSS clipping.
     }
     // `result.card` is the structured payload every feature builder produces
     // (src/features/{sudoku,written,panchang,dinvishesh}.js) beside its

@@ -21,8 +21,109 @@ const pool = require('../src/config/db');
 const { signIn, removeEdition } = require('./helpers/desk');
 const { fillEdition, toCopy } = require('../src/services/editionFeatures.service');
 const panchang = require('../src/features/panchang');
+const ai = require('../src/services/ai');
 
 test.after(() => pool.end());
+
+// `fillEdition()` calls features.buildAll(), which calls written.js's ONE
+// model call for the day's राशिभविष्य/सुविचार bundle (src/features/written.js).
+// Every test in this file that calls fillEdition() therefore used to make a
+// real, paid AI call whenever a real key happened to be configured in
+// `.env` - and silently fell back to "the box was skipped" whenever it was
+// not, which is exactly how the one assertion below went from a passing
+// review-status check to `actual: undefined`: rashi/suvichar were never in
+// `result.filled` at all, because written.buildAll() had errored and
+// features.buildAll() only ever assembles it, never fakes it (src/features/
+// index.js: `if (composed.error) notes.push(...)` - no feature is added).
+//
+// installAiStub() replaces the provider chain with a deterministic stub, so
+// this file never depends on a real key, real network, provider
+// availability or today's `.env`. Applied to every fillEdition() test below,
+// not only the one that was failing - a suite whose tests are silently
+// re-billed (or silently degrade to "skipped") on every run depending on
+// whoever's `.env` happens to be sitting in the checkout is not a
+// deterministic suite, whether or not any one assertion happens to notice.
+const RASHI_KEYS = [
+  'mesh', 'vrishabh', 'mithun', 'kark', 'sinh', 'kanya',
+  'tula', 'vrischik', 'dhanu', 'makar', 'kumbh', 'meen',
+];
+
+function writtenFeatureReply() {
+  return {
+    data: {
+      rashi: RASHI_KEYS.map((key, index) => ({
+        key,
+        text: `आजचा चाचणी मजकूर ${index + 1}.`,
+        lucky_number: (index % 9) + 1,
+        lucky_colour: 'निळा',
+      })),
+      suvichar: {
+        text: 'परिश्रम आणि संयम यांना पर्याय नाही.',
+        attribution: 'अज्ञात',
+      },
+    },
+  };
+}
+
+/**
+ * Stubs the AI provider chain with a deterministic, schema-valid written
+ * reply, exactly like tests/aiConditions.test.js's withProviders() and
+ * tests/geminiPrimary.test.js's own PROVIDERS stub - the same pattern this
+ * codebase already uses to keep AI-touching tests off the network. Returns a
+ * call counter so a caller can assert the ONE-call-per-day promise
+ * (src/features/written.js's whole reason to exist) rather than just trust
+ * it.
+ */
+function installAiStub(t) {
+  const savedProviders = { ...ai.PROVIDERS };
+  const savedProvider = process.env.AI_PROVIDER;
+  const savedFallback = process.env.AI_FALLBACK_PROVIDER;
+  const calls = { count: 0 };
+
+  ai.PROVIDERS.gemini = {
+    key: 'gemini',
+    name: 'Gemini test stub',
+    supportsTiers: true,
+    isConfigured: () => true,
+    configHint: '',
+    maxOutputTokens: (value) => value || 8192,
+    async askForJson() {
+      calls.count += 1;
+      return writtenFeatureReply();
+    },
+  };
+
+  process.env.AI_PROVIDER = 'gemini';
+  process.env.AI_FALLBACK_PROVIDER = '';
+
+  t.after(() => {
+    for (const key of Object.keys(ai.PROVIDERS)) delete ai.PROVIDERS[key];
+    Object.assign(ai.PROVIDERS, savedProviders);
+    if (savedProvider === undefined) delete process.env.AI_PROVIDER;
+    else process.env.AI_PROVIDER = savedProvider;
+    if (savedFallback === undefined) delete process.env.AI_FALLBACK_PROVIDER;
+    else process.env.AI_FALLBACK_PROVIDER = savedFallback;
+  });
+
+  return calls;
+}
+
+/**
+ * The opposite stub: no provider answers `isConfigured()` truthfully, no
+ * matter what is actually sitting in `.env` on the machine running this
+ * suite. Used by the no-AI failure-mode test below - real isolation, not
+ * "hope nobody has a key configured".
+ */
+function installNoProviderStub(t) {
+  const saved = { ...ai.PROVIDERS };
+  for (const key of Object.keys(ai.PROVIDERS)) {
+    ai.PROVIDERS[key] = { ...ai.PROVIDERS[key], isConfigured: () => false };
+  }
+  t.after(() => {
+    for (const key of Object.keys(ai.PROVIDERS)) delete ai.PROVIDERS[key];
+    Object.assign(ai.PROVIDERS, saved);
+  });
+}
 
 async function withFeaturesPage(run) {
   const server = createApp().listen(0);
@@ -45,7 +146,8 @@ async function withFeaturesPage(run) {
   }
 }
 
-test('filling an edition writes the panchang block\'s structured card, not just flattened copy', async () => {
+test('filling an edition writes the panchang block\'s structured card, not just flattened copy', async (t) => {
+  installAiStub(t);
   await withFeaturesPage(async ({ newspaper, page }) => {
     const result = await fillEdition(newspaper.id, {});
     assert.ok(result.filled.some((f) => f.feature === 'panchang'), JSON.stringify(result));
@@ -71,7 +173,8 @@ test('filling an edition writes the panchang block\'s structured card, not just 
   });
 });
 
-test('fillEdition always returns structured filled[] and skipped[] arrays', async () => {
+test('fillEdition always returns structured filled[] and skipped[] arrays', async (t) => {
+  installAiStub(t);
   await withFeaturesPage(async ({ newspaper }) => {
     const result = await fillEdition(newspaper.id, {});
     assert.ok(Array.isArray(result.skipped));
@@ -79,7 +182,8 @@ test('fillEdition always returns structured filled[] and skipped[] arrays', asyn
   });
 });
 
-test('filling twice re-fills the card (a deliberate refill), not left stale from the first pass', async () => {
+test('filling twice re-fills the card (a deliberate refill), not left stale from the first pass', async (t) => {
+  installAiStub(t);
   await withFeaturesPage(async ({ newspaper, page }) => {
     await fillEdition(newspaper.id, {});
     // Hand-corrupt the card, as if a desk had cleared it.
@@ -96,16 +200,62 @@ test('filling twice re-fills the card (a deliberate refill), not left stale from
   });
 });
 
-test('model-written standing features need review while computed and curated features are ready', async () => {
+test('model-written standing features need review while computed and curated features are ready', async (t) => {
+  const calls = installAiStub(t);
   await withFeaturesPage(async ({ newspaper, page }) => {
     const result = await fillEdition(newspaper.id, {});
     const statuses = new Map(result.filled.map((item) => [item.feature, item.status]));
     assert.equal(statuses.get('rashi'), 'needs_review');
     assert.equal(statuses.get('suvichar'), 'needs_review');
     assert.equal(statuses.get('panchang'), 'ready');
+
+    // written.js's whole reason to exist: the day's राशिभविष्य AND सुविचार
+    // come back from ONE model call, not one call per box (and certainly
+    // not one per zodiac sign) - src/features/index.js's buildAll() calls
+    // written.buildAll() exactly once per fillEdition(), and this is what
+    // would catch a regression back to a call-per-feature.
+    assert.equal(calls.count, 1, 'exactly one model-written bundle call for the whole edition, not one per feature');
+
     const { rows } = await pool.query(`SELECT feature_key,status FROM page_sections WHERE page_id=$1 AND feature_key IS NOT NULL`, [page.id]);
     assert.equal(rows.find((item) => item.feature_key === 'rashi').status, 'needs_review');
+    assert.equal(rows.find((item) => item.feature_key === 'suvichar').status, 'needs_review');
     assert.equal(rows.find((item) => item.feature_key === 'panchang').status, 'ready');
+  });
+});
+
+// The other half of the contract: with no AI provider answering at all
+// (installNoProviderStub() - real isolation from whatever `.env` on this
+// machine actually holds, not merely "no key configured today"), the
+// computed/curated features must still fill, the written ones must be
+// reported as skipped with a reason a desk can act on, and - the one thing
+// that must never happen - no fake horoscope may be written under a paper's
+// masthead. No network call is made: the stub never reaches past
+// `isConfigured()`.
+test('with no AI provider configured, computed/curated features still fill and no fake horoscope is produced', async (t) => {
+  installNoProviderStub(t);
+  await withFeaturesPage(async ({ newspaper, page }) => {
+    const result = await fillEdition(newspaper.id, {});
+
+    const filledKeys = result.filled.map((item) => item.feature);
+    assert.ok(filledKeys.includes('panchang'), 'a computed feature must still fill with no AI provider');
+    assert.ok(!filledKeys.includes('rashi'), 'no fake horoscope may be produced without a real model call');
+    assert.ok(!filledKeys.includes('suvichar'), 'no fake thought-for-the-day may be produced without a real model call');
+
+    const skippedKeys = result.skipped.map((item) => item.feature);
+    assert.ok(skippedKeys.includes('rashi'), 'rashi must be reported as skipped, not silently absent');
+    assert.ok(skippedKeys.includes('suvichar'), 'suvichar must be reported as skipped, not silently absent');
+    const rashiSkip = result.skipped.find((item) => item.feature === 'rashi');
+    assert.match(rashiSkip.reason, /AI/i, 'the skip reason must tell a desk why, not just that it happened');
+
+    const { rows } = await pool.query(
+      `SELECT feature_key, body, smart_card_data FROM page_sections WHERE page_id = $1 AND feature_key IS NOT NULL`,
+      [page.id],
+    );
+    const rashiRow = rows.find((item) => item.feature_key === 'rashi');
+    assert.ok(!rashiRow.body, 'the rashi block must not be written to with invented copy');
+    assert.equal(rashiRow.smart_card_data, null, 'no invented Smart Card either');
+    const panchangRow = rows.find((item) => item.feature_key === 'panchang');
+    assert.ok(panchangRow.body, 'panchang - computed, no AI needed - must still be filled');
   });
 });
 
@@ -154,14 +304,15 @@ test('toCopy: a budget too small for even one entry drops everything rather than
   assert.equal(copy.entriesDropped, 1);
 });
 
-test('filling an edition never persists a body longer than the block\'s own real budget', async () => {
-  // The trim's own unit tests above are deterministic; this closes the loop
-  // against the real AI-written path (rashi) that motivated it - the 1-in-5
-  // overset was found by re-running the real fill, not by reasoning about it.
-  // One real draw, not the 5 that first surfaced it: each is a real, paid AI
-  // call (written.js's whole point is ONE call for the day - CLAUDE.md notes
-  // the free tier is 20/day), and the deterministic tests above already prove
-  // the trim mechanism itself, every run, without spending any.
+test('filling an edition never persists a body longer than the block\'s own real budget', async (t) => {
+  // The trim's own unit tests above are deterministic and prove the trim
+  // mechanism itself, every run, without spending an AI call. This test
+  // closes the loop against the real fillEdition() path with the
+  // deterministic stub (installAiStub()) rather than a real call - the 1-in-5
+  // overset that originally motivated the trim was found once, live, against
+  // a real account; it does not need to be re-drawn from a paid API on every
+  // suite run to stay covered.
+  installAiStub(t);
   await withFeaturesPage(async ({ newspaper, page }) => {
     const { buildFlowMap } = await import('../public/editor/layout/text-flow.js');
     await fillEdition(newspaper.id, {});

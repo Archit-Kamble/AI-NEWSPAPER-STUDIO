@@ -123,6 +123,69 @@ The cost function knows what the justifier can actually close (`slackCost`): sla
 
 Measured across a filled page: **30 ragged lines → 21, worst 17% → 12%, median 6% → 4%.** Across 1200 real blocks: 8 ragged lines total, all on one synthetic repeated-token fixture.
 
+### A paragraph is set in LINES, not written in sentences
+
+Every style guide tells a reporter to write two- or three-sentence paragraphs,
+and that advice is right. But the advice is about SENTENCES and what a reader
+sees is LINES, and they are not the same thing — the same two-sentence
+paragraph sets as eight lines in an 11 em city column and as one and a half
+across a full-width lead. Measured on 80 real multi-paragraph blocks before
+any code was written: **88.4% of authored paragraphs set in three lines or
+fewer, and 51.1% set in ONE.** A one-line paragraph is not a paragraph; it is
+a caption with an indent in front of it, and because a paragraph's closing
+line is ragged *by design* (it is never justified), a column of them is a
+column in which every line is a ragged closing line.
+
+`public/editor/compose/paragraph-policy.js` states the rule in the unit the
+reader sees. Two ceilings, because they catch different blocks:
+
+| | | catches |
+|---|---|---|
+| `MIN_PARAGRAPH_LINES` | 3 | a break the block is too shallow to carry — set as one paragraph |
+| `MAX_PARAGRAPH_LINES` | 10 | a narrow column running away |
+| `MAX_PARAGRAPH_SENTENCES` | 3 | a WIDE one. The front page's 268×264 lead set **eight whole sentences as ten lines** — inside the line ceiling, and still a wall of type |
+
+A paragraph splits only at a sentence end — **the compositor may choose where a
+paragraph starts, never where a sentence does** — and never into pieces the
+merger would immediately take back.
+
+**Two passes, and the second is exact.** A paragraph's depth is not knowable
+before the pour, so `composeBlock()` pours once with every authored break,
+reads the real depths in equivalent lines, applies the policy, and pours
+again. Estimating depth from a character count is the mistake this codebase
+has already measured its way out of. Two and not more: merging only deepens a
+paragraph, splitting only shallows one. `mayNeedPolicy()` keeps the second
+pour off ordinary single-paragraph blocks with a regex and no measurement.
+
+**The stored copy is never edited.** `body` keeps every blank line the reporter
+typed. Offsets stay exact because the paragraphs *tile* the text: a merged
+paragraph substitutes its interior newlines with spaces — same length, same
+offsets, and the space lands at the end of a piece where it is trimmed before
+any ink is measured. That is what keeps `line.at` valid, and `render.js`
+re-applies the sub-editor's bold and italic marks through `line.at`.
+
+Measured across 600 real article blocks: one-line paragraphs **149 → 1**,
+paragraphs over ten lines **83 → 0**, deepest paragraph **27 → 8**. The cost
+is 70 more interior lines that cannot fully close — and **every one of them
+has both justification levers already pinned at their caps**, worst at 85% of
+its measure, half of them the (indented, so narrower) first line of one of the
+new paragraphs.
+
+**A paragraph break costs room, and the budget charges for it.** The
+paragraph's last line ends where the copy ends rather than where the next word
+will not fit, so the rest of that measure is gone. `capacityChars()` poured
+one continuous run and could not see it — a 200×300 block quoting its floor
+overflowed the moment the compositor split a paragraph. It now pours in
+paragraphs at the policy's own cadence, and indents each one. That makes the
+calibration samples' sentence length load-bearing: `WIDEST_PER_CHAR` reached a
+full stop every 27 characters and was measuring its own punctuation, dropping
+the quoted floor 25% on a 190×264 lead. **All three samples probe character
+WIDTH and nothing else — keep their sentences at an ordinary length.**
+
+The Space panel says what the compositor did (`Paragraphs — 2 set, 1 written`)
+whenever the two differ, so "I typed four and the page shows two" has an
+answer on screen. `tests/paragraphPolicy.test.js` holds the rule.
+
 ### The last fraction of a column is closed with the LEADING
 
 Copy is written in whole **sentences**, so a writer can only ever get within about a line of the foot: one more sentence overflows, and trimming takes it straight back out. That granularity is why a block kept stopping at 86% however many times it was asked for more words — and no amount of prompting fixes it, because nothing can be written into a gap smaller than a line.

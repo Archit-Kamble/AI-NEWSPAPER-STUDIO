@@ -3541,3 +3541,123 @@ Still open: `SHORT_CLOSE` fires on 14 paragraph endings at 25–33% of their
 measure — inside the widow rule but short. And `NO_LEGAL_MEASURE` (a picture
 leaving no column wide enough to set type in) is now reported to the desk but
 not prevented at placement time.
+
+### 30. The paragraph is a compositor's unit, measured in lines (2026-08-18)
+
+The desk's report was *"paragraph with 2-3 lines does not look good"*. Measured
+on the real database before writing any code, across 80 multi-paragraph
+article blocks:
+
+| paragraph sets in | count | share |
+|---|---|---|
+| 1 line | 141 | 51.1% |
+| 2 lines | 74 | 26.8% |
+| 3 lines | 29 | 10.5% |
+| **three or fewer** | **244** | **88.4%** |
+
+And across 600 real article blocks the other end was just as wrong: **77
+paragraphs ran past ten lines and the deepest ran 27**.
+
+**The cause is a units mismatch, not bad writing.** Every newspaper style
+guide tells a reporter to write short paragraphs — two or three sentences —
+and that advice is right. But the advice is about SENTENCES and what a reader
+sees is LINES, and the two are not the same thing: the same two-sentence
+paragraph sets as eight lines in an 11 em city column and as one and a half
+lines across a full-width lead. The writer's rule therefore produces the right
+texture in one block and the wrong one in the other.
+
+A one-line paragraph is not a paragraph; it is a caption with an indent in
+front of it. It also wrecks the right edge: a paragraph's closing line is
+ragged *by design* (it is never justified), so a column of one-line paragraphs
+is a column in which every single line is a ragged closing line.
+
+**`public/editor/compose/paragraph-policy.js`** states the rule in the unit a
+reader actually sees, and the two ceilings catch different blocks:
+
+- `MIN_PARAGRAPH_LINES = 3` — about one Marathi sentence at a city column's
+  measure. Below it, two authored paragraphs are set as one.
+- `MAX_PARAGRAPH_LINES = 10` — what stops a narrow column running away.
+- `MAX_PARAGRAPH_SENTENCES = 3` — what stops a WIDE one. The line bound alone
+  is not enough: the front page's 268×248 lead set **eight whole sentences as
+  ten lines**, inside the line ceiling and still a wall of type. Measured on
+  the real page.
+
+A paragraph is split only at a sentence end — the compositor may choose where
+a paragraph starts, never where a sentence does — and never into pieces the
+merger would immediately take back (`affordable = floor(depth / MIN)`).
+
+**Two passes, and the second is exact.** A paragraph's depth is not knowable
+before the pour: it depends on the measure, on the photographs standing in the
+copy, and on where the words fall. So `composeBlock()` pours once with every
+authored break set, reads the real depths in EQUIVALENT lines, applies the
+policy, and pours again. Estimating depth from a character count is the
+mistake this codebase has already made and measured its way out of. Two passes
+and not more: merging can only deepen a paragraph and splitting only shallow
+one, so a third pass chases a boundary case at the cost of doubling the work
+on every keystroke. `mayNeedPolicy()` keeps the second pour off the majority
+of blocks (one paragraph, few sentences) with a regex and no measurement.
+
+**The stored copy is never edited.** `page_sections.body` keeps every blank
+line the reporter typed; the same body sets as one paragraph in a wide block
+and three in a narrow one. Offsets are preserved exactly — the paragraphs
+*tile* the text, and a merged paragraph substitutes its interior newlines with
+spaces (same length, same offsets, and the space lands at the end of a piece
+where it is trimmed before any ink is measured). That is what keeps
+`line.at` valid, which is what render.js re-applies the sub-editor's bold and
+italic marks through.
+
+`overset` is now taken straight off the original text at the offset the pour
+stopped, rather than reassembled from the paragraph list — the old
+reconstruction put back a single `\n` where the author had typed two.
+
+**Measured across 600 real article blocks, before → after:**
+
+| | before | after |
+|---|---|---|
+| paragraphs set in one line | 149 | **1** |
+| paragraphs over ten lines | 83 | **0** |
+| deepest paragraph | 27 lines | **8 lines** |
+| paragraphs set | 738 | 900 |
+| ragged interior lines (justified blocks) | 147 / 2947 | 217 / 2848 |
+
+The last row is the cost, and it is understood rather than guessed: **every
+one of the 179 ragged lines in the images-free sample has BOTH justification
+levers pinned at their caps** (word space at 0.55 em, glyphs at 1.03), the
+worst sits at 85% of its measure, and 88 of them are the first line of one of
+the new paragraphs — narrower by an em because it is indented, in columns of
+15–16 em that hold only three or four Marathi words. Nothing is left on the
+table: `balanceParagraph` already breaks against the indented measure, and the
+next lever a Latin compositor would reach for (letter-spacing) is forbidden
+here.
+
+**The budget now charges for a paragraph break.** A break costs more than the
+indent it draws: the paragraph's last line ends where the copy ends rather
+than where the next word will not fit, so the rest of that measure is gone.
+`capacityChars()` poured one continuous run and could not see it — invisible
+only for as long as the fixtures were single-paragraph, and a 200×300 block
+quoting its floor overflowed the moment the compositor split a long paragraph.
+It now pours in paragraphs at the same cadence the policy sets them, and
+indents each one.
+
+That made the calibration samples' own sentence length load-bearing, and
+`WIDEST_PER_CHAR` reached a full stop every 27 characters — it was measuring
+its own punctuation and dropped the quoted floor by **25%** on a 190×264 lead.
+All three samples are now written at an ordinary newspaper sentence length;
+they exist to probe character WIDTH and nothing else.
+
+**The desk is told.** The Space panel shows `Paragraphs — 2 set, 1 written
+(1 split — too long to print as one)` whenever the two differ, so "I typed
+four paragraphs and the page shows two" has an answer on screen rather than
+reading as a bug. Verified live in the running app, zero console errors.
+
+`tests/paragraphPolicy.test.js` holds all of it (15 tests): the merge, the
+tail that merges backwards, both ceilings, the refusal to cut mid-sentence,
+offset preservation, exact overset, and the budget.
+
+Still open, and unrelated to this work: the Space panel composes the lead
+block with **10.04 lines of room where a compose from the stored row gives
+10.0**, and sets nine lines where the page sets ten. The difference is
+geometric (band room, not paragraphs) — the editor's live view and the
+persisted row disagree by a fraction of a percent somewhere. Also still open
+from §29: `SHORT_CLOSE` endings, and `NO_LEGAL_MEASURE` reported but not
+prevented at placement time.

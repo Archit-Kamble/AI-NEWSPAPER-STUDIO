@@ -32,6 +32,10 @@ test.before(async () => {
 });
 
 const SENTENCE = 'सातारा जिल्ह्यातील शेतकऱ्यांसाठी राज्य सरकारने नवीन योजना जाहीर केली आहे. ';
+// A paragraph a newspaper would actually set: at least MIN_PARAGRAPH_LINES
+// deep in this block's measure, so the compositor keeps the break in front
+// of it rather than merging it into its neighbour.
+const PARAGRAPH = SENTENCE.repeat(3);
 
 /** A mask whose opaque subject stands in the middle, clear of both edges. */
 function centreSplitMask(halfCells = 3) {
@@ -170,10 +174,14 @@ test('a block filled to its foot reads as full, and an empty one as empty', () =
 
 test('paragraph air is intentional space, never a hole somebody is asked to fill', () => {
   const section = { ...SECTION, paragraph_spacing_px: 24 };
+  // Paragraphs deep enough that the block actually SETS the breaks - the
+  // paragraph policy merges anything under MIN_PARAGRAPH_LINES, so a fixture
+  // of one-sentence paragraphs would be testing a block with no breaks in it.
+  const body = [PARAGRAPH, PARAGRAPH, PARAGRAPH].join('\n\n');
   const spaced = adapter.composeSection({ ...section, images: [] },
-    { headline: '', subheading: '', body: `${SENTENCE}\n\n${SENTENCE}\n\n${SENTENCE}` });
+    { headline: '', subheading: '', body });
   const tight = adapter.composeSection({ ...section, paragraph_spacing_px: 0, images: [] },
-    { headline: '', subheading: '', body: `${SENTENCE}\n\n${SENTENCE}\n\n${SENTENCE}` });
+    { headline: '', subheading: '', body });
 
   assert.ok(spaced.whitespace.occupancy.intentionalEquivalentLines > 0,
     'the air a paragraph break asks for must be recorded as intentional');

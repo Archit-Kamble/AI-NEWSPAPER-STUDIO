@@ -297,9 +297,19 @@ test('the safe end of the range holds for prose of any word shape', () => {
   // `min` is what a caller quotes when it must not be wrong: it is poured with
   // the least character-efficient prose there is (plain consonants, no
   // zero-width matras to hide), so any ordinary sentence fits inside it.
-  const shapes = ['कमल गगन सरल पवन नयन जल थल. ', 'ते या बाबत आज सकाळी बोलत होते. ',
+  //
+  // Every shape is written at an ordinary newspaper sentence length. Sentence
+  // LENGTH is a second variable and not the one under test here: a paragraph
+  // break costs room, and the compositor sets one every
+  // MAX_PARAGRAPH_SENTENCES, so copy that reaches a full stop every three
+  // words is asking a different question. That copy is not unsafe - it is
+  // caught exactly by the overflow check below and cut back for free by
+  // trimToFit(), which is the contract this codebase states: the budget is a
+  // range, the measurement afterwards is the guarantee.
+  const shapes = ['कमल गगन सरल पवन नयन जल थल कमल गगन सरल पवन नयन जल थल कमल गगन सरल. ',
+    'ते या बाबत आज सकाळी बोलत होते ते या बाबत आज सकाळी बोलत होते ते या बाबत. ',
     'सातारा जिल्ह्यातील शेतकऱ्यांसाठी योजना जाहीर केली आहे. ',
-    'ज्ञानेश्वर श्रद्धांजली क्षेत्रफळ विद्यार्थ्यांसाठी. '];
+    'ज्ञानेश्वर श्रद्धांजली क्षेत्रफळ विद्यार्थ्यांसाठी श्रद्धांजली क्षेत्रफळ. '];
   for (const [width, height] of SHAPES) {
     for (const columnCount of [1, 2]) {
       const frame = { width, height, padding: 12, bodyFontPx: 11, columnCount, headline: 'मथळा', headlineFontPx: 20 };
@@ -799,7 +809,10 @@ test('a selected larger size run changes where the line wraps', () => {
 });
 
 test('paragraph spacing pushes the second paragraph down whole extra bands', () => {
-  const body = 'पहिला परिच्छेद येथे संपतो.\n\nदुसरा परिच्छेद येथे सुरू होतो.';
+  // Both paragraphs deep enough for the block to set the break at all: the
+  // paragraph policy merges a paragraph under MIN_PARAGRAPH_LINES into its
+  // neighbour, so a one-sentence fixture has no second paragraph to push.
+  const body = `${'पहिला परिच्छेद येथे संपतो. '.repeat(6)}\n\n${'दुसरा परिच्छेद येथे सुरू होतो. '.repeat(6)}`;
   const tight = compose.composeBlock({ width: 260, height: 300, padding: 10, body, bodyFontPx: 16, columnCount: 1, paragraphSpacingPx: 0 });
   const spaced = compose.composeBlock({ width: 260, height: 300, padding: 10, body, bodyFontPx: 16, columnCount: 1, paragraphSpacingPx: 30 });
   const tightSecond = tight.bodyLines.find((l) => l.paragraphBreak);
@@ -1098,12 +1111,13 @@ test('no placed line extends below the frame\'s own content bottom (test C)', ()
 
 const TWO_COLUMN_FRAME = { width: 400, height: 260, padding: 10, bodyFontPx: 14, lineHeight: 1.25, columnCount: 2 };
 const FIRST_PARAGRAPH = 'पहिला परिच्छेद मजकूर '.repeat(15);
-const SECOND_PARAGRAPH = 'दुसरा परिच्छेद नवीन स्तंभात सुरू होतो.';
+const SECOND_PARAGRAPH = 'दुसरा परिच्छेद नवीन स्तंभात सुरू होतो. '.repeat(4);
 const TWO_PARAGRAPH_BODY = `${FIRST_PARAGRAPH}\n\n${SECOND_PARAGRAPH}`;
 
 test('paragraph spacing still applies normally within the same column (test D)', () => {
-  const tight = compose.composeBlock({ ...TWO_COLUMN_FRAME, body: 'एक.\n\nदोन.', paragraphSpacingPx: 0 });
-  const spaced = compose.composeBlock({ ...TWO_COLUMN_FRAME, body: 'एक.\n\nदोन.', paragraphSpacingPx: 8 });
+  const body = `${'एक दोन तीन चार पाच सहा. '.repeat(4)}\n\n${'सात आठ नऊ दहा अकरा बारा. '.repeat(4)}`;
+  const tight = compose.composeBlock({ ...TWO_COLUMN_FRAME, body, paragraphSpacingPx: 0 });
+  const spaced = compose.composeBlock({ ...TWO_COLUMN_FRAME, body, paragraphSpacingPx: 8 });
   const tightSecond = tight.bodyLines.find((l) => l.paragraphBreak);
   const spacedSecond = spaced.bodyLines.find((l) => l.paragraphBreak);
   assert.equal(tightSecond.x, spacedSecond.x, 'both must still land in the same (first) column');

@@ -47,6 +47,23 @@ function reservedComposition(section, view, images) {
 // different message, and it is still there (`metrics.overflowing`).
 const WHITESPACE_THRESHOLD = 0.95;
 
+// What the compositor did with the reporter's paragraph breaks.
+//
+// A paragraph is set in LINES, not written in sentences: a break the block is
+// too shallow to carry is merged into its neighbour, and a paragraph that
+// runs past the ceiling is set as two. The desk sees the result on the page
+// either way, so this only appears when the two numbers differ - it exists so
+// "I typed four paragraphs and the page shows two" has an answer on screen
+// rather than being read as a bug.
+function paragraphRow(composition, row) {
+  const p = composition && composition.typography && composition.typography.paragraphs;
+  if (!p || !p.authored || p.authored === p.set) return "";
+  const how = p.merged && p.split ? "merged and split"
+    : p.merged ? `${p.merged} merged - too short to read as paragraphs here`
+      : `${p.split} split - too long to print as one`;
+  return row("Paragraphs", `${p.set} set, ${p.authored} written (${how})`);
+}
+
 export function layoutWarnings(metrics) {
   const warnings = [];
   // The empty FOOT of the block is the whitespace a desk actually complains
@@ -158,6 +175,7 @@ export function spacePanelMarkup(section, view, images = []) {
       ${row("Written so far", `${used} characters`)}
       ${row("Lines set", `${fill.linesUsed} of ${fill.linesAvailable}`)}
       ${fill.intentionalEquivalentLines > 0 ? row("Paragraph air", `${fill.intentionalEquivalentLines} lines`) : ""}
+      ${paragraphRow(m.composition, row)}
     `;
     noteHtml = `${reserved ? "This block has no headline yet, so the figures above keep room for the one it will get. " : ""}Exact composition, measured in the real publication font. The bar is the block's own body geometry, weighted: a row a picture halves counts as half a line, so these figures are fractional and exact. The character figure is a range, because Marathi's character budget cannot be a single scalar - see CLAUDE.md.`;
   } else {

@@ -66,12 +66,20 @@ test('a tighter margin gives the story its room back, and that is where the room
   const paper = adapter.composeSection({ ...BLOCK, margin_px: 4, images: [] }, { headline: '', subheading: '', body: '' });
   const room = (r) => r.content.bottom - r.bodyTop;
   assert.ok(room(paper) > room(web), `4px margin must leave more room than 12px: ${room(paper)} vs ${room(web)}`);
-  assert.ok(paper.capacity.bodyCharCapacity > web.capacity.bodyCharCapacity * 1.1,
-    'and it is not a rounding difference - it is over a tenth of the block');
+  // Room grows 17% by area; the quoted budget grows less than that because
+  // the deeper block also carries one more paragraph, and a paragraph break
+  // costs the tail of a line (capacityChars() charges for it). 6.5% of this
+  // block is 48 characters - a whole sentence of it, and nothing like a
+  // rounding difference.
+  assert.ok(paper.capacity.bodyCharCapacity > web.capacity.bodyCharCapacity * 1.05,
+    'and it is not a rounding difference - it is a whole sentence of the block');
 });
 
 test('a paragraph is marked by an INDENT, and the indent is not counted as a hole', () => {
-  const body = `${SENTENCE}\n\n${SENTENCE}\n\n${SENTENCE}`;
+  // Three real paragraphs, each deep enough that this block sets the break -
+  // the paragraph policy merges anything shallower, so a one-sentence fixture
+  // would have no indent to look for.
+  const body = [SENTENCE.repeat(2), SENTENCE.repeat(2), SENTENCE.repeat(2)].join('\n\n');
   const r = adapter.composeSection({ ...BLOCK, images: [] }, { headline: '', subheading: '', body });
 
   assert.equal(r.whitespace.occupancy.intentionalEquivalentLines, 0,

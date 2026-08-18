@@ -28,6 +28,7 @@
 import { measureWidth as hmtxWidth, minLineHeightFor, faceAscent, faceDescent, fontsReady, publicationWeight } from './font-metrics.js';
 import { shapeWidthPx, isShaperReady } from './shaper.js';
 import { breakPieces, clusters, trimEndClusters } from './graphemes.js';
+import { planParagraphs, mayNeedPolicy, MAX_PARAGRAPH_LINES, MAX_PARAGRAPH_SENTENCES } from './paragraph-policy.js';
 import { subtract, viableIntervals, MIN_CORRIDOR_EM } from './intervals.js';
 import { bandObstacles, imageFingerprint } from './exclusion.js';
 
@@ -399,25 +400,45 @@ function measurePieceWidth(piece, at, fontPx, family, weight, marks, letterSpaci
 // marks the resulting line `paragraphBreak: true` for a caller to style,
 // without yet spending a partial band on the gap itself. That is a scoped,
 // documented gap, not a silent one.
-function splitParagraphs(text, marks) {
-  const paragraphs = [];
+export function authoredParagraphStarts(text) {
+  const raw = [0];
   const re = /\n+/g;
-  let start = 0;
   let match;
   while ((match = re.exec(text)) !== null) {
-    paragraphs.push({
-      text: text.slice(start, match.index),
-      offset: start,
-      paragraphBreak: match[0].length >= 2,
-    });
-    start = re.lastIndex;
+    if (re.lastIndex < text.length) raw.push(re.lastIndex);
   }
-  paragraphs.push({ text: text.slice(start), offset: start, paragraphBreak: false });
-  return paragraphs.filter((p, i) => p.text.length > 0 || i === 0).map((p, i) => ({
-    ...p,
-    // The break BEFORE this paragraph (irrelevant for the first).
-    forcedBreak: i > 0,
-  }));
+  // A paragraph with nothing but whitespace in it is not a paragraph - a body
+  // that opens with a blank line, or carries three of them between two
+  // paragraphs, must not pour an empty line for each.
+  return raw.filter((start, i) => {
+    const end = i + 1 < raw.length ? raw[i + 1] : text.length;
+    return i === 0 || text.slice(start, end).trim().length > 0;
+  });
+}
+
+// The paragraphs a given set of starting offsets describes.
+//
+// The offsets TILE the body: paragraph i runs from starts[i] to starts[i+1],
+// so every character of the text - including the newline run that separated
+// two authored paragraphs - belongs to exactly one paragraph, and every
+// `line.at` a renderer later uses to re-locate a line in the original body
+// is a real offset into that same string. That is why a merged paragraph is
+// built by SUBSTITUTING its interior newlines with spaces rather than by
+// deleting them: same length, same offsets, and the substituted space lands
+// at the end of a piece (breakPieces() keeps whitespace attached to the word
+// in front of it), where it is trimmed before any ink is measured.
+function paragraphsFrom(text, starts) {
+  return starts.map((start, i) => {
+    const end = i + 1 < starts.length ? starts[i + 1] : text.length;
+    const raw = text.slice(start, end);
+    return {
+      text: raw.includes('\n') ? raw.replace(/\n/g, ' ') : raw,
+      offset: start,
+      forcedBreak: i > 0,
+      // Whether the AUTHOR asked for air here, as opposed to a bare <br>.
+      paragraphBreak: start > 0 && text.slice(Math.max(0, start - 2), start).includes('\n\n'),
+    };
+  });
 }
 
 /**
@@ -432,6 +453,7 @@ function pourBody(bodyInput, {
   top, bottom, columns, images, fontPx, lineHeight, family, weight, align: requestedAlign,
   paragraphSpacingPx = 0, letterSpacingPx = 0,
   italic = false, underline = false, firstLineIndentPx = 0,
+  paragraphStarts = null,
 }) {
   let align = requestedAlign;
   const text = typeof bodyInput === 'object' && bodyInput ? String(bodyInput.text || '') : String(bodyInput || '');
@@ -860,9 +882,21 @@ function pourBody(bodyInput, {
   // that column will never have (BUG 2).
   let lastLineColumnIndex = null;
 
-  const paragraphs = splitParagraphs(text, marks);
+  // The offsets this pour actually sets a paragraph at. `paragraphStarts` is
+  // the second pass of the two-pass paragraph policy (see paragraph-policy.js
+  // and composeBlock() below); with nothing passed, every authored break is
+  // set, which is the first pass and also what a caller composing directly
+  // gets.
+  const starts = Array.isArray(paragraphStarts) && paragraphStarts.length
+    ? paragraphStarts.slice().sort((a, b) => a - b)
+    : authoredParagraphStarts(text);
+  const paragraphs = paragraphsFrom(text, starts);
+  // How deep each paragraph actually set, in EQUIVALENT lines - the unit the
+  // occupancy record uses, and the only one the policy can be stated in. A
+  // fragment count would say a row a photograph splits in two is two lines.
+  const paragraphDepths = paragraphs.map(() => 0);
 
-  for (const paragraph of paragraphs) {
+  for (const [paragraphIndex, paragraph] of paragraphs.entries()) {
     // Paragraph spacing: this paragraph's first row must start at or after
     // the PREVIOUS row's real bottom (whatever that row's own finalized
     // height turned out to be - it may have been a tall one) plus the air a
@@ -925,7 +959,9 @@ function pourBody(bodyInput, {
           emptyEquivalent += p.measure / columnMeasureAt(colIndex);
           continue;
         }
-        occupiedEquivalent += (p.occupies ?? p.measure) / columnMeasureAt(colIndex);
+        const equivalent = (p.occupies ?? p.measure) / columnMeasureAt(colIndex);
+        occupiedEquivalent += equivalent;
+        paragraphDepths[paragraphIndex] += equivalent;
         // Which pieces this line took, so the paragraph can be re-broken as a
         // whole once its real measures are known - see balanceParagraph().
         paragraphSlots.push({ index: lines.length, measure: p.measure, from: consumedFrom, to: p.pieceEnd });
@@ -986,10 +1022,14 @@ function pourBody(bodyInput, {
     if (index < pieces.length) {
       // Ran out of room inside this paragraph. Everything from here on,
       // including every later paragraph, is overset - reported, not painted.
-      overset = paragraphs
-        .slice(paragraphs.indexOf(paragraph))
-        .map((p, i) => (i === 0 ? pieces.slice(index).join('') : (p.forcedBreak ? '\n' : '') + p.text))
-        .join('');
+      //
+      // Taken straight off the ORIGINAL text rather than reassembled from the
+      // paragraph list, because the paragraphs tile it: the pour stopped
+      // after `paraCharOffset` characters of this one, so everything from
+      // there to the end is unplaced, blank lines and all. Reassembling it
+      // could only ever reproduce the source approximately - the old version
+      // put back a single `\n` where the author had typed two.
+      overset = text.slice(paragraph.offset + paraCharOffset);
       break;
     }
   }
@@ -1066,6 +1106,8 @@ function pourBody(bodyInput, {
     tooNarrowToJustify,
     columnEm: Number(columnEm.toFixed(2)),
     fullMeasureEquivalents: usableWidth / Math.max(1, columns[0].end - columns[0].start),
+    paragraphStarts: starts,
+    paragraphDepths: paragraphDepths.map((d) => Number(d.toFixed(3))),
   };
 }
 
@@ -1095,8 +1137,13 @@ const CALIBRATION = 'सातारा जिल्ह्यातील शे
 // is the geometry (line equivalents, which do not vary at all) plus an honest
 // character RANGE, and the guarantee is moved to where it can be kept: exact
 // measurement after the copy exists.
-const WIDEST_PER_CHAR = 'कमल गगन सरल पवन नयन जल थल. ';
-const NARROWEST_PER_CHAR = 'ज्ञानेश्वर श्रद्धांजली क्षेत्रफळ विद्यार्थ्यांसाठी. ';
+// Both probe WORD SHAPE, and both are set at the same sentence length as
+// CALIBRATION on purpose. A paragraph break costs room (see capacityChars()),
+// so a sample that reaches a full stop every 27 characters is measuring its
+// own punctuation as much as this block's width - which is a different
+// question from the one these two exist to ask.
+const WIDEST_PER_CHAR = 'कमल गगन सरल पवन नयन जल थल कमल गगन सरल पवन नयन जल थल कमल गगन सरल. ';
+const NARROWEST_PER_CHAR = 'ज्ञानेश्वर श्रद्धांजली क्षेत्रफळ विद्यार्थ्यांसाठी श्रद्धांजली क्षेत्रफळ. ';
 
 // A line never fills its measure exactly: it ends when the next word will not
 // fit, so it leaves a ragged tail. That tail is not a rounding error - it is
@@ -1113,24 +1160,51 @@ const NARROWEST_PER_CHAR = 'ज्ञानेश्वर श्रद्धा
 // So the budget is POURED rather than computed: calibration copy is run
 // through this block's own real gaps - the same gaps the story will be set
 // in, photographs and all - and what lands is what the block holds.
-function capacityChars(measures, fontPx, family, sample = CALIBRATION, letterSpacingPx = 0) {
+function capacityChars(measures, fontPx, family, sample = CALIBRATION, letterSpacingPx = 0, indentPx = 0) {
   const pieces = breakPieces(sample);
   if (!pieces.length) return 0;
   let chars = 0;
   let at = 0;
+  // The calibration is poured in PARAGRAPHS, at the cadence this block's own
+  // GEOMETRY forces - because a paragraph break costs room and the budget has
+  // to know it. The last line of a paragraph ends where the copy ends rather
+  // than where the next word will not fit, and the first line of the next one
+  // starts an em in. Pouring one continuous run instead quoted a floor that a
+  // block then overflowed the moment the compositor broke the copy up.
+  //
+  // BOTH ceilings are applied, because the compositor applies both, and a
+  // break SAHAS itself decides to set is not the writer's to pay for. That
+  // makes the samples' own sentence length load-bearing, which is why all
+  // three are written at an ordinary newspaper sentence length: an earlier
+  // WIDEST_PER_CHAR reaching a full stop every 27 characters was measuring
+  // its own punctuation and dropped the quoted floor by 25%.
+  let linesInParagraph = 0;
+  let sentencesInParagraph = 0;
+  const endsSentence = /[।॥.!?][)"'\u201d\u2019]*\s*$/u;
   for (const measureWidthPx of measures) {
+    const room = measureWidthPx - (linesInParagraph === 0 && chars > 0 ? indentPx : 0);
     let line = '';
     let width = 0;
+    let closed = false;
     while (true) {
       const piece = pieces[at % pieces.length];
       const pieceWidth = measure(piece, fontPx, family, 400, letterSpacingPx);
-      if (line && width + pieceWidth > measureWidthPx + 0.5) break;
-      if (!line && pieceWidth > measureWidthPx + 0.5) { line = piece; at += 1; break; }
+      if (line && width + pieceWidth > room + 0.5) break;
+      if (!line && pieceWidth > room + 0.5) { line = piece; at += 1; break; }
       line += piece;
       width += pieceWidth;
       at += 1;
+      if (endsSentence.test(piece)) {
+        sentencesInParagraph += 1;
+        if (sentencesInParagraph >= MAX_PARAGRAPH_SENTENCES) { closed = true; break; }
+      }
     }
     chars += line.length;
+    linesInParagraph += 1;
+    if (closed || linesInParagraph >= MAX_PARAGRAPH_LINES) {
+      linesInParagraph = 0;
+      sentencesInParagraph = 0;
+    }
   }
   return chars;
 }
@@ -1338,7 +1412,7 @@ export function composeBlock(input = {}) {
   result.columns = columns;
 
   const bodyInput = input.body && typeof input.body === 'object' ? input.body : String(input.body || '');
-  const body = pourBody(bodyInput, {
+  const pourOptions = {
     top: bodyTop,
     bottom: content.bottom,
     columns,
@@ -1353,10 +1427,50 @@ export function composeBlock(input = {}) {
     italic: bodyItalic,
     underline: bodyUnderline,
     firstLineIndentPx: Math.max(0, num(input.firstLineIndentPx, 0)),
-  });
+  };
+
+  // ------------------------------------------------ the paragraph policy ---
+  //
+  // Pour once with every authored break set, look at how deep each paragraph
+  // ACTUALLY came out, and pour again with the breaks this block can carry.
+  //
+  // Two passes and not one, because a paragraph's depth is not knowable
+  // before the pour: it depends on the measure, on the photographs standing
+  // in the copy, and on where the words happen to fall. Estimating it from a
+  // character count is the mistake this codebase has already made, measured
+  // and retired - see "the character budget is a range" in CLAUDE.md. So the
+  // policy reads a real composition and the decision it makes is composed
+  // exactly, rather than predicted.
+  //
+  // Two passes and not more, deliberately. Merging can only make a paragraph
+  // deeper (it removes an indent and repacks) and splitting only shallower,
+  // so a third pass would be chasing a boundary case at the cost of doubling
+  // the work again on every keystroke. `result.typography.paragraphs` records
+  // what the second pass did, so a surface that disagrees can say so.
+  let body = pourBody(bodyInput, pourOptions);
+  const bodyPlainText = typeof bodyInput === 'object' ? bodyInput.text : bodyInput;
+  let paragraphPlan = null;
+  if (mayNeedPolicy(bodyPlainText, body.paragraphStarts, body.paragraphDepths)) {
+    paragraphPlan = planParagraphs({
+      text: bodyPlainText,
+      starts: body.paragraphStarts,
+      depths: body.paragraphDepths,
+    });
+    if (paragraphPlan.changed) {
+      body = pourBody(bodyInput, { ...pourOptions, paragraphStarts: paragraphPlan.starts });
+    }
+  }
 
   result.bodyLines = body.lines;
-  const bodyPlainText = typeof bodyInput === 'object' ? bodyInput.text : bodyInput;
+  // What the compositor did with the author's breaks. Authored is what the
+  // reporter typed; set is what this block's own measure can carry.
+  result.typography.paragraphs = {
+    authored: paragraphPlan ? paragraphPlan.authoredCount : body.paragraphStarts.length,
+    set: body.paragraphStarts.length,
+    merged: paragraphPlan ? paragraphPlan.merged : 0,
+    split: paragraphPlan ? paragraphPlan.split : 0,
+    depths: body.paragraphDepths,
+  };
   result.overset = {
     kicker: result.bands.kicker?.overset || '',
     headline: result.bands.headline?.overset || '',
@@ -1490,7 +1604,9 @@ export function composeBlock(input = {}) {
     occupancy,
   };
 
-  const pour = (sample) => Math.floor(capacityChars(body.measures, bodyPx, bodyFamily, sample, letterSpacingPx) * BUDGET_SAFETY);
+  const pour = (sample) => Math.floor(
+    capacityChars(body.measures, bodyPx, bodyFamily, sample, letterSpacingPx, Math.max(0, num(input.firstLineIndentPx, 0))) * BUDGET_SAFETY,
+  );
   const charCapacity = pour(CALIBRATION);
   // The ends of the range are whichever samples actually pack worst and best
   // in THIS measure, not whichever was expected to. In a narrow column long

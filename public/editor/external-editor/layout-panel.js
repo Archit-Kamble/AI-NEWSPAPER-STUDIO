@@ -8,27 +8,68 @@
 
 import { computeMetrics } from "../layout/layout-metrics.js";
 import { buildFlowMap, flowFit, flowImageFromRow } from "../layout/text-flow.js";
+import { bodyFill, composeSection } from "../compose/section-adapter.js";
+import "../layout/headline-reserve.js";
+
+const { reservationCandidates } = globalThis.SahasHeadlineReserve;
+
+// The block as it will be once it has a headline - or null when it already
+// has one (or is not the kind of block that gets one), in which case the
+// real composition is already the honest answer. The WORST candidate wins,
+// exactly as planningFit() picks it: line count is not monotonic in headline
+// length once the engine breaks at real word boundaries, so the longest
+// stand-in is not reliably the one that leaves the body least room.
+function reservedComposition(section, view, images) {
+  const hasHeadline = String(view?.headline ?? section?.headline ?? "").trim().length > 0;
+  const kind = section?.block_type || "article";
+  if (hasHeadline || kind !== "article") return null;
+
+  const map = buildFlowMap(section, view, images.map(flowImageFromRow));
+  let worst = null;
+  for (const candidate of reservationCandidates(map.cols || 1)) {
+    const composed = composeSection({ ...section, images }, { ...view, ...candidate });
+    if (!worst || composed.capacity.bodyCharCapacity < worst.capacity.bodyCharCapacity) worst = composed;
+  }
+  return worst;
+}
 
 const WHITESPACE_THRESHOLD = 0.45;
 const TIGHT_THRESHOLD = 0.95;
 
 export function layoutWarnings(metrics) {
   const warnings = [];
+  // The empty FOOT of the block is the whitespace a desk actually complains
+  // about, and `metrics.fillRatio` cannot see it: it is
+  // `(available - unexplained) / available`, and `unexplained` counts only the
+  // gaps BESIDE pictures (compose.js's `emptyGapWidth * bandHeight`), never
+  // the room left under the last line. So a lead block with 2 of its 4.55 body
+  // lines set - 56% of the body area standing empty, plainly visible - scored
+  // a high fillRatio and was reported as "Layout looks balanced".
+  //
+  // Where there is a real composition, the line fill is the honest number, and
+  // it is the SAME one the meter above shows. Only the pre-font-load fallback
+  // still has to use the area ratio, because it has no composition to read.
+  const fill = metrics.composition ? bodyFill(metrics.reservedComposition || metrics.composition) : null;
+  const ratio = fill ? fill.ratio : metrics.fillRatio;
+  const isEmpty = fill ? fill.linesUsed === 0 : !metrics.usedHeightPx;
+
   if (metrics.overflowing) {
     warnings.push({
       level: "error",
       text: `Content overflows the block by about ${Math.abs(metrics.remainingHeightPx)} px. Trim the body, reduce the body size, or use a larger block.`,
     });
-  } else if (metrics.fillRatio > TIGHT_THRESHOLD) {
+  } else if (ratio > TIGHT_THRESHOLD) {
     warnings.push({ level: "warn", text: "Block is nearly full - there is no room for late corrections." });
   }
-  if (!metrics.overflowing && metrics.fillRatio < WHITESPACE_THRESHOLD && metrics.usedHeightPx > 0) {
+  if (!metrics.overflowing && ratio < WHITESPACE_THRESHOLD && !isEmpty) {
     warnings.push({
       level: "warn",
-      text: `Only ${Math.round(metrics.fillRatio * 100)}% of the block is used - ${Math.round(metrics.remainingHeightPx)} px of whitespace will print.`,
+      text: fill
+        ? `Only ${Math.round(ratio * 100)}% of the block's room is set - ${fill.holeLines} lines of it will print empty.`
+        : `Only ${Math.round(ratio * 100)}% of the block is used - ${Math.round(metrics.remainingHeightPx)} px of whitespace will print.`,
     });
   }
-  if (!metrics.usedHeightPx) warnings.push({ level: "info", text: "Block is empty." });
+  if (isEmpty) warnings.push({ level: "info", text: "Block is empty." });
   return warnings;
 }
 
@@ -67,7 +108,7 @@ export function spacePanelMarkup(section, view, images = []) {
   // mid-resize would see a budget computed against where the picture USED
   // to be.
   const m = computeMetrics({ ...section, images }, view);
-  const warnings = layoutWarnings(m);
+  const warnings = layoutWarnings({ ...m, reservedComposition: reservedComposition(section, view, images) });
 
   let ratio;
   let overflowing;
@@ -75,17 +116,41 @@ export function spacePanelMarkup(section, view, images = []) {
   let noteHtml;
 
   if (m.composition) {
-    const { capacity } = m.composition;
-    const floor = capacity.bodyCharCapacityFloor;
+    // An article block is never published without a headline, so measuring
+    // the body's room on a block that has none answers a question nobody
+    // asks - and the gap is not a detail. On a real 268x248 lead with a
+    // cut-out beside the copy: 639 characters of body with no headline, 187
+    // once a real headline and deck are set. A desk shown "467-767
+    // characters, 14.41 lines" on the empty block and then handed 162
+    // characters of AI copy reasonably concludes the AI underfilled it four
+    // times over - when the copy was right and this read-out was wrong.
+    //
+    // So while the block has no headline, the same reservation the model is
+    // briefed against is shown here (headline-reserve.js, one definition for
+    // both sides). Six compositions, ~13ms, and only on a block nobody has
+    // typed into yet - never on the keystroke path.
+    const composition = reservedComposition(section, view, images) || m.composition;
+    const { capacity } = composition;
     const used = capacity.bodyCharsUsed;
-    ratio = floor ? Math.min(1, used / floor) : 0;
+    const fill = bodyFill(composition);
+    const reserved = composition !== m.composition;
+    // LINES, not characters. Dividing by the character range's floor is what
+    // made this meter read "91% of the room for copy used - layout looks
+    // balanced" on a block with 3.58 of its lines standing empty: the floor
+    // (539) is the least this block could hold for the worst possible prose,
+    // and the copy in it was ordinary, so it was being measured against a
+    // number 40% below its real capacity. The line count has no range in it -
+    // see bodyFill()'s own note.
+    ratio = fill.ratio;
     overflowing = m.overflowing;
-    const words = Math.round(floor / 6);
+    const words = Math.round(capacity.bodyCharCapacity / 6);
     charRowsHtml = `
-      ${row("Room for copy", `${capacity.bodyCharRange.min}–${capacity.bodyCharRange.max} characters (~${words} words)`)}
+      ${row(reserved ? "Room for copy (after a headline)" : "Room for copy", `${capacity.bodyCharRange.min}–${capacity.bodyCharRange.max} characters (~${words} words)`)}
       ${row("Written so far", `${used} characters`)}
+      ${row("Lines set", `${fill.linesUsed} of ${fill.linesAvailable}`)}
+      ${fill.intentionalEquivalentLines > 0 ? row("Paragraph air", `${fill.intentionalEquivalentLines} lines`) : ""}
     `;
-    noteHtml = `Exact composition, measured in the real publication font. A range, not one number - see CLAUDE.md on why Marathi's character budget cannot be a single scalar.`;
+    noteHtml = `${reserved ? "This block has no headline yet, so the figures above keep room for the one it will get. " : ""}Exact composition, measured in the real publication font. The bar is the block's own body geometry, weighted: a row a picture halves counts as half a line, so these figures are fractional and exact. The character figure is a range, because Marathi's character budget cannot be a single scalar - see CLAUDE.md.`;
   } else {
     const map = buildFlowMap(section, view, images.map(flowImageFromRow));
     const fit = flowFit(map);
@@ -100,13 +165,19 @@ export function spacePanelMarkup(section, view, images = []) {
     noteHtml = `Estimates in editor pixels (2 px per mm of the 330 × 530 mm page) - the publication font is not measurable yet. Print composition measures text for real, in millimetres.`;
   }
 
+  // Named in lines, because that is what the desk can see standing empty -
+  // weighted lines, so a corridor beside a cut-out counts for what it is
+  // worth rather than for a whole one. See bodyFill().
+  const hole = m.composition ? bodyFill(reservedComposition(section, view, images) || m.composition).holeLines : 0;
+  const holeNote = !overflowing && hole >= 1 ? ` · ${hole} line${hole >= 2 ? "s" : ""} free at the foot` : "";
+
   return `
     ${row("Block", `${m.widthPx} × ${m.heightPx} px`)}
     ${charRowsHtml}
     <div class="fill-meter large${overflowing ? " overflowing" : ""}">
       <span style="width:${Math.min(100, Math.round(ratio * 100))}%"></span>
     </div>
-    <p class="muted metrics-note">${Math.round(ratio * 100)}% of the room for copy used</p>
+    <p class="muted metrics-note">${Math.round(ratio * 100)}% of the block's lines are set${holeNote}</p>
     <div class="warning-list">${warningsMarkup(warnings)}</div>
     <p class="muted ext-note">${noteHtml}</p>
   `;

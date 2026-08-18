@@ -214,6 +214,70 @@ export function bodyOverset(result) {
 }
 
 /**
+ * How full this block actually is, in LINES - the one honest answer to "is
+ * there room left", and the only one every surface may quote.
+ *
+ * Characters cannot answer it. The engine's own character budget is a RANGE
+ * (`capacity.bodyCharRange`), and on a real block it is wide: 539-918 on the
+ * 307x312 advert this was found on, a factor of 1.7. Any two callers that
+ * pick different ends of that range tell the desk opposite stories about the
+ * same block, and that is exactly what happened - the Space panel divided by
+ * the range's FLOOR and reported "91% of the room for copy used, layout looks
+ * balanced" on a block whose foot was visibly empty, while the AI panel
+ * divided by a calibrated target and offered "79 left" on a block the same
+ * panel called "nearly full" one click later.
+ *
+ * Lines have no range. The compositor placed 9 of them and left 3.58 lines of
+ * room under the last one; that is a measurement, not an estimate, and it is
+ * what the eye is already reading. So this is the number the meter, the
+ * warnings, the AI read-out and the fill decision all share.
+ */
+export function bodyFill(result) {
+  const occupancy = result?.whitespace?.occupancy;
+  const renderedFragments = (result?.bodyLines || []).length;
+
+  // `bodyLines.length` is a FRAGMENT count, and it is not the number of lines
+  // set. Around a cut-out standing clear of both edges, one physical row of
+  // type is two corridors, `pourBody()` sets both, and each becomes its own
+  // entry in `bodyLines`. Measured on a centre-standing silhouette: nine
+  // entries for six physical rows, each entry a half-measure fragment. The
+  // old reading divided that fragment count by a width-derived hole and
+  // called the quotient a percentage - two different units, so the answer
+  // could not be right except by accident. On that block it read 44% full
+  // where the geometry says 29%.
+  const occupiedEquivalentLines = occupancy
+    ? Math.max(0, Number(occupancy.occupiedEquivalentLines) || 0)
+    : renderedFragments;
+  const emptyEquivalentLines = occupancy
+    ? Math.max(0, Number(occupancy.emptyEquivalentLines) || 0)
+    : Math.max(0, Number(result?.whitespace?.largestHoleLines) || 0);
+  const intentionalEquivalentLines = occupancy ? Math.max(0, Number(occupancy.intentionalEquivalentLines) || 0) : 0;
+  const availableEquivalentLines = occupiedEquivalentLines + emptyEquivalentLines;
+
+  const round = (n) => Number(n.toFixed(2));
+  return {
+    occupiedEquivalentLines: round(occupiedEquivalentLines),
+    emptyEquivalentLines: round(emptyEquivalentLines),
+    intentionalEquivalentLines: round(intentionalEquivalentLines),
+    availableEquivalentLines: round(availableEquivalentLines),
+    // Diagnostic only. Never a line count, never a divisor.
+    renderedFragments,
+    // The same three numbers under the names every surface already quotes -
+    // now carrying the weighted geometry rather than a fragment tally. They
+    // are fractional, because a row a silhouette halves really is half a line.
+    linesUsed: round(occupiedEquivalentLines),
+    holeLines: round(emptyEquivalentLines),
+    linesAvailable: round(availableEquivalentLines),
+    // 1 means the block is full to the foot. Overset copy is reported as full
+    // rather than as more-than-full: how far past the edge it ran is
+    // `bodyOversetChars()`, a different question with its own exact answer.
+    ratio: availableEquivalentLines > 0 ? Math.min(1, occupiedEquivalentLines / availableEquivalentLines) : 0,
+    overset: bodyOverset(result),
+    state: result?.fitState || 'EMPTY',
+  };
+}
+
+/**
  * How many visible units of the body have no room - real leftover text plus
  * any unbreakable token that was drawn past its own measure (see
  * `bodyOverset()`). "Cut about N characters" only means something if N

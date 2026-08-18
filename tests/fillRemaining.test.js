@@ -134,26 +134,38 @@ test('a reporter\'s copy is carried on, never replaced', async (t) => {
   assert.ok(result.proposal.body.startsWith(reporterStory), 'and comes back at the front, word for word');
 });
 
-test('a full block is told so rather than asked to overflow', async (t) => {
+// This used to assert a 400 telling the desk to "cut it, set it tighter, or
+// carry it over" - so the one button whose whole job is making a block the
+// right length refused in exactly the case a desk most needs it, and its
+// advice was to go and do it by hand. Overset copy is now cut back to the
+// last whole sentence that fits, by composing it (copyFit.service.js), which
+// is why the model still must not be called: cutting is arithmetic, not
+// authorship, and spending a paid call on it was always waste.
+test('an over-full block is CUT back to fit, deterministically and without a model call', async (t) => {
   const { desk, page } = await withBlock(t, 'ZZ fill already full');
 
-  // Far more copy than a block holds.
+  // Far more copy than a block holds - real sentences, so there are sentence
+  // boundaries to cut at, which is what a sub-editor's own "cut from the
+  // bottom" does.
+  const sentence = 'पंतप्रधान नरेंद्र मोदी यांनी लाल किल्ल्यावर ध्वजारोहण केले. ';
   await desk(`/api/pages/${page.id}/sections/lead`, {
     method: 'PUT',
-    body: JSON.stringify({ headline: 'x', body: 'क'.repeat(20000) }),
+    body: JSON.stringify({ headline: 'मथळा', body: sentence.repeat(60) }),
   });
 
-  withProvider(t, async () => { throw new Error('the model must not be called for a full block'); });
+  withProvider(t, async () => { throw new Error('the model must not be called to cut copy'); });
 
   const response = await desk(`/api/pages/${page.id}/sections/lead/fill`, {
     method: 'POST',
     body: JSON.stringify({ tier: 'basic' }),
   });
-  assert.equal(response.status, 400);
+  assert.equal(response.status, 200, 'the block is repaired, not refused');
   const result = await response.json();
-  assert.match(result.error, /over|full/i);
-  assert.match(result.error, /Cut it|set it tighter|carry it over|already full/i,
-    'and points at the three moves a sub-editor actually has');
+  assert.ok(result.proposal?.body, 'a shorter body comes back');
+  assert.ok(result.proposal.body.length < sentence.repeat(60).length, 'and it is genuinely shorter');
+  assert.equal(result.fit.overflowing, false, 'and it actually fits now');
+  assert.equal(result.fit.trimmed, true);
+  assert.equal(result.trimmedOnly, true, 'no provider was asked');
 });
 
 test('a block holding a Smart Card is not filled with prose', async (t) => {

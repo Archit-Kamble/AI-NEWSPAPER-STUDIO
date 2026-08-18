@@ -5003,6 +5003,10 @@ body.print-view .page-imprint {
 .ai-proposal-sub { margin: 0 0 var(--s2); color: #55555e; font-size: 0.88rem; }
 .ai-proposal-fit { margin: 0 0 var(--s2); color: #3d7258; font-size: 0.72rem; font-weight: 700; }
 .ai-proposal-fit.over { color: var(--accent); }
+/* A block the material could not fill. Deliberately not styled as an error -
+   it is an honest production state the desk decides what to do about. */
+.ai-proposal-underfill { margin: 0 0 var(--s2); padding: var(--s2); border-left: 3px solid #c8a24a;
+  background: rgba(200, 162, 74, 0.08); color: #6b5420; font-size: 0.72rem; line-height: 1.5; }
 .ai-proposal-body {
   max-height: 260px;
   overflow: auto;

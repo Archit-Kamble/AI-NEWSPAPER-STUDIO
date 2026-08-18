@@ -3356,3 +3356,86 @@ is MATCH on all pages. Measured rendered-source geometry is P1 `160–1008`, P2
 `64–1008`; preflight is clean. Screenshot automation still cannot run because
 this checkout lacks `playwright-core`, so layout is accepted only after manual
 visual confirmation.
+
+### 27. Copy-fit rebuilt: the exact compositor is the controller
+
+The desk's report — "either it is underflowing or it is overflowing", and a
+block reported "already fits its area" while visibly half empty — turned out
+to be three structural faults, not a threshold that needed tuning. All three
+were found by measuring, and all three are fixed.
+
+**A. `bodyLines.length` is a fragment count, and was being used as a line
+count.** Around a cut-out standing clear of both edges, one physical row of
+type is two corridors; `pourBody()`'s `fillRow()` sets every legal gap on a
+row and pushes each as its own entry. Measured on a centre-standing
+silhouette: **9 entries for 6 physical rows**, each a half-measure fragment
+counted as a whole line. `bodyFill()` then divided that fragment count by a
+*width-derived* hole — two different units — and reported **44% full where the
+geometry says 29%**. It did not stay in the read-out: `measureFit()` divided
+the character count by the same tally to calibrate the repair target, so on a
+real cut-out block the rate came out **26% low**, and that wrong rate was
+multiplied by the hole to decide what to ask the model for next.
+
+`pourBody()` now returns an `occupancy` record measured in equivalent lines —
+each gap weighted by `gap.measure / its own column's width`. A full-width row
+counts 1, a row a silhouette halves counts 0.5. The image's shape participates
+on its own; there is no image-specific arithmetic anywhere. Paragraph air is
+recorded as `intentional`, so the desk is no longer offered "fill this" for
+whitespace the stylesheet inserted. `bodyLines.length` survives as
+`renderedFragments`, diagnostic only. `tests/bodyOccupancy.test.js` holds it
+across six shapes; the pre-existing tapered-cut-out fixture does **not** prove
+this bug, because it sits flush against the block's left edge and narrows one
+corridor rather than splitting a row.
+
+**B. The settle loop accepted a repair for having made the hole smaller.**
+That only proves the result got less bad — a block could go 55% full → 70%
+full and be returned as done. `isAcceptablyFilled()` is now the single
+authority and has no threshold in it: nothing overset (body, headline, deck or
+kicker) and under one whole equivalent line of fillable measure left empty.
+When the bounded repair budget runs out without reaching it, the result
+reports **`SOURCE_LIMITED_UNDERFILL`** rather than `FITS`, and the AI panel
+shows the desk what to do about it. `resizeNeeded()` — a second, count-based
+answer to "does this fit", already unreachable from `write()` — was deleted.
+
+**C. The pre-write reservation was the wrong control variable, and is not
+even a safe bound.** It reserves room for a headline and deck that do not
+exist yet. Measured across 96 real block geometries with an in-spec headline
+*and* deck, it **over-promises on 49 of them**, and the same block's real
+capacity varies by a factor of **1.5–3** depending only on how long the
+headline and deck turn out to be. (An earlier measurement showing zero
+over-promises was taken against blocks with no subheading at all — not what
+the brief asks a model to produce. That measurement is retired, and so is the
+"the reservation is a proof" claim in CLAUDE.md.)
+
+`write()` now asks for a **reservoir** — deliberately more copy than the block
+will print — and the compositor chooses the prefix that fits. The reservoir is
+bounded by the block with the *shortest display type the brief permits*, never
+by an empty block: sizing it from an empty block asked for up to **7×** what
+the finished block could hold; from the shortest legal display type it is 2×
+at the median and 3× at p95, and it under-asks on 2 of 96 blocks, both by a
+single character. Repairs ask only for **further paragraphs to append**, never
+a rewrite, so copy the desk has already read is never thrown away. Trimming
+cuts at the strongest boundary that still fills the block: paragraph if that
+alone is acceptable, otherwise sentence, word only as the emergency fallback.
+
+**Verified live against the running app**, not only in tests:
+
+| action | before | after | paid calls |
+|---|---|---|---|
+| Fill remaining, overset block | 672 chars, overflowing | 279 chars, 4 of 4 lines, 100% | **0** |
+| Fill remaining, short block | 55 chars, 1 line | 159 chars, 3 of 3 lines, 100% | 1 |
+| Write this block | — | 3.57 of 4.57 lines, `FITS` | 0 (trimmed free) |
+| Write this block (thin material) | — | 3 of 5 lines, `SOURCE_LIMITED_UNDERFILL` | — |
+
+768 tests pass. Two pre-existing failures in
+`tests/browser/workspace.browser.js` are **not** from this work and are not
+fixed here: the canvas-vs-editor geometry check reads `.section-content`,
+which `section-thumb.js`'s `contentMarkup()` does not emit for every block
+state, and the draft-shadowing check names `editorialPresentation`, a field
+introduced by the committed `editionComposition` pipeline (58df3a9). Both
+predate this change and both deserve their own pass.
+
+`src/services/exactFitWriter.service.js` (the separate full-edition
+composition path, reached via `editionComposition.service.js`) still decides
+fit from `rawBodyFillRatio`, a character ratio. It was **not** migrated to the
+compositor here and is the obvious next target.

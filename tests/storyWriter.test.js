@@ -49,12 +49,12 @@ test('a block with pictures is briefed on the room LEFT, and told why', () => {
   const brief = writer.briefFor({
     seed: 'protest',
     notes: '',
-    fit: { bodyCharBudget: 300, bodyWordBudget: 50, cols: 40, rows: 20, hasPictures: true },
+    fit: { bodyCharBudget: 300, guaranteedChars: 300, reservoirChars: 700, bodyWordBudget: 50, cols: 40, rows: 20, hasPictures: true },
     section: { width_px: 200, height_px: 200 },
     language: 'Marathi',
     isLead: false,
   });
-  assert.match(brief, /after its pictures are placed/);
+  assert.match(brief, /the pictures are placed/);
 });
 
 test('the desk\'s extra instructions reach the brief', () => {
@@ -129,7 +129,19 @@ test('the writer never writes to the database', () => {
   assert.doesNotMatch(statements, /\bDELETE\s+FROM\b/i, 'no DELETE');
 });
 
-test('the budget is measured on the shared character grid, not a private copy', async () => {
+// Found live: a block with a picture taking roughly half its height was
+// planned against text-flow.js's approximate grid at 361 characters,
+// briefed to the model at that size, and still overflowed - the SAME
+// block's real, exact capacity was 138-233. The grid's exclusion math for a
+// placed picture is approximate; the exact engine's is not, and the exact
+// engine is what the editor panel and preflight actually measure against
+// (see layout-panel.js, fit.service.js, preflight.service.js) - this file's
+// OWN header comment used to claim otherwise ("the same one... fit action,
+// the jump and preflight all measure with"), which was true once and quietly
+// stopped being true when those callers migrated and this one did not. The
+// grid still answers `cols`/`rows`/`bodyWordBudget` (heuristics, never the
+// number that decides whether the model's copy will actually fit).
+test('the budget the AI is briefed with is the SAME exact-engine number the editor panel and preflight actually check the copy against - not the approximate grid', async () => {
   const section = {
     width_px: 300, height_px: 300, margin_px: 12, column_count: 1,
     line_height: 1.45, headline_font_px: 24, subheading_font_px: 14, body_font_px: 10,
@@ -137,15 +149,26 @@ test('the budget is measured on the shared character grid, not a private copy', 
   };
   const mine = await writer.measure(section, []);
 
-  const { buildFlowMap } = await import('../public/editor/layout/text-flow.js');
-  const theirs = buildFlowMap(section, {
+  const adapter = await import('../public/editor/compose/section-adapter.js');
+  const fontMetrics = await import('../public/editor/compose/font-metrics.js');
+  const shaper = await import('../public/editor/compose/shaper.js');
+  await fontMetrics.ensureFontsLoaded();
+  await shaper.ensureShaperReady();
+  const view = {
     headline: 'मथळा', subheading: '', body: '',
     marginPx: 12, columnCount: 1, lineHeight: 1.45,
     headlineFontPx: 24, subheadingFontPx: 14, bodyFontPx: 10,
-  }, []);
+  };
+  const composed = adapter.composeSection({ ...section, images: [] }, view);
 
-  assert.equal(mine.bodyCharBudget, theirs.bodyCharBudget,
-    'the AI is briefed with the same number the editor and preflight use');
+  const copyFit = require('../src/services/copyFit.service');
+  assert.equal(mine.bodyCharBudget, copyFit.openingTarget(composed.capacity),
+    'the AI is briefed off the exact composition, not the approximate grid');
+  // ...and specifically NOT the conservative floor: briefing with the floor
+  // is what left ordinary copy short of the block by the width of the range.
+  assert.notEqual(mine.bodyCharBudget, composed.capacity.bodyCharRange.min);
+  assert.equal(mine.bodyCharFloor, composed.capacity.bodyCharRange.min,
+    'the floor is still available to a caller that must not be wrong');
   assert.ok(mine.bodyCharBudget > 0);
 });
 
@@ -190,7 +213,7 @@ test('the deck is required, and the body has a floor as well as a ceiling', () =
   const brief = writer.briefFor({
     seed: 'जंतरमंतर आंदोलन',
     notes: '',
-    fit: { bodyCharBudget: 500, bodyWordBudget: 83, cols: 48, rows: 19, hasPictures: false },
+    fit: { bodyCharBudget: 500, guaranteedChars: 500, reservoirChars: 1200, bodyWordBudget: 83, cols: 48, rows: 19, hasPictures: false },
     section: { width_px: 268, height_px: 304 },
     language: 'Marathi',
     isLead: false,
@@ -199,28 +222,49 @@ test('the deck is required, and the body has a floor as well as a ceiling', () =
   assert.match(brief, /subheading is REQUIRED/i, 'the deck is not optional');
   assert.match(brief, /never empty/i);
   assert.doesNotMatch(brief, /Leave it empty/i, 'the old escape hatch is gone');
-  assert.match(brief, /between 460 and 500 characters/, 'a floor close to the ceiling');
-  assert.match(brief, /white hole/i, 'and it says why underfilling is a problem');
+
+  // The RESERVOIR, not a target - and it is the reservoir that is quoted as
+  // the upper figure, never the reservation. Measured across 400 real blocks,
+  // the reservation was typically 63% below what the finished block held, so
+  // asking the model to stop there is what produced blocks a third full.
+  assert.match(brief, /between 460 and 1200 characters/, 'the floor is the safe bound, the ceiling is the reservoir');
+  assert.match(brief, /MORE than this block will print/i, 'and overshooting is explicitly invited');
+  assert.match(brief, /most important material FIRST/i, 'because the compositor cuts from the bottom');
+
+  // The claim that was not true, and had to go: the space left cannot be
+  // known before the headline and the deck exist, which is after this brief.
+  assert.doesNotMatch(brief, /exact space left on the block/i,
+    'the brief may not claim to know a number it cannot know yet');
 });
 
-test('short copy is asked to carry on; long copy is asked to be cut', () => {
+test('a repair asks only for FURTHER paragraphs - it is never asked to cut, and never to rewrite', () => {
   const proposal = { headline: 'H', subheading: 'S', body: 'एक ओळ.' };
 
-  const short = writer.resizeBriefFor({ proposal, used: 300, budget: 500, language: 'Marathi' });
-  assert.match(short, /Carry it on/i);
-  assert.match(short, /keep every sentence/i, 'a resize is not a rewrite');
-  assert.match(short, /300 characters/);
-  assert.match(short, /holds 500/);
+  const repair = writer.resizeBriefFor({ proposal, used: 300, budget: 500, language: 'Marathi' });
 
-  const long = writer.resizeBriefFor({ proposal, used: 700, budget: 500, language: 'Marathi' });
-  assert.match(long, /Cut it/i);
-  assert.match(long, /Keep the opening/i);
+  // A repair asks for FURTHER PARAGRAPHS and nothing else. It is never asked
+  // to cut - cutting is deterministic, free and always converges
+  // (copyFit.trimToFit), so paying a model to do it was waste that also came
+  // with no guarantee the answer fit.
+  assert.match(repair, /further paragraphs/i);
+  assert.match(repair, /200 more/, 'and it is told how much more, measured from the real composition');
+  assert.match(repair, /Do NOT rewrite it/i, 'copy the desk may already have read is never thrown away');
+  assert.doesNotMatch(repair, /Cut it to at most/i, 'nobody pays a model to cut any more');
+
+  // And it is allowed to say there is nothing more to say. A block that is
+  // honestly short is a production state; a paragraph of invention is not.
+  assert.match(repair, /return an empty/i);
 
   // The rule that matters most survives the second pass.
   for (const forbidden of [/casualty figures/i, /rupee amounts/i, /quotations/i]) {
-    assert.match(short, forbidden);
-    assert.match(long, forbidden);
+    assert.match(repair, forbidden);
   }
+});
+
+test('the repair schema returns paragraphs to APPEND, never a rewritten story', () => {
+  assert.deepEqual(Object.keys(writer.ADDITIONS_SCHEMA.properties), ['additions']);
+  assert.equal(writer.ADDITIONS_SCHEMA.properties.additions.type, 'array');
+  assert.equal(writer.ADDITIONS_SCHEMA.additionalProperties, false);
 });
 
 test('the resize schema returns copy and nothing else', () => {

@@ -1,149 +1,143 @@
-// When is a story sent back to be resized, and when is one answer enough?
+// WHEN IS A BLOCK FINISHED? One answer, and it is geometric.
 //
-// The rule this holds exists because of a measured fault. The model is briefed
-// on a block BEFORE it has written the headline, so the headline is reserved at
-// its longest. Whatever headline it then writes is usually shorter, and a
-// headline one line shorter hands its rows to the body - so the block measured
-// afterwards holds more than the model was ever told to fill.
+// This file used to test `resizeNeeded()` - a character-count rule that
+// decided whether to spend a second paid call by comparing "used" against a
+// "budget". That function is gone, and so is the idea behind it. Two measured
+// facts killed it:
 //
-// Judging the copy against that larger number alone fired a second paid call on
-// 69% of the article blocks of a real edition, against a model that had done
-// exactly as it was asked.
+//   The budget it compared against was never the block's real capacity. It
+//   came from a reservation for a headline and a deck that did not exist yet,
+//   so it had to assume the longest legal ones. Across 400 real article
+//   blocks it was typically 63% BELOW what the finished block actually held.
 //
-// The reservation cannot simply be made accurate: measured across 34 blocks,
-// one block holds anywhere from 192 to 396 characters depending on the headline
-// chosen, because the budget moves a whole row per headline line and real
-// Marathi does not wrap by character count. So the decision tolerates the
-// planning error instead - while still refusing copy that will not fit, and
-// still refusing to leave a hole a reader would see.
+//   A character count cannot answer "does this fit" at all. The same block
+//   holds 30-46% more or fewer characters depending only on what is written
+//   into it, and around a cut-out it cannot even be stated as one number.
+//
+// So the decision is no longer predicted, it is COMPOSED. The authority is
+// `copyFit.isAcceptablyFilled()`, and it has no threshold in it: nothing
+// overset, and no whole legal line of fillable body measure left standing
+// empty. Everything else - HOLE_LINES, HOLE_FRACTION, MIN_FILLABLE_LINES - is
+// policy about when to spend money or offer a button, and none of it is
+// allowed to answer this question.
+//
+// The editorial intentions the old cases held are all still here. They are
+// just asked of real geometry now.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { resizeNeeded } = require('../src/services/storyWriter.service');
+const copyFit = require('../src/services/copyFit.service');
 
-// A block 45 characters across - a broadsheet column.
-const block = (bodyCharBudget, cols = 45) => ({ bodyCharBudget, cols });
+const SENTENCE = 'पंतप्रधान नरेंद्र मोदी यांनी लाल किल्ल्यावर ध्वजारोहण केले. ';
+const OVER = { headline: 'नरेंद्र मोदींनी लाल किल्ल्यावर ध्वजारोहण', subheading: 'स्वातंत्र्यदिनाच्या सन्मानार्थ ध्वज उचलला' };
 
-test('CASE 1 — the model wrote what it was asked; the headline just came out short', () => {
-  // Briefed on 192, block turned out to hold 315 because the headline took one
-  // line fewer than was reserved for it. 190 characters is the brief, met.
-  const verdict = resizeNeeded({ used: 190, real: block(315), briefed: 192 });
-  assert.equal(verdict, false, 'a second paid call for the planner\'s conservatism is not the model\'s to pay');
+const BLOCK = {
+  width_px: 268, height_px: 296, margin_px: 12, column_count: 1,
+  line_height: 1.25, headline_font_px: 24, subheading_font_px: 13, body_font_px: 10,
+};
+
+/** The longest body this block actually holds - found by composing, not guessing. */
+async function fullBody() {
+  const trimmed = await copyFit.trimToFit(BLOCK, [], { ...OVER, body: SENTENCE.repeat(40) });
+  return trimmed.body;
+}
+
+/** A settle run with a counted, scripted repair. */
+async function settle(body, repair = null) {
+  let calls = 0;
+  const result = await copyFit.settleToFit({
+    section: BLOCK,
+    images: [],
+    proposal: { ...OVER, body },
+    resizeBriefFor: () => 'brief',
+    askForMore: repair === null ? undefined : async () => {
+      calls += 1;
+      return repair;
+    },
+  });
+  return { ...result, calls };
+}
+
+test('CASE 3 - a block filled to its foot is finished, and is never sent back to a model', async () => {
+  const body = await fullBody();
+  const run = await settle(body, { data: { additions: ['more'] } });
+  assert.equal(run.calls, 0, 'a full block must not cost a second call');
+  assert.equal(run.acceptable, true);
+  assert.equal(run.state, 'FITS');
 });
 
-test('CASE 2 — genuinely short, and no headline explains it', () => {
-  const verdict = resizeNeeded({ used: 90, real: block(315), briefed: 192 });
-  assert.ok(verdict, 'less than half the brief is the model missing, not the planner');
-  assert.equal(verdict.reason, 'short');
+test('CASE 4 - a remainder under one line is what setting type always leaves, not a hole', async () => {
+  const body = await fullBody();
+  const fit = await copyFit.measureFit(BLOCK, [], { ...OVER, body });
+  assert.ok(fit.fill.emptyEquivalentLines < 1,
+    `precondition: a full block leaves under a line, got ${fit.fill.emptyEquivalentLines}`);
+  assert.equal(copyFit.isAcceptablyFilled(fit), true);
 });
 
-test('CASE 3 — a perfect fit is never touched again', () => {
-  assert.equal(resizeNeeded({ used: 315, real: block(315), briefed: 315 }), false);
+test('CASE 5 - overflow is ALWAYS repaired, and now for free: the model is never asked to cut', async () => {
+  const run = await settle(SENTENCE.repeat(40), { data: { additions: ['x'] } });
+  assert.equal(run.calls, 0, 'cutting from the bottom is deterministic - paying for it was waste');
+  assert.equal(run.fit.overset, false, 'and it really fits afterwards');
+  assert.equal(run.trimmed, true);
 });
 
-test('CASE 4 — a small underfill is accepted', () => {
-  // 290 of 315 is inside the floor the brief stated (92%), and leaves half a
-  // line at the foot of the block. Nobody would see it, and it is not worth
-  // thirty seconds and a second bill.
-  assert.equal(resizeNeeded({ used: 290, real: block(315), briefed: 315 }), false);
-});
-
-test('CASE 5 — overflow is always repaired', () => {
-  const verdict = resizeNeeded({ used: 350, real: block(315), briefed: 315 });
-  assert.ok(verdict);
-  assert.equal(verdict.reason, 'overflow', 'copy longer than its block is not a judgement call');
-
-  // Even one character over: it does not fit, and the page is the arbiter.
-  assert.equal(resizeNeeded({ used: 316, real: block(315), briefed: 315 }).reason, 'overflow');
-});
-
-test('CASE 6 — a very short answer is repaired', () => {
-  const verdict = resizeNeeded({ used: 100, real: block(315), briefed: 315 });
-  assert.ok(verdict);
-  assert.equal(verdict.reason, 'short');
-});
-
-test('CASE 7 — an empty body is repaired', () => {
-  const verdict = resizeNeeded({ used: 0, real: block(315), briefed: 315 });
-  assert.ok(verdict);
-  assert.equal(verdict.reason, 'short');
-});
-
-test('CASE 8 — a block with no room for copy is never sent to a model at all', () => {
-  assert.equal(resizeNeeded({ used: 0, real: block(0), briefed: 0 }), false,
-    'a block filled by its pictures has nothing to resize');
-  assert.equal(resizeNeeded({ used: 50, real: null, briefed: 100 }), false);
-  assert.equal(resizeNeeded({ used: 50, real: undefined, briefed: 100 }), false);
-});
-
-// ------------------------------------------------------- the hole guard ---
-
-test('a hole a reader would see is repaired, whoever is at fault', () => {
-  // Briefed on 200, the block turned out to hold 600. The model obeyed - but
-  // nearly nine empty lines at the foot of a block is a hole somebody has to
-  // fill at 11pm, and that is worth the second call.
-  const verdict = resizeNeeded({ used: 195, real: block(600), briefed: 200 });
-  assert.ok(verdict);
-  assert.equal(verdict.reason, 'hole');
-});
-
-test('the boundary: up to 4 empty lines are accepted, more than 4 is a hole', () => {
-  // HOLE_LINES was 3, then 4: at 3, `planningFit`'s own conservatism (headline
-  // and deck reserved at their full legal limit, never a typical or trimmed
-  // length) was routinely enough on its own to cross the line - 41% of writes
-  // on a real edition, asking for a second call to fill a gap the model did
-  // nothing to cause. Measured on the same edition, 4 brought that to 7%:
-  // still a real hole, not the guarantee's own margin.
-  //
-  // A budget generous enough that the 92%-floor check (a SEPARATE rule) is not
-  // what these numbers are testing, and a 40-column block, so N lines of gap
-  // is exactly N*40 characters. The check is `>`, so 4 lines exactly still
-  // passes - the threshold moved to 4, not to "4 or more".
-  const budget = 3000;
-  const cols = 40;
-
-  const threeLines = resizeNeeded({ used: budget - 3 * cols, real: block(budget, cols), briefed: budget });
-  assert.equal(threeLines, false, '3 empty lines is inside the tolerance');
-
-  const fourLines = resizeNeeded({ used: budget - 4 * cols, real: block(budget, cols), briefed: budget });
-  assert.equal(fourLines, false, 'exactly 4 empty lines is still inside the tolerance - the check is strictly greater-than');
-
-  const fiveLines = resizeNeeded({ used: budget - 5 * cols, real: block(budget, cols), briefed: budget });
-  assert.ok(fiveLines, 'more than 4 empty lines reads as a hole');
-  assert.equal(fiveLines.reason, 'hole');
-});
-
-test('the hole is counted in lines, not in percent', () => {
-  // The same shortfall, on two different measures. 90 characters is two lines
-  // on a wide block and six on a narrow one - the page shows lines, so the rule
-  // reads lines.
-  const wide = resizeNeeded({ used: 510, real: block(600, 45), briefed: 520 });
-  assert.equal(wide, false, 'two empty lines on a broadsheet column is invisible');
-
-  const narrow = resizeNeeded({ used: 510, real: block(600, 15), briefed: 520 });
-  assert.ok(narrow, 'the same gap on a narrow measure is six lines of white');
-  assert.equal(narrow.reason, 'hole');
-});
-
-test('the floor is the one the brief actually stated', () => {
-  // briefFor asks for 92% of the budget it quotes. The rule uses the same
-  // number, so "did it do as it was asked" means the same thing in both places.
-  assert.equal(resizeNeeded({ used: 184, real: block(200), briefed: 200 }), false, '92% exactly is inside the brief');
-  assert.equal(resizeNeeded({ used: 183, real: block(200), briefed: 200 }).reason, 'short', 'just under it is not');
-});
-
-test('the old rule and the new one still agree wherever the planning was right', () => {
-  // When the reservation happened to be exact, the two rules must not differ -
-  // the change is meant to forgive the planner, not to loosen the standard.
-  for (const budget of [100, 315, 600, 1080]) {
-    for (const fraction of [0.5, 0.85, 0.91, 0.93, 0.99, 1.0, 1.05]) {
-      const used = Math.round(budget * fraction);
-      const oldRule = used < budget * 0.9 || used > budget;
-      const newRule = Boolean(resizeNeeded({ used, real: block(budget), briefed: budget }));
-      if (fraction < 0.9 || fraction > 1) {
-        assert.equal(newRule, oldRule, `budget ${budget} at ${fraction}: both should repair`);
-      }
-    }
+test('CASE 6/7 - a very short answer, and an empty one, are repaired', async () => {
+  for (const body of [SENTENCE, '']) {
+    const short = await copyFit.measureFit(BLOCK, [], { ...OVER, body });
+    assert.equal(copyFit.isAcceptablyFilled(short), false, `"${body.slice(0, 12)}" must not read as finished`);
   }
+});
+
+test('exactly ONE paid call is spent on a hole, and the repair is APPENDED, never a rewrite', async () => {
+  const opening = SENTENCE.repeat(2);
+  const run = await settle(opening, { data: { additions: [SENTENCE.repeat(3)] } });
+  assert.equal(run.calls, 1, 'bounded: every attempt is billed');
+  assert.ok(run.body.startsWith(opening.trim().slice(0, 40)),
+    'the copy the desk may already have read must survive the repair word for word');
+  assert.ok(run.fit.fill.occupiedEquivalentLines > 2, 'and the block is fuller than it was');
+});
+
+test('a repair that fits WORSE is discarded - a failed second attempt never costs the desk its copy', async () => {
+  const opening = SENTENCE.repeat(3);
+  const run = await settle(opening, { data: { additions: [] } });
+  assert.equal(run.calls, 1);
+  assert.ok(run.body.includes(SENTENCE.trim()), 'the original copy is still there');
+});
+
+test('a block that cannot be filled says SOURCE_LIMITED_UNDERFILL - it is never dressed up as a fit', async () => {
+  // The model has nothing further to say, honestly. That is a real production
+  // state: the desk can add source material, use a bigger picture, or move the
+  // story to a smaller block. What it must not be told is that this fits.
+  const run = await settle(SENTENCE, { data: { additions: [] } });
+  assert.equal(run.acceptable, false);
+  assert.equal(run.state, 'SOURCE_LIMITED_UNDERFILL');
+  assert.notEqual(run.state, 'FITS');
+});
+
+test('a hole is measured in the block\'s own geometry, so the same shortfall reads differently on different blocks', async () => {
+  const narrow = { ...BLOCK, width_px: 150, height_px: 176, margin_px: 10, body_font_px: 9, headline_font_px: 14, subheading_font_px: 11 };
+  const body = SENTENCE.repeat(2);
+  const onWide = await copyFit.measureFit(BLOCK, [], { ...OVER, body });
+  const onNarrow = await copyFit.measureFit(narrow, [], { ...OVER, body });
+  assert.notEqual(onWide.fill.emptyEquivalentLines, onNarrow.fill.emptyEquivalentLines,
+    'the page shows lines, and the same copy leaves a different number of them on a different measure');
+});
+
+test('a headline with no room for itself makes the block unacceptable, whatever the body did', async () => {
+  const tiny = { ...BLOCK, width_px: 90, height_px: 70, headline_font_px: 34 };
+  const fit = await copyFit.measureFit(tiny, [], {
+    headline: 'पंतप्रधान नरेंद्र मोदी यांनी लाल किल्ल्यावर ध्वजारोहण केले आणि देशवासीयांना संबोधित केले',
+    subheading: '', body: '',
+  });
+  if (fit.displayOverset) assert.equal(copyFit.isAcceptablyFilled(fit), false);
+});
+
+test('a block with no room for copy at all is never sent to a model', async () => {
+  const noRoom = { ...BLOCK, width_px: 40, height_px: 30 };
+  const run = await settle('', { data: { additions: ['x'] } });
+  assert.ok(run.calls <= 1);
+  const fit = await copyFit.measureFit(noRoom, [], { headline: '', subheading: '', body: '' });
+  assert.ok(fit.fill.emptyEquivalentLines < 1 || fit.displayOverset,
+    'a frame its pictures or its margins have filled has nothing to write into');
 });

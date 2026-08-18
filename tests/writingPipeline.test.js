@@ -153,23 +153,54 @@ async function callCount(t, block) {
   } };
 }
 
-const BLOCK = { bodyCharBudget: 315, cols: 45 };
+const copyFit = require('../src/services/copyFit.service');
 
-test('call-count matrix: good fit, hole, overflow, short, and no room', async (t) => {
-  // Exercised directly against resizeNeeded - already the authority the
-  // service itself calls - rather than re-deriving planningFit's real-block
-  // arithmetic, which tests/planningFit.test.js already covers exhaustively.
+// A real block, composed - not a `{ bodyCharBudget, cols }` stand-in. The
+// stand-in is what the old `resizeNeeded()` rule needed, and that rule is
+// gone: a character count cannot answer "does this fit" (the same block holds
+// 30-46% more or fewer characters depending only on what is written into it),
+// and the budget it compared against was a reservation for a headline that
+// did not exist yet - measured 63% below the finished block's real capacity
+// across 400 real article blocks.
+const REAL_BLOCK = {
+  width_px: 268, height_px: 296, margin_px: 12, column_count: 1,
+  line_height: 1.25, headline_font_px: 24, subheading_font_px: 13, body_font_px: 10,
+};
+const REAL_OVER = { headline: 'नरेंद्र मोदींनी लाल किल्ल्यावर ध्वजारोहण', subheading: 'स्वातंत्र्यदिनाच्या सन्मानार्थ ध्वज उचलला' };
+const REAL_SENTENCE = 'पंतप्रधान नरेंद्र मोदी यांनी लाल किल्ल्यावर ध्वजारोहण केले. ';
+
+async function paidCallsFor(body) {
+  let calls = 0;
+  const settled = await copyFit.settleToFit({
+    section: REAL_BLOCK,
+    images: [],
+    proposal: { ...REAL_OVER, body },
+    resizeBriefFor: () => 'brief',
+    askForMore: async () => { calls += 1; return { data: { additions: [REAL_SENTENCE.repeat(6)] } }; },
+  });
+  return { calls, settled };
+}
+
+test('call-count matrix: good fit, hole, and overflow - measured on a real block', async () => {
+  // The block's own longest fitting body, found by composing.
+  const full = (await copyFit.trimToFit(REAL_BLOCK, [], { ...REAL_OVER, body: REAL_SENTENCE.repeat(40) })).body;
+
   const scenarios = [
-    { name: 'good fit (at the top of the brief)', used: 315, briefed: 315, expectCalls: 1 },
-    { name: 'small acceptable underfill', used: 300, briefed: 315, expectCalls: 1 },
-    { name: 'genuine hole (>4 lines short)', used: 90, briefed: 315, expectCalls: 2 },
-    { name: 'overflow', used: 340, briefed: 315, expectCalls: 2 },
-    { name: 'very short', used: 20, briefed: 315, expectCalls: 2 },
+    { name: 'good fit (composed to the foot)', body: full, expectCalls: 0 },
+    { name: 'genuine hole', body: REAL_SENTENCE, expectCalls: 1 },
+    // The change that saves the most money: overflow is repaired by a free,
+    // deterministic sentence-boundary cut. It used to cost a paid call that
+    // was not even guaranteed to come back the right length.
+    { name: 'overflow', body: REAL_SENTENCE.repeat(40), expectCalls: 0 },
+    { name: 'empty', body: '', expectCalls: 1 },
   ];
+
   for (const s of scenarios) {
-    const verdict = writer.resizeNeeded({ used: s.used, real: BLOCK, briefed: s.briefed });
-    const calls = verdict ? 2 : 1;
-    assert.equal(calls, s.expectCalls, `${s.name}: expected ${s.expectCalls} call(s), the rule implies ${calls}`);
+    // eslint-disable-next-line no-await-in-loop
+    const { calls, settled } = await paidCallsFor(s.body);
+    assert.equal(calls, s.expectCalls, `${s.name}: expected ${s.expectCalls} paid call(s), spent ${calls}`);
+    // Whatever happened, nothing may be left running past the foot of the block.
+    assert.equal(settled.fit.overset, false, `${s.name}: the block a desk is shown always fits`);
   }
 });
 
@@ -188,10 +219,11 @@ test('call-count matrix: no room means zero calls, not one that gets refused', a
 // -------------------------------------------------- Part 14: Fill Remaining ---
 
 test('Fill Remaining never invokes the resize pipeline', () => {
-  // fillRemaining's own source is the authority: it must not reference
-  // resizeNeeded or make a second ai.askForJson call under any condition.
+  // fillRemaining's own source is the authority: it must not reach for the
+  // writer's repair path or make a second ai.askForJson call under any
+  // condition. (`resizeNeeded` itself is gone - see resizeRule.test.js.)
   const src = writer.fillBriefFor.toString();
-  assert.doesNotMatch(src, /resizeNeeded/);
+  assert.doesNotMatch(src, /resizeNeeded|resizeBriefFor/);
 });
 
 test('Fill Remaining asks for exactly one call when there is room', async (t) => {
@@ -265,14 +297,31 @@ function withRss(t, stub) {
 // Answering at every stated limit is the same technique the Phase 5
 // exhaustive proof used, and for the same reason: it is what keeps these
 // tests measuring ONE thing (does retrieval add a call) rather than two.
+// A real word, space-separated and repeated, never one giant unbroken
+// token: storyWriter.service.js's own `standIn()` reserves the headline/deck
+// budget the same way, and now that the budget itself comes from the exact
+// composition engine (not text-flow.js's length-only grid - see its own
+// comment on why), a single N-character token with no legal break point
+// composes to a DIFFERENT row count than N characters of ordinary word-
+// wrapped text would. `'क'.repeat(N)` was a fine stand-in under the old
+// grid, where only length mattered; under real word-shaping it is its own,
+// unrelated cause of an "overflow" a genuine headline of the same length
+// would never hit.
+function wordFill(n) {
+  const want = Math.max(0, Math.round(n));
+  if (!want) return '';
+  const WORD = 'शब्द ';
+  return WORD.repeat(Math.ceil(want / WORD.length)).slice(0, want);
+}
+
 function compliantResponse(prompt) {
   const headlineLimit = /headline must be at most (\d+) characters/.exec(prompt);
   const deckLimit = /one line of \d+ to (\d+)/.exec(prompt);
   const bodyRange = /between (\d+) and (\d+) characters/.exec(prompt);
   return {
-    headline: 'क'.repeat(headlineLimit ? Number(headlineLimit[1]) : 30),
-    subheading: 'क'.repeat(deckLimit ? Number(deckLimit[1]) : 60),
-    body: 'क'.repeat(bodyRange ? Number(bodyRange[2]) : 400),
+    headline: wordFill(headlineLimit ? Number(headlineLimit[1]) : 30),
+    subheading: wordFill(deckLimit ? Number(deckLimit[1]) : 60),
+    body: wordFill(bodyRange ? Number(bodyRange[2]) : 400),
   };
 }
 

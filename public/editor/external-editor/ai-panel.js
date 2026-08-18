@@ -237,8 +237,9 @@ function proposalMarkup(result) {
     <p class="ai-proposal-headline">${escapeHtml(proposal.headline)}</p>
     ${proposal.subheading ? `<p class="ai-proposal-sub">${escapeHtml(proposal.subheading)}</p>` : ""}
     <p class="ai-proposal-fit${over ? " over" : ""}">
-      ${fit.charsUsed} of ${fit.bodyCharBudget} characters${over ? ` — ${fit.charsUsed - fit.bodyCharBudget} too many, this will not fit` : ` · ${fit.charsRemaining} left`}
+      ${fitLine(fit)}
     </p>
+    ${underfillNote(fit)}
     <div class="ai-proposal-body">${escapeHtml(proposal.body).replace(/\n{2,}/g, "</p><p>").replace(/\n/g, "<br>")}</div>
     <div class="ext-editor-toolbar">
       <button type="button" class="ext-editor-btn ext-editor-btn-primary" id="aiAcceptStory">Accept into the block</button>
@@ -255,6 +256,38 @@ function proposalMarkup(result) {
  * accepting the whole thing, and the point of the action is that the copy
  * already there is unchanged - which is only checkable if it is shown.
  */
+// How the proposal sits in the block, in the one unit that has no range in
+// it. This line used to read "124 of 203 characters · 79 left" on a block the
+// Space panel called 95% full one click later - two surfaces quoting two
+// different points of a character range 1.7x wide, and the desk correctly
+// called it wrong. Lines are exact and are what the eye is already reading;
+// the character count stays as a secondary figure for the writer.
+function fitLine(fit) {
+  const fill = fit && fit.fill;
+  if (!fill) {
+    const over = fit.overflowing;
+    return `${fit.charsUsed} of ${fit.bodyCharBudget} characters${over ? ` — ${fit.charsUsed - fit.bodyCharBudget} too many, this will not fit` : ""}`;
+  }
+  if (fit.overflowing) return `${fill.linesUsed} lines set — this runs past the foot of the block and will not fit`;
+  const hole = fill.holeLines;
+  // Fractional on purpose. A row a cut-out halves really is half a line of
+  // room, and rounding it to a whole one is how a block with a silhouette
+  // beside its copy reported itself fuller than it was.
+  const room = hole >= 1 ? ` · ${hole} line${hole >= 2 ? "s" : ""} still free` : " · full to the foot";
+  return `${fill.linesUsed} of ${fill.linesAvailable} lines${room} (${fit.charsUsed} characters)`;
+}
+
+// A block the material could not fill. Not an error and not a failure of the
+// AI - the honest third outcome, and the desk is the only one who can act on
+// it. Saying "it fits" here is what puts a half-empty block on a printed page.
+function underfillNote(fit) {
+  if (!fit || fit.state !== "SOURCE_LIMITED_UNDERFILL") return "";
+  const hole = fit.fill ? fit.fill.holeLines : 0;
+  return `<p class="ai-proposal-underfill">Still ${hole} line${hole >= 2 ? "s" : ""} short of the foot.
+    There was not enough material to say more without inventing it — add source material,
+    make a picture larger, or move this story to a smaller block.</p>`;
+}
+
 function fillProposalMarkup(result) {
   const { proposal, fit } = result;
   const added = fit.charsUsed - fit.charsBefore;
@@ -263,12 +296,9 @@ function fillProposalMarkup(result) {
       <span class="muted">review before accepting</span></h4>
     ${handoverNote(result)}
     <p class="ai-proposal-fit${fit.overflowing ? " over" : ""}">
-      ${fit.charsBefore} → ${fit.charsUsed} of ${fit.bodyCharBudget} characters${
-        fit.overflowing
-          ? ` — ${fit.charsUsed - fit.bodyCharBudget} too many, this will not fit`
-          : ` · added ${added}, ${fit.charsRemaining} left`
-      }
+      ${added >= 0 ? `+${added} characters` : `${added} characters`} · ${fitLine(fit)}
     </p>
+    ${underfillNote(fit)}
     ${result.retriedAt ? `<p class="muted ext-note">Written at the ${escapeHtml(result.retriedAt)} tier — the tier you asked for could not finish inside its output limit.</p>` : ""}
     <div class="ai-proposal-body">${escapeHtml(proposal.body).replace(/\n{2,}/g, "</p><p>").replace(/\n/g, "<br>")}</div>
     <div class="ext-editor-toolbar">

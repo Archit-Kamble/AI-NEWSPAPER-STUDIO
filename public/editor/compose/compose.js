@@ -501,7 +501,8 @@ function pourBody(bodyInput, {
       for (let gapIndex = 0; gapIndex < row.gaps.length; gapIndex += 1) {
         if (cursorIndex >= pieces.length) {
           for (let rest = gapIndex; rest < row.gaps.length; rest += 1) {
-            placed.push({ empty: true, width: row.gaps[rest].end - row.gaps[rest].start });
+            const rested = row.gaps[rest].end - row.gaps[rest].start;
+            placed.push({ empty: true, width: rested, measure: rested });
           }
           break;
         }
@@ -536,7 +537,7 @@ function pourBody(bodyInput, {
         }
 
         const trimmed = trimEndClusters(line);
-        if (!trimmed) { placed.push({ empty: true, width: measureWidthPx }); continue; }
+        if (!trimmed) { placed.push({ empty: true, width: measureWidthPx, measure: measureWidthPx }); continue; }
         const drawn = measurePieceWidth(trimmed, lineStartOffset, fontPx, family, weight, marks, letterSpacingPx);
         placed.push({ text: trimmed, at: lineStartOffset, x: gap.start, width: drawn, measure: measureWidthPx, hardOverset });
       }
@@ -579,6 +580,39 @@ function pourBody(bodyInput, {
   // for a column that is completely full. Ragged right is how type is set,
   // not a defect. Only a gap that received nothing is unexplained.
   let emptyGapWidth = 0;
+
+  // ------------------------------------------------------------ occupancy ---
+  //
+  // How full the body is, in EQUIVALENT LINES - and this is the only
+  // dimensionally valid way to ask, which `lines.length` is not.
+  //
+  // One physical row of type around a cut-out is not one line. A subject
+  // standing in the middle of the frame leaves a corridor either side of it,
+  // `fillRow()` sets BOTH, and each becomes its own entry in `lines`. So a
+  // block with a centre-standing cut-out reported nine "lines used" for six
+  // physical rows - and each of those nine was a half-measure fragment being
+  // counted as a whole line. That number was then divided into the character
+  // count to calibrate the AI's repair target, so the error propagated
+  // straight into what the model was asked to write.
+  //
+  // A gap is measured against the width of ITS OWN column, so a full-width
+  // row counts 1, a row halved by a silhouette counts 0.5, and two quarter
+  // corridors on one row count 0.5 between them. The image's real shape
+  // therefore participates on its own, with no image-specific arithmetic
+  // anywhere: it simply narrows the gaps it actually crosses.
+  //
+  // A gap that received text counts its whole MEASURE, not the width its
+  // glyphs happened to reach - the ragged right end of a set line is how
+  // type is set, never a hole (the same rule `emptyGapWidth` above already
+  // followed).
+  let occupiedEquivalent = 0;
+  let emptyEquivalent = 0;
+  // Room consumed on purpose - the air a paragraph break asks for. Counting
+  // it as empty offers the desk "Fill remaining area with AI" for whitespace
+  // the stylesheet deliberately inserted.
+  let intentionalEquivalent = 0;
+  let intentionalGapWidth = 0;
+  const columnMeasureAt = (index) => Math.max(1, columns[index].end - columns[index].start);
   let overset = '';
   let colIndex = 0;
   // Which column the last COMMITTED line actually landed in - paragraph
@@ -609,7 +643,11 @@ function pourBody(bodyInput, {
         if (cursors[colIndex].y >= nextY - 0.5) break;
         const row = cursors[colIndex].probe(bandHeight);
         if (!row) { colIndex += 1; break; }
-        for (const gap of row.gaps) emptyGapWidth += gap.end - gap.start;
+        for (const gap of row.gaps) {
+          const gapWidth = gap.end - gap.start;
+          intentionalGapWidth += gapWidth;
+          intentionalEquivalent += gapWidth / columnMeasureAt(colIndex);
+        }
         cursors[colIndex].commit(bandHeight);
       }
     }
@@ -644,7 +682,12 @@ function pourBody(bodyInput, {
       if (!result || result.retryNextColumn) { colIndex += 1; continue; }
 
       for (const p of result.placed) {
-        if (p.empty) { emptyGapWidth += p.width; continue; }
+        if (p.empty) {
+          emptyGapWidth += p.width;
+          emptyEquivalent += p.measure / columnMeasureAt(colIndex);
+          continue;
+        }
+        occupiedEquivalent += p.measure / columnMeasureAt(colIndex);
         lines.push({
           text: p.text,
           at: p.at,
@@ -713,7 +756,11 @@ function pourBody(bodyInput, {
     while (cursors[colIndex].hasRoom(bandHeight)) {
       const row = cursors[colIndex].probe(bandHeight);
       if (!row) break;
-      for (const gap of row.gaps) emptyGapWidth += gap.end - gap.start;
+      for (const gap of row.gaps) {
+        const gapWidth = gap.end - gap.start;
+        emptyGapWidth += gapWidth;
+        emptyEquivalent += gapWidth / columnMeasureAt(colIndex);
+      }
       cursors[colIndex].commit(bandHeight);
     }
   }
@@ -745,10 +792,23 @@ function pourBody(bodyInput, {
     }
   }
 
+  const availableEquivalent = occupiedEquivalent + emptyEquivalent;
+
   return {
     lines,
     overset,
     violations,
+    // The authoritative answer to "how full is the body", in equivalent
+    // lines. `lines.length` is a FRAGMENT count and is never this number.
+    occupancy: {
+      occupiedEquivalentLines: Number(occupiedEquivalent.toFixed(3)),
+      emptyEquivalentLines: Number(emptyEquivalent.toFixed(3)),
+      intentionalEquivalentLines: Number(intentionalEquivalent.toFixed(3)),
+      availableEquivalentLines: Number(availableEquivalent.toFixed(3)),
+      ratio: availableEquivalent > 0 ? Math.min(1, occupiedEquivalent / availableEquivalent) : 0,
+      renderedFragments: lines.length,
+    },
+    intentionalGapWidth,
     // Room, expressed the way the AI brief and the worklist want it: how many
     // full-measure lines of this type the block still has. Derived from real
     // geometry rather than from a cell count.
@@ -1067,15 +1127,22 @@ export function composeBlock(input = {}) {
     + measureAvail * Math.max(0, bodyTop - content.top);
 
   result.whitespace = {
-    intentional: Math.round(intentionalArea),
+    intentional: Math.round(intentionalArea + body.intentionalGapWidth * bandHeight),
     unexplained: Math.round(body.emptyGapWidth * bandHeight),
     bottomResidualPx: Math.round(bottomResidualPx),
+    // Kept as DIAGNOSTICS. Neither is the fill verdict, and taking the larger
+    // of the two was a category error: `bottomResidualLines` is a single
+    // scalar over the whole frame (it cannot see a hole in a column a line
+    // was not last set in), while `unexplainedLines` is a width sum that
+    // could not tell paragraph air from missing copy.
     bottomResidualLines: Number(bottomResidualLines.toFixed(2)),
     unexplainedLines: Number(unexplainedLines.toFixed(2)),
-    // The single number the desk and the writer both act on. A remainder
-    // under one line is what setting type on a grid always leaves and is
-    // never worth an AI call.
-    largestHoleLines: Number(Math.max(bottomResidualLines, unexplainedLines).toFixed(2)),
+    // The one number the desk and the writer act on, now in the same unit as
+    // everything else: equivalent lines of legal, fillable body measure that
+    // received no type. Room a photograph made unusable was never counted as
+    // usable, and air a paragraph break asked for is `intentional`, not this.
+    largestHoleLines: body.occupancy.emptyEquivalentLines,
+    occupancy: body.occupancy,
   };
 
   const pour = (sample) => Math.floor(capacityChars(body.measures, bodyPx, bodyFamily, sample, letterSpacingPx) * BUDGET_SAFETY);
@@ -1118,7 +1185,12 @@ export function composeBlock(input = {}) {
   // ...and a shortfall smaller than one line is not one either, for exactly
   // the reason the geometric remainder is not: nothing can be written into
   // it. Both halves of the test are therefore "at least one legal line".
-  const charsPerLine = body.measures.length ? result.capacity.bodyCharRange.min / body.measures.length : 0;
+  // Per equivalent LINE, not per gap. `body.measures` is the list of legal
+  // gaps in the calibration grid, and around a cut-out one row contributes
+  // several of them - dividing by that count is the same fragment-vs-line
+  // confusion `bodyFill()` was carrying.
+  const equivalents = Number(body.fullMeasureEquivalents) || 0;
+  const charsPerLine = equivalents > 0 ? result.capacity.bodyCharRange.min / equivalents : 0;
   const holed = result.whitespace.largestHoleLines >= HOLE_LINES
     && result.capacity.shortfallChars > charsPerLine;
 

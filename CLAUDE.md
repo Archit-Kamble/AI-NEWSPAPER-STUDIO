@@ -193,9 +193,8 @@ So the tier does not reliably cap the thinking, and it is not a cost control. Wh
 A used-up daily quota and a busy minute are both HTTP 429 and are not the same situation; asking again is latency the desk waits through and, on a metered account, a second charge. When the understudy does write, the desk is told **why** in one sentence — "Google Gemini's quota is used up for now. Sarvam AI wrote this instead." Status codes and raw JSON bodies never reach a sub-editor; the providers' own words stay in `attempts`.
 
 - **An exhausted budget gets exactly one retry**, one tier down with twice the room. Never a loop — every attempt is billed. What the desk is finally shown names the two things a sub-editor can do, never an environment variable.
-- **"Write this block" spends a second paid call only when the copy genuinely misses.** The model is briefed before it has written the headline, so the headline is reserved at its **full stated limit** — not a typical length, not a trimmed one. `resizeNeeded()` in `storyWriter.service.js` asks three questions, any one of which means resize: **will it fit** (overflow), **did it do as asked** (below the floor the brief stated), **is there a hole** (more than **four** empty body lines — counted in lines, because that is what the page shows).
-- **The reservation is a proof, not a measurement.** Row count in `public/editor/layout/text-flow.js` is `ceil(text.length / charsPerLine)` — a function of length alone, nothing about script or where the spaces fall (confirmed: a headline of bare `'क'` and a real Marathi headline of the same length take identical rows). `ceil` is monotonic, so reserving headline and deck at their full limit takes at least as many rows as any shorter, legal one the model could write — meaning the real block, measured afterwards, can **never** hold less body room than the model was told to fill. Checked exhaustively across a real edition (644 headline/deck lengths, every article block): zero violations. An earlier version trimmed the stand-in to the last whole word for readability, which the row math never asked for and cost the guarantee for nothing — that shortfall, not Devanagari combining marks (a wrong explanation once written here and corrected), was the cause of 27 of 32 second calls still firing after the first pass at this bug.
-- **This does not make the gap go away, it relocates it.** A conservative reservation removes overflow but, whenever the model's real headline lands under the limit (the ordinary case — short headlines are good journalism), leaves more of the block unaccounted-for than a snug reservation would. Under a fair, realistic headline distribution: the old trimmed reservation gave 42% overflow (content gets cut); the full-limit reservation gives 0% overflow. `HOLE_LINES` was raised from 3 to 4 for exactly this reason — at 3, the reservation's own conservatism was enough on its own to trigger a repair on 41% of writes across a real edition; at 4, 7%, still a real hole rather than the guarantee's own margin. Decided, not left open — do not tune this again without the same kind of evidence.
+- **"Write this block" never predicts a length, and never pays to cut.** The model is asked for a **reservoir** — more copy than the block will print — and the exact compositor chooses the prefix that fits. Overflow is repaired by a free deterministic trim; only a genuine hole costs a paid call, at most one. See "The compositor is the controller" below for the whole loop and the measurements behind it.
+- **The old "reservation is a proof" claim is RETIRED, and it was wrong twice over.** It rested on `text-flow.js`'s row count being `ceil(text.length / charsPerLine)` — a function of length alone, so `ceil`'s monotonicity made the full-limit stand-in a genuine upper bound. Moving the budget to the exact engine voided that: it breaks lines at real word boundaries, so a *shorter* headline whose last word will not fit wraps to an extra line and leaves the body less room. Sampling several stand-in lengths was tried next and is also not a proof. Then the premise itself failed measurement: across 96 real block geometries with an in-spec headline **and deck**, the reservation over-promises on **49 of them**. (The earlier "zero violations across a real edition" was measured against blocks that had no subheading at all — not what the brief asks a model to produce.) Nothing load-bearing rests on the reservation now; do not try to make it exact.
 - **Google's free tier is 20 requests per day, per model.** That is about ten blocks, after which the whole paper silently comes out of Sarvam — whose Starter plan then truncates a full-page lead. Enable billing before an edition depends on this.
 
 Bulk generation is **one request per block, two at a time** (`bulk-generate.js`). Never send a newspaper in one request: the budget is per request, one failure would lose every block, and each block has its own measured hole.
@@ -277,6 +276,77 @@ Copy never arrives the right length, and a sub-editor has exactly three moves. A
 - **Carry it over** — `jump.service.js`, with the two lines a reader follows.
 
 `GET /api/newspapers/:id/worklist` answers "what is left?": every unfinished block in page order, with **the exact number of characters it holds**. That number is knowable before a word is written, and quoting it only after the copy has already run over is the thing this replaces. Never duplicate the measurement — the server imports `public/editor/layout/text-flow.js`, the one character grid, exactly as `editionFeatures`, `jump` and `preflight` do.
+
+### The compositor is the controller — `copyFit.service.js`
+
+**A character count is not the control variable, and neither is a pre-write reservation.** Both were tried, both are measured, both are settled:
+
+- The **character budget is a range**, 30–46% wide (see above), so no scalar can answer "does this fit".
+- The **pre-write reservation** reserves room for a headline and deck that do not exist yet, so it must assume the longest legal ones. Measured across 96 real block geometries with an in-spec headline *and* deck, it **over-promises on 49 of them** — it is not even a safe lower bound. And the same block's real capacity varies by a **factor of 1.5–3** depending only on how long the headline and deck turn out to be. An earlier measurement that showed it never over-promising was taken against blocks that had no subheading at all, which is not what the brief asks a model to produce.
+
+So the loop runs the other way round. The AI supplies editorial material; **SAHAS decides what fits, where, how much is still fillable, and when fitting is finished.**
+
+- **`measureFit()`** composes through the exact engine and reports the engine's own `fitState`, plus `displayOverset` (a headline or deck with no room for its own text is a block that does not fit, whatever the body did).
+- **`isAcceptablyFilled(fit)` is the ONE authority on "is this block finished"**, and it has no threshold in it: nothing overset — body, headline, deck or kicker — and **under one whole equivalent line of fillable body measure left empty**. `HOLE_LINES`, `HOLE_FRACTION` and `MIN_FILLABLE_LINES` are *policy* (when to spend money unasked, when to offer a button); none of them may answer this question. `ACCEPTANCE_EPSILON` (0.01) absorbs the two-decimal rounding and is not a knob.
+- **`trimToFit()`** cuts back to the longest prefix that fits, by binary search over the composed result, at the strongest boundary that still fills the block: **paragraph if that alone is already acceptable, otherwise sentence, and a word only as the emergency fallback** for a single sentence longer than the block. Deterministic, free, always converges.
+- **`settleToFit()`** trims if long, then loops — bounded by `MAX_FILL_CALLS` (1) — asking only for **further paragraphs to APPEND**, never a rewrite. It stops early if a repair fails to shrink the hole, and a repair that fits worse is discarded, so a failed second attempt never costs the desk the copy it already had.
+
+**A repair used to be accepted for having made the hole SMALLER.** That only proves the result got less bad: a block could go 55% full → 70% full and be returned as done. Acceptance is now the geometric condition, and when the bounded budget runs out without reaching it the result says **`SOURCE_LIMITED_UNDERFILL`** — the block still has room and the material available would not fill it. That is an honest production state (add source material, use a larger picture, choose a smaller block) and the AI panel shows it. **Never dress it up as `FITS`** — that is what puts a half-empty block on a printed page.
+
+### Write for a RESERVOIR, not a target
+
+`briefFor()` used to say *"That is the exact space left on the block"*. It was not true — the space left cannot be known until the headline and deck exist, which is after the brief. It is gone.
+
+The model is now asked for **more copy than the block will print**, told so explicitly, and told to put the least important material last. Missing long is repaired by a free deterministic trim; missing short needs a paid call and may still miss. So the reservoir misses long on purpose.
+
+**The reservoir is bounded by the block with the SHORTEST display type the brief permits** (`bestCaseCandidate()` in `headline-reserve.js`) — a brief headline and a deck at the bottom of its stated range — never by an empty block. An article block is never published without a headline and this brief requires a deck, so a body measured with neither is a block that will never exist: sizing the reservoir from it asked for up to **7×** what the finished block could hold. From the shortest legal display type: 2× at the median, 3× at p95, and it under-asks on 2 of 96 blocks, both by a single character. `RESERVOIR_CAP_CHARS` (6000) bounds it by what one response can carry.
+
+`planningFit()` still computes the reservation, for exactly two narrow jobs: how long the headline may be, and whether this block has any room for copy at all. **Nothing load-bearing rests on it.** Do not spend effort improving its sampling.
+
+`resizeNeeded()` and its own `HOLE_LINES` are **deleted**. It was a second, count-based answer to "does this fit", already unreachable from `write()`, kept alive only by its own test.
+
+**A cut-out photograph needs no special case, deliberately.** Its exclusion comes from its real alpha mask (`compose/exclusion.js`, via `section-adapter.js`'s `obstacleFromImage` — `mask` is carried), so an irregular silhouette narrows the individual scanlines it actually crosses. Nothing models that; it only asks.
+
+**"Fill remaining area with AI" repairs both directions.** Overset copy is cut to fit with no model call at all (`trimmedOnly: true`). Verified live: 672 → 279 characters, 4 of 4 lines, no provider called; and 55 → 159 characters, 3 of 3 lines, one call.
+
+### How full is this block? In WEIGHTED USABLE GEOMETRY — `bodyFill()`
+
+**`bodyLines.length` is a FRAGMENT count and was never a line count.** Around a cut-out standing clear of both edges, one physical row of type is two corridors; `pourBody()`'s `fillRow()` sets every legal gap on a row and pushes each as its own entry. Measured on a centre-standing silhouette: **9 entries for 6 physical rows**, each a half-measure fragment counted as a whole line. The old `bodyFill()` then divided that fragment count by a *width-derived* hole and called the quotient a percentage — two different units, so it could only be right by accident. On that block it read **44% full where the geometry says 29%**.
+
+It did not stay in the read-out. `measureFit()` divided the character count by the same fragment tally to calibrate the repair target, so on a real cut-out block the rate came out **26% low** and that wrong rate was multiplied by the hole to decide what to ask the model for next.
+
+`pourBody()` now returns an **occupancy** record, and it is the authority:
+
+| field | what it is |
+|---|---|
+| `occupiedEquivalentLines` | every gap that received type, counted as `gap.measure / its own column's width` |
+| `emptyEquivalentLines` | every legal gap that received nothing — the fillable hole, and `whitespace.largestHoleLines` |
+| `intentionalEquivalentLines` | room a paragraph break asked for |
+| `availableEquivalentLines` | occupied + empty |
+| `renderedFragments` | `bodyLines.length`, diagnostic ONLY — never a line count, never a divisor |
+
+A full-width row counts 1, a row a silhouette halves counts 0.5, two quarter corridors count 0.5 between them. **The image's shape participates on its own** — there is no image-specific arithmetic anywhere; it simply narrows the gaps it crosses. A gap that received type counts its whole **measure**, not the width its glyphs reached: a ragged right end is how type is set, never a hole.
+
+**Paragraph air is `intentional`, not empty.** It used to land in `emptyGapWidth`, so the desk was offered "Fill remaining area with AI" for whitespace the stylesheet deliberately inserted.
+
+`whitespace.bottomResidualLines` and `unexplainedLines` survive as **diagnostics only**. Taking the larger of the two was a category error: the first is a single scalar over the whole frame (it cannot see a hole in a column no line was last set in), the second could not tell paragraph air from missing copy.
+
+`bodyFill()` keeps `linesUsed` / `holeLines` / `linesAvailable` as aliases so every surface reads one number — they are **fractional** now, because a row a picture halves really is half a line. `tests/bodyOccupancy.test.js` holds this across six shapes: no image, rect, centre-split cut-out, asymmetric cut-out, 90°-rotated cut-out and a two-column section. The existing tapered-cut-out fixture does **not** prove it — it sits flush against the block's left edge, so it narrows one corridor rather than splitting a row.
+
+`compose.js`'s own `charsPerLine` (inside the `holed` check) divided `bodyCharRange.min` by `body.measures.length` — the count of calibration *gaps*, the same confusion. It divides by `fullMeasureEquivalents` now.
+
+**Two hole thresholds, deliberately, and they must not be merged:**
+
+- `HOLE_LINES` (4, `compose.js`) is the **automatic** threshold, tuned against a real edition (at 3 it fired on 41% of writes, at 4 on 7%). `fitState` uses it, which is why a block with a 2-line hole reports `FITS` while `isAcceptablyFilled()` correctly says it is not finished.
+- `MIN_FILLABLE_LINES` (1, `copyFit.service.js`) is for when **the desk pressed the button**. Nobody needs protecting from a call they asked for. `hasRoomToFill()` is that check — never `fitState !== 'FITS'`.
+
+**A hole is a SHARE of the block's body area, never a fixed line count** (`isUnderfilled()`): a quarter of the body area, **or** `HOLE_LINES`, whichever comes first, never below one whole line. An absolute count means completely different things on different blocks, which is why small blocks kept going out half empty.
+
+**`write()` reports the block's own capacity, never `targetChars`.** `targetChars` is calibrated *from the draft*, so quoting it back as "the block holds N" is circular — that is what produced "124 of 203 · 79 left".
+
+**The Space panel reserves a headline when the block has none.** An article block is never published without one, so measuring the body's room on a block that has none answers a question nobody asks — 639 characters with no headline against 187 once a real headline and deck are set, on the same block. While `headline` is empty on an `article` block the panel shows the same reservation the model is briefed against, labelled **"Room for copy (after a headline)"**.
+
+**`layoutWarnings()` cannot use `metrics.fillRatio` for whitespace.** That ratio counts only the gaps *beside* pictures, never the room under the last line — the whitespace a desk actually complains about. Where there is a real composition, the warnings read `bodyFill()`.
 
 ## Scribus / PDF export (not yet built)
 

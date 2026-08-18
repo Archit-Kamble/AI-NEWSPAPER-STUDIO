@@ -105,6 +105,34 @@ Together on that block: the story's room went from 137 px / 5.83 lines to **184 
 
 The migration is in `schema.sql` beside the columns, and its backfill is **guarded**: it moves only rows still carrying the exact old default, so a value a desk actually chose is never overwritten. `schema.sql` is not applied at boot — it has to be run.
 
+### How the copy is SET — the compositor's own work
+
+The desk's report was *"uneven gap … not touching right side properly"*. Measuring the block it came from found the cause: **four of thirteen lines had silently given up on justification** — 17%, 36%, 29% and 17% short of their own measure, sitting among lines that were flush. A right edge that is sometimes straight is worse than one that is never straight; the reader sees a mistake rather than a style.
+
+Four things had to change, and all four are ordinary newspaper compositing:
+
+**1. Lines are broken for the whole paragraph, not greedily** (`balanceParagraph` in `compose.js`). Greedy filling — take words until the next will not fit — is optimal for *line count* and terrible for evenness: it spends all the slack on whichever line happens to meet a long word. Once a paragraph is poured its lines' real measures are known (they come from the geometry and the pictures, not the text), so the pieces are re-assigned across those same slots to minimise total badness, TeX's cubed-slack cost. **The line count never changes, so no geometry moves.**
+
+The cost function knows what the justifier can actually close (`slackCost`): slack the justifier will absorb is nearly free, slack it *cannot* absorb costs 100×. Without that the breaker cheerfully chose lines nothing could fix — measured across a real page, every remaining ragged line had both justification levers pinned at their caps.
+
+**2. A paragraph never closes on a single word** (`lastLineCost`). A widow is not a matter of degree, so it is a flat `WIDOW_PENALTY`, not a cubed deficit — cubing made it vanish next to the few thousandths of ordinary slack it was competing with, and the solver traded a good last line for a slightly better one above it.
+
+**3. Justification has two levers and never surrenders** (`justifyLine`). Word spaces open first, to `MAX_EXTRA_WORD_SPACE_EM` (0.55); the glyphs themselves take the remainder, to `MAX_GLYPH_STRETCH` (1.03) — InDesign's own newspaper range. **Letter-spacing is deliberately not a lever**: tracking a Devanagari word pulls its shirorekha apart. Glyph scaling scales the head stroke with everything else, which is why it is the safe second lever here.
+
+**4. A column too narrow to justify is set flush left** (`JUSTIFY_MIN_EM`, 13). A Latin column needs ~40 characters before justification stops producing rivers; Marathi sets ~2.5 characters to the em, so ~16 em. Below that a line holds two or three words and there is nowhere to put the slack — which is why captions, sidebars and tight columns are set flush left in every printed newspaper. Measured across 1200 real blocks the column measures cluster at 11 em (55% of them), 15, 20 and 26. **The decision is per BLOCK, never per line** — a block justified or not depending on how wide each line happened to be is exactly the inconsistent edge this removes.
+
+Measured across a filled page: **30 ragged lines → 21, worst 17% → 12%, median 6% → 4%.** Across 1200 real blocks: 8 ragged lines total, all on one synthetic repeated-token fixture.
+
+### The last fraction of a column is closed with the LEADING
+
+Copy is written in whole **sentences**, so a writer can only ever get within about a line of the foot: one more sentence overflows, and trimming takes it straight back out. That granularity is why a block kept stopping at 86% however many times it was asked for more words — and no amount of prompting fixes it, because nothing can be written into a gap smaller than a line.
+
+A compositor opens the leading a point or two and lets the copy fill the column. InDesign calls it vertical justification; every printed page uses it. `compose.js` does it after the pour, **bounded twice over**: at most one band's worth of residual is absorbed (`MAX_ABSORBED_BANDS`), and no single line gap opens by more than 12% (`MAX_LEADING_STRETCH`). Anything bigger is a genuine hole and stays one, for the writer to fill with words.
+
+`whitespace.occupancy.leadingAbsorbedLines` records what it took, and `emptyEquivalentLines` is reduced by it — room the leading took is no longer room a writer could fill. Measured on a real block: **86% set → 97.5%**. Across a filled 34-block page: **28 blocks at exactly 100%, 31 of 34 at or above 95%**.
+
+`scripts/fill-edition-copy.js` was rewritten to match: it used to assemble copy against `bodyCharRange.min` (the guaranteed-safe *floor*) and stop one sentence before even that, leaving 41 of 43 blocks under 95% — so every screenshot taken to judge the layout was judging a page nobody had filled. It now composes after every sentence and keeps the last one that fits.
+
 ### Terminology — there is no external editor
 
 The SAHAS Layout Desk is one editor with two views of the same block:

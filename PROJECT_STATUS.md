@@ -3485,3 +3485,59 @@ openings with no blank lines, and copy running to the foot of the block.
 The `schema.sql` migration's backfill is guarded: it moves only rows still
 carrying the exact old default, so a value a desk actually chose is never
 overwritten. `schema.sql` is not applied at boot and has to be run.
+
+### 29. Setting the type: line-breaking, justification, vertical justification
+
+The desk's report was "uneven gap ... not touching right side properly".
+Measuring the block it came from found four of thirteen lines where the
+justifier had silently given up — 17%, 36%, 29% and 17% short of their own
+measure, among lines that were flush. Four fixes, all ordinary compositing:
+
+**Minimum-badness line breaking** (`balanceParagraph`). Greedy filling is
+optimal for line count and terrible for evenness. Once a paragraph is poured,
+its lines' real measures are known, so the pieces are re-assigned across those
+same slots to minimise TeX's cubed-slack cost. The line count never changes,
+so no geometry moves. The cost function knows what the justifier can close —
+without that the breaker chose lines nothing could fix, and every ragged line
+left on a real page had both levers pinned at their caps.
+
+**A flat widow penalty.** A cubed deficit vanished next to the few thousandths
+of ordinary slack it competed with, and the solver pulled a word up a line and
+left "मांडली." standing alone under a full column.
+
+**Two justification levers and no surrender.** Word spaces to 0.55 em extra,
+then glyph scaling to 103% — InDesign's newspaper range. Letter-spacing is
+deliberately not a lever: tracking a Devanagari word pulls its shirorekha
+apart; glyph scaling scales the head stroke with everything else.
+
+**Flush left below 13 em.** A Latin column needs ~40 characters to justify;
+Marathi sets ~2.5 characters an em, so ~16 em. Measured across 1200 real
+blocks the measures cluster at 11 em (55%), 15, 20 and 26. The decision is per
+block, never per line.
+
+Result: on a filled page, 30 ragged lines → 21, worst 17% → 12%, median 6% →
+4%. Across 1200 real blocks, 8 ragged lines total, all on one synthetic
+repeated-token fixture. Zero rivers, zero widows, zero overset.
+
+**Vertical justification** closes the last fraction. Copy is written in whole
+sentences, so a writer can only get within about a line of the foot — one more
+sentence overflows and trimming takes it back out. That granularity, not the
+prompt, is why a block kept stopping at 86%. The compositor now opens the
+leading, bounded twice: at most one band of residual absorbed, and no line gap
+opened by more than 12%. Anything bigger stays a hole for the writer to fill
+with words. Measured: 86% → 97.5% on a real block; across a filled 34-block
+page, 28 blocks at exactly 100% and 31 of 34 at or above 95%.
+
+`scripts/fill-edition-copy.js` was rewritten to compose rather than count. It
+assembled copy against `bodyCharRange.min` and stopped one sentence short of
+even that, leaving 41 of 43 blocks under 95% — so every screenshot taken to
+judge the layout was judging a page nobody had filled.
+
+A quality audit (`RAGGED_EDGE`, `RIVER`, `WIDOW`, `SHORT_CLOSE`,
+`NO_ROOM_FOR_TYPE`, `TALL_HEADLINE`, `TALL_DECK`, `OVERSET`) drove all of
+this; it is worth rebuilding rather than judging pages by eye.
+
+Still open: `SHORT_CLOSE` fires on 14 paragraph endings at 25–33% of their
+measure — inside the widow rule but short. And `NO_LEGAL_MEASURE` (a picture
+leaving no column wide enough to set type in) is now reported to the desk but
+not prevented at placement time.

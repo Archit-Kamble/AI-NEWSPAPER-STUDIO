@@ -94,18 +94,41 @@ const REPORTERS = ['प्रतिनिधी', 'वार्ताहर', '�
 // screenshots of the same edition must be comparable.
 const pick = (list, seed) => list[Math.abs(seed) % list.length];
 
-/** Sentences joined until adding another would pass the block's own budget. */
-function bodyFor(budgetChars, seed) {
-  if (budgetChars <= 0) return '';
+/**
+ * Sentences added until the block is genuinely full - COMPOSED, not counted.
+ *
+ * This used to assemble copy against `capacity.bodyCharRange.min`, the
+ * guaranteed-safe FLOOR, and then stop one sentence before even that. On a
+ * real page it left 41 of 43 blocks under 95% set - some at 62% - so every
+ * screenshot taken to judge the layout was judging a page nobody had actually
+ * filled. The whole point of this script is to make composition work visible,
+ * and it was hiding the thing it exists to show.
+ *
+ * A character budget cannot answer "is this block full" - that is the
+ * measured, settled result this codebase is built on (CLAUDE.md, "the
+ * character budget is a range"). So this composes after every sentence and
+ * keeps the last one that still fits. Deterministic, free, and it lands on
+ * exactly the geometry the page will print.
+ */
+function bodyFor(compose, section, images, view, seed) {
+  const fits = (body) => {
+    const r = compose.composeSection({ ...section, images }, { ...view, body });
+    return { ok: !r.overset.body && !(r.violations || []).some((v) => v.code === 'BODY_UNBREAKABLE_TOKEN_OVERSET'), r };
+  };
+  if (!fits('').ok) return '';
+
   const out = [];
-  let used = 0;
-  for (let i = 0; i < SENTENCES.length * 4; i += 1) {
-    const sentence = SENTENCES[(seed + i) % SENTENCES.length];
-    if (used + sentence.length + 1 > budgetChars) break;
-    out.push(sentence);
-    used += sentence.length + 1;
+  let best = '';
+  for (let i = 0; i < SENTENCES.length * 6; i += 1) {
+    const candidate = [...out, SENTENCES[(seed + i) % SENTENCES.length]].join(' ');
+    const { ok, r } = fits(candidate);
+    if (!ok) break;
+    out.push(SENTENCES[(seed + i) % SENTENCES.length]);
+    best = candidate;
+    // Full to the foot: nothing more can be set in what is left.
+    if (r.whitespace.occupancy.emptyEquivalentLines < 0.25) break;
   }
-  return out.join(' ');
+  return best;
 }
 
 (async () => {
@@ -179,7 +202,7 @@ function bodyFor(budgetChars, seed) {
       { headline, subheading, body: '', location, author: reporter },
     );
 
-    const body = bodyFor(probe.capacity.bodyCharRange.min, index * 11);
+    const body = bodyFor(compose, section, placed, { headline, subheading, location, author: reporter }, index * 11);
 
     // A block whose photograph leaves no room for a sentence must not keep a
     // story anyway. Left alone, its old copy simply has nowhere to go, and the
@@ -204,10 +227,10 @@ function bodyFor(budgetChars, seed) {
     written += 1;
     console.log(
       `p${section.page_number} ${String(section.section_key).padEnd(16)}`,
-      `budget ${String(probe.capacity.bodyCharRange.min).padStart(5)}`,
       `wrote ${String(body.length).padStart(5)}`,
       `-> ${after.fitState}`,
-      after.overset.body ? `OVERSET +${after.overset.body.length}` : `hole ${after.whitespace.largestHoleLines}`,
+      `${Math.round(after.whitespace.occupancy.ratio * 100)}% set`,
+      after.overset.body ? `OVERSET +${after.overset.body.length}` : `hole ${after.whitespace.occupancy.emptyEquivalentLines}`,
     );
   }
 

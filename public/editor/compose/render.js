@@ -144,11 +144,18 @@ export function composedMarkup(composition, view, { datelinePrefix = '' } = {}) 
     // position - `word-spacing` is the one property that does that without
     // this renderer having to re-lay out the individual words itself.
     const wordSpacing = Number.isFinite(line.wordSpacingPx) ? `word-spacing:${line.wordSpacingPx.toFixed(2)}px;` : '';
+    // The second justification lever (compose.js's justifyLine): the glyphs
+    // themselves stretch by the small amount a newspaper really uses, after
+    // the word spaces have opened as far as is decent. Anchored left so the
+    // line still starts exactly where it was composed to start.
+    const glyphScale = Number.isFinite(line.glyphScaleX) && line.glyphScaleX !== 1
+      ? `transform:scaleX(${line.glyphScaleX});transform-origin:left top;`
+      : '';
     pieces.push(
       `<span class="section-composed section-body-line${dateline ? ' has-dateline' : ''}"`
       + ` style="left:${line.x.toFixed(2)}px;top:${line.y.toFixed(2)}px;`
       + `width:${(line.measure + 1).toFixed(2)}px;height:${line.height.toFixed(2)}px;`
-      + `font-size:${line.fontPx}px;line-height:${line.height.toFixed(2)}px;${wordSpacing}${faceStyle(line)}">${html}</span>`,
+      + `font-size:${line.fontPx}px;line-height:${line.height.toFixed(2)}px;${wordSpacing}${glyphScale}${faceStyle(line)}">${html}</span>`,
     );
   }
 

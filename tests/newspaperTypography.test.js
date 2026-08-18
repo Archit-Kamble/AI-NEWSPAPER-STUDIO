@@ -107,3 +107,120 @@ test('the leading floor is NOT lowered - Marathi really needs it', () => {
   assert.ok(match, 'MIN_LINE_HEIGHT must still be declared in one place');
   assert.ok(Number(match[1]) >= 1.4, `the leading floor may not drop below 1.4, found ${match[1]}`);
 });
+
+// ---------------------------------------------------------- the type itself ---
+//
+// Everything below is about how the copy is SET, not how much of it there is.
+// The desk's report was "uneven gap ... not touching right side properly", and
+// measuring the block it came from found four of thirteen lines where the
+// justifier had silently given up: 17%, 36%, 29% and 17% short of their own
+// measure, sitting among lines that were flush. A right edge that is
+// sometimes straight is worse than one that is never straight - the reader
+// sees a mistake rather than a style.
+
+const LONG = [
+  'पंतप्रधान नरेंद्र मोदी यांनी लाल किल्ल्यावरून देशवासीयांना संबोधित केले.',
+  'स्वातंत्र्यदिनाच्या या मुख्य सोहळ्यात त्यांनी देशाच्या प्रगतीचा आढावा घेतला.',
+  'आपल्या भाषणात त्यांनी आत्मनिर्भर भारत आणि औद्योगिक विकासावर भर दिला.',
+  'नागरिकांनी देशाच्या विकासात सक्रिय योगदान देण्याचे आवाहन त्यांनी केले.',
+].join(' ');
+
+const WIDE = { ...BLOCK, width_px: 400, height_px: 300, body_font_px: 10 };
+
+function bodyLinesOf(section, images, body) {
+  return adapter.composeSection({ ...section, images }, { headline: '', subheading: '', body });
+}
+
+test('every non-final line of a justified block reaches its measure - no silent surrender', () => {
+  const r = bodyLinesOf(WIDE, [], LONG);
+  const px = Number(r.typography.bodyPx);
+  let worst = 0;
+  r.bodyLines.forEach((l, i) => {
+    const spaces = (l.text.match(/\s/gu) || []).length;
+    const set = l.width + (l.wordSpacingPx || 0) * spaces;
+    const isLast = i === r.bodyLines.length - 1 || (r.bodyLines[i + 1] && r.bodyLines[i + 1].paragraphBreak);
+    if (!isLast) worst = Math.max(worst, (l.measure - set) / l.measure);
+  });
+  assert.ok(worst < 0.05, `worst non-final line is ${Math.round(worst * 100)}% short of its measure`);
+  assert.ok(px > 0);
+});
+
+test('justification uses two levers, in order - word spaces first, then the glyphs', () => {
+  const r = bodyLinesOf(WIDE, [], LONG);
+  const stretched = r.bodyLines.filter((l) => l.wordSpacingPx);
+  assert.ok(stretched.length > 0, 'word spacing must actually be applied');
+  // Glyph scaling is the second lever and is bounded to the range a newspaper
+  // really uses. Letter-spacing is NOT a lever here: tracking a Devanagari
+  // word pulls its shirorekha apart.
+  for (const l of r.bodyLines) {
+    if (l.glyphScaleX) assert.ok(l.glyphScaleX <= 1.031, `glyph scale ${l.glyphScaleX} is outside the newspaper range`);
+  }
+});
+
+test('a paragraph never closes on a single word', () => {
+  const body = `${LONG}\n\n${LONG}`;
+  const r = bodyLinesOf(WIDE, [], body);
+  r.bodyLines.forEach((l, i) => {
+    const isLast = i === r.bodyLines.length - 1 || (r.bodyLines[i + 1] && r.bodyLines[i + 1].paragraphBreak);
+    if (isLast && i > 0) {
+      const words = l.text.trim().split(/\s+/).length;
+      assert.ok(words >= 2, `a paragraph closed on "${l.text.trim()}" - one word under a full column is a widow`);
+    }
+  });
+});
+
+test('a column too narrow to justify is set flush left, as a printed newspaper sets one', () => {
+  // 11 em is two or three Marathi words to the line - there is nowhere to put
+  // the slack, and 55% of the real blocks in this database are that narrow.
+  const narrow = { ...BLOCK, width_px: 111, height_px: 200, body_font_px: 9, text_align: 'justify' };
+  const r = bodyLinesOf(narrow, [], LONG);
+  assert.ok(r.bodyLines.length > 1, 'precondition: it has to set some lines');
+  assert.ok(r.bodyLines.every((l) => l.wordSpacingPx == null),
+    'a column this narrow must not be justified at all');
+  assert.ok((r.warnings || []).some((w) => w.code === 'SET_FLUSH_LEFT'), 'and the desk is told why');
+});
+
+test('the last fraction of a column is closed with the LEADING, not with more words', () => {
+  // Copy is written in whole sentences, so a writer can only ever get within
+  // about a line of the foot: one more sentence overflows and trimming takes
+  // it straight back out. A compositor opens the leading a point or two and
+  // lets the copy fill the column - InDesign calls it vertical justification.
+  // Measured on a real block, this took it from 86% set to 97.5%.
+  const tall = { ...BLOCK, width_px: 300, height_px: 260, body_font_px: 10 };
+  const band = (r) => Number(r.typography.bodyPx) * Number(r.typography.lineHeight);
+
+  // Copy grown until one more sentence would not fit - which is exactly where
+  // the writer has to stop, and exactly the case this exists for.
+  let body = '';
+  for (let i = 0; i < 12; i += 1) {
+    const next = body ? `${body} ${LONG}` : LONG;
+    if (bodyLinesOf(tall, [], next).overset.body) break;
+    body = next;
+  }
+  assert.ok(body, 'precondition: some copy has to fit');
+
+  const r = bodyLinesOf(tall, [], body);
+  const occ = r.whitespace.occupancy;
+  const foot = r.content.bottom - Math.max(...r.bodyLines.map((l) => l.y + l.height));
+
+  assert.ok(foot < band(r), `the copy ends ${(foot / band(r)).toFixed(2)} of a line from the foot`);
+  assert.ok(occ.ratio >= 0.95, `${Math.round(occ.ratio * 100)}% set - the desk's bar is 95%`);
+
+  // Bounded twice, so it can never hide a hole a writer should be filling
+  // with words, and never visibly loosens the page.
+  if (occ.leadingAbsorbedLines) {
+    assert.ok(occ.leadingAbsorbedLines <= 1.001, 'never more than one line of residual is absorbed');
+    const rows = [...new Set(r.bodyLines.map((l) => Number(l.y.toFixed(2))))].sort((a, b) => a - b);
+    for (let i = 1; i < rows.length; i += 1) {
+      assert.ok(rows[i] - rows[i - 1] <= band(r) * 1.121,
+        `a line gap opened to ${((rows[i] - rows[i - 1]) / band(r)).toFixed(3)} of the band`);
+    }
+  }
+});
+
+test('re-breaking a paragraph never loses or reorders a word', () => {
+  const r = bodyLinesOf(WIDE, [], LONG);
+  const set = r.bodyLines.map((l) => l.text).join(' ').replace(/\s+/g, ' ').trim();
+  const source = LONG.replace(/\s+/g, ' ').trim();
+  assert.equal(set, source, 'every word must survive the re-break, in order');
+});

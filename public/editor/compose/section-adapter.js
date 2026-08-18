@@ -187,6 +187,16 @@ export function composeSection(section = {}, view = {}) {
     // as textAlign above: a real, already-wired desk control with no effect
     // on the actual geometry.
     paragraphSpacingPx: positive(pick(section, view, 'paragraphSpacingPx', 'paragraph_spacing_px', 0), 0),
+    // The newspaper's own paragraph mark: an indented first line rather than
+    // a blank one. A blank line costs a whole row of the column, and no
+    // printed newspaper spends one that way. One em, which is what a
+    // compositor sets.
+    firstLineIndentPx: positive(pick(section, view, 'firstLineIndentPx', 'first_line_indent_px', bodyFontPx), bodyFontPx),
+    // How many lines the display type may take. Left at the engine's own
+    // defaults unless a caller states them - `headline-reserve.js` does, so
+    // that the reservation and the real block are measured the same way.
+    headlineMaxLines: pick(section, view, 'headlineMaxLines', 'headline_max_lines', undefined),
+    deckMaxLines: pick(section, view, 'deckMaxLines', 'deck_max_lines', undefined),
     letterSpacingPx: Number(pick(section, view, 'letterSpacingPx', 'letter_spacing_px', 0)) || 0,
     columnCount: measureColumns(section, view, width),
     headlineLocked: Boolean(pick(section, view, 'headlineLocked', 'headline_locked', false)),

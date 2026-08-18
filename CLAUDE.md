@@ -86,6 +86,25 @@ Asking for more pages adds them at their proper rung. Asking for fewer never rem
 
 `headline_font_px`, `subheading_font_px` and `body_font_px` are `NUMERIC(5,1)`, not integers — a printer sets type in half points. They therefore arrive over the wire as strings, like the page's mm dimensions; every reader coerces with `Number()`.
 
+### The block is set like a newspaper, not like a web page
+
+A desk screenshot of a 190×264 lead showed roughly a third of the block standing empty while the Space panel called it balanced. None of it was the copy's fault — it was typography defaults inherited from the web. Each of these is now measured against real practice, and the numbers are on that one block:
+
+| | was | is | why |
+|---|---|---|---|
+| `margin_px` | 12 (= **6 mm** at 2 px/mm) | **4** | A newspaper separates two stories by a ~4 mm gutter, **shared** — 2 mm each side. 12 px took 24 of 190 px of measure and 24 of 264 px of depth before a word was set. |
+| `paragraph_spacing_px` | 8 (a blank line) | **0 + a 1 em first-line indent** | No printed newspaper spends a whole row of a column on a blank line. Measured: 0.7 of 5.83 body lines, 12% of the block, standing empty. |
+| `text_align` | `left` | **`justify`** | A narrow measure with a ragged right reads as unfinished against a column rule. |
+| deck length | `min(140, cols × 2)` | **measured, one line** | `cols` is the **body's** characters per line, and a deck is not set in body type — so it asked for two body lines' worth of characters in larger type: **three deck lines, 18% of the block**, which is the "second headline" the desk reported. |
+
+Together on that block: the story's room went from 137 px / 5.83 lines to **184 px / 9.73 lines — 67% more**.
+
+**`line_height` is NOT part of this, and must not be "tidied" downward.** It looks generous at 1.45. It is not. The serif face's worst-case ink box was measured exhaustively in the browser across every consonant, every vowel sign and every virama conjunct: **1.475 em** — ascent 0.905 (the candrabindu), descent 0.570 (stacks like `ड़्रु`). The face's own design box is 1.555 em. 1.45 is already at the edge of cropping Marathi, and `MIN_LINE_HEIGHT` in `text-flow.js` is a floor for exactly that reason. `tests/newspaperTypography.test.js` holds it.
+
+**The paragraph indent is set in two places on purpose, and they are one rule.** `compose.js`'s `firstLineIndentPx` puts it in the exact geometry (so the composed line's own `x` carries it); `.section-body p + p` in `styles.css` puts it in the canvas's CSS markup. Both, or the canvas and the composed page mark a paragraph differently — the `object-fit: cover` vs `contain` drift, again. The opening paragraph is never indented; that is a compositor's rule, not a preference.
+
+The migration is in `schema.sql` beside the columns, and its backfill is **guarded**: it moves only rows still carrying the exact old default, so a value a desk actually chose is never overwritten. `schema.sql` is not applied at boot — it has to be run.
+
 ### Terminology — there is no external editor
 
 The SAHAS Layout Desk is one editor with two views of the same block:
@@ -287,7 +306,7 @@ Copy never arrives the right length, and a sub-editor has exactly three moves. A
 So the loop runs the other way round. The AI supplies editorial material; **SAHAS decides what fits, where, how much is still fillable, and when fitting is finished.**
 
 - **`measureFit()`** composes through the exact engine and reports the engine's own `fitState`, plus `displayOverset` (a headline or deck with no room for its own text is a block that does not fit, whatever the body did).
-- **`isAcceptablyFilled(fit)` is the ONE authority on "is this block finished"**, and it has no threshold in it: nothing overset — body, headline, deck or kicker — and **under one whole equivalent line of fillable body measure left empty**. `HOLE_LINES`, `HOLE_FRACTION` and `MIN_FILLABLE_LINES` are *policy* (when to spend money unasked, when to offer a button); none of them may answer this question. `ACCEPTANCE_EPSILON` (0.01) absorbs the two-decimal rounding and is not a knob.
+- **`isAcceptablyFilled(fit)` is the ONE authority on "is this block finished"**: nothing overset — body, headline, deck or kicker — and the block **at least 95% set** (`ACCEPTABLE_FILL_RATIO`), or with literally nothing fillable left. "Under one whole line empty" was the first attempt and is far too slack on a small block: 4.83 of 5.83 lines is under a line empty and only 83% set, which is exactly the "Layout looks balanced" a desk was shown at 87% while looking at an obviously short column. `isUnderfilled()` — the repair trigger — now chases the **same** bar rather than a share rule of its own, and `layout-panel.js`'s `WHITESPACE_THRESHOLD` is that bar too, so the panel and the writer cannot tell a desk two different stories. `MIN_FILLABLE_LINES` (0.25 — a quarter of a line is two or three words, the smallest thing a model can be asked to add) is *policy*: it decides whether a hole is worth a call, never whether the block fits. `ACCEPTANCE_EPSILON` (0.01) absorbs the two-decimal rounding and is not a knob.
 - **`trimToFit()`** cuts back to the longest prefix that fits, by binary search over the composed result, at the strongest boundary that still fills the block: **paragraph if that alone is already acceptable, otherwise sentence, and a word only as the emergency fallback** for a single sentence longer than the block. Deterministic, free, always converges.
 - **`settleToFit()`** trims if long, then loops — bounded by `MAX_FILL_CALLS` (1) — asking only for **further paragraphs to APPEND**, never a rewrite. It stops early if a repair fails to shrink the hole, and a repair that fits worse is discarded, so a failed second attempt never costs the desk the copy it already had.
 
@@ -335,12 +354,7 @@ A full-width row counts 1, a row a silhouette halves counts 0.5, two quarter cor
 
 `compose.js`'s own `charsPerLine` (inside the `holed` check) divided `bodyCharRange.min` by `body.measures.length` — the count of calibration *gaps*, the same confusion. It divides by `fullMeasureEquivalents` now.
 
-**Two hole thresholds, deliberately, and they must not be merged:**
-
-- `HOLE_LINES` (4, `compose.js`) is the **automatic** threshold, tuned against a real edition (at 3 it fired on 41% of writes, at 4 on 7%). `fitState` uses it, which is why a block with a 2-line hole reports `FITS` while `isAcceptablyFilled()` correctly says it is not finished.
-- `MIN_FILLABLE_LINES` (1, `copyFit.service.js`) is for when **the desk pressed the button**. Nobody needs protecting from a call they asked for. `hasRoomToFill()` is that check — never `fitState !== 'FITS'`.
-
-**A hole is a SHARE of the block's body area, never a fixed line count** (`isUnderfilled()`): a quarter of the body area, **or** `HOLE_LINES`, whichever comes first, never below one whole line. An absolute count means completely different things on different blocks, which is why small blocks kept going out half empty.
+**`compose.js`'s `HOLE_LINES` (4) is not the fill bar and never was.** It belongs to the engine's own `fitState`, which is why a block with a 2-line hole reports `FITS` while `isAcceptablyFilled()` correctly says it is not finished. Do not merge the two: `fitState` is what preflight fails a page for, the 95% bar is what the writer works to.
 
 **`write()` reports the block's own capacity, never `targetChars`.** `targetChars` is calibrated *from the draft*, so quoting it back as "the block holds N" is circular — that is what produced "124 of 203 · 79 left".
 

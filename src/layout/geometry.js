@@ -252,7 +252,12 @@ module.exports = {
 // agree about how many lines a headline costs. A Devanagari line needs 1.45 of
 // its type size - the vowel signs stack above the shirorekha and below the
 // baseline - and that is the number text-flow.js enforces.
-const BLOCK_MARGIN_PX = 12;
+// A newspaper separates two stories by a gutter of about 4 mm, shared between
+// them - so 2 mm each side, which at this page's 2 px/mm is 4 px. 12 px was a
+// web margin: on a 190 px block it took 24 px of measure and 24 px of depth,
+// nearly a tenth of the block, before a word was set. See schema.sql's own
+// note beside the matching column default.
+const BLOCK_MARGIN_PX = 4;
 const LINE_HEIGHT = 1.45;
 // A headline is assumed to wrap to two lines, because most do, and it may not
 // take more than half of what the block has. The other half is the story.

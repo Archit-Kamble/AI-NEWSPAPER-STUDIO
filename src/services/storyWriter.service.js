@@ -217,7 +217,10 @@ function sanitiseAccentMarks(headline, accentStyle) {
 // dual CJS/ESM idiom caption-geometry.js uses, because briefFor() is
 // synchronous. See that module for why the reservation is now sampled rather
 // than proved.
-const { headlineLimit, subheadingLimit, reservationCandidates, bestCaseCandidate } = require('../../public/editor/layout/headline-reserve');
+const {
+  headlineLimit, subheadingLimit, reservationCandidates, bestCaseCandidate,
+  measuredHeadlineLimit, measuredSubheadingLimit, limitProbeView,
+} = require('../../public/editor/layout/headline-reserve');
 
 // How much copy to ASK FOR - deliberately more than the block will print.
 //
@@ -269,8 +272,26 @@ async function planningFit(section, images) {
   }
   bound = bound || open;
 
+  // How long the headline and the deck may actually be, measured in their OWN
+  // type against this block's own measure - never derived from the body's
+  // characters per line, which is what asked for a three-line deck on a
+  // 264px block and produced the "second headline" the desk reported.
+  const adapter = await ensureComposeReady();
+  const probe = adapter.composeSection({ ...section, images: images || [] }, {
+    ...limitProbeView(),
+    marginPx: Number(section.margin_px) || 12,
+    columnCount: Number(section.column_count) || 1,
+    lineHeight: Number(section.line_height) || 1.45,
+    headlineFontPx: Number(section.headline_font_px) || 24,
+    subheadingFontPx: Number(section.subheading_font_px) || 14,
+    bodyFontPx: Number(section.body_font_px) || 10,
+    body: '',
+  });
+
   return {
     ...bound,
+    headlineChars: measuredHeadlineLimit(probe, cols),
+    deckChars: measuredSubheadingLimit(probe, cols),
     // What the model is asked to produce. Always at least the bound, so the
     // reservoir can never be the smaller of the two.
     reservoirChars: Math.min(
@@ -323,8 +344,12 @@ function verifiedContextBlock(verifiedContext) {
  */
 function briefFor({ seed, notes, fit, section, language, isLead, verifiedContext, accentStyle }) {
   const languageName = LANGUAGE_NAMES[language] || LANGUAGE_NAMES.Marathi;
-  const headlineChars = headlineLimit(fit.cols);
-  const deckChars = subheadingLimit(fit.cols);
+  // Measured in the headline's and the deck's OWN type where a composition
+  // was available (planningFit), and only estimated from the body grid when
+  // one was not - see headline-reserve.js's own note on why the grid's `cols`
+  // is the wrong unit for display type.
+  const headlineChars = fit.headlineChars || headlineLimit(fit.cols);
+  const deckChars = fit.deckChars || subheadingLimit(fit.cols);
   // How much to ask for. NOT "the exact space left on the block" - that
   // sentence used to be here and it was not true: the space left cannot be
   // known until the headline and the deck exist, which is after this brief.
@@ -352,9 +377,10 @@ function briefFor({ seed, notes, fit, section, language, isLead, verifiedContext
     '  * Never repeat yourself, and never invent a fact to make it longer.',
     '    Copy that runs out of real material stops; it does not stretch.',
     `  * The headline must be at most ${headlineChars} characters.`,
-    `  * The subheading is REQUIRED: one line of ${Math.round(deckChars * 0.5)} to ${deckChars}`,
-    '    characters that carries the story forward rather than repeating the headline.',
-    '    It is a deck, not a label, and it is never empty.',
+    `  * The subheading is REQUIRED, and it is ONE LINE: ${Math.round(deckChars * 0.6)} to ${deckChars}`,
+    '    characters that carry the story forward rather than repeating the headline.',
+    '    That is a measured line of this block, in the deck\'s own type - longer and it',
+    '    wraps into a second headline and eats the story\'s room. Never empty.',
     '',
     'HOW TO WRITE IT:',
     `  * ${isLead ? 'This is a lead story: open with the most important fact.' : 'Open with the most important fact.'}`,

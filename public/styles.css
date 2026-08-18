@@ -3751,6 +3751,19 @@ body.print-view .section-diagnostic {
   column-rule: 1px solid #ccc;
 }
 
+/* A newspaper marks a new paragraph by indenting its first line, not by
+   leaving a blank one - a blank line costs a whole row of the column, and no
+   printed newspaper spends one that way. This is the CSS half of the same
+   rule compose.js's `firstLineIndentPx` sets in the exact geometry, so the
+   canvas and the composed page mark a paragraph the same way. The opening
+   paragraph is never indented; that is a compositor's rule, not a preference. */
+.section-body p + p,
+.section-body > p:not(:first-child) {
+  margin-top: 0;
+  text-indent: 1em;
+}
+.section-body p { margin: 0; }
+
 /* Rules a layout asked for. `box` is a boxed item, `rule` a hairline under the
    block - both are how a printed page separates one story from the next. */
 .newspaper-section.ruled-box {

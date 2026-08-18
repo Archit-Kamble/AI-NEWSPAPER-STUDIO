@@ -3439,3 +3439,49 @@ predate this change and both deserve their own pass.
 composition path, reached via `editionComposition.service.js`) still decides
 fit from `rawBodyFillRatio`, a character ratio. It was **not** migrated to the
 compositor here and is the obvious next target.
+
+### 28. The block is set like a newspaper
+
+A desk screenshot of a 190×264 lead showed roughly a third of the block empty
+with the Space panel reporting "Layout looks balanced". The copy was not at
+fault; the typography defaults were web defaults. Measured on that block:
+
+| | was | is | cost of the old value |
+|---|---|---|---|
+| `margin_px` | 12 (6 mm) | 4 | 24 of 190 px of measure, 24 of 264 px of depth |
+| `paragraph_spacing_px` | 8 (a blank line) | 0, plus a 1 em first-line indent | 0.7 of 5.83 body lines — 12% of the block |
+| `text_align` | left | justify | a ragged right against a column rule |
+| deck length | `min(140, cols×2)` | measured, one line | 3 deck lines, 18% of the block |
+
+The deck limit was the largest single fault. `cols` is the **body's**
+characters per line; a deck is not set in body type, so the old formula asked
+for two body lines' worth of characters in larger type. Measured on the block:
+limit 100 → **44 characters**, deck 3 lines → **1**, body region 154 → 184 px.
+With the margin, the story's room went from 137 px / 5.83 lines to **184 px /
+9.73 lines — 67% more**.
+
+`line_height` was investigated and deliberately **not** changed. It looks
+generous at 1.45; it is not. The serif face's worst-case ink box was measured
+exhaustively in the browser across every consonant, every vowel sign and every
+virama conjunct: **1.475 em** (ascent 0.905 from the candrabindu, descent
+0.570 from stacks like `ड़्रु`); the face's own design box is 1.555 em. 1.45 is
+already at the edge of cropping Marathi. `tests/newspaperTypography.test.js`
+holds a guard so it is not "tidied" downward later.
+
+The acceptance bar moved with it. "Under one whole line empty" is far too
+slack on a small block — 4.83 of 5.83 lines is under a line empty and only 83%
+set. `ACCEPTABLE_FILL_RATIO` is **0.95**, `isUnderfilled()` chases the same
+bar instead of a share rule of its own, and `layout-panel.js`'s whitespace
+warning uses that bar too, so the panel and the writer cannot disagree.
+`MIN_FILLABLE_LINES` dropped from 1 to 0.25 — a quarter of a line is two or
+three words, and that is the smallest thing a model can usefully be asked for.
+
+Verified live on the real app, one write, no repair call: 405 characters,
+**7.28 of 7.28 lines = 100% set**, 0 empty, 0 paragraph air, one-line deck,
+residual at the foot 3.6 px (0.23 of a line — nothing can go there). The
+screenshot shows justified copy flush to both edges, indented paragraph
+openings with no blank lines, and copy running to the foot of the block.
+
+The `schema.sql` migration's backfill is guarded: it moves only rows still
+carrying the exact old default, so a value a desk actually chose is never
+overwritten. `schema.sql` is not applied at boot and has to be run.

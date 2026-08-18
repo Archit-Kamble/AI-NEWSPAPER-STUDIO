@@ -368,10 +368,16 @@ function splitParagraphs(text, marks) {
  */
 function pourBody(bodyInput, {
   top, bottom, columns, images, fontPx, lineHeight, family, weight, align, paragraphSpacingPx = 0, letterSpacingPx = 0,
-  italic = false, underline = false,
+  italic = false, underline = false, firstLineIndentPx = 0,
 }) {
   const text = typeof bodyInput === 'object' && bodyInput ? String(bodyInput.text || '') : String(bodyInput || '');
   const marks = (typeof bodyInput === 'object' && bodyInput && bodyInput.marks) || [];
+  // A newspaper marks a new paragraph by INDENTING its first line, not by
+  // leaving a blank one. A blank line costs a whole row of the column and no
+  // printed newspaper spends one that way - measured on a real 190x264 block,
+  // paragraph air was taking 0.7 of 5.83 body lines, 12% of the block,
+  // standing empty while the desk was told the layout looked balanced.
+  const indentPx = Math.max(0, Number(firstLineIndentPx) || 0);
 
   // The ORDINARY line height. `result.capacity`/`result.whitespace` are
   // measured against this constant, never against what a particular size
@@ -487,7 +493,7 @@ function pourBody(bodyInput, {
    * top of the next column, or - if there is no next column - let it fall
    * through to ordinary overset accounting.
    */
-  function fillRow(cursor, pieces, index, paraCharOffset, paragraphOffset) {
+  function fillRow(cursor, pieces, index, paraCharOffset, paragraphOffset, indentFirstGap = false) {
     let height = bandHeight;
 
     for (let pass = 0; pass < 2; pass += 1) {
@@ -507,7 +513,11 @@ function pourBody(bodyInput, {
           break;
         }
         const gap = row.gaps[gapIndex];
-        const measureWidthPx = gap.end - gap.start;
+        // The paragraph's own first line starts inset. The gap it is set in
+        // is unchanged - the row is still fully used - only the text starts
+        // further in, exactly as a printed paragraph does.
+        const indent = indentFirstGap && gapIndex === 0 ? Math.min(indentPx, (gap.end - gap.start) * 0.5) : 0;
+        const measureWidthPx = gap.end - gap.start - indent;
         let line = '';
         let width = 0;
         const lineStartOffset = paragraphOffset + cursorOffset;
@@ -537,9 +547,19 @@ function pourBody(bodyInput, {
         }
 
         const trimmed = trimEndClusters(line);
-        if (!trimmed) { placed.push({ empty: true, width: measureWidthPx, measure: measureWidthPx }); continue; }
+        if (!trimmed) {
+          const whole = gap.end - gap.start;
+          placed.push({ empty: true, width: whole, measure: whole });
+          continue;
+        }
         const drawn = measurePieceWidth(trimmed, lineStartOffset, fontPx, family, weight, marks, letterSpacingPx);
-        placed.push({ text: trimmed, at: lineStartOffset, x: gap.start, width: drawn, measure: measureWidthPx, hardOverset });
+        placed.push({
+          text: trimmed, at: lineStartOffset, x: gap.start + indent, width: drawn,
+          measure: measureWidthPx, hardOverset,
+          // The row is occupied whatever the indent did to the text's start -
+          // an indented first line is a set line, not a partly empty one.
+          occupies: gap.end - gap.start,
+        });
       }
 
       const requiredHeight = placed.reduce((max, p) => {
@@ -674,7 +694,8 @@ function pourBody(bodyInput, {
       if (colIndex >= cursors.length) break;
 
       const cursor = cursors[colIndex];
-      const result = fillRow(cursor, pieces, index, paraCharOffset, paragraph.offset);
+      const result = fillRow(cursor, pieces, index, paraCharOffset, paragraph.offset,
+        indentPx > 0 && firstLineOfParagraph && paragraph.forcedBreak);
       // Either no room at the ordinary height at all, or a run on this row
       // needs more height than this column has left (BUG 1) - either way,
       // nothing was consumed, so the same text is retried at the next
@@ -687,7 +708,7 @@ function pourBody(bodyInput, {
           emptyEquivalent += p.measure / columnMeasureAt(colIndex);
           continue;
         }
-        occupiedEquivalent += p.measure / columnMeasureAt(colIndex);
+        occupiedEquivalent += (p.occupies ?? p.measure) / columnMeasureAt(colIndex);
         lines.push({
           text: p.text,
           at: p.at,
@@ -1082,6 +1103,7 @@ export function composeBlock(input = {}) {
     letterSpacingPx,
     italic: bodyItalic,
     underline: bodyUnderline,
+    firstLineIndentPx: Math.max(0, num(input.firstLineIndentPx, 0)),
   });
 
   result.bodyLines = body.lines;
@@ -1209,7 +1231,8 @@ export function composeBlock(input = {}) {
     ENGINE_VERSION, width, height, padding, bodyPx, lineHeight, bodyFamily, input.textAlign,
     bodyWeight, bodyItalic, bodyUnderline,
     input.headlineFontPx, input.subheadingFontPx, input.columnCount,
-    letterSpacingPx, paragraphSpacingPx,
+    letterSpacingPx, paragraphSpacingPx, input.firstLineIndentPx,
+    input.headlineMaxLines, input.deckMaxLines,
     input.kicker, input.headline, input.subheading, bodyPlainText,
     JSON.stringify((typeof bodyInput === 'object' && bodyInput.marks) || []),
     images.map(imageFingerprint).join('|'),

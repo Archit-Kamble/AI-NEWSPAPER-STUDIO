@@ -241,28 +241,38 @@ test('a block genuinely full to the foot is the one case an explicit fill still 
 // filled 2, and 2.55 lines - 56% of the body area - went out empty, because
 // the absolute threshold (4) had not been reached. The same 4 lines on a
 // 14-line block is 29%, which IS worth repairing. One number cannot be both.
-test('the underfill rule is proportional: a small block half empty is repaired, a big block barely short is not', () => {
-  const fill = (linesUsed, linesAvailable) => ({
-    linesUsed,
-    holeLines: Number((linesAvailable - linesUsed).toFixed(2)),
-    linesAvailable,
+test('a block is finished at 95% set, and chased until it is', () => {
+  const fill = (used, available) => ({
+    occupiedEquivalentLines: used,
+    emptyEquivalentLines: Number((available - used).toFixed(2)),
+    availableEquivalentLines: available,
+    linesUsed: used,
+    holeLines: Number((available - used).toFixed(2)),
+    linesAvailable: available,
+    ratio: available > 0 ? used / available : 0,
     overset: false,
   });
+  const fit = (used, available) => ({ fill: fill(used, available), overset: false, displayOverset: false });
 
-  // The reported block: 2 of 4.55 lines, 56% of the body area empty.
+  // 95%, not "under one whole line empty". That older bar was far too slack
+  // on a small block: 4.83 of 5.83 lines is under a line empty and only 83%
+  // set, and it is what let a desk be shown "Layout looks balanced" while
+  // looking at a column with a visibly short foot.
+  assert.equal(copyFit.isAcceptablyFilled(fit(4.83, 5.83)), false, '83% set is not finished');
+  assert.equal(copyFit.isAcceptablyFilled(fit(5.6, 5.83)), true, '96% set is');
+  assert.equal(copyFit.isAcceptablyFilled(fit(13, 14)), false, '93% on a big block is not finished either');
+
+  // And the repair rule chases the same bar - one question, not two.
   assert.equal(copyFit.isUnderfilled(fill(2, 4.55)), true, 'a block 56% empty must be repaired');
-
-  // Big blocks keep exactly the behaviour they had under the absolute rule -
-  // 4 of 14 lines is 29%, so both the old and the new rule fire.
-  assert.equal(copyFit.isUnderfilled(fill(10, 14)), true, '4 of 14 lines empty (29%) - repaired before and now');
-  assert.equal(copyFit.isUnderfilled(fill(13, 14)), false, '1 of 14 lines empty (7%) - the ordinary ragged remainder');
-
-  // Never chase less than one whole line, however big the share looks.
-  assert.equal(copyFit.isUnderfilled(fill(3.5, 4)), false, 'half a line is not a hole anything can be written into');
-  assert.equal(copyFit.isUnderfilled(fill(1, 1.6)), false, '0.6 of a line is still under the one-line floor');
+  assert.equal(copyFit.isUnderfilled(fill(10, 14)), true, '71% set is repaired');
+  assert.equal(copyFit.isUnderfilled(fill(13, 14)), true, '93% set is now repaired too - the bar is 95%');
+  assert.equal(copyFit.isUnderfilled(fill(13.9, 14)), false, 'a quarter-line remainder is what setting type leaves');
 
   // Overset copy is a different repair entirely - it is trimmed, not filled.
   assert.equal(copyFit.isUnderfilled({ ...fill(2, 4.55), overset: true }), false);
+  assert.equal(copyFit.isAcceptablyFilled({ ...fit(5.8, 5.83), overset: true }), false, 'overset is never finished');
+  assert.equal(copyFit.isAcceptablyFilled({ ...fit(5.8, 5.83), displayOverset: true }), false,
+    'and neither is a headline with no room for itself');
 });
 
 test('settleToFit fills a small block that is proportionally half empty, which the absolute rule ignored', async () => {

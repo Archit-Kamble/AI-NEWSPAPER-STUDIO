@@ -37,8 +37,62 @@ function headlineLimit(cols) {
   return Math.max(24, Math.min(90, Math.round(cols * 0.9)));
 }
 
+// FALLBACK ONLY. `cols` is the BODY's characters per line, and a deck is not
+// set in body type - so deriving the deck's length from it asks for two body
+// lines' worth of characters set in larger type, which is three deck lines.
+// Measured on a real 190x264 block: the deck took 46px of a 264px block, 18%
+// of it, three lines deep and nearly the size of the headline above it. A
+// deck is ONE line that carries the story forward; a three-line one is a
+// second headline, which is what the desk reported seeing.
+//
+// `measuredSubheadingLimit()` below is the real answer. This survives for the
+// moment before a composition exists.
 function subheadingLimit(cols) {
   return Math.max(40, Math.min(140, cols * 2));
+}
+
+// How many lines of display type a block gets. A deck is one line - see
+// above. A headline gets two, which is what a newspaper gives it and what
+// every real headline in this database already takes (measured across 4137
+// rows: 2163 set one line, 1470 two).
+const DECK_LINES = 1;
+const HEADLINE_LINES = 2;
+
+/**
+ * The deck's real one-line capacity, read off a composition that was given
+ * more deck than could possibly fit and told to set exactly one line.
+ *
+ * Measured in the deck's OWN type, in this block's own measure, around this
+ * block's own pictures - which is the only way to ask the question.
+ */
+function measuredSubheadingLimit(composed, fallbackCols) {
+  const line = composed?.bands?.deck?.lines?.[0];
+  if (!line || !line.text) return subheadingLimit(fallbackCols);
+  // The band was filled to its own edge, so its text IS the capacity.
+  return Math.max(24, line.text.trim().length);
+}
+
+/** The same question for the headline, over its own line allotment. */
+function measuredHeadlineLimit(composed, fallbackCols) {
+  const lines = composed?.bands?.headline?.lines || [];
+  if (!lines.length) return headlineLimit(fallbackCols);
+  return Math.max(20, lines.map((l) => l.text).join(' ').trim().length);
+}
+
+/** A block composed with more display type than fits, clamped to its allotment. */
+function limitProbeView() {
+  const fill = `${STAND_IN_WORDS} `.repeat(4);
+  return {
+    headline: fill,
+    subheading: fill,
+    headlineMaxLines: HEADLINE_LINES,
+    deckMaxLines: DECK_LINES,
+    // Locked, so the engine reports what does not fit rather than shrinking
+    // the type to make it - the question here is capacity at the block's own
+    // stated size, not what size would swallow this stand-in.
+    headlineLocked: true,
+    subheadingLocked: true,
+  };
 }
 
 const STAND_IN_WORDS = 'पुणे शहरातील नव्या पायाभूत सुविधा प्रकल्पाचे काम वेगाने सुरू असून '
@@ -122,6 +176,7 @@ function bestCaseCandidate(cols) {
 
   const api = Object.freeze({
     headlineLimit, subheadingLimit, standIn, RESERVE_SAMPLES, reservationCandidates, bestCaseCandidate,
+    measuredHeadlineLimit, measuredSubheadingLimit, limitProbeView, DECK_LINES, HEADLINE_LINES,
   });
   root.SahasHeadlineReserve = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

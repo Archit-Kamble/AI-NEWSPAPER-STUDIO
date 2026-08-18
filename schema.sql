@@ -170,6 +170,40 @@ ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS drop_cap BOOLEAN NOT NULL DEF
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS image_flip_h BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS image_flip_v BOOLEAN NOT NULL DEFAULT FALSE;
 
+-- Newspaper typography, measured against real practice rather than assumed.
+--
+-- The defaults above were web defaults, and on a real 190x264 block they cost
+-- roughly a third of the story's room:
+--
+--   margin_px 12          = 6 mm at this page's 2 px/mm. A newspaper separates
+--                           two stories by a GUTTER of about 4 mm, shared - so
+--                           2 mm (4 px) each side. 12 px each side took 24 of
+--                           190 px of measure and 24 of 264 px of depth.
+--   paragraph_spacing_px 8= a blank line between paragraphs. No printed
+--                           newspaper spends a whole row of a column that way;
+--                           it indents the first line instead. Measured on the
+--                           block this was reported from: 0.7 of 5.83 body
+--                           lines standing empty, 12% of the block.
+--   text_align 'left'     = ragged right. Newspapers justify body copy; the
+--                           measure is narrow and the ragged edge reads as
+--                           unfinished against a column rule.
+--
+-- line_height is deliberately NOT changed. It looks generous at 1.45, but the
+-- serif face's real worst-case ink box was measured exhaustively across every
+-- consonant, every vowel sign and every virama conjunct: 1.475 em (ascent
+-- 0.905 from the candrabindu, descent 0.570 from stacks like "ड़्रु"). 1.45 is
+-- already at the edge of clipping Marathi and must not be lowered.
+ALTER TABLE page_sections ALTER COLUMN margin_px SET DEFAULT 4;
+ALTER TABLE page_sections ALTER COLUMN paragraph_spacing_px SET DEFAULT 0;
+ALTER TABLE page_sections ALTER COLUMN text_align SET DEFAULT 'justify';
+
+-- Backfill, guarded: ONLY rows still carrying the exact old default are moved.
+-- A value a desk actually chose is never overwritten, which is why each clause
+-- names the old default rather than updating everything.
+UPDATE page_sections SET margin_px = 4 WHERE margin_px = 12;
+UPDATE page_sections SET paragraph_spacing_px = 0 WHERE paragraph_spacing_px = 8;
+UPDATE page_sections SET text_align = 'justify' WHERE text_align = 'left';
+
 CREATE TABLE IF NOT EXISTS media_assets (
   id SERIAL PRIMARY KEY,
   original_filename VARCHAR(500) NOT NULL,

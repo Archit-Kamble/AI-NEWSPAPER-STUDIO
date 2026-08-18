@@ -61,35 +61,33 @@ const MIN_SENTENCE_CHARS = 12;
 //   a block standing empty. Measured on the real block this was reported
 //   from: 9 lines set, 3.58 lines empty - 28% of the body area, under the
 //   automatic threshold and obvious to the eye.
-const MIN_FILLABLE_LINES = 1;
+const MIN_FILLABLE_LINES = 0.25;
 
-// A hole is a SHARE of the block's own body area, not a fixed number of
-// lines - and this is the whole reason small blocks kept coming out half
-// empty while the pipeline called them balanced.
+// HOW FULL A BLOCK HAS TO BE. A quarter of a line short is a couple of words;
+// anything more than that is white the reader sees. A printed newspaper fills
+// its columns to the foot, and the desk's standard for this product is 95%.
 //
-// `HOLE_LINES` (4) is an absolute count, and an absolute count means
-// completely different things on different blocks. Measured on the real lead
-// block this was reported from: a 268x248 frame with a tall cut-out beside
-// the copy has room for 4.55 lines of body once its headline and deck are
-// set. The model filled 2 and left 2.55 - **56% of the body area standing
-// empty** - and nothing repaired it, because 2.55 is less than 4. The same 4
-// lines on a 14-line block is 29%, which is a sensible thing to repair. One
-// threshold cannot be both.
-//
-// So: repair when a quarter of the body area is empty, OR when the absolute
-// count is reached (whichever comes first, so big blocks behave exactly as
-// they always did - 4 of 14 lines is 29%, either rule fires). Never below one
-// whole line: nothing can be written into less than a line, and chasing the
-// remainder every column of type leaves is what spends money for nothing.
-const HOLE_LINES = 4;
-const HOLE_FRACTION = 0.25;
+// This is the ACCEPTANCE bar, not a repair-cost policy. It replaced "under one
+// whole line empty", which on a small block was far too slack: a 5.83-line
+// block could stand at 4.83 lines - 83% - and be reported as finished, which
+// is exactly the "Layout looks balanced" a desk was shown at 87% while
+// looking at an obviously short column.
+const ACCEPTABLE_FILL_RATIO = 0.95;
 
-/** Is a share of this block's body area big enough to be worth filling? */
+/**
+ * Is this block short enough of its own bar to be worth a paid call?
+ *
+ * One question now, not two. It used to be a share rule of its own (a quarter
+ * of the body area, or four absolute lines) tuned to avoid paying for the
+ * planner's conservatism - and with the planner no longer setting the target,
+ * that reason is gone. What is left is: the block is not acceptably filled,
+ * and there is enough room left that a model could put words in it.
+ */
 function isUnderfilled(fill) {
   if (!fill || fill.overset) return false;
-  if (fill.holeLines < MIN_FILLABLE_LINES) return false;
-  if (fill.holeLines >= HOLE_LINES) return true;
-  return fill.linesAvailable > 0 && (fill.holeLines / fill.linesAvailable) >= HOLE_FRACTION;
+  if (fill.emptyEquivalentLines < MIN_FILLABLE_LINES) return false;
+  return fill.availableEquivalentLines > 0
+    && (fill.ratio < ACCEPTABLE_FILL_RATIO);
 }
 
 let adapterModule = null;
@@ -229,7 +227,11 @@ const ACCEPTANCE_EPSILON = 0.01;
 function isAcceptablyFilled(fit) {
   if (!fit || !fit.fill) return false;
   if (fit.overset || fit.displayOverset) return false;
-  return fit.fill.emptyEquivalentLines < 1 + ACCEPTANCE_EPSILON;
+  // Nothing left at all, or the block is at least 95% set. The first clause
+  // matters on a small block, where one line can be more than 5% and the
+  // ratio alone would refuse a column that is genuinely full to the foot.
+  if (fit.fill.emptyEquivalentLines < MIN_FILLABLE_LINES) return true;
+  return fit.fill.ratio >= ACCEPTABLE_FILL_RATIO - ACCEPTANCE_EPSILON;
 }
 
 // Sentences, with their terminator kept on the front piece, and paragraph
@@ -513,5 +515,5 @@ function hasRoomToFill(fit) {
 module.exports = {
   measureFit, trimToFit, settleToFit, openingTarget, hasRoomToFill, isUnderfilled,
   isAcceptablyFilled, splitSentences, joinSentences, ensureComposeReady,
-  MIN_FILLABLE_LINES, MAX_FILL_CALLS,
+  MIN_FILLABLE_LINES, MAX_FILL_CALLS, ACCEPTABLE_FILL_RATIO,
 };

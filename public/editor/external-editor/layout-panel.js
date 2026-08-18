@@ -33,8 +33,19 @@ function reservedComposition(section, view, images) {
   return worst;
 }
 
-const WHITESPACE_THRESHOLD = 0.45;
-const TIGHT_THRESHOLD = 0.95;
+// The desk's standard: a printed newspaper fills its columns to the foot, and
+// anything under 95% set is white the reader sees. This used to be 0.45, so a
+// block at 62% was reported as "Layout looks balanced" - which is how a
+// visibly short column reached a screenshot with a green bar beside it. It is
+// the SAME bar copyFit.ACCEPTABLE_FILL_RATIO uses, so the panel and the
+// writer cannot tell a desk two different stories about one block.
+//
+// The old "Block is nearly full - there is no room for late corrections"
+// warning is gone with it. It fired above 95%, which is now the TARGET: a
+// printed column is full, and warning about the thing the whole pipeline
+// exists to achieve is noise. Copy that genuinely does not fit is a
+// different message, and it is still there (`metrics.overflowing`).
+const WHITESPACE_THRESHOLD = 0.95;
 
 export function layoutWarnings(metrics) {
   const warnings = [];
@@ -58,14 +69,12 @@ export function layoutWarnings(metrics) {
       level: "error",
       text: `Content overflows the block by about ${Math.abs(metrics.remainingHeightPx)} px. Trim the body, reduce the body size, or use a larger block.`,
     });
-  } else if (ratio > TIGHT_THRESHOLD) {
-    warnings.push({ level: "warn", text: "Block is nearly full - there is no room for late corrections." });
   }
   if (!metrics.overflowing && ratio < WHITESPACE_THRESHOLD && !isEmpty) {
     warnings.push({
       level: "warn",
       text: fill
-        ? `Only ${Math.round(ratio * 100)}% of the block's room is set - ${fill.holeLines} lines of it will print empty.`
+        ? `${Math.round(ratio * 100)}% of the block is set - ${fill.holeLines} lines will print empty. A column runs to its foot; fill it, cut the block down, or make a picture larger.`
         : `Only ${Math.round(ratio * 100)}% of the block is used - ${Math.round(metrics.remainingHeightPx)} px of whitespace will print.`,
     });
   }

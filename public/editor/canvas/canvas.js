@@ -5,7 +5,10 @@ import { sectionInnerHtml, sectionClassName } from "./section-thumb.js";
 import { menuMarkup, bindContextMenu, showContextMenu, hideContextMenu } from "./context-menu.js";
 import { bindViewport, bindSpacebarPan, applyTransform, renderMiniMap } from "./canvas-view.js";
 import { gridOverlayMarkup, getGeometry } from "./grid.js";
-import { mastheadMarkup, folioMarkup, pageFootMarkup, registrationMarkup, imprintMarkup } from "./masthead.js";
+import {
+  mastheadMarkup, folioMarkup, pageFootMarkup, registrationMarkup, imprintMarkup, contentRegion,
+} from "./masthead.js";
+import { columnRulesMarkup } from "./column-rules.js";
 import { bindSectionDrag } from "./section-drag.js";
 import { viewOfSection } from "../section-model.js";
 import { computeMetrics } from "../layout/layout-metrics.js";
@@ -13,6 +16,12 @@ import { rulerMarkup, rebuildRulers, bindRulers } from "./ruler.js";
 import { guideLayerMarkup, renderGuides, bindGuideInteractions, setGuidesVisible } from "./page-guides.js";
 
 let handlers = {};
+// The page last drawn. refreshSection() repaints ONE block without being handed
+// the page again, and it has to know where the matter's content band ends to
+// decide whether that block is ruled off below - the same question renderCanvas()
+// answers for all of them. Kept here rather than re-derived from the DOM: the
+// band is a fact about the page, not about what happens to be on screen.
+let renderedPage = null;
 
 // A page that prints black only is not a design choice, it is what the press
 // will do. Saying so on the page - and previewing the photographs in grey, which
@@ -51,8 +60,10 @@ export function renderCanvas(page, newspaper, selection, callbacks = {}) {
     return;
   }
 
+  renderedPage = page;
   const geometry = getGeometry() || { marginXPx: 20, marginYPx: 20, matterWidthPx: 620, pageHeightPx: 1060 };
   const matterRight = geometry.marginXPx + geometry.matterWidthPx;
+  const contentBottom = contentRegion(geometry, page).bottom;
   const pageWidth = newspaper?.page_width_px || 660;
   const pageHeight = newspaper?.page_height_px || 1060;
   const { selectedSectionKey, draft, dirty } = selection;
@@ -61,8 +72,14 @@ export function renderCanvas(page, newspaper, selection, callbacks = {}) {
     ${rulerMarkup()}
     <div class="canvas-viewport" id="canvasViewport">
      <div class="canvas-sizer" id="canvasSizer">
+      <!-- The gutters are published as custom properties because the COLUMN
+           RULES are drawn in them, and a rule that is not exactly centred in
+           its gutter is worse than no rule at all - the eye reads it as
+           belonging to one of the two stories. One source (geometry.js), so
+           the stylesheet can never hold a second, drifted copy of the grid. -->
       <div class="newspaper-canvas${page.prints_colour === false ? " mono-forme" : ""}${page.origin === "common" ? " common-page" : ""}"
-           id="canvasSurface" style="width:${pageWidth}px;height:${pageHeight}px;">
+           id="canvasSurface" style="width:${pageWidth}px;height:${pageHeight}px;`
+        + `--gutter-x:${geometry.gutterPx}px;--gutter-y:${geometry.baselinePx}px;">
         ${monoWarningMarkup(page, geometry)}
         ${gridOverlayMarkup()}
         <div class="align-guides" id="alignGuides"></div>
@@ -76,17 +93,23 @@ export function renderCanvas(page, newspaper, selection, callbacks = {}) {
         ${pageFootMarkup(newspaper, page, geometry)}
         ${imprintMarkup(newspaper, page, geometry)}
         ${registrationMarkup(geometry)}
+        <!-- Under the blocks, because a rule is what the page shows BETWEEN
+             two stories - anything a block draws sits on top of it. -->
+        ${columnRulesMarkup(page, geometry)}
         ${page.sections
           .map((section) => {
             const view = viewOfSection(section, draft, selectedSectionKey);
             const selected = section.section_key === selectedSectionKey;
             const overflowing = computeMetrics(section, view).overflowing;
             const atRightEdge = section.x_px + section.width_px >= matterRight - 2;
+            // Nothing below it but the page foot, so nothing to be ruled off
+            // from - see contentRegion().
+            const atFootEdge = section.y_px + section.height_px >= contentBottom - 2;
             // Positioned in page pixels, not percentages: the surface is a fixed
             // pixel canvas, and dragging has to write back the exact numbers
             // that get stored and printed.
             return `
-              <div class="${sectionClassName(view, { selected, dirty: selected && dirty, overflowing, atRightEdge, hasImages: Boolean((section.images || []).length) })}"
+              <div class="${sectionClassName(view, { selected, dirty: selected && dirty, overflowing, atRightEdge, atFootEdge, hasImages: Boolean((section.images || []).length) })}"
                    data-section-key="${section.section_key}"
                    style="left:${section.x_px}px;top:${section.y_px}px;width:${section.width_px}px;height:${section.height_px}px;"
               >${sectionInnerHtml(section, view, { dirty: selected && dirty, selected })}</div>`;
@@ -151,7 +174,8 @@ export function refreshSection(section, view, { selected = false, dirty = false 
   const overflowing = computeMetrics(section, view).overflowing;
   const g = getGeometry();
   const atRightEdge = g ? section.x_px + section.width_px >= g.marginXPx + g.matterWidthPx - 2 : false;
-  element.className = sectionClassName(view, { selected, dirty, overflowing, atRightEdge, hasImages: Boolean((section.images || []).length) });
+  const atFootEdge = g ? section.y_px + section.height_px >= contentRegion(g, renderedPage).bottom - 2 : false;
+  element.className = sectionClassName(view, { selected, dirty, overflowing, atRightEdge, atFootEdge, hasImages: Boolean((section.images || []).length) });
   element.innerHTML = sectionInnerHtml(section, view, { dirty, selected });
 }
 

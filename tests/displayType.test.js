@@ -82,16 +82,28 @@ test('growth is capped, so a small block cannot out-shout a big one', () => {
 test('filling the headline never costs a word: growth yields to overset copy', () => {
   const headline = 'जिल्ह्यात पाणीटंचाईवर उपाययोजना सुरू';
   const sentence = 'गावातील नागरिकांनी या उपक्रमात उत्स्फूर्त सहभाग घेतला आहे. ';
+  const frame = { ...LEAD, height: 204, headline };
 
   // Room to spare: the headline takes the extra depth and fills its measure.
-  const roomy = compose.composeBlock({ ...LEAD, headline, body: sentence.repeat(9) });
+  const roomy = compose.composeBlock({ ...frame, body: sentence.repeat(4) });
   assert.equal(roomy.bands.headline.grew, true);
   assert.equal(roomy.overset.body, '', 'and the copy still fits');
 
-  // One sentence more, and the depth the growth wanted is the copy's last
-  // line. The headline gives it back rather than pushing a word off the page,
-  // and the block still sets everything it was given.
-  const full = compose.composeBlock({ ...LEAD, headline, body: sentence.repeat(10) });
+  // The same block filled to its foot - the longest body it can carry at the
+  // size the design asked for. The depth the growth wanted is now somebody's
+  // last line, so the headline gives it back rather than pushing a word off
+  // the page, and the block still sets everything it was given.
+  const source = sentence.repeat(20);
+  let fits = 0;
+  for (let length = source.length; length > 0; length -= 1) {
+    if (!compose.composeBlock({ ...frame, body: source.slice(0, length), headlineGrowth: false }).overset.body) {
+      fits = length;
+      break;
+    }
+  }
+  assert.ok(fits > 0, 'the fixture must hold some copy');
+
+  const full = compose.composeBlock({ ...frame, body: source.slice(0, fits) });
   assert.equal(full.bands.headline.grew, false, 'growth must yield');
   assert.equal(full.bands.headline.resolvedPx, LEAD.headlineFontPx, 'back to the size the design asked for');
   assert.equal(full.overset.body, '', 'no copy pushed off the block');

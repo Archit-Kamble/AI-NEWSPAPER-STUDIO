@@ -142,15 +142,39 @@ function spanTheMeasure(rect, { contentLeft, measure, standOffPx, bodyTop, bodyB
   const spanned = { x: contentLeft, y: rect.y, width: measure, height: rect.height, snapped: true, how: 'spanned' };
   if (!(bandHeightPx > 0) || bodyTop === null || bodyBottom === null) return spanned;
 
-  const depth = bodyBottom - bodyTop;
-  // Nothing to be gained: even flush against one end there is no room for a
-  // line of type beside it.
-  if (depth - rect.height - standOffPx < bandHeightPx) {
+  // How many WHOLE LINES of copy each end leaves.
+  //
+  // Not "how many pixels" - the copy is poured on a band grid anchored at
+  // `bodyTop` (compose.js's pourBody), so a gap that does not start on that
+  // grid is worth only the whole bands that fall inside it. Measured on a real
+  // 190x264 block: a full-measure picture at the top left 25 px under it and a
+  // band is 24.88 px, so it looked like exactly one line of room - and the
+  // grid's next row began 5 px lower and ran past the frame, so the block set
+  // NOTHING. The repair reported success and the block still could not print.
+  //
+  // At the FOOT the copy runs from `bodyTop` down, so it is band-aligned for
+  // free; at the TOP it resumes at the first band boundary at or after the
+  // picture, which can waste up to a whole line. That is why they have to be
+  // compared rather than the nearer one taken.
+  const linesAtFoot = Math.floor(((bodyBottom - rect.height - standOffPx) - bodyTop) / bandHeightPx);
+  const resumesAt = bodyTop
+    + Math.ceil((bodyTop + rect.height + standOffPx - bodyTop) / bandHeightPx) * bandHeightPx;
+  const linesAtTop = Math.floor((bodyBottom - resumesAt) / bandHeightPx);
+
+  // Nothing to be gained: neither end leaves room for a line of type.
+  if (Math.max(linesAtTop, linesAtFoot) < 1) {
     return { ...rect, width: Math.min(rect.width, measure), snapped: false, how: 'does-not-fit' };
   }
 
   const atTop = bodyTop;
   const atFoot = bodyBottom - rect.height;
-  const y = Math.abs(atTop - rect.y) <= Math.abs(atFoot - rect.y) ? atTop : atFoot;
-  return { ...spanned, y: Math.round(y), how: y === Math.round(atTop) ? 'spanned-at-top' : 'spanned-at-foot' };
+  // The end that prints more of the story. Only when they print the same is
+  // this the desk's choice, decided by which end the picture was nearer.
+  const top = linesAtTop > linesAtFoot
+    || (linesAtTop === linesAtFoot && Math.abs(atTop - rect.y) <= Math.abs(atFoot - rect.y));
+  return {
+    ...spanned,
+    y: Math.round(top ? atTop : atFoot),
+    how: top ? 'spanned-at-top' : 'spanned-at-foot',
+  };
 }

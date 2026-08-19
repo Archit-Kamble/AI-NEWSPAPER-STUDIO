@@ -462,7 +462,7 @@ export function sectionInnerHtml(section, view, { dirty = false, selected = fals
   `;
 }
 
-export function sectionClassName(view, { selected = false, dirty = false, overflowing = false, atRightEdge = false, hasImages = false } = {}) {
+export function sectionClassName(view, { selected = false, dirty = false, overflowing = false, atRightEdge = false, atFootEdge = false, hasImages = false } = {}) {
   // Same gap as statusOf() (status/section-status.js) and the same fix: a
   // block holding only a placed picture (section_images), no headline/body/
   // legacy image_url, was drawn with the empty-block treatment on the canvas
@@ -478,6 +478,10 @@ export function sectionClassName(view, { selected = false, dirty = false, overfl
     // A block against the right edge of the matter has nothing to its right to
     // be ruled off from.
     atRightEdge ? "at-right-edge" : "",
+    // And a block at the foot of the matter has nothing below it either - a
+    // rule there would be a rule against the page foot, which no printed
+    // newspaper draws.
+    atFootEdge ? "at-foot-edge" : "",
     filled ? "filled" : "",
     selected ? "active" : "",
     dirty ? "unsaved" : "",

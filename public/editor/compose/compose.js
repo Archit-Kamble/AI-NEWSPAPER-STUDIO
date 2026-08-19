@@ -28,7 +28,9 @@
 import { measureWidth as hmtxWidth, minLineHeightFor, faceAscent, faceDescent, fontsReady, publicationWeight } from './font-metrics.js';
 import { shapeWidthPx, isShaperReady } from './shaper.js';
 import { breakPieces, clusters, trimEndClusters } from './graphemes.js';
-import { planParagraphs, mayNeedPolicy, MAX_PARAGRAPH_LINES, MAX_PARAGRAPH_SENTENCES } from './paragraph-policy.js';
+import {
+  planParagraphs, mayNeedPolicy, MIN_PARAGRAPH_LINES, MAX_PARAGRAPH_LINES, MAX_PARAGRAPH_SENTENCES,
+} from './paragraph-policy.js';
 import { subtract, viableIntervals, MIN_CORRIDOR_EM } from './intervals.js';
 import { bandObstacles, imageFingerprint } from './exclusion.js';
 
@@ -66,18 +68,42 @@ const DISPLAY_TYPOGRAPHY = {
   deck: { family: 'sans', weight: 400 },
 };
 
-// Optical space between one editorial flow and the next, in ems of the
-// LARGER of the two - a gap under a 34px headline and a gap under a 16px deck
-// are not the same gap. These are transition-aware rather than one uniform
-// margin: the space a printer leaves between a headline and its deck is
-// visibly tighter than between a deck and the body, because the first pair
-// belongs together and the second pair does not.
-const GAP_EM = {
-  'kicker>headline': 0.18,
-  'headline>deck': 0.22,
-  'headline>body': 0.5,
-  'deck>body': 0.42,
-  'kicker>body': 0.4,
+// Space between one editorial flow and the next, BASELINE TO BASELINE, in the
+// line of the flow BELOW.
+//
+// Both halves of that sentence are the correction. This used to be
+// `y = previousBand.bottom + share * max(fontPx)` - a gap measured from the
+// previous flow's BOX and scaled by the DISPLAY size - and it produced a page
+// whose sinks were all different. Measured across one real front page:
+//
+//     headline -> deck   1.30, 1.44, 1.60, 1.68 body-lines   (29% spread)
+//     display  -> body   1.33, 1.37, 1.54, 1.61, 1.75        (31% spread)
+//
+// Two things compound to make that. A display band's box is a full line box
+// tall, and the ink sits in the upper part of it, so the box's bottom is
+// already further below the ink on a 26px headline than on a 13px one - and
+// then a share of that same font size is added on top. So the bigger the
+// headline, the more space under it, twice over. A reader never measures the
+// white under a headline, but an uneven one is exactly why a page looks
+// homemade - the same argument the block gutter was already fixed by
+// (templates.js's GAP, which had drifted to seven values).
+//
+// A compositor does not specify space this way. Space is specified BASELINE TO
+// BASELINE, because that is what a grid is made of, and it is specified in the
+// leading of the type that follows, because that is the rhythm the reader is
+// reading in. A deck sits 1.35 deck-lines under the headline whether the
+// headline is 13px or 40px; the copy sits 1.5 body-lines under the display on
+// every block on the page.
+const BASELINE_GAP = {
+  // A kicker is the headline's own overline and belongs to it: tight.
+  'kicker>headline': 0.95,
+  // The deck belongs to the headline too, but reads as a separate line.
+  'headline>deck': 1.35,
+  // The sink: what separates the display from the story. Slightly wider with
+  // no deck to bridge the two.
+  'headline>body': 1.55,
+  'deck>body': 1.50,
+  'kicker>body': 1.50,
 };
 
 // A headline may not eat its own block. Shared with typeScaleFor() in
@@ -236,12 +262,22 @@ function num(value, fallback) {
  */
 function setDisplayFlow(text, {
   top, bottomLimit, column, images, fontPx, lineHeight, family, weight, maxLines, letterSpacingPx = 0,
-  align = 'left', marks = null,
+  align = 'left', marks = null, baselineAt = null, floor = null,
 }) {
   const pieces = breakPieces(text);
   if (!pieces.length) return { lines: [], height: 0, bottom: top, overset: '', lineCount: 0, violations: [] };
 
   const bandHeight = fontPx * lineHeight;
+  // Placed by its first BASELINE when one is asked for, not by its box top.
+  // This has to happen HERE rather than at the call site because the size is
+  // not settled until this function runs: fitDisplayFlow() tries several, and
+  // where a line box has to start to put its baseline in a given place depends
+  // on the size it is finally set at. Computing the top outside would place
+  // every shrunk or grown flow at the ascent of a size it was not set in.
+  if (baselineAt !== null) {
+    top = baselineAt - fontPx * faceAscent(family, weight);
+    if (floor !== null && top < floor) top = floor;
+  }
   const lines = [];
   const violations = [];
   let index = 0;
@@ -371,6 +407,11 @@ function setDisplayFlow(text, {
 
   return {
     lines,
+    // The top this flow actually resolved to - which is NOT the caller's, once
+    // a baseline target is in play (the size decides where the box has to
+    // start). `top + height` must still be the band's real bottom, so the band
+    // has to be told which top its height was measured from.
+    top,
     height: occupiedBottom - top,
     bottom: occupiedBottom,
     lineCount: lines.length,
@@ -462,6 +503,10 @@ function growToFill(text, options, { maxPx, fillTarget, set, failed }) {
 // extra lines, a wide one gets its fill, and neither is decided by a constant
 // that had to be right for both.
 function fitDisplayFlow(text, options, { locked, minPx, maxPx = 0, fillTarget = 0, preferLines = 0, roomyBottomLimit = 0 }) {
+  // `options.top` is only the fallback for a flow with no baseline target
+  // (the first one on the block); every attempt below carries `baselineAt`
+  // through untouched, so each size positions itself.
+
   const failed = (attempt) => attempt.overset || attempt.violations.length > 0;
 
   if (locked) {
@@ -1450,7 +1495,20 @@ function capacityChars(measures, fontPx, family, sample = CALIBRATION, letterSpa
       at += 1;
       if (endsSentence.test(piece)) {
         sentencesInParagraph += 1;
-        if (sentencesInParagraph >= MAX_PARAGRAPH_SENTENCES) { closed = true; break; }
+        // Two ceilings and a FLOOR, because the policy that will really set
+        // this copy has all three (paragraph-policy.js). The ceilings say when
+        // a paragraph must end; the floor says how shallow the shallowest
+        // piece may be - and because planParagraphs() divides a long paragraph
+        // EVENLY rather than closing it at the first ceiling it meets, the
+        // break lands near that floor, not near the sentence ceiling.
+        //
+        // Modelling only the ceilings put the break two lines later than the
+        // compositor really takes it, and a break costs the tail of the line
+        // it closes: measured on a 240x180 block, 271 characters quoted
+        // against 247 actually set - a floor 10% optimistic, which is the one
+        // direction this number may not be wrong in.
+        if (sentencesInParagraph >= MAX_PARAGRAPH_SENTENCES
+          || linesInParagraph + 1 >= MIN_PARAGRAPH_LINES) { closed = true; break; }
       }
     }
     chars += line.length;
@@ -1468,10 +1526,41 @@ function capacityChars(measures, fontPx, family, sample = CALIBRATION, letterSpa
 // large uncertainty is expressed as a range, not buried in a discount.
 const BUDGET_SAFETY = 0.97;
 
+// And a little more on the FLOOR alone, because the floor is the one end of
+// the range that may not be wrong: the worklist prints it as "this block holds
+// N characters" and fit.service.js sets type against it.
+//
+// The calibration pours the sample through this block's real gaps, which is
+// exact, and then has to GUESS where the paragraph policy will break it -
+// planParagraphs() divides a long paragraph evenly, and evenly depends on a
+// total depth the calibration does not know because it is generating the copy
+// as it goes. Measured against the true, character-granular capacity of 208
+// real block shapes x column counts x word shapes: the floor is 25%
+// conservative at the median and over-promises on 4 of them, worst by 4.9%.
+// This covers that and nothing else - it is not a discount on the budget
+// (which is what was tried once and underfilled every block on the page), it
+// is the measured error of one estimator, applied where that estimator's
+// promise is made.
+const FLOOR_SAFETY = 0.95;
+
 // ---------------------------------------------------------------- the call ---
 
-function gapBetween(from, to, fontPx) {
-  return (GAP_EM[`${from}>${to}`] ?? 0.3) * fontPx;
+/**
+ * Where the next flow's first BASELINE goes, given where the last one's ended.
+ *
+ * Two numbers, and the larger wins:
+ *
+ *   * the specified gap - BASELINE_GAP, in the line of the flow below;
+ *   * and the clearance the two faces physically need, from their own
+ *     metrics: the flow above's descent plus the flow below's ascent. A
+ *     40px headline over 9px copy asks for a wider clearance than 1.5 body
+ *     lines, and type that collides is not a spacing preference.
+ */
+function baselineAfter(previous, next) {
+  const specified = (BASELINE_GAP[`${previous.key}>${next.key}`] ?? 1.5) * next.lineBox;
+  const clearance = previous.fontPx * faceDescent(previous.family, previous.weight)
+    + next.fontPx * faceAscent(next.family, next.weight);
+  return previous.baseline + Math.max(specified, clearance);
 }
 
 function hash(value) {
@@ -1654,8 +1743,23 @@ export function composeBlock(input = {}) {
   let y = content.top;
   let previous = null;
 
+  // The last baseline set, and what set it - all the next flow needs to know
+  // where its own first baseline goes (baselineAfter()).
+  let lastBaseline = null;
+
   for (const flow of flows) {
-    if (previous) y += gapBetween(previous, flow.key, Math.max(flow.px, result.bands[previous]?.resolvedPx || flow.px));
+    const displayLineHeight = Math.max(1.1, lineHeight - 0.15);
+    // Where this flow's first baseline should fall. Null for the first flow on
+    // the block, which starts at the top of the content and nowhere else.
+    const baselineAt = lastBaseline
+      ? baselineAfter(lastBaseline, {
+        key: flow.key,
+        fontPx: flow.px,
+        family: flow.family,
+        weight: flow.weight,
+        lineBox: flow.px * displayLineHeight,
+      })
+      : null;
 
     // The headline is the one flow with a share limit: it is the page's
     // hierarchy, but a block that is all headline holds no story.
@@ -1667,11 +1771,19 @@ export function composeBlock(input = {}) {
     // limit ended up taking half the block between them.
     const set = fitDisplayFlow(flow.text, {
       top: y,
+      baselineAt,
+      // The only hard floor is the block's own content edge. A band's BOX may
+      // legitimately begin above the previous band's box bottom - that box
+      // carries a full line's slack below its ink, and closing that slack is
+      // the whole point of spacing by baseline. What may not collide is the
+      // INK, and baselineAfter()'s clearance term is what guarantees that,
+      // from the two faces' own metrics.
+      floor: content.top,
       bottomLimit: Math.min(content.bottom, content.top + room * MAX_DISPLAY_SHARE, y + room * share),
       column: { start: content.left, end: content.right },
       images,
       fontPx: flow.px,
-      lineHeight: Math.max(1.1, lineHeight - 0.15),
+      lineHeight: displayLineHeight,
       family: flow.family,
       weight: flow.weight,
       maxLines: flow.maxLines,
@@ -1694,7 +1806,7 @@ export function composeBlock(input = {}) {
     });
 
     result.bands[flow.key] = {
-      top: y,
+      top: set.top,
       height: set.height,
       lines: set.lines,
       lineCount: set.lineCount,
@@ -1722,6 +1834,17 @@ export function composeBlock(input = {}) {
     }
 
     y = set.bottom;
+    if (set.lines.length) {
+
+      const last = set.lines[set.lines.length - 1];
+      lastBaseline = {
+        key: flow.key,
+        baseline: last.baseline,
+        fontPx: last.fontPx,
+        family: last.family,
+        weight: last.weight,
+      };
+    }
     previous = flow.key;
   }
 
@@ -1740,7 +1863,16 @@ export function composeBlock(input = {}) {
     });
   }
 
-  const bodyTop = previous ? y + gapBetween(previous, 'body', result.bands[previous].resolvedPx) : content.top;
+  // The copy starts where its FIRST BASELINE belongs, worked back to the top
+  // of its line box - the same rule the display flows above are placed by, so
+  // the sink under the display is one number on every block of the page rather
+  // than a function of how big that block's headline happened to be.
+  const bodyLineBox = bodyPx * lineHeight;
+  const bodyTop = lastBaseline
+    ? Math.max(y, baselineAfter(lastBaseline, {
+      key: 'body', fontPx: bodyPx, family: bodyFamily, weight: bodyWeight, lineBox: bodyLineBox,
+    }) - bodyPx * faceAscent(bodyFamily, bodyWeight))
+    : content.top;
   result.bodyTop = bodyTop;
 
   const gutter = num(input.gutterPx, Math.round(bodyPx * 0.9));
@@ -2002,7 +2134,7 @@ export function composeBlock(input = {}) {
   // conjunct words waste more at the line end than they save in width, so
   // which sample is the ceiling genuinely changes with the block.
   const poured = [charCapacity, pour(WIDEST_PER_CHAR), pour(NARROWEST_PER_CHAR)];
-  const charFloor = Math.min(...poured);
+  const charFloor = Math.floor(Math.min(...poured) * FLOOR_SAFETY);
   const charCeiling = Math.max(...poured);
   const codepointsPerCluster = CALIBRATION.length / clusters(CALIBRATION).length;
   result.capacity = {

@@ -171,6 +171,18 @@ function footerBand(geometry, page) {
   return geometry?.regions?.inside?.footer || FALLBACK_FOOTER;
 }
 
+// The band the editorial blocks live in, from the SAME page-region model the
+// footer above is read from. Exported because the canvas has to know where the
+// matter ENDS to decide whether a block is ruled off below it: a hairline under
+// the last story in a column is a rule against the page foot, which no printed
+// newspaper draws.
+const FALLBACK_CONTENT = { top: 56, bottom: 1008 };
+export function contentRegion(geometry, page) {
+  if (Number(page?.page_number) === 1) return geometry?.regions?.front?.content || FALLBACK_CONTENT;
+  if (Number(page?.page_number) === 2) return geometry?.regions?.insideImprint?.content || FALLBACK_CONTENT;
+  return geometry?.regions?.inside?.content || FALLBACK_CONTENT;
+}
+
 /**
  * The foot of the page: the printline every Indian newspaper carries by law,
  * the page number and the edition's date. Standing furniture - identical in

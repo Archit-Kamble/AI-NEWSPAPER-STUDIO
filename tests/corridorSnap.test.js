@@ -111,15 +111,37 @@ test('a snapped picture really does let the block set its copy', async () => {
   };
   const picture = (rect) => [{ ...rect, shape: 'rect', rotation: 0, stand_off_px: 6 }];
 
+  // The picture that reproduces the fault, DERIVED from this block rather than
+  // remembered as two pixel numbers. The original fixture carried block
+  // 300202's real placement (66, 71, 175x190), and it stopped reproducing the
+  // fault the day the sink under the display type was corrected and the block
+  // gained ten pixels of copy depth - one line then fitted above the picture
+  // and the test was silently exercising nothing. Where the copy starts is not
+  // a constant of a block; a fixture that assumes it is tests last week's
+  // typography.
+  //
+  // Same fault, stated as what it IS: a picture with a dead corridor on both
+  // sides, tall enough that neither the strip above it nor the strip below is
+  // a whole line deep.
+  const bare = adapter.composeSection({ ...section, images: [] }, {});
+  const band = bare.typography.bodyPx * bare.typography.lineHeight;
+  const standOff = 6;
+  const rect = {
+    x: 66,
+    y: Math.round(bare.bodyTop + band * 0.6),
+    width: 175,
+    height: Math.round(bare.content.bottom - band - standOff - (bare.bodyTop + band * 0.6)) + 4,
+  };
+
   const before = adapter.composeSection(
-    { ...section, images: picture({ x_px: 66, y_px: 71, width_px: 175, height_px: 190 }) }, {});
+    { ...section, images: picture({ x_px: rect.x, y_px: rect.y, width_px: rect.width, height_px: rect.height }) }, {});
   assert.ok(before.warnings.some((w) => w.code === 'NO_LEGAL_MEASURE'),
     'the fixture must be the real fault: a picture leaving no legal column');
   assert.equal(before.bodyLines.length, 0, 'and it really sets nothing');
 
-  const fixed = snap({ x: 66, y: 71, width: 175, height: 190 },
+  const fixed = snap(rect,
     { contentLeft: before.content.left, contentRight: before.content.right,
-      standOffPx: 6, minCorridorPx: 6 * before.typography.bodyPx, expectsCopy: true });
+      standOffPx: standOff, minCorridorPx: 6 * before.typography.bodyPx, expectsCopy: true });
   const after = adapter.composeSection(
     { ...section, images: picture({ x_px: fixed.x, y_px: fixed.y, width_px: fixed.width, height_px: fixed.height }) }, {});
 

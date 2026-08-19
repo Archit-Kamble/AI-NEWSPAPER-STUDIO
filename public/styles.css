@@ -3865,17 +3865,38 @@ body.print-view .newspaper-canvas {
    them a dense page reads as one grey mass. The rules are drawn in print view
    only - in the editing view the block outlines already do that job, and two
    sets of lines at once would be noise. */
+/* ---------------------------------------------------------------- rules ---
+   The column rules, drawn by the page rather than by the blocks - see
+   column-rules.js for why that is the only place they can be correct (a block
+   is `overflow: hidden`, so a rule offset into the gutter was clipped away
+   entirely, and a rule on a block's own edge is not in the gutter at all).
+
+   Ink, not chrome: one weight, one colour, the same on both axes. The previous
+   pair - a #c9c9c9 vertical border and a #111 horizontal one - were two
+   different inks, and a newspaper has one. Grey screens to a broken dotted
+   line on newsprint, or to nothing.
+
+   Shown while editing as well as in print view. A desk judging whether the
+   page reads as a newspaper has to see the thing that makes it read as one;
+   it is toned back rather than hidden, because the editor's own outlines are
+   louder than any rule and the two must not compete. */
+.page-rules {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+.page-rules i {
+  position: absolute;
+  background: #b4b4b4;
+}
+body.print-view .page-rules i {
+  background: #111;
+}
 body.print-view .newspaper-section.block-article,
 body.print-view .newspaper-section.block-briefs,
 body.print-view .newspaper-section.block-photo {
-  border-right: 1px solid #c9c9c9;
-  border-bottom: 1px solid #111;
-  padding: 5px 8px 7px 6px;
-}
-/* A block that runs to the right edge of the matter has nothing to be ruled
-   off from. */
-body.print-view .newspaper-section.at-right-edge {
-  border-right: none;
+  padding: 0;
 }
 
 /* The page foot: the printline the law requires, plus the paper, date and page

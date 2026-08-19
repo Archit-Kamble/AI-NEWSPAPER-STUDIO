@@ -375,24 +375,23 @@ test('a picture that would leave the block unable to set a line is placed legall
     // would leave 15px above and 15px below, and one line of this type needs
     // 25px. A full-measure picture goes at the top of the copy or the foot.
     //
-    // Asked of the COMPOSITION rather than of two hand-written pixel numbers.
-    // Where the copy starts is not a constant of this block - it moves with
-    // whatever the display type actually does, and a headline set larger to
-    // fill its measure (compose.js's HEADLINE_FILL_TARGET) moves it by 12px
-    // on this very block. A test that hard-codes the old figure is testing
-    // last week's typography, not the rule.
-    const bare = adapter.composeSection({ ...rows[0], images: [] }, {});
-    const top = Math.abs(Number(picture.y_px) - bare.bodyTop) <= 1;
-    const foot = Math.abs((Number(picture.y_px) + Number(picture.height_px)) - bare.content.bottom) <= 1;
-    assert.ok(top || foot,
-      `a full-measure picture must go to the top of the copy (${bare.bodyTop.toFixed(1)}) or the foot `
-      + `(${bare.content.bottom}), not float at ${picture.y_px}`);
-
-    // And the block really can set its copy again.
+    // Asked of the COMPOSITION rather than of two hand-written pixel numbers,
+    // and of the SAME composition the service snapped against - the one with
+    // this picture in it. Where the copy starts is not a constant of this
+    // block: it moves with the display type, and the display type moves with
+    // the picture. A test that reads it off a picture-free composition, or
+    // off a hard-coded figure, is testing a different block.
     const composed = adapter.composeSection({ ...rows[0], images: [{
       x_px: picture.x_px, y_px: picture.y_px, width_px: picture.width_px, height_px: picture.height_px,
       shape: 'rect', rotation: 0, stand_off_px: picture.stand_off_px,
     }] }, {});
+    const top = Math.abs(Number(picture.y_px) - composed.bodyTop) <= 1;
+    const foot = Math.abs((Number(picture.y_px) + Number(picture.height_px)) - composed.content.bottom) <= 1;
+    assert.ok(top || foot,
+      `a full-measure picture must go to the top of the copy (${composed.bodyTop.toFixed(1)}) or the foot `
+      + `(${composed.content.bottom}), not float at ${picture.y_px}`);
+
+    // And the block really can set its copy again.
     assert.ok(!composed.warnings.some((w) => w.code === 'NO_LEGAL_MEASURE'),
       'the placement the service chose must be printable by the engine\'s own reckoning');
   } finally {

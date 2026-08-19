@@ -92,7 +92,7 @@ A desk screenshot of a 190×264 lead showed roughly a third of the block standin
 
 | | was | is | why |
 |---|---|---|---|
-| `margin_px` | 12 (= **6 mm** at 2 px/mm) | **4** | A newspaper separates two stories by a ~4 mm gutter, **shared** — 2 mm each side. 12 px took 24 of 190 px of measure and 24 of 264 px of depth before a word was set. |
+| `margin_px` | 12 (= **6 mm** at 2 px/mm) | **1** | The block's inset is not the gutter and never was — see "The gutter is the page's, not the block's" below. |
 | `paragraph_spacing_px` | 8 (a blank line) | **0 + a 1 em first-line indent** | No printed newspaper spends a whole row of a column on a blank line. Measured: 0.7 of 5.83 body lines, 12% of the block, standing empty. |
 | `text_align` | `left` | **`justify`** | A narrow measure with a ragged right reads as unfinished against a column rule. |
 | deck length | `min(140, cols × 2)` | **measured, one line** | `cols` is the **body's** characters per line, and a deck is not set in body type — so it asked for two body lines' worth of characters in larger type: **three deck lines, 18% of the block**, which is the "second headline" the desk reported. |
@@ -104,6 +104,34 @@ Together on that block: the story's room went from 137 px / 5.83 lines to **184 
 **The paragraph indent is set in two places on purpose, and they are one rule.** `compose.js`'s `firstLineIndentPx` puts it in the exact geometry (so the composed line's own `x` carries it); `.section-body p + p` in `styles.css` puts it in the canvas's CSS markup. Both, or the canvas and the composed page mark a paragraph differently — the `object-fit: cover` vs `contain` drift, again. The opening paragraph is never indented; that is a compositor's rule, not a preference.
 
 The migration is in `schema.sql` beside the columns, and its backfill is **guarded**: it moves only rows still carrying the exact old default, so a value a desk actually chose is never overwritten. `schema.sql` is not applied at boot — it has to be run.
+
+### The gutter is the PAGE's, not the block's
+
+The row above used to read `margin_px` **4** — "a ~4 mm gutter, shared, 2 mm each
+side" — and the destination was right while the arithmetic was wrong, because
+**two blocks do not touch**. The page grid already leaves 3 mm between them
+(`geometry.js`, `gridGutterMm`) and the templates leave 4 mm above and below, so
+the block's own inset was added to a gutter that already existed. Measured across
+every neighbouring pair on a real front page:
+
+| | grid | + inset | printed on the customer's own page |
+|---|---|---|---|
+| across | 3 mm | **7 mm** | 3.8 mm |
+| down | 4 mm | **8 mm** | ~5 mm |
+
+A 7 mm gutter is what makes a made-up page read as a web layout — the columns
+stop being columns and become panels floating on white. The inset is therefore
+not the gutter and is not asked to be one: it is the hair of air that keeps type
+off its own frame's edge, **0.5 mm (1 px)**, the smallest step this page has.
+Across → 4 mm, down → 5 mm, which is the printed page.
+
+It can only ever GIVE a block room, so nothing can overset on it: swept over all
+4603 sections carrying copy, `BODY_OVERSET` went **15 → 13**. `UNDERFILLED` rises
+(3611 → 3666) and that is the honest reading — the same words in a wider measure
+fill a smaller share of it, and the writer fills the rest.
+
+A boxed block is unchanged in kind: `BOX_INSET_PX` is added on top of this
+(`section-adapter.js`), so its type still sets ~3 mm inside its own rule.
 
 ### How the copy is SET — the compositor's own work
 

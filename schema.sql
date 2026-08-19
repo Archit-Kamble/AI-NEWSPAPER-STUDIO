@@ -204,6 +204,38 @@ UPDATE page_sections SET margin_px = 4 WHERE margin_px = 12;
 UPDATE page_sections SET paragraph_spacing_px = 0 WHERE paragraph_spacing_px = 8;
 UPDATE page_sections SET text_align = 'justify' WHERE text_align = 'left';
 
+-- ...and the gutter was then counted TWICE.
+--
+-- The note above is right about the destination and wrong about the arithmetic,
+-- and the error is visible on every page: it reasoned "a newspaper separates
+-- two stories by about 4 mm, shared, so 2 mm each side" as though two blocks
+-- touched. They do not. The page grid (src/layout/geometry.js, gridGutterMm 3)
+-- already leaves 3 mm between one block and the next, and the templates leave
+-- 4 mm above and below. The block's own inset is added to that, so the real
+-- distance from the last character of one story to the first of the next was
+--
+--   horizontal: 2 mm + 3 mm + 2 mm = 7 mm   (measured on every pair, page 1)
+--   vertical:   2 mm + 4 mm + 2 mm = 8 mm
+--
+-- against the ~4 mm the note was aiming for and the 3.8 mm measured off the
+-- customer's own printed page. A 7 mm gutter is what makes a made-up page read
+-- as a web layout: the columns stop being columns and become separate panels
+-- floating on white.
+--
+-- So the inset stops trying to BE the gutter and becomes what it actually is -
+-- the hair of air that keeps type off its own frame's edge. 0.5 mm, which at
+-- 2 px/mm is the smallest step this page has:
+--
+--   horizontal: 0.5 + 3 + 0.5 = 4 mm
+--   vertical:   0.5 + 4 + 0.5 = 5 mm   (a touch more, as a printed page has)
+--
+-- It can only give a block room, never take it, so nothing can overset on it.
+-- A boxed block is unaffected in kind: it adds BOX_INSET_PX on top of this
+-- (public/editor/compose/section-adapter.js), so its type still sets ~3 mm
+-- inside its rule, which is what a printed panel does.
+ALTER TABLE page_sections ALTER COLUMN margin_px SET DEFAULT 1;
+UPDATE page_sections SET margin_px = 1 WHERE margin_px = 4;
+
 CREATE TABLE IF NOT EXISTS media_assets (
   id SERIAL PRIMARY KEY,
   original_filename VARCHAR(500) NOT NULL,

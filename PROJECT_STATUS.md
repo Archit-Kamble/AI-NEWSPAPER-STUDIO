@@ -4131,3 +4131,53 @@ for free.
 Sweep, 11 813 sections, no throws: `NO_LEGAL_MEASURE` 0. 829 tests, 55/55 on the
 controls net, 208/211 on the workspace net (the three are the AI-provider
 assertions belonging to uncommitted provider work in the tree).
+
+### 36. The gutter was counted twice (2026-08-19)
+
+The desk's report was *"we are leaving margin in news blocks and padding for
+news block also thats why it look having too much space in between."* It is
+exactly right, and the cause is one line of arithmetic in §28.
+
+That entry set `margin_px` to 4 px reasoning "a newspaper separates two stories
+by a ~4 mm gutter, **shared** — 2 mm each side". The destination is correct.
+The arithmetic assumed **two blocks touch**, and they never have: the page grid
+leaves 3 mm between them (`geometry.js`, `gridGutterMm: 3`) and the templates
+leave 4 mm above and below. The block's own inset was added to a gutter that
+already existed. Measured over every neighbouring pair on a real front page
+(edition 2099, page 1 — 12 horizontal pairs, 14 vertical):
+
+| | page grid | block inset, both sides | type to type | printed reference |
+|---|---|---|---|---|
+| across | 3 mm | 2 + 2 | **7 mm** | 3.8 mm |
+| down | 4 mm | 2 + 2 | **8 mm** | ~5 mm |
+
+The reference is the customer's own printed page (`1787132000.jpg`): 1920 px
+across 330 mm, five columns of 358 px separated by 22 px — 3.8 mm, and there are
+no column rules on it at all.
+
+A 7 mm gutter is what makes a made-up page read as a web layout rather than a
+newspaper: the columns stop reading as columns and become panels floating on
+white. So the inset stops trying to BE the gutter — the page owns that — and
+becomes what it actually is: the hair of air that keeps type off its own frame's
+edge. **0.5 mm, 1 px**, the smallest step a 2 px/mm page has. Across → 4 mm,
+down → 5 mm.
+
+It can only ever give a block room, so nothing can overset on it. Composed both
+ways across all 4603 sections carrying copy:
+
+| | at 2 mm | at 0.5 mm |
+|---|---|---|
+| `BODY_OVERSET` | 15 | **13** |
+| `FITS` | 977 | 924 |
+| `UNDERFILLED` | 3611 | 3666 |
+
+`UNDERFILLED` rising is the honest reading, not a regression: the same words in
+a wider measure fill a smaller share of it, and `isAcceptablyFilled()` is right
+to say so — the writer fills the rest.
+
+Boxed blocks are unchanged in kind. `BOX_INSET_PX` is added on top of this
+(§35), so a boxed brief still sets ~3 mm inside its own rule.
+
+Migration in `schema.sql` beside the columns, guarded in the usual way — only
+rows still carrying the exact old default move (11 873 of 11 873; no desk had
+overridden it). 829 tests.

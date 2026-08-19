@@ -1666,11 +1666,22 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
         { section_key: 'a', headline: 'h', body: '' },
         { section_key: 'b', headline: 'h', body: 'written' },
         { section_key: 'c', headline: '', body: '' },
-      ] });
-      return { concurrency: m.CONCURRENCY, ready: ready.map((r) => r.sectionKey) };
+      ] }, { place: 'सातारा' });
+      return {
+        concurrency: m.CONCURRENCY,
+        ready: ready.map((r) => r.sectionKey),
+        seeds: ready.map((r) => r.seed),
+        fromToday: ready.map((r) => r.fromToday),
+      };
     });
     say(bulk.concurrency >= 2 && bulk.concurrency <= 3, 'bulk generation runs 2-3 at a time', String(bulk.concurrency));
-    say(bulk.ready.length === 1 && bulk.ready[0] === 'a', 'and only writes a block with a headline and no copy');
+    say(bulk.ready.join(',') === 'a,c', 'every empty block is written; copy already there is never touched', bulk.ready.join(','));
+    // A block with no headline is briefed with today's news for this paper's
+    // own ground, and that seed is what makes information/intent.js classify
+    // it `current_news` - so write() verifies real sources before spending a
+    // call, or refuses. The model is never the source of a current event.
+    say(bulk.seeds[1] === 'सातारा आजच्या ताज्या बातम्या' && bulk.fromToday[1] === true,
+      'and one with no headline is briefed from today, not from nothing', bulk.seeds[1]);
   }
 
   // ------------------------------------------------------- a Smart Card ---

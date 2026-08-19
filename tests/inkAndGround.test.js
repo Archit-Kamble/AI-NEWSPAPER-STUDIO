@@ -161,3 +161,54 @@ test('an explicit count is honoured exactly, including one', async () => {
   // The view wins over the row, like every other field this adapter picks.
   assert.equal(adapter.measureColumns({ ...wide, column_count: 1 }, { columnCount: 2 }, 268), 2);
 });
+
+// ------------------------------------- a block without a headline or a deck ---
+//
+// A block is not always a story with a headline over it: a sidebar, a box-out,
+// a second leg under a headline that is already set. Both default to true, so
+// nothing that does not ask changes at all.
+
+test('asking for no headline changes what the block is MEASURED as, not just what is hidden', async () => {
+  const storyWriter = require('../src/services/storyWriter.service');
+  const section = {
+    id: 1, section_key: 'lead', x_px: 20, y_px: 200, width_px: 268, height_px: 300,
+    block_type: 'article', margin_px: 1, line_height: 1.45, column_count: null,
+    headline: '', subheading: '', body: '', headline_font_px: 26, subheading_font_px: 14,
+    body_font_px: 12, text_align: 'justify', font_family: 'theme', font_weight: 400,
+    paragraph_spacing_px: 0, letter_spacing_px: 0, border_style: 'none',
+  };
+
+  const withDisplay = await storyWriter.planningFit(section, []);
+  const noHeadline = await storyWriter.planningFit(section, [], { writeHeadline: false });
+  const bare = await storyWriter.planningFit(section, [], { writeHeadline: false, writeSubheading: false });
+
+  // Reserving rows for display type nobody will ever set is the mirror image
+  // of the fault planningFit() was written to fix, and costs the same way: the
+  // model is asked for a fraction of what the block holds and it prints half
+  // empty.
+  assert.ok(noHeadline.bodyCharBudget > withDisplay.bodyCharBudget,
+    `no headline must leave more room (${withDisplay.bodyCharBudget} -> ${noHeadline.bodyCharBudget})`);
+  assert.ok(bare.bodyCharBudget > noHeadline.bodyCharBudget,
+    `and no deck more again (${noHeadline.bodyCharBudget} -> ${bare.bodyCharBudget})`);
+});
+
+test('the brief says which parts to write, and the length rules follow', async () => {
+  const storyWriter = require('../src/services/storyWriter.service');
+  const fit = { cols: 20, bodyCharBudget: 400, guaranteedChars: 350, reservoirChars: 800, headlineChars: 40, deckChars: 60 };
+  const section = { section_key: 'lead', headline_style: 'plain' };
+  const args = { seed: 'शहरातील पाणीपुरवठा', notes: '', fit, section, language: 'Marathi', isLead: true };
+
+  const ordinary = storyWriter.briefFor(args);
+  assert.match(ordinary, /The headline must be at most 40 characters/);
+  assert.match(ordinary, /The subheading is REQUIRED/);
+
+  const bare = storyWriter.briefFor({ ...args, writeHeadline: false, writeSubheading: false });
+  assert.match(bare, /prints NO HEADLINE/);
+  assert.match(bare, /prints NO SUBHEADING/);
+  assert.doesNotMatch(bare, /The subheading is REQUIRED/);
+  // The schema still requires both fields - a model told to omit a key answers
+  // less reliably than one told to fill it - so the brief asks for them and
+  // write() drops what the desk did not want. That is also the only way the
+  // drop is guaranteed rather than hoped for.
+  assert.match(bare, /for the desk's reference only/);
+});

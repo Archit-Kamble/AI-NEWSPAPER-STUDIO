@@ -318,10 +318,13 @@ test('source metadata never reaches the printed headline, subheading or body', a
   assert.doesNotMatch(copy, /trusted-wire\.example\.com/i);
   assert.doesNotMatch(copy, /Trusted Wire/i);
   assert.doesNotMatch(copy, /TRUSTED_NEWS/);
-  // The proposal object itself has no source-shaped fields - only
-  // headline/subheading/body. Source data lives exclusively at
-  // `result.retrieval`, a sibling of `proposal`, never inside it.
-  assert.deepEqual(Object.keys(result.proposal).sort(), ['body', 'headline', 'subheading']);
+  // The proposal object itself has no source-shaped fields. `author` is the
+  // paper's own byline (text-flow.js's DEFAULT_BYLINE) or the reporter already
+  // named on the block - furniture, never the model's to write, and never a
+  // source. Source data lives exclusively at `result.retrieval`, a sibling of
+  // `proposal`, never inside it.
+  assert.deepEqual(Object.keys(result.proposal).sort(), ['author', 'body', 'headline', 'subheading']);
+  assert.doesNotMatch(result.proposal.author, /trusted-wire|Trusted Wire|TRUSTED_NEWS/i);
 });
 
 // -------------------------------------------------------- 2/3/4. refusal, explicitly ---

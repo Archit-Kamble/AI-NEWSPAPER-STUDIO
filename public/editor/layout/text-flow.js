@@ -47,6 +47,20 @@ import "./caption-geometry.js";
 export const MIN_LINE_HEIGHT = 1.45;
 export const { PLACED_CAPTION_METRICS, captionBox } = globalThis.SahasCaptionGeometry;
 
+// The paper's own byline, used when a story has no reporter to name.
+//
+// Every newspaper has one and uses it constantly - agency copy, a desk
+// rewrite, a filler - and this paper's is its own name. A generic "वार्ताहर"
+// (correspondent) says less than that and is what the desk asked to be rid of.
+//
+// It is a DEFAULT REPORTER, deliberately, and not a rule inside datelineText()
+// below: it is written onto the block's own `reporter_name` when copy is
+// written into it, so it is a value the desk can see in Story details and
+// change or clear. A block that should carry no byline at all - a caption
+// panel, a filler - is still a block with an empty reporter, and still prints
+// nothing. A rule here could not have said that.
+export const DEFAULT_BYLINE = 'साहस वार्ता';
+
 // Printed by both normal and flowed story renderers. This is SAHAS furniture,
 // not AI-authored copy, so it has its own capacity accounting.
 export function datelineText(view = {}) {

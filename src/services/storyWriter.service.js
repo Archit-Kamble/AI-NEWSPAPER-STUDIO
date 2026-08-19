@@ -246,8 +246,20 @@ const {
 // for more than a single response can carry.
 const RESERVOIR_CAP_CHARS = 6000;
 
-async function planningFit(section, images) {
+async function planningFit(section, images, { writeHeadline = true, writeSubheading = true } = {}) {
   const cols = (await measure(section, images)).cols || 1;
+
+  // A block the desk asked for WITHOUT a headline, or without a deck, has that
+  // much more room for copy - and the reservoir has to be sized against the
+  // block that will actually exist. Reserving rows for display type nobody
+  // will ever set is the mirror image of the fault planningFit() was written
+  // to fix, and it costs the same way: the model is asked for a fraction of
+  // what the block can hold and the block prints half empty.
+  const displayed = (candidate) => ({
+    ...candidate,
+    headline: writeHeadline ? candidate.headline : '',
+    subheading: writeSubheading ? candidate.subheading : '',
+  });
 
   // The block with the SHORTEST display type the brief permits - a brief
   // headline and a deck at the bottom of its stated range. Nothing legal can
@@ -255,7 +267,7 @@ async function planningFit(section, images) {
   // the reservoir from a block with NO headline at all instead (the tempting
   // upper bound) asked for up to 7x what the finished block could hold,
   // measured across 96 real block geometries.
-  const open = await measure(section, images, bestCaseCandidate(cols));
+  const open = await measure(section, images, displayed(bestCaseCandidate(cols)));
 
   // The safety bound: the same block with the longest headline and deck the
   // brief permits. Kept because "has this block ANY room for copy" and "how
@@ -267,7 +279,7 @@ async function planningFit(section, images) {
   let bound = null;
   for (const candidate of reservationCandidates(cols)) {
     // eslint-disable-next-line no-await-in-loop
-    const fit = await measure(section, images, candidate);
+    const fit = await measure(section, images, displayed(candidate));
     if (!bound || fit.bodyCharBudget < bound.bodyCharBudget) bound = fit;
   }
   bound = bound || open;
@@ -342,7 +354,10 @@ function verifiedContextBlock(verifiedContext) {
  * Written as instructions to a sub-editor rather than as a template, because
  * that is what produces newspaper copy instead of an essay.
  */
-function briefFor({ seed, notes, fit, section, language, isLead, verifiedContext, accentStyle }) {
+function briefFor({
+  seed, notes, fit, section, language, isLead, verifiedContext, accentStyle,
+  writeHeadline = true, writeSubheading = true,
+}) {
   const languageName = LANGUAGE_NAMES[language] || LANGUAGE_NAMES.Marathi;
   // Measured in the headline's and the deck's OWN type where a composition
   // was available (planningFit), and only estimated from the body grid when
@@ -376,11 +391,24 @@ function briefFor({ seed, notes, fit, section, language, isLead, verifiedContext
     '    complete story. Keep paragraphs short.',
     '  * Never repeat yourself, and never invent a fact to make it longer.',
     '    Copy that runs out of real material stops; it does not stretch.',
-    `  * The headline must be at most ${headlineChars} characters.`,
-    `  * The subheading is REQUIRED, and it is ONE LINE: ${Math.round(deckChars * 0.6)} to ${deckChars}`,
-    '    characters that carry the story forward rather than repeating the headline.',
-    '    That is a measured line of this block, in the deck\'s own type - longer and it',
-    '    wraps into a second headline and eats the story\'s room. Never empty.',
+    writeHeadline
+      ? `  * The headline must be at most ${headlineChars} characters.`
+      : '  * This block prints NO HEADLINE. Fill the headline field with a few words'
+        + ' for the desk\'s reference only - it will not be printed - and write the'
+        + ' body so it stands on its own without one, opening with what the story is.',
+    writeSubheading
+      ? `  * The subheading is REQUIRED, and it is ONE LINE: ${Math.round(deckChars * 0.6)} to ${deckChars}`
+      : '  * This block prints NO SUBHEADING. Fill the field for reference only; it'
+        + ' will not be printed.',
+    writeSubheading
+      ? '    characters that carry the story forward rather than repeating the headline.'
+      : '',
+    writeSubheading
+      ? '    That is a measured line of this block, in the deck\'s own type - longer and it'
+      : '',
+    writeSubheading
+      ? '    wraps into a second headline and eats the story\'s room. Never empty.'
+      : '',
     '',
     'HOW TO WRITE IT:',
     `  * ${isLead ? 'This is a lead story: open with the most important fact.' : 'Open with the most important fact.'}`,
@@ -502,7 +530,14 @@ function resizeBriefFor({ proposal, used, budget, language, verifiedContext }) {
  *
  * Returns `{ proposal, fit, provider, tier }` or `{ error }`. Never writes.
  */
-async function write(pageId, sectionKey, { seed, notes, tier, language } = {}) {
+async function write(pageId, sectionKey, {
+  seed, notes, tier, language,
+  // What the desk asked the model to WRITE. A block is not always a story with
+  // a headline over it: a sidebar, a box-out, a run-on leg under a headline
+  // that is already set, a caption panel. Both default to true, so nothing that
+  // does not ask changes at all.
+  writeHeadline = true, writeSubheading = true,
+} = {}) {
   const clean = String(seed || '').trim();
   if (!clean) return { error: 'Say what the story is about first — a few words is enough.' };
   if (!ai.isConfigured()) {
@@ -535,7 +570,7 @@ async function write(pageId, sectionKey, { seed, notes, tier, language } = {}) {
 
   // Planned with the headline and deck reserved, so the body is asked for the
   // room it will actually have rather than the room an empty block has.
-  const fit = await planningFit(section, images);
+  const fit = await planningFit(section, images, { writeHeadline, writeSubheading });
   if (!fit.guaranteedChars) {
     return { error: 'This block has no room for copy — it is filled by its pictures, or it is too small.' };
   }
@@ -551,6 +586,8 @@ async function write(pageId, sectionKey, { seed, notes, tier, language } = {}) {
       isLead: /lead/i.test(sectionKey),
       verifiedContext,
       accentStyle,
+      writeHeadline,
+      writeSubheading,
     }),
     STORY_SCHEMA,
     { tier },
@@ -558,10 +595,22 @@ async function write(pageId, sectionKey, { seed, notes, tier, language } = {}) {
   if (result.error) return { error: result.error, unconfigured: result.unconfigured };
 
   const { plainText } = await textFlow().then(() => require('../layout/plain-text'));
+  // The schema still REQUIRES both fields - a model told to omit a key answers
+  // less reliably than one told to fill it, and this schema is what makes the
+  // answer parseable at all. So the brief asks for them and this drops what
+  // the desk did not want, which is also the only way the drop can be
+  // guaranteed rather than hoped for.
   const proposal = {
-    headline: sanitiseAccentMarks(String(result.data.headline || '').trim(), accentStyle),
-    subheading: String(result.data.subheading || '').trim(),
+    headline: writeHeadline ? sanitiseAccentMarks(String(result.data.headline || '').trim(), accentStyle) : '',
+    subheading: writeSubheading ? String(result.data.subheading || '').trim() : '',
     body: String(result.data.body || '').trim(),
+    // The byline, which is NOT the model's to write - it is the paper signing
+    // its own copy. A block that already names a reporter keeps that reporter;
+    // one that does not gets the paper's own name rather than nothing at all
+    // or a generic "correspondent". Part of the proposal, so it lands in the
+    // draft the desk reviews and can be changed or cleared there like any
+    // other field.
+    author: String(section.reporter_name || '').trim() || (await textFlow()).DEFAULT_BYLINE,
   };
 
   // Now measure against the headline and deck it actually wrote - the real

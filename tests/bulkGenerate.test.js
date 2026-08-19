@@ -18,7 +18,7 @@ const page = (sections) => ({ id: 1, sections });
 
 // ------------------------------------------------- what may be written at all ---
 
-test('only a block with a headline and no copy is written', () => {
+test('an empty block is written - from its headline, or from today\'s news when it has none', () => {
   const { ready, skipped } = bulk.candidatesOn(page([
     { section_key: 'lead', headline: 'शेतकऱ्यांसाठी योजना', body: '' },
     { section_key: 'second', headline: 'पावसाची हजेरी', body: 'आधीच लिहिलेला मजकूर' },
@@ -30,8 +30,19 @@ test('only a block with a headline and no copy is written', () => {
     { section_key: 'puzzle', headline: 'सुडोकू', body: '', smart_card_key: 'sudoku' },
   ]));
 
-  assert.deepEqual(ready.map((b) => b.sectionKey), ['lead'], 'exactly one block qualifies');
-  assert.equal(ready[0].seed, 'शेतकऱ्यांसाठी योजना', 'the headline is the brief');
+  assert.deepEqual(ready.map((b) => b.sectionKey), ['lead', 'third'], 'the two writable blocks qualify');
+  assert.equal(ready[0].seed, 'शेतकऱ्यांसाठी योजना', 'the headline is the brief when there is one');
+  assert.equal(ready[0].fromToday, false);
+
+  // A block with NO headline used to be skipped, on the reasoning that a model
+  // asked to fill 800 characters from nothing invents all of them. That was
+  // true when it was written; it is not any more. The seed names a place and
+  // names today, which is what information/intent.js classifies as
+  // `current_news` - so write() fetches and verifies real sources BEFORE
+  // spending a call and refuses in Marathi if it cannot. The model is never
+  // the source of a current event.
+  assert.equal(ready[1].seed, 'महाराष्ट्र आजच्या ताज्या बातम्या');
+  assert.equal(ready[1].fromToday, true);
 
   const why = Object.fromEntries(skipped.map((s) => [s.sectionKey, s.why]));
   assert.match(why.second, /already written/, 'copy is never overwritten');
@@ -40,7 +51,22 @@ test('only a block with a headline and no copy is written', () => {
   assert.match(why['lead-pictures'], /photograph/);
   assert.match(why.rashi, /standing feature/);
   assert.match(why.puzzle, /standing feature/);
-  assert.match(why.third, /no headline/, 'a model asked to fill 800 characters from nothing invents them');
+  assert.equal(why.third, undefined, 'a block with no headline is no longer skipped');
+});
+
+test("a headline-less block is briefed with the paper's own ground, not a guess", () => {
+  const { ready } = bulk.candidatesOn(page([
+    { section_key: 'a', headline: '', body: '', location: 'सातारा' },
+    { section_key: 'b', headline: '', body: '', category: 'क्रीडा' },
+    { section_key: 'c', headline: '', body: '' },
+  ]), { place: 'सातारा' });
+
+  // The block's own location first, then what the layout said it is for, then
+  // the paper's place of publication - and every one of them names today, so
+  // intent.js reads it as a current event and retrieval runs.
+  assert.equal(ready[0].seed, 'सातारा आजच्या ताज्या बातम्या');
+  assert.equal(ready[1].seed, 'क्रीडा आजच्या ताज्या बातम्या');
+  assert.equal(ready[2].seed, 'सातारा आजच्या ताज्या बातम्या');
 });
 
 test("the desk's own notes ride along with the headline", () => {

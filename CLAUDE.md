@@ -672,6 +672,37 @@ A second copy of any of these is the failure mode this project has already been 
 
 **Whitespace is classified, not counted.** A ragged right end is how type is set and is never a hole; a gap a photograph made unusable was never counted as usable in the first place. `largestHoleLines` is the one number the desk and the writer act on, and `HOLE_LINES` (4) matches `storyWriter.service.js` deliberately.
 
+### The desk's own workflow: a byline, a part list, and the empty blocks
+
+**The paper signs its own copy.** `DEFAULT_BYLINE` (`text-flow.js`) is
+**साहस वार्ता**, and it is written onto the block's own `reporter_name` when copy
+is written into it — by the AI writer, and by `fill-edition-copy.js`. It is
+deliberately NOT a rule inside `datelineText()`: as a stored value the desk can
+see it in Story details and change or clear it, and a block that should carry no
+byline at all (a caption panel, a filler) is still a block with an empty
+reporter and still prints nothing. A rule could not have said that.
+
+**"Write a headline" / "Write a subheading" are part of the brief, not a
+display toggle.** Turning one off changes what the block is *measured* as
+(`planningFit`), because reserving rows for display type nobody will ever set is
+the mirror image of the fault `planningFit` was written to fix — the model is
+asked for a fraction of what the block holds and it prints half empty. The
+schema still **requires** both fields (a model told to omit a key answers less
+reliably than one told to fill it), so the brief asks for them and `write()`
+drops what the desk did not want, which is also the only way the drop is
+guaranteed rather than hoped for.
+
+**"Write empty blocks" now includes a block with no headline.** It used to skip
+one, on the reasoning that a model asked to fill 800 characters from nothing
+invents all of them. That was true when it was written and is not any more:
+`newsSeed()` briefs such a block with *today's news for the ground this paper
+covers* — the block's own location, else its category, else the paper's place of
+publication — and every seed names the day in Marathi, which is exactly what
+`information/intent.js` classifies as `current_news`. So `write()` fetches and
+verifies real sources **before spending a call** and returns a Marathi refusal if
+it cannot. An empty block is written from today's checked news or it is not
+written at all, and the desk is told which blocks came from the wire.
+
 ### Two blocks, one story — shift-click the second
 
 `jump.service.js`'s `carryOver()` has always taken an explicit

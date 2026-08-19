@@ -148,6 +148,16 @@ export function aiPanelMarkup(view) {
              placeholder="जंतरमंतर आंदोलन · Jantar Mantar protest · a few words is enough"
              value="">
       <button type="button" class="btn-submit" id="aiWriteStory">Write this block</button>
+      <!-- A block is not always a story with a headline over it: a sidebar, a
+           box-out, a second leg under a headline that is already set. Both on
+           by default, so the ordinary block is unchanged - and turning one off
+           does not merely hide the field, it changes what the block is
+           MEASURED as, so the copy is written for the room it will really
+           have (storyWriter.js's planningFit). -->
+      <div class="ai-parts">
+        <label class="toggle"><input type="checkbox" id="edAiWriteHeadline" checked> Write a headline</label>
+        <label class="toggle"><input type="checkbox" id="edAiWriteSubheading" checked> Write a subheading</label>
+      </div>
       <p class="ai-seed-note" id="edAiSeedNote">It is written to fit — the character grid says how much room this block has.</p>
     </div>
 
@@ -363,6 +373,8 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, g
             notes: document.getElementById("edAiPrompt")?.value || "",
             tier: getAiTier(),
             language: view?.language,
+            writeHeadline: document.getElementById("edAiWriteHeadline")?.checked !== false,
+            writeSubheading: document.getElementById("edAiWriteSubheading")?.checked !== false,
           }),
         },
       );

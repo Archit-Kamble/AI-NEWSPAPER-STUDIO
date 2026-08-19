@@ -4518,3 +4518,60 @@ refusal still works and still says what a sub-editor can do about it — a
 silently oversetting.
 
 840 tests.
+
+### 43. The desk's own workflow: a byline, a part list, the empty blocks (2026-08-19)
+
+Three asks, one group.
+
+**1. The paper signs its own copy.** *"rather वार्ताहर make sahas varta (in
+Marathi) as default reporter."* `DEFAULT_BYLINE` is **साहस वार्ता**, written onto
+the block's own `reporter_name` when copy is written into it — by the AI writer
+(as part of the proposal, so it lands in the draft the desk reviews) and by
+`fill-edition-copy.js`, whose three invented correspondent names are what the
+desk was reading off the page.
+
+It is deliberately **not** a rule inside `datelineText()`. That was built first
+and measured: as a rule it prepends a byline to every block with copy — 3532 of
+them — and, more to the point, leaves no way to say "this block carries no
+byline", which a caption panel or a filler needs. As a stored default it is a
+value the desk can see and change, and six existing tests that compose bare
+fixtures stayed true.
+
+**2. A block without a headline or a deck.** *"human Editor should have ability
+to ask ai news block without headling or subheading."* Two checkboxes in the AI
+panel, both on by default. Turning one off is not a display toggle — it changes
+what the block is **measured** as (`planningFit`), because reserving rows for
+display type nobody will ever set is the mirror image of the fault `planningFit`
+exists to fix, and costs the same way: the model is asked for a fraction of what
+the block holds and it prints half empty. Measured in
+`tests/inkAndGround.test.js`: budget rises with the headline dropped, and again
+with the deck.
+
+The schema still **requires** both fields — a model told to omit a key answers
+less reliably than one told to fill it, and this schema is what makes the answer
+parseable at all. So the brief asks for them, tells the model they will not be
+printed, and `write()` drops them. That is also the only way the drop is
+guaranteed rather than hoped for.
+
+**3. "Write empty blocks" writes the blocks with no headline too.** *"One big
+button on top: write all remaining empty blocks will write all empty blocks with
+today's relevant news across internet."* The button already existed; it skipped
+any block without a headline, on the reasoning that a model asked to fill 800
+characters from nothing invents all of them.
+
+That reasoning was right when it was written and is not any more, because
+Phase 8-10 built the layer that answers it. `newsSeed()` briefs such a block with
+today's news for the ground this paper covers — the block's own location, else
+its category, else the paper's place of publication — and every seed names the
+day in Marathi (`आजच्या ताज्या बातम्या`), which is precisely what
+`information/intent.js` classifies as `current_news`. Verified: all three seed
+shapes classify `current_news`; a plain headline still classifies `evergreen`.
+
+So `write()` fetches and verifies real sources **before spending an AI call** and
+returns a Marathi refusal if it cannot. Driven live with the toggles set and a
+district seed: the payload carried `writeHeadline: false`, the retrieval line
+read `○ No source configured` (no feeds are configured in this environment), and
+**no model call was made**. An empty block is written from today's checked news
+or it is not written at all.
+
+841 tests, 80/80 on the controls net.

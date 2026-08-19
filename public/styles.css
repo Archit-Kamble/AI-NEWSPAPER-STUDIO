@@ -4785,6 +4785,11 @@ body.print-view .page-imprint {
   z-index: 3;
 }
 
+/* "Write a headline" / "Write a subheading" - what the model is asked to
+   produce, not what the block is allowed to have. */
+.ai-parts { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 6px 0 0; }
+.ai-parts .toggle { display: inline-flex; align-items: center; gap: 6px; color: #55555f; font-size: .74rem; }
+
 /* The block's ground: five tints, chosen the same way an ink is - by pressing
    the one you want, not by mixing it. */
 .tint-swatches { display: flex; gap: 6px; }

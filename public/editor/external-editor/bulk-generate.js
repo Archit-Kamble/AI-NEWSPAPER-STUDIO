@@ -21,6 +21,24 @@
 export const CONCURRENCY = 2;
 
 /**
+ * The brief for a block nobody has written a headline for: today's news, for
+ * the ground this paper covers.
+ *
+ * Deliberately in Marathi and deliberately naming the day. Both matter:
+ * information/intent.js classifies a seed as `current_news` from words like
+ * "आज" and "ताज्या", and information/routing.js picks which feeds to ask from
+ * the place named in it. A seed that says neither would be classified
+ * `evergreen`, retrieval would never run, and the model would be writing a
+ * news story out of its own memory - the one thing that layer exists to stop.
+ */
+export function newsSeed(section, place = '') {
+  const ground = [section?.location, section?.category, place]
+    .map((part) => String(part || '').trim())
+    .find(Boolean) || 'महाराष्ट्र';
+  return `${ground} आजच्या ताज्या बातम्या`;
+}
+
+/**
  * The blocks on a page that can be written, and the seed each would be written
  * from.
  *
@@ -34,10 +52,17 @@ export const CONCURRENCY = 2;
  *   * a linked reporter story belongs to the reporter
  *   * a Smart Card block is not prose
  *   * an advert slot was sold, and a photo block wants a photograph
- *   * a block with no headline has nothing to write FROM, and a model asked to
- *     fill 800 characters from nothing invents all of them
+ *
+ * A block with NO headline used to be skipped too, on the reasoning that a
+ * model asked to fill 800 characters from nothing invents all of them. That
+ * reasoning was right when it was written and is not any more: a seed naming a
+ * place and today is classified `current_news` by information/intent.js, and
+ * `write()` fetches and verifies real sources BEFORE spending an AI call and
+ * returns a refusal in Marathi if it cannot. So an empty block is written from
+ * today's real news or it is not written at all - the model is never the source
+ * of a current event, which is the whole invariant that layer exists to hold.
  */
-export function candidatesOn(page) {
+export function candidatesOn(page, { place = '' } = {}) {
   const blocks = page?.sections || [];
   const out = { ready: [], skipped: [] };
 
@@ -51,15 +76,21 @@ export function candidatesOn(page) {
     if (section.feature_key || section.smart_card_key) { skip("a standing feature"); continue; }
     if (section.news_item_id) { skip("a reporter's story"); continue; }
     if (body) { skip("already written"); continue; }
-    if (!headline) { skip("no headline to write from"); continue; }
 
     out.ready.push({
       sectionKey: section.section_key,
-      // The headline IS the brief. Whatever the desk added in AI notes rides
-      // along as further instruction.
-      seed: headline,
+      // The headline IS the brief when there is one. When there is not, the
+      // brief is today's news for the ground this paper covers - the block's
+      // own location or category if the layout gave it one, else the paper's
+      // place of publication. Written in Marathi because that is the language
+      // the feeds are read in and the language intent.js's own "this is a
+      // current event" words are in (आज, ताज्या, बातम्या).
+      seed: headline || newsSeed(section, place),
       notes: String(section.ai_notes || "").trim(),
       language: section.language || "Marathi",
+      // So the desk can be told which blocks were written from the wire rather
+      // than from a headline somebody wrote.
+      fromToday: !headline,
     });
   }
 

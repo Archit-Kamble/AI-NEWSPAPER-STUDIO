@@ -88,7 +88,12 @@ const DECKS = [
 ];
 
 const LOCATIONS = ['सातारा', 'कऱ्हाड', 'वाई', 'फलटण', 'पाटण'];
-const REPORTERS = ['प्रतिनिधी', 'वार्ताहर', 'विशेष प्रतिनिधी'];
+// The paper signs its own filler copy, the same way the writer does
+// (text-flow.js's DEFAULT_BYLINE). The three invented correspondent names that
+// used to be here are what the desk was reading off the page and asked to be
+// rid of - and a fixture that shows a byline the product would never produce
+// is a fixture nobody can judge the page by.
+const REPORTERS = ['साहस वार्ता'];
 
 // A stable pick, so the same block gets the same copy on every run - two
 // screenshots of the same edition must be comparable.

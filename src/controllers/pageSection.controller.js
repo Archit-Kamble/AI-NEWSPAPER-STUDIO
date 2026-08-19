@@ -50,6 +50,11 @@ async function write(req, res) {
       notes: req.body?.notes,
       tier: req.body?.tier,
       language: req.body?.language,
+      // Only ever FALSE on request. An absent flag means the ordinary block -
+      // a story with a headline and a deck over it - so an older caller, and
+      // every server-side caller, behaves exactly as it did.
+      writeHeadline: req.body?.writeHeadline !== false,
+      writeSubheading: req.body?.writeSubheading !== false,
     },
   );
   if (result.error) return res.status(result.unconfigured ? 503 : 400).json(result);

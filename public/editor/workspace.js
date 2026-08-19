@@ -22,7 +22,7 @@ import { renderMiniMap, configure as configureCanvasView, applyTransform } from 
 import { refreshRulers } from "./canvas/ruler.js";
 import { setGuidesVisible } from "./canvas/page-guides.js";
 import { loadGeometry, findFreeRect, getGeometry } from "./canvas/grid.js";
-import { loadIdentity } from "./canvas/masthead.js";
+import { loadIdentity, getIdentity } from "./canvas/masthead.js";
 // The real advance widths of the publication faces. Every measurement in the
 // workspace - what fits, where a line breaks, how full a block is - is made
 // against these, so they are loaded before the first paint.
@@ -1452,14 +1452,18 @@ async function writeEmptyBlocks() {
   const page = store.getCurrentPage();
   if (!page) return;
 
-  const { ready, skipped } = candidatesOn(page);
+  // The paper's own ground, for the blocks that carry no headline to write
+  // from - they are briefed with today's news for this place instead, and the
+  // information layer refuses rather than letting the model invent one.
+  const { ready, skipped } = candidatesOn(page, { place: getIdentity()?.placeOfPublication || "" });
   if (!ready.length) {
     return showNotice(
       skipped.length
-        ? `Nothing to write on this page. ${skipped.length} block${skipped.length === 1 ? " was" : "s were"} left alone — give a block a headline and no copy, and it becomes one to write.`
+        ? `Nothing to write on this page. ${skipped.length} block${skipped.length === 1 ? " was" : "s were"} left alone — an advert, a photograph, a standing feature, a reporter's story, or copy already written.`
         : "Nothing to write on this page.",
     );
   }
+  const fromToday = ready.filter((block) => block.fromToday).length;
 
   const button = document.getElementById("writeEmptyBtn");
   const label = button?.textContent;
@@ -1482,7 +1486,7 @@ async function writeEmptyBlocks() {
         }).then((response) => response.json().catch(() => ({ error: "The AI did not answer." }))),
     });
 
-    showBulkProposals(batch, skipped);
+    showBulkProposals(batch, skipped, { fromToday });
   } finally {
     if (button) { button.disabled = false; button.textContent = label; }
   }
@@ -1495,7 +1499,7 @@ async function writeEmptyBlocks() {
  * select the block, patch the draft, let autosave carry it - so a bulk run and
  * a single block end up in exactly the same place.
  */
-function showBulkProposals(batch, skipped) {
+function showBulkProposals(batch, skipped, { fromToday = 0 } = {}) {
   const rows = batch.results.map((result) => {
     if (result.error) {
       return `<li class="bulk-row is-error"><strong>${escapeHtml(result.sectionKey)}</strong>
@@ -1513,6 +1517,14 @@ function showBulkProposals(batch, skipped) {
     ? `<p class="muted ext-note">Left alone: ${skipped.map((s) => `${escapeHtml(s.sectionKey)} (${escapeHtml(s.why)})`).join(", ")}.</p>`
     : "";
 
+  // Said plainly, because a block written from the wire and a block written
+  // from a headline somebody typed are not the same kind of proposal - the
+  // first one's facts came from sources the desk can open (the AI panel's
+  // retrieval list), the second one's did not.
+  const todayNote = fromToday
+    ? `<p class="muted ext-note">${fromToday} block${fromToday === 1 ? "" : "s"} had no headline, so ${fromToday === 1 ? "it was" : "they were"} written from today's checked news for this edition's own ground. A block whose sources could not be verified is refused rather than invented — that refusal is what you will see in its row.</p>`
+    : "";
+
   // The same kind of panel over the workspace that "What's left" uses - never
   // another screen (VISION.md: everything happens inside the one workspace).
   document.getElementById("bulkPanel")?.remove();
@@ -1527,6 +1539,7 @@ function showBulkProposals(batch, skipped) {
     <p class="worklist-summary">Nothing has been saved. Accept a block and it lands in that block's
        draft, marked <strong>needs review</strong>, exactly as a single block does.</p>
     <ul class="bulk-list">${rows}</ul>
+    ${todayNote}
     ${skippedNote}
     <p class="ai-proposal-warn">The desk must check every fact before any of this is printed.</p>`;
   document.body.appendChild(panel);

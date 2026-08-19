@@ -95,10 +95,48 @@ export async function loadAiStatus() {
     if (!status) return null;
     aiStatus = status;
     if (Array.isArray(status.tiers) && status.tiers.length) AI_TIERS = status.tiers;
+    paintAiStatus();
     return status;
   } catch {
     return null;
   }
+}
+
+/**
+ * Puts the answer on screen when it arrives.
+ *
+ * workspace.js calls loadAiStatus() WITHOUT awaiting it and renders the panels
+ * on the next line, so the first paint always happens with `aiStatus` still
+ * null - and nothing re-rendered the panel afterwards. The desk was therefore
+ * shown "Checking which provider is configured…" for as long as they left the
+ * selection alone, on the one line whose whole job is to say who writes this
+ * paper's copy. Selecting a block happened to fix it, which is why it survived:
+ * the fault is invisible to anyone who clicks something.
+ *
+ * Awaiting the fetch before the first paint would fix it too, and would hold
+ * the whole editor behind a network call to say one sentence. So the line is
+ * repainted in place instead - and the effort dial with it, because whether
+ * the tiers mean anything is part of the same answer (a provider with no
+ * effort setting must not be offered three choices that cost the same).
+ */
+function paintAiStatus() {
+  const line = document.getElementById("edAiStatus");
+  if (line) line.textContent = aiStatusLine();
+
+  // Rebuilt rather than patched: the option list itself comes from the server
+  // when the server has one. getAiTier() reads the value by id at press time,
+  // so replacing the options cannot leave a stale handler behind - the
+  // #edSpaceGroup trap, avoided by not binding to this element at all.
+  const tier = document.getElementById("edAiTier");
+  if (!tier) return;
+  const chosen = tier.value;
+  const holder = document.createElement("div");
+  holder.innerHTML = tierSelectMarkup();
+  const fresh = holder.querySelector("select");
+  if (!fresh) return;
+  tier.title = fresh.title;
+  tier.innerHTML = fresh.innerHTML;
+  if ([...tier.options].some((option) => option.value === chosen)) tier.value = chosen;
 }
 
 export function getAiTier() {

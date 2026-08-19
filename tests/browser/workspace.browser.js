@@ -108,12 +108,24 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
 
   // ---------------------------------------------------------- the provider ---
   {
+    // WHICH provider writes this paper is configuration (.env), not a fact
+    // about the code - CLAUDE.md: "DEFAULT_PROVIDER is the only hard-coded
+    // provider name. Never name a provider anywhere else." This net named two,
+    // so the day the desk changed AI_PROVIDER it reported three failures
+    // against an app that was working perfectly. What has to be true is the
+    // invariant, not the vendor: somebody is configured, they are ready, there
+    // is an understudy behind them, and the panel's effort dial tells the truth
+    // about whether that provider has one.
     const status = await page.evaluate(() => fetch('/api/ai/status').then((r) => r.json()));
-    say(status.provider?.key === 'gemini', 'AI status names Gemini as the writer',
+    say(status.configured === true && status.provider?.ready === true,
+      'AI status names a configured, ready writer',
       `${status.provider?.key} (ready ${status.provider?.ready})`);
-    say((status.fallbacks || [])[0]?.key === 'sarvam', 'and Sarvam as the understudy',
-      (status.fallbacks || []).map((f) => f.key).join(','));
-    say(status.tiersMeaningful === true, 'the effort tiers mean something on it');
+    say((status.fallbacks || []).some((f) => f.ready && f.key !== status.provider?.key),
+      'and a ready understudy behind it',
+      (status.fallbacks || []).map((f) => `${f.key}:${f.ready ? 'ready' : 'no'}`).join(','));
+    say(typeof status.tiersMeaningful === 'boolean',
+      'and says whether the effort tiers mean anything on it',
+      String(status.tiersMeaningful));
     say(!JSON.stringify(status).match(/AIza|sk-|api[_-]?key/i), 'and no key reaches the browser');
   }
 

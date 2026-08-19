@@ -26,7 +26,8 @@ import { loadIdentity, getIdentity } from "./canvas/masthead.js";
 // The real advance widths of the publication faces. Every measurement in the
 // workspace - what fits, where a line breaks, how full a block is - is made
 // against these, so they are loaded before the first paint.
-import { ensureFontsLoaded } from "./compose/font-metrics.js";
+import { ensureFontsLoaded, fontsReady } from "./compose/font-metrics.js";
+import { composeSection } from "./compose/section-adapter.js";
 // Real Devanagari shaping (see compose/shaper.js). Awaited alongside the
 // fonts, before the first paint, for the same reason: a page composed from
 // summed hmtx advances and then repainted once real shaping loads is two
@@ -735,6 +736,16 @@ async function addBlock() {
   const width = Math.round(geometry.columnPx * 2 + geometry.gutterPx);
   const height = geometry.baselinePx * 24;
   const rect = findFreeRect(page.sections || [], width, height);
+  // Whether the page had room for it, said plainly. On a full page the block
+  // is still added - and cascaded clear of the last one so it can be picked up
+  // - but "Block added. Drag it where the page needs it." on a page with no
+  // room reads as though a space was found, and the desk goes looking for one.
+  const onTopOfSomething = (page.sections || []).some(
+    (s) => rect.x < Number(s.x_px) + Number(s.width_px)
+      && Number(s.x_px) < rect.x + rect.width
+      && rect.y < Number(s.y_px) + Number(s.height_px)
+      && Number(s.y_px) < rect.y + rect.height,
+  );
 
   const response = await fetch(`/api/pages/${page.id}/sections`, {
     method: "POST",
@@ -748,7 +759,9 @@ async function addBlock() {
   const added = updated.sections[updated.sections.length - 1];
   renderPageArea();
   if (added) selectSection(added.section_key);
-  showNotice("Block added. Drag it where the page needs it.");
+  showNotice(onTopOfSomething
+    ? "Block added, but this page has no free space — it is sitting over the blocks below it. Drag it where the page needs it, or make room first."
+    : "Block added. Drag it where the page needs it.");
 }
 
 async function deleteBlock(sectionKey) {
@@ -1619,10 +1632,29 @@ function renderSidePanels() {
     getBudget: () => {
       const section = store.getSelectedSection();
       const view = currentView();
-      if (!section || !view) return 0;
-      // The same character grid the Space panel and preflight use - never a
-      // second measurement that could quietly disagree with them.
-      return buildFlowMap(section, view, sectionImages.map(flowImageFromRow)).bodyCharBudget;
+      if (!section || !view) return null;
+      // The EXACT engine, because that is what the Space panel beside this
+      // counter reads. The comment that used to sit here said this was "the
+      // same character grid the Space panel and preflight use - never a second
+      // measurement that could quietly disagree with them", and it went stale
+      // the day the Space panel moved to composeSection(): the footer was then
+      // the second measurement. Measured on one real block, on one screen, at
+      // the same moment: the footer said "51 of 300 characters" while the panel
+      // a few pixels to its right said 147-336. Two numbers for one block is
+      // the drift this codebase has already been bitten by twice.
+      //
+      // A range, not a scalar, and that is settled - the same block holds
+      // 30-46% more or fewer characters depending only on what is written into
+      // it (CLAUDE.md, "The character budget is a range"). The grid survives as
+      // the fallback for the moment before the publication font is measurable,
+      // which is exactly what it is for.
+      if (fontsReady() && Number(section.width_px) > 0) {
+        const composed = composeSection({ ...section, images: sectionImages }, view);
+        const range = composed.capacity?.bodyCharRange;
+        if (range) return { min: range.min, max: range.max, exact: true };
+      }
+      const budget = buildFlowMap(section, view, sectionImages.map(flowImageFromRow)).bodyCharBudget;
+      return { min: budget, max: budget, exact: false };
     },
     // The small layout in the dock needs the whole page, not just this block.
     getPage: () => store.getCurrentPage(),

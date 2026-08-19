@@ -258,7 +258,7 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
         ${group("story", escapeHtml(blockKind(section.block_type).panel), `
           ${storySourceMarkup(view, story)}
           ${storyEditorMarkup(view, {
-            budget: callbacks.getBudget ? callbacks.getBudget() : 0,
+            budget: callbacks.getBudget ? callbacks.getBudget() : null,
             tools: `<button type="button" class="rt-btn rt-picture" id="cmpAddImage"
                        title="Put a picture on this block">▣ Picture</button>`,
             pictures: `

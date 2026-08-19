@@ -132,7 +132,31 @@ function alignButtonsMarkup(view, part) {
       title="Align ${a.label.toLowerCase()} — ${target.toLowerCase()}">${alignIcon(a.value)}</button>`).join("");
 }
 
-export function storyEditorMarkup(view, { budget = 0, tools = "", pictures = "" } = {}) {
+/**
+ * The counter under the story, in the unit the block is actually measured in.
+ *
+ * `budget` is a RANGE - {min, max} - because the same block holds 30-46% more
+ * or fewer characters depending only on what is written into it: Marathi hides
+ * zero-width vowel signs inside a cluster, so no single number can answer "how
+ * much fits" (CLAUDE.md, "The character budget is a range, not a scalar"). The
+ * Space panel a few pixels to the right has always said so; this line used to
+ * quote one scalar from the retired character grid, and the two disagreed on
+ * screen at the same instant.
+ *
+ * Over-set is called only above the MAXIMUM, because that is the only figure
+ * that is certain: below it the copy may or may not fit, and the Space panel
+ * and the engine's own fitState are what answer that. A counter that cried
+ * "too many" at the floor would be red on ordinary blocks that set perfectly.
+ */
+function budgetText(used, budget) {
+  const min = Number(budget?.min) || 0;
+  const max = Number(budget?.max) || min;
+  if (!min) return `${used} characters`;
+  if (used > max) return `${used} of ${min}\u2013${max} \u2014 ${used - max} too many`;
+  return min === max ? `${used} of ${min} characters` : `${used} of ${min}\u2013${max} characters`;
+}
+
+export function storyEditorMarkup(view, { budget = null, tools = "", pictures = "" } = {}) {
   const used = plainText(view.body).length;
   return `
     <article class="story-editor" id="storyEditor" aria-label="Story editor">
@@ -198,7 +222,7 @@ export function storyEditorMarkup(view, { budget = 0, tools = "", pictures = "" 
       </div>
 
       <footer class="story-editor-foot">
-        <span class="rt-count" id="edStoryCount">${used}${budget ? ` of ${budget} characters` : " characters"}</span>
+        <span class="rt-count" id="edStoryCount">${budgetText(used, budget)}</span>
         <span class="rt-foot-note">Drag a picture anywhere on the page; its corner sizes it.</span>
       </footer>
 
@@ -252,12 +276,9 @@ export function refreshStoryCount() {
   if (!readout) return;
 
   const used = plainText(copyFromFrame()).length;
-  const budget = budgetOf ? budgetOf() : 0;
-  const over = budget ? used - budget : 0;
-  readout.textContent = budget
-    ? over > 0 ? `${used} of ${budget} — ${over} too many` : `${used} of ${budget} characters`
-    : `${used} characters`;
-  readout.classList.toggle("over", over > 0);
+  const budget = budgetOf ? budgetOf() : null;
+  readout.textContent = budgetText(used, budget);
+  readout.classList.toggle("over", used > (Number(budget?.max) || Infinity));
 }
 
 export function bindStoryEditor({ onPatch, getBudget, getSection, getView, getImages, onPatchImage, onRemoveImage, onSelectImage, onSelectPart, onToggleImageSelection }) {

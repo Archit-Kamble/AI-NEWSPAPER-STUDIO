@@ -80,7 +80,8 @@ function headlineBandSegments(lines, view) {
   return headlineSegments(lines.map((line) => line.text), { accentStyle: view.headlineStyle === 'accent' });
 }
 
-function headlineLineHtml(text, view, segments) {
+function headlineLineHtml(line, view, segments, marks) {
+  const text = line.text;
   const accent = escapeHtml(view.accentColor || '#c8102e');
   const semantic = presentationRanges(text, view.editorialPresentation, 'headline');
   if (semantic.length) return renderPresentation(text, [], semantic, escapeHtml);
@@ -89,6 +90,12 @@ function headlineLineHtml(text, view, segments) {
       .map((segment) => (segment.accent ? `<span style="color:${accent}">${escapeHtml(segment.text)}</span>` : escapeHtml(segment.text)))
       .join('');
   }
+  // The desk's own bold/italic/underline runs, clipped to this line and
+  // rebased onto it - the same `line.at` mechanism a body line has always
+  // used, now that a display line carries one (compose.js's setDisplayFlow).
+  // A phrase emphasised across the headline's line break is therefore still
+  // emphasised on both halves.
+  if (marks.length) return renderPresentation(text, sliceRanges(marks, line.at || 0, text.length), [], escapeHtml);
   return escapeHtml(text);
 }
 
@@ -112,18 +119,27 @@ export function composedMarkup(composition, view, { datelinePrefix = '' } = {}) 
     const className = BAND_CLASS[key] || 'section-flowed-band';
     const headlineSegments = key === 'headline' ? headlineBandSegments(band.lines, view) : null;
     band.lines.forEach((line, lineIndex) => {
+      const bandMarks = band.marks || [];
       const html = key === 'headline'
-        ? headlineLineHtml(line.text, view, headlineSegments?.[lineIndex])
+        ? headlineLineHtml(line, view, headlineSegments?.[lineIndex], bandMarks)
         : renderPresentation(
           line.text,
-          [],
+          sliceRanges(bandMarks, line.at || 0, line.text.length),
           presentationRanges(line.text, view.editorialPresentation, key === 'deck' ? 'subheading' : key),
           escapeHtml,
         );
+      // A justified display line stretches its word spaces and, past that,
+      // its glyphs - exactly as a justified body line does, and painted the
+      // same way. Absent on every left/centre/right line, so nothing is
+      // emitted for the ordinary case.
+      const wordSpacing = Number.isFinite(line.wordSpacingPx) ? `word-spacing:${line.wordSpacingPx.toFixed(2)}px;` : '';
+      const glyphScale = Number.isFinite(line.glyphScaleX) && line.glyphScaleX !== 1
+        ? `transform:scaleX(${line.glyphScaleX});transform-origin:left top;`
+        : '';
       pieces.push(
         `<span class="section-composed ${className}" style="left:${line.x.toFixed(2)}px;top:${line.y.toFixed(2)}px;`
         + `width:${line.measure.toFixed(2)}px;height:${line.height.toFixed(2)}px;`
-        + `font-size:${line.fontPx}px;line-height:${line.height.toFixed(2)}px;${faceStyle(line)}">${html}</span>`,
+        + `font-size:${line.fontPx}px;line-height:${line.height.toFixed(2)}px;${wordSpacing}${glyphScale}${faceStyle(line)}">${html}</span>`,
       );
     });
   }

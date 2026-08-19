@@ -12,7 +12,7 @@
 
 import { composeBlock } from './compose.js';
 import { clusters } from './graphemes.js';
-import { plainText, textWithMarks } from '../layout/rich-text.js';
+import { textWithMarks } from '../layout/rich-text.js';
 // The dateline opens the body and therefore occupies the body's room, so it
 // is composed as part of the flow. One definition, in the module that has
 // always owned it - a second copy here is exactly the drift this codebase
@@ -156,9 +156,15 @@ export function composeSection(section = {}, view = {}) {
     width,
     height,
     padding,
-    kicker: plainText(pick(section, view, 'kicker', 'kicker', '')),
-    headline: plainText(pick(section, view, 'headline', 'headline', '')),
-    subheading: plainText(pick(section, view, 'subheading', 'subheading', '')),
+    // Display type carries the sub-editor's marks too, and for exactly the
+    // reason the body does: a bolded name in a headline is set in a real bold
+    // face, and a real bold Devanagari word is 5-8% wider than its regular
+    // ghost. These went through plainText() before, which threw the marks
+    // away, so the one place a desk could emphasise a word - the story - was
+    // also the only place it printed.
+    kicker: textWithMarks(pick(section, view, 'kicker', 'kicker', '')),
+    headline: textWithMarks(pick(section, view, 'headline', 'headline', '')),
+    subheading: textWithMarks(pick(section, view, 'subheading', 'subheading', '')),
     // The dateline is part of the flow it opens.
     body: { text: bodyText, marks: bodyMarks },
     // Whether this block is MEANT to hold copy, from the one catalog that
@@ -188,6 +194,14 @@ export function composeSection(section = {}, view = {}) {
     // assumes. Wiring it here is what makes a desk's "justify" choice
     // actually change the geometry rather than being silently ignored.
     textAlign: pick(section, view, 'textAlign', 'text_align', 'left'),
+    // The display objects' own alignment (schema.sql's headline_align /
+    // subheading_align). Separate from textAlign above because they are
+    // separate objects: `text_align` is the BODY's, and treating it as the
+    // block's is what made the desk's alignment buttons act on the copy while
+    // the headline was the thing selected. Left empty when the desk has never
+    // said - compose.js then sets them the paper's own way.
+    headlineAlign: pick(section, view, 'headlineAlign', 'headline_align', '') || '',
+    subheadingAlign: pick(section, view, 'subheadingAlign', 'subheading_align', '') || '',
     // The persisted paragraph gap (schema.sql: paragraph_spacing_px, default
     // 8) - previously read by nothing in this engine, the same class of gap
     // as textAlign above: a real, already-wired desk control with no effect
@@ -202,6 +216,11 @@ export function composeSection(section = {}, view = {}) {
     // defaults unless a caller states them - `headline-reserve.js` does, so
     // that the reservation and the real block are measured the same way.
     headlineMaxLines: pick(section, view, 'headlineMaxLines', 'headline_max_lines', undefined),
+    // Whether the headline may be set LARGER than asked in order to fill its
+    // measure (compose.js's HEADLINE_FILL_TARGET). Left undefined - and so
+    // on - unless a caller states otherwise; the two that do are the engine's
+    // own overset fallback and the measurements that need a fixed baseline.
+    headlineGrowth: pick(section, view, 'headlineGrowth', 'headline_growth', undefined),
     deckMaxLines: pick(section, view, 'deckMaxLines', 'deck_max_lines', undefined),
     letterSpacingPx: Number(pick(section, view, 'letterSpacingPx', 'letter_spacing_px', 0)) || 0,
     columnCount: measureColumns(section, view, width),

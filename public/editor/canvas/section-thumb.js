@@ -107,7 +107,10 @@ export function headlineMarkup(view) {
   const text = plainText(view.headline);
   const semantic = presentationRanges(text, view.editorialPresentation, 'headline');
 
-  const size = `style="font-size:${view.headlineFontPx}px"`;
+  // Alignment too, or the one paint before the publication font loads sets the
+  // headline flush left and the real composition then moves it - two different
+  // pages, a blink apart.
+  const size = `style="font-size:${view.headlineFontPx}px;text-align:${escapeHtml(view.headlineAlign || 'left')}"`;
 
   if (semantic.length) return `<div class="section-headline" ${size}>${renderPresentation(text, [], semantic, escapeHtml)}</div>`;
   if (text.includes("*")) {
@@ -138,7 +141,7 @@ export function headlineMarkup(view) {
 export function subheadingMarkup(view) {
   if (!view.subheading) return "";
   const text = plainText(view.subheading);
-  return `<div class="section-subheading" style="font-size:${view.subheadingFontPx}px">${renderPresentation(text, [], presentationRanges(text, view.editorialPresentation, 'subheading'), escapeHtml)}</div>`;
+  return `<div class="section-subheading" style="font-size:${view.subheadingFontPx}px;text-align:${escapeHtml(view.subheadingAlign || 'left')}">${renderPresentation(text, [], presentationRanges(text, view.editorialPresentation, 'subheading'), escapeHtml)}</div>`;
 }
 
 // "■ मुंबई, वृत्तसंस्था" — place first, then who filed. It opens the body text,
@@ -170,7 +173,7 @@ function contentMarkup(section, view) {
   // budget would mean the page you see is not the page that was measured.
   return `
     <div class="section-content" style="font-size:${view.bodyFontPx}px;line-height:${view.lineHeight || 1.25}">
-      ${view.kicker ? `<div class="section-kicker" style="font-size:${Math.round(view.bodyFontPx * 1.05)}px">${escapeHtml(view.kicker)}</div>` : ""}
+      ${view.kicker ? `<div class="section-kicker" style="font-size:${Math.round(view.bodyFontPx * 1.05)}px;text-align:${escapeHtml(view.headlineAlign || 'left')}">${escapeHtml(plainText(view.kicker))}</div>` : ""}
       ${headlineMarkup(view)}
       ${subheadingMarkup(view)}
       ${

@@ -364,19 +364,31 @@ test('a picture that would leave the block unable to set a line is placed legall
     assert.equal(Number(picture.width_px), 182, 'it must become a full-measure picture');
     assert.equal(Number(picture.x_px), 4, 'flush with the measure, not the frame');
     assert.equal(Number(picture.height_px), 88, 'and its height is never touched');
-    // Widening it alone is not enough: floating in the middle of the copy it
-    // would leave 15px above and 15px below, and one line of this type needs
-    // 25px. A full-measure picture goes at the top of the copy or the foot.
-    assert.ok(Number(picture.y_px) <= 130 || Number(picture.y_px) >= 170,
-      `a full-measure picture must go to the top or the foot, not float at ${picture.y_px}`);
-
-    // And the block really can set its copy again.
     const shaper = await import('../public/editor/compose/shaper.js');
     const metrics = await import('../public/editor/compose/font-metrics.js');
     const adapter = await import('../public/editor/compose/section-adapter.js');
     await Promise.all([metrics.ensureFontsLoaded(), shaper.ensureShaperReady()]);
     const { rows } = await pool.query(
       'SELECT * FROM page_sections WHERE page_id = $1 AND section_key = $2', [page.id, 'lead']);
+
+    // Widening it alone is not enough: floating in the middle of the copy it
+    // would leave 15px above and 15px below, and one line of this type needs
+    // 25px. A full-measure picture goes at the top of the copy or the foot.
+    //
+    // Asked of the COMPOSITION rather than of two hand-written pixel numbers.
+    // Where the copy starts is not a constant of this block - it moves with
+    // whatever the display type actually does, and a headline set larger to
+    // fill its measure (compose.js's HEADLINE_FILL_TARGET) moves it by 12px
+    // on this very block. A test that hard-codes the old figure is testing
+    // last week's typography, not the rule.
+    const bare = adapter.composeSection({ ...rows[0], images: [] }, {});
+    const top = Math.abs(Number(picture.y_px) - bare.bodyTop) <= 1;
+    const foot = Math.abs((Number(picture.y_px) + Number(picture.height_px)) - bare.content.bottom) <= 1;
+    assert.ok(top || foot,
+      `a full-measure picture must go to the top of the copy (${bare.bodyTop.toFixed(1)}) or the foot `
+      + `(${bare.content.bottom}), not float at ${picture.y_px}`);
+
+    // And the block really can set its copy again.
     const composed = adapter.composeSection({ ...rows[0], images: [{
       x_px: picture.x_px, y_px: picture.y_px, width_px: picture.width_px, height_px: picture.height_px,
       shape: 'rect', rotation: 0, stand_off_px: picture.stand_off_px,

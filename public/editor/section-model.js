@@ -43,6 +43,11 @@ export const DRAFT_FIELDS = [
   "fontItalic",
   "fontUnderline",
   "textAlign",
+  // The headline's and the deck's OWN alignment. `textAlign` is the body's -
+  // see schema.sql beside the columns for why one field for the whole block
+  // could not say what a newspaper page routinely does.
+  "headlineAlign",
+  "subheadingAlign",
   "columnCount",
   "marginPx",
   "lineHeight",
@@ -108,6 +113,11 @@ export function draftFromSection(section) {
     fontItalic: section.font_italic === true,
     fontUnderline: section.font_underline === true,
     textAlign: section.text_align || "left",
+    // Empty, not "left", when the row has never carried an opinion: the
+    // engine's own display default answers for those, so a block never
+    // silently acquires a desk decision nobody made.
+    headlineAlign: section.headline_align || "",
+    subheadingAlign: section.subheading_align || "",
     columnCount: Number(section.column_count) || 1,
     marginPx: Number.isFinite(Number(section.margin_px)) ? Number(section.margin_px) : 12,
     // A floor, not a default (text-flow.js's MIN_LINE_HEIGHT comment explains
@@ -200,6 +210,8 @@ export function payloadFromDraft(draft) {
     fontItalic: draft.fontItalic,
     fontUnderline: draft.fontUnderline,
     textAlign: draft.textAlign,
+    headlineAlign: draft.headlineAlign,
+    subheadingAlign: draft.subheadingAlign,
     columnCount: draft.columnCount,
     marginPx: draft.marginPx,
     lineHeight: draft.lineHeight,

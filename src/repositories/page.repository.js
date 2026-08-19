@@ -417,6 +417,8 @@ async function saveSection(pageId, sectionKey, updates) {
          smart_card_key = $43, smart_card_data = $44,
          story_type = COALESCE($45, story_type),
          editorial_priority = COALESCE($46, editorial_priority),
+         headline_align = COALESCE($47, headline_align),
+         subheading_align = COALESCE($48, subheading_align),
          updated_at = CURRENT_TIMESTAMP
      WHERE page_id = $1 AND section_key = $2 RETURNING *`,
     [pageId, sectionKey, updates.newsItemId || null, updates.headline || null, updates.headlineFontPx || null,
@@ -447,7 +449,11 @@ async function saveSection(pageId, sectionKey, updates) {
       updates.storyType || null,
       Number.isInteger(updates.editorialPriority)
         ? Math.min(5, Math.max(1, updates.editorialPriority))
-        : null]
+        : null,
+      // COALESCE like every other presentational column: a payload that does
+      // not mention the headline's alignment leaves it exactly as it was.
+      updates.headlineAlign || null,
+      updates.subheadingAlign || null]
   );
   return rows[0] || null;
 }

@@ -166,8 +166,22 @@ test('the stand-in reserves the full limit, not a word-trimmed length short of i
       subheading: textOfLength(dLimit(cols)),
     });
 
-    assert.equal(fit.guaranteedChars, atFullLimit,
-      'the bound must still be exactly what a headline/deck AT the limit would take - '
-      + 'it is a rough bound now, but it must be the bound it says it is');
+    // At or BELOW, not equal. The full limit used to be the worst case by
+    // construction - a longer headline took at least as many rows as a shorter
+    // one - and it is not any more: a headline that comes in short is set
+    // LARGER so that it fills its measure (compose.js's HEADLINE_FILL_TARGET),
+    // so a shorter stand-in can take more depth off the block than the
+    // longest legal one does. `planningFit` takes the minimum across its
+    // sampled candidates, which is still the right thing to take; what changed
+    // is that the full limit is no longer guaranteed to BE that minimum.
+    //
+    // This weakens nothing that anything relies on: the file's own header
+    // records that the reservation over-promises on 49 of 96 real block
+    // geometries and that nothing load-bearing rests on it. What must still
+    // hold is that the bound is not OPTIMISTIC about the longest legal
+    // display type, and that is what is checked here.
+    assert.ok(fit.guaranteedChars <= atFullLimit,
+      `the bound (${fit.guaranteedChars}) must not promise more than a headline and deck at their `
+      + `stated limits actually leave (${atFullLimit})`);
   }
 });

@@ -128,6 +128,8 @@ async function saveSection(pageId, sectionKey, body) {
     fontItalic: body.fontItalic,
     fontUnderline: body.fontUnderline,
     textAlign: body.textAlign,
+    headlineAlign: body.headlineAlign,
+    subheadingAlign: body.subheadingAlign,
     columnCount: body.columnCount,
     marginPx: body.marginPx,
     lineHeight: body.lineHeight,

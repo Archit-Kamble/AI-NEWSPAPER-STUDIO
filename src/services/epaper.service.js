@@ -76,6 +76,12 @@ async function buildEdition(newspaperId) {
           kicker: section.kicker || '',
           headline: section.headline || '',
           subheading: section.subheading || '',
+          // How the display type is set on the printed page, so the archive
+          // copy reads the same way round. NULL means the desk never said, and
+          // the paper's own default (flush left) applies - the same reading
+          // the compositor takes.
+          headlineAlign: section.headline_align || 'left',
+          subheadingAlign: section.subheading_align || 'left',
           body: section.body || '',
           category: section.category || '',
           location: section.location || '',
@@ -109,9 +115,9 @@ function renderHtml(edition) {
 
   const article = (item, pageNumber) => `
       <article class="story" id="p${pageNumber}-${escapeHtml(item.sectionKey)}">
-        ${item.kicker ? `<p class="kicker">${escapeHtml(item.kicker)}</p>` : ''}
-        <h3>${escapeHtml(plainText(item.headline))}</h3>
-        ${item.subheading ? `<p class="deck">${escapeHtml(item.subheading)}</p>` : ''}
+        ${item.kicker ? `<p class="kicker" style="text-align:${escapeHtml(item.headlineAlign)}">${escapeHtml(plainText(item.kicker))}</p>` : ''}
+        <h3 style="text-align:${escapeHtml(item.headlineAlign)}">${escapeHtml(plainText(item.headline))}</h3>
+        ${item.subheading ? `<p class="deck" style="text-align:${escapeHtml(item.subheadingAlign)}">${escapeHtml(plainText(item.subheading))}</p>` : ''}
         ${
           [item.location, item.reporter].filter(Boolean).length
             ? `<p class="dateline">${escapeHtml([item.location, item.reporter].filter(Boolean).join(', '))}</p>`

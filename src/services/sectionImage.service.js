@@ -111,19 +111,29 @@ async function snapPlacement(section, placement, images = []) {
   const withPicture = adapter.composeSection({ ...section, images: proposed }, {});
   if (!snapModule.leavesNoLegalColumn(withPicture)) return placement;
 
-  const probe = adapter.composeSection({ ...section, images }, {});
-  if (!probe || !probe.content) return placement;
+  // The frame the repair is measured against is the composition being
+  // REPAIRED - the one that has this picture in it - not a second composition
+  // of the same block without it. Those two do not always describe the same
+  // frame: where the copy starts moves with the display type, and the display
+  // type moves with the picture (a picture standing in the headline's bands
+  // pushes it down, and a headline set larger to fill its measure yields that
+  // size again the moment the copy oversets - compose.js). Snapping against
+  // the picture-free frame put a full-measure picture at a `bodyTop` 12 px
+  // lower than the block really had, which left it under one line of copy at
+  // the foot and none at the top: a repair that did not repair, arrived at by
+  // measuring the wrong block.
+  if (!withPicture.content) return placement;
   const snapped = snapModule.snapPictureToLegalCorridor(
     { x: placement.x, y: placement.y, width: placement.width, height: placement.height },
     {
-      contentLeft: probe.content.left,
-      contentRight: probe.content.right,
+      contentLeft: withPicture.content.left,
+      contentRight: withPicture.content.right,
       standOffPx: Number(placement.standOffPx ?? section.stand_off_px) || 0,
-      minCorridorPx: intervalsModule.MIN_CORRIDOR_EM * (probe.typography?.bodyPx || 0),
-      columnCount: probe.columns?.length || 1,
-      bodyTop: probe.bodyTop,
-      bodyBottom: probe.content.bottom,
-      bandHeightPx: (probe.typography?.bodyPx || 0) * (probe.typography?.lineHeight || 0),
+      minCorridorPx: intervalsModule.MIN_CORRIDOR_EM * (withPicture.typography?.bodyPx || 0),
+      columnCount: withPicture.columns?.length || 1,
+      bodyTop: withPicture.bodyTop,
+      bodyBottom: withPicture.content.bottom,
+      bandHeightPx: (withPicture.typography?.bodyPx || 0) * (withPicture.typography?.lineHeight || 0),
       expectsCopy: kindsModule.blockExpectsCopy(section.block_type),
     },
   );

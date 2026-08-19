@@ -496,3 +496,28 @@ CREATE TABLE IF NOT EXISTS page_guides (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_page_guides_page ON page_guides(page_id);
+
+-- The headline and the deck are OBJECTS, and an object has its own alignment.
+--
+-- `text_align` (above) is one column for the whole block, and every surface
+-- treated it as the body's: the exact engine's setDisplayFlow() placed a
+-- headline line at the start of its measure and left it there, whatever the
+-- column said. A sub-editor selecting the headline and pressing "centre"
+-- therefore changed the BODY - the one object they were not looking at - and
+-- nothing on screen said so. That is not a wiring slip in one control; it is
+-- the block-wide model being wrong about what a newspaper page is. A centred
+-- headline over justified copy, or a flush-right kicker, is ordinary Marathi
+-- daily practice and one column could not express it.
+--
+-- NULL, not a default string, so "the desk has never expressed an opinion
+-- about this headline" stays distinguishable from "the desk chose left". The
+-- engine reads NULL as the paper's own display default (flush left, which is
+-- what every existing row was already being set as), so no row changes
+-- appearance on the day this column arrives, and a future change to that
+-- default reaches every block that never had an opinion.
+--
+-- There is deliberately no kicker_align: the kicker is the headline's own
+-- overline and follows it (compose.js). A separate control for it could only
+-- ever be used to knock the two out of step.
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS headline_align VARCHAR(10);
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS subheading_align VARCHAR(10);

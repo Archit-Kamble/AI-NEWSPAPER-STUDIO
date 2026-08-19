@@ -156,7 +156,9 @@ test('a district edition shares its parent pages and owns only its own', async (
     // And the e-paper serves the words, not a picture of them.
     const html = await desk(`/epaper/${parentId}`).then((r) => r.text());
     assert.match(html, /एकदाच दुरुस्त/);
-    assert.match(html, /<h3>/);
+    // The headline carries its own alignment now (schema.sql's headline_align),
+    // so the tag is no longer bare.
+    assert.match(html, /<h3 style="text-align:/);
     assert.ok(!html.includes('<script'), 'the archive must not need JavaScript to be read');
 
     const data = await desk(`/api/newspapers/${parentId}/epaper`).then((r) => r.json());

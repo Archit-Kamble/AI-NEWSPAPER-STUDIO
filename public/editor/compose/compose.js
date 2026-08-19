@@ -127,6 +127,76 @@ const MAX_DISPLAY_SHARE = 0.5;
 //
 const HEADLINE_MAX_LINES = 2;
 
+// ------------------------------------------- the headline fills its measure ---
+//
+// Holding the two-line budget stopped a headline eating half the block. It
+// did not make the headline FILL, and a desk photographed what was left: a
+// 268x248 lead whose headline set "*वाई* मध्ये मुलांचे / वृक्षारोपण" at 85% and
+// 52% of their own measures, with a hand's width of white down the right of
+// both. That is not a small blemish - a ragged right edge under a column rule
+// is the first thing a reader's eye finds on a front page.
+//
+// It is the oldest job on the desk and it has exactly one lever. A sub-editor
+// writes a headline to a COUNT so that it fills the measure; the words here
+// belong to the reporter and cannot be rewritten, so the lever left is the
+// SIZE. Every page-layout tool has this move - InDesign ships "fit headline
+// to frame" - and it is what a compositor does when the copy comes in short.
+//
+// fitDisplayFlow() only ever stepped DOWN, because the requested size is a
+// preferred MAXIMUM (that is the contract fit.service.js shrinks type
+// against, and it must not change). So a headline that came in short stayed
+// short however much room the block had. This adds the other direction, and
+// only in the direction of FILLING: a headline already at its measure never
+// moves.
+//
+// Measured across 300 real article blocks carrying a headline and copy: 216
+// of them set their longest line under 92% of its measure, and letting the
+// size grow closes 210 of those - mean longest-line fill 74.7% -> 95.6%.
+const HEADLINE_FILL_TARGET = 0.92;
+
+// How far a headline may grow to reach that.
+//
+// This is a HIERARCHY bound, not a typographic one. A page reads as one page
+// because the bigger block shouts louder, and geometry.js encodes that in
+// `byMeasure = width/11` - the block's width IS its rung. Growth reorders the
+// rungs whenever a narrow block overtakes a wider one, which happens exactly
+// when the growth factor exceeds the ratio of their widths. Capped at a
+// quarter, only blocks within 25% of each other's width can trade places, and
+// two blocks that close in size are not carrying the page's hierarchy between
+// them anyway. Uncapped, the measured factors ran to 2.0x - a single-column
+// filler set larger than the lead, which is a worse fault than the gap this
+// closes.
+// Chosen by measuring both sides of it across all 5084 real blocks that carry
+// a headline and all 429 real pages that carry more than one, not by taste.
+// "lead beaten" is a page where a SMALLER block ends up shouting louder than
+// the biggest block on it - the fault this bound exists to prevent:
+//
+//     cap    grew    at/over 92% filled    lead beaten (of 429)
+//     off      -           1089                   46
+//     1.15    23%          2237                   47
+//     1.25    33%          2787                   50
+//     1.40    41%          3186                   82
+//     1.60    55%          3886                  275
+//
+// The knee is unmistakable. 1.25 takes two and a half times as many headlines
+// to a filled measure for four more pages; 1.40 costs nine times that for one
+// sixth more; 1.60 wrecks two pages in three. (46 pages are already beaten
+// with growth switched off entirely - a long headline on a big block is
+// auto-fitted DOWN past a short one on a small block, which is the same fault
+// arriving from the other direction and is not something this cap can fix.)
+const HEADLINE_GROWTH_CAP = 1.25;
+
+// The absolute ceiling on display type, matching the clamp geometry.js
+// already applies when it picks a block's default headline size: above this a
+// full-width strip stops being a headline and starts shouting. One number,
+// two places that must agree about it.
+const MAX_DISPLAY_PX = 40;
+
+// Display type is set flush left unless the desk says otherwise. That is what
+// a Marathi daily does, and what this engine already did by accident before
+// the alignment was wired through at all.
+export const DEFAULT_DISPLAY_ALIGN = 'left';
+
 // The floor preflight fails a page for: newsprint will not legibly hold
 // anything under 6.5 PT. This project's logical px is 2 per mm (see
 // geometry.js/pxToMm), so 6.5pt converts to 6.5 * 25.4/72 * 2 = 4.6 logical
@@ -166,6 +236,7 @@ function num(value, fallback) {
  */
 function setDisplayFlow(text, {
   top, bottomLimit, column, images, fontPx, lineHeight, family, weight, maxLines, letterSpacingPx = 0,
+  align = 'left', marks = null,
 }) {
   const pieces = breakPieces(text);
   if (!pieces.length) return { lines: [], height: 0, bottom: top, overset: '', lineCount: 0, violations: [] };
@@ -174,6 +245,13 @@ function setDisplayFlow(text, {
   const lines = [];
   const violations = [];
   let index = 0;
+  // Where each line's text starts in the flow's own plain text. breakPieces()
+  // TILES the source (every cluster lands in exactly one piece, whitespace
+  // attached to the word it follows), so a running sum of consumed piece
+  // lengths is the exact offset - the same contract `line.at` already carries
+  // on a body line, and what lets render.js re-apply a sub-editor's bold or
+  // italic marks to a headline broken across two lines.
+  let consumed = 0;
   let y = top;
   // The band's real bottom edge, tracked from what was actually PLACED - not
   // from lines.length * bandHeight, which undercounts whenever a photograph
@@ -197,13 +275,14 @@ function setDisplayFlow(text, {
     if (!gap) { y += bandHeight; continue; }
 
     const measure = gap.end - gap.start;
+    const lineAt = consumed;
     let line = '';
     let width = 0;
     let hardOverset = false;
 
     while (index < pieces.length) {
       const piece = pieces[index];
-      const pieceWidth = measure2(piece, fontPx, family, weight);
+      const pieceWidth = measure2(piece, consumed, fontPx, family, weight);
       if (line && width + pieceWidth > measure + 0.5) break;
       if (!line && pieceWidth > measure + 0.5) {
         // One unbreakable token wider than every legal measure. It is set
@@ -217,18 +296,21 @@ function setDisplayFlow(text, {
         width = pieceWidth;
         hardOverset = true;
         index += 1;
+        consumed += piece.length;
         break;
       }
       line += piece;
       width += pieceWidth;
       index += 1;
+      consumed += piece.length;
     }
 
     const trimmed = trimEndClusters(line);
     if (trimmed) {
-      const drawnWidth = measure2(trimmed, fontPx, family, weight);
+      const drawnWidth = measure2(trimmed, lineAt, fontPx, family, weight);
       lines.push({
         text: trimmed,
+        at: lineAt,
         x: gap.start,
         y,
         width: drawnWidth,
@@ -256,6 +338,37 @@ function setDisplayFlow(text, {
     y += bandHeight;
   }
 
+  // ------------------------------------------------------------ alignment ---
+  //
+  // Display type obeys the desk's alignment exactly as the body does, and
+  // until now it obeyed nothing at all: every headline, kicker and deck line
+  // was placed at `gap.start` and left there, so a sub-editor pressing
+  // "centre" or "flush right" with the headline selected changed only the
+  // BODY - the one object they were not looking at. The control was not
+  // subtly wrong, it was wired to the wrong object.
+  //
+  // Same rule as the body, and for the same reason: alignment never changes
+  // which words are on which line - that was decided above at natural width -
+  // only where the finished line sits, and, for `justify`, how the space
+  // inside it is opened.
+  //
+  // A band's LAST line is never justified. In display type that matters more
+  // than in body copy, not less: the last line of a headline is usually two
+  // words, and stretching two words across a full measure is the single most
+  // obvious mark of software setting type rather than a compositor. The
+  // JUSTIFY_MIN_EM floor the body uses is deliberately NOT applied here -
+  // that rule is about rivers in a narrow column of small type, and display
+  // type is one line of large type where there is no river to make.
+  if (align && align !== 'left' && lines.length) {
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i];
+      const slack = Math.max(0, line.measure - line.width);
+      if (align === 'right') line.x += slack;
+      else if (align === 'center') line.x += slack / 2;
+      else if (align === 'justify' && i < lines.length - 1) justifyLine(line, slack);
+    }
+  }
+
   return {
     lines,
     height: occupiedBottom - top,
@@ -268,7 +381,62 @@ function setDisplayFlow(text, {
   // measure2: a small local alias so this closure does not have to thread
   // `measure` through every call site above by name collision with the
   // module-level `measure()` - kept local to make the diff obvious.
-  function measure2(t, px, fam, w) { return measure(t, px, fam, w, letterSpacingPx); }
+  // Mark-aware, exactly as the body's pour is: a sub-editor's bold word inside
+  // a headline is set in a real bold face and a real bold Devanagari word is
+  // 5-8% wider than its regular ghost, so measuring the whole flow at one
+  // weight would reserve the wrong measure for the line it lands on. With no
+  // marks this is the plain measurement it always was.
+  function measure2(t, at, px, fam, w) {
+    return measurePieceWidth(t, at, px, fam, w, marks, letterSpacingPx);
+  }
+}
+
+/**
+ * How close a set band comes to its own measure, judged on its LONGEST line.
+ *
+ * The longest line and not the mean, because that is what the eye reads: a
+ * two-line headline whose first line is flush and whose second is short is an
+ * ordinary printed headline, and a two-line headline where BOTH lines stop
+ * short is a mistake. Averaging the two cannot tell those apart.
+ */
+function bandFill(set) {
+  if (!set || !set.lines.length) return 1;
+  return Math.max(...set.lines.map((line) => (line.measure > 0 ? line.width / line.measure : 0)));
+}
+
+/**
+ * The SMALLEST size, up to `maxPx`, at which this flow actually fills its
+ * measure. `null` when no size within reach does.
+ *
+ * Two decisions, and both are the compositor's rather than the optimiser's:
+ *
+ * The smallest that fills, not the largest that fits. Every pixel of display
+ * type is a pixel off the top of the story, so the growth buys exactly what it
+ * came for and stops.
+ *
+ * And all or nothing. "Any improvement" was the first rule here and it is
+ * wrong in a way that is obvious once seen: a one-word headline in a
+ * full-width block cannot fill 296 px of measure at any legible size, so the
+ * rule inflated it 30 px -> 37 px to go from 19% of its measure to 24% - a
+ * quarter larger, still five-sixths empty, and the story a line shorter for
+ * it. A headline whose words cannot fill the measure is set at the size the
+ * page's design gave it; a short headline is a short headline, and a printed
+ * newspaper does not blow one up to hide that.
+ *
+ * Steps up a pixel at a time and stops at the first size that will not set -
+ * overset against a fixed frame is monotone in type size, so nothing legal
+ * lies beyond it.
+ */
+function growToFill(text, options, { maxPx, fillTarget, set, failed }) {
+  if (!(maxPx > options.fontPx) || !(fillTarget > 0)) return null;
+  if (bandFill(set) >= fillTarget) return null;
+
+  for (let px = Math.floor(options.fontPx) + 1; px <= maxPx; px += 1) {
+    const attempt = setDisplayFlow(text, { ...options, fontPx: px });
+    if (failed(attempt)) return null;
+    if (bandFill(attempt) >= fillTarget) return { set: attempt, px };
+  }
+  return null;
 }
 
 /**
@@ -293,7 +461,7 @@ function setDisplayFlow(text, {
 // the range does, look again with only the hard limit. A narrow block gets its
 // extra lines, a wide one gets its fill, and neither is decided by a constant
 // that had to be right for both.
-function fitDisplayFlow(text, options, { locked, minPx, preferLines = 0, roomyBottomLimit = 0 }) {
+function fitDisplayFlow(text, options, { locked, minPx, maxPx = 0, fillTarget = 0, preferLines = 0, roomyBottomLimit = 0 }) {
   const failed = (attempt) => attempt.overset || attempt.violations.length > 0;
 
   if (locked) {
@@ -314,9 +482,20 @@ function fitDisplayFlow(text, options, { locked, minPx, preferLines = 0, roomyBo
   // this took DECK_OVERSET across the database from 1 block to 7.
   if (roomyBottomLimit > options.bottomLimit) passes.push({ ...options, bottomLimit: roomyBottomLimit });
 
-  for (const attemptOptions of passes) {
+  for (let pass = 0; pass < passes.length; pass += 1) {
+    const attemptOptions = passes[pass];
     const first = setDisplayFlow(text, attemptOptions);
-    if (!failed(first)) return { ...first, resolvedPx: options.fontPx, shrunk: false };
+    if (!failed(first)) {
+      // Only from the pass that got what it wanted. A flow already forced
+      // past its preferred line budget, or already given the display share
+      // ceiling's own last relaxation, is a flow with nothing to spare -
+      // growing it there would be buying a straight right edge with the very
+      // room those relaxations were granted to protect.
+      const grown = pass === 0 ? growToFill(text, attemptOptions, { maxPx, fillTarget, set: first, failed }) : null;
+      return grown
+        ? { ...grown.set, resolvedPx: grown.px, shrunk: false, grew: true }
+        : { ...first, resolvedPx: options.fontPx, shrunk: false };
+    }
     for (let px = options.fontPx - 1; px >= minPx; px -= 1) {
       const attempt = setDisplayFlow(text, { ...attemptOptions, fontPx: px });
       if (!failed(attempt)) return { ...attempt, resolvedPx: px, shrunk: true };
@@ -1442,10 +1621,34 @@ export function composeBlock(input = {}) {
   // font was ALSO not ready, and the two are separate failures.
   if (!result.fontReady) warnings.push({ code: 'FONT_NOT_READY', detail: 'Composed before the publication font was measurable; sizes are estimated.' });
 
+  // Each display object's own alignment. These are separate persisted fields
+  // (schema.sql's headline_align/subheading_align) because they are separate
+  // objects on the page: a centred headline over justified copy is an
+  // ordinary Marathi front page, and one `text_align` for the whole block
+  // could not say it. The kicker follows the headline deliberately - it is
+  // the headline's own overline, not a third thing to align, and giving it a
+  // control of its own would only let a desk knock it out of step.
+  const headlineAlign = input.headlineAlign || DEFAULT_DISPLAY_ALIGN;
+  const deckAlign = input.subheadingAlign || DEFAULT_DISPLAY_ALIGN;
+
+  // Growth is a preference, and the one thing it must never buy is overset
+  // copy - see the recomposition at the foot of this function, which is what
+  // clears this flag on the way back through.
+  const mayGrowHeadline = input.headlineGrowth !== false;
+
+  // A display flow arrives either as plain text or - since a sub-editor may
+  // bold a name inside a headline exactly as inside a story - as the same
+  // { text, marks } pair the body already takes. `marks` are held against the
+  // flow's own plain text, so a headline's offsets are its own and never the
+  // body's.
+  const flowOf = (value) => (value && typeof value === 'object'
+    ? { text: String(value.text || ''), marks: value.marks || null }
+    : { text: String(value || ''), marks: null });
+
   const flows = [
-    { key: 'kicker', text: String(input.kicker || ''), px: Math.round(bodyPx * 1.05), min: MIN_LEGIBLE_PX, maxLines: 2, locked: true, ...DISPLAY_TYPOGRAPHY.kicker },
-    { key: 'headline', text: String(input.headline || ''), px: num(input.headlineFontPx, 34), min: Math.max(MIN_LEGIBLE_PX, bodyPx * 1.1), maxLines: num(input.headlineMaxLines, 4), preferLines: HEADLINE_MAX_LINES, locked: Boolean(input.headlineLocked), ...DISPLAY_TYPOGRAPHY.headline },
-    { key: 'deck', text: String(input.subheading || ''), px: num(input.subheadingFontPx, 20), min: Math.max(MIN_LEGIBLE_PX, bodyPx), maxLines: num(input.deckMaxLines, 3), locked: Boolean(input.subheadingLocked), ...DISPLAY_TYPOGRAPHY.deck },
+    { key: 'kicker', ...flowOf(input.kicker), px: Math.round(bodyPx * 1.05), min: MIN_LEGIBLE_PX, maxLines: 2, locked: true, align: headlineAlign, ...DISPLAY_TYPOGRAPHY.kicker },
+    { key: 'headline', ...flowOf(input.headline), px: num(input.headlineFontPx, 34), min: Math.max(MIN_LEGIBLE_PX, bodyPx * 1.1), maxLines: num(input.headlineMaxLines, 4), preferLines: HEADLINE_MAX_LINES, locked: Boolean(input.headlineLocked), align: headlineAlign, ...DISPLAY_TYPOGRAPHY.headline },
+    { key: 'deck', ...flowOf(input.subheading), px: num(input.subheadingFontPx, 20), min: Math.max(MIN_LEGIBLE_PX, bodyPx), maxLines: num(input.deckMaxLines, 3), locked: Boolean(input.subheadingLocked), align: deckAlign, ...DISPLAY_TYPOGRAPHY.deck },
   ].filter((flow) => flow.text.trim());
 
   let y = content.top;
@@ -1473,9 +1676,19 @@ export function composeBlock(input = {}) {
       weight: flow.weight,
       maxLines: flow.maxLines,
       letterSpacingPx,
+      align: flow.align,
+      marks: flow.marks,
     }, {
       locked: flow.locked,
       minPx: flow.min,
+      // Only the headline is written to a count. The deck is subordinate
+      // type: growing it to fill would steal the story's room to straighten
+      // the edge of a line nobody reads as the block's voice, and it would
+      // close the size gap that makes the headline the headline.
+      maxPx: flow.key === 'headline' && mayGrowHeadline
+        ? Math.min(MAX_DISPLAY_PX, Math.floor(flow.px * HEADLINE_GROWTH_CAP))
+        : 0,
+      fillTarget: flow.key === 'headline' ? HEADLINE_FILL_TARGET : 0,
       preferLines: flow.preferLines || 0,
       roomyBottomLimit: Math.min(content.bottom, y + room * share),
     });
@@ -1488,6 +1701,12 @@ export function composeBlock(input = {}) {
       requestedPx: flow.px,
       resolvedPx: set.resolvedPx,
       shrunk: set.shrunk,
+      grew: Boolean(set.grew),
+      align: flow.align,
+      // The flow's own marks, carried on the band so render.js can re-apply
+      // them through each line's `at` without having to re-derive which of the
+      // view's fields this band came from.
+      marks: flow.marks || [],
       overset: set.overset,
     };
 
@@ -1569,6 +1788,29 @@ export function composeBlock(input = {}) {
     if (paragraphPlan.changed) {
       body = pourBody(bodyInput, { ...pourOptions, paragraphStarts: paragraphPlan.starts });
     }
+  }
+
+  // ------------------------------- filling the headline never costs a word ---
+  //
+  // Growing the headline to its measure takes depth off the top of the copy,
+  // and on a block that was already full to the foot that depth is somebody's
+  // last sentence. A straight right edge is worth a great deal; it is not
+  // worth a word pushed off a printed page, which is the same order this
+  // engine's other preferences already yield in (HEADLINE_MAX_LINES to
+  // overset, the display share to DECK_OVERSET).
+  //
+  // So the check is made where the answer is actually known - after the pour,
+  // which is the only thing that can say whether the copy still fits - and
+  // the whole block is composed once more with the growth withheld. Recursion
+  // is one level deep by construction: the second pass sets
+  // `headlineGrowth: false`, so it cannot grow and cannot re-enter.
+  //
+  // A block that is overset EITHER way keeps the ungrown headline. That is the
+  // conservative reading and it costs nothing real: a block whose copy has to
+  // be cut is a block the desk is about to work on anyway, and copyFit's
+  // trimToFit() will re-compose it the moment it does.
+  if (result.bands.headline?.grew && (body.overset || result.bands.deck?.overset)) {
+    return composeBlock({ ...input, headlineGrowth: false });
   }
 
   result.bodyLines = body.lines;
@@ -1787,11 +2029,12 @@ export function composeBlock(input = {}) {
 
   result.fingerprint = hash([
     ENGINE_VERSION, width, height, padding, bodyPx, lineHeight, bodyFamily, input.textAlign,
+    headlineAlign, deckAlign,
     bodyWeight, bodyItalic, bodyUnderline,
     input.headlineFontPx, input.subheadingFontPx, input.columnCount,
     letterSpacingPx, paragraphSpacingPx, input.firstLineIndentPx,
     input.headlineMaxLines, input.deckMaxLines,
-    input.kicker, input.headline, input.subheading, bodyPlainText,
+    flows.map((flow) => `${flow.key}:${flow.text}:${JSON.stringify(flow.marks || [])}`).join('|'), bodyPlainText,
     JSON.stringify((typeof bodyInput === 'object' && bodyInput.marks) || []),
     images.map(imageFingerprint).join('|'),
   ].join(''));

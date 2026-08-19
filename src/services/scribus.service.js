@@ -391,7 +391,7 @@ async function blockFrames(section, { pageIndex = 0, pageOffsetMm = 0 } = {}) {
     ? adapter.composeSection({ ...section, images: [], body: '' }, { ...section, body: '' })
     : adapter.composeSection(section, section);
 
-  parts.push(displayBandFrames(composition, section, accent, {
+  parts.push(displayBandFrames(composition, section, accent, richText, {
     xBaseMm: mm(section.x_px), yBaseMm: mm(section.y_px), pageOffsetMm, ownPage: pageIndex,
   }));
 
@@ -450,16 +450,23 @@ async function blockFrames(section, { pageIndex = 0, pageOffsetMm = 0 } = {}) {
  * `headline_style: 'accent'`) split into its own run so it paints in the
  * paper's colour, decided band-wide by accent.js's headlineSegments() -
  * exactly as render.js's composedMarkup() already does for the browser. */
-function displayBandFrames(composition, section, accent, { xBaseMm, yBaseMm, pageOffsetMm, ownPage }) {
+function displayBandFrames(composition, section, accent, richText, { xBaseMm, yBaseMm, pageOffsetMm, ownPage }) {
   const parts = [];
   const headlineBand = composition.bands?.headline;
   const headlineTexts = headlineBand ? headlineBand.lines.map((line) => line.text) : [];
   const headline = accent.headlineSegments(headlineTexts, { accentStyle: section.headline_style === 'accent' });
   for (const [key, band] of Object.entries(composition.bands || {})) {
     band.lines.forEach((line, lineIndex) => {
+      // The desk's own marks inside a display flow - a name set bold in a
+      // headline, a word at its own size in a deck - through the SAME
+      // styledRuns() the body goes through, against the same `line.at`
+      // contract. Without this the press file flattened every display band to
+      // one plain run: the browser printed the bold word and the paper did
+      // not, which is the exact class of divergence a press file may not have.
       const runs = key === 'headline' && headline
         ? segmentRuns(headline[lineIndex], { family: line.family, weight: line.weight }, 'SahasRed').map((run) => ({ ...run, fontPx: run.fontPx || line.fontPx }))
-        : [{ text: line.text, family: line.family, weight: line.weight, bold: false, italic: false, underline: false, fontPx: line.fontPx }];
+        : richText.styledRuns(line.text, line.at || 0, band.marks || [], line.fontPx)
+          .map((run) => ({ ...run, family: line.family, weight: run.bold ? 700 : line.weight }));
       // `line.measure` is the band's own gap; `line.width` is what was
       // actually drawn there. A one-word headline wider than the whole
       // measure is set anyway (compose.js will not invent a hyphen inside a

@@ -54,7 +54,7 @@ test('and once the shaper is ready the same block composes, exactly', async () =
   const result = compose.composeBlock(FRAME);
   assert.equal(result.exactShaping, true, 'this is the composition the browser and the press both use');
   assert.ok(result.bodyLines.length > 0, 'and it really sets the copy');
-  assert.ok(!result.warnings.some((w) => w.code === 'SHAPING_NOT_EXACT'),
+  assert.ok(!result.warnings.some((w) => w.code === 'SHAPING_NOT_READY'),
     'no approximation warning when the shaping is exact');
 });
 
@@ -70,4 +70,34 @@ test('the two measurements really do disagree - this is what the refusal is prot
   const shaped = shaper.shapeWidthPx(word, 100, 'serif', 400);
   assert.ok(summed > shaped * 1.3,
     `summing advances must visibly overstate a conjunct: ${summed} vs ${shaped}`);
+});
+
+// --------------------------------------------------- a block with no room ---
+//
+// A frame with no usable measure - zero width, zero height, or a margin wider
+// than the block, all of which a desk can produce by dragging or by typing a
+// number into the Typography panel - takes an early return that never pours a
+// body. Two warnings that READ the pour were pasted into that branch by
+// mistake, and because `body` is declared far below, every such block threw
+// `ReferenceError: Cannot access 'body' before initialization` instead of
+// reporting NO_ROOM. In the browser that is an uncaught throw in the middle
+// of painting the canvas: a blank block, with nothing on screen saying why.
+
+test('a block with no usable measure reports NO_ROOM - it does not throw', async () => {
+  const compose = await load('compose.js');
+  const metrics = await load('font-metrics.js');
+  const shaper = await load('shaper.js');
+  await Promise.all([metrics.ensureFontsLoaded(), shaper.ensureShaperReady()]);
+
+  const cases = [
+    ['a margin wider than the block', { width: 20, height: 200, padding: 30 }],
+    ['a zero-height frame', { width: 200, height: 0, padding: 4 }],
+    ['a zero-width frame', { width: 0, height: 200, padding: 4 }],
+  ];
+  for (const [name, frame] of cases) {
+    const result = compose.composeBlock({ ...frame, bodyFontPx: 10, body: 'क' });
+    assert.equal(result.fitState, 'NO_ROOM', `${name} must report NO_ROOM`);
+    assert.equal(result.overset.body, '', `${name} must still return a whole result`);
+    assert.ok(result.capacity, `${name} must carry a capacity object the caller can read`);
+  }
 });

@@ -1322,8 +1322,9 @@ export function composeBlock(input = {}) {
       throw new Error('EXACT_SHAPER_NOT_READY');
     }
     warnings.push({
-      code: 'SHAPING_NOT_EXACT',
-      detail: 'Composed before the shaper was ready; Devanagari conjuncts measure wide and line counts may change once it loads.',
+      code: 'SHAPING_NOT_READY',
+      detail: 'Composed with summed advances, not real shaping - conjunct-heavy Marathi is reserved wider than it prints, '
+        + 'and line counts change once the shaper loads.',
     });
   }
   const result = {
@@ -1340,31 +1341,17 @@ export function composeBlock(input = {}) {
     warnings,
   };
 
+  // No usable measure at all - a zero-width or zero-height frame, or a margin
+  // wider than the block. There is no pour here and no `body`, so nothing
+  // that reads one belongs in this branch: NO_LEGAL_MEASURE and
+  // SET_FLUSH_LEFT were pasted in here by mistake and turned every such block
+  // into a ReferenceError (`body` is declared far below, so the read hit its
+  // temporal dead zone) instead of the NO_ROOM result the caller expects. In
+  // the browser that is an uncaught throw in the middle of painting the
+  // canvas - a blank block, with the cause nowhere on screen.
   if (measureAvail <= 0 || room <= 0) {
     result.fitState = 'NO_ROOM';
-    // A picture can leave a block with real vertical depth and yet no band wide
-  // enough to set a line in - the corridor beside it is under one word wide,
-  // so every band is refused and the whole story reports as overset while the
-  // block LOOKS half empty. Measured on a real 190x264 block: 130 px of body
-  // depth, zero legal bands, 199 characters with nowhere to go, and nothing on
-  // screen said why. It is a layout that cannot be printed, and the desk can
-  // only fix it if it is told.
-  if (body.occupancy.availableEquivalentLines < 0.01 && content.bottom - bodyTop > bandHeight) {
-    warnings.push({
-      code: 'NO_LEGAL_MEASURE',
-      detail: `This block has ${Math.round(content.bottom - bodyTop)}px of depth for copy, but its pictures leave no `
-        + `column wide enough to set ${bodyPx}px type in. Make a picture narrower, move it, or set the body smaller.`,
-    });
-  }
-  if (body.tooNarrowToJustify) {
-    warnings.push({
-      code: 'SET_FLUSH_LEFT',
-      detail: `A ${body.columnEm} em column is too narrow to justify - two or three words to the line leave nowhere `
-        + 'to put the space. Set flush left instead, as a printed newspaper sets a narrow column.',
-    });
-  }
-
-  result.whitespace = { intentional: width * height, unexplained: 0, bottomResidualPx: 0, bottomResidualLines: 0, unexplainedLines: 0, largestHoleLines: 0 };
+    result.whitespace = { intentional: width * height, unexplained: 0, bottomResidualPx: 0, bottomResidualLines: 0, unexplainedLines: 0, largestHoleLines: 0 };
     result.capacity = { fullMeasureEquivalents: 0, bodyClusterCapacity: 0 };
     result.overset = { headline: '', deck: '', kicker: '', body: '' };
     result.fingerprint = hash(`${width}x${height}`);
@@ -1375,8 +1362,10 @@ export function composeBlock(input = {}) {
   // composed against a fallback measurement and then repainted when the real
   // shaper/font arrives is two different pages, and only one of them was
   // approved.
+  // The shaper's own warning is raised above, where the fallback is decided -
+  // it used to sit in this `else`, which made it unreachable whenever the
+  // font was ALSO not ready, and the two are separate failures.
   if (!result.fontReady) warnings.push({ code: 'FONT_NOT_READY', detail: 'Composed before the publication font was measurable; sizes are estimated.' });
-  else if (!shaperReady) warnings.push({ code: 'SHAPING_NOT_READY', detail: 'Composed with summed advances, not real shaping - conjunct-heavy Marathi may be reserved wider than it prints.' });
 
   const flows = [
     { key: 'kicker', text: String(input.kicker || ''), px: Math.round(bodyPx * 1.05), min: MIN_LEGIBLE_PX, maxLines: 2, locked: true, ...DISPLAY_TYPOGRAPHY.kicker },

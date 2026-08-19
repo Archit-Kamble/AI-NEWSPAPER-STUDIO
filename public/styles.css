@@ -3842,6 +3842,13 @@ body.print-view .section-selected-label,
 body.print-view .canvas-minimap {
   display: none !important;
 }
+/* The desk's own tint on a block. A custom property rather than a background
+   set straight on the element, because the editing view paints its own grounds
+   over it (selected, hover, empty) and print view resets `background` to
+   transparent - a tint that is furniture, not chrome, has to survive both. */
+.newspaper-section[style*="--block-tint"] {
+  background: var(--block-tint);
+}
 body.print-view .newspaper-section {
   background: transparent;
   border: none;
@@ -3850,6 +3857,9 @@ body.print-view .newspaper-section {
   color: #000;
   padding: 4px 6px;
   animation: none;
+}
+body.print-view .newspaper-section[style*="--block-tint"] {
+  background: var(--block-tint);
 }
 body.print-view .newspaper-section.ruled-box {
   border: 1.5px solid #111;
@@ -3873,6 +3883,15 @@ body.print-view .section-subheading {
 body.print-view .newspaper-canvas {
   background: #fff;
   box-shadow: 0 2px 24px rgba(0, 0, 0, 0.25);
+}
+
+/* The solid band behind a reversed headline. Drawn, not composed - it is ink
+   laid behind type that was already placed, so it sits UNDER the composed line
+   spans and moves nothing. */
+.section-headline-reverse {
+  position: absolute;
+  display: block;
+  z-index: 0;
 }
 
 /* Caption under a placed photograph. */
@@ -4765,6 +4784,59 @@ body.print-view .page-imprint {
 .frame-pictures {
   z-index: 3;
 }
+
+/* The block's ground: five tints, chosen the same way an ink is - by pressing
+   the one you want, not by mixing it. */
+.tint-swatches { display: flex; gap: 6px; }
+.tint-swatch {
+  width: 30px;
+  height: 26px;
+  padding: 3px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+  line-height: 0;
+}
+.tint-swatch i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--tint, #fff);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+}
+.tint-swatch:hover { border-color: #cfcfd6; }
+.tint-swatch.active { border-color: var(--accent); }
+
+/* The ink buttons: four swatches, not a colour wheel. A page is separated
+   into plates, so the desk chooses a plate. "Black" is the absence of an ink
+   and is drawn as an outline rather than a filled black chip, because it is a
+   CLEAR and should not read as one more colour to pick. */
+.ed-quill-ink-btn {
+  width: 22px;
+  height: 22px;
+  padding: 3px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  line-height: 0;
+}
+.ed-quill-ink-btn i {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--ink, transparent);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+.ed-quill-ink-btn.is-none i {
+  background:
+    linear-gradient(to bottom right, transparent 45%, #b3b3bb 45%, #b3b3bb 55%, transparent 55%),
+    #fff;
+}
+.ed-quill-ink-btn:hover i { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.55); }
+.ed-quill-ink-btn[disabled] { opacity: .4; cursor: not-allowed; }
 
 /* The rich-text control is intentionally outside the printable page. It edits
    the same persisted body, while the page above is the exact print/layout

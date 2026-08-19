@@ -569,3 +569,16 @@ ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS subheading_align VARCHAR(10);
 -- come from a decision - the Block Editor's Properties panel - so a future
 -- migration would have to be guarded in the ordinary way.
 UPDATE page_sections SET border_style = 'none' WHERE border_style = 'box';
+
+-- A light ground behind a block, chosen by the desk.
+--
+-- A printed newspaper tints a panel - a sidebar, a box-out, a standing feature
+-- - a few percent of one ink so it reads as a separate piece of furniture
+-- without a rule around it. NULL is the paper's own white and is the default:
+-- like border_style, nothing is tinted unless a person tinted it.
+--
+-- Constrained to the paper's own tints in the one control that sets it
+-- (properties-panel.js's TINTS), for the same reason the ink marks are: a page
+-- is separated into plates, and a colour mixed in a browser is one no press
+-- can lay down.
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS background_color VARCHAR(20);

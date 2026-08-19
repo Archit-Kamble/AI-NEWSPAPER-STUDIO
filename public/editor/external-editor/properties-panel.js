@@ -14,6 +14,7 @@
 // content of this panel for those three, not an apology for missing one.
 
 import { escapeHtml } from "../format.js";
+import { TINTS } from "../layout/inks.js";
 import { PART_LABEL } from "./typography-panel.js";
 // The Layer control reuses the EXACT arithmetic the Story panel's "Bring
 // forward"/"Send back" buttons already use - not a second copy of
@@ -45,6 +46,20 @@ const BORDERS = [
   ["rule", "Rule below"],
 ];
 
+// The tints come from the ONE colour catalogue (layout/inks.js), the same one
+// the ink marks and the press file read. A palette written out a second time
+// here is the drift this codebase has already been bitten by twice.
+
+// What the headline does with its own band. `accent` colours the last word;
+// `reverse` sets the whole headline in white out of a solid panel - the
+// treatment a Marathi daily gives a lead. Both are drawn, never composed, so
+// neither moves a line (compose/render.js).
+const HEADLINE_STYLES = [
+  ["plain", "Plain"],
+  ["accent", "Accent word"],
+  ["reverse", "Reversed"],
+];
+
 let boundHandlers = null;
 
 function normDeg(value) {
@@ -65,6 +80,8 @@ function numberField(id, label, value, { min, max, step = 1, unit = "" } = {}) {
 
 function blockPropertiesMarkup(section, view, page) {
   const border = String(view.borderStyle || section.border_style || "none");
+  const tint = view.backgroundColor ?? section.background_color ?? null;
+  const headlineStyle = String(view.headlineStyle || section.headline_style || "plain");
   return `
     <div class="field-grid">
       <div class="form-group"><label>Block type</label><p class="prop-readout">${escapeHtml(section.block_type || "article")}</p></div>
@@ -84,6 +101,32 @@ function blockPropertiesMarkup(section, view, page) {
         </div>
       </div>
       <p class="muted ext-note">Nothing is ruled unless you rule it. A box sets the copy in a little way from its own line, the way a printed panel does, and the page draws no hairline in the gutter beside a block that already has a box.</p>
+    </div>
+
+    <div class="prop-section">
+      <h5 class="prop-heading">Ground</h5>
+      <div class="form-group">
+        <div class="tint-swatches" data-prop-tint>
+          ${TINTS.map(
+            (entry) => `<button type="button" class="tint-swatch${(tint || null) === entry.hex ? " active" : ""}"
+              data-tint="${entry.hex || ""}" title="${escapeHtml(entry.label)}"
+              style="--tint:${entry.hex || "#ffffff"}"><i></i></button>`,
+          ).join("")}
+        </div>
+      </div>
+      <p class="muted ext-note">A few per cent of one ink, which is what a printed side-bar carries. Heavier than that and the copy loses its contrast on newsprint.</p>
+    </div>
+
+    <div class="prop-section">
+      <h5 class="prop-heading">Headline treatment</h5>
+      <div class="form-group">
+        <div class="segmented" data-prop-headline-style>
+          ${HEADLINE_STYLES.map(
+            ([key, label]) => `<button type="button" class="segment${headlineStyle === key ? " active" : ""}" data-headline-style="${key}">${label}</button>`,
+          ).join("")}
+        </div>
+      </div>
+      <p class="muted ext-note">Reversed sets the headline in white out of a solid band, in the block's accent colour. The band is drawn behind type that has already been placed, so it never changes where a line breaks.</p>
     </div>
   `;
 }
@@ -295,6 +338,25 @@ function bindBorderButtons(handlers) {
   });
 }
 
+function bindTintButtons(handlers) {
+  document.querySelectorAll("[data-prop-tint] [data-tint]").forEach((button) => {
+    button.addEventListener("click", () => {
+      // "" is White, and White is the absence of a tint - so it is stored as
+      // NULL, not as #ffffff. A page whose blocks all carry an explicit white
+      // could never be told apart from a page nobody had tinted.
+      handlers.onPatch?.({ backgroundColor: button.dataset.tint || null }, "properties-panel");
+    });
+  });
+}
+
+function bindHeadlineStyleButtons(handlers) {
+  document.querySelectorAll("[data-prop-headline-style] [data-headline-style]").forEach((button) => {
+    button.addEventListener("click", () => {
+      handlers.onPatch?.({ headlineStyle: button.dataset.headlineStyle }, "properties-panel");
+    });
+  });
+}
+
 function bindImageControls() {
   if (!boundHandlers) return;
   bindGeometryFields(boundHandlers);
@@ -307,6 +369,8 @@ function bindImageControls() {
 function bindBlockControls() {
   if (!boundHandlers) return;
   bindBorderButtons(boundHandlers);
+  bindTintButtons(boundHandlers);
+  bindHeadlineStyleButtons(boundHandlers);
 }
 
 export function bindPropertiesPanel(handlers) {

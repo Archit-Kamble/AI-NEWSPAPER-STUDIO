@@ -4355,3 +4355,69 @@ pushed the pre-edit copy back into the document the commit was about to write.
 Ten new checks on the workspace net, all green, including the one that would
 have caught the caret: *"and the caret is actually inside it, not merely
 focused."* 829 tests, 61/61 on the controls net.
+
+### 40. The paper's colours: an ink, a ground, a reversed headline (2026-08-19)
+
+Three of the desk's asks, one subject: *"In Editor ability to add color to words.
+In Editor ability to add background light color to whole news block. In Editor
+ability to add dark background color to headline, in this case text will be in
+white color."*
+
+**One catalogue, `public/editor/layout/inks.js`.** SAHAS VARTA prints from four
+plates, so every colour that reaches a page has to be one the press can
+separate — which is why none of these controls is a colour wheel. The browser
+draws its swatches from this file and `scribus.service.js` reaches the same file
+through the dynamic `import()` the character grid already uses, so a colour
+cannot mean one thing on screen and another on the plate. Four inks (the
+nameplate's red, plus the blue and green a Marathi daily uses in a headline) and
+four tints (a few per cent of one ink, which is what a printed side-bar carries).
+
+Black and White carry **no hex**, deliberately: Black is the absence of an ink,
+so choosing it clears the mark; White is the paper, stored as NULL, so a block
+nobody tinted can be told from one a desk set to white. `background_color` is
+consequently the one presentational column written **without** `COALESCE` — with
+it, clearing a tint would have been impossible.
+
+**Three bugs found by building this, each measured in the running app.**
+
+1. **A colour that has been through the DOM is `rgb(200, 16, 46)`.** Quill's
+   colour attributor is a *style* attributor: it reads its value back off the
+   element, and a browser normalises every inline colour. A whitelist of hexes
+   therefore rejected the exact string Quill itself produced — so Quill painted
+   the words red in its own DOM and recorded **nothing in the Delta**, and
+   `copyFromFrame()` (which walks the Delta, deliberately — §34) stored plain
+   text. The whitelist is open now; `sanitiseInk()` at the one door to storage
+   is what keeps a foreign colour off the page, and it accepts both forms.
+
+2. **An absent attribute is not a value of zero.** `sanitiseSize(null)` returned
+   **6**: `getAttribute` gives null for a span with no size, `Number(null)` is 0,
+   `Number.isFinite(0)` is true, and the clamp took it to `SIZE_MIN`. So
+   `sanitise()` kept every stray `<span>` as a size mark and set the words
+   inside it in 3 pt type. Latent since the size mark was written; surfaced the
+   moment a second span attribute existed, as an inked headline coming back
+   stored `<span data-sahas-size="6" data-sahas-ink="#17458f">`.
+
+3. **A tint is a VALUE, so it lives in the element's own style** — and
+   `refreshSection()`, the single-block repaint used for every keystroke, sets
+   `className` and `innerHTML` and nothing else. The tint stored correctly, drew
+   correctly on a reload, and never appeared while a desk was choosing it. Two
+   paint paths, one of them updated: the same shape as the `#edSpaceGroup` trap.
+
+**The reverse panel is drawn, never composed.** It is ink laid behind type that
+has already been placed, so no line moves and no capacity changes. It spans the
+block's whole measure — a panel stopping at the shortest line reads as a
+highlighter, not as printed furniture — and takes `REVERSE_BLEED` (1 mm) past
+the band's own box so the type has ink around it rather than sitting on the
+panel's edge.
+
+**And all of it reaches the press file**, which is the failure this project
+treats as the worst one. `blockFrames()` emits the ground as a filled polygon,
+then the panel, then the type — in that order, because a `.sla` paints in
+document order and a ground emitted after the type would paint over the story.
+A desk's own ink mark inside a reversed headline still wins in both surfaces.
+`tests/inkAndGround.test.js` holds the palette bounds, the two parsing bugs
+above, the separations and that ordering.
+
+837 tests, **74/74** on the controls net, **218/221** on the workspace net — the
+first complete run of it this session, and the three are the AI-provider
+assertions belonging to uncommitted provider work in the tree.

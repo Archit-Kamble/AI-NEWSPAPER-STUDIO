@@ -419,6 +419,10 @@ async function saveSection(pageId, sectionKey, updates) {
          editorial_priority = COALESCE($46, editorial_priority),
          headline_align = COALESCE($47, headline_align),
          subheading_align = COALESCE($48, subheading_align),
+         -- NOT coalesced, deliberately: NULL is the paper's own white, and
+         -- "no tint" is a value a desk chooses. COALESCE would make clearing
+         -- a tint impossible.
+         background_color = $49,
          updated_at = CURRENT_TIMESTAMP
      WHERE page_id = $1 AND section_key = $2 RETURNING *`,
     [pageId, sectionKey, updates.newsItemId || null, updates.headline || null, updates.headlineFontPx || null,
@@ -453,7 +457,8 @@ async function saveSection(pageId, sectionKey, updates) {
       // COALESCE like every other presentational column: a payload that does
       // not mention the headline's alignment leaves it exactly as it was.
       updates.headlineAlign || null,
-      updates.subheadingAlign || null]
+      updates.subheadingAlign || null,
+      updates.backgroundColor || null]
   );
   return rows[0] || null;
 }

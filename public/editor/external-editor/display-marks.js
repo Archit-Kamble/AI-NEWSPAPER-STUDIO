@@ -16,11 +16,14 @@
 // ordinary contenteditable.
 //
 // Everything here produces only what rich-text.js's sanitise() already keeps:
-// <b>, <i>, <u> and the one controlled <span data-sahas-size>. Nothing invents
-// a colour, a face or an inline style, because a newspaper is one paper rather
-// than a scrapbook (rich-text.js).
+// <b>, <i>, <u> and the two controlled spans, `data-sahas-size` and
+// `data-sahas-ink`. Nothing invents a FACE or an arbitrary inline style, and
+// the ink is not an arbitrary colour either - it is one of the four the paper
+// prints from (rich-text.js's INKS), because a page is separated into plates
+// and a colour off a browser wheel is an ink that does not exist.
 
 import { sanitise, sanitiseSize, isMarkedUp, plainText } from "../layout/rich-text.js";
+import { sanitiseInk } from "../layout/inks.js";
 import { escapeHtml } from "../format.js";
 
 // The display field the desk is typing in, if any. Held rather than derived
@@ -110,6 +113,55 @@ function applySize(field, px) {
   return true;
 }
 
+/**
+ * One of the paper's inks on the selected words.
+ *
+ * The same shape as applySize() above, and for the same reasons: the mark is
+ * one controlled attribute with a finite set of legal values, and it carries a
+ * real style as well so the field shows the ink while it is being edited -
+ * fieldValue()'s sanitise() takes the style back off on the way to storage.
+ *
+ * Black is not an ink here, it is the absence of one: choosing it strips the
+ * mark, so the word goes back to being set in whatever the block is set in.
+ */
+function applyInk(field, hex) {
+  const range = selectionInside(field);
+  if (!range || range.collapsed) return false;
+
+  const ink = sanitiseInk(hex);
+  if (ink === null) return stripInk(field, range);
+
+  const span = document.createElement("span");
+  span.setAttribute("data-sahas-ink", ink);
+  span.style.color = ink;
+  try {
+    range.surroundContents(span);
+  } catch {
+    span.appendChild(range.extractContents());
+    range.insertNode(span);
+  }
+
+  const selection = window.getSelection();
+  const after = document.createRange();
+  after.selectNodeContents(span);
+  selection?.removeAllRanges();
+  selection?.addRange(after);
+  return true;
+}
+
+// Back to the block's own ink. Every inked span the selection touches is
+// unwrapped - a partial selection inside one would need the span split, and
+// the honest simple rule ("choosing Black clears the ink on the words you
+// selected, and on the run they are part of") is one a desk can predict.
+function stripInk(field, range) {
+  const touched = [...field.querySelectorAll("[data-sahas-ink]")]
+    .filter((span) => range.intersectsNode(span));
+  if (!touched.length) return false;
+  touched.forEach((span) => span.replaceWith(...span.childNodes));
+  field.normalize();
+  return true;
+}
+
 // A mark is applied by hand rather than by document.execCommand, and the
 // reason is measurable rather than stylistic: a headline field is ALREADY set
 // in the paper's bold display face, so `execCommand('bold')` reads the
@@ -191,6 +243,7 @@ export function applyDisplayMark(action, value) {
   field.focus({ preventScroll: true });
 
   if (action === "size") return applySize(field, value);
+  if (action === "ink") return applyInk(field, value);
   if (action === "clean") return clearMarks(field);
   if (action === "bold") return toggleMark(field, "B");
   if (action === "italic") return toggleMark(field, "I");
@@ -222,6 +275,10 @@ export function fieldHtml(value) {
   // what it stored before.
   holder.querySelectorAll("[data-sahas-size]").forEach((span) => {
     span.style.fontSize = `${span.getAttribute("data-sahas-size")}px`;
+  });
+  // The ink mark, for the same reason and taken off again the same way.
+  holder.querySelectorAll("[data-sahas-ink]").forEach((span) => {
+    span.style.color = span.getAttribute("data-sahas-ink");
   });
   return holder.innerHTML;
 }

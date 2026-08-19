@@ -385,6 +385,89 @@ const BODY = 'सातारा : नगरपालिकेच्या स�
     say((await storedBorder()) === 'none', 'and that is what is stored', String(await storedBorder()));
   }
 
+  // ------------------------------------------------------------- the paper's ink ---
+  //
+  // A colour on WORDS, and it must land on the object that is selected - the
+  // same rule the alignment controls and the marks toolbar already keep. Four
+  // named inks, never a colour wheel: a page is separated into plates.
+  {
+    const draft = () => page.evaluate(async () => (await import('/editor/store.js')).getState().draft);
+
+    say(await page.locator('.ed-quill-ink-btn').count() === 4, 'the toolbar carries the paper\'s four inks and no more');
+
+    await focusPart('body');
+    await selectAllIn('body');
+    await page.locator('.ed-quill-ink-btn[data-ink="#c8102e"]').click();
+    await page.waitForTimeout(600);
+    say(/data-sahas-ink="#c8102e"/.test((await draft()).body), 'an ink on the body is stored as the controlled mark',
+      (await draft()).body.slice(0, 80));
+    say(!/style="color/.test((await draft()).body), 'and never as a raw style - a pasted stylesheet may not reach the page');
+    say(await page.evaluate(() => {
+      const el = document.querySelector('.newspaper-section.active .section-body-line span[style*="color"]');
+      return Boolean(el);
+    }), 'the page itself paints it, not only the editor');
+
+    await focusPart('headline');
+    await selectAllIn('headline');
+    await page.locator('.ed-quill-ink-btn[data-ink="#17458f"]').click();
+    await page.waitForTimeout(600);
+    say(/data-sahas-ink="#17458f"/.test((await draft()).headline), 'and the headline takes its own, not the body\'s',
+      (await draft()).headline.slice(0, 80));
+    say(!/#17458f/.test((await draft()).body), 'the body kept the ink it already had');
+
+    // Black is the absence of an ink, not a fifth one.
+    await selectAllIn('headline');
+    await page.locator('.ed-quill-ink-btn[data-ink=""]').click();
+    await page.waitForTimeout(600);
+    say(!/data-sahas-ink/.test((await draft()).headline), 'Black clears the ink rather than adding one');
+  }
+
+  // -------------------------------------------------- the ground and the panel ---
+  {
+    await page.locator(`.newspaper-section[data-section-key="${KEY}"]`).click();
+    await page.waitForTimeout(600);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(700);
+    const blockStyle = () => page.locator(`.newspaper-section[data-section-key="${KEY}"]`).getAttribute('style');
+
+    say(await page.locator('[data-prop-tint] .tint-swatch').count() === 5, 'the block offers the paper\'s tints and white');
+    await page.locator('[data-prop-tint] [data-tint="#fbf3e9"]').click();
+    await page.waitForTimeout(900);
+    // The tint is a VALUE, so it lives in the element's own style - which means
+    // the single-block repaint path has to set it too. It did not, and the tint
+    // was stored correctly, drawn correctly on a reload, and never appeared
+    // while a desk was choosing it.
+    say(/--block-tint: #fbf3e9/.test(await blockStyle()), 'and it appears on the page as it is chosen', await blockStyle());
+
+    await page.locator('[data-prop-headline-style] [data-headline-style="reverse"]').click();
+    await page.waitForTimeout(1000);
+    say(await page.locator(`.newspaper-section[data-section-key="${KEY}"] .section-headline-reverse`).count() === 1,
+      'a reversed headline draws its panel');
+    say(await page.evaluate((key) => {
+      const el = document.querySelector(`.newspaper-section[data-section-key="${key}"] .section-headline`);
+      return el ? getComputedStyle(el).color : '';
+    }, KEY) === 'rgb(255, 255, 255)', 'and sets the type out of it in white');
+
+    await page.waitForTimeout(3200);
+    const stored = await page.evaluate(async ([ed, key]) => {
+      const pages = await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json());
+      const section = pages[0].sections.find((s) => s.section_key === key);
+      return { ground: section.background_color, style: section.headline_style };
+    }, [ED, KEY]);
+    say(stored.ground === '#fbf3e9' && stored.style === 'reverse', 'both are on the row', JSON.stringify(stored));
+
+    // Put it back, so this net can be run again.
+    await page.locator('[data-prop-tint] [data-tint=""]').click();
+    await page.waitForTimeout(700);
+    await page.locator('[data-prop-headline-style] [data-headline-style="plain"]').click();
+    await page.waitForTimeout(3200);
+    const cleared = await page.evaluate(async ([ed, key]) => {
+      const pages = await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json());
+      return pages[0].sections.find((s) => s.section_key === key).background_color;
+    }, [ED, KEY]);
+    say(cleared === null, 'White is stored as nothing at all, so an untinted block can be told from a white one', String(cleared));
+  }
+
   say(errors.length === 0, 'no console errors or page errors anywhere in this run', errors.slice(0, 4).join(' | ') || '(none)');
 
   const failed = results.filter((r) => !r.ok);

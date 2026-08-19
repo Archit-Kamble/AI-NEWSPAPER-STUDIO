@@ -61,6 +61,7 @@ export const DRAFT_FIELDS = [
   "borderStyle",
   "borderWidthPx",
   "borderColor",
+  "backgroundColor",
   "headlineStyle",
   "accentColor",
   // The structured card placed in this block, if any. In the draft like every
@@ -135,6 +136,8 @@ export function draftFromSection(section) {
     borderStyle: section.border_style || "none",
     borderWidthPx: Number(section.border_width_px) || 1,
     borderColor: section.border_color || "#111111",
+    // NULL is the paper's own white and is not a colour - see schema.sql.
+    backgroundColor: section.background_color || null,
     headlineStyle: section.headline_style || "plain",
     accentColor: section.accent_color || "#c8102e",
     // A card is only a card when both halves are there. A key with no payload
@@ -222,6 +225,7 @@ export function payloadFromDraft(draft) {
     borderStyle: draft.borderStyle,
     borderWidthPx: draft.borderWidthPx,
     borderColor: draft.borderColor,
+    backgroundColor: draft.backgroundColor || null,
     headlineStyle: draft.headlineStyle,
     accentColor: draft.accentColor,
     smartCardKey: draft.smartCardKey || null,

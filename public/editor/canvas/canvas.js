@@ -111,7 +111,8 @@ export function renderCanvas(page, newspaper, selection, callbacks = {}) {
             return `
               <div class="${sectionClassName(view, { selected, dirty: selected && dirty, overflowing, atRightEdge, atFootEdge, hasImages: Boolean((section.images || []).length) })}"
                    data-section-key="${section.section_key}"
-                   style="left:${section.x_px}px;top:${section.y_px}px;width:${section.width_px}px;height:${section.height_px}px;"
+                   style="left:${section.x_px}px;top:${section.y_px}px;width:${section.width_px}px;height:${section.height_px}px;`
+              + `${view.backgroundColor ? `--block-tint:${view.backgroundColor};` : ""}"
               >${sectionInnerHtml(section, view, { dirty: selected && dirty, selected })}</div>`;
           })
           .join("")}
@@ -166,6 +167,11 @@ export function refreshGuides(guides) {
   renderGuides(guides);
 }
 
+function applyBlockTint(element, view) {
+  if (view.backgroundColor) element.style.setProperty("--block-tint", view.backgroundColor);
+  else element.style.removeProperty("--block-tint");
+}
+
 // Part 14: repaint exactly one section. Used for every keystroke, so live
 // preview costs one innerHTML write on one box.
 export function refreshSection(section, view, { selected = false, dirty = false } = {}) {
@@ -176,6 +182,12 @@ export function refreshSection(section, view, { selected = false, dirty = false 
   const atRightEdge = g ? section.x_px + section.width_px >= g.marginXPx + g.matterWidthPx - 2 : false;
   const atFootEdge = g ? section.y_px + section.height_px >= contentRegion(g, renderedPage).bottom - 2 : false;
   element.className = sectionClassName(view, { selected, dirty, overflowing, atRightEdge, atFootEdge, hasImages: Boolean((section.images || []).length) });
+  // The block's ground is a VALUE, so it lives in the element's own style and
+  // not in its class list - which means this repaint has to set it too. It did
+  // not, and the symptom is the one this codebase keeps meeting: the tint was
+  // stored correctly, drawn correctly on a reload, and never appeared while a
+  // desk was actually choosing it. Two paint paths, one of them updated.
+  applyBlockTint(element, view);
   element.innerHTML = sectionInnerHtml(section, view, { dirty, selected });
 }
 

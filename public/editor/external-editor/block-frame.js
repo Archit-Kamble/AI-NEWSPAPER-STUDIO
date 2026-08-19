@@ -30,6 +30,7 @@
 // about being enlarged can move a line.
 
 import { sanitise, sanitiseSize, fromPlainText, plainText } from "../layout/rich-text.js";
+import { INKS, sanitiseInk } from "../layout/inks.js";
 import {
   markDisplayField, clearDisplayField, activeDisplayField, applyDisplayMark, holdSelection,
   fieldHtml, fieldValue, DISPLAY_TARGET_EVENT,
@@ -142,6 +143,17 @@ export function blockFrameMarkup() {
           <button type="button" class="ed-quill-size-btn" data-size="18px" title="18px">18</button>
           <button type="button" class="ed-quill-size-btn" data-size="22px" title="22px">22</button>
           <button type="button" class="ed-quill-size-btn" data-size="28px" title="28px">28</button>
+        </span>
+        <!-- The paper's inks. The second exception to "colour is the
+             layout's, not the selection's", and bounded the same way the
+             size buttons are: four named inks out of rich-text.js's INKS,
+             never a colour wheel. A page is separated into plates, and a
+             colour a desk mixed in a browser is an ink no press can lay
+             down. Black is the absence of a mark, so it CLEARS. -->
+        <span class="ql-formats ed-quill-ink-group" id="edQuillInk">
+          ${INKS.map((ink) => `<button type="button" class="ed-quill-ink-btn${ink.hex ? "" : " is-none"}"
+              data-ink="${ink.hex || ""}" title="${ink.label}"
+              style="${ink.hex ? `--ink:${ink.hex}` : ""}"><i></i></button>`).join("")}
         </span>
         <span class="ql-formats">
           <button class="ql-list" value="ordered" type="button"></button>
@@ -1076,13 +1088,20 @@ function bindPictureFrames() {
 // Attributor for - drops the mark on load, and the very next keystroke would
 // save it away permanently even though the desk never touched that word.
 function quillHtmlFromStored(html) {
-  if (!html || !html.includes("data-sahas-size")) return html;
+  if (!html || !(html.includes("data-sahas-size") || html.includes("data-sahas-ink"))) return html;
   const holder = document.createElement("div");
   holder.innerHTML = html;
   holder.querySelectorAll("[data-sahas-size]").forEach((el) => {
     const px = Number(el.getAttribute("data-sahas-size"));
     el.removeAttribute("data-sahas-size");
     if (Number.isFinite(px)) el.style.fontSize = `${px}px`;
+  });
+  // The ink mark, the same way and for the same reason: Quill's clipboard only
+  // round-trips formats it has an Attributor for, and its own is a style.
+  holder.querySelectorAll("[data-sahas-ink]").forEach((el) => {
+    const ink = sanitiseInk(el.getAttribute("data-sahas-ink"));
+    el.removeAttribute("data-sahas-ink");
+    if (ink) el.style.color = ink;
   });
   return holder.innerHTML;
 }
@@ -1107,6 +1126,12 @@ function canonicalInlineHtml(text, attrs) {
   let html = escapeCanonicalText(text);
   const size = attrs.size ? sanitiseSize(Number.parseFloat(attrs.size)) : null;
   if (size !== null) html = `<span data-sahas-size="${size}">${html}</span>`;
+  // Quill's own `color` attribute, back into the paper's controlled mark. An
+  // ink that is not one of the four is dropped rather than stored - a colour
+  // no press can separate must not reach the page just because a paste
+  // carried it.
+  const ink = attrs.color ? sanitiseInk(attrs.color) : null;
+  if (ink !== null) html = `<span data-sahas-ink="${ink}">${html}</span>`;
   if (attrs.underline) html = `<u>${html}</u>`;
   if (attrs.italic) html = `<em>${html}</em>`;
   if (attrs.bold) html = `<strong>${html}</strong>`;
@@ -1203,7 +1228,8 @@ function toolbarActionOf(target) {
   for (const [action, selector] of TOOLBAR_ACTION) {
     if (target.closest(selector)) return action;
   }
-  return target.closest(".ed-quill-size-btn") ? "size" : null;
+  if (target.closest(".ed-quill-size-btn")) return "size";
+  return target.closest(".ed-quill-ink-btn") ? "ink" : null;
 }
 
 let marksToolbarBound = false;
@@ -1239,8 +1265,10 @@ function bindMarksToolbar() {
     event.preventDefault();
     event.stopPropagation();
 
-    const button = event.target.closest(".ed-quill-size-btn");
-    if (applyDisplayMark(action, button?.dataset.size)) {
+    const value = action === "ink"
+      ? event.target.closest(".ed-quill-ink-btn")?.dataset.ink
+      : event.target.closest(".ed-quill-size-btn")?.dataset.size;
+    if (applyDisplayMark(action, value)) {
       // Straight down the ordinary field path - the same "input" event a
       // keystroke in the field raises, so the draft, the counters and the
       // canvas all update through one route rather than through a second one
@@ -1330,6 +1358,23 @@ export async function mountFrame(section, view, images, callbacks, selectedPart 
     const SizeStyle = Quill.import("attributors/style/size");
     SizeStyle.whitelist = null;
     Quill.register(SizeStyle, true);
+    // Ink is the second exception, registered as a STYLE attributor for the
+    // same reason size is: Quill's default colour attributor is a CLASS, and a
+    // class round-trips through the clipboard as `ql-color-red`, which means
+    // nothing to canonicalInlineHtml() or to a press file.
+    //
+    // Open whitelist, exactly like size, and it has to be. A StyleAttributor
+    // reads its value back off the element, and a browser normalises every
+    // inline colour: the style set as `#c8102e` reads back as
+    // `rgb(200, 16, 46)`, which a whitelist of hexes rejects - so Quill
+    // painted the words red in its own DOM and recorded NOTHING in the Delta,
+    // and copyFromFrame() (which walks the Delta, deliberately) stored plain
+    // text. Measured that way before this line changed. What keeps a foreign
+    // colour off the page is sanitiseInk() at the one door to storage, not a
+    // list Quill compares against a string it never produces.
+    const ColorStyle = Quill.import("attributors/style/color");
+    ColorStyle.whitelist = null;
+    Quill.register(ColorStyle, true);
     sizeAttributorRegistered = true;
   }
 
@@ -1355,6 +1400,16 @@ export async function mountFrame(section, view, images, callbacks, selectedPart 
   // Bold working after that focus loss) is what makes this still apply to
   // the text that was actually selected.
   bindMarksToolbar();
+  // The ink buttons, for the BODY - the display fields go through
+  // applyDisplayMark() above. Black carries no hex and clears the format,
+  // which is what `false` means to Quill.
+  document.getElementById("edQuillInk")?.addEventListener("click", (event) => {
+    const button = event.target.closest(".ed-quill-ink-btn");
+    if (!button || !quill) return;
+    const range = quill.getSelection(true);
+    if (!range) return;
+    quill.format("color", sanitiseInk(button.dataset.ink) || false, "user");
+  });
   document.getElementById("edQuillSize")?.addEventListener("click", (event) => {
     const button = event.target.closest(".ed-quill-size-btn");
     if (!button || !quill) return;

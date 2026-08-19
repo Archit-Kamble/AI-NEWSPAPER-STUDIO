@@ -128,6 +128,11 @@ function headlineLineHtml(line, view, segments, marks) {
   return escapeHtml(setSpaces(text).text);
 }
 
+// A printed reverse panel carries about a millimetre of ink above and below
+// the type it holds - type sitting exactly on the panel's edge reads as a
+// mistake. One pixel is 0.5 mm on this page.
+const REVERSE_BLEED = 2;
+
 const BAND_CLASS = {
   kicker: 'section-kicker',
   headline: 'section-headline',
@@ -143,6 +148,28 @@ const BAND_CLASS = {
  */
 export function composedMarkup(composition, view, { datelinePrefix = '' } = {}) {
   const pieces = [];
+
+  // A headline set REVERSED - white type out of a solid band - is one of the
+  // three or four treatments a Marathi daily actually uses on a lead, and it
+  // is drawn rather than composed: the band is ink laid behind type that was
+  // already placed, so nothing about the composition changes and no line moves.
+  //
+  // The panel is the block's whole measure, not the headline's own line widths
+  // - a reverse band that stopped at the end of the shortest line would read as
+  // a highlighter, not as a printed panel - and it is taken a hair past the
+  // band's own box top and bottom (REVERSE_BLEED) so the type has ink around
+  // it rather than sitting on the panel's edge.
+  const reversed = view.headlineStyle === 'reverse';
+  if (reversed && composition.bands?.headline?.lines?.length) {
+    const band = composition.bands.headline;
+    const left = composition.content.left;
+    const width = composition.content.measure;
+    pieces.push(
+      `<i class="section-headline-reverse" style="left:${left.toFixed(2)}px;top:${(band.top - REVERSE_BLEED).toFixed(2)}px;`
+      + `width:${width.toFixed(2)}px;height:${(band.height + REVERSE_BLEED * 2).toFixed(2)}px;`
+      + `background:${escapeHtml(view.accentColor || '#111111')}"></i>`,
+    );
+  }
 
   for (const [key, band] of Object.entries(composition.bands || {})) {
     const className = BAND_CLASS[key] || 'section-flowed-band';
@@ -168,10 +195,14 @@ export function composedMarkup(composition, view, { datelinePrefix = '' } = {}) 
       const glyphScale = Number.isFinite(line.glyphScaleX) && line.glyphScaleX !== 1
         ? `transform:scaleX(${line.glyphScaleX});transform-origin:left top;`
         : '';
+      // Type out of a reverse band is white, and it is the band's own decision
+      // rather than a mark - a desk that inked a word inside it still wins,
+      // because that span carries its own colour further down the cascade.
+      const reverseInk = reversed && key === 'headline' ? 'color:#fff;' : '';
       pieces.push(
         `<span class="section-composed ${className}" style="left:${line.x.toFixed(2)}px;top:${line.y.toFixed(2)}px;`
         + `width:${line.measure.toFixed(2)}px;height:${line.height.toFixed(2)}px;`
-        + `font-size:${line.fontPx}px;line-height:${line.height.toFixed(2)}px;${wordSpacing}${glyphScale}${faceStyle(line)}">${html}</span>`,
+        + `font-size:${line.fontPx}px;line-height:${line.height.toFixed(2)}px;${wordSpacing}${glyphScale}${reverseInk}${faceStyle(line)}">${html}</span>`,
       );
     });
   }

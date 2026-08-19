@@ -672,6 +672,54 @@ A second copy of any of these is the failure mode this project has already been 
 
 **Whitespace is classified, not counted.** A ragged right end is how type is set and is never a hole; a gap a photograph made unusable was never counted as usable in the first place. `largestHoleLines` is the one number the desk and the writer act on, and `HOLE_LINES` (4) matches `storyWriter.service.js` deliberately.
 
+### The paper's colours are a palette, never a picker
+
+SAHAS VARTA is printed from four plates, so every colour that reaches a page has
+to be one the press can separate. `public/editor/layout/inks.js` is the one
+catalogue — the browser draws its controls from it, and `scribus.service.js`
+reaches it through the same dynamic `import()` the character grid does, so a
+colour can never mean one thing on screen and another on the plate.
+
+| | | control |
+|---|---|---|
+| `INKS` | a colour on selected **words**, stored as `data-sahas-ink` | the marks toolbar |
+| `TINTS` | a light ground behind a whole **block**, `page_sections.background_color` | Properties → Ground |
+| `headline_style: 'reverse'` | white type out of a solid panel | Properties → Headline treatment |
+
+- **Black and White carry no hex, deliberately.** Black is the absence of an ink
+  (choosing it *clears*); White is the paper, stored as NULL, so a block nobody
+  tinted can be told from one a desk set to white. `background_color` is the one
+  presentational column NOT written with `COALESCE` — otherwise clearing a tint
+  would be impossible.
+- **A colour that has been through the DOM comes back `rgb(200, 16, 46)`.** A
+  browser normalises every inline colour, so both forms have to resolve to the
+  same ink. Quill's colour attributor is a **style** attributor that reads its
+  value back off the element — a whitelist of hexes rejected what Quill itself
+  produced, so Quill painted the words red in its own DOM and recorded **nothing
+  in the Delta**, and `copyFromFrame()` (which walks the Delta, deliberately)
+  stored plain text. The whitelist is open; `sanitiseInk()` at the one door to
+  storage is what keeps a foreign colour off the page.
+- **An absent attribute is not a value of zero.** `sanitiseSize(null)` returned
+  **6** — `Number(null)` is 0, `Number.isFinite(0)` is true, and the clamp took
+  it to the minimum — so `sanitise()` kept every stray `<span>` as a size mark
+  and set the words inside it in 3 pt type. Latent until a second span attribute
+  existed; found because an inked headline stored as
+  `<span data-sahas-size="6" data-sahas-ink="…">`.
+- **The reverse panel is DRAWN, never composed.** It is ink laid behind type
+  that has already been placed, so no line moves. It spans the block's whole
+  measure (a panel that stopped at the shortest line would read as a
+  highlighter) and takes `REVERSE_BLEED` past the band's own box. A desk's own
+  ink mark inside a reversed headline still wins, in the browser and in the
+  press file alike.
+- **A tint is a VALUE, so it lives in the element's own style** — which means
+  `refreshSection()`, the single-block repaint used for every keystroke, has to
+  set it too. It did not: the tint stored correctly, drew correctly on a reload,
+  and never appeared while a desk was choosing it. Two paint paths, one updated.
+- **In the press file the ground goes down first, then the panel, then the
+  type.** A `.sla` paints in document order; `tests/inkAndGround.test.js` holds
+  that order, because a ground emitted after the type would paint over the
+  story.
+
 ### The story is typed where it prints
 
 A double click on the body used to scroll the page **down** to the Quill box

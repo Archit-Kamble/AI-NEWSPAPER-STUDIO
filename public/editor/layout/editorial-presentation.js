@@ -39,6 +39,11 @@ export function renderPresentation(text, richMarks = [], semanticRanges = [], es
     // is the one place that becomes a real, visible font-size.
     const sized = richMarks.find((mark) => mark.tag === 'size' && mark.start <= start && mark.end >= end);
     if (sized) piece = `<span style="font-size:${sized.value}px">${piece}</span>`;
+    // A word set in one of the paper's inks (rich-text.js's `data-sahas-ink`).
+    // Stored as an attribute and nothing else; this is the one place it
+    // becomes a visible colour, exactly as the size mark above does.
+    const inked = richMarks.find((mark) => mark.tag === 'ink' && mark.start <= start && mark.end >= end);
+    if (inked) piece = `<span style="color:${inked.value}">${piece}</span>`;
     for (const tag of ['u', 'i', 'b']) if (richMarks.some((mark) => mark.tag === tag && mark.start <= start && mark.end >= end)) piece = `<${tag}>${piece}</${tag}>`;
     html += piece;
   }

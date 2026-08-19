@@ -70,6 +70,12 @@ const COLOURS = `
   <COLOR NAME="Registration" CMYK="#ffffffff" Spot="0" Register="1"/>
   <COLOR NAME="White" CMYK="#00000000" Spot="0" Register="0"/>
   <COLOR NAME="SahasRed" CMYK="#00ffe61a" Spot="0" Register="0"/>
+  <COLOR NAME="SahasBlue" CMYK="#d6840070" Spot="0" Register="0"/>
+  <COLOR NAME="SahasGreen" CMYK="#ea007b85" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintGrey" CMYK="#0202000b" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintCream" CMYK="#00081204" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintPink" CMYK="#000c0a02" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintBlue" CMYK="#0d080004" Spot="0" Register="0"/>
   <COLOR NAME="None" CMYK="#00000000" Spot="0" Register="0"/>`;
 
 // The four faces the publication actually ships (public/assets/fonts/, the
@@ -84,6 +90,11 @@ const FONT_NAMES = {
   'sans/400': 'Noto Sans Devanagari Regular',
   'sans/700': 'Noto Sans Devanagari Bold',
 };
+// The same hair of ink a printed reverse panel carries above and below its
+// type - one copy of the number, shared with compose/render.js's REVERSE_BLEED
+// by being stated in the same units (editor px) and converted here.
+const REVERSE_BLEED_PX = 2;
+
 const BODY_FONT = FONT_NAMES['serif/400'];
 const HEAD_FONT = FONT_NAMES['sans/700'];
 
@@ -190,6 +201,24 @@ function lineFrame({ xMm, yMm, widthMm, heightMm, runs, align = 0, ownPage = 0 }
               COLUMNS="1" COLGAP="0" TEXTFLOWMODE="0"
               EXTRA="0" TEXTRA="0" BEXTRA="0" REXTRA="0">${itext}<para ALIGN="${align}"/>
   </PAGEOBJECT>`;
+}
+
+/**
+ * A plain filled rectangle - the ground behind a block, and the panel behind a
+ * reversed headline.
+ *
+ * PTYPE 6 is Scribus's Polygon; a rectangle is its default shape, so no path
+ * has to be described. PCOLOR is the fill and PWIDTH 0 means no outline: this
+ * is ink laid down, never a frame with a border. It is pushed BEFORE the text
+ * frames that sit on it, because a .sla paints in document order.
+ */
+function fillFrame({ xMm, yMm, widthMm, heightMm, colour, ownPage = 0 }) {
+  if (!colour || colour === 'None') return '';
+  return `
+  <PAGEOBJECT XPOS="${mmRound(xMm)}" YPOS="${mmRound(yMm)}" WIDTH="${mmRound(widthMm)}" HEIGHT="${mmRound(heightMm)}"
+              OwnPage="${ownPage}" ItemID="${nextId()}" PTYPE="6" ANNAME="" FRTYPE="0"
+              PWIDTH="0" PCOLOR="${escapeXml(colour)}" PCOLOR2="None" LOCALSCX="1" LOCALSCY="1"
+              SHADE="100" SHADE2="100" TEXTFLOWMODE="0"/>`;
 }
 
 // An image frame. `PFILE` is a path the press box has to be able to resolve, so
@@ -396,6 +425,14 @@ async function blockFrames(section, { pageIndex = 0, pageOffsetMm = 0 } = {}) {
     ? adapter.composeSection({ ...section, images: [], body: '' }, { ...section, body: '' })
     : adapter.composeSection(section, section);
 
+  // The block's own ground, first, because a .sla paints in document order and
+  // this is what everything else in the block is printed ON.
+  parts.push(fillFrame({
+    xMm: mm(section.x_px), yMm: mm(section.y_px) + pageOffsetMm,
+    widthMm: mm(section.width_px), heightMm: mm(section.height_px),
+    colour: richText.tintSeparation(section.background_color), ownPage: pageIndex,
+  }));
+
   parts.push(displayBandFrames(composition, section, accent, richText, {
     xBaseMm: mm(section.x_px), yBaseMm: mm(section.y_px), pageOffsetMm, ownPage: pageIndex,
   }));
@@ -460,6 +497,24 @@ function displayBandFrames(composition, section, accent, richText, { xBaseMm, yB
   const headlineBand = composition.bands?.headline;
   const headlineTexts = headlineBand ? headlineBand.lines.map((line) => line.text) : [];
   const headline = accent.headlineSegments(headlineTexts, { accentStyle: section.headline_style === 'accent' });
+
+  // A reversed headline is white type out of a solid panel, and the panel is
+  // laid down first - exactly as render.js draws it for the browser, at the
+  // same REVERSE_BLEED and across the same full measure. A press file that
+  // emitted the white type without the panel would print nothing at all where
+  // the lead's headline should be, which is the worst failure this exporter
+  // could have.
+  const reversed = section.headline_style === 'reverse';
+  if (reversed && headlineBand?.lines?.length) {
+    parts.push(fillFrame({
+      xMm: xBaseMm + mm(composition.content.left),
+      yMm: yBaseMm + mm(headlineBand.top - REVERSE_BLEED_PX) + pageOffsetMm,
+      widthMm: mm(composition.content.measure),
+      heightMm: mm(headlineBand.height + REVERSE_BLEED_PX * 2),
+      colour: 'SahasRed', ownPage,
+    }));
+  }
+
   for (const [key, band] of Object.entries(composition.bands || {})) {
     band.lines.forEach((line, lineIndex) => {
       // The desk's own marks inside a display flow - a name set bold in a
@@ -472,6 +527,11 @@ function displayBandFrames(composition, section, accent, richText, { xBaseMm, yB
         ? segmentRuns(headline[lineIndex], { family: line.family, weight: line.weight }, 'SahasRed').map((run) => ({ ...run, fontPx: run.fontPx || line.fontPx }))
         : richText.styledRuns(line.text, line.at || 0, band.marks || [], line.fontPx)
           .map((run) => ({ ...run, family: line.family, weight: run.bold ? 700 : line.weight }));
+      // Out of the panel above. A desk's own ink mark inside the headline
+      // still wins, the same way it does in the browser.
+      if (reversed && key === 'headline') {
+        runs.forEach((run) => { if (!run.colour) run.colour = 'White'; });
+      }
       // `line.measure` is the band's own gap; `line.width` is what was
       // actually drawn there. A one-word headline wider than the whole
       // measure is set anyway (compose.js will not invent a hyphen inside a

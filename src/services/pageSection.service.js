@@ -140,6 +140,7 @@ async function saveSection(pageId, sectionKey, body) {
     borderStyle: body.borderStyle,
     borderWidthPx: body.borderWidthPx,
     borderColor: body.borderColor,
+    backgroundColor: body.backgroundColor,
     headlineStyle: body.headlineStyle,
     accentColor: body.accentColor,
     // What structured card is placed in this block, and its payload. Never

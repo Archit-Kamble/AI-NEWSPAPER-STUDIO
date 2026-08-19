@@ -36,6 +36,13 @@
 // a story, and the words would be gone from the printed page with nothing to
 // show they had ever been there. The sanitiser is what removes foreign tags, on
 // the way in; by the time text is stored, the only tags left are these.
+// The paper's colours live in ONE catalogue, shared by the browser and the
+// server (inks.js) - a second copy of a palette is exactly the drift this
+// codebase has already been bitten by twice.
+import { sanitiseInk, inkSeparation } from './inks.js';
+
+export { INKS, TINTS, sanitiseInk, sanitiseTint, inkSeparation, tintSeparation } from './inks.js';
+
 const MARKS = 'b|strong|i|em|u|br|p|div|ul|ol|li|span';
 // A paragraph ends with a BLANK line, not a single break. Everything
 // downstream splits paragraphs on two newlines - the e-paper renders them as
@@ -55,6 +62,14 @@ const SIZE_MAX = 96;
 
 /** A finite, in-range size, or null if the attribute was not a real number. */
 export function sanitiseSize(value) {
+  // An ABSENT attribute is not a size of zero, and this cost real damage:
+  // `getAttribute` returns null for a span that carries no size, `Number(null)`
+  // is 0, `Number.isFinite(0)` is true, and the clamp below turned it into the
+  // minimum - 6 px. So sanitise() kept every stray <span> as a size mark and
+  // set the words inside it in 3 pt type. Found the moment a second span
+  // attribute existed (`data-sahas-ink`): an inked headline came back stored as
+  // `<span data-sahas-size="6" data-sahas-ink="...">`.
+  if (value === null || value === undefined || String(value).trim() === '') return null;
   const n = Number(value);
   if (!Number.isFinite(n)) return null;
   return Math.min(SIZE_MAX, Math.max(SIZE_MIN, n));
@@ -140,9 +155,11 @@ export function sanitise(html) {
       // unwrapped like any other tag not on the list.
       if (child.tagName === 'SPAN') {
         const size = sanitiseSize(child.getAttribute('data-sahas-size'));
-        if (size === null) { child.replaceWith(...child.childNodes); return; }
+        const ink = sanitiseInk(child.getAttribute('data-sahas-ink'));
+        if (size === null && ink === null) { child.replaceWith(...child.childNodes); return; }
         [...child.attributes].forEach((attribute) => child.removeAttribute(attribute.name));
-        child.setAttribute('data-sahas-size', String(size));
+        if (size !== null) child.setAttribute('data-sahas-size', String(size));
+        if (ink !== null) child.setAttribute('data-sahas-ink', ink);
         return;
       }
 
@@ -202,6 +219,12 @@ export function textWithMarks(html) {
   // until the paper is printed. One parser, both sides.
   const open = [];
   const marks = [];
+  // What each open SPAN pushed, so its own closing tag knows what to close.
+  // A span is the one tag whose mark is a VALUE rather than a presence, and it
+  // can now carry two of them at once (a size and an ink) or, after a paste,
+  // neither - so "close the most recent 'size'" is not a rule that holds. The
+  // stack records the actual entries, in order.
+  const spans = [];
   let text = '';
   let index = 0;
 
@@ -217,23 +240,39 @@ export function textWithMarks(html) {
 
     const closing = match[1] === '/';
     const name = match[2].toUpperCase();
-    const mark = name === 'SPAN' ? 'size' : MARK_TAGS[name];
+    const mark = MARK_TAGS[name];
 
     if (name === 'BR') { text += '\n'; continue; }
 
     if (!closing) {
       if (name === 'SPAN') {
-        const attrMatch = /data-sahas-size="([^"]*)"/.exec(match[3] || '');
-        const size = attrMatch ? sanitiseSize(attrMatch[1]) : null;
-        // A span with no valid size carries no mark - it still opens/closes
-        // in the source, but nothing is pushed for it, so its content reads
-        // as plain, unmarked text (matching what sanitise() would have
-        // reduced it to anyway).
-        if (size !== null) open.push({ tag: mark, start: text.length, value: size });
+        const sizeAttr = /data-sahas-size="([^"]*)"/.exec(match[3] || '');
+        const inkAttr = /data-sahas-ink="([^"]*)"/.exec(match[3] || '');
+        const size = sizeAttr ? sanitiseSize(sizeAttr[1]) : null;
+        const ink = inkAttr ? sanitiseInk(inkAttr[1]) : null;
+        // A span with neither carries no mark - it still opens and closes in
+        // the source, but nothing is pushed for it, so its content reads as
+        // plain, unmarked text (matching what sanitise() would have reduced it
+        // to anyway). The stack entry is pushed either way, so the closing tag
+        // still balances.
+        const entries = [];
+        if (size !== null) entries.push({ tag: 'size', start: text.length, value: size });
+        if (ink !== null) entries.push({ tag: 'ink', start: text.length, value: ink });
+        entries.forEach((entry) => open.push(entry));
+        spans.push(entries);
       } else if (mark) {
         open.push({ tag: mark, start: text.length });
       }
       continue;
+    }
+
+    if (name === 'SPAN') {
+      for (const entry of spans.pop() || []) {
+        const at = open.indexOf(entry);
+        if (at < 0) continue;
+        if (text.length > entry.start) marks.push({ start: entry.start, end: text.length, tag: entry.tag, value: entry.value });
+        open.splice(at, 1);
+      }
     }
 
     if (mark) {
@@ -290,12 +329,15 @@ export function styledRuns(runText, at, marks, baseFontPx) {
     if (to <= from) continue;
     const active = relevant.filter((mark) => mark.start <= at + from && mark.end >= at + to);
     const sizeMark = active.find((mark) => mark.tag === 'size');
+    const inkMark = active.find((mark) => mark.tag === 'ink');
     runs.push({
       text: runText.slice(from, to),
       bold: active.some((mark) => mark.tag === 'b'),
       italic: active.some((mark) => mark.tag === 'i'),
       underline: active.some((mark) => mark.tag === 'u'),
       fontPx: sizeMark ? sizeMark.value : baseFontPx,
+      // The SEPARATION, not the screen hex: a press file names a plate.
+      colour: inkMark ? inkSeparation(inkMark.value) : undefined,
     });
   }
   return runs.length ? runs : plain();
@@ -329,9 +371,15 @@ export function markRun(runText, at, marks, escape) {
     const piece = escape(runText.slice(from, to));
     const active = relevant.filter((mark) => mark.start <= at + from && mark.end >= at + to);
     out += active.length
-      ? active.reduce((inner, mark) => (
-        mark.tag === 'size' ? `<span data-sahas-size="${mark.value}">${inner}</span>` : `<${mark.tag}>${inner}</${mark.tag}>`
-      ), piece)
+      ? active.reduce((inner, mark) => {
+        if (mark.tag === 'size') return `<span data-sahas-size="${mark.value}">${inner}</span>`;
+        // The mark stays style-free where it is STORED; here it is being
+        // painted, so it carries the real colour as well - the same shape
+        // renderPresentation() uses, and the same reason (nothing downstream
+        // can read an attribute into an ink).
+        if (mark.tag === 'ink') return `<span data-sahas-ink="${mark.value}" style="color:${mark.value}">${inner}</span>`;
+        return `<${mark.tag}>${inner}</${mark.tag}>`;
+      }, piece)
       : piece;
   }
   return out;

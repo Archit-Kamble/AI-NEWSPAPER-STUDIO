@@ -12,7 +12,10 @@ const pageGuideController = asyncController(require('../controllers/pageGuide.co
 const router = express.Router();
 
 router.post('/newspapers/:newspaperId/pages', pageController.create);
-router.get('/newspapers/:newspaperId/pages', pageController.list);
+// Every block on every page, with the copy in it - the single richest thing
+// this API returns, and it was answering anonymous callers. See the note in
+// newspaper.routes.js: deskWrites guards writes only.
+router.get('/newspapers/:newspaperId/pages', requireDesk, pageController.list);
 router.patch('/pages/:pageId', pageController.update);
 router.patch('/pages/:pageId/colour', pageController.colour);
 router.patch('/pages/:pageId/state', pageController.state);
@@ -26,7 +29,7 @@ router.patch('/pages/:pageId/sections/:sectionId/geometry', pageSectionControlle
 
 // Pictures placed inside a block. Where each sits is layout data - it is what
 // the character grid in public/editor/layout/text-flow.js is computed from.
-router.get('/pages/:pageId/sections/:sectionId/images', sectionImageController.list);
+router.get('/pages/:pageId/sections/:sectionId/images', requireDesk, sectionImageController.list);
 router.post('/pages/:pageId/sections/:sectionId/images', sectionImageController.add);
 router.patch('/pages/:pageId/sections/:sectionId/images/:imageId', sectionImageController.move);
 router.delete('/pages/:pageId/sections/:sectionId/images/:imageId', sectionImageController.remove);
@@ -35,7 +38,7 @@ router.post('/pages/:pageId/sections/:sectionId/images/:imageId/cutout', section
 // Ruler guides (Stage 4) - page-level reference lines, never printed and (so
 // far) not a snap target. Same list-of-placements shape as pictures, so the
 // same four verbs.
-router.get('/pages/:pageId/guides', pageGuideController.list);
+router.get('/pages/:pageId/guides', requireDesk, pageGuideController.list);
 router.post('/pages/:pageId/guides', pageGuideController.create);
 router.patch('/pages/:pageId/guides/:guideId', pageGuideController.move);
 router.delete('/pages/:pageId/guides/:guideId', pageGuideController.remove);

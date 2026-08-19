@@ -3,6 +3,12 @@ import { renderEditions } from "./admin/editions.js";
 import { escapeHtml } from "./editor/format.js";
 
 const app = document.getElementById("app");
+
+// Who makes up the paper, as src/middleware/auth.js defines it. The one place
+// this list appears on the client, and it decides only which screen opens -
+// every actual permission is checked on the server, which is where it belongs.
+const DESK_ROLES = ["admin", "editor", "chief_editor"];
+
 let currentUser = null;
 let currentLanguage = "mr";
 let editingDraftId = null;
@@ -22,6 +28,13 @@ function closeAppSidebar() {
 function wireAppSidebarToggle() {
   document.getElementById("appSidebarToggle").addEventListener("click", toggleAppSidebar);
   document.getElementById("sidebarAppBackdrop").addEventListener("click", closeAppSidebar);
+  // Escape closes it, the way it closes every other panel in this product
+  // (the workspace's own panels already do). A drawer with a z-index 250
+  // backdrop over the whole screen that only one particular click will shut is
+  // the one panel a desk can get stuck behind.
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeAppSidebar();
+  });
   document.querySelector(".sidebar").addEventListener("click", (event) => {
     if (event.target.classList.contains("sidebar-btn")) closeAppSidebar();
   });
@@ -59,18 +72,28 @@ function renderLogin() {
   document.getElementById("loginBtn").addEventListener("click", async () => {
     const email = document.getElementById("email").value;
     const password = document.getElementById("password").value;
-    const role = email.includes("admin") ? "admin" : "reporter";
 
+    // What somebody's job is is not a fact about their email address. This
+    // used to read `email.includes("admin") ? "admin" : "reporter"` and send
+    // that guess to the server, which compares it against the real role and
+    // refuses when the two differ - so a chief editor at sunil@sahasvarta.com
+    // was told "Invalid credentials" with the right password, and a reporter
+    // whose address happened to contain "admin" could not sign in at all.
+    // With two seeded accounts the guess happened to be right; it breaks the
+    // morning the customer adds their first member of staff.
+    //
+    // The server already knows the role - it reads it off the user row. So it
+    // is asked, and its answer is what decides the screen.
     const response = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, role }),
+      body: JSON.stringify({ email, password }),
     });
 
     const data = await response.json();
     if (response.ok) {
       currentUser = data.user;
-      if (role === "admin") renderAdminDashboard();
+      if (DESK_ROLES.includes(data.user?.role)) renderAdminDashboard();
       else renderReporterDashboard();
     } else {
       alert(data.error);

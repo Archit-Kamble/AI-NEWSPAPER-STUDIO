@@ -17,9 +17,18 @@ router.post('/start', newspaperController.start);
 router.get('/ladder', newspaperController.ladder);
 router.get('/supported-page-counts', newspaperController.supportedPageCounts);
 router.post('/:id/resize', newspaperController.resize);
-router.get('/', newspaperController.list);
-router.get('/latest', newspaperController.latest);
-router.get('/:id', newspaperController.getOne);
+// deskWrites leaves every GET open, so a GET that returns PRODUCTION data has
+// to say requireDesk itself. The rule this middleware states (src/middleware/
+// auth.js) is that the finished edition and the e-paper are public - not the
+// list of every edition in the building, not an edition's own record, and not
+// the pages with every unpublished story on them. Measured before this was
+// added: an anonymous GET of /api/newspapers returned 372 KB of edition state
+// and /api/newspapers/:id/pages returned 126 KB of copy nobody had passed for
+// press. The e-paper routes below are deliberately NOT guarded - that is what
+// an e-paper is for, and it is built from its own service, not from these.
+router.get('/', requireDesk, newspaperController.list);
+router.get('/latest', requireDesk, newspaperController.latest);
+router.get('/:id', requireDesk, newspaperController.getOne);
 router.patch('/:id', newspaperController.update);
 router.post(
   '/:id/final-files',
@@ -38,8 +47,8 @@ router.post(
 
 // District editions: one paper with some pages swapped, not many papers.
 router.post('/:id/district-editions', newspaperController.createDistrictEdition);
-router.get('/:id/district-editions', newspaperController.listDistrictEditions);
-router.get('/:id/printed-pages', newspaperController.printedPages);
+router.get('/:id/district-editions', requireDesk, newspaperController.listDistrictEditions);
+router.get('/:id/printed-pages', requireDesk, newspaperController.printedPages);
 
 router.get('/:id/epaper', newspaperController.epaper);
 

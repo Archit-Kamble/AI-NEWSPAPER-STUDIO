@@ -42,6 +42,12 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
   const block = (key = KEY) => page.locator(`.newspaper-section[data-section-key="${key}"]`);
   const blockText = async (key = KEY) => (await block(key).innerText()).replace(/\s+/g, ' ').trim();
 
+  // The headline and subheading fields are contenteditable, not <input> - a
+  // headline carries the desk's own marks (story-editor.js's own note), so it
+  // cannot be a string in a value attribute. `fill()` still drives them;
+  // `inputValue()` cannot read them.
+  const fieldText = async (id) => (await page.locator(`#${id}`).innerText()).replace(/\s+/g, ' ').trim();
+
   async function openEdition() {
     await page.goto(BASE);
     await page.waitForTimeout(900);
@@ -165,7 +171,13 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
       const d = store.getDraft();
       return {
         hasAll: ['headline', 'subheading', 'body'].every((k) => k in d),
-        shadows: Object.keys(d).filter((k) => /^(canvas|editor|external)/i.test(k)),
+        // A SHADOW is a second copy of the block's state under a
+        // surface-specific name ("canvasHeadline", "editorBody"). Anchored on
+        // a capital after the prefix, or the pattern also catches ordinary
+        // fields that merely begin with those letters - `editorialPriority`
+        // and `editorialPresentation` are real, single-copy draft fields and
+        // were reported as shadows for as long as this check has existed.
+        shadows: Object.keys(d).filter((k) => /^(canvas|editor|external)[A-Z]/.test(k)),
       };
     });
     say(draft.hasAll && draft.shadows.length === 0,
@@ -202,10 +214,26 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
       // (type icon/label/status badge) that the canvas draws and the editor
       // frame, correctly, does not - so it is the fair "content starts here"
       // origin on the canvas side.
-      const cOrigin = normRect(canvasBlock.querySelector('.section-content'), canvasScale);
-      const cHeadline = normRect(canvasBlock.querySelector('.section-headline'), canvasScale);
-      const cSubheading = normRect(canvasBlock.querySelector('.section-subheading'), canvasScale);
-      const cBody = normRect(canvasBlock.querySelector('.section-body'), canvasScale);
+      // TWO renderings to cope with, and the composed one is now the normal
+      // one. Once the publication font has loaded, the canvas draws the exact
+      // composition - absolutely positioned `.section-composed` spans, one per
+      // LINE, with no `.section-content` wrapper at all (section-thumb.js).
+      // Reading only the old normal-flow DOM found nothing, so every canvas
+      // rectangle came back null and this whole section crashed on the first
+      // `.top` - taking the twenty checks after it with it, silently, for as
+      // long as the fonts have been loading reliably.
+      const composed = canvasBlock.querySelector('.section-composed');
+      const first = (selector) => {
+        const all = [...canvasBlock.querySelectorAll(selector)];
+        if (!all.length) return null;
+        return all.reduce((top, el) => (el.getBoundingClientRect().top < top.getBoundingClientRect().top ? el : top));
+      };
+      const cOrigin = composed
+        ? normRect(canvasBlock, canvasScale)
+        : normRect(canvasBlock.querySelector('.section-content'), canvasScale);
+      const cHeadline = normRect(first('.section-headline'), canvasScale);
+      const cSubheading = normRect(first('.section-subheading'), canvasScale);
+      const cBody = normRect(first(composed ? '.section-body-line' : '.section-body'), canvasScale);
 
       const framePage = document.getElementById('edFramePage');
       const blockWidthPx = parseFloat(canvasBlock.style.width);
@@ -317,12 +345,12 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
     await page.locator('#edHeadlineFrame').click();
     await page.waitForTimeout(200);
     say((await partOf()) === 'headline', 'a single click on the headline still selects it');
-    say((await focusedId()) !== 'edStoryHeadline', 'but does not steal focus into the real input');
+    say((await focusedId()) !== 'edStoryHeadline', 'but does not steal focus into the field below the page');
 
     await page.locator('#edHeadlineFrame').dblclick();
     await page.waitForTimeout(200);
     // The FRAME itself is now the edit surface (block-frame.js's
-    // beginInlineTextEdit()), not the plain #edStoryHeadline input - it is
+    // beginInlineTextEdit()), not the #edStoryHeadline field below - it is
     // filled with the full semantic headline and made contenteditable
     // directly, because the canonical rendering is one <span> PER LINE and
     // could only ever give back a third of a three-line headline's real text
@@ -330,8 +358,11 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
     // spans the whole band. The input still receives the committed value on
     // blur (unchanged - see the "did not steal focus" assertions below).
     say((await focusedId()) === 'edHeadlineFrame', 'a double click on the headline enters text editing');
-    say(await page.locator('#edHeadlineFrame').evaluate((el) => el.getAttribute('contenteditable') === 'plaintext-only'),
-      'the headline frame itself becomes the semantic edit surface');
+    // Rich, not "plaintext-only": a sub-editor marks a word inside a headline
+    // (display-marks.js), and this is the surface where the headline is
+    // visible at its real size while they do it.
+    say(await page.locator('#edHeadlineFrame').evaluate((el) => el.getAttribute('contenteditable') === 'true'),
+      'the headline frame itself becomes the edit surface, and a rich one');
     say((await partOf()) === 'headline', 'and the headline is still what is selected');
 
     say(await page.locator('#edHeadlineFrame').evaluate((el) => !el.querySelector('.pic-handle')),
@@ -393,7 +424,10 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
     await page.waitForTimeout(250);
     say((await partOf()) === 'image', 'clicking the picture selects the image object');
     say(await picFrame().evaluate((el) => el.classList.contains('is-selected')), 'the picture frame shows as selected');
-    say((await picFrame().locator('.pic-handle').count()) === 4, 'a selected picture shows four resize handles');
+    // EIGHT: four corners (independent X/Y, Shift locks the aspect) and four
+    // edges (one axis only). This asserted four for as long as the edge
+    // handles have existed - image-resize.js's RESIZE_HANDLES is the catalog.
+    say((await picFrame().locator('.pic-handle').count()) === 8, 'a selected picture shows its eight resize handles');
     say(await page.locator('#edSelectionLabel').isHidden(),
       'no text label is drawn over a selected picture - the handles already say it is selected');
 
@@ -401,7 +435,9 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
     // must stay exactly where it was - that is what "resize from a corner"
     // means, versus a resize that also silently repositions the picture.
     const before = await picFrame().boundingBox();
-    const tlHandle = picFrame().locator('.pic-handle-tl');
+    // 'nw', not 'tl' - image-resize.js names the corners by compass point since the
+    // four EDGE handles were added, and n/s/e/w only work that way.
+    const tlHandle = picFrame().locator('.pic-handle-nw');
     const hBox = await tlHandle.boundingBox();
     await page.mouse.move(hBox.x + hBox.width / 2, hBox.y + hBox.height / 2);
     await page.mouse.down();
@@ -432,7 +468,7 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.waitForTimeout(500);
     const frameAtResize = await picFrame().boundingBox();
-    const tlAtResize = await picFrame().locator('.pic-handle-tl').boundingBox();
+    const tlAtResize = await picFrame().locator('.pic-handle-nw').boundingBox();
     say(
       frameAtResize && tlAtResize
       && Math.abs((tlAtResize.x + tlAtResize.width / 2) - frameAtResize.x) < 8
@@ -662,41 +698,44 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
     }
     await reopen();
 
-    // ---- Bug #1/#3 (PROJECT_STATUS.md): the flowed preview toggle ----
+    // ---- Bug #1/#3 (PROJECT_STATUS.md): the copy really does run around ----
     //
     // A picture placed low enough that it reaches into the BODY's own rows
-    // (not just the headline/deck bands, which dodge it live) is the one
-    // case Quill cannot show real runaround for - see block-frame.js's own
-    // header note. The toggle only appears when that is actually true.
+    // (not just the headline/deck bands, which dodge it live) is the case
+    // Quill cannot show. It does not have to: the block a desk LOOKS at is
+    // the exact composition, drawn by the same renderer the newspaper page
+    // uses (block-frame.js's own header), and Quill sits below it as a
+    // writing surface only.
+    //
+    // This used to drive a "see the accurate preview" toggle, which no longer
+    // exists anywhere in the application - the canonical layer replaced it and
+    // made it redundant. Twenty-five lines of this file went on driving a
+    // button that had been deleted, which is why everything after it never
+    // ran. What is checked now is the property that button existed to prove.
     //
     // A genuine clean slate, not an assumption that the z-order test's own
     // cleanup above left nothing - the same reasoning as the multi-selection
-    // block's own opening cleanup (a picture surviving an earlier interrupted
-    // run of this file is exactly what that guards against too).
+    // block's own opening cleanup.
     for (const row of (await fetchImages()).images) {
       await page.evaluate(([pid, key, imgId]) => fetch(`/api/pages/${pid}/sections/${key}/images/${imgId}`, { method: 'DELETE' }), [pageId, KEY, row.id]);
     }
     await reopen();
-    say(await page.locator('#edPreviewToggle').isHidden(), 'no pictures at all on the block - no preview toggle');
+    const bare = await page.evaluate(() => [...document.querySelectorAll('#edCanonicalContent .section-body-line')]
+      .map((el) => Math.round(parseFloat(el.style.left))));
 
     // A tall picture on the left, guaranteed to still be standing once the
     // block's own headline/subheading rows have passed.
     const picF = await addPicture(URL_A, { x: 5, y: 5, width: 50, height: 200 });
     await reopen();
-    say(await page.locator('#edPreviewToggle').isVisible(), 'a picture reaching into the body shows the toggle');
-    say((await page.locator('#edFlowedPreview').isHidden()), 'the preview itself starts hidden - Quill is still the default writing surface');
+    const around = await page.evaluate(() => [...document.querySelectorAll('#edCanonicalContent .section-body-line')]
+      .map((el) => Math.round(parseFloat(el.style.left))));
 
-    await page.locator('#edPreviewToggleBtn').click();
-    await page.waitForTimeout(400);
-    say(await page.locator('#edFlowedPreview').isVisible(), 'clicking the toggle shows the accurate preview');
-    say((await page.locator('#edPreviewToggleBtn').textContent()).includes('Back to writing'), 'and the button now offers to go back');
-    const previewHtml = await page.locator('#edFlowedPreview').innerHTML();
-    say(previewHtml.includes('section-flowed'), 'the preview is built from the real flowed runs, not a placeholder');
-
-    await page.locator('#edPreviewToggleBtn').click();
-    await page.waitForTimeout(400);
-    say(await page.locator('#edFlowedPreview').isHidden(), 'clicking it again returns to the writing surface');
-    say(await page.locator('.ql-editor').isVisible(), 'Quill is visible again');
+    say(bare.length > 0 && around.length > 0, 'the block sets copy both with and without the picture',
+      `${bare.length} lines -> ${around.length}`);
+    say(around.some((left, i) => left !== bare[i]),
+      'and the copy really moves out of the picture\'s way in the Block Editor itself',
+      `left edges ${bare.slice(0, 4).join(',')} -> ${around.slice(0, 4).join(',')}`);
+    say(await page.locator('.ql-editor').isVisible(), 'while Quill stays the writing surface below it');
 
     // Typing must still work normally after all this toggling - the preview
     // is display-only, never a second copy of the story. Restored with
@@ -852,7 +891,9 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
 
     // A direct drag (Stage 2's own mechanism) must still update Properties -
     // the inspector cannot go stale relative to the canvas.
-    const tlHandle = picFrame().locator('.pic-handle-tl');
+    // 'nw', not 'tl' - image-resize.js names the corners by compass point since the
+    // four EDGE handles were added, and n/s/e/w only work that way.
+    const tlHandle = picFrame().locator('.pic-handle-nw');
     const hBox = await tlHandle.boundingBox();
     await page.mouse.move(hBox.x + hBox.width / 2, hBox.y + hBox.height / 2);
     await page.mouse.down();
@@ -1438,32 +1479,32 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
   // own undo of the last few characters, never a jump in the editor's
   // history stack out from under a cursor mid-sentence.
   {
-    const original = await page.inputValue('#edStoryHeadline');
+    const original = await fieldText('edStoryHeadline');
     await page.fill('#edStoryHeadline', 'की-बोर्ड चाचणी मथळा');
     await page.waitForTimeout(700); // past history.js's COALESCE_MS, so this is its own undo step
-    say((await page.inputValue('#edStoryHeadline')) === 'की-बोर्ड चाचणी मथळा', 'the test headline was actually typed');
+    say((await fieldText('edStoryHeadline')) === 'की-बोर्ड चाचणी मथळा', 'the test headline was actually typed');
 
     // Move focus OUT of the field first - Ctrl+Z's target is the editor, not the input.
     await page.locator('.ext-editor-header').click();
     await page.keyboard.press('Control+z');
     await page.waitForTimeout(400);
-    say((await page.inputValue('#edStoryHeadline')) === original,
-      'Ctrl+Z outside a text field undoes the last edit', await page.inputValue('#edStoryHeadline'));
+    say((await fieldText('edStoryHeadline')) === original,
+      'Ctrl+Z outside a text field undoes the last edit', await fieldText('edStoryHeadline'));
 
     await page.keyboard.press('Control+Shift+z');
     await page.waitForTimeout(400);
-    say((await page.inputValue('#edStoryHeadline')) === 'की-बोर्ड चाचणी मथळा',
-      'Ctrl+Shift+Z redoes it', await page.inputValue('#edStoryHeadline'));
+    say((await fieldText('edStoryHeadline')) === 'की-बोर्ड चाचणी मथळा',
+      'Ctrl+Shift+Z redoes it', await fieldText('edStoryHeadline'));
 
     // Ctrl+Z back INTO a focused field must not jump the editor's history -
     // only the field's own native undo should act, leaving the editor's
     // state exactly where it was.
     await page.click('#edStoryHeadline');
     await page.keyboard.type(' अ');
-    const beforeFieldUndo = await page.inputValue('#edStoryHeadline');
+    const beforeFieldUndo = await fieldText('edStoryHeadline');
     await page.keyboard.press('Control+z');
     await page.waitForTimeout(300);
-    const afterFieldUndo = await page.inputValue('#edStoryHeadline');
+    const afterFieldUndo = await fieldText('edStoryHeadline');
     say(afterFieldUndo !== beforeFieldUndo && afterFieldUndo.startsWith('की-बोर्ड'),
       'Ctrl+Z while typing is the field\'s own undo, not the editor jumping history',
       `${beforeFieldUndo} -> ${afterFieldUndo}`);
@@ -1521,8 +1562,8 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
   await openEdition();
   await block().click();
   await page.waitForTimeout(1800);
-  say(await page.inputValue('#edStoryHeadline') === HEADLINE, 'the headline survives a reload');
-  say(await page.inputValue('#edStorySubheading') === SUBHEADING, 'the subheading survives a reload');
+  say(await fieldText('edStoryHeadline') === HEADLINE, 'the headline survives a reload');
+  say(await fieldText('edStorySubheading') === SUBHEADING, 'the subheading survives a reload');
   say((await page.locator('.ql-editor').innerText()).includes('महामेट्रोने'), 'the body survives a reload');
   say((await blockText()).includes('पुणे मेट्रोचा'), 'and the newspaper shows the same', beforeReload.slice(0, 40));
 
@@ -1567,7 +1608,11 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
     await page.locator('#smartCardAccept').click();
     await page.waitForTimeout(1500);
     say(await block().locator('.smart-card-grid-table td').count() === 81, 'and the same grid is on the newspaper');
-    say(await page.locator('#edFrameCard .smart-card-grid-table td').count() === 81, 'and in the editor');
+    // Inside the canonical composed layer, not a `#edFrameCard` of its own -
+    // that element was removed when the Block Editor started drawing the same
+    // composition the page draws (block-frame.js's layoutCard()), and this
+    // check went on looking for it.
+    say(await page.locator('#edCanonicalContent .smart-card-grid-table td').count() === 81, 'and in the editor');
 
     // The card's own headline ("आजचे सुडोकू", set by the accept handler
     // alongside smartCardKey/smartCardData - smart-card-panel.js) and the
@@ -1576,7 +1621,18 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
     // the flex column above it had already set - found live on a real
     // generated page (Project A, PROJECT_STATUS.md), not hypothetical: this
     // is the exact block this test already puts a card and a headline on.
-    const headlineBox = await block().locator('.section-headline').boundingBox();
+    // The whole headline BAND, not one element: the composed renderer draws
+    // one span per line, so a two-line card headline ("आजचे / सुडोकू") is two
+    // `.section-headline` spans and a bare locator resolves to both. The
+    // question here is whether the card overlaps the headline at all, which is
+    // asked of the band's own union.
+    const headlineBox = await block().evaluate((el) => {
+      const spans = [...el.querySelectorAll('.section-headline')];
+      if (!spans.length) return null;
+      const boxes = spans.map((span) => span.getBoundingClientRect());
+      const y = Math.min(...boxes.map((b) => b.y));
+      return { y, height: Math.max(...boxes.map((b) => b.bottom)) - y };
+    });
     const cardBox = await block().locator('.smart-card').boundingBox();
     if (headlineBox && cardBox) {
       const verticalOverlap = Math.min(headlineBox.y + headlineBox.height, cardBox.y + cardBox.height)

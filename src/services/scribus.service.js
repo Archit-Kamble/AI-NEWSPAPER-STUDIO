@@ -46,6 +46,16 @@ const escapeXml = (value) =>
     .replace(/'/g, '&apos;');
 
 const mm = (px) => Number(pxToMm(px).toFixed(4));
+// The same rounding, for a number that has already been ASSEMBLED from
+// millimetres rather than converted from pixels once - a frame's y is the
+// block's own y plus the line's, and adding two already-rounded millimetre
+// values reintroduces the float noise the rounding just removed: 30 + 18.645
+// is 48.644999999999996 as a double, and that is what was going into the
+// press file. A .sla is a document handed to a printer; it carries clean
+// millimetres. It also made two paths that compute the same coordinate in a
+// different ORDER disagree in their last digits, which is exactly what
+// tests/scribusComposition.test.js exists to catch.
+const mmRound = (value) => Number(Number(value).toFixed(4));
 // Scribus works in points for type sizes. The editor's px are 2 per mm - the
 // SAME conversion every persisted *_font_px column already uses, so a
 // selected-size mark (rich-text.js's `data-sahas-size`, also stored in that
@@ -174,7 +184,7 @@ function lineFrame({ xMm, yMm, widthMm, heightMm, runs, align = 0, ownPage = 0 }
   if (!itext) return '';
 
   return `
-  <PAGEOBJECT XPOS="${xMm}" YPOS="${yMm}" WIDTH="${widthMm}" HEIGHT="${heightMm}"
+  <PAGEOBJECT XPOS="${mmRound(xMm)}" YPOS="${mmRound(yMm)}" WIDTH="${mmRound(widthMm)}" HEIGHT="${mmRound(heightMm)}"
               OwnPage="${ownPage}" ItemID="${nextId()}" PTYPE="4" ANNAME="" FRTYPE="0"
               PWIDTH="0" PCOLOR="None" PCOLOR2="None" LOCALSCX="1" LOCALSCY="1"
               COLUMNS="1" COLGAP="0" TEXTFLOWMODE="0"
@@ -221,7 +231,7 @@ function imageFrame({ resolved, xMm, yMm, file, ownPage = 0 }) {
   const localYMm = mm(localContentRect.y);
 
   return `
-  <PAGEOBJECT XPOS="${xMm}" YPOS="${yMm}" WIDTH="${widthMm}" HEIGHT="${heightMm}"
+  <PAGEOBJECT XPOS="${mmRound(xMm)}" YPOS="${mmRound(yMm)}" WIDTH="${mmRound(widthMm)}" HEIGHT="${mmRound(heightMm)}"
               ROT="${rotation || 0}" OwnPage="${ownPage}" ItemID="${nextId()}" PTYPE="2" FRTYPE="0"
               PWIDTH="0" PCOLOR="None" PCOLOR2="None"
               PFILE="${escapeXml(file)}" LOCALSCX="${localScX}" LOCALSCY="${localScY}"
@@ -587,6 +597,6 @@ ${objectParts.join('')}
 }
 
 module.exports = {
-  buildDocument, blockFrames, escapeXml, mm, pxToPt, BODY_FONT, HEAD_FONT, fontNameFor,
+  buildDocument, blockFrames, escapeXml, mm, mmRound, pxToPt, BODY_FONT, HEAD_FONT, fontNameFor,
   ensureComposeReady,
 };

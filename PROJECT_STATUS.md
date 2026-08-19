@@ -3831,3 +3831,58 @@ act on.
 
 **Database sweep: `NO_LEGAL_MEASURE` 51 → 2 → 1 → 0** across 11318 sections,
 no throws. The fault class is closed.
+
+
+### 33. The headline fills its measure, and stops eating the block (2026-08-19)
+
+A desk reported two things about one block — *"a big gap on the right of the
+headline"* and *"headline and subheadline are half the whole block"*. They are
+one fault, and the cause was the code disagreeing with itself.
+
+`src/layout/geometry.js` chooses a block's default headline size assuming the
+headline wraps to **two** lines (`HEADLINE_LINES = 2`, and its comment says so).
+`compose.js` allowed **four**. So `typeScaleFor()` picked 24px for a 268×248
+lead on a two-line basis, and the engine set three lines — measured:
+
+| | before | after |
+|---|---|---|
+| headline lines | 3 | **2** |
+| fill of each line | 54%, 53%, 53% | **97%**, 48% |
+| headline height | 101px | **62px** |
+| display share of the block | **50%** | **33%** |
+| body starts at | y=134 | **y=94** |
+
+Forty pixels of a 240px block handed back to the story, and the first headline
+line now reaches its measure.
+
+**Two caps, both preferences that yield to overset.** `HEADLINE_MAX_LINES` (2)
+is preferred, not enforced: a one-column 90px filler carrying six long Marathi
+words cannot set them in two lines at any legible size, and forcing it there
+pushed words off the block. `MAX_DISPLAY_SHARE` (0.5) caps kicker + headline +
+deck **together, measured absolutely from `content.top`** — the old per-flow
+shares were measured from a running `y`, so they were shares of what was left
+and compounded. `fitDisplayFlow()` now runs passes in order of preference and
+settles rather than oversetting; without that last pass, capping the display
+took `DECK_OVERSET` from 1 block to 7.
+
+**Across 655 real article blocks with a headline and copy:**
+
+| | before | after |
+|---|---|---|
+| three-line headlines | 134 | **0** |
+| mean headline fill | 68.4% | **71.6%** |
+| mean display share | 21.3% | **18.4%** |
+| blocks spending >40% on display | 67 | **13** |
+| blocks spending >50% | 12 | **2** (both deliberate — the ceiling yielded rather than overset) |
+
+**A press-export bug found on the way.** `tests/scribusComposition.test.js`
+compares the composition's geometry against the `.sla` string, and it started
+failing on `YPOS="48.644999999999996"` where the composition says `48.645`.
+`mm()` rounds a pixel conversion to four places, but the service ASSEMBLES some
+coordinates from already-rounded millimetres, and `30 + 18.645` is
+`48.644999999999996` as a double. So raw float noise was going into a document
+handed to a printer, and two paths computing the same coordinate in a different
+order disagreed in their last digits. `mmRound()` now rounds at emission.
+
+**Sweep, 11438 sections, no throws:** `NO_LEGAL_MEASURE` 0, `DECK_OVERSET`
+1 → 0, `BODY_OVERSET` 30 → 18 (blocks have more room for copy than they did).

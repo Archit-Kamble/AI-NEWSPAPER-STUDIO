@@ -142,9 +142,18 @@ test('a shorter headline gives its room back to the body - nothing reserves a ph
 
   // The band is exactly its own lines tall - no rounding up to a reserved
   // rectangle, which is the whole point.
-  const lineBox = oneLine.bands.headline.height;
-  assert.ok(Math.abs(threeLine.bands.headline.height - lineBox * threeLine.bands.headline.lineCount) < 0.5,
-    'a band must be exactly as tall as the lines it actually set');
+  //
+  // Measured against the band's OWN lines, not against the one-line band's
+  // line box: a headline held to its preferred two lines is auto-fitted to a
+  // smaller size to get there (HEADLINE_MAX_LINES), so the two bands are no
+  // longer set in the same type and their line boxes are not the same height.
+  // The property under test - a band reserves nothing it did not set - is
+  // about the band and its own lines, and is size-independent.
+  for (const band of [oneLine.bands.headline, threeLine.bands.headline]) {
+    const ownLines = band.lines.reduce((sum, line) => sum + line.height, 0);
+    assert.ok(Math.abs(band.height - ownLines) < 0.5,
+      'a band must be exactly as tall as the lines it actually set');
+  }
 
   assert.ok(oneLine.bodyTop < threeLine.bodyTop, 'the body must start higher under a shorter headline');
   assert.ok(oneLine.capacity.fullMeasureEquivalents > threeLine.capacity.fullMeasureEquivalents,

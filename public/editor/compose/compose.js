@@ -87,6 +87,46 @@ const GAP_EM = {
 // be written into.
 const MAX_HEADLINE_SHARE = 0.5;
 
+// The whole display block - kicker, headline and deck together - against the
+// block's own room. geometry.js has always said what this should be ("a
+// headline is assumed to wrap to two lines ... and it may not take more than
+// half of what the block has. The other half is the story"), but nothing
+// enforced it on the DISPLAY as a whole: each flow was capped against its own
+// share measured from wherever the previous one ended, so a headline at its
+// 50% and a deck at its 70% of what remained could between them take far more
+// than half the block. Measured across 659 real article blocks with a headline
+// and copy in them: 67 spent more than 40% of the block on display type and 12
+// spent more than half - which is the "headline and subheadline are half the
+// block" a desk reported.
+const MAX_DISPLAY_SHARE = 0.5;
+
+// A headline runs to TWO lines - PREFERRED, not enforced (see
+// fitDisplayFlow's two passes: a narrow one-column block that cannot set its
+// words in two at any legible size gets its third and fourth rather than
+// having words pushed off the block, because overset is always worse).
+//
+// This is not a new opinion - it is what
+// src/layout/geometry.js has always assumed when it chose the block's default
+// headline size (`HEADLINE_LINES = 2`). The engine allowed four, so the sizing
+// and the setting disagreed: typeScaleFor() picked a size on the basis of two
+// lines and the engine cheerfully set three, which both stole the block's
+// depth and left every line of the headline short of its own measure.
+//
+// A headline is written to a COUNT - a sub-editor sizes it to the column, and
+// a headline that stops two-fifths short of its measure reads as unfinished.
+// Holding the line budget is what makes the fit happen: over the budget is a
+// failure, so fitDisplayFlow() steps the size down until it sets in two, and
+// the size it lands on is the one whose longest line comes closest to filling.
+//
+// Measured on the real 268x248 lead a desk reported: 24px set THREE lines at
+// 54%, 53% and 53% of their measure, taking 50% of the block. Held to two, it
+// sets at 22px - 95% and 46% - taking 33%. Across 659 real article blocks:
+// 134 three-line headlines to none, mean headline fill 68.4% to 71.7%, mean
+// display share 21.3% to 18.4%, and blocks spending over 40% of themselves on
+// display type from 67 to 13.
+//
+const HEADLINE_MAX_LINES = 2;
+
 // The floor preflight fails a page for: newsprint will not legibly hold
 // anything under 6.5 PT. This project's logical px is 2 per mm (see
 // geometry.js/pxToMm), so 6.5pt converts to 6.5 * 25.4/72 * 2 = 4.6 logical
@@ -239,15 +279,50 @@ function setDisplayFlow(text, {
  * overset instead, because silently setting a sub-editor's 48px headline at
  * 31px is a design decision the software is not entitled to make on its own.
  */
-function fitDisplayFlow(text, options, { locked, minPx }) {
-  const first = setDisplayFlow(text, options);
+// The size a display flow is actually set at.
+//
+// TWO PASSES, because the line budget is a PREFERENCE and overset is a
+// failure. A headline wants to set in `preferLines` (see HEADLINE_MAX_LINES) -
+// that is what makes it fill its measure instead of stopping two-fifths short
+// on every line, and what stops it eating half the block. But a one-column
+// 90px filler carrying six long Marathi words cannot set in two lines at any
+// legible size, and forcing it there pushed words off the block entirely.
+// Overset is worse than a third line, always.
+//
+// So: look for a size that meets the preferred budget cleanly; if no size in
+// the range does, look again with only the hard limit. A narrow block gets its
+// extra lines, a wide one gets its fill, and neither is decided by a constant
+// that had to be right for both.
+function fitDisplayFlow(text, options, { locked, minPx, preferLines = 0, roomyBottomLimit = 0 }) {
   const failed = (attempt) => attempt.overset || attempt.violations.length > 0;
-  if (locked || !failed(first)) return { ...first, resolvedPx: options.fontPx, shrunk: false };
 
-  for (let px = options.fontPx - 1; px >= minPx; px -= 1) {
-    const attempt = setDisplayFlow(text, { ...options, fontPx: px });
-    if (!failed(attempt)) return { ...attempt, resolvedPx: px, shrunk: true };
+  if (locked) {
+    const set = setDisplayFlow(text, options);
+    return { ...set, resolvedPx: options.fontPx, shrunk: false };
   }
+
+  // In order of what this would LIKE, ending with what it will settle for.
+  // Every relaxation here exists because the thing it gives up is worth less
+  // than the thing it protects, and the thing it protects in every case is
+  // that no word is pushed off the block.
+  const passes = [];
+  if (preferLines > 0 && preferLines < options.maxLines) passes.push({ ...options, maxLines: preferLines });
+  passes.push(options);
+  // Last: the display's own share ceiling yields. A deck that cannot be set
+  // inside half the block is a tall deck; a deck with its last words pushed
+  // off the page is a mistake in print. Measured: capping the display without
+  // this took DECK_OVERSET across the database from 1 block to 7.
+  if (roomyBottomLimit > options.bottomLimit) passes.push({ ...options, bottomLimit: roomyBottomLimit });
+
+  for (const attemptOptions of passes) {
+    const first = setDisplayFlow(text, attemptOptions);
+    if (!failed(first)) return { ...first, resolvedPx: options.fontPx, shrunk: false };
+    for (let px = options.fontPx - 1; px >= minPx; px -= 1) {
+      const attempt = setDisplayFlow(text, { ...attemptOptions, fontPx: px });
+      if (!failed(attempt)) return { ...attempt, resolvedPx: px, shrunk: true };
+    }
+  }
+
   const floor = setDisplayFlow(text, { ...options, fontPx: minPx });
   return { ...floor, resolvedPx: minPx, shrunk: true };
 }
@@ -1369,7 +1444,7 @@ export function composeBlock(input = {}) {
 
   const flows = [
     { key: 'kicker', text: String(input.kicker || ''), px: Math.round(bodyPx * 1.05), min: MIN_LEGIBLE_PX, maxLines: 2, locked: true, ...DISPLAY_TYPOGRAPHY.kicker },
-    { key: 'headline', text: String(input.headline || ''), px: num(input.headlineFontPx, 34), min: Math.max(MIN_LEGIBLE_PX, bodyPx * 1.1), maxLines: num(input.headlineMaxLines, 4), locked: Boolean(input.headlineLocked), ...DISPLAY_TYPOGRAPHY.headline },
+    { key: 'headline', text: String(input.headline || ''), px: num(input.headlineFontPx, 34), min: Math.max(MIN_LEGIBLE_PX, bodyPx * 1.1), maxLines: num(input.headlineMaxLines, 4), preferLines: HEADLINE_MAX_LINES, locked: Boolean(input.headlineLocked), ...DISPLAY_TYPOGRAPHY.headline },
     { key: 'deck', text: String(input.subheading || ''), px: num(input.subheadingFontPx, 20), min: Math.max(MIN_LEGIBLE_PX, bodyPx), maxLines: num(input.deckMaxLines, 3), locked: Boolean(input.subheadingLocked), ...DISPLAY_TYPOGRAPHY.deck },
   ].filter((flow) => flow.text.trim());
 
@@ -1382,9 +1457,14 @@ export function composeBlock(input = {}) {
     // The headline is the one flow with a share limit: it is the page's
     // hierarchy, but a block that is all headline holds no story.
     const share = flow.key === 'headline' ? MAX_HEADLINE_SHARE : 0.7;
+    // Two limits, and the display one is ABSOLUTE - measured from the top of
+    // the content, not from wherever the previous flow happened to end. A
+    // per-flow share measured from a running `y` is a share of what is LEFT,
+    // which compounds: that is how a headline and a deck each inside their own
+    // limit ended up taking half the block between them.
     const set = fitDisplayFlow(flow.text, {
       top: y,
-      bottomLimit: Math.min(content.bottom, y + room * share),
+      bottomLimit: Math.min(content.bottom, content.top + room * MAX_DISPLAY_SHARE, y + room * share),
       column: { start: content.left, end: content.right },
       images,
       fontPx: flow.px,
@@ -1393,7 +1473,12 @@ export function composeBlock(input = {}) {
       weight: flow.weight,
       maxLines: flow.maxLines,
       letterSpacingPx,
-    }, { locked: flow.locked, minPx: flow.min });
+    }, {
+      locked: flow.locked,
+      minPx: flow.min,
+      preferLines: flow.preferLines || 0,
+      roomyBottomLimit: Math.min(content.bottom, y + room * share),
+    });
 
     result.bands[flow.key] = {
       top: y,

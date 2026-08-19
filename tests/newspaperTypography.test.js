@@ -232,3 +232,78 @@ test('re-breaking a paragraph never loses or reorders a word', () => {
   const source = LONG.replace(/\s+/g, ' ').trim();
   assert.equal(set, source, 'every word must survive the re-break, in order');
 });
+
+// ------------------------------------------- the headline fills its measure ---
+//
+// A headline is written to a COUNT: a sub-editor sizes it to the column, and
+// one that stops two-fifths short on every line reads as unfinished. The desk
+// reported both halves of this at once - "a big gap on the right of the
+// headline" and "headline and subheadline are half the whole block" - and they
+// are one fault.
+//
+// src/layout/geometry.js has always chosen a block's headline size on the
+// assumption of TWO lines (`HEADLINE_LINES = 2`), and the engine allowed four.
+// So the sizing and the setting disagreed: typeScaleFor() picked 24px for a
+// 268x248 lead on a two-line basis and the engine set THREE lines at 54%, 53%
+// and 53% of their measure, taking half the block.
+
+const LEAD = {
+  width_px: 268, height_px: 248, margin_px: 4, column_count: 1,
+  line_height: 1.25, headline_font_px: 24, subheading_font_px: 13, body_font_px: 10,
+  text_align: 'justify', paragraph_spacing_px: 0,
+  headline: 'वाई मध्ये विद्यार्थ्यांचे वृक्षारोपण',
+  subheading: 'पर्यावरणरक्षणासाठी शालेय पुढाकार',
+  // The cut-out is part of the fault, not incidental to it: it narrows the
+  // headline's own measure to 205px, which is what turned a two-line headline
+  // into a three-line one at the size geometry.js had chosen.
+  images: [{ x_px: 0, y_px: 7, width_px: 84, height_px: 241, shape: 'cutout', rotation: 0, stand_off_px: 6 }],
+};
+
+const fillOf = (line) => line.width / line.measure;
+
+test('a headline is held to two lines, and the size it lands on is the one that FILLS', () => {
+  const r = adapter.composeSection(LEAD, {});
+  const band = r.bands.headline;
+
+  assert.equal(band.lineCount, 2, 'three lines of headline on a lead is the fault, not the design');
+  assert.ok(band.shrunk, 'it gets there by being fitted to the measure, not by luck');
+  assert.ok(fillOf(band.lines[0]) > 0.9,
+    `the headline's first line must fill its measure, got ${Math.round(100 * fillOf(band.lines[0]))}%`);
+});
+
+test('and the display type stops taking half the block', () => {
+  const r = adapter.composeSection(LEAD, {});
+  const display = ['kicker', 'headline', 'deck']
+    .reduce((sum, key) => sum + (r.bands[key]?.height || 0), 0);
+  const share = display / r.content.room;
+  assert.ok(share < 0.4, `headline + deck took ${Math.round(100 * share)}% of the block`);
+  // And the room really goes to the story, not nowhere.
+  // Measured: bodyTop 134 before, 94 after - forty pixels of a 240px block
+  // handed back to the story.
+  assert.ok(r.bodyTop < r.content.top + r.content.room * 0.42,
+    `the body must start high in the block, started at ${r.bodyTop.toFixed(0)}`);
+});
+
+test('the line budget is a PREFERENCE - a narrow block gets its extra lines rather than overset', () => {
+  // A one-column 90px filler carrying six long Marathi words cannot set them
+  // in two lines at any legible size. Forcing it there pushed words off the
+  // block entirely, and overset is always worse than a third line.
+  const narrow = {
+    width_px: 90, height_px: 220, margin_px: 4, column_count: 1,
+    headline: 'शेतकऱ्यांसाठी राज्य सरकारची नवी मोठी योजना जाहीर',
+    headline_font_px: 18, subheading: '', body: '', body_font_px: 9, line_height: 1.45,
+  };
+  const r = adapter.composeSection({ ...narrow, images: [] }, {});
+  assert.ok(r.bands.headline.lineCount > 2, 'it must be allowed the lines it needs');
+  assert.equal(r.overset.headline, '', 'and no word may be pushed off the block to hold a line budget');
+});
+
+test('a desk that asks for a three-line headline still gets one', () => {
+  const r = adapter.composeSection({ ...LEAD, headline_max_lines: 3 }, {});
+  assert.ok(r.bands.headline.lineCount <= 3);
+  // The point is that the row's own value is honoured, not overridden by the
+  // preferred budget.
+  const held = adapter.composeSection(LEAD, {});
+  assert.ok(r.bands.headline.resolvedPx >= held.bands.headline.resolvedPx,
+    'more lines allowed means the headline need not be shrunk as far');
+});

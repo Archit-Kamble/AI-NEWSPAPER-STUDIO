@@ -145,6 +145,43 @@ This gap had already been found and hand-fixed once in `tests/compose.test.js`
 and had come back in a script and a test, which is why the refusal is in the
 engine and not in its callers. `tests/exactShaping.test.js` holds it.
 
+### The headline is written to a COUNT — it fills its measure
+
+A sub-editor sizes a headline to the column. One that stops two-fifths short on
+every line reads as unfinished, and it is the same fault as a headline that
+eats half the block — a desk reported both at once and they have one cause.
+
+**`src/layout/geometry.js` has always chosen a block's headline size assuming
+TWO lines** (`HEADLINE_LINES = 2`); the engine allowed **four**. So the sizing
+and the setting disagreed: `typeScaleFor()` picked 24px for a 268×248 lead on a
+two-line basis and the engine set **three lines at 54%, 53% and 53% of their
+measure, taking 50% of the block**. Holding the budget is what makes the fit
+happen — over budget is a failure, so the size steps down until it sets in two,
+and the size it lands on is the one whose longest line comes closest to filling.
+That block now sets at 22px: **97% and 48%, taking 33%**, and hands 40px of a
+240px block back to the story.
+
+Two caps, and both are **preferences that yield to overset**, in this order:
+
+| | |
+|---|---|
+| `HEADLINE_MAX_LINES` (2) | preferred; a narrow one-column block that cannot set its words in two at any legible size gets its third and fourth |
+| `MAX_DISPLAY_SHARE` (0.5) | kicker + headline + deck together, measured **absolutely from `content.top`** |
+
+**A per-flow share measured from a running `y` is a share of what is LEFT, and
+it compounds** — that is how a headline inside its own 50% and a deck inside its
+own 70% took half the block between them.
+
+**Overset is always worse.** `fitDisplayFlow()` runs its passes in order of what
+it would like, ending with what it will settle for; every relaxation gives up
+something worth less than a word pushed off the page. Removing that last pass
+took `DECK_OVERSET` across the database from 1 block to 7.
+
+Measured across 655 real article blocks: three-line headlines **134 → 0**, mean
+headline fill **68.4% → 71.6%**, mean display share **21.3% → 18.4%**, blocks
+spending over 40% of themselves on display type **67 → 13**. `headline_max_lines`
+on the row still wins, so a splash can be given three.
+
 ### A picture may not leave a column too narrow to set in
 
 A photograph placed so that the strip of measure beside it is under one word

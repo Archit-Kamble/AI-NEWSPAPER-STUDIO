@@ -4047,3 +4047,71 @@ does not emit, so every canvas rectangle came back null and it died on the first
 
 **206 → 209 of 211.** The two that remain are the AI-provider assertions, which
 belong to uncommitted provider work in the tree, not to this.
+
+### 35. The block, set like a printed page (2026-08-19)
+
+> "FIX News Blocks as Much as possible then Gap and padding between
+> newssections (heading, subheading, body) and News Blocks also"
+
+Three faults, all measured before anything was written.
+
+**The page had no rules.** It had two: a `#c9c9c9` vertical border and a `#111`
+horizontal one, both drawn on the block's own edge. Two inks where a newspaper
+has one (grey screens to a broken dotted line on newsprint), and on the edge
+rather than in the gutter, which is where a rule has to be — halfway between the
+two stories, or the eye reads it as belonging to the near one. And a block
+cannot draw outside itself: `.newspaper-section` is `overflow: hidden` and must
+be, so a pseudo-element offset into the gutter was clipped away entirely and the
+rules simply did not appear.
+
+They are **page furniture** now (`column-rules.js`), like the nameplate: the
+layout is read, the gutters between neighbours are found, and a hairline runs
+the length over which two blocks actually face each other and stops where they
+stop. Merged where three blocks stack against one tall neighbour, so there are
+no seams. Gutters come from `geometry.js` through a custom property, never a
+second copy in the stylesheet.
+
+**Every sink on the page was a different size.** Measured across one real front
+page: the space under a headline ran 1.30, 1.44, 1.60, 1.68 body-lines and the
+space under the display 1.33 to 1.75 — a 31% spread. `y = previousBand.bottom +
+share × max(fontPx)` compounds twice, because a display band's box is a full
+line box tall (the ink sits in the upper part of it) *and* a share of the same
+font size is then added. A reader never measures the white under a headline; an
+uneven one is why a page looks homemade.
+
+Specified baseline to baseline now, in the line of the flow below, which is how
+a compositor specifies it and the rhythm the reader is reading in. Across all
+11 813 sections: **1.35 under every headline, 1.50 under every deck, 1.55 where
+there is no deck.** The floor is the two faces' own metrics, so type cannot
+collide whatever the numbers ask for.
+
+**A boxed brief set its type 1.25 mm from a black rule.** The box is ink; a
+printed panel insets its type 3–4 mm inside it. `BOX_INSET_PX`.
+
+**And a double word space, which nobody typed.** The paragraph policy merges two
+authored paragraphs by substituting each interior newline with a space — the
+substitution that keeps the text the same length and so keeps `line.at` valid —
+so a reporter's `घेतला.\n\nशाळा` set as `घेतला.  शाळा`, visible at 200% on the
+front page's own lead and reserved as ink width, so the justifier then
+distributed the line's slack around it. The stored copy is not edited: it is SET
+as one space, at the width it is measured at and the ink it is painted with, in
+the browser and in the press file alike.
+
+Three more found on the way, all real:
+
+- A full-measure picture was placed at whichever end of the copy it was nearer.
+  The copy pours on a band grid anchored at `bodyTop`, so a 25 px gap under a
+  picture with a 24.88 px band looked like exactly one line of room — the grid's
+  next row began 5 px lower and ran past the frame, and the block set NOTHING
+  while the repair reported success. Both ends are counted in whole LINES now.
+- `capacityChars()` modelled the paragraph policy's two ceilings but not its
+  floor, so it put the break two lines later than the compositor takes it, and a
+  break costs the tail of the line it closes: 271 characters quoted against 247
+  set on a 240×180 block.
+- And the floor needed the last 5%, measured against the true character-granular
+  capacity of 208 block shapes: 25% conservative at the median, over-promising
+  on 4 of them by up to 4.9%. Applied to the floor alone — it is one estimator's
+  measured error, not a discount on the budget.
+
+Sweep, 11 813 sections, no throws: `NO_LEGAL_MEASURE` 0, `OVERSET` 17
+(unchanged). 829 tests, 55/55 on the controls net.

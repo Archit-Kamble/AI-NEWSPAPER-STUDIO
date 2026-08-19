@@ -273,6 +273,68 @@ Quill's, and Quill owns exactly one document — the body.
 this class of bug can be caught: press each control with each object selected
 and check WHICH field moved.
 
+### The page is RULED, and the space is specified baseline to baseline
+
+Two things a printed newspaper has that a page of white gaps does not.
+
+**Column rules are page furniture** (`public/editor/canvas/column-rules.js`),
+like the nameplate and the folio — never a border on a block. Three reasons,
+and all three are the difference between a rule and a line:
+
+- A rule belongs exactly **halfway between** the two stories it separates. On
+  one block's own edge it sits 2 mm from that story and 5 mm from the other,
+  and the eye reads it as belonging to the near one.
+- **A block cannot draw outside itself.** `.newspaper-section` is
+  `overflow: hidden` and must be — overset copy may not spill onto the next
+  story — so a pseudo-element offset into the gutter is clipped away entirely.
+- A rule exists because two stories **meet**. It is a fact about the pair.
+
+So the layout is read, the gutters between neighbours are found, and a hairline
+runs the length over which two blocks actually face each other. Gutters come
+from `geometry.js` through a custom property on the canvas — never a second copy
+in the stylesheet. One ink, one weight, both axes: a `#c9c9c9` vertical and a
+`#111` horizontal were two inks, and a newspaper has one (grey screens to a
+broken dotted line on newsprint, or to nothing). An advert or any block with its
+own box is skipped — its box IS the separator, and a hairline 3 px outside it is
+two rules where a printer draws one.
+
+**Space between flows is BASELINE TO BASELINE, in the line of the flow below.**
+`y = previousBand.bottom + share × max(fontPx)` — a gap measured from the
+previous flow's *box* and scaled by the *display* size — compounds twice: a
+display band's box is a full line box tall and the ink sits in the upper part
+of it, so the box bottom is already further below the ink on a 26 px headline
+than on a 13 px one, and then a share of that same size is added on top.
+Measured across one real front page:
+
+| | | spread |
+|---|---|---|
+| headline → deck | 1.30, 1.44, 1.60, 1.68 body-lines | 29% |
+| display → body | 1.33, 1.37, 1.54, 1.61, 1.75 | 31% |
+
+A compositor does not specify space that way. `BASELINE_GAP` states it as a
+compositor does, and `baselineAfter()` takes the larger of the specified gap and
+the clearance the two faces physically need from their own metrics, so type can
+never collide whatever the numbers ask for. Across all 11 813 sections: **1.35
+under every headline, 1.50 under every deck, 1.55 where there is no deck.**
+
+`setDisplayFlow()` places itself from a target baseline rather than a box top,
+and it has to — the size is not settled until it runs (`fitDisplayFlow` tries
+several), and where a line box starts to put its baseline in a given place
+depends on the size it is finally set at.
+
+**A boxed block sets its type inside the box, not against it**
+(`BOX_INSET_PX`). The box is ink; a printed panel insets its type 3–4 mm.
+
+**Two spaces mid-line are set as one** (`setSpaces()` in `graphemes.js`).
+Nobody types them: the paragraph policy merges two authored paragraphs by
+substituting each interior newline with a space — which is exactly what keeps
+the text the same length, and so keeps `line.at` valid — so `घेतला.\n\nशाळा`
+became `घेतला.  शाळा`. The stored copy is never edited to fix it; it is SET as
+one space, at the two places setting happens: the width it is measured at and
+the ink it is painted with (browser and press file both). The collapse returns
+its own index table so a mark that starts or ends at a collapsed space lands on
+the same words.
+
 ### A picture may not leave a column too narrow to set in
 
 A photograph placed so that the strip of measure beside it is under one word

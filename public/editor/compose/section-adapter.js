@@ -130,10 +130,30 @@ export function obstaclesOf(section) {
  * what the desk currently has on screen, which may be an unsaved draft. The
  * draft wins, so the canvas shows what is being typed.
  */
+// 2 mm, which with the box's own rule puts the type a little over 3 mm inside
+// it - what a printed panel sets.
+const BOX_INSET_PX = 4;
+
 export function composeSection(section = {}, view = {}) {
   const width = positive(section.width_px ?? section.width, 0);
   const height = positive(section.height_px ?? section.height, 0);
-  const padding = positive(pick(section, view, 'marginPx', 'margin_px', 12), 12);
+  // A block that is BOXED sets its type inside the box, not against it.
+  //
+  // The box is ink on the page - a printed one insets its type 3-4 mm inside
+  // the rule, the way a printed panel does. Composed with the block's ordinary
+  // margin alone, the type sat 4 px from the block's edge and the box's own
+  // ink took 1.5 of those, so a boxed brief on the front page set 1.25 mm from
+  // a black rule: visibly cramped at 200%, and the one block on the page whose
+  // separator is not a hairline in a gutter but a line the copy is inside.
+  //
+  // Only for a full box. A `rule` block carries a hairline on ONE edge and the
+  // composition's padding is a single number for all four - insetting the
+  // other three to clear a rule they do not have would be worse.
+  const border = String(pick(section, view, 'borderStyle', 'border_style', 'none') || 'none');
+  const boxInset = border === 'box'
+    ? BOX_INSET_PX + positive(pick(section, view, 'borderWidthPx', 'border_width_px', 1), 1)
+    : 0;
+  const padding = positive(pick(section, view, 'marginPx', 'margin_px', 12), 12) + boxInset;
   const bodyFontPx = positive(pick(section, view, 'bodyFontPx', 'body_font_px', 16), 16);
   const prefix = datelineText(view);
 

@@ -3808,8 +3808,26 @@ Saved as x_px 128 — the exact logical value, no round-trip drift (the drop now
 saves the rectangle it last previewed rather than re-deriving one from screen
 pixels, which could give up a pixel and put a corridor back in the dead zone).
 
-**Database sweep: `NO_LEGAL_MEASURE` 51 → 2 → 1**, and the last one is block
-39131, which nobody has touched since. That is deliberate: this repairs a
-placement being *made* and never rewrites a stored row. An edition carrying a
-bad placement keeps it, and keeps its warning, until someone touches the
-picture. All 11273 sections compose without a throw.
+**And the repair is OFFERED, not just described.** The warning names three
+things a desk could do; SAHAS already knows which picture is in the way and
+exactly where it has to go, because corridor-snap computes that for every
+placement anyway. Printing advice while holding the answer is the same failure
+as printing a number nobody can act on. So the warning now carries a button —
+*"Set it across the foot, full measure"*, *"Move it to the right of the
+column"* — which goes through the ordinary picture patch a drag would make.
+
+It stays an offer. Nothing moves a stored picture on its own; a person presses
+it. And the offer is checked against the engine before it is drawn, so a
+button that would not actually fix the block is never shown.
+
+One real bug found by driving it: `bindPlacementRepair` was wired in
+`renderToolsRail()`, but `#edSpaceGroup` belongs to the **dock**, not the
+settings rail — so the listener bound to an element that render had not
+written yet, and the button drew perfectly and did nothing. Moved to
+`renderExternalEditor()`, verified live: pressed on block 39131 it moved the
+picture to 4,172,182,88, saved, and the block's fault became an ordinary
+"content overflows, trim the body" — which is true, and which a sub-editor can
+act on.
+
+**Database sweep: `NO_LEGAL_MEASURE` 51 → 2 → 1 → 0** across 11318 sections,
+no throws. The fault class is closed.

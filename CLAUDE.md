@@ -182,9 +182,17 @@ so a direct API caller cannot make the layout the UI refuses to. It never
 changes a picture's height, and changes its width only in the span case.
 
 It repairs a placement being **made**; it never rewrites stored rows. An
-edition already carrying a bad placement keeps it, and keeps its warning,
-until someone touches the picture — silently moving pictures in saved pages is
-not this system's to do.
+edition already carrying a bad placement keeps it until someone acts — but the
+desk is *offered* the repair rather than only told about it: `placementRepair()`
+in `layout-panel.js` works out which picture is in the way and exactly where it
+goes, and the warning carries a button that goes through the ordinary picture
+patch. The offer is checked against the engine before it is drawn, so a button
+that would not fix the block is never shown. Silently moving pictures in saved
+pages is still not this system's to do; a person presses it.
+
+`#edSpaceGroup` belongs to the **dock**, not the settings rail. Binding a
+listener to it from `renderToolsRail()` binds to an element render has not
+written yet — the control draws perfectly and does nothing.
 
 ### The engine's own findings must be rendered, and only the real ones
 

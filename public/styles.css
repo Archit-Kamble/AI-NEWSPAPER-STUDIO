@@ -2727,6 +2727,25 @@ body.print-view .page-guides {
   background: #ececee;
   color: #6a6a72;
 }
+/* The repair, offered rather than described. Sits inside the warning it
+   belongs to, so a desk reads the fault and the fix as one thing. */
+.warning-fix {
+  display: block;
+  margin-top: var(--s1);
+  padding: 4px 10px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.warning-fix:hover {
+  background: currentColor;
+  filter: invert(1) hue-rotate(180deg);
+}
 .warning-ok {
   margin: 0;
   padding: var(--s1) var(--s2);

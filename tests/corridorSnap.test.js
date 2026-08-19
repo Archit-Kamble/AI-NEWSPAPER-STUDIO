@@ -159,3 +159,64 @@ test('a picture too tall for the block is left alone rather than shuffled to no 
   assert.equal(out.snapped, false, 'nowhere to put it helps - that is a picture this block cannot take');
   assert.equal(out.how, 'does-not-fit');
 });
+
+// ------------------------------------------------- the repair is an OFFER ---
+//
+// The warning names three things a desk could do about an unprintable block.
+// SAHAS already knows which picture is in the way and exactly where it would
+// have to go - corridor-snap computes that for every placement anyway - so
+// printing the advice while holding the answer is the same failure as
+// printing a number nobody can act on.
+//
+// It stays an offer: a button, pressed by a person, going through the same
+// picture patch a drag makes. Nothing here moves a stored picture on its own.
+
+test('a block that cannot be printed is offered the repair, with the exact rectangle', async () => {
+  const panel = await import(path.join(__dirname, '..', 'public', 'editor', 'external-editor', 'layout-panel.js'));
+  const adapter = await import(path.join(__dirname, '..', 'public', 'editor', 'compose', 'section-adapter.js'));
+  const metrics = await import(path.join(__dirname, '..', 'public', 'editor', 'compose', 'font-metrics.js'));
+  const shaper = await import(path.join(__dirname, '..', 'public', 'editor', 'compose', 'shaper.js'));
+  await Promise.all([metrics.ensureFontsLoaded(), shaper.ensureShaperReady()]);
+
+  // Block 39131, the one block in the database still carrying this fault.
+  const section = {
+    block_type: 'article', width_px: 190, height_px: 264, margin_px: 4, column_count: 1,
+    headline: 'सातारा: पाणीटंचाईची सावट', headline_font_px: '17.0',
+    subheading: 'अनेक भागात पाणीपुरवठा कमी झाला असून नागरिक त्रस्त आहेत.', subheading_font_px: '16.0',
+    body_font_px: '16.0', line_height: '1.25', text_align: 'justify',
+    body: 'पाणीपुरवठा कमी झाल्याने दैनंदिन जीवन विस्कळीत होऊन नागरिक त्रस्त आहेत.',
+  };
+  const images = [{ id: 7, x_px: 0, y_px: 151, width_px: 95, height_px: 88, shape: 'rect', rotation: 0, stand_off_px: 6 }];
+
+  const before = adapter.composeSection({ ...section, images }, {});
+  assert.ok(before.warnings.some((w) => w.code === 'NO_LEGAL_MEASURE'), 'the fixture must be the real fault');
+
+  const repair = panel.placementRepair(section, {}, images);
+  assert.ok(repair, 'a repair must be offered, not just advice');
+  assert.equal(repair.imageId, 7);
+
+  // And it really works - the offer is checked against the engine before it is
+  // ever shown, so a button that does not fix the block is never drawn.
+  const moved = [{ ...images[0], x_px: repair.patch.x, y_px: repair.patch.y,
+    width_px: repair.patch.width, height_px: repair.patch.height }];
+  const after = adapter.composeSection({ ...section, images: moved }, {});
+  assert.ok(!after.warnings.some((w) => w.code === 'NO_LEGAL_MEASURE'));
+  assert.ok(after.bodyLines.length > 0, 'the block must set its copy after the repair');
+});
+
+test('a printable block is offered nothing - there is nothing to repair', async () => {
+  const panel = await import(path.join(__dirname, '..', 'public', 'editor', 'external-editor', 'layout-panel.js'));
+  const section = {
+    block_type: 'article', width_px: 307, height_px: 296, margin_px: 4, column_count: 1,
+    headline: 'सेंद्रिय शेती गटांसाठी', headline_font_px: '28.0',
+    body_font_px: '12.0', line_height: '1.25', text_align: 'justify',
+    body: 'कृषी विभागाने सेंद्रिय शेती गटांसाठी तीन दिवसांचे प्रशिक्षण शिबिर आयोजित केले.',
+  };
+  const images = [{ id: 9, x_px: 128, y_px: 71, width_px: 175, height_px: 190, shape: 'rect', rotation: 0, stand_off_px: 6 }];
+  assert.equal(panel.placementRepair(section, {}, images), null);
+});
+
+test('a block with no picture at all is never offered a picture repair', async () => {
+  const panel = await import(path.join(__dirname, '..', 'public', 'editor', 'external-editor', 'layout-panel.js'));
+  assert.equal(panel.placementRepair({ block_type: 'article', width_px: 190, height_px: 264 }, {}, []), null);
+});

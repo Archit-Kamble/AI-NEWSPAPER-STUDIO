@@ -154,6 +154,25 @@ function renderToolsRail(section, view, callbacks) {
   bindPageMap((sectionKey) => callbacks.onSelectSection?.(sectionKey));
 }
 
+// "Move it clear of the column" on the Layout panel's unprintable-block
+// warning. The rectangle was already worked out to draw the button
+// (layout-panel.js's placementRepair), so pressing it is an ordinary picture
+// patch - the same one a drag makes. Delegated on the group, which is
+// re-rendered wholesale on every refresh.
+function bindPlacementRepair(onPatchImage) {
+  const group = document.getElementById("edSpaceGroup");
+  if (!group || group.dataset.repairBound === "1") return;
+  group.dataset.repairBound = "1";
+  group.addEventListener("click", (event) => {
+    const button = event.target.closest?.("[data-fix-placement]");
+    if (!button) return;
+    event.preventDefault();
+    const [x, y, width, height] = String(button.dataset.fixRect).split(",").map(Number);
+    if (![x, y, width, height].every(Number.isFinite)) return;
+    onPatchImage?.(Number(button.dataset.fixPlacement), { x, y, width, height });
+  });
+}
+
 export function renderExternalEditor(section, view, story, reporterNews, callbacks) {
   const container = document.getElementById("externalEditorPanel");
   if (!container) return;
@@ -268,6 +287,11 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
   `;
 
   const notify = showNotice;
+
+  // #edSpaceGroup belongs to the DOCK, not the settings rail - binding it in
+  // renderToolsRail() bound a listener to an element that render had not
+  // written yet, and the button drew correctly and did nothing.
+  bindPlacementRepair(callbacks.onPatchImage);
 
   bindPictureControls({
     onAddImage: callbacks.onAddImage,

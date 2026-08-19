@@ -9,6 +9,9 @@
 import { computeMetrics } from "../layout/layout-metrics.js";
 import { buildFlowMap, flowFit, flowImageFromRow } from "../layout/text-flow.js";
 import { bodyFill, composeSection } from "../compose/section-adapter.js";
+import { snapPictureToLegalCorridor, leavesNoLegalColumn } from "../layout/corridor-snap.js";
+import { blockExpectsCopy } from "../layout/block-kinds.js";
+import { MIN_CORRIDOR_EM } from "../compose/intervals.js";
 import "../layout/headline-reserve.js";
 
 const { reservationCandidates } = globalThis.SahasHeadlineReserve;
@@ -102,6 +105,77 @@ function engineWarnings(composition) {
   return out;
 }
 
+// The repair for a block that can set nothing, worked out rather than
+// described.
+//
+// The warning already says what is wrong, and it names three things a desk
+// could do about it - but SAHAS knows which picture is in the way and exactly
+// where it would have to go, because corridor-snap.js computes that for every
+// placement anyway. Printing advice while holding the answer is the same
+// failure as printing a number nobody can act on.
+//
+// This is an OFFER, not an action: it is a button, the desk presses it, and it
+// goes through the ordinary picture patch like a drag would. Nothing here
+// moves a stored picture on its own - that is the same line the drag-time
+// snap holds (it repairs a placement being made, never a saved row).
+//
+// Which picture, when there are several: whichever one, moved on its own,
+// makes the block printable - tried in the order they are stacked. Moving one
+// picture is a repair a desk can see and undo; moving three at once is a
+// rearrangement nobody asked for.
+export function placementRepair(section, view, images = []) {
+  const rows = images || [];
+  if (!rows.length || !blockExpectsCopy(section?.block_type)) return null;
+
+  const composed = composeSection({ ...section, images: rows }, view);
+  if (!leavesNoLegalColumn(composed)) return null;
+
+  const bodyPx = composed.typography?.bodyPx || 0;
+  const rule = {
+    contentLeft: composed.content.left,
+    contentRight: composed.content.right,
+    minCorridorPx: MIN_CORRIDOR_EM * bodyPx,
+    columnCount: composed.columns?.length || 1,
+    bodyTop: composed.bodyTop,
+    bodyBottom: composed.content.bottom,
+    bandHeightPx: bodyPx * (composed.typography?.lineHeight || 0),
+    expectsCopy: true,
+  };
+
+  for (const image of rows) {
+    const rect = {
+      x: Number(image.x_px ?? image.x) || 0,
+      y: Number(image.y_px ?? image.y) || 0,
+      width: Number(image.width_px ?? image.width) || 0,
+      height: Number(image.height_px ?? image.height) || 0,
+    };
+    const standOffPx = Number(image.stand_off_px ?? image.standOffPx) || 0;
+    const snapped = snapPictureToLegalCorridor(rect, { ...rule, standOffPx });
+    if (!snapped.snapped) continue;
+
+    const moved = rows.map((other) => (other === image
+      ? { ...other, x_px: snapped.x, y_px: snapped.y, width_px: snapped.width, height_px: snapped.height }
+      : other));
+    if (leavesNoLegalColumn(composeSection({ ...section, images: moved }, view))) continue;
+    return {
+      imageId: Number(image.id),
+      patch: { x: snapped.x, y: snapped.y, width: snapped.width, height: snapped.height },
+      how: snapped.how,
+    };
+  }
+  return null;
+}
+
+const REPAIR_WORDS = {
+  'flush-left': 'Move it to the left of the column',
+  'flush-right': 'Move it to the right of the column',
+  'inset-from-left': 'Move it clear of the column',
+  'inset-from-right': 'Move it clear of the column',
+  spanned: 'Set it across the full measure',
+  'spanned-at-top': 'Set it across the top, full measure',
+  'spanned-at-foot': 'Set it across the foot, full measure',
+};
+
 export function layoutWarnings(metrics) {
   const warnings = [];
   // The empty FOOT of the block is the whitespace a desk actually complains
@@ -126,6 +200,12 @@ export function layoutWarnings(metrics) {
 
   const engine = engineWarnings(metrics.composition);
   const unprintable = engine.some((w) => w.code === "NO_LEGAL_MEASURE");
+  // The warning names three things a desk could do; where SAHAS can work out
+  // which one and where, it offers it instead of only describing it.
+  if (metrics.placementRepair) {
+    const fault = engine.find((w) => w.code === "NO_LEGAL_MEASURE");
+    if (fault) fault.action = { ...metrics.placementRepair, label: REPAIR_WORDS[metrics.placementRepair.how] || "Move it clear of the column" };
+  }
 
   // "Trim the body, reduce the body size, or use a larger block" is advice
   // that cannot work when there is no legal column at all - no amount of
@@ -184,7 +264,11 @@ export function spacePanelMarkup(section, view, images = []) {
   // mid-resize would see a budget computed against where the picture USED
   // to be.
   const m = computeMetrics({ ...section, images }, view);
-  const warnings = layoutWarnings({ ...m, reservedComposition: reservedComposition(section, view, images) });
+  const warnings = layoutWarnings({
+    ...m,
+    reservedComposition: reservedComposition(section, view, images),
+    placementRepair: placementRepair(section, view, images),
+  });
 
   let ratio;
   let overflowing;
@@ -262,7 +346,13 @@ export function spacePanelMarkup(section, view, images = []) {
 
 function warningsMarkup(warnings) {
   if (!warnings.length) return `<p class="warning-ok">Layout looks balanced.</p>`;
-  return warnings.map((w) => `<p class="warning-item level-${w.level}">${w.text}</p>`).join("");
+  return warnings.map((w) => {
+    if (!w.action) return `<p class="warning-item level-${w.level}">${w.text}</p>`;
+    const { imageId, patch, label } = w.action;
+    return `<p class="warning-item level-${w.level}">${w.text}`
+      + `<button type="button" class="warning-fix" data-fix-placement="${imageId}"`
+      + ` data-fix-rect="${patch.x},${patch.y},${patch.width},${patch.height}">${label}</button></p>`;
+  }).join("");
 }
 
 export function refreshSpacePanel(section, view, images = []) {

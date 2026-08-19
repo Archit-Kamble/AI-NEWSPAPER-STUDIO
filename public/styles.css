@@ -3594,6 +3594,14 @@ body.print-view .section-diagnostic {
   z-index: 4;
   pointer-events: none;
   border-bottom: 1px solid #111;
+  /* The band is a fixed height with `overflow: hidden`, which is what keeps it
+     inside the region geometry.js reserved for it - and that clipping edge sat
+     exactly on the first line box's top. Devanagari's ink box is taller than
+     its line box (1.475 em against 1.45), and every matra above the shirorekha
+     in the strapline was being sliced off: the desk photographed it. Two pixels
+     of leading is the whole fix; the band has room for it (measured: 10.8 px
+     of slack below the owner line). */
+  padding-top: 2px;
   padding-bottom: 2px;
   box-sizing: border-box;
   height: 120px;
@@ -3619,11 +3627,16 @@ body.print-view .section-diagnostic {
   text-overflow: ellipsis;
   max-width: 60%;
 }
+/* The nameplate is the biggest thing on the page, and it was not.
+   The ears are set as narrow as their own type needs - the date numeral is
+   38 px and the meta lines are 6.5-8 px - and every pixel saved goes to the
+   middle column, because the plate is WIDTH-bound: at 5.33:1 it can only get
+   taller by getting wider. */
 .masthead-body {
   display: grid;
-  grid-template-columns: 90px 1fr 110px;
+  grid-template-columns: 64px 1fr 88px;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 .masthead-ear {
   display: flex;
@@ -3663,7 +3676,9 @@ body.print-view .section-diagnostic {
 }
 .masthead-plate img {
   max-width: 100%;
-  max-height: 76px;
+  /* The whole band the body row has, less the 2 px of leading above. `contain`
+     keeps the aspect, so this is a ceiling and never a stretch. */
+  max-height: 80px;
   object-fit: contain;
 }
 .masthead-ear-right {
@@ -3671,17 +3686,15 @@ body.print-view .section-diagnostic {
   text-align: right;
   gap: 1px;
 }
+/* One line, always: an RNI number broken across two lines reads as a mistake,
+   and the ear is only as wide as the nameplate can spare. */
 .masthead-rni {
-  font-size: 6.5px;
+  font-size: 6px;
   color: #444;
+  white-space: nowrap;
 }
 .masthead-meta {
   font-size: 8px;
-}
-.masthead-editor {
-  font-size: 8px;
-  font-weight: 700;
-  color: #0a7a3f;
 }
 .masthead-web {
   font-size: 8px;
@@ -3694,8 +3707,12 @@ body.print-view .section-diagnostic {
   position: absolute;
   z-index: 4;
   pointer-events: none;
-  display: flex;
-  justify-content: space-between;
+  /* Same three columns as the page foot, and for the same reason: the date is
+     the middle item in both orders (masthead.js's folioMarkup), so a centre
+     column puts it on the page's centre line rather than halfway between two
+     ears of different widths. */
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 10px;
   border-bottom: 1px solid #111;
@@ -3913,8 +3930,14 @@ body.print-view .newspaper-section.block-photo {
   position: absolute;
   z-index: 4;
   pointer-events: none;
-  display: flex;
-  justify-content: space-between;
+  /* THREE COLUMNS, not `space-between`, and the date is the middle one.
+     `space-between` centres the date between its two NEIGHBOURS, and the
+     neighbours are never the same width - "दैनिक साहस वार्ता" against
+     "पृष्ठ १" pushed the date well left of the page's own centre line, on
+     every page, in a strip whose whole job is to look machine-set. A 1fr /
+     auto / 1fr grid puts it on the centre line whatever the two ears say. */
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 12px;
   padding: 1px 0;
@@ -3931,6 +3954,7 @@ body.print-view .newspaper-section.block-photo {
    drawn box, and the ruled strip that used to sit here read as an unwanted
    line under every page. */
 .foot-title {
+  text-align: left;
   font-size: 9px;
   font-weight: 700;
   color: #111;
@@ -3942,6 +3966,7 @@ body.print-view .newspaper-section.block-photo {
   overflow: hidden;
 }
 .foot-date {
+  text-align: center;
   font-size: 9px;
   color: #444;
   white-space: nowrap;
@@ -3952,6 +3977,7 @@ body.print-view .newspaper-section.block-photo {
   overflow: hidden;
 }
 .foot-page {
+  text-align: right;
   font-size: 9px;
   font-weight: 700;
   color: #111;
@@ -3966,13 +3992,15 @@ body.print-view .newspaper-section.block-photo {
 /* Verso and recto. The page number sits on the OUTER edge of the spread - left
    on an even page, right on an odd one - so a reader flicking through finds it
    in the same place their thumb already is. */
-.page-folio.folio-verso .folio-title,
-.page-folio.folio-recto .folio-page {
-  text-align: right;
-}
-.page-foot.foot-verso {
-  flex-direction: row-reverse;
-}
+.page-folio > :first-child { text-align: left; }
+.page-folio > .folio-date { text-align: center; }
+.page-folio > :last-child { text-align: right; }
+/* A verso page swaps the two ears - the page number goes to the outer edge -
+   and does it by REORDERING rather than by reversing the box, so the date
+   stays in the middle column and stays on the centre line. */
+.page-foot.foot-verso .foot-page { order: 1; text-align: left; }
+.page-foot.foot-verso .foot-date { order: 2; }
+.page-foot.foot-verso .foot-title { order: 3; text-align: right; }
 
 /* A page that prints black only. The photographs are previewed in grey because
    that is how the press will lay them down - showing them in colour would be
@@ -4618,6 +4646,19 @@ body.story-fullscreen { overflow: hidden; }
 }
 .page-imprint .imprint-en {
   font-family: Arial, sans-serif;
+}
+/* The AI disclosure. Set apart from the declaration above it - it is not part
+   of the Press and Registration of Books Act statement and must not read as
+   though it were - but in the same band, at the same size, because it is the
+   same kind of standing notice to the reader. */
+.page-imprint .imprint-ai {
+  /* No margin and no padding: the band is exactly five line boxes tall
+     (geometry.js's imprintHeightPx) and it clips, so every pixel spent on air
+     here is taken off the bottom of the disclosure's own descenders. The
+     hairline is the whole separation, and it costs one pixel. */
+  border-top: 1px solid #d6d6dc;
+  font-weight: 700;
+  text-align: center;
 }
 body.print-view .page-imprint {
   border-top-color: #333;

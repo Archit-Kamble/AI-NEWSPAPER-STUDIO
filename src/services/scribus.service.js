@@ -533,14 +533,25 @@ function footerFrames(newspaper, page, geometry, identity, { pageOffsetMm, ownPa
   if (Number(page.page_number) === Number(identity.imprintPage || 2) && region.footer.imprintHeightPx > 0) {
     const imprintYMm = mm(region.footer.imprintTop) + pageOffsetMm;
     const imprintHeightMm = mm(region.footer.imprintHeightPx);
+    // Two declaration lines and the standing AI disclosure, in the same
+    // proportions the canvas sets them in (masthead.js's imprintMarkup): the
+    // Marathi and English declarations take two of the band's five lines
+    // each, the disclosure the fifth. A press file that dropped the
+    // disclosure would print a paper that does not carry it.
+    const declarationMm = imprintHeightMm * 0.4;
     parts.push(lineFrame({
-      xMm: leftMm, yMm: imprintYMm, widthMm, heightMm: imprintHeightMm / 2,
+      xMm: leftMm, yMm: imprintYMm, widthMm, heightMm: declarationMm,
       runs: [{ text: identity.imprint, family: 'sans', weight: 400, bold: false, italic: false, underline: false, fontPx: 9 }],
       align: 1, ownPage,
     }));
     parts.push(lineFrame({
-      xMm: leftMm, yMm: imprintYMm + imprintHeightMm / 2, widthMm, heightMm: imprintHeightMm / 2,
+      xMm: leftMm, yMm: imprintYMm + declarationMm, widthMm, heightMm: declarationMm,
       runs: [{ text: identity.imprintEnglish, family: 'sans', weight: 400, bold: false, italic: false, underline: false, fontPx: 8 }],
+      align: 1, ownPage,
+    }));
+    parts.push(lineFrame({
+      xMm: leftMm, yMm: imprintYMm + declarationMm * 2, widthMm, heightMm: imprintHeightMm - declarationMm * 2,
+      runs: [{ text: identity.aiDisclosure, family: 'sans', weight: 700, bold: true, italic: false, underline: false, fontPx: 9 }],
       align: 1, ownPage,
     }));
   }

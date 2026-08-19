@@ -4181,3 +4181,92 @@ Boxed blocks are unchanged in kind. `BOX_INSET_PX` is added on top of this
 Migration in `schema.sql` beside the columns, guarded in the usual way — only
 rows still carrying the exact old default move (11 873 of 11 873; no desk had
 overridden it). 829 tests.
+
+### 37. The page's own furniture: the nameplate, the folio and the disclosure (2026-08-19)
+
+Five reports from the desk, one band of the page, and one of them turned out to
+be a bug nobody could have found by reading the code.
+
+**1. The nameplate was small, and could never be big.** 247×46 px inside a
+620 px measure — a quarter of the width of the customer's own printed page,
+where the name runs from 150 px to 1750 px of 1920. Two causes, both structural:
+the ears were 90 px and 110 px of small type, and the corner advert took a
+further 157 px whether or not anything was ever sold in it. The plate is
+width-bound at 5.33:1, so it can only get taller by getting wider.
+
+**2. And the corner block "was not working correctly."** It was worse than that.
+Deleting it was refused with a 409 (`STRUCTURAL_FRAME_PROTECTED`), and if the
+row was removed any other way, `workspace.js` asked
+`POST /repair-structural-frames` **on every single edition open** and put it
+straight back. So a desk who did not want the corner could neither remove it nor
+keep it removed, and nothing on screen said why. An automatic repair that
+reverses an editorial decision is not a repair.
+
+The refusal was put in for a real fault — the nameplate once stretched the
+paper's title across a corner it did not own — but that fault was in the
+nameplate, which took its left edge from whether the block happened to exist
+rather than from the page's region model, and it was fixed there in an earlier
+phase. Refusing the deletion as well left a paper that could not say "this
+edition does not sell the corner."
+
+So: the reservation follows the FRAME (not its contents — an unsold corner still
+prints blank while its frame is there, because a desk fills it the morning it is
+sold), removal is allowed, the repair endpoint stays for a desk who wants the
+corner back, and nothing is repaired on load.
+
+| | nameplate |
+|---|---|
+| before | 247 × 46 px |
+| with the corner sold | 299 × 56 px |
+| **with no corner frame** | **426 × 80 px** |
+
+The ears came down to 64/88 px, and the editor's name — which was set **twice**,
+once in the right ear and again in the owner line below — is now set once. It is
+the same legal statement, and the duplicate was also what wrapped the ear onto
+two lines.
+
+**3. The strapline's glyph tops were being sliced off** (the desk's screenshot).
+`.page-masthead` is a fixed 120 px with `overflow: hidden` — which is what keeps
+it inside the region `geometry.js` reserved — and that clipping edge sat exactly
+on the first line box's top. Devanagari's ink box is taller than its line box
+(1.475 em against 1.45, measured in §28), so every matra above the shirorekha
+was outside the box and clipped. Two pixels of leading is the whole fix, and the
+band had 10.8 px of slack to spend.
+
+**4. The date was not on the centre line.** `.page-foot` and `.page-folio` were
+flex with `space-between`, which centres the date between its two NEIGHBOURS —
+and the neighbours are never the same width (`दैनिक साहस वार्ता` against
+`पृष्ठ १`). A `1fr auto 1fr` grid puts it on the page's own centre line whatever
+the ears say. Measured on pages 1, 2 and 3, recto and verso, foot and folio:
+band centre 940.0, date centre 940.0, every one. A verso page swaps its ears by
+REORDERING rather than by reversing the box, so the middle column stays the
+middle.
+
+**5. The AI disclosure**, in Marathi, at the foot of page two beside the
+printer's declaration:
+
+> सूचना : या अंकातील मजकूर कृत्रिम बुद्धिमत्तेच्या (AI) साहाय्याने तयार करण्यात
+> आला असून संपादकीय पथकाच्या तपासणीनंतर प्रसिद्ध करण्यात आला आहे.
+
+Both halves, deliberately: the copy is drafted with AI, and a person on the desk
+passed it before it printed. Saying only the first would misdescribe a workflow
+in which nothing reaches the page unaccepted.
+
+It could not simply be added to the markup. The imprint band was **exactly**
+four lines of 5.2 px type in 32 px (measured: `scrollHeight` 31 of 32), and it
+clips — so a disclosure added to it would have been swallowed silently, which
+for a disclosure is the one failure that matters. `imprintHeightPx` is 40 now,
+five lines, and page two's editorial region gives up that one line.
+`scribus.service.js` emits it as its own frame: a press file that dropped it
+would print a paper that does not carry it.
+
+**One browser-net check had to change, and it is worth recording why.** It
+clicked 2 px in from the block page's top-left corner to select the whole block,
+on the reasoning that the block's inset was a comfortable target. After §36 the
+inset is the real printed 0.5 mm, so at that fixture's scale the corner is about
+two screen pixels and the hit test can land either side of it — the check was
+testing the rounding, not the product. It now measures a point in the space
+BETWEEN two bands, where a desk actually clicks and where there are tens of
+pixels of room.
+
+829 tests, 55/55 on the controls net.

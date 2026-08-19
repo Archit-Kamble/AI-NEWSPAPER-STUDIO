@@ -67,16 +67,6 @@ async function fetchJson(url, options) {
   return response.json();
 }
 
-// See the call site in renderWorkspace() for why this asks unconditionally
-// rather than checking for a missing frame itself - the endpoint is the one
-// place that knows which keys are structural.
-async function repairPageOneStructuralFrames(pages) {
-  const pageOne = (pages || []).find((page) => Number(page.page_number) === 1);
-  if (!pageOne) return;
-  const result = await fetchJson(`/api/pages/${pageOne.id}/repair-structural-frames`, { method: "POST" });
-  if (result?.created?.length) store.replacePage(result.page, { structural: true });
-}
-
 export async function renderWorkspace(newspaperId) {
   let newspaper, pages, reporterNews;
   try {
@@ -110,16 +100,19 @@ export async function renderWorkspace(newspaperId) {
   }
 
   store.setEdition({ newspaper, pages, reporterNews });
-  // A page whose structural-furniture row (the sold corner beside the
-  // nameplate) was deleted before deletion was guarded still shows a blank
-  // reserved area rather than an actual frame. Repairing that is restoring a
-  // known invariant, not a layout choice, so it is safe to ask for
-  // unconditionally on load - the endpoint itself is the one place that
-  // knows which frames are structural (see templates.js), and it is a no-op
-  // (`created: []`) on every page that already has them, which is every
-  // page after the first repair. Page one only: no other page reserves any
-  // structural furniture today.
-  repairPageOneStructuralFrames(pages).catch(() => {});
+  // Nothing is repaired on load, and that is the point.
+  //
+  // This used to ask POST /repair-structural-frames unconditionally every
+  // time an edition was opened, on the reasoning that restoring the sold
+  // corner beside the nameplate is a known invariant rather than a layout
+  // choice. It stopped being an invariant the moment a paper was allowed to
+  // say it does not sell that corner (pageSection.service.js's deleteSection,
+  // masthead.js's ear): a desk removed the frame, the nameplate took the
+  // whole measure exactly as intended, and the next time they opened the
+  // edition the frame was silently back and the name small again. An
+  // automatic repair that undoes an editorial decision is not a repair.
+  //
+  // The endpoint stays, for a desk who wants the corner back on purpose.
   autosave.configure({ save: persistDraft, onStateChange: onAutosaveState });
   history.configure(() => {
     refreshHistoryButtons(history.canUndo(), history.canRedo());

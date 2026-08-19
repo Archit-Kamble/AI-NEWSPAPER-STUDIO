@@ -123,7 +123,7 @@ test('a missing EDITORIAL frame is never recreated by repair - only structural f
   }
 });
 
-test('a custom (desk-drawn) frame is untouched by repair, and masthead-advert stays protected from deletion', async () => {
+test('a custom (desk-drawn) frame is untouched by repair, and the corner can be removed and put back', async () => {
   const app = createApp();
   const server = app.listen(0);
   const port = server.address().port;
@@ -145,12 +145,22 @@ test('a custom (desk-drawn) frame is untouched by repair, and masthead-advert st
     const after = result.page.sections.find((s) => s.id === custom.id);
     assert.equal(after.updated_at, custom.updated_at, 'repair must not touch a custom block at all');
 
-    // The deletion guard this repair complements: still refuses to remove
-    // the structural frame, on the same page, in the same request cycle.
+    // A paper that does not sell the corner says so by removing the frame,
+    // and the nameplate takes the whole measure (masthead.js). That used to
+    // be refused with a 409; the fault it was guarding against was in the
+    // nameplate and was fixed there.
     const deleteResponse = await desk(`/api/pages/${page.id}/sections/masthead-advert`, { method: 'DELETE' });
-    assert.equal(deleteResponse.status, 409);
-    const body = await deleteResponse.json();
-    assert.equal(body.code, 'STRUCTURAL_FRAME_PROTECTED');
+    assert.equal(deleteResponse.status, 200);
+    const afterDelete = await deleteResponse.json();
+    assert.ok(
+      !afterDelete.sections.some((s) => s.section_key === 'masthead-advert'),
+      'the corner frame must actually be gone',
+    );
+
+    // ...and this repair is how a desk gets it back, which is what makes the
+    // removal safe to allow.
+    const restored = await desk.json(`/api/pages/${page.id}/repair-structural-frames`, { method: 'POST' });
+    assert.deepEqual(restored.created, ['masthead-advert']);
   } finally {
     server.close();
     if (newspaper) await cleanupNewspaper(newspaper.id);

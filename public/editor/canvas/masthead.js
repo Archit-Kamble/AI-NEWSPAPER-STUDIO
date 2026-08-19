@@ -77,21 +77,31 @@ export function mastheadMarkup(newspaper, page, geometry, { advertWidthPx = 0 } 
   const top = geometry?.marginYPx ?? 20;
   const matterWidth = geometry?.matterWidthPx ?? 620;
 
-  // The paper sells the top-left corner of page one. What sits in it is an
-  // advert BLOCK, but the corner itself is reserved by the PAGE - it is part
-  // of the region model (geometry.js's regionsFor, `header.earWidthPx`), the
-  // same way the footer band is.
+  // The paper MAY sell the top-left corner of page one, and the nameplate is
+  // set for both answers.
   //
-  // That distinction is the whole fix for the missing top-left block. This
-  // used to take the reserved width from the advert block's own width, and
-  // fall back to nothing when no such block was found. So a page whose corner
-  // block had been deleted did not print an empty corner: the nameplate began
-  // at the matter's edge and stretched the newspaper's name across the space
-  // the corner had held. The name is never allowed there, whether or not
-  // anything has been sold. Reserve first, and let the block fill it.
+  // While the corner frame is on the page the corner is the page's, not the
+  // block's: the reserved width comes from the region model (geometry.js's
+  // regionsFor, `header.earWidthPx`), so a corner block someone made narrower
+  // than the region still leaves the region alone and the name never creeps
+  // into it. That much is unchanged, and it is the fix for the front page
+  // whose title once stretched across a corner it did not own.
+  //
+  // What is new is the other answer. A paper that does not sell the corner
+  // prints its nameplate across the whole measure - every broadsheet does -
+  // and this could not, because the reservation was unconditional: removing
+  // the corner frame left a white hole and a small name beside it. So the
+  // reservation now follows the FRAME's existence rather than being assumed.
+  // No frame, no ear: the plate takes the measure and is set large.
+  //
+  // It is the frame that decides and not the frame's contents, deliberately.
+  // An unsold corner still prints blank while its frame is there (a desk fills
+  // it the morning it is sold, and the page must not re-make itself under
+  // them); a desk that means "this edition has no corner" removes the frame,
+  // which is now allowed - see pageSection.service.js's deleteSection.
   const reserved = geometry?.regions?.front?.header;
   const pageReserve = reserved ? (reserved.earWidthPx || 0) + (reserved.earGapPx || 0) : 0;
-  const ear = Math.max(advertWidthPx, pageReserve);
+  const ear = advertWidthPx > 0 ? Math.max(advertWidthPx, pageReserve) : 0;
   const left = matterLeft + ear;
   const width = matterWidth - ear;
 
@@ -111,11 +121,14 @@ export function mastheadMarkup(newspaper, page, geometry, { advertWidthPx = 0 } 
         <div class="masthead-plate">
           <img src="${escapeHtml(identity.nameplateUrl)}" alt="${escapeHtml(identity.title || "")}" />
         </div>
+        <!-- The editor's name is set ONCE, in the owner line below. It used
+             to be set here as well - the same legal statement printed twice
+             on one band - and, the ear being narrow, the duplicate is what
+             wrapped it onto two lines. -->
         <div class="masthead-ear masthead-ear-right">
           <span class="masthead-rni">${escapeHtml(identity.rni || "")}</span>
           <span class="masthead-meta">${escapeHtml(identity.volumeLine || "")}</span>
           <span class="masthead-meta">${escapeHtml(identity.pageCountLabel || "")} । ${escapeHtml(identity.price || "")}</span>
-          <span class="masthead-editor">${escapeHtml(identity.editor || "")}</span>
           <span class="masthead-web">${escapeHtml(identity.epaper || "")}</span>
         </div>
       </div>
@@ -164,7 +177,7 @@ export function folioMarkup(newspaper, page, geometry) {
 // inside pages reserve the identical band, so this falls back to the same
 // numbers regionsFor(g, 'inside') computes when an older geometry payload
 // (without .regions) is ever passed in.
-const FALLBACK_FOOTER = { footTop: 1012, footHeightPx: 28, imprintTop: 976, imprintHeightPx: 32 };
+const FALLBACK_FOOTER = { footTop: 1012, footHeightPx: 28, imprintTop: 968, imprintHeightPx: 40 };
 function footerBand(geometry, page) {
   if (Number(page?.page_number) === 1) return geometry?.regions?.front?.footer || FALLBACK_FOOTER;
   if (Number(page?.page_number) === 2) return geometry?.regions?.insideImprint?.footer || FALLBACK_FOOTER;
@@ -247,6 +260,7 @@ export function imprintMarkup(newspaper, page, geometry) {
     <div class="page-imprint" style="left:${left}px;width:${width}px;top:${band.imprintTop}px;height:${band.imprintHeightPx}px;">
       <span class="imprint-mr">${escapeHtml(identity.imprint || "")}</span>
       <span class="imprint-en">${escapeHtml(identity.imprintEnglish || "")}</span>
+      <span class="imprint-ai">${escapeHtml(identity.aiDisclosure || "")}</span>
     </div>
   `;
 }

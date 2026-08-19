@@ -674,6 +674,66 @@ A second copy of any of these is the failure mode this project has already been 
 
 ### The page reserves its own furniture
 
+**The nameplate is set for both answers, and the corner is one of them.**
+`geometry.js`'s `regionsFor` owns the footer band **and** page one's top-left
+corner (`header.earWidthPx`). While the corner FRAME is on the page the corner
+belongs to the page, not to the block in it — a corner block someone made
+narrower still leaves the region alone, which is the fix for the front page
+whose title once stretched across a corner it did not own. But a paper that
+does not sell the corner prints its nameplate across the whole measure, and
+that answer did not exist: the reservation was unconditional, so removing the
+corner left a white hole and a small name beside it.
+
+So three things changed together, and they are one rule:
+
+- **`mastheadMarkup` reserves the ear only when the corner frame exists.** No
+  frame, no ear — the plate takes the measure. Measured on a real front page:
+  **247×46 px → 426×80 px**, 73% bigger in both directions.
+- **Removing the corner is allowed.** The `STRUCTURAL_FRAME_PROTECTED` 409 is
+  retired; the fault it guarded against was in the nameplate and was fixed
+  there. `POST /api/pages/:id/repair-structural-frames` puts the corner back
+  for a desk who wants it again.
+- **The workspace no longer repairs on load.** It used to ask for the repair on
+  every open, unconditionally. That silently undid the desk's decision: remove
+  the corner, reopen the edition, and the frame is back and the name small
+  again. **This is the "the left block is not working correctly" report.** An
+  automatic repair that reverses an editorial choice is not a repair.
+
+It is the FRAME that decides and never the frame's contents — an unsold corner
+still prints blank while its frame is there, because a desk fills it the
+morning it is sold and the page may not re-make itself under them.
+
+**The nameplate is width-bound, so every pixel of ear is a pixel off the name.**
+At 5.33:1 the plate can only get taller by getting wider, so the ears are set as
+narrow as their own type needs (90/110 → 64/88) and the editor's name — which
+was set **twice**, in the right ear and again in the owner line below — is set
+once. The duplicate is also what wrapped the ear onto two lines.
+
+**A fixed band with `overflow: hidden` clips ink, not just overflow.** The
+masthead's clipping edge sat exactly on the strapline's first line box, and
+Devanagari's ink box is taller than its line box (1.475 em against 1.45), so
+every matra above the shirorekha was sliced off — the desk photographed it. Two
+pixels of leading is the whole fix. **Any fixed furniture band that sets
+Devanagari needs that pixel or two; the line box is not the ink box.**
+
+**The date is centred by a GRID, not by `space-between`.** The foot's ears are
+never the same width — `दैनिक साहस वार्ता` against `पृष्ठ १` — so
+`space-between` centred the date between its neighbours rather than on the
+page's centre line. `1fr auto 1fr` puts it on the centre line whatever the ears
+say, on the page foot and the inside-page folio alike, and a verso page reorders
+its ears rather than reversing the box so the middle column stays the middle.
+
+**The AI disclosure is standing furniture, in the imprint band, in Marathi**
+(`identity.js`'s `aiDisclosure`). It says both halves of what is true here — the
+copy is drafted with AI, and a person on the desk passed it before it printed —
+because saying only the first misdescribes a workflow in which nothing reaches
+the page unaccepted. It needed the band to grow from four lines to five
+(`imprintHeightPx` 32 → 40): the band was exactly full, and a band that clips
+would have swallowed a disclosure silently, which for a disclosure is the one
+failure that matters. `scribus.service.js` emits it too — a press file that
+dropped it would print a paper that does not carry it.
+
+
 `geometry.js`'s `regionsFor` owns the footer band **and** page one's top-left corner (`header.earWidthPx`). The corner used to be reserved only by the presence of the `masthead-advert` block, so deleting that block moved the newspaper's name into the corner and stretched it across the space — found live on edition 13542. A region the page owns cannot be removed by deleting something out of it. `pageSection.service.js` additionally refuses to delete a structurally reserved frame (409; clear its contents instead), narrowly — ordinary editorial frames stay freely deletable.
 
 The page foot carries the paper, the date and the page number, and nothing else. The Act printline belongs to the page-two imprint, which already prints it; setting it on every page duplicated a legal statement and read as an unwanted rule.

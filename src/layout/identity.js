@@ -98,6 +98,19 @@ const identity = {
     'jurisdiction) Editor SHRIKANT SHIVNATH MULE (Responsible under PRB Act). ' +
     'Contact No. 8409494949, E-mail: sahasvarta@gmail.com',
 
+  // Told once, on the same page as the printer's declaration and in the same
+  // band, because it is the same kind of statement: a standing disclosure the
+  // reader is entitled to and no desk should have to remember to type.
+  //
+  // In Marathi, deliberately - like information/conditions.js's refusals, this
+  // is a sentence addressed to a reader of this newspaper, not admin chrome.
+  // It says BOTH halves of what is true here: the copy is drafted with AI, and
+  // a person on the desk passed it before it printed. Saying only the first
+  // would misdescribe a workflow in which nothing reaches the page unaccepted.
+  aiDisclosure:
+    'सूचना : या अंकातील मजकूर कृत्रिम बुद्धिमत्तेच्या (AI) साहाय्याने तयार करण्यात आला असून ' +
+    'संपादकीय पथकाच्या तपासणीनंतर प्रसिद्ध करण्यात आला आहे.',
+
   // Which page the declaration prints on. The paper puts it on page two.
   imprintPage: 2,
 };

@@ -22,15 +22,6 @@ async function create(req, res) {
 async function remove(req, res) {
   const page = await pageSectionService.deleteSection(req.params.pageId, req.params.sectionId);
   if (!page) return res.status(404).json({ error: 'Not found' });
-  // A frame the page reserves is not the desk's to remove. Told plainly,
-  // because "nothing happened" would read as a bug.
-  if (page.error === 'STRUCTURAL_FRAME_PROTECTED') {
-    return res.status(409).json({
-      error: 'This block is part of the page itself and cannot be removed. Clear its contents instead.',
-      code: page.error,
-      sectionKey: page.sectionKey,
-    });
-  }
   res.json(page);
 }
 

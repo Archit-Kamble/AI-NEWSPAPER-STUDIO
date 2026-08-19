@@ -370,10 +370,26 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
     say(await page.locator('#edBodyFrame').evaluate((el) => !el.querySelector('.pic-handle')),
       'neither does the body frame');
 
-    // A point inside the page's own margin, outside every frame - the block
-    // fixture is well over 100px screen-tall at this point, so a few pixels
-    // in from the page's own top-left corner is safely in the gutter.
-    await page.locator('#edFramePage').click({ position: { x: 2, y: 2 } });
+    // A point that is genuinely empty room, FOUND rather than assumed.
+    //
+    // This used to click 2 px in from the page's own top-left corner, on the
+    // reasoning that the block's inset was a comfortable target. It is not any
+    // more and should not be: the inset is the block's real printed one and
+    // that is now 0.5 mm (schema.sql's margin_px - the page grid owns the
+    // gutter, not the block), so at this fixture's scale the corner is about
+    // two screen pixels of margin and the hit test can land either side of it.
+    // A test that depends on which side is testing the rounding, not the
+    // product. The empty room a desk actually clicks in is the space BETWEEN
+    // the bands - tens of pixels of it - so the point is measured from the
+    // frames themselves.
+    const emptyPoint = await page.evaluate(() => {
+      const page_ = document.getElementById('edFramePage');
+      const box = page_.getBoundingClientRect();
+      const head = document.getElementById('edHeadlineFrame').getBoundingClientRect();
+      const deck = document.getElementById('edSubheadingFrame').getBoundingClientRect();
+      return { x: box.width / 2, y: (head.bottom + deck.top) / 2 - box.top };
+    });
+    await page.locator('#edFramePage').click({ position: emptyPoint });
     await page.waitForTimeout(250);
     say((await partOf()) === 'block', 'clicking empty room on the page selects the block as a whole');
     say(await page.locator('#edFramePage').evaluate((el) => el.classList.contains('frame-selected')),

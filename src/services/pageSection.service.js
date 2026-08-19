@@ -4,7 +4,6 @@ const { normalizeStoryMetadata } = require('./storyType.service');
 const { geometryOf, snapPointsX } = require('../layout/geometry');
 const { quote } = require('../layout/rateCard');
 const reviewInvalidation = require('./reviewInvalidation.service');
-const { isStructuralTemplateFrame } = require('../layout/templates');
 
 const PRINTABLE_FIELDS = ['news_item_id','kicker','headline','subheading','body','caption','image_url','smart_card_key','smart_card_data'];
 const comparable = (value) => JSON.stringify(value ?? null);
@@ -57,24 +56,25 @@ async function createSection(pageId, body) {
   return pageRepository.findById(id);
 }
 
-// Frames that hold a region the PAGE reserves rather than a hole in the
-// editorial matter. Deleting one does not leave an empty corner - the
-// furniture beside it moves in, and the page is silently wrong in a way
-// nobody notices until it prints. The sold corner of page one is the case
-// this was found on: it was deleted, and the nameplate stretched the paper's
-// own title across the space where it had been.
+// Removing the sold corner of page one is allowed, and the REFUSAL that used
+// to sit here is retired.
 //
-// Classification lives in templates.js now (isStructuralTemplateFrame) -
-// the template catalog remains the only place a section key is defined, so
-// it is the only place this can live without a second copy drifting from it
-// (page.repository.js's structural-repair reads the same function). Emptying
-// such a block is fine and normal - an unsold corner prints blank - so only
-// removal is refused here.
+// It was put in for a real fault: the corner block was deleted and the
+// nameplate stretched the paper's own title across the space where it had
+// been. But that fault was in the nameplate, not in the deletion - it took
+// its own left edge from whether the block happened to exist rather than from
+// the page's region model - and it was fixed there. Refusing the deletion as
+// well left a page that could never say "this edition does not sell the
+// corner", which is an ordinary thing for a paper to say and the thing the
+// desk asked for: no corner, and the nameplate set across the whole measure
+// (masthead.js).
+//
+// The classification itself stays in templates.js (isStructuralTemplateFrame)
+// and still earns its keep: `POST /api/pages/:id/repair-structural-frames`
+// puts the corner back for a desk who removed it and wants it again, and that
+// repair reads the same one function.
 async function deleteSection(pageId, sectionKey) {
   const id = parseInt(pageId, 10);
-  if (isStructuralTemplateFrame(sectionKey)) {
-    return { error: 'STRUCTURAL_FRAME_PROTECTED', sectionKey: String(sectionKey) };
-  }
   const removed = await pageRepository.deleteSection(id, sectionKey);
   if (!removed) return null;
   await reviewInvalidation.invalidatePage(id);

@@ -114,7 +114,14 @@ const FOOTER = {
   // editorial reservation on every page.
   footHeightPx: 28,
   contentFooterGapPx: PAGE_FURNITURE_GAP_PX,
-  imprintHeightPx: 32, // two safe compact legal-imprint lines, Page 2 only
+  // The legal imprint band, page two only. Five lines of 5.2 px type at the
+  // Devanagari-safe 1.45: two for the Marathi declaration, two for the
+  // English one, and one for the standing AI disclosure (identity.js's
+  // aiDisclosure). It was 32 px - exactly the four declaration lines, with
+  // nothing left over - so the disclosure could not simply be added to the
+  // markup; a band with `overflow: hidden` would have silently swallowed it,
+  // which for a disclosure is the one failure that matters.
+  imprintHeightPx: 40,
   imprintGapPx: 4,
 };
 

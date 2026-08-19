@@ -4113,5 +4113,21 @@ Three more found on the way, all real:
   on 4 of them by up to 4.9%. Applied to the floor alone — it is one estimator's
   measured error, not a discount on the budget.
 
-Sweep, 11 813 sections, no throws: `NO_LEGAL_MEASURE` 0, `OVERSET` 17
-(unchanged). 829 tests, 55/55 on the controls net.
+**And the workspace stopped drawing fifteen accent rectangles.** A written block
+was outlined in 2 px of the paper's red — a state badge doing a boundary's job.
+"Filled" is already said by the white ground, by the absence of the EMPTY chip
+and by the copy being there; the accent is what a desk looks for when they are
+looking for the selected block, and it could not be seen against fourteen
+others. A hairline now, with selection and hover unchanged — and the column
+rules that actually belong to the page are visible for the first time while
+editing.
+
+The box inset costs 2 real blocks across the database, which now hold a few
+characters fewer and want trimming (`OVERSET` among boxed blocks 8 → 12, two of
+the four holding a Smart Card, whose body text is not what prints). That is the
+right trade: the box needs the room, and the desk's own tools cut the copy back
+for free.
+
+Sweep, 11 813 sections, no throws: `NO_LEGAL_MEASURE` 0. 829 tests, 55/55 on the
+controls net, 208/211 on the workspace net (the three are the AI-provider
+assertions belonging to uncommitted provider work in the tree).

@@ -784,10 +784,18 @@ body {
     animation: none;
   }
 }
+/* A block that has been written is drawn as the page draws it: a hairline, not
+   a 2px accent frame. The border is a boundary a desk clicks, not a state
+   badge - "filled" is already said by the white ground, by the absence of the
+   EMPTY chip, and by the copy being there. Fifteen accent rectangles on one
+   page made the workspace read as a form rather than as a newspaper, and the
+   column rules that actually belong to the page could not be seen against
+   them. Selection and hover keep the accent, which is what a desk is looking
+   for when they are looking for it. */
 .newspaper-section.filled {
   color: #202020;
   background: white;
-  border: 2px solid var(--accent);
+  border: 1px solid #dcdce2;
 }
 .newspaper-section.unsaved {
   border-style: dashed;

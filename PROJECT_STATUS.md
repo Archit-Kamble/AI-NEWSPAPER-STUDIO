@@ -3654,10 +3654,112 @@ reading as a bug. Verified live in the running app, zero console errors.
 tail that merges backwards, both ceilings, the refusal to cut mid-sentence,
 offset preservation, exact overset, and the budget.
 
-Still open, and unrelated to this work: the Space panel composes the lead
-block with **10.04 lines of room where a compose from the stored row gives
-10.0**, and sets nine lines where the page sets ten. The difference is
-geometric (band room, not paragraphs) — the editor's live view and the
-persisted row disagree by a fraction of a percent somewhere. Also still open
-from §29: `SHORT_CLOSE` endings, and `NO_LEGAL_MEASURE` reported but not
-prevented at placement time.
+**The numbers above were re-measured with the shaper on** (see §31 — the
+original audit ran against the hmtx fallback). They hold: one-line paragraphs
+**149 → 0**, slabs **81 → 0**, deepest paragraph **26 → 8 lines**. The cost is
+smaller than first reported but real: ragged interior lines **81 of 2935 →
+138 of 2855**, and 137 of the 138 have both justification levers pinned.
+
+The panel-versus-page disagreement noted here was the thread that led to §31,
+and it is fixed.
+
+
+### 31. The hmtx fallback was a different page, and nothing was reading the engine (2026-08-19)
+
+Chasing a one-line disagreement between the Space panel and the page — the
+same block composing 10 of 10 lines in Node and 9 of 10.04 in the browser —
+turned up four faults, in increasing order of how long they had been there.
+
+**1. `exactShaping` was false in Node, and it changes the page.** Without
+HarfBuzz the engine sums raw hmtx advances, which overstates a Devanagari
+conjunct by up to 80% (`shaper.js` has carried those measurements from the
+start). Measured across 600 real article blocks, composing each one both ways:
+
+| | |
+|---|---|
+| set in a different number of lines | **178 blocks, 29.7%** |
+| mean fill-ratio difference | 3.7 points |
+| blocks reporting an overset that is not real | 3 |
+| blocks with a different paragraph count | 1 |
+| worst single block | **93.8% vs 58.7% full** |
+
+There *was* a `SHAPING_NOT_READY` warning — but it sat in the `else` of the
+font-readiness check (so it could not fire when the font was also unready),
+and nothing anywhere rendered warnings at all (fault 4), so in practice the
+fallback was silent.
+
+In **Node** the fallback is never legitimate: `harfbuzzjs` is a local package
+and the fonts are local files, so `exactShaping: false` there is always a
+caller that forgot `ensureShaperReady()`. `composeBlock()` refuses there now,
+with the same `EXACT_SHAPER_NOT_READY` name `requireShaperReady()` throws. In
+the **browser** it is a real momentary state before the WASM and the four
+faces finish downloading, so there it stays a warning.
+
+Every server service already required the shaper. Two callers had forgotten,
+and one mattered: `scripts/fill-edition-copy.js` — the tool this project uses
+to look at composition without spending AI calls — so **every screenshot taken
+to judge the layout was judging a page filled against numbers the browser
+never uses.** Refilled correctly, the front page's lead went from 9 of 10.04
+lines and 515 characters to **11 of 11 and 606**; 30 of 36 blocks now set at
+exactly 100%.
+
+This exact gap had already been found and hand-fixed once in
+`tests/compose.test.js` and had come back in a script and a test, which is why
+the refusal lives in the engine rather than in its callers.
+`tests/exactShaping.test.js` holds it.
+
+**2. A crash I introduced in `42ab206`.** `NO_LEGAL_MEASURE` and
+`SET_FLUSH_LEFT` had been pasted into `composeBlock()`'s `NO_ROOM` early
+return as well as into the normal path. That branch never pours a body and
+`body` is declared far below it, so every block with no usable measure — a
+zero-width or zero-height frame, or a margin wider than the block — threw
+`ReferenceError: Cannot access 'body' before initialization` instead of
+returning `NO_ROOM`. In the browser that is an uncaught throw while painting
+the canvas: a blank block, cause nowhere on screen. No row in the database
+reaches it today (0 of 11153), so it was latent — but `margin_px` is a number
+a desk types into the Typography panel, so it was one keystroke away.
+
+**3. `NO_LEGAL_MEASURE` was wrong 49 times out of 51.** It fired on 51 real
+blocks; 49 were display adverts and photo blocks carrying a full-bleed image
+and no copy, which is the finished advert, not a fault. Telling a desk to
+"make a picture narrower" about those is exactly how a warning stops being
+read — and how the two blocks that genuinely cannot be printed were being
+missed. `BLOCK_KINDS` now records whether a kind is *meant* to carry copy
+(`article`/`briefs`/`feature` yes; `photo`/`advert` no), `section-adapter`
+passes it, and the warning is gated on it. **51 → 2, both real.**
+
+**4. Nothing rendered the engine's findings.** `layoutWarnings()` built its
+own three messages from metrics and read neither `composition.violations` nor
+`composition.warnings`. On block 39131 — a 190×264 second lead whose picture
+leaves no column wide enough for its 16px type — the desk was told:
+
+```
+Content overflows the block by about 130 px. Trim the body...
+Block is empty.
+```
+
+Two messages, contradicting each other, neither true, and the advice cannot
+work: no amount of trimming makes a corridor narrower than one word hold a
+word. The engine's own diagnosis was computed and discarded. It now reads the
+truth, "Block is empty" no longer fires on a block that holds copy, and the
+generic overflow advice stands down when there is no legal column to trim
+into. `SET_FLUSH_LEFT` is deliberately **not** in the fault list: it fires on
+4077 of 11153 blocks because that is how a narrow newspaper column is set — a
+decision, not a fault, and it would bury everything else.
+
+**Sweep result:** all 11153 sections in the database compose without a throw.
+`fitState` is FITS 1106, EMPTY 6318, UNDERFILLED 3691, OVERSET 38.
+
+**§29's `SHORT_CLOSE` item is closed as NOT a defect**, on measurement. Across
+805 justified closing lines, 105 close under 34% of their measure — and
+**none of them is a widow**: they hold 2 words (37), 3 (44), 4 (22) or 5 (2),
+and every one is far longer than the 1 em paragraph indent, which is the rule
+that actually governs a short last line. 59 are the story's own final line.
+A paragraph closing on two or three words is how every printed newspaper sets;
+chasing it would mean forcing text. The diagnostic stays, the "open fault"
+framing was overcautious.
+
+Still open: `NO_LEGAL_MEASURE` is now reported accurately but still not
+*prevented* at placement time. With 2 blocks in 11153 reaching it and the
+warning trustworthy, snapping a picture at drag time is a UI change carrying
+more risk than the fault it removes — deferred deliberately, not forgotten.

@@ -123,6 +123,56 @@ The cost function knows what the justifier can actually close (`slackCost`): sla
 
 Measured across a filled page: **30 ragged lines → 21, worst 17% → 12%, median 6% → 4%.** Across 1200 real blocks: 8 ragged lines total, all on one synthetic repeated-token fixture.
 
+### The shaper is not optional, and Node refuses to compose without it
+
+`composeBlock()` promises the same numbers in Node and in the browser. It did
+not keep that promise: without HarfBuzz the engine falls back to summing raw
+hmtx advances, which **overstates a Devanagari conjunct by up to 80%**
+(`shaper.js` carries the per-word measurements). Measured across 600 real
+article blocks, composing each one both ways: **29.7% set in a different
+number of lines**, the mean fill ratio moved 3.7 points, three blocks reported
+an overset that does not exist, and the worst single block read **93.8% full
+one way and 58.7% the other** — same copy, same frame.
+
+- **In Node the fallback is never legitimate** — `harfbuzzjs` is a local
+  package and the fonts are local files — so `composeBlock()` **throws
+  `EXACT_SHAPER_NOT_READY`** there. Every Node entry point must
+  `await Promise.all([ensureFontsLoaded(), ensureShaperReady()])`.
+- **In the browser it is a real momentary state** before the WASM and the four
+  faces download, so there it is a `SHAPING_NOT_READY` warning.
+
+This gap had already been found and hand-fixed once in `tests/compose.test.js`
+and had come back in a script and a test, which is why the refusal is in the
+engine and not in its callers. `tests/exactShaping.test.js` holds it.
+
+### The engine's own findings must be rendered, and only the real ones
+
+`composeBlock()` returns `violations` and `warnings` on every composition.
+`layoutWarnings()` read **neither** and built its own three messages from
+metrics — so on a block whose picture leaves no column wide enough to set type
+in, the desk was shown *"Content overflows the block… Trim the body"* and,
+under it, *"Block is empty."* Two messages, contradicting each other, neither
+true, and the advice cannot work. Where a fault has a specific diagnosis, the
+generic one must stand down.
+
+Two rules that came out of it:
+
+- **A warning about copy must not fire on a block that carries none.**
+  `NO_LEGAL_MEASURE` fired on 51 real blocks and **49 were full-bleed adverts
+  and photo blocks** — the finished advert, not a fault. `BLOCK_KINDS` now
+  records whether a kind is *meant* to carry copy and the warning is gated on
+  it (51 → 2, both real). A warning that is usually wrong is a warning nobody
+  reads.
+- **`SET_FLUSH_LEFT` is not a fault and is deliberately not in the list.** It
+  fires on 4077 of 11153 blocks because that is how a narrow newspaper column
+  is set. Putting it in the fault list would bury everything else.
+
+`SHORT_CLOSE` is a diagnostic, **not** a defect: across 805 justified closing
+lines, 105 close under a third of their measure and **not one is a widow** —
+they hold two to five words, all far longer than the 1 em indent, which is the
+rule that actually governs a last line. A paragraph closing on two or three
+words is how every printed newspaper sets.
+
 ### A paragraph is set in LINES, not written in sentences
 
 Every style guide tells a reporter to write two- or three-sentence paragraphs,

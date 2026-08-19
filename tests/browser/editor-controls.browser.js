@@ -420,6 +420,15 @@ const BODY = 'सातारा : नगरपालिकेच्या स�
     await page.locator('.ed-quill-ink-btn[data-ink=""]').click();
     await page.waitForTimeout(600);
     say(!/data-sahas-ink/.test((await draft()).headline), 'Black clears the ink rather than adding one');
+
+    // And take it off the body too, so this net leaves the fixture as it found
+    // it - a desk opening the edition afterwards should not find a block set
+    // in red because a test ran.
+    await focusPart('body');
+    await selectAllIn('body');
+    await page.locator('.ed-quill-ink-btn[data-ink=""]').click();
+    await page.waitForTimeout(600);
+    say(!/data-sahas-ink/.test((await draft()).body), 'and off the body as well, leaving the block as it was found');
   }
 
   // -------------------------------------------------- the ground and the panel ---

@@ -10,7 +10,10 @@
 // type, the editorial limits, and the counts a desk reads all day.
 
 import { plainText } from "../layout/rich-text.js";
-import { FONT_FAMILIES, ALIGNMENTS } from "./typography-panel.js";
+import { markDisplayField, fieldHtml, fieldValue } from "./display-marks.js";
+import {
+  FONT_FAMILIES, ALIGNMENTS, PART_LABEL, alignFieldFor, alignValueOf,
+} from "./typography-panel.js";
 import {
   blockFrameMarkup, mountFrame, refreshFrame, copyFromFrame,
   renderPictures, selectPictureFrame,
@@ -36,10 +39,13 @@ const BODY_SIZES = [7, 8, 8.5, 9, 9.5, 10, 11, 12, 13, 14, 16, 18, 20, 24];
 let budgetOf = null;
 let escapeBound = false;
 
-// The size control follows the text object selected on the canonical page.
-// These are genuinely separate persisted fields. Other typography such as
-// family/weight/alignment is still block-wide in the current page_sections
-// model and must not be falsely presented as object-specific.
+// The size and alignment controls follow the text object selected on the
+// canonical page. Both are genuinely separate persisted fields per object
+// (headline_font_px / subheading_font_px / body_font_px, and now
+// headline_align / subheading_align / text_align). The FAMILY and the WEIGHT
+// are still one value for the whole block and must not be falsely presented
+// as object-specific - a newspaper does not let one paragraph pick its own
+// face, and the schema does not carry it either.
 let selectedTextPart = "body";
 
 const TEXT_SIZE_FIELD = {
@@ -109,6 +115,23 @@ function alignIcon(align) {
   return `<svg viewBox="0 0 16 14" width="15" height="13" aria-hidden="true" fill="currentColor">${bars}</svg>`;
 }
 
+/**
+ * The alignment buttons, aimed at whichever text object is selected.
+ *
+ * They used to be labelled "whole block" and to write `textAlign`
+ * unconditionally, which is the body's field: a sub-editor who selected the
+ * headline and pressed "centre" re-set the STORY and left the headline
+ * exactly where it was. The title now names the object being changed, so the
+ * button says what it will do before it is pressed.
+ */
+function alignButtonsMarkup(view, part) {
+  const current = alignValueOf(view, part);
+  const target = PART_LABEL[part] || "Whole block";
+  return ALIGNMENTS.map((a) => `<button type="button" class="rt-btn rt-align${current === a.value ? " active" : ""}"
+      data-align="${a.value}" aria-label="Align ${a.label.toLowerCase()} — ${target.toLowerCase()}"
+      title="Align ${a.label.toLowerCase()} — ${target.toLowerCase()}">${alignIcon(a.value)}</button>`).join("");
+}
+
 export function storyEditorMarkup(view, { budget = 0, tools = "", pictures = "" } = {}) {
   const used = plainText(view.body).length;
   return `
@@ -117,10 +140,13 @@ export function storyEditorMarkup(view, { budget = 0, tools = "", pictures = "" 
         <div class="story-editor-ribbon-title">
           <span>Writing</span><small>Changes save automatically</small>
         </div>
-        <!-- This row sets the BLOCK's type, and only the block's: a newspaper
-             does not let one paragraph pick its own face. Marking words - bold,
-             italic, lists, links - is Quill's toolbar, drawn inside the page.
-             The two are deliberately not the same bar. -->
+        <!-- This row sets the block's TYPE: the face for the whole block, and
+             the size and alignment of whichever text object is selected on the
+             page above. Marking WORDS - bold, italic, a phrase at its own size,
+             lists - is the marks toolbar drawn over the page (block-frame.js),
+             which follows the same selection. The two are deliberately not the
+             same bar: one sets an object, the other marks a selection inside
+             one. -->
         <div class="story-editor-toolbar" id="edStoryToolbar" role="toolbar" aria-label="Block type">
           <div class="rt-row rt-row-type">
             <select class="rt-select rt-select-font" id="edStoryFont" title="Font for the whole block">
@@ -130,9 +156,7 @@ export function storyEditorMarkup(view, { budget = 0, tools = "", pictures = "" 
               ${sizeOptions(view.bodyFontPx)}
             </select>
             <span class="rt-sep"></span>
-            ${ALIGNMENTS.map((a) => `<button type="button" class="rt-btn rt-align${String(view.textAlign) === a.value ? " active" : ""}"
-                data-align="${a.value}" aria-label="Align ${a.label.toLowerCase()}"
-                title="Align ${a.label.toLowerCase()} — whole block">${alignIcon(a.value)}</button>`).join("")}
+            ${alignButtonsMarkup(view, selectedTextPart)}
             ${tools ? `<span class="rt-sep"></span>${tools}` : ""}
             <span class="rt-spacer"></span>
             <button type="button" class="rt-btn" data-action="fullscreen" title="Focus writing (Esc to exit)">&#10530;</button>
@@ -148,18 +172,28 @@ export function storyEditorMarkup(view, { budget = 0, tools = "", pictures = "" 
              modest so the eye goes to the page above, not to two headlines. -->
         ${blockFrameMarkup()}
         <div class="story-fields">
+          <!-- Contenteditable rather than <input>, because a headline carries
+               MARKS: a name in bold, a phrase at its own size. An <input> can
+               hold only a string, so every keystroke here used to overwrite
+               whatever the desk had marked on the page above with the plain
+               text of the field - one surface silently destroying the other's
+               work. Same rich-text.js marks as the story, same sanitiser, and
+               the counters still read plainText(), because a <b> is not a
+               character a printer sets. -->
           <label class="story-field-label" for="edStoryHeadline">
             Headline
             <span class="field-counter" id="edStoryHeadlineCounter">${plainText(view.headline).length}/${HEADLINE_LIMIT}</span>
           </label>
-          <input id="edStoryHeadline" class="story-headline-input" maxlength="200"
-            placeholder="मथळा — the headline as it will print" value="${escapeAttribute(plainText(view.headline))}">
+          <div id="edStoryHeadline" class="story-headline-input rich-field" contenteditable="true"
+            role="textbox" aria-label="Headline" data-part="headline"
+            data-placeholder="मथळा — the headline as it will print">${fieldHtml(view.headline)}</div>
           <label class="story-field-label" for="edStorySubheading">
             Subheading
             <span class="field-counter" id="edStorySubheadingCounter">${plainText(view.subheading).length}/${SUBHEADING_LIMIT}</span>
           </label>
-          <input id="edStorySubheading" class="story-subheading-input" maxlength="300"
-            placeholder="उपमथळा — the subheading, if the story has one" value="${escapeAttribute(plainText(view.subheading))}">
+          <div id="edStorySubheading" class="story-subheading-input rich-field" contenteditable="true"
+            role="textbox" aria-label="Subheading" data-part="subheading"
+            data-placeholder="उपमथळा — the subheading, if the story has one">${fieldHtml(view.subheading)}</div>
         </div>
       </div>
 
@@ -233,19 +267,43 @@ export function bindStoryEditor({ onPatch, getBudget, getSection, getView, getIm
   const subheading = document.getElementById("edStorySubheading");
   const toolbar = document.getElementById("edStoryToolbar");
 
-  headline?.addEventListener("input", () => {
-    onPatch?.({ headline: headline.value }, "story-editor");
-    refreshFieldCounters({ headline: headline.value, subheading: subheading?.value });
-  });
-  // Typing here IS the headline object being edited - Tab-ing into the field,
-  // or a click that landed on the input rather than the frame drawn over the
-  // page, must select it exactly as clicking the frame does.
-  headline?.addEventListener("focus", () => onSelectPart?.("headline"));
-  subheading?.addEventListener("input", () => {
-    onPatch?.({ subheading: subheading.value }, "story-editor");
-    refreshFieldCounters({ headline: headline?.value, subheading: subheading.value });
-  });
-  subheading?.addEventListener("focus", () => onSelectPart?.("subheading"));
+  // Both fields behave identically, so they are bound identically rather than
+  // twice by hand - the second copy is where "and the subheading does not do
+  // that" comes from.
+  for (const [part, field] of [["headline", headline], ["subheading", subheading]]) {
+    if (!field) continue;
+
+    field.addEventListener("input", () => {
+      onPatch?.({ [part]: fieldValue(field) }, "story-editor");
+      refreshFieldCounters({ headline: fieldValue(headline), subheading: fieldValue(subheading) });
+    });
+
+    // Typing here IS that object being edited - Tab-ing into the field, or a
+    // click that landed on it rather than on the frame drawn over the page,
+    // must select it exactly as clicking the frame does. `focusin` and not
+    // `focus`, so it survives the caret landing on a child element a mark
+    // created.
+    field.addEventListener("focusin", () => {
+      onSelectPart?.(part);
+      // And this is where a bold/italic/size press will land from now on.
+      markDisplayField(field);
+    });
+
+    // One flow, so Enter is not a paragraph - it is "done".
+    field.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") { event.preventDefault(); field.blur(); }
+    });
+
+    // A pasted headline brings a website's fonts with it. Only its words are
+    // wanted; sanitise() would remove the rest on the way to storage anyway,
+    // but taking it at the door keeps the field itself honest on screen.
+    field.addEventListener("paste", (event) => {
+      const text = event.clipboardData?.getData("text/plain");
+      if (text === undefined) return;
+      event.preventDefault();
+      document.execCommand("insertText", false, text.replace(/\s+/g, " "));
+    });
+  }
 
   // The block's own type. Same fields the Typography panel writes.
   document.getElementById("edStoryFont")?.addEventListener("change", (event) =>
@@ -259,7 +317,9 @@ export function bindStoryEditor({ onPatch, getBudget, getSection, getView, getIm
     const align = event.target.closest("[data-align]");
     if (align) {
       event.preventDefault();
-      onPatch?.({ textAlign: align.dataset.align }, "story-toolbar");
+      // Resolved at click time against the object selected NOW - the same
+      // rule the size control beside it already follows.
+      onPatch?.({ [alignFieldFor(selectedTextPart)]: align.dataset.align }, "story-toolbar");
       toolbar.querySelectorAll("[data-align]").forEach((b) => b.classList.toggle("active", b === align));
       return;
     }
@@ -288,11 +348,19 @@ export function bindStoryEditor({ onPatch, getBudget, getSection, getView, getIm
       onPatchImage,
       onRemoveImage,
       onSelectImage,
-      onSelectPart: (part) => {
+      // `imageId` and not just `part`: block-frame.js calls this with BOTH
+      // when a picture is clicked, and this wrapper swallowed the second
+      // argument - so store.setSelectedPart("image", undefined) narrowed the
+      // selection to no picture at all. The block knew a picture was the
+      // selected KIND of object and could not say WHICH, so every re-render
+      // took the selection outline and the eight resize handles straight back
+      // off the picture that had just been clicked. Found by the browser net
+      // the moment it could reach this far again.
+      onSelectPart: (part, imageId = null) => {
         if (part === "headline" || part === "subheading" || part === "body") {
           selectedTextPart = part;
         }
-        onSelectPart?.(part);
+        onSelectPart?.(part, imageId);
 
         const currentView = getView?.();
         if (currentView) refreshBlockControls(currentView, part);
@@ -329,8 +397,16 @@ export function refreshStoryEditor(view, section, images, source, selectedPart, 
 
   const headline = document.getElementById("edStoryHeadline");
   const subheading = document.getElementById("edStorySubheading");
-  if (headline && document.activeElement !== headline) headline.value = plainText(view.headline);
-  if (subheading && document.activeElement !== subheading) subheading.value = plainText(view.subheading);
+  // Never while the caret is in it: replacing innerHTML under a live caret
+  // moves it to the start, which on a rich field means every second keystroke
+  // lands at the beginning of the headline.
+  const restore = (field, value) => {
+    if (!field || field.contains(document.activeElement) || field === document.activeElement) return;
+    const wanted = fieldHtml(value);
+    if (field.innerHTML !== wanted) field.innerHTML = wanted;
+  };
+  restore(headline, view.headline);
+  restore(subheading, view.subheading);
 
   if (section) refreshFrame(section, view, images, source, selectedPart, selectedImageIds);
 
@@ -361,8 +437,12 @@ function refreshBlockControls(view, part = selectedTextPart) {
       `${TEXT_SIZE_LABEL[selectedTextPart] || "Body size"} for selected object`,
     );
   }
+  const alignNow = alignValueOf(view, selectedTextPart);
+  const alignTarget = (PART_LABEL[selectedTextPart] || "Whole block").toLowerCase();
   document.querySelectorAll("#edStoryToolbar [data-align]").forEach((control) => {
-    control.classList.toggle("active", String(view.textAlign) === control.dataset.align);
+    control.classList.toggle("active", alignNow === control.dataset.align);
+    control.title = `Align ${control.dataset.align} — ${alignTarget}`;
+    control.setAttribute("aria-label", control.title);
   });
 }
 

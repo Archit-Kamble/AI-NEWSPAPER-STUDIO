@@ -30,6 +30,10 @@
 // about being enlarged can move a line.
 
 import { sanitise, sanitiseSize } from "../layout/rich-text.js";
+import {
+  markDisplayField, clearDisplayField, activeDisplayField, applyDisplayMark, holdSelection,
+  fieldHtml, fieldValue, DISPLAY_TARGET_EVENT,
+} from "./display-marks.js";
 
 import { placedPictureStyle } from "../layout/picture-style.js";
 import { resizeRect, RESIZE_HANDLES } from "../layout/image-resize.js";
@@ -68,12 +72,7 @@ let hooks = {};
 // Shift+click could leave the two disagreeing: a picture dropped from the
 // Set by Shift+click stayed selected on screen because the OTHER field still
 // named it. One field, no drift.
-// previewMode: has the desk asked to see the real flowed render instead of
-// the plain Quill surface? Off by default on every mount - a picture that
-// does not reach into the body needs no toggle at all (bindTextFrames()
-// hides it), and one that does should not silently swap the desk's writing
-// surface out from under them the moment they open the block.
-let state = { section: null, view: null, images: [], selectedIds: new Set(), selectedPart: "block", previewMode: false };
+let state = { section: null, view: null, images: [], selectedIds: new Set(), selectedPart: "block" };
 
 // ---------------------------------------------------------------- loading ---
 
@@ -300,7 +299,9 @@ function applyBlockSelection() {
 // the block held no pictures at all, however many it actually had). The
 // headline and deck are whole positioned bands (bandBox(), shared with the
 // canvas), so they dodge a picture standing in their rows exactly as the
-// canvas does. The body cannot: see renderFlowedPreview() below.
+// canvas does. The body cannot - CSS floats only touch a column's edges -
+// which is why the canonical composed layer, not Quill, is what the desk
+// looks at (see this file's own header).
 function layoutTextFrames() {
   const page = document.getElementById("edFramePage");
   const canonical = document.getElementById("edCanonicalContent");
@@ -408,13 +409,17 @@ function finishInlineTextEdit({ cancel = false } = {}) {
 
   element?.classList.remove("is-inline-editing", "is-semantic-text-editor");
   if (element) element.style.pointerEvents = "";
+  clearDisplayField(element);
 
   if (!element?.isConnected) return;
 
-  const value = String(element.textContent || "")
-    .replace(/\s*\n+\s*/g, " ")
-    .replace(/[ \t]+/g, " ")
-    .trim();
+  // Read as MARKUP now, not as textContent: this surface carries the desk's
+  // bold/italic/underline and its selected-size spans, and reading only the
+  // text off it threw every one of them away the moment the edit committed.
+  // Normalised and sanitised by the same function the field below the page
+  // uses, so the two writing surfaces for the same object cannot store it two
+  // different ways.
+  const value = fieldValue(element);
 
   element.removeAttribute("contenteditable");
   element.removeAttribute("role");
@@ -432,9 +437,11 @@ function finishInlineTextEdit({ cancel = false } = {}) {
     return;
   }
 
-  // Reuse the existing story-editor input event. This keeps one state,
-  // counters and persistence path instead of inventing a second save path.
-  input.value = value;
+  // Reuse the existing story-editor field event. This keeps one state, one set
+  // of counters and one persistence path instead of inventing a second save
+  // path. The field is contenteditable now (story-editor.js), so the value
+  // goes in as markup rather than as `.value`.
+  input.innerHTML = fieldHtml(value);
   input.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
@@ -465,6 +472,9 @@ function beginInlineTextEdit(part) {
     if (!frame || !canonical) return;
 
     const source = part === "headline" ? String(state.view.headline || "") : String(state.view.subheading || "");
+    // Marks stay marks while they are being edited, so the size spans keep
+    // their real size on screen.
+
 
     inlineTextEdit = { element: frame, config };
 
@@ -486,10 +496,16 @@ function beginInlineTextEdit(part) {
     frame.style.pointerEvents = "auto";
 
     frame.classList.add("is-inline-editing", "is-semantic-text-editor");
-    frame.textContent = source;
-    frame.setAttribute("contenteditable", "plaintext-only");
+    // Rich, not "plaintext-only": marking a word inside a headline is exactly
+    // what a sub-editor does, and this is the surface where the desk can see
+    // the headline at its real size while doing it.
+    frame.innerHTML = fieldHtml(source);
+    frame.setAttribute("contenteditable", "true");
     frame.setAttribute("role", "textbox");
     frame.setAttribute("aria-label", config.label);
+    // Bold/italic/size presses from the marks toolbar land here while this is
+    // the open editor, instead of in the body Quill owns.
+    markDisplayField(frame);
 
     // The canonical layer's own composed lines for this flow still sit
     // underneath the frame; hidden while the frame carries the live edit
@@ -746,8 +762,9 @@ function previewImageRect(id, logical) {
 // snap. Read from the SAME composition everything else on this page is drawn
 // from, so the picture snaps against the measure the words are actually set
 // in rather than a re-derived guess at it.
-function corridorRuleFor(image) {
-  const composition = sectionComposition({ ...state.section, images: state.images || [] }, state.view);
+function corridorRuleFor(image, composed) {
+  const composition = composed
+    || sectionComposition({ ...state.section, images: state.images || [] }, state.view);
   if (!composition || !composition.content) return null;
   const bodyPx = composition.typography?.bodyPx || 0;
   return {
@@ -852,7 +869,6 @@ function bindPictureFrames() {
     // neither the block's measure nor its body size changes while a picture is
     // being dragged. (The reflow below is coalesced to one per paint for the
     // same reason.)
-    const corridorRule = corridorRuleFor(originalImage);
     let lastLogical = null;
 
     frame.classList.add("is-dragging");
@@ -916,9 +932,20 @@ function bindPictureFrames() {
       // drag has already shown the desk the copy going; letting go puts it
       // right. See corridor-snap.js for the rule and why it is the ordinary
       // newspaper one.
-      if (lastLogical && corridorRule) {
+      if (lastLogical) {
         const proposed = { ...state.section, images: state.images || [] };
-        if (leavesNoLegalColumn(sectionComposition(proposed, state.view))) {
+        const settled = sectionComposition(proposed, state.view);
+        // Measured against the composition being REPAIRED - the block with
+        // this picture where the desk just dropped it - rather than against
+        // one taken before the drag began. Where the copy starts moves with
+        // the display type, and the display type moves with the picture, so
+        // the pre-drag frame is not the frame the repair has to fit into.
+        // Same correction as sectionImage.service.js's, for the same reason:
+        // the two must not snap to different geometry.
+        const corridorRule = leavesNoLegalColumn(settled)
+          ? corridorRuleFor(originalImage, settled)
+          : null;
+        if (corridorRule) {
           const snapped = snapPictureToLegalCorridor(lastLogical, corridorRule);
           if (snapped.snapped) {
             lastLogical = { x: snapped.x, y: snapped.y, width: snapped.width, height: snapped.height };
@@ -1085,6 +1112,121 @@ export function copyFromFrame() {
   return sanitise(html);
 }
 
+// ------------------------------------------------- the marks toolbar's aim ---
+//
+// One toolbar, three text objects. Quill owns the body and binds these same
+// buttons to it, so a press with the headline open used to embolden a word in
+// the story - the control was aimed at the wrong object, exactly as the
+// alignment buttons were.
+//
+// Intercepted in the CAPTURE phase, before Quill's own listener runs, and only
+// while a display field actually has the caret. When none does, nothing is
+// stopped and the event reaches Quill untouched - the body's behaviour is
+// completely unchanged, which is what makes this safe to put in front of an
+// editor this project did not write.
+const TOOLBAR_ACTION = [
+  ["bold", ".ql-bold"],
+  ["italic", ".ql-italic"],
+  ["underline", ".ql-underline"],
+  ["clean", ".ql-clean"],
+  ["list", ".ql-list"],
+];
+
+function toolbarActionOf(target) {
+  for (const [action, selector] of TOOLBAR_ACTION) {
+    if (target.closest(selector)) return action;
+  }
+  return target.closest(".ed-quill-size-btn") ? "size" : null;
+}
+
+let marksToolbarBound = false;
+function bindMarksToolbar() {
+  if (marksToolbarBound) return;
+  marksToolbarBound = true;
+
+  // Bound to the DOCUMENT, not to #edQuillToolbar itself. The toolbar is part
+  // of the Block Editor's markup and is rewritten wholesale on every render,
+  // so a listener attached to the element that existed at mount time is a
+  // listener on a detached node from the next repaint onwards - the control
+  // draws perfectly and does nothing, which is the exact trap CLAUDE.md
+  // records for #edSpaceGroup. Found here the same way: by pressing the
+  // button in the running app and watching nothing happen.
+  const inToolbar = (target) => (target instanceof Element ? target.closest("#edQuillToolbar") : null);
+
+  // Pressing a button must not take the caret out of the field behind it, or
+  // there is nothing selected left to mark by the time the click lands.
+  document.addEventListener("mousedown", (event) => {
+    if (!activeDisplayField()) return;
+    if (!inToolbar(event.target)) return;
+    if (!toolbarActionOf(event.target)) return;
+    holdSelection(event);
+  }, true);
+
+  document.addEventListener("click", (event) => {
+    const field = activeDisplayField();
+    if (!field) return;
+    if (!inToolbar(event.target)) return;
+    const action = toolbarActionOf(event.target);
+    if (!action) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const button = event.target.closest(".ed-quill-size-btn");
+    if (applyDisplayMark(action, button?.dataset.size)) {
+      // Straight down the ordinary field path - the same "input" event a
+      // keystroke in the field raises, so the draft, the counters and the
+      // canvas all update through one route rather than through a second one
+      // invented for the toolbar.
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    refreshMarksToolbarState();
+  }, true);
+
+  // The caret leaving a display field is the marks toolbar losing its aim -
+  // whatever it went to. Bound at the document, not on Quill's host: "the
+  // body" is only one of the places focus can go, and a toolbar still
+  // claiming to point at the headline after the desk has clicked away is the
+  // same lie about which object is targeted that this whole mechanism exists
+  // to remove. Presses on the toolbar itself are exempt - holdSelection()
+  // stops them taking focus at all, and one that slipped through must not
+  // clear the aim it is about to act on.
+  document.addEventListener("focusin", (event) => {
+    const field = activeDisplayField();
+    if (!field) return;
+    if (field === event.target || field.contains(event.target)) return;
+    if (event.target instanceof Element && event.target.closest("#edQuillToolbar")) return;
+    clearDisplayField(null);
+  });
+
+  // Whoever changes the aim - a field taking focus, an inline edit closing,
+  // Quill taking it back - the toolbar is repainted from the one announcement.
+  document.addEventListener(DISPLAY_TARGET_EVENT, refreshMarksToolbarState);
+  refreshMarksToolbarState();
+}
+
+/**
+ * The toolbar says which object it will act on, and greys out what that object
+ * cannot do.
+ *
+ * A headline set as a bullet is not a headline, and the compositor has no
+ * display flow that could carry a list - so those two buttons are disabled
+ * rather than left looking live and doing nothing.
+ */
+function refreshMarksToolbarState() {
+  const toolbar = document.getElementById("edQuillToolbar");
+  if (!toolbar) return;
+  const field = activeDisplayField();
+  const part = field?.dataset?.part
+    || (field?.id === "edHeadlineFrame" ? "headline" : field?.id === "edSubheadingFrame" ? "subheading" : null);
+  toolbar.classList.toggle("is-display-target", Boolean(field));
+  toolbar.setAttribute("aria-label", `Marks — ${PART_LABEL[part] || "Body"}`);
+  toolbar.querySelectorAll(".ql-list").forEach((button) => {
+    button.toggleAttribute("disabled", Boolean(field));
+    button.title = field ? "Lists are a body form" : "";
+  });
+}
+
 export async function mountFrame(section, view, images, callbacks, selectedPart = "block", selectedImageIds = []) {
   hooks = callbacks || {};
   state = { section, view, images: images || [], selectedIds: new Set(selectedImageIds), selectedPart };
@@ -1134,6 +1276,7 @@ export async function mountFrame(section, view, images, callbacks, selectedPart 
   // Quill's own internal `lastRange` tracking (the same mechanism that keeps
   // Bold working after that focus loss) is what makes this still apply to
   // the text that was actually selected.
+  bindMarksToolbar();
   document.getElementById("edQuillSize")?.addEventListener("click", (event) => {
     const button = event.target.closest(".ed-quill-size-btn");
     if (!button || !quill) return;

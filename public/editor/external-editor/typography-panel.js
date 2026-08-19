@@ -7,6 +7,7 @@
 
 import { MIN_LINE_HEIGHT } from "../layout/text-flow.js";
 import { escapeHtml as escapeText } from "../format.js";
+import { DEFAULT_DISPLAY_ALIGN } from "../compose/compose.js";
 
 // Exported because the writing toolbar offers the same font and the same
 // alignments, and they must be the SAME list. A second copy of a catalog is how
@@ -36,6 +37,38 @@ export const ALIGNMENTS = [
   { value: "right", label: "Right" },
   { value: "justify", label: "Justify" },
 ];
+
+// WHICH object's alignment a control is setting.
+//
+// `text_align` is the BODY's alignment and always was - the exact engine
+// pours the copy with it and, until the display flows were wired up, placed
+// every headline and deck line flush left whatever it said. So a desk with
+// the headline selected pressing "centre" changed the copy underneath it and
+// nothing on screen admitted that. The headline and the deck have their own
+// persisted fields now (schema.sql's headline_align / subheading_align), and
+// this map is the ONE place that says which field belongs to which selected
+// object, shared by the writing toolbar and the Typography panel so the two
+// cannot answer it differently.
+export const ALIGN_FIELD = {
+  headline: "headlineAlign",
+  subheading: "subheadingAlign",
+  body: "textAlign",
+  block: "textAlign",
+};
+
+export function alignFieldFor(part) {
+  return ALIGN_FIELD[part] || "textAlign";
+}
+
+/** What that object's alignment currently IS, with the right default for it. */
+export function alignValueOf(view, part) {
+  const field = alignFieldFor(part);
+  // An empty display field means the desk has never had an opinion about this
+  // headline, and the engine sets it the paper's own way - so that is what
+  // the control has to show, or the button lit on screen is not the one the
+  // page is using.
+  return String(view?.[field] || (field === "textAlign" ? "left" : DEFAULT_DISPLAY_ALIGN));
+}
 
 const LIST_STYLES = [
   { value: "none", label: "None" },
@@ -89,6 +122,12 @@ function segmented(name, options, current) {
 // "headline-only" would claim a precision the schema does not have. This map
 // is deliberately short for that reason.
 const PART_FIELD = { headline: "tyHeadlineSize", subheading: "tySubheadingSize", body: "tyBodySize" };
+
+// Which object this panel is currently pointed at. The alignment control now
+// writes a DIFFERENT field depending on it (ALIGN_FIELD), so the click handler
+// has to know what the last render was told, exactly as story-editor.js
+// already tracks the selected object for the size control.
+let panelPart = "block";
 // Exported so block-frame.js's on-frame selection label reads the same six
 // words the Typography panel does - one catalog, not two that could drift.
 export const PART_LABEL = {
@@ -108,10 +147,11 @@ function selectionNote(part) {
   if (part === "smartCard") {
     return `<p class="ty-selection-note">A Smart Card is selected. Its content is generated, not typed - see the Smart Cards panel.</p>`;
   }
-  return `<p class="ty-selection-note">Editing <strong>${PART_LABEL[part] || part}</strong> - its size is highlighted below. Family, weight, alignment and spacing are set for the whole block.</p>`;
+  return `<p class="ty-selection-note">Editing <strong>${PART_LABEL[part] || part}</strong> - its size and alignment are its own, highlighted below. Family, weight and spacing are set for the whole block.</p>`;
 }
 
 export function typographyPanelMarkup(view, part = "block") {
+  panelPart = part;
   return `
     <div class="ext-columns">
       <p class="ty-selection-label">Editing: <strong id="tySelectionLabel">${PART_LABEL[part] || "Whole block"}</strong></p>
@@ -126,8 +166,8 @@ export function typographyPanelMarkup(view, part = "block") {
           <select id="tyFontWeight">${select("tyFontWeight", WEIGHTS, view.fontWeight)}</select>
         </div>
         <div class="form-group">
-          <label>Alignment</label>
-          ${segmented("textAlign", ALIGNMENTS, view.textAlign)}
+          <label>Alignment${part === "headline" || part === "subheading" ? ` — ${PART_LABEL[part]}` : ""}</label>
+          ${segmented("align", ALIGNMENTS, alignValueOf(view, part))}
         </div>
         <div class="form-group">
           <label>Lists</label>
@@ -198,8 +238,8 @@ export function previewMarkup(view) {
 
   return `
     <div style="${style}">
-      <h2 style="font-size:${view.headlineFontPx}px;margin:0 0 6px;">${escapeText(view.headline || "Headline preview")}</h2>
-      ${view.subheading ? `<h3 style="font-size:${view.subheadingFontPx}px;margin:0 0 10px;font-weight:400;">${escapeText(view.subheading)}</h3>` : ""}
+      <h2 style="font-size:${view.headlineFontPx}px;margin:0 0 6px;text-align:${alignValueOf(view, "headline")};">${escapeText(view.headline || "Headline preview")}</h2>
+      ${view.subheading ? `<h3 style="font-size:${view.subheadingFontPx}px;margin:0 0 10px;font-weight:400;text-align:${alignValueOf(view, "subheading")};">${escapeText(view.subheading)}</h3>` : ""}
       ${bodyEl}
     </div>
   `;
@@ -226,12 +266,19 @@ export function bindTypographyPanel(getView, onPatch) {
   document.querySelectorAll("[data-segmented]").forEach((group) => {
     const field = group.dataset.segmented;
     group.querySelectorAll(".segment").forEach((button) => {
-      button.addEventListener("click", () => patch({ [field]: button.dataset.value }));
+      // "align" is resolved at CLICK time, not at render time: the desk can
+      // select a different object on the page without this panel being
+      // rebuilt, and a listener that had closed over "the headline's field"
+      // would then set the headline's alignment while the body was selected.
+      button.addEventListener("click", () => patch({
+        [field === "align" ? alignFieldFor(panelPart) : field]: button.dataset.value,
+      }));
     });
   });
 }
 
 export function refreshTypographyPanel(view, source, part = "block") {
+  panelPart = part;
   const preview = document.getElementById("tyPreview");
   if (preview) preview.innerHTML = previewMarkup(view);
 
@@ -249,10 +296,17 @@ export function refreshTypographyPanel(view, source, part = "block") {
 
   document.querySelectorAll("[data-segmented]").forEach((group) => {
     const field = group.dataset.segmented;
+    const current = field === "align" ? alignValueOf(view, part) : String(view[field]);
     group.querySelectorAll(".segment").forEach((button) => {
-      button.classList.toggle("active", String(view[field]) === button.dataset.value);
+      button.classList.toggle("active", current === button.dataset.value);
     });
   });
+  const alignLabel = document.querySelector('[data-segmented="align"]')?.previousElementSibling;
+  if (alignLabel) {
+    alignLabel.textContent = part === "headline" || part === "subheading"
+      ? `Alignment — ${PART_LABEL[part]}`
+      : "Alignment";
+  }
 
   if (source === "typography-panel") return;
   NUMBER_FIELDS.forEach((f) => {

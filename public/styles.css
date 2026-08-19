@@ -1390,6 +1390,7 @@ body.resizing-y * {
   top: 0;
   z-index: 40;
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 16px;
@@ -1424,6 +1425,15 @@ body.resizing-y * {
 .toolbar-actions {
   display: flex;
   gap: 8px;
+  /* Wraps rather than pushing the page wider than the window. Nine buttons
+     that refuse to wrap set a 772px floor on their own row, which set a 934px
+     floor on the whole document - so at 900px the entire workspace scrolled
+     sideways, header and all, and the block a desk was working on moved out
+     from under the pointer. `min-width: 0` lets the flex item be narrower than
+     its content wants; `flex-wrap` is what it does with the room instead. */
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  min-width: 0;
 }
 .toolbar-btn {
   display: inline-flex;
@@ -4499,6 +4509,21 @@ body.print-view .mono-forme-warning { display: none; }
   color: #a8a8b0;
 }
 
+/* The headline and deck fields are contenteditable, not <input> - they carry
+   the desk's marks (story-editor.js). These are the few properties an <input>
+   gave them for free. */
+.rich-field {
+  min-height: 1.6em;
+  white-space: pre-wrap;
+  word-break: break-word;
+  cursor: text;
+}
+.rich-field:empty::before {
+  content: attr(data-placeholder);
+  color: #a8a8b0;
+  pointer-events: none;
+}
+
 .story-field-label { display: block; margin-bottom: var(--s1); color: #8a8a94; font-size: .66rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
 
 
@@ -4781,18 +4806,6 @@ body.print-view .page-imprint {
   position: absolute;
   background: white;
 }
-/* [hidden] and this class carry the same specificity, so without this the
-   later, author rule's `display: flex` would win over the browser's own
-   `[hidden] { display: none }` and the toggle would stay visible - found live,
-   not assumed, when a test asserted "no pictures, no toggle" and it failed. */
-.frame-preview-toggle {
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-  margin-top: var(--s2);
-}
-.frame-preview-toggle[hidden] { display: none; }
-.frame-preview-toggle .muted { font-size: 0.75rem; }
 /* Quill's toolbar belongs to the copy, so it sits with the page rather than in
    the block's own type bar - marking WORDS and setting the BLOCK are different
    decisions and a desk should not have to tell them apart in one strip. */
@@ -4803,6 +4816,24 @@ body.print-view .page-imprint {
   padding: 2px 0 6px;
   text-align: center;
 }
+/* Aimed at the headline or the deck rather than at the story. The toolbar has
+   to SAY so: these are the same five buttons either way, and a desk pressing
+   bold has a right to know which object is about to change. */
+.frame-toolbar.is-display-target {
+  border-bottom-color: var(--accent);
+  background: rgba(196, 30, 58, 0.05);
+}
+.frame-toolbar.is-display-target::before {
+  content: attr(aria-label);
+  display: block;
+  margin-bottom: 2px;
+  color: var(--accent);
+  font-size: 0.62rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.frame-toolbar button[disabled] { opacity: 0.35; cursor: not-allowed; }
 
 /* Plain buttons, not Quill's own Picker widget - see block-frame.js's
    blockFrameMarkup() for why. Styled to sit quietly among Quill's real

@@ -99,22 +99,45 @@ const TARGET_COLUMN_PX = 120;
 // is a printed column; 5.4 em sets none.
 const MIN_COLUMN_EM = 10;
 
-export function measureColumns(section, view, widthPx) {
-  const explicit = Number(pick(section, view, 'columnCount', 'column_count', undefined));
-  if (Number.isInteger(explicit) && explicit >= 1) return explicit;
-
+/**
+ * The most columns this block could be set in and still hold a word.
+ *
+ * The floor was already inside measureColumns() and could only ever protect
+ * the AUTO path - an explicit count short-circuits before it. So Properties ->
+ * Columns offered 1-4 on every block, and on a narrow one 2, 3 and 4 all set
+ * NOTHING: measured on a real 150 x 264 lead in 12px type, every count above
+ * one composes 0 body lines, NO_LEGAL_MEASURE, BODY_OVERSET, and the Space
+ * panel reads "Room for copy 0-0 characters". A control that offers a choice
+ * which cannot work is the same fault as the old number input that could not
+ * say "auto" - so the rule is lifted out here and the control asks it.
+ *
+ * `MIN_COLUMN_EM` is the floor and the 190px second lead is why it exists:
+ * one column is 11.8 em, and split in two it is 5.4 em and the pour sets
+ * nothing. See CLAUDE.md, "A wide block sets in COLUMNS".
+ */
+export function maxLegibleColumns(section, view, widthPx, ceiling = 4) {
   const margin = positive(pick(section, view, 'marginPx', 'margin_px', 12), 12);
   const bodyPx = positive(pick(section, view, 'bodyFontPx', 'body_font_px', 16), 16);
   const usable = Math.max(0, widthPx - 2 * margin);
   const gutter = columnGutterPx(bodyPx);
   const floorPx = MIN_COLUMN_EM * bodyPx;
 
-  // Nearest to the printed target, then stepped back until every column left
-  // is wide enough to set in. The gutter is the engine's own (compose.js), not
-  // a second guess at it.
-  let count = Math.max(1, Math.round(usable / TARGET_COLUMN_PX));
+  let count = Math.max(1, Math.floor(ceiling));
   while (count > 1 && (usable - gutter * (count - 1)) / count < floorPx) count -= 1;
   return count;
+}
+
+export function measureColumns(section, view, widthPx) {
+  const explicit = Number(pick(section, view, 'columnCount', 'column_count', undefined));
+  if (Number.isInteger(explicit) && explicit >= 1) return explicit;
+
+  const margin = positive(pick(section, view, 'marginPx', 'margin_px', 12), 12);
+  const usable = Math.max(0, widthPx - 2 * margin);
+
+  // Nearest to the printed target, then held to the widest count that can
+  // still be read - one floor rule, stated once, in maxLegibleColumns().
+  const wanted = Math.max(1, Math.round(usable / TARGET_COLUMN_PX));
+  return Math.min(wanted, maxLegibleColumns(section, view, widthPx, wanted));
 }
 
 /** A `section_images` row (or an already-converted one) as an obstacle. */

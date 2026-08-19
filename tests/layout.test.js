@@ -362,3 +362,47 @@ test('the front page starts its content below the nameplate; inside pages start 
   assert.ok(g.regions.front.content.top > g.regions.inside.content.top,
     'the nameplate band is taller than the folio strip, so front-page content starts lower');
 });
+
+// --- a column count the block cannot hold is not offered ------------------
+//
+// MIN_COLUMN_EM was inside measureColumns() and could only ever protect the
+// AUTO path: an explicit count short-circuits before the floor is applied. So
+// Properties -> Columns offered 1-4 on every block however narrow, and on a
+// real 150 x 264 lead in 12px type every count above one composes ZERO body
+// lines. Found by driving the running app: a sweep pressed "4", and the block
+// then read "Room for copy 0-0 characters" with nothing set in it.
+test('maxLegibleColumns: a narrow block admits exactly one column', async () => {
+  const { maxLegibleColumns, measureColumns } = await import('../public/editor/compose/section-adapter.js');
+  const view = { bodyFontPx: 12, marginPx: 1 };
+
+  assert.equal(maxLegibleColumns({}, view, 150, 4), 1, '150px holds one column, not four');
+  assert.equal(maxLegibleColumns({}, view, 190, 4), 1, 'the 190px second lead: one, per CLAUDE.md');
+  assert.ok(maxLegibleColumns({}, view, 268, 4) >= 2, 'the 268px anchor can take two');
+
+  // The floor still governs AUTO exactly as it did - this refactor moved the
+  // rule, it did not change the answer.
+  assert.equal(measureColumns({}, view, 150), 1);
+  assert.equal(measureColumns({}, view, 190), 1);
+  assert.equal(measureColumns({}, view, 268), 2);
+});
+
+test('a column count over the floor sets nothing, which is why it is refused', async () => {
+  const { ensureFontsLoaded } = await import('../public/editor/compose/font-metrics.js');
+  const { ensureShaperReady } = await import('../public/editor/compose/shaper.js');
+  const { composeSection } = await import('../public/editor/compose/section-adapter.js');
+  await Promise.all([ensureFontsLoaded(), ensureShaperReady()]);
+
+  const section = { section_key: 'narrow', width_px: 150, height_px: 264, block_type: 'article', images: [] };
+  const base = {
+    headline: 'चाचणी मथळा', subheading: 'चाचणी उपमथळा',
+    body: 'पुणे : ही एक चाचणी बातमी आहे. दुसरे वाक्य येथे आहे.',
+    headlineFontPx: 28, subheadingFontPx: 18, bodyFontPx: 12, lineHeight: 1.45, marginPx: 1, textAlign: 'justify',
+  };
+
+  const four = composeSection(section, { ...base, columnCount: 4 });
+  assert.equal(four.bodyLines.length, 0, 'four columns on a 150px block set no type at all');
+  assert.ok(four.warnings.some((w) => (w.code || w) === 'NO_LEGAL_MEASURE'));
+
+  const one = composeSection(section, { ...base, columnCount: null });
+  assert.ok(one.bodyLines.length > 0, 'and Auto sets it perfectly well');
+});

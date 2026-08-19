@@ -15,7 +15,7 @@
 
 import { escapeHtml } from "../format.js";
 import { TINTS } from "../layout/inks.js";
-import { measureColumns } from "../compose/section-adapter.js";
+import { measureColumns, maxLegibleColumns } from "../compose/section-adapter.js";
 import { PART_LABEL } from "./typography-panel.js";
 // The Layer control reuses the EXACT arithmetic the Story panel's "Bring
 // forward"/"Send back" buttons already use - not a second copy of
@@ -102,9 +102,13 @@ function numberField(id, label, value, { min, max, step = 1, unit = "" } = {}) {
 function columnsNote(section, view) {
   const width = Number(section.width_px) || 0;
   const auto = measureColumns(section, view, width);
-  return auto === 1
+  const most = maxLegibleColumns(section, view, width, 4);
+  const cap = most < 4
+    ? ` This block is too narrow for ${most === 1 ? "two" : `${most + 1}`} columns${most === 1 ? "" : " or more"} - they are greyed out because a column that narrow sets no words at all, not fewer.`
+    : "";
+  return (auto === 1
     ? "Auto sets this block in one column - it is not wide enough for two that could still be read."
-    : `Auto sets this block in ${auto} columns. A column is aimed at the 59 mm a printed page uses, and never made too narrow to set a word in.`;
+    : `Auto sets this block in ${auto} columns. A column is aimed at the 59 mm a printed page uses, and never made too narrow to set a word in.`) + cap;
 }
 
 function blockPropertiesMarkup(section, view, page) {
@@ -152,9 +156,21 @@ function blockPropertiesMarkup(section, view, page) {
       <h5 class="prop-heading">Columns</h5>
       <div class="form-group">
         <div class="segmented" data-prop-columns>
-          ${COLUMN_COUNTS.map(
-            ([value, label]) => `<button type="button" class="segment${columns === value ? " active" : ""}" data-columns="${value ?? ""}">${label}</button>`,
-          ).join("")}
+          ${(() => {
+            // A count this block cannot hold is not offered. Measured on a real
+            // 150 x 264 lead in 12px type: 2, 3 and 4 columns each compose ZERO
+            // body lines - NO_LEGAL_MEASURE, BODY_OVERSET, "Room for copy 0-0
+            // characters" - so all three were choices that could only break the
+            // block, offered with nothing to say so. The floor is the engine's
+            // own (section-adapter.js's maxLegibleColumns), not a second guess.
+            const most = maxLegibleColumns(section, view, Number(section.width_px) || 0, 4);
+            return COLUMN_COUNTS.map(([value, label]) => {
+              const tooMany = Number.isInteger(value) && value > most;
+              return `<button type="button" class="segment${columns === value ? " active" : ""}"
+                ${tooMany ? `disabled title="This block is only wide enough for ${most} column${most === 1 ? "" : "s"} - ${value} would set no words at all"` : ""}
+                data-columns="${value ?? ""}">${label}</button>`;
+            }).join("");
+          })()}
         </div>
       </div>
       <p class="muted ext-note">${escapeHtml(columnsNote(section, view))}</p>

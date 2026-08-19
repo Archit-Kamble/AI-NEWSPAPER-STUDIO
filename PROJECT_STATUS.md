@@ -3886,3 +3886,156 @@ order disagreed in their last digits. `mmRound()` now rounds at emission.
 
 **Sweep, 11438 sections, no throws:** `NO_LEGAL_MEASURE` 0, `DECK_OVERSET`
 1 → 0, `BODY_OVERSET` 30 → 18 (blocks have more room for copy than they did).
+
+### 34. Every control names the object it acts on (2026-08-19)
+
+Two reports from the desk, one sitting:
+
+> "heading right side gap still exist"
+
+> "if I want to apply align-right, align-left like this editor functionalities
+> it does not apply on that section rather it apply it on body — make sure all
+> editor functionality apply on every section, every word, every character"
+
+They are not the same bug and both were real.
+
+---
+
+#### The gap: a headline that fills is a headline that was SIZED to fill
+
+§33 held the headline to two lines and stopped it eating half the block. It did
+not make it FILL. Composing the exact block the desk photographed (311210, a
+268×248 lead with an 84×241 cut-out narrowing the measure to 205px): the
+headline set **85% and 52%** of its two lines' measures. Both lines short is
+what a reader sees as a mistake; one short closing line is how every printed
+headline is set.
+
+Sizing a headline to its count is the oldest job on the desk and it has exactly
+one lever. The words belong to the reporter, so the lever is the SIZE — every
+page-layout tool ships this move (InDesign calls it "fit headline to frame").
+`fitDisplayFlow()` only ever stepped DOWN, because the requested size is a
+preferred maximum and that contract is what `fit.service.js` shrinks type
+against. It now also steps UP, under three rules that were each arrived at by
+measuring the alternative:
+
+- **All or nothing.** "Any improvement" was the first rule and it is wrong in a
+  way that is obvious once seen: a one-word headline on a full-width block
+  cannot fill 296px of measure at any legible size, so the rule inflated it
+  30px → 37px to go from 19% of its measure to 24% — a quarter larger, still
+  five-sixths empty, and the story a line shorter for it. A headline whose words
+  cannot fill is set at the size the design gave it.
+- **The smallest size that fills, not the largest that fits.** Every pixel of
+  display type is a pixel off the top of the story.
+- **Capped at 1.25×**, chosen against both sides of the trade across all 5084
+  real blocks with a headline and all 429 real pages with more than one:
+
+  | cap | grew | at/over 92% filled | pages where a smaller block out-shouts the biggest |
+  |---|---|---|---|
+  | off | — | 1089 | 46 |
+  | 1.15 | 23% | 2237 | 47 |
+  | **1.25** | **33%** | **2787** | **50** |
+  | 1.40 | 41% | 3186 | 82 |
+  | 1.60 | 55% | 3886 | 275 |
+
+  The knee is unmistakable. (46 pages are already "beaten" with growth off — a
+  long headline on a big block auto-fits DOWN past a short one on a small block.
+  Same fault from the other direction; not something a cap can fix.)
+
+**And it never costs a word.** Growing takes depth off the copy, and on a block
+already full to the foot that depth is somebody's last sentence. The check is
+made where the answer is knowable — after the pour — and the block is composed
+once more with the growth withheld. Recursion is one level by construction.
+Measured: 9 blocks in 5084 hit this, and `BODY_OVERSET` across the database is
+unchanged at 17 either way (24 without the fallback).
+
+**Across all 5084 blocks carrying a headline:** longest-line fill 73.6% →
+76.6%, headlines at or over 92% filled **1089 → 2787**, display share 20.0% →
+20.6%, `OVERSET` unchanged, `FITS` 972 → 993.
+
+The block the desk photographed now sets at 26px: **62% and 98%**, in the same
+two lines.
+
+**A second bug this exposed.** `sectionImage.service.js` snapped a picture
+against a composition of the block *without* that picture in it, while the
+composition it was repairing had the picture in it. Those are not the same
+frame — where the copy starts moves with the display type, and the display type
+moves with the picture — so a full-measure repair landed 12px above the block's
+real `bodyTop` and left under one line of copy at the top and none at the foot.
+A repair that did not repair, arrived at by measuring the wrong block. Both the
+service and the editor's own drag now measure the composition being repaired.
+
+---
+
+#### The controls: they were wired, visible, and aimed at the wrong object
+
+`text_align` is the BODY's alignment and always was, and the exact engine's
+`setDisplayFlow()` placed every headline, kicker and deck line at the start of
+its measure and left it there — it read no alignment at all. So a sub-editor
+selecting the headline and pressing "centre" re-set the story underneath it.
+No error, no empty state, nothing on screen to notice.
+
+The same shape, worse, for the marks: the bold/italic/underline/size toolbar
+over the block is Quill's, and Quill owns exactly one document — the body. Bold
+with the headline open emboldened a word in the copy.
+
+What landed:
+
+- **`headline_align` / `subheading_align`** (`schema.sql`, NULL = "the desk
+  never said", so no existing row changes appearance). The kicker follows the
+  headline deliberately — it is the headline's own overline, and a separate
+  control could only knock the two out of step.
+- **`setDisplayFlow()` applies alignment**, including justify with the same two
+  bounded levers the body uses, and never on a band's last line.
+- **`ALIGN_FIELD` in `typography-panel.js`** is the one map from selected object
+  to field, shared by the writing toolbar and the Typography panel, resolved at
+  CLICK time (the selection can change without either being rebuilt).
+- **Display lines carry `at`**, so `render.js` re-applies marks to a headline
+  broken across two lines exactly as it does to a body line, and
+  `scribus.service.js` emits them as real runs — the press file used to flatten
+  every display band to one plain run, so the browser printed a bold word and
+  the paper did not.
+- **The headline and subheading fields are contenteditable**, not `<input>`. An
+  `<input>` holds a string, so every keystroke there overwrote whatever had been
+  marked on the page above — one surface silently destroying the other's work.
+- **`display-marks.js`** applies the marks. `document.execCommand` cannot: a
+  headline field is ALREADY set in the paper's bold display face, so
+  `execCommand('bold')` reads the selection as bold and takes bold OFF, emitting
+  `<span style="font-weight: normal">`, which `sanitise()` then unwraps —
+  pressing bold on a headline stored exactly nothing. Verified in the running
+  app before the replacement was written. Lists are disabled for a display
+  object rather than left looking live: a headline set as a bullet is not a
+  headline, and the compositor has no display flow that could carry one.
+
+`tests/browser/editor-controls.browser.js` is the net for this, and it is the
+only way this class of bug can be caught: press each control with each object
+selected and check WHICH field moved. **55/55.**
+
+---
+
+#### What the browser net found once it could run again
+
+`tests/browser/workspace.browser.js` had been **crashing at check 18 of 211**,
+silently, for as long as the publication font has been loading reliably: its
+WYSIWYG-geometry section read `.section-content`, which the composed renderer
+does not emit, so every canvas rectangle came back null and it died on the first
+`.top`. Everything after it never ran. Repaired, and with it:
+
+- **A selected picture was never marked selected.** `story-editor.js` wrapped
+  `onSelectPart` as `(part) => ...` and forwarded only `part`, dropping the
+  `imageId` `block-frame.js` passes with it — so `setSelectedPart("image",
+  undefined)` narrowed the selection to no picture at all, and every re-render
+  took the outline and the eight resize handles straight back off the picture
+  that had just been clicked. One argument.
+- **At 900px the whole workspace scrolled sideways.** Nine toolbar buttons that
+  refuse to wrap set a 772px floor on their row and a 934px floor on the
+  document — header and all — so the block under the pointer moved. `flex-wrap`.
+- **Dead weight**: a "see the accurate preview" toggle that no longer exists
+  anywhere in the application (the canonical composed layer replaced it) was
+  still being driven by 25 lines of the net and still had its CSS; `#edFrameCard`
+  and `.pic-handle-tl` were both renamed long ago; "four resize handles" has been
+  eight since the edge handles landed; and the "nothing shadows the draft" check
+  used `/^(canvas|editor|external)/i`, which flags the real fields
+  `editorialPriority` and `editorialPresentation`.
+
+**206 → 209 of 211.** The two that remain are the AI-provider assertions, which
+belong to uncommitted provider work in the tree, not to this.

@@ -182,6 +182,90 @@ headline fill **68.4% → 71.6%**, mean display share **21.3% → 18.4%**, block
 spending over 40% of themselves on display type **67 → 13**. `headline_max_lines`
 on the row still wins, so a splash can be given three.
 
+**Holding the line budget is not the same as filling the measure**, and the desk
+reported the second one next: a headline set in two lines at 85% and 52% of
+their measures. Both lines short is what a reader sees as a mistake; one short
+closing line is how every printed headline is set. So `fitDisplayFlow()` steps
+UP as well as down — the words are the reporter's, so the only lever left is the
+size, and every layout tool ships this move.
+
+Three rules, each arrived at by measuring the alternative:
+
+- **All or nothing** (`HEADLINE_FILL_TARGET`, 0.92). "Any improvement" was tried
+  and is wrong in a way that is obvious once seen: one short word on a full-width
+  block cannot fill 296px of measure at any legible size, so it inflated 30px →
+  37px to go from 19% to 24% — a quarter larger, still five-sixths empty, and the
+  story a line shorter for it. A headline whose words cannot fill is set at the
+  size the design gave it.
+- **The smallest size that fills, not the largest that fits.** Every pixel of
+  display type is a pixel off the top of the story.
+- **`HEADLINE_GROWTH_CAP` (1.25) is a HIERARCHY bound**, not a typographic one.
+  A page reads as one page because the bigger block shouts louder, and
+  `byMeasure = width/11` is the rung. Measured over 5084 blocks and 429 pages:
+  1.25 takes headlines at/over 92% filled from 1089 to 2787 for four more pages
+  where a smaller block out-shouts the biggest; 1.4 costs nine times that for one
+  sixth more; 1.6 breaks two pages in three. The table is beside the constant.
+
+**And it never costs a word.** Growth is a preference like the others: the check
+is made after the pour — the only thing that can say whether the copy still
+fits — and the block is composed once more with the growth withheld. One level
+of recursion by construction (`headlineGrowth: false` cannot re-enter). 9 blocks
+in 5084 hit it; `BODY_OVERSET` is unchanged either way.
+
+Across all 5084 blocks with a headline: longest-line fill **73.6% → 76.6%**,
+headlines at or over 92% filled **1089 → 2787**, display share 20.0% → 20.6%.
+
+### Every control names the object it acts on
+
+`text_align` is the **body's** alignment and always was, and `setDisplayFlow()`
+read no alignment at all — it placed every headline, kicker and deck line at the
+start of its measure and left it there. So a sub-editor selecting the headline
+and pressing "centre" re-set the story underneath it. The control was not subtly
+wrong; it was aimed at the wrong object, with no error and nothing on screen to
+notice. The same shape, worse, for bold/italic/underline: that toolbar is
+Quill's, and Quill owns exactly one document — the body.
+
+| the desk selects | size | alignment | marks |
+|---|---|---|---|
+| Headline | `headline_font_px` | `headline_align` | `display-marks.js` |
+| Subheading | `subheading_font_px` | `subheading_align` | `display-marks.js` |
+| Body | `body_font_px` | `text_align` | Quill |
+
+- **`ALIGN_FIELD` in `typography-panel.js` is the one map** from selected object
+  to field, shared by the writing toolbar and the Typography panel, and resolved
+  at **click time** — the selection can change without either being rebuilt.
+- **The kicker follows the headline** deliberately. It is the headline's own
+  overline; a control of its own could only knock the two out of step.
+- `headline_align`/`subheading_align` are **NULL** when the desk has never said,
+  so the engine's own display default answers and no existing row changes.
+- **Display type is never justified on its last line**, and `JUSTIFY_MIN_EM` is
+  deliberately NOT applied to it — that rule is about rivers in a narrow column
+  of small type.
+- **A display line carries `at`**, so `render.js` re-applies a mark to a headline
+  broken across two lines exactly as it does to a body line, and
+  `scribus.service.js` emits real runs. The press file used to flatten every
+  display band to one plain run: the browser printed the bold word and the paper
+  did not.
+- **The headline and subheading fields are `contenteditable`, not `<input>`.** An
+  `<input>` holds a string, so every keystroke there overwrote whatever had been
+  marked on the page above — one surface silently destroying the other's work.
+  `fieldHtml()`/`fieldValue()` are the one round trip.
+- **`document.execCommand` cannot apply these marks.** A headline field is
+  already set in the paper's bold display face, so `execCommand('bold')` reads
+  the selection as bold and takes bold OFF — `<span style="font-weight:normal">`,
+  which `sanitise()` then unwraps, so pressing bold stored nothing. Ranges are
+  wrapped by hand instead.
+- **Lists are disabled for a display object**, not left looking live. A headline
+  set as a bullet is not a headline and no display flow could carry one.
+- **The marks toolbar is bound at the `document`, not to `#edQuillToolbar`.** The
+  toolbar is rewritten on every render, so an element-bound listener is on a
+  detached node from the next repaint — the `#edSpaceGroup` trap, again, and
+  found the same way: by pressing the button and watching nothing happen.
+
+`tests/browser/editor-controls.browser.js` is the net, and it is the only way
+this class of bug can be caught: press each control with each object selected
+and check WHICH field moved.
+
 ### A picture may not leave a column too narrow to set in
 
 A photograph placed so that the strip of measure beside it is under one word
@@ -620,9 +704,12 @@ A task is complete only when: it builds/boots (`node server.js` or `npm test`'s 
 
 ```bash
 node tests/browser/workspace.browser.js          # defaults to edition 2099
+node tests/browser/editor-controls.browser.js    # every control × every text object
 ```
 
-It resets the block it drives first, so it can be run repeatedly. It needs `playwright-core` and Chrome at `/usr/bin/google-chrome` (`CHROME_PATH` overrides).
+Both reset the block they drive first, so they can be run repeatedly. They need `playwright-core` and Chrome at `/usr/bin/google-chrome` (`CHROME_PATH` overrides).
+
+**A browser test that crashes is worse than one that fails.** `workspace.browser.js` died at check 18 of 211 for months — its geometry section read `.section-content`, which the composed renderer does not emit — and everything after it silently never ran. Three real bugs were sitting behind it (a selected picture that never showed selected, a sideways scroll at 900px, a Smart Card check pointing at a removed element). If you change a renderer's DOM, run the net and read the LAST line, not the first failure.
 
 The dev database is full of test fixtures — 221 editions across 13 dates, named `साहस`, `ZZ …`, `8/3/2026 Edition`. Tests that create an edition must remove it in `t.after(...)`. `POST /api/newspapers` is **not** idempotent; only `POST /api/newspapers/start` is, and only that one is wired to a button.
 

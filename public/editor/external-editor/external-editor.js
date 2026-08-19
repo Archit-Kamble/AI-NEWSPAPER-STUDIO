@@ -147,7 +147,7 @@ function renderToolsRail(section, view, callbacks) {
     ${pageMapMarkup(callbacks.getPage?.(), callbacks.getNewspaper?.(), section.section_key)}
   `;
 
-  bindPropertiesPanel({ getSelectedImage: callbacks.getSelectedImage, onPatchImage: callbacks.onPatchImage });
+  bindPropertiesPanel({ getSelectedImage: callbacks.getSelectedImage, onPatchImage: callbacks.onPatchImage, onPatch: callbacks.onPatch });
   bindTypographyPanel(callbacks.getView, callbacks.onPatch);
   bindStoryDetails(callbacks.onPatch);
   bindHistoryPanel(historyHandlers(callbacks));

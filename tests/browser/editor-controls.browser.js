@@ -347,6 +347,44 @@ const BODY = 'सातारा : नगरपालिकेच्या स�
     say(stored.textAlign !== 'center', 'the body kept its own', String(stored.textAlign));
   }
 
+  // ------------------------------------------------------------- the border ---
+  //
+  // The one control that rules a block, and the object it acts on is the BLOCK
+  // - not the headline, not the body. Nothing on a page is ruled unless a
+  // person ruled it: adverts, briefs and the standing features used to be born
+  // boxed from the layout template with no way to take the box off, which is
+  // what the desk reported seeing in print view.
+  {
+    await page.locator(`.newspaper-section[data-section-key="${KEY}"]`).click();
+    await page.waitForTimeout(600);
+    // The border belongs to the BLOCK, and the panel shows the properties of
+    // whatever is selected - the run above left the headline selected, so back
+    // out to the whole block first, exactly as a desk would.
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(700);
+    const blockClass = () => page.locator(`.newspaper-section[data-section-key="${KEY}"]`).getAttribute('class');
+    const storedBorder = () => page.evaluate(async ([ed, key]) => {
+      const pages = await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json());
+      return pages[0].sections.find((s) => s.section_key === key).border_style;
+    }, [ED, KEY]);
+
+    say(await page.locator('[data-prop-border]').count() === 1,
+      'the block carries a border control, and exactly one');
+    say(!/ruled-box/.test(await blockClass()), 'and nothing is ruled to begin with');
+
+    await page.locator('[data-prop-border] [data-border="box"]').click();
+    await page.waitForTimeout(1200);
+    say(/ruled-box/.test(await blockClass()), 'pressing Box rules the block on the page immediately');
+    await page.waitForTimeout(3200);
+    say((await storedBorder()) === 'box', 'and the row carries it', String(await storedBorder()));
+
+    await page.locator('[data-prop-border] [data-border="none"]').click();
+    await page.waitForTimeout(1200);
+    say(!/ruled-box/.test(await blockClass()), 'pressing None takes it off again');
+    await page.waitForTimeout(3200);
+    say((await storedBorder()) === 'none', 'and that is what is stored', String(await storedBorder()));
+  }
+
   say(errors.length === 0, 'no console errors or page errors anywhere in this run', errors.slice(0, 4).join(' | ') || '(none)');
 
   const failed = results.filter((r) => !r.ok);

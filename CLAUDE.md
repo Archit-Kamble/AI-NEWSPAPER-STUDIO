@@ -672,6 +672,27 @@ A second copy of any of these is the failure mode this project has already been 
 
 **Whitespace is classified, not counted.** A ragged right end is how type is set and is never a hole; a gap a photograph made unusable was never counted as usable in the first place. `largestHoleLines` is the one number the desk and the writer act on, and `HOLE_LINES` (4) matches `storyWriter.service.js` deliberately.
 
+### Nothing on the page is ruled unless a person ruled it
+
+`border_style` always defaulted to `'none'` on the column, and `templates.js`
+then shipped `border: 'box'` on **every** advert, every briefs block and all
+four standing features — so a made-up page came out of the press view ruled into
+panels nobody had chosen, and **there was no control anywhere in the product to
+take one off**. 2548 of 11 903 rows.
+
+The template's job is to say where a frame is and what it is for. How it is
+ruled is a design decision and belongs to the desk, per block: **Properties →
+Border** in the Block Editor (`properties-panel.js`, `BORDERS`), which is now
+the only place in the product that sets the field. The migration is unguarded
+and that IS the guard — no control existed, so every `'box'` in the table came
+from the template default rather than from a decision. A future migration would
+have to be guarded in the ordinary way.
+
+Two things already follow from the field and are why it is one control and not
+a stylesheet rule: a box costs the block room (`BOX_INSET_PX` — a printed panel
+sets its type 3–4 mm inside its own rule) and the page draws no hairline in the
+gutter beside a boxed block (`column-rules.js` — its box IS the separator).
+
 ### The page reserves its own furniture
 
 **The nameplate is set for both answers, and the corner is one of them.**

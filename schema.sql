@@ -553,3 +553,19 @@ CREATE INDEX IF NOT EXISTS idx_page_guides_page ON page_guides(page_id);
 -- ever be used to knock the two out of step.
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS headline_align VARCHAR(10);
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS subheading_align VARCHAR(10);
+
+-- A block prints no box unless a person asked for one.
+--
+-- `border_style` has always defaulted to 'none' on the column, but
+-- src/layout/templates.js shipped `border: 'box'` on every advert, every
+-- briefs block and all four standing features - so a made-up page came out of
+-- the press view ruled into panels nobody had chosen, which is what the desk
+-- reported ("in print view we are seeing border around newsblock, we don't
+-- want it, rather a button if the editor wants he can add").
+--
+-- Unguarded, and that IS the guard: there has never been a control anywhere in
+-- this product that sets border_style, so every 'box' in this table came from
+-- the template default above and not from a decision. From now on it can only
+-- come from a decision - the Block Editor's Properties panel - so a future
+-- migration would have to be guarded in the ordinary way.
+UPDATE page_sections SET border_style = 'none' WHERE border_style = 'box';

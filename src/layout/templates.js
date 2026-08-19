@@ -155,6 +155,14 @@ function block(key, col, span, y, height, options = {}) {
     blockType,
     storyType,
     editorialPriority: priority,
+    // A block prints no box unless a person asked for one.
+    //
+    // Adverts, briefs and the standing features used to ship `border: 'box'`
+    // from here, so a made-up page came out of the press view ruled into
+    // panels nobody had chosen - and there was no control anywhere in the
+    // product to turn one off. The box is now the desk's own decision, taken
+    // per block in the Block Editor's Properties panel; the template's job is
+    // to say where a frame is and what it is for, not how it is ruled.
     borderStyle: options.border || 'none',
     headlineStyle: options.headline || 'plain',
     // A standing daily feature: the software fills this block for the
@@ -226,7 +234,7 @@ const templates = {
         // The sold corner of page one, beside the nameplate.
         block('masthead-advert', MASTHEAD_ADVERT.col, MASTHEAD_ADVERT.span,
           MASTHEAD_ADVERT.y, MASTHEAD_ADVERT.height,
-          { type: 'advert', story: 'ADVERTISEMENT', priority: 1, border: 'box' }),
+          { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
 
         // Band one - the day's lead, flanked by pictures, with an advert ear.
         block('lead-pictures', 0, 2, FRONT[0].y, FRONT[0].height,
@@ -236,7 +244,7 @@ const templates = {
         block('lead-side', 9, 2, FRONT[0].y, FRONT[0].height,
           { type: 'photo', story: 'PHOTO_FEATURE', priority: 3, purpose: 'IMAGE_COMPANION', requirement: 'REQUIRED_CONTENT', packageOwner: 'lead' }),
         block('top-advert', 11, 5, FRONT[0].y, FRONT[0].height,
-          { type: 'advert', story: 'ADVERTISEMENT', priority: 1, border: 'box' }),
+          { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
 
         // Band two - two heavy stories.
         block('second-lead', 0, 5, FRONT[1].y, FRONT[1].height,
@@ -246,7 +254,7 @@ const templates = {
         block('anchor', 9, 7, anchor.y, anchor.height,
           { story: 'SECONDARY', priority: 4 }),
         block('display-advert', 9, 7, advert.y, advert.height,
-          { type: 'advert', story: 'ADVERTISEMENT', priority: 1, border: 'box' }),
+          { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
 
         // Band three - the day's reports.
         block('report-one', 0, 3, FRONT[2].y, FRONT[2].height, { story: 'STANDARD', priority: 3 }),
@@ -257,7 +265,7 @@ const templates = {
         block('brief-one', 0, 3, FRONT[3].y, FRONT[3].height, { story: 'BRIEF', priority: 2 }),
         block('brief-two', 3, 3, FRONT[3].y, FRONT[3].height, { story: 'BRIEF', priority: 2 }),
         block('short-news', 6, 3, FRONT[3].y, FRONT[3].height,
-          { type: 'briefs', story: 'BRIEF', priority: 2, border: 'box' }),
+          { type: 'briefs', story: 'BRIEF', priority: 2 }),
       ];
     })(),
   },
@@ -380,20 +388,20 @@ const templates = {
       const rashiDepth = bottom - GAP - INSIDE_TOP;
       return [
         block('rashi', 0, 8, INSIDE_TOP, rashiDepth,
-          { type: 'feature', story: 'SMART_CARD', priority: 3, border: 'box', feature: 'rashi', purpose: 'STANDING_FEATURE', requirement: 'REQUIRED_CONTENT' }),
+          { type: 'feature', story: 'SMART_CARD', priority: 3, feature: 'rashi', purpose: 'STANDING_FEATURE', requirement: 'REQUIRED_CONTENT' }),
         block('panchang', 8, 4, right[0].y, right[0].height,
-          { type: 'feature', story: 'SMART_CARD', priority: 2, border: 'box', feature: 'panchang', purpose: 'STANDING_FEATURE', requirement: 'REQUIRED_CONTENT' }),
+          { type: 'feature', story: 'SMART_CARD', priority: 2, feature: 'panchang', purpose: 'STANDING_FEATURE', requirement: 'REQUIRED_CONTENT' }),
         block('dinvishesh', 12, 4, right[0].y, right[0].height,
-          { type: 'feature', story: 'SMART_CARD', priority: 2, border: 'box', feature: 'dinvishesh', purpose: 'STANDING_FEATURE', requirement: 'REQUIRED_CONTENT' }),
+          { type: 'feature', story: 'SMART_CARD', priority: 2, feature: 'dinvishesh', purpose: 'STANDING_FEATURE', requirement: 'REQUIRED_CONTENT' }),
         block('suvichar', 8, 8, right[1].y, right[1].height,
-          { type: 'feature', story: 'QUOTE', priority: 2, border: 'box', feature: 'suvichar', purpose: 'STANDING_FEATURE', requirement: 'REQUIRED_CONTENT' }),
+          { type: 'feature', story: 'QUOTE', priority: 2, feature: 'suvichar', purpose: 'STANDING_FEATURE', requirement: 'REQUIRED_CONTENT' }),
         block('feature-one', 8, 8, right[2].y, right[2].height,
           { story: 'PHOTO_FEATURE', priority: 4, headline: 'accent' }),
 
         block('feature-two', 0, 4, bottom, INSIDE_BOTTOM - bottom, { story: 'OPINION', priority: 3 }),
         block('feature-three', 4, 4, bottom, INSIDE_BOTTOM - bottom, { story: 'DATA', priority: 3 }),
         block('feature-advert', 8, 8, bottom, INSIDE_BOTTOM - bottom,
-          { type: 'advert', story: 'ADVERTISEMENT', priority: 1, border: 'box' }),
+          { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
       ];
     })(),
   },

@@ -4270,3 +4270,34 @@ BETWEEN two bands, where a desk actually clicks and where there are tens of
 pixels of room.
 
 829 tests, 55/55 on the controls net.
+
+### 38. The box is opt-in (2026-08-19)
+
+The desk: *"in print view we are seeing border around newsblock, we don't want
+it — rather a button, if the human editor wants he can add."*
+
+`border_style` has always defaulted to `'none'` on the column. `templates.js`
+then shipped `border: 'box'` on nine frames — every advert, the briefs block and
+all four standing features — so a page came out of the press view ruled into
+panels nobody had chosen. **And there was no control anywhere in the product
+that set the field**, so no desk could take one off: 2548 of 11 903 rows carried
+a box that nobody had asked for.
+
+- The nine template defaults are gone. A frame's template entry says where it is
+  and what it is for, never how it is ruled.
+- **Properties → Border** (none / box / rule below) in the Block Editor is now
+  the one place the field is set. Verified live: pressing Box rules the block on
+  the canvas immediately and `border_style` is `box` on the row after autosave;
+  pressing None takes it off and stores `none`. Six new checks on the controls
+  net — **61/61**.
+- The backfill is unguarded, and that is the guard: with no control in
+  existence, every `'box'` in the table came from the template default rather
+  than from a decision. From here on it can only come from a decision, so the
+  next migration has to be guarded in the ordinary way.
+
+Two behaviours already hang off this one field and are why it is a control and
+not a stylesheet rule: a box costs the block room (§35's `BOX_INSET_PX`) and the
+page draws no column rule beside a boxed block (its box is the separator). Both
+now follow the desk's choice rather than the template's.
+
+829 tests.

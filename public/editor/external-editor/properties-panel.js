@@ -26,6 +26,25 @@ const SHAPES = [
   ["cutout", "Cut-out"],
 ];
 
+// How this block is ruled, and the only place in the product that says so.
+//
+// Every advert, every briefs block and all four standing features used to be
+// born boxed, from the layout template, with no control anywhere to take the
+// box off - so a page came out of the press view ruled into panels nobody had
+// chosen. The template's job is to say where a frame is and what it is for;
+// how it is ruled is a design decision and belongs to the desk, per block.
+//
+// A box costs the block room (section-adapter.js's BOX_INSET_PX: a printed
+// panel sets its type 3-4 mm inside its own rule, so the copy comes in), and
+// the column rules skip a boxed block entirely (column-rules.js) - its box IS
+// the separator, and a hairline 3 px outside it would be two rules where a
+// printer draws one. Both follow from this one field.
+const BORDERS = [
+  ["none", "None"],
+  ["box", "Box"],
+  ["rule", "Rule below"],
+];
+
 let boundHandlers = null;
 
 function normDeg(value) {
@@ -45,6 +64,7 @@ function numberField(id, label, value, { min, max, step = 1, unit = "" } = {}) {
 // -------------------------------------------------------------- markup ---
 
 function blockPropertiesMarkup(section, view, page) {
+  const border = String(view.borderStyle || section.border_style || "none");
   return `
     <div class="field-grid">
       <div class="form-group"><label>Block type</label><p class="prop-readout">${escapeHtml(section.block_type || "article")}</p></div>
@@ -53,6 +73,18 @@ function blockPropertiesMarkup(section, view, page) {
       ${page?.template_key ? `<div class="form-group"><label>Layout</label><p class="prop-readout">${escapeHtml(page.template_key)}</p></div>` : ""}
     </div>
     <p class="muted ext-note">A block's position and size come from the page's layout template, not from this panel - see the small page map below for where it sits.</p>
+
+    <div class="prop-section">
+      <h5 class="prop-heading">Border</h5>
+      <div class="form-group">
+        <div class="segmented" data-prop-border>
+          ${BORDERS.map(
+            ([key, label]) => `<button type="button" class="segment${border === key ? " active" : ""}" data-border="${key}">${label}</button>`,
+          ).join("")}
+        </div>
+      </div>
+      <p class="muted ext-note">Nothing is ruled unless you rule it. A box sets the copy in a little way from its own line, the way a printed panel does, and the page draws no hairline in the gutter beside a block that already has a box.</p>
+    </div>
   `;
 }
 
@@ -251,6 +283,18 @@ function bindLayerButtons(handlers) {
   });
 }
 
+// The block's own controls. Bound the same way the image controls are, and
+// re-bound on every refresh for the same reason: refreshPropertiesPanel()
+// rewrites #propBody, so a listener bound to a button inside it is on a
+// detached node from the next repaint - the #edSpaceGroup trap.
+function bindBorderButtons(handlers) {
+  document.querySelectorAll("[data-prop-border] [data-border]").forEach((button) => {
+    button.addEventListener("click", () => {
+      handlers.onPatch?.({ borderStyle: button.dataset.border }, "properties-panel");
+    });
+  });
+}
+
 function bindImageControls() {
   if (!boundHandlers) return;
   bindGeometryFields(boundHandlers);
@@ -260,9 +304,15 @@ function bindImageControls() {
   bindLayerButtons(boundHandlers);
 }
 
+function bindBlockControls() {
+  if (!boundHandlers) return;
+  bindBorderButtons(boundHandlers);
+}
+
 export function bindPropertiesPanel(handlers) {
   boundHandlers = handlers;
   bindImageControls();
+  bindBlockControls();
 }
 
 // ------------------------------------------------------------- refresh ---
@@ -287,4 +337,5 @@ export function refreshPropertiesPanel(section, view, image, source, part = "blo
 
   host.innerHTML = bodyMarkupFor(section, view, image, part, page);
   if (part === "image") bindImageControls();
+  if (part === "block") bindBlockControls();
 }

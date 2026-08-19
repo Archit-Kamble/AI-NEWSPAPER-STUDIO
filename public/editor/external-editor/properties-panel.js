@@ -15,6 +15,7 @@
 
 import { escapeHtml } from "../format.js";
 import { TINTS } from "../layout/inks.js";
+import { measureColumns } from "../compose/section-adapter.js";
 import { PART_LABEL } from "./typography-panel.js";
 // The Layer control reuses the EXACT arithmetic the Story panel's "Bring
 // forward"/"Send back" buttons already use - not a second copy of
@@ -50,6 +51,23 @@ const BORDERS = [
 // the ink marks and the press file read. A palette written out a second time
 // here is the drift this codebase has already been bitten by twice.
 
+// How many columns the copy is set in. "Auto" is NULL - the honest default,
+// and now the ordinary state (schema.sql): the engine works the count out from
+// the block's own width and type size, targeting the 59 mm column measured off
+// the customer's printed page and never producing one too narrow to set in
+// (section-adapter.js's measureColumns).
+//
+// This is the ONE control for the field. It used to be a number input in the
+// Typography panel, which could not express "auto" at all - so a desk who once
+// touched it could never hand the decision back.
+const COLUMN_COUNTS = [
+  [null, "Auto"],
+  [1, "1"],
+  [2, "2"],
+  [3, "3"],
+  [4, "4"],
+];
+
 // What the headline does with its own band. `accent` colours the last word;
 // `reverse` sets the whole headline in white out of a solid panel - the
 // treatment a Marathi daily gives a lead. Both are drawn, never composed, so
@@ -78,10 +96,23 @@ function numberField(id, label, value, { min, max, step = 1, unit = "" } = {}) {
 
 // -------------------------------------------------------------- markup ---
 
+// What Auto would actually do, said in the block's own numbers rather than
+// left as a promise - a desk choosing between "auto" and "2" should be able to
+// see that they are the same answer here.
+function columnsNote(section, view) {
+  const width = Number(section.width_px) || 0;
+  const auto = measureColumns(section, view, width);
+  return auto === 1
+    ? "Auto sets this block in one column - it is not wide enough for two that could still be read."
+    : `Auto sets this block in ${auto} columns. A column is aimed at the 59 mm a printed page uses, and never made too narrow to set a word in.`;
+}
+
 function blockPropertiesMarkup(section, view, page) {
   const border = String(view.borderStyle || section.border_style || "none");
   const tint = view.backgroundColor ?? section.background_color ?? null;
   const headlineStyle = String(view.headlineStyle || section.headline_style || "plain");
+  const rawColumns = view.columnCount ?? section.column_count ?? null;
+  const columns = Number.isInteger(Number(rawColumns)) && Number(rawColumns) >= 1 ? Number(rawColumns) : null;
   return `
     <div class="field-grid">
       <div class="form-group"><label>Block type</label><p class="prop-readout">${escapeHtml(section.block_type || "article")}</p></div>
@@ -115,6 +146,18 @@ function blockPropertiesMarkup(section, view, page) {
         </div>
       </div>
       <p class="muted ext-note">A few per cent of one ink, which is what a printed side-bar carries. Heavier than that and the copy loses its contrast on newsprint.</p>
+    </div>
+
+    <div class="prop-section">
+      <h5 class="prop-heading">Columns</h5>
+      <div class="form-group">
+        <div class="segmented" data-prop-columns>
+          ${COLUMN_COUNTS.map(
+            ([value, label]) => `<button type="button" class="segment${columns === value ? " active" : ""}" data-columns="${value ?? ""}">${label}</button>`,
+          ).join("")}
+        </div>
+      </div>
+      <p class="muted ext-note">${escapeHtml(columnsNote(section, view))}</p>
     </div>
 
     <div class="prop-section">
@@ -349,6 +392,17 @@ function bindTintButtons(handlers) {
   });
 }
 
+function bindColumnButtons(handlers) {
+  document.querySelectorAll("[data-prop-columns] [data-columns]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const raw = button.dataset.columns;
+      // "" is Auto, and Auto is NULL - the engine's own answer, not a number
+      // this panel guessed and stored.
+      handlers.onPatch?.({ columnCount: raw === "" ? null : Number(raw) }, "properties-panel");
+    });
+  });
+}
+
 function bindHeadlineStyleButtons(handlers) {
   document.querySelectorAll("[data-prop-headline-style] [data-headline-style]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -370,6 +424,7 @@ function bindBlockControls() {
   if (!boundHandlers) return;
   bindBorderButtons(boundHandlers);
   bindTintButtons(boundHandlers);
+  bindColumnButtons(boundHandlers);
   bindHeadlineStyleButtons(boundHandlers);
 }
 

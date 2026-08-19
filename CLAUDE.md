@@ -672,6 +672,46 @@ A second copy of any of these is the failure mode this project has already been 
 
 **Whitespace is classified, not counted.** A ragged right end is how type is set and is never a hole; a gap a photograph made unusable was never counted as usable in the first place. `largestHoleLines` is the one number the desk and the writer act on, and `HOLE_LINES` (4) matches `storyWriter.service.js` deliberately.
 
+### A wide block sets in COLUMNS
+
+`measureColumns()` has always been able to work a column count out from a
+block's width, and was **never once asked to**: `column_count` was
+`NOT NULL DEFAULT 1`, so every row in the table carried an explicit 1 and the
+whole inference half of that function was unreachable. The front page's anchor
+is 268 px — **134 mm** — and was set as one column of type, 48 characters to the
+line. No newspaper prints a 134 mm measure.
+
+NULL means "the desk has not said" now, exactly as `headline_align` does, and it
+is the ordinary state. Two numbers decide, and both are measured:
+
+- **`TARGET_COLUMN_PX` (120)** — 59 mm, taken off the customer's own printed
+  page (1920 px across 330 mm, five columns of 358 px with 22 px gutters). The
+  count is whichever whole number comes nearest.
+- **`MIN_COLUMN_EM` (10)** — the floor, and the block that proves it is needed
+  is the 190 px second lead: one column is already 11.8 em and 27 characters,
+  and split in two it becomes 5.4 em and the pour sets **nothing**. Two columns
+  nothing can be written into is worse than one that is a shade wide. It sits
+  just under `JUSTIFY_MIN_EM` (13) on purpose — a column under 13 em is set
+  flush left, which is how every paper sets a narrow one; a column under 10 em
+  cannot hold a Marathi word and a half.
+
+Measured across all 4653 sections carrying copy — lines over 50 characters
+**580 → 19**, lines in the printed 20–35 band **911 → 1797**, and `OVERSET`
+unchanged at 10, so the split costs no copy.
+
+**`0` is the wire's word for AUTO.** Every presentational column is written with
+`COALESCE` (a payload that does not mention a field leaves it alone), which on
+its own makes "hand this decision back to the engine" impossible to express. 0
+is not a legal column count, so it can never collide with a real one:
+`section-model.js` sends it, `page.repository.js` turns it into NULL. And
+`draftFromSection`'s `|| 1` had to go — it turned every NULL straight back into
+an explicit single column.
+
+**Properties → Columns is the one control**, offering Auto and 1–4, with a note
+saying what Auto would actually do in this block's own numbers. It used to be a
+number input in Typography, which could not say "auto" at all — so a desk who
+once touched it could never hand the decision back.
+
 ### The paper's colours are a palette, never a picker
 
 SAHAS VARTA is printed from four plates, so every colour that reaches a page has

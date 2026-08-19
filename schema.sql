@@ -582,3 +582,26 @@ UPDATE page_sections SET border_style = 'none' WHERE border_style = 'box';
 -- is separated into plates, and a colour mixed in a browser is one no press
 -- can lay down.
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS background_color VARCHAR(20);
+
+-- A wide block sets in COLUMNS, and could not.
+--
+-- section-adapter.js's measureColumns() has always been able to work a column
+-- count out from a block's width, and has never once been asked to: it honours
+-- an explicit value (deliberately, including 1 - a desk locking a block to one
+-- column is a real instruction) and falls through to inference only when the
+-- field is not an integer. This column is NOT NULL DEFAULT 1, so every row in
+-- the table has always carried an explicit 1.
+--
+-- The result is on every page. The front page's anchor is 268 px wide - 134 mm
+-- - and was set as ONE column of type. No newspaper prints a 134 mm measure;
+-- the customer's own front page sets its full width in five columns of 59 mm.
+--
+-- NULL now means "the desk has not said", exactly as headline_align does, and
+-- inference answers. The backfill moves every row still carrying the old
+-- default, and it is the same trade the border migration made: a stored 1 is
+-- indistinguishable from a 1 nobody chose, and a 134 mm single column is not
+-- something a desk chose on purpose. The control still works - setting 1 after
+-- this stores 1 and is honoured exactly.
+ALTER TABLE page_sections ALTER COLUMN column_count DROP NOT NULL;
+ALTER TABLE page_sections ALTER COLUMN column_count DROP DEFAULT;
+UPDATE page_sections SET column_count = NULL WHERE column_count = 1;

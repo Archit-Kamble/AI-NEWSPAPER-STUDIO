@@ -468,6 +468,42 @@ const BODY = 'सातारा : नगरपालिकेच्या स�
     say(cleared === null, 'White is stored as nothing at all, so an untinted block can be told from a white one', String(cleared));
   }
 
+  // ------------------------------------------------------------- the columns ---
+  //
+  // "Auto" is NULL, and it has to be expressible: a desk who once set a count
+  // must be able to hand the decision back to the engine. A number input could
+  // not say it, which is why this control moved out of Typography.
+  {
+    const KEY_WIDE = 'anchor';
+    await page.locator(`.newspaper-section[data-section-key="${KEY_WIDE}"]`).click();
+    await page.waitForTimeout(600);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(800);
+    const stored = () => page.evaluate(async ([ed, key]) => {
+      const pages = await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json());
+      return pages[0].sections.find((s) => s.section_key === key).column_count;
+    }, [ED, KEY_WIDE]);
+
+    say(await page.locator('[data-prop-columns] .segment').count() === 5, 'the block offers Auto and four counts');
+    say((await page.locator('[data-prop-columns] .segment.active').innerText()).trim() === 'Auto',
+      'and a block nobody has set reads as Auto');
+    say(/Auto sets this block in 2 columns/.test(
+      await page.locator('[data-prop-columns]').evaluate((el) => el.closest('.prop-section').querySelector('.ext-note').textContent),
+    ), 'which says what it would actually do, in this block\'s own numbers');
+    say(await page.locator(`.newspaper-section[data-section-key="${KEY_WIDE}"] .section-body-line`).count() > 0,
+      'the block is set');
+
+    await page.locator('[data-prop-columns] [data-columns="1"]').click();
+    await page.waitForTimeout(3400);
+    say((await stored()) === 1, 'an explicit count is stored', String(await stored()));
+
+    await page.locator('[data-prop-columns] [data-columns=""]').click();
+    await page.waitForTimeout(3400);
+    // 0 on the wire, NULL in the row - `|| null` on either side would have
+    // eaten it and left the explicit 1 exactly where it was.
+    say((await stored()) === null, 'and Auto hands the decision back to the engine', String(await stored()));
+  }
+
   say(errors.length === 0, 'no console errors or page errors anywhere in this run', errors.slice(0, 4).join(' | ') || '(none)');
 
   const failed = results.filter((r) => !r.ok);

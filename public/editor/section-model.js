@@ -119,7 +119,13 @@ export function draftFromSection(section) {
     // silently acquires a desk decision nobody made.
     headlineAlign: section.headline_align || "",
     subheadingAlign: section.subheading_align || "",
-    columnCount: Number(section.column_count) || 1,
+    // NULL means "the desk has not said", and it is the ordinary state
+    // (schema.sql) - the engine works the count out from the block's own width
+    // and type. `|| 1` turned every one of those back into an explicit single
+    // column, which is the whole fault this was meant to fix.
+    columnCount: Number.isInteger(Number(section.column_count)) && Number(section.column_count) >= 1
+      ? Number(section.column_count)
+      : null,
     marginPx: Number.isFinite(Number(section.margin_px)) ? Number(section.margin_px) : 12,
     // A floor, not a default (text-flow.js's MIN_LINE_HEIGHT comment explains
     // why: Devanagari vowel signs stack above and below the baseline, and a
@@ -215,7 +221,14 @@ export function payloadFromDraft(draft) {
     textAlign: draft.textAlign,
     headlineAlign: draft.headlineAlign,
     subheadingAlign: draft.subheadingAlign,
-    columnCount: draft.columnCount,
+    // 0 is the wire's word for AUTO. It is not a legal column count, so it can
+    // never collide with a real one - and it is needed because every other
+    // presentational column is written with COALESCE (a payload that does not
+    // mention a field leaves it alone), which on its own would make "hand this
+    // decision back to the engine" impossible to express.
+    columnCount: Number.isInteger(Number(draft.columnCount)) && Number(draft.columnCount) >= 1
+      ? Number(draft.columnCount)
+      : 0,
     marginPx: draft.marginPx,
     lineHeight: draft.lineHeight,
     letterSpacingPx: draft.letterSpacingPx,

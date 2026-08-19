@@ -405,7 +405,13 @@ async function saveSection(pageId, sectionKey, updates) {
          image_url = $19, image_rotation = $20, image_zoom = $21, image_fit = $22,
          image_flip_h = $23, image_flip_v = $24,
          font_family = $25, font_weight = COALESCE($26, font_weight), font_italic = $27, font_underline = $28,
-         text_align = COALESCE($29, text_align), column_count = COALESCE($30, column_count),
+         text_align = COALESCE($29, text_align),
+         -- 0 is the wire's word for AUTO (section-model.js): NULL means the
+         -- desk has not said and the engine works the count out. Without the
+         -- sentinel, COALESCE would make handing that decision back to the
+         -- engine impossible - a null reads as "the payload did not mention
+         -- this field", which is the behaviour every other column here wants.
+         column_count = CASE WHEN $30 = 0 THEN NULL ELSE COALESCE($30, column_count) END,
          margin_px = COALESCE($31, margin_px), line_height = COALESCE($32, line_height),
          letter_spacing_px = COALESCE($33, letter_spacing_px),
          paragraph_spacing_px = COALESCE($34, paragraph_spacing_px),
@@ -433,7 +439,11 @@ async function saveSection(pageId, sectionKey, updates) {
       updates.imageZoom || 1, updates.imageFit || 'cover',
       updates.imageFlipH === true, updates.imageFlipV === true,
       updates.fontFamily || null, updates.fontWeight || null, updates.fontItalic === true,
-      updates.fontUnderline === true, updates.textAlign || null, updates.columnCount || null,
+      updates.fontUnderline === true, updates.textAlign || null,
+      // Passed through as-is, INCLUDING 0 - which is the wire's word for AUTO
+      // and is turned into NULL by the CASE above. `|| null` would have eaten
+      // it and left the explicit count exactly where it was.
+      Number.isInteger(updates.columnCount) ? updates.columnCount : null,
       Number.isFinite(updates.marginPx) ? updates.marginPx : null,
       updates.lineHeight || null,
       Number.isFinite(updates.letterSpacingPx) ? updates.letterSpacingPx : null,

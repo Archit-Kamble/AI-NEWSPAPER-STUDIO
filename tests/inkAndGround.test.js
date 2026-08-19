@@ -127,3 +127,37 @@ test('a block nobody tinted lays no ground at all', async () => {
   const xml = await scribus.blockFrames(section, { pageIndex: 0, pageOffsetMm: 0 });
   assert.equal((xml.match(/PTYPE="6"/g) || []).length, 0, 'no fills at all');
 });
+
+// ---------------------------------------------------------------- columns ---
+//
+// A wide block sets in columns, and for a long time could not: `column_count`
+// was NOT NULL DEFAULT 1, so every row carried an explicit 1 and
+// measureColumns()'s whole inference half was unreachable. The front page's
+// 268 px anchor - 134 mm - was set as ONE column of type.
+
+test('a block wide enough for two columns gets them, and one that is not keeps one', async () => {
+  const adapter = await import('../public/editor/compose/section-adapter.js');
+  const block = (width, bodyPx) => ({ width_px: width, margin_px: 1, body_font_px: bodyPx, column_count: null });
+
+  // The front page's anchor: 268 px at 12 px body. One column is 22 em and
+  // sets 48 characters to the line - half as wide again as a printed column.
+  assert.equal(adapter.measureColumns(block(268, 12), {}, 268), 2);
+  // The second lead: 190 px at 16 px body. One column is already 11.8 em and
+  // 27 characters - a proper newspaper column. Split in two it is 5.4 em and
+  // the pour sets NOTHING, which is why the em floor exists.
+  assert.equal(adapter.measureColumns(block(190, 16), {}, 190), 1);
+  // A brief. Nothing to split.
+  assert.equal(adapter.measureColumns(block(111, 16), {}, 111), 1);
+  // The whole measure at a real newsprint body size - the reference page's own
+  // five columns.
+  assert.equal(adapter.measureColumns(block(620, 8), {}, 620), 5);
+});
+
+test('an explicit count is honoured exactly, including one', async () => {
+  const adapter = await import('../public/editor/compose/section-adapter.js');
+  const wide = { width_px: 268, margin_px: 1, body_font_px: 12 };
+  assert.equal(adapter.measureColumns({ ...wide, column_count: 1 }, {}, 268), 1, 'a desk locking a block to one column means it');
+  assert.equal(adapter.measureColumns({ ...wide, column_count: 3 }, {}, 268), 3);
+  // The view wins over the row, like every other field this adapter picks.
+  assert.equal(adapter.measureColumns({ ...wide, column_count: 1 }, { columnCount: 2 }, 268), 2);
+});

@@ -621,6 +621,19 @@ function justifyLine(line, slack) {
 
 // ------------------------------------------------------------------- body ---
 
+/**
+ * The space between two text columns INSIDE one block, in editor px.
+ *
+ * Proportional to the type, the way a printed gutter is: 0.9 em is what a
+ * newspaper leaves between columns of its own body size. Exported because
+ * section-adapter.js's measureColumns() has to know it to work out whether a
+ * given number of columns would leave anything worth setting in - two places
+ * computing the same gutter is how they come to disagree.
+ */
+export function columnGutterPx(bodyPx) {
+  return Math.round((Number(bodyPx) || 16) * 0.9);
+}
+
 function columnsOf(content, count, gutter) {
   const n = Math.max(1, Math.round(count));
   const width = (content.right - content.left - gutter * (n - 1)) / n;
@@ -1881,7 +1894,7 @@ export function composeBlock(input = {}) {
     : content.top;
   result.bodyTop = bodyTop;
 
-  const gutter = num(input.gutterPx, Math.round(bodyPx * 0.9));
+  const gutter = num(input.gutterPx, columnGutterPx(bodyPx));
   // An explicit column count means exactly that count, including 1 - a
   // desk's own "set this in one column" is not the same request as "no
   // opinion, work it out". Only a genuinely missing/non-finite value falls

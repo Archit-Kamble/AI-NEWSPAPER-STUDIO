@@ -4421,3 +4421,62 @@ above, the separations and that ordering.
 837 tests, **74/74** on the controls net, **218/221** on the workspace net — the
 first complete run of it this session, and the three are the AI-provider
 assertions belonging to uncommitted provider work in the tree.
+
+### 41. A wide block sets in columns (2026-08-19)
+
+The desk: *"For big news block paragraph should be vertical with vertical gap
+between them"*, with a photograph of their own printed front page.
+
+`section-adapter.js`'s `measureColumns()` has been able to work a column count
+out from a block's width since it was written, and had **never once been asked
+to**. `column_count` was `NOT NULL DEFAULT 1`, so every row in the table carried
+an explicit 1 — and that function honours an explicit value deliberately,
+including 1 (a desk locking a block to one column is a real instruction, §
+earlier). The inference half was unreachable code.
+
+So the front page's anchor — 268 px, **134 mm** — was set as one column of type,
+48 characters to the line. The customer's own page sets its full width in five
+columns of 59 mm.
+
+NULL is "the desk has not said" now, and the ordinary state. The rule is two
+measured numbers:
+
+| | | from |
+|---|---|---|
+| `TARGET_COLUMN_PX` | 120 (59 mm) | the reference page: 1920 px / 330 mm, five columns of 358 px, 22 px gutters |
+| `MIN_COLUMN_EM` | 10 | the block that breaks without it |
+
+The floor is the interesting half. The front page's 190 px second lead is
+**already** a proper column — 11.8 em, 27 characters to the line, measured. Split
+in two by the target alone it becomes 5.4 em and the pour sets **nothing at
+all**. Two columns nothing can be written into is worse than one that is a shade
+wide. 10 em sits just under `JUSTIFY_MIN_EM` (13) on purpose: below 13 a column
+is set flush left, which is how every printed newspaper sets a narrow one, but
+below about 10 it cannot hold a Marathi word and a half.
+
+Swept over all 4653 sections carrying copy, composing each one both ways:
+
+| characters to the line | one column | inferred |
+|---|---|---|
+| 50+ (nothing prints this) | **580** | **19** |
+| 36–49 | 671 | 333 |
+| 28–35 (printed) | 452 | **774** |
+| 20–27 (printed) | 459 | **1023** |
+| 14–19 | 1980 | 1993 |
+| under 14 | 510 | 510 |
+
+`OVERSET` is unchanged at 10 — the split costs no copy — and the two narrow
+bands do not move at all, which is the floor doing its job.
+
+**`0` is the wire's word for AUTO**, and it had to be invented. Every
+presentational column is written with `COALESCE`, so a null on the wire means
+"the payload did not mention this field" — which makes handing a decision back
+to the engine inexpressible. 0 is not a legal column count and can never collide
+with a real one. `draftFromSection`'s `Number(section.column_count) || 1` had to
+go with it: it turned every NULL straight back into an explicit single column.
+
+The control moved from a number input in Typography to **Properties → Columns**
+(Auto, 1, 2, 3, 4), which is the only shape that can express Auto — and it says
+what Auto would do in this block's own numbers rather than leaving it a promise.
+
+837 tests, **80/80** on the controls net.

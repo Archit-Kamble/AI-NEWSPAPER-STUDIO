@@ -18,6 +18,7 @@ import { textWithMarks } from '../layout/rich-text.js';
 // always owned it - a second copy here is exactly the drift this codebase
 // has been bitten by before.
 import { datelineText } from '../layout/text-flow.js';
+import { columnGutterPx } from './compose.js';
 import { blockExpectsCopy } from '../layout/block-kinds.js';
 // A side-effect module shared with Scribus, so it installs onto globalThis
 // rather than exporting - the canvas and the print path must use one caption
@@ -56,6 +57,14 @@ function positive(value, fallback) {
  * composed as two. Only a genuinely missing/non-integer value now falls
  * through.
  *
+ * ...and for a long time NOTHING fell through, which is the fault the desk
+ * reported ("for big news block paragraph should be vertical"). `column_count`
+ * was NOT NULL DEFAULT 1, so every row in the table carried an explicit 1 and
+ * this function's whole second half was unreachable: the front page's 268 px
+ * anchor - 134 mm - was set as one column of type, and no newspaper prints a
+ * 134 mm measure. NULL means "the desk has not said" now (schema.sql), and it
+ * is the ordinary state.
+ *
  * Reads `view` first and `section` (the persisted row) second, exactly like
  * every other field this adapter picks - NOT `view` alone. A caller that
  * passes a small overrides object rather than a fully-hydrated draft (every
@@ -65,11 +74,47 @@ function positive(value, fallback) {
  * sits beside - an explicit choice discarded because the code only looked in
  * one of the two places it can legally live.
  */
+// What one text column should measure, in editor px.
+//
+// Taken off the customer's own printed front page rather than reasoned about:
+// 1920 px across 330 mm, five columns of 358 px separated by 22 px gutters -
+// 59 mm a column. At 2 px/mm that is 118 px, and 120 rounds it to the page's
+// own step. A TARGET, not a floor: the count is whichever whole number of
+// columns comes nearest to it.
+const TARGET_COLUMN_PX = 120;
+
+// ...and the floor, which is in EMS because that is the unit legibility is in.
+//
+// The target alone is not enough, and the block that proves it is the front
+// page's 190 px second lead. It is already a proper newspaper column - 11.8 em,
+// 27 characters to the line, measured. Split in two by the target it becomes
+// 5.4 em, and the pour sets NOTHING in it: two columns nothing can be written
+// into is worse than one that is a shade wide.
+//
+// 10 em is a shade under this paper's own JUSTIFY_MIN_EM (13, the width below
+// which justification starts producing rivers), and deliberately so: a column
+// under 13 em is set flush left, which is how every printed newspaper sets a
+// narrow one, but a column under about 10 em cannot hold a Marathi word and a
+// half. Measured on real blocks: 10.6 em sets 23 characters to the line, which
+// is a printed column; 5.4 em sets none.
+const MIN_COLUMN_EM = 10;
+
 export function measureColumns(section, view, widthPx) {
   const explicit = Number(pick(section, view, 'columnCount', 'column_count', undefined));
   if (Number.isInteger(explicit) && explicit >= 1) return explicit;
-  const usable = Math.max(0, widthPx - 2 * positive(pick(section, view, 'marginPx', 'margin_px', 12), 12));
-  return Math.max(1, Math.min(4, Math.floor(usable / 150)));
+
+  const margin = positive(pick(section, view, 'marginPx', 'margin_px', 12), 12);
+  const bodyPx = positive(pick(section, view, 'bodyFontPx', 'body_font_px', 16), 16);
+  const usable = Math.max(0, widthPx - 2 * margin);
+  const gutter = columnGutterPx(bodyPx);
+  const floorPx = MIN_COLUMN_EM * bodyPx;
+
+  // Nearest to the printed target, then stepped back until every column left
+  // is wide enough to set in. The gutter is the engine's own (compose.js), not
+  // a second guess at it.
+  let count = Math.max(1, Math.round(usable / TARGET_COLUMN_PX));
+  while (count > 1 && (usable - gutter * (count - 1)) / count < floorPx) count -= 1;
+  return count;
 }
 
 /** A `section_images` row (or an already-converted one) as an obstacle. */

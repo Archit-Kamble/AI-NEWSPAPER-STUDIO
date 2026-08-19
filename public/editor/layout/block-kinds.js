@@ -21,12 +21,19 @@
 // panel is the same panel - the same surface, the same pictures, the same
 // controls - but "Write the story" over an advert slot is simply untrue, and a
 // heading that lies about what a box is for is worse than no heading.
+// `copy` says whether this kind is MEANT to carry body text. A display advert
+// and a photo block are a picture and nothing else - a full-bleed image on one
+// is the finished thing, not a mistake - so a complaint about "no column wide
+// enough to set type in" is simply wrong about them. Measured: that complaint
+// was firing on 51 real blocks and 49 of them were full-bleed adverts and
+// photos with no copy and none intended, which is how a desk learns to ignore
+// a warning and misses the two that are real.
 export const BLOCK_KINDS = {
-  article: { label: "Article", work: "copy to write", panel: "Write the story" },
-  briefs: { label: "Briefs", work: "briefs to gather", panel: "Write the briefs" },
-  photo: { label: "Photo", work: "a photograph to place", panel: "Place the photograph" },
-  advert: { label: "Advert", work: "advertising space", panel: "Advertising space" },
-  feature: { label: "Feature", work: "a standing feature", panel: "The day's feature" },
+  article: { label: "Article", work: "copy to write", panel: "Write the story", copy: true },
+  briefs: { label: "Briefs", work: "briefs to gather", panel: "Write the briefs", copy: true },
+  photo: { label: "Photo", work: "a photograph to place", panel: "Place the photograph", copy: false },
+  advert: { label: "Advert", work: "advertising space", panel: "Advertising space", copy: false },
+  feature: { label: "Feature", work: "a standing feature", panel: "The day's feature", copy: true },
 };
 
 const FALLBACK = BLOCK_KINDS.article;
@@ -34,6 +41,11 @@ const FALLBACK = BLOCK_KINDS.article;
 /** The kind of a block, never null - an unknown type reads as an article. */
 export function blockKind(blockType) {
   return BLOCK_KINDS[String(blockType || "article")] || FALLBACK;
+}
+
+/** Whether this kind is meant to carry body copy at all. */
+export function blockExpectsCopy(blockType) {
+  return blockKind(blockType).copy !== false;
 }
 
 /** What this block needs, in the words the worklist uses. */

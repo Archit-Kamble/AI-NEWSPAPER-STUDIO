@@ -1582,7 +1582,16 @@ export function composeBlock(input = {}) {
   // depth, zero legal bands, 199 characters with nowhere to go, and nothing on
   // screen said why. It is a layout that cannot be printed, and the desk can
   // only fix it if it is told.
-  if (body.occupancy.availableEquivalentLines < 0.01 && content.bottom - bodyTop > bandHeight) {
+  //
+  // Only for a block that is MEANT to carry copy. A display advert or a photo
+  // block is a picture and nothing else, and a full-bleed image on one is the
+  // finished thing - telling a desk to "make a picture narrower" about it is
+  // wrong, and it was wrong on 49 of the 51 blocks this fired on, which is how
+  // a warning stops being read.
+  const expectsCopy = input.expectsCopy !== undefined
+    ? Boolean(input.expectsCopy)
+    : String(bodyPlainText || '').trim().length > 0;
+  if (expectsCopy && body.occupancy.availableEquivalentLines < 0.01 && content.bottom - bodyTop > bandHeight) {
     warnings.push({
       code: 'NO_LEGAL_MEASURE',
       detail: `This block has ${Math.round(content.bottom - bodyTop)}px of depth for copy, but its pictures leave no `

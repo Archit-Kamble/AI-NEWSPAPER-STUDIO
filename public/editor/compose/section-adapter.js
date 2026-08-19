@@ -18,6 +18,7 @@ import { plainText, textWithMarks } from '../layout/rich-text.js';
 // always owned it - a second copy here is exactly the drift this codebase
 // has been bitten by before.
 import { datelineText } from '../layout/text-flow.js';
+import { blockExpectsCopy } from '../layout/block-kinds.js';
 // A side-effect module shared with Scribus, so it installs onto globalThis
 // rather than exporting - the canvas and the print path must use one caption
 // geometry, and that predates this engine.
@@ -160,6 +161,11 @@ export function composeSection(section = {}, view = {}) {
     subheading: plainText(pick(section, view, 'subheading', 'subheading', '')),
     // The dateline is part of the flow it opens.
     body: { text: bodyText, marks: bodyMarks },
+    // Whether this block is MEANT to hold copy, from the one catalog that
+    // says what each block kind is for. A full-bleed advert leaves no column
+    // wide enough to set type in and that is the finished advert, not a
+    // fault - see NO_LEGAL_MEASURE in compose.js.
+    expectsCopy: blockExpectsCopy(section.block_type ?? section.blockType ?? view.blockType),
     headlineFontPx: positive(pick(section, view, 'headlineFontPx', 'headline_font_px', 34), 34),
     subheadingFontPx: positive(pick(section, view, 'subheadingFontPx', 'subheading_font_px', 20), 20),
     bodyFontPx,

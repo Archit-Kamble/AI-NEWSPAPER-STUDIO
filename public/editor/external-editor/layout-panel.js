@@ -64,6 +64,44 @@ function paragraphRow(composition, row) {
   return row("Paragraphs", `${p.set} set, ${p.authored} written (${how})`);
 }
 
+// The engine's own faults, in the desk's words.
+//
+// composeBlock() reports violations and warnings on every composition and
+// NOTHING rendered them. On a real 190x264 block whose picture leaves no
+// column wide enough to set type in, the panel said "Content overflows the
+// block by about 130 px. Trim the body..." and, directly under it, "Block is
+// empty." - two messages that contradict each other, and neither of them
+// true. The truth ("240px of depth, but its pictures leave no column wide
+// enough to set 9px type in") was computed and thrown away.
+//
+// Not every code belongs here. SET_FLUSH_LEFT fires on 4077 of 11153 real
+// blocks because setting a narrow column flush left is how a newspaper is
+// set - it is a decision, not a fault, and putting it in the fault list would
+// bury the two blocks that genuinely cannot be printed.
+const ENGINE_FAULTS = {
+  NO_LEGAL_MEASURE: "error",
+  HEADLINE_AUTO_FITTED: "info",
+  DECK_AUTO_FITTED: "info",
+  KICKER_AUTO_FITTED: "info",
+  FONT_NOT_READY: "info",
+  SHAPING_NOT_READY: "info",
+};
+
+function engineWarnings(composition) {
+  if (!composition) return [];
+  const out = [];
+  // A violation is always a fault: the copy does not fit, or a word is wider
+  // than anything on the page can hold.
+  for (const v of composition.violations || []) {
+    out.push({ level: "error", text: v.detail, code: v.code });
+  }
+  for (const w of composition.warnings || []) {
+    const level = ENGINE_FAULTS[w.code];
+    if (level) out.push({ level, text: w.detail, code: w.code });
+  }
+  return out;
+}
+
 export function layoutWarnings(metrics) {
   const warnings = [];
   // The empty FOOT of the block is the whitespace a desk actually complains
@@ -79,15 +117,27 @@ export function layoutWarnings(metrics) {
   // still has to use the area ratio, because it has no composition to read.
   const fill = metrics.composition ? bodyFill(metrics.reservedComposition || metrics.composition) : null;
   const ratio = fill ? fill.ratio : metrics.fillRatio;
-  const isEmpty = fill ? fill.linesUsed === 0 : !metrics.usedHeightPx;
+  const hasCopy = Boolean(metrics.composition && metrics.composition.capacity
+    && metrics.composition.capacity.bodyCharsUsed > 0);
+  // Set nothing AND holding nothing. A block with copy in it that set no lines
+  // is not empty, it is unprintable - and telling a desk it is empty while 220
+  // characters sit in the editor is how a real fault gets closed unread.
+  const isEmpty = (fill ? fill.linesUsed === 0 : !metrics.usedHeightPx) && !hasCopy;
 
-  if (metrics.overflowing) {
+  const engine = engineWarnings(metrics.composition);
+  const unprintable = engine.some((w) => w.code === "NO_LEGAL_MEASURE");
+
+  // "Trim the body, reduce the body size, or use a larger block" is advice
+  // that cannot work when there is no legal column at all - no amount of
+  // trimming makes a corridor narrower than one word hold a word. The engine's
+  // own message says what to do instead, so this one stands down.
+  if (metrics.overflowing && !unprintable) {
     warnings.push({
       level: "error",
       text: `Content overflows the block by about ${Math.abs(metrics.remainingHeightPx)} px. Trim the body, reduce the body size, or use a larger block.`,
     });
   }
-  if (!metrics.overflowing && ratio < WHITESPACE_THRESHOLD && !isEmpty) {
+  if (!metrics.overflowing && !unprintable && ratio < WHITESPACE_THRESHOLD && !isEmpty) {
     warnings.push({
       level: "warn",
       text: fill
@@ -96,7 +146,7 @@ export function layoutWarnings(metrics) {
     });
   }
   if (isEmpty) warnings.push({ level: "info", text: "Block is empty." });
-  return warnings;
+  return [...engine, ...warnings];
 }
 
 function row(label, value) {

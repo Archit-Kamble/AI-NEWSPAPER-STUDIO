@@ -4575,3 +4575,31 @@ read `○ No source configured` (no feeds are configured in this environment), a
 or it is not written at all.
 
 841 tests, 80/80 on the controls net.
+
+
+### 44. Where this leaves the page (2026-08-19)
+
+Eight groups, eight commits, one desk brief. What a front page looks like now
+against what it looked like this morning:
+
+| | was | is |
+|---|---|---|
+| gutter between stories | 7 mm across, 8 mm down | **4 mm / 5 mm** |
+| nameplate | 247 × 46 px | **299 × 56** sold, **426 × 80** unsold |
+| blocks printing a box nobody chose | 2548 | **0** |
+| lines over 50 characters | 580 | **19** |
+| lines in the printed 20–35 band | 911 | **1797** |
+| body edited | by scrolling to a box under the page | **in place, where it prints** |
+| colours a desk can set | none | **4 inks, 4 grounds, a reversed headline** |
+| an empty block with no headline | skipped | **written from today's checked news** |
+| page two | printline only | **printline + AI disclosure, in Marathi** |
+
+`OVERSET` across every section carrying copy is **10**, from 15 this morning —
+every change this session either gave the page room or cost it none.
+
+843 tests, 81/81 on the controls net, 219/222 on the workspace net (the three
+are the AI-provider assertions belonging to uncommitted provider work in the
+tree).
+
+Next, in the desk's own order: **Smart Cards**, then the Scribus/CMYK download,
+then the site's own UI, then handover.

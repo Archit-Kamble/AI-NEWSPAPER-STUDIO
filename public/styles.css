@@ -4710,7 +4710,8 @@ body.print-view .page-imprint {
    so it carries the full semantic text instead, and stays interactive
    rather than stepping aside. */
 .frame-headline.is-semantic-text-editor,
-.frame-subheading.is-semantic-text-editor {
+.frame-subheading.is-semantic-text-editor,
+.frame-body.is-semantic-text-editor {
   pointer-events: auto;
   cursor: text;
   user-select: text;
@@ -4724,7 +4725,8 @@ body.print-view .page-imprint {
 }
 
 .frame-headline.is-semantic-text-editor:focus,
-.frame-subheading.is-semantic-text-editor:focus {
+.frame-subheading.is-semantic-text-editor:focus,
+.frame-body.is-semantic-text-editor:focus {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
@@ -4749,6 +4751,17 @@ body.print-view .page-imprint {
 .frame-body:hover {
   background: rgba(196, 30, 58, 0.035);
 }
+/* The story typed in place sets its own paragraphs, so it keeps them - the
+   display fields above flatten to one flow and are set `pre-wrap` for the
+   line breaks a headline never has. `overflow` is set on the element by
+   block-frame.js while the edit is open, so copy that runs past the band
+   while it is being typed is still reachable. */
+.frame-body.is-semantic-text-editor p {
+  margin: 0;
+}
+.frame-body.is-semantic-text-editor p + p {
+  text-indent: 1em;
+}
 .frame-pictures {
   z-index: 3;
 }
@@ -4765,24 +4778,12 @@ body.print-view .page-imprint {
   background: #fff;
   transition: border-color .12s ease, box-shadow .12s ease;
 }
-.frame-writing-surface.is-body-target {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(196, 30, 58, 0.10);
-}
-/* A brief pulse when a double-click on the canonical (read-only) frame jumps
-   focus HERE - `is-body-target`'s static border alone was easy to miss,
-   especially once scrolled into view "nearest" (sometimes barely moving),
-   which read as "double-clicking the body does nothing" to a desk who never
-   noticed the jump. Removed again after ~700ms (block-frame.js), so this is
-   a moment, not a permanent look. */
-@keyframes frame-writing-pulse {
-  0%   { box-shadow: 0 0 0 2px rgba(196, 30, 58, 0.10); }
-  30%  { box-shadow: 0 0 0 5px rgba(196, 30, 58, 0.35); }
-  100% { box-shadow: 0 0 0 2px rgba(196, 30, 58, 0.10); }
-}
-.frame-writing-surface.just-activated {
-  animation: frame-writing-pulse 0.7s ease-out;
-}
+/* `is-body-target`, `just-activated` and the dashed jump trail that went with
+   them are gone. They existed to make an unmissable cue out of a double click
+   on the body scrolling the page down to THIS box - and the story is typed
+   where it prints now (block-frame.js's INLINE_TEXT.body), so there is no
+   jump left to signpost. This box is still the same document, for a desk who
+   wants a long comfortable writing surface. */
 .frame-writing-surface:focus-within {
   border-color: var(--accent);
 }

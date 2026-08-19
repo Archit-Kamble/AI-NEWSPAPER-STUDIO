@@ -398,6 +398,68 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
       'the selection label reads "Whole block"');
   }
 
+  // ------------------------------------------------- the story is typed where it prints ---
+  //
+  // A double click on the body used to scroll the page DOWN to the Quill box
+  // below the newspaper and put the cursor in that, which the desk read - and
+  // reported - as "the body is not editable, it redirects." Nothing else on
+  // this page behaves that way. The frame that already sits over the body band
+  // becomes the writing surface, exactly as the headline's does, and the
+  // commit goes back into the ONE document (Quill's) through Quill's own
+  // clipboard, so the undo stack, the marks and the save path are unchanged.
+  {
+    const focusedId = () => page.evaluate(() => document.activeElement?.id || '');
+    const bodyOf = () => page.evaluate(async ([ed, key]) => {
+      const pages = await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json());
+      return pages[0].sections.find((s) => s.section_key === key).body || '';
+    }, [ED, KEY]);
+
+    await page.locator('#edBodyFrame').dblclick();
+    await page.waitForTimeout(500);
+    say((await focusedId()) === 'edBodyFrame', 'a double click on the body edits it in place');
+    say(await page.locator('#edBodyFrame').evaluate((el) => el.getAttribute('contenteditable') === 'true'),
+      'the body frame itself becomes the writing surface');
+    // FOCUS IS NOT A CARET, and this check is the whole reason that sentence
+    // is in block-frame.js: the element had focus and was contenteditable and
+    // every keystroke was still being dropped, because the selection was
+    // wherever the double click had left it - outside the frame.
+    say(await page.locator('#edBodyFrame').evaluate((el) => {
+      const selection = window.getSelection();
+      return selection.rangeCount > 0 && el.contains(selection.anchorNode);
+    }), 'and the caret is actually inside it, not merely focused');
+    // The composed body underneath is one span PER LINE (compose/render.js's
+    // `section-body-line`), and it has to be hidden or the desk types over the
+    // old words. `.section-body` - the canvas's own CSS markup - matches
+    // nothing here, and a selector that matches nothing hides nothing.
+    say(await page.evaluate(() => {
+      const lines = [...document.querySelectorAll('#edCanonicalContent .section-body-line')];
+      return lines.length > 0 && lines.every((el) => el.style.visibility === 'hidden');
+    }), 'the composed lines underneath step aside while it is being typed');
+
+    await page.keyboard.type('ZZ');
+    await page.waitForTimeout(200);
+    say(/ZZ/.test(await page.locator('#edBodyFrame').innerHTML()), 'and it takes what is typed into it');
+
+    // Enter is a PARAGRAPH here. In a headline it ends the edit - a headline is
+    // one flow and cannot carry a break.
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('QQ');
+    await page.waitForTimeout(200);
+    say((await focusedId()) === 'edBodyFrame', 'Enter starts a paragraph rather than ending the edit');
+
+    await page.locator('.ext-editor-header').click();
+    await page.waitForTimeout(1200);
+    say(!(await page.locator('#edBodyFrame').evaluate((el) => el.hasAttribute('contenteditable'))),
+      'clicking away closes the edit');
+    say(/QQ/.test(await page.evaluate(() => document.querySelector('#edQuill .ql-editor')?.innerText || '')),
+      'and the words are in the one document below, not a second copy of them');
+
+    await page.waitForTimeout(3200);
+    const stored = await bodyOf();
+    say(/ZZ/.test(stored) && /QQ/.test(stored), 'the row carries what was typed on the page', stored.slice(0, 90));
+    say(/<p>[^<]*QQ/.test(stored), 'with the paragraph the Enter made', stored.slice(-60));
+  }
+
   // -------------------------------------------------------- image resize handles ---
   //
   // A real picture, placed through the same endpoint "Take from Reporter"

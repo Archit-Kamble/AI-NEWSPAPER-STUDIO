@@ -672,6 +672,43 @@ A second copy of any of these is the failure mode this project has already been 
 
 **Whitespace is classified, not counted.** A ragged right end is how type is set and is never a hole; a gap a photograph made unusable was never counted as usable in the first place. `largestHoleLines` is the one number the desk and the writer act on, and `HOLE_LINES` (4) matches `storyWriter.service.js` deliberately.
 
+### The story is typed where it prints
+
+A double click on the body used to scroll the page **down** to the Quill box
+below the newspaper and put the cursor in that. The desk read that as *"the body
+is not editable, it is redirecting"* — and they were right to: nothing else on
+the page behaves that way. The frame that already sits over the body band
+becomes the writing surface, exactly as the headline's does
+(`INLINE_TEXT.body` in `block-frame.js`).
+
+It is **not** a second copy of the words, which is the objection the old comment
+raised. There is one document, Quill's, and the commit goes back into it through
+**Quill's own clipboard** at source `"user"` — so the existing `text-change`
+listener makes the one body patch every other keystroke already makes, and the
+undo stack, the counters and the save path are the ones that were there.
+
+Four things the body needs that a headline does not:
+
+- **A caret, not just focus.** `activeElement` was the frame, `contenteditable`
+  was `"true"`, and every keystroke was still dropped — because the selection
+  was wherever the double click had left it, *outside*. `caretAt()` resolves the
+  click point into the frame (`caretRangeFromPoint`), falling back to the top.
+- **`.section-body-line`, not `.section-body`.** The composed body is one span
+  per LINE (`compose/render.js`); `.section-body` is the canvas's CSS markup and
+  matches nothing here. A selector that matches nothing hides nothing, so the
+  desk typed over the old words.
+- **Enter is a paragraph**, not the end of the edit (`multiline`), and the
+  commit keeps the block tags rather than flattening them (`bodyValue`) — the
+  story *is* its paragraphs.
+- **The canonical lines stay hidden across re-renders.** They were hidden once,
+  at open, and any refresh at all rebuilt the layer and put them back.
+
+The **list buttons** are disabled while the story is typed in place, and for a
+different reason than a headline's are: they are Quill's, and Quill holds the
+pre-edit document, so a press would bullet copy nobody can see and the commit
+would throw it away. Bold, italic, underline and size aim at the frame and
+survive the round trip. A list is set in the writing surface below.
+
 ### Nothing on the page is ruled unless a person ruled it
 
 `border_style` always defaulted to `'none'` on the column, and `templates.js`

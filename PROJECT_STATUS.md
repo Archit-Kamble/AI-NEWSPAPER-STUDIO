@@ -4301,3 +4301,57 @@ page draws no column rule beside a boxed block (its box is the separator). Both
 now follow the desk's choice rather than the template's.
 
 829 tests.
+
+### 39. The story is typed where it prints (2026-08-19)
+
+The desk: *"Body in editor is not editable, it is redirecting to below body copy
+— fix that."*
+
+Exactly what it did. A double click on the body called `activateBodyEditor()`,
+which scrolled the page down to the Quill box below the newspaper, pulsed a
+border on it and drew a dashed trail from the click to it. All of that chrome
+existed to make the jump unmissable, which is the tell: the jump was the
+problem, not its visibility. Every other object on that page — the headline, the
+deck, a picture — is edited where it prints.
+
+The old comment argued the canonical layer is a read-only replica and must not
+become a second copy of the words. True, and the headline had already shown how
+to avoid one: the hit frame becomes the writing surface and the commit goes back
+into the ONE document through the path every other keystroke uses. For the body
+that document is Quill's, and `quill.clipboard.dangerouslyPasteHTML(html,
+"user")` is the way in — the existing `text-change` listener turns it into the
+same `{ body }` patch, so undo, the counters, autosave and the marks round trip
+are all untouched.
+
+**Focus is not a caret**, and that cost the most time here. Measured: the frame
+was `document.activeElement`, its `contenteditable` was `"true"`, `user-modify`
+computed to `read-write` — and `keyboard.type('XYZ')` did nothing, and
+`insertText` did nothing either. The selection was still wherever the double
+click had left it, outside the frame, so there was nowhere for a character to
+go. `caretAt()` resolves the click point into the frame with
+`caretRangeFromPoint`, which also means a double click halfway down a story puts
+the caret halfway down the story rather than at the end of it.
+
+**And the wrong selector hid nothing.** `.section-body` is the canvas's own CSS
+markup; the composed renderer emits one span per LINE, class
+`section-body-line`. The canonical lines stayed visible under the live ones. The
+hiding is now re-applied inside `layoutTextFrames()` rather than once at open,
+because any refresh at all - an autosave landing, a picture moving, a window
+resize - rebuilds that layer and put them back.
+
+Differences from a display field, each measured against what the body is:
+
+| | headline / deck | body |
+|---|---|---|
+| Enter | ends the edit (one flow, no breaks) | starts a paragraph |
+| commit reads | `fieldValue` — flattens every block tag | `bodyValue` — keeps them, `<div>` → `<p>` |
+| caret opens at | the end | the click point |
+| lists | disabled: a headline is not a bullet | disabled: they are Quill's, and Quill holds the pre-edit document |
+
+`refreshFrame()` also had to name this edit explicitly: `quill.hasFocus()` is
+false while the story is typed on the page, so every autosave tick would have
+pushed the pre-edit copy back into the document the commit was about to write.
+
+Ten new checks on the workspace net, all green, including the one that would
+have caught the caret: *"and the caret is actually inside it, not merely
+focused."* 829 tests, 61/61 on the controls net.

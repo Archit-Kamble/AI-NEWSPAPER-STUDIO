@@ -147,7 +147,13 @@ function bodyFor(compose, section, images, view, seed) {
   // measurement then checks it.
   const compose = await import(path.join(__dirname, '..', 'public', 'editor', 'compose', 'section-adapter.js'));
   const metrics = await import(path.join(__dirname, '..', 'public', 'editor', 'compose', 'font-metrics.js'));
-  await metrics.ensureFontsLoaded();
+  const shaper = await import(path.join(__dirname, "..", "public", "editor", "compose", "shaper.js"));
+  await Promise.all([metrics.ensureFontsLoaded(), shaper.ensureShaperReady()]);
+  // Real HarfBuzz shaping, not summed hmtx advances. Without this the script
+  // fills every block to a measure that overstates conjuncts by up to 80%,
+  // and every screenshot taken to judge the composition judges a page filled
+  // against numbers the browser never uses.
+  shaper.requireShaperReady();
 
   const { rows: sections } = await pool.query(
     `SELECT ps.*, p.page_number

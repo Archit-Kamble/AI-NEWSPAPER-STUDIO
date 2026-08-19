@@ -21,7 +21,13 @@ test.before(async () => {
   policy = await import(path.join(__dirname, '..', 'public', 'editor', 'compose', 'paragraph-policy.js'));
   adapter = await import(path.join(__dirname, '..', 'public', 'editor', 'compose', 'section-adapter.js'));
   const metrics = await import(path.join(__dirname, '..', 'public', 'editor', 'compose', 'font-metrics.js'));
-  await metrics.ensureFontsLoaded();
+  const shaper = await import(path.join(__dirname, '..', 'public', 'editor', 'compose', 'shaper.js'));
+  // Real HarfBuzz shaping, not the hmtx fallback. A paragraph's DEPTH is the
+  // whole subject of this file, and 29.7% of real blocks set in a different
+  // number of lines between the two - so without this line these tests would
+  // be measuring paragraphs the page never sets.
+  await Promise.all([metrics.ensureFontsLoaded(), shaper.ensureShaperReady()]);
+  shaper.requireShaperReady();
 });
 
 const SENTENCE = 'सातारा जिल्ह्यातील शेतकऱ्यांसाठी राज्य सरकारने नवीन योजना जाहीर केली आहे. ';

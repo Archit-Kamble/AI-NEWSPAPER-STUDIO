@@ -1289,7 +1289,43 @@ export function composeBlock(input = {}) {
   const violations = [];
   const warnings = [];
 
+  // ------------------------------------------- the shaper is not optional ---
+  //
+  // Without HarfBuzz this engine falls back to summing hmtx advances, which
+  // overstates a Devanagari conjunct by up to 80% (shaper.js has the
+  // measurements). That is not a rougher version of the same page, it is a
+  // DIFFERENT page, and it used to happen in total silence - `exactShaping`
+  // was recorded on the result and nothing anywhere looked at it.
+  //
+  // MEASURED across 600 real article blocks, composing each one twice:
+  // 29.7% set in a different number of lines, the mean fill ratio moved 3.7
+  // points, three blocks reported an overset that does not exist, and one
+  // block came out with a different number of paragraphs. The worst single
+  // block read 93.8% full one way and 58.7% the other - same copy, same
+  // frame.
+  //
+  // In NODE the fallback is never legitimate: harfbuzzjs is a local package
+  // and the fonts are local files, so `exactShaping: false` there is always a
+  // caller that forgot `ensureShaperReady()`, never a state worth rendering.
+  // So it is refused, loudly, with the same error name requireShaperReady()
+  // already throws. (This had already been found and fixed once by hand in
+  // tests/compose.test.js, and had since come back in a script and a test -
+  // which is why it is closed here rather than in the callers alone.)
+  //
+  // In the BROWSER it is a real, momentary state - the page composes once
+  // before the WASM and the four faces have finished downloading - so there
+  // it stays a warning, beside FONT_NOT_READY, which is the same situation
+  // for the same reason.
   const shaperReady = isShaperReady();
+  if (!shaperReady) {
+    if (typeof process !== 'undefined' && process.versions && process.versions.node) {
+      throw new Error('EXACT_SHAPER_NOT_READY');
+    }
+    warnings.push({
+      code: 'SHAPING_NOT_EXACT',
+      detail: 'Composed before the shaper was ready; Devanagari conjuncts measure wide and line counts may change once it loads.',
+    });
+  }
   const result = {
     engineVersion: ENGINE_VERSION,
     fontReady: fontsReady(),

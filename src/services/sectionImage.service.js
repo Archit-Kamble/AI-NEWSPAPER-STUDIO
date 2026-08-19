@@ -23,6 +23,9 @@ async function sectionRow(pageId, sectionKey) {
 let adapterModule = null;
 let metricsModule = null;
 let shaperModule = null;
+let snapModule = null;
+let kindsModule = null;
+let intervalsModule = null;
 async function ensureComposeReady() {
   if (!adapterModule) adapterModule = await import('../../public/editor/compose/section-adapter.js');
   if (!metricsModule) metricsModule = await import('../../public/editor/compose/font-metrics.js');
@@ -59,8 +62,14 @@ async function copyStartsAt(section) {
 function clampToBlock(section, placement) {
   const maxW = Number(section.width_px);
   const maxH = Number(section.height_px);
-  const width = Math.max(20, Math.min(Number(placement.width) || 120, maxW));
-  const height = Math.max(20, Math.min(Number(placement.height) || 90, maxH));
+  // Rounded here, not left to the caller: section_images.width_px/height_px
+  // are INTEGER columns, and the aspect-ratio lock above divides to derive
+  // one dimension from the other - a plain fraction (e.g. 100 / (611/213))
+  // reaches Postgres as "invalid input syntax for type integer" instead of a
+  // resized picture. x/y were already rounded here; width/height never had
+  // to be, because every existing caller already sent whole pixels.
+  const width = Math.max(20, Math.min(Math.round(Number(placement.width)) || 120, maxW));
+  const height = Math.max(20, Math.min(Math.round(Number(placement.height)) || 90, maxH));
   return {
     ...placement,
     width,
@@ -68,6 +77,58 @@ function clampToBlock(section, placement) {
     x: Math.max(0, Math.min(Math.round(Number(placement.x) || 0), maxW - width)),
     y: Math.max(0, Math.min(Math.round(Number(placement.y) || 0), maxH - height)),
   };
+}
+
+/**
+ * The nearest placement that leaves a column of type worth setting.
+ *
+ * A picture defaults to HALF the block's width at its left edge, and on a
+ * narrow block in large type that is already the fault: 190px wide, 16px
+ * type, a 95px picture, and the 81px strip left beside it is under the 96px
+ * one word needs - so the block keeps its depth, keeps its copy, and sets not
+ * one line of it. That is how the two NO_LEGAL_MEASURE blocks in this
+ * database got there; nobody dragged them into it.
+ *
+ * Enforced here as well as in the editor's own drag (block-frame.js, via the
+ * same corridor-snap.js), so a direct API caller cannot recreate the layout
+ * the UI now refuses to make. See corridor-snap.js for the rule.
+ */
+async function snapPlacement(section, placement, images = []) {
+  const adapter = await ensureComposeReady();
+  if (!snapModule) snapModule = await import('../../public/editor/layout/corridor-snap.js');
+  if (!kindsModule) kindsModule = await import('../../public/editor/layout/block-kinds.js');
+  if (!intervalsModule) intervalsModule = await import('../../public/editor/compose/intervals.js');
+
+  // Composed WITH the placement about to be made, and snapped only if the
+  // engine says the block can then set nothing at all. A dead corridor on one
+  // side of a picture is not a fault when the other side is a whole column -
+  // that is an ordinary page - so the trigger is the block that is unprintable,
+  // never a placement that is merely unusual.
+  const proposed = [...images, {
+    x_px: placement.x, y_px: placement.y, width_px: placement.width, height_px: placement.height,
+    shape: placement.shape || 'rect', rotation: 0, stand_off_px: placement.standOffPx ?? 0,
+  }];
+  const withPicture = adapter.composeSection({ ...section, images: proposed }, {});
+  if (!snapModule.leavesNoLegalColumn(withPicture)) return placement;
+
+  const probe = adapter.composeSection({ ...section, images }, {});
+  if (!probe || !probe.content) return placement;
+  const snapped = snapModule.snapPictureToLegalCorridor(
+    { x: placement.x, y: placement.y, width: placement.width, height: placement.height },
+    {
+      contentLeft: probe.content.left,
+      contentRight: probe.content.right,
+      standOffPx: Number(placement.standOffPx ?? section.stand_off_px) || 0,
+      minCorridorPx: intervalsModule.MIN_CORRIDOR_EM * (probe.typography?.bodyPx || 0),
+      columnCount: probe.columns?.length || 1,
+      bodyTop: probe.bodyTop,
+      bodyBottom: probe.content.bottom,
+      bandHeightPx: (probe.typography?.bodyPx || 0) * (probe.typography?.lineHeight || 0),
+      expectsCopy: kindsModule.blockExpectsCopy(section.block_type),
+    },
+  );
+  if (!snapped.snapped) return placement;
+  return clampToBlock(section, { ...placement, x: snapped.x, y: snapped.y, width: snapped.width, height: snapped.height });
 }
 
 async function list(pageId, sectionKey) {
@@ -94,12 +155,12 @@ async function carryForwardAutoFilledImage(section, ownerId) {
   if (existing.length) return;
 
   const asset = await repo.findOrCreateAsset({ url: section.image_url, filename: null, mimeType: null, ownerId });
-  const placement = clampToBlock(section, {
+  const placement = await snapPlacement(section, clampToBlock(section, {
     x: 0,
     y: await copyStartsAt(section),
     width: Math.round(Number(section.width_px) / 2),
     height: Math.round(Number(section.height_px) / 3),
-  });
+  }));
   await repo.place(section.id, asset.id, placement);
   await pool.query('UPDATE page_sections SET image_url = NULL WHERE id = $1', [section.id]);
 }
@@ -125,7 +186,7 @@ async function add(pageId, sectionKey, body, ownerId) {
   // A new picture defaults to half the block's width, at the left of the copy -
   // clear of the headline, and inside the text, so the runaround is real from
   // the moment it lands. It is still immediately visible and draggable.
-  const placement = clampToBlock(section, {
+  const placement = await snapPlacement(section, clampToBlock(section, {
     x: body.x ?? 0,
     y: body.y ?? (await copyStartsAt(section)),
     width: body.width ?? Math.round(Number(section.width_px) / 2),
@@ -133,7 +194,7 @@ async function add(pageId, sectionKey, body, ownerId) {
     shape: body.shape,
     standOffPx: body.standOffPx,
     fitMode: body.fitMode,
-  });
+  }));
 
   // A photograph arrives with its caption; it should not need a second call to
   // keep it.
@@ -156,12 +217,44 @@ async function move(pageId, sectionKey, imageId, body) {
       .find((image) => image.id === parseInt(imageId, 10));
     if (!current) return null;
 
-    Object.assign(patch, clampToBlock(section, {
+    let width = body.width ?? Number(current.width_px);
+    let height = body.height ?? Number(current.height_px);
+
+    // A cut-out is trimmed to one exact silhouette - stretching it just
+    // strands its own resize handles away from the visible person and
+    // leaves dead frame around them (found live, this exact way: a manual
+    // resize call widened a cut-out's frame without its height, and the
+    // handles ended up a third of the frame's width from anything visible).
+    // Enforced here, not only in the editor's own drag handler
+    // (block-frame.js), so a direct API caller cannot recreate the same bug
+    // the UI now refuses to.
+    //
+    // The ratio is read from the SOURCE photograph's own natural dimensions
+    // (media_assets.width_px/height_px, joined in as source_width_px/
+    // source_height_px - see sectionImage.repository.js's own note on why
+    // that pair, never the placement frame's, is the source's real shape),
+    // not from the current frame - a frame already stretched crooked (by an
+    // earlier call, before this guarantee existed) would otherwise just lock
+    // in its own wrong ratio forever, unable to self-correct.
+    if (current.shape === 'cutout') {
+      const sourceWidth = Number(current.source_width_px) || Number(current.width_px) || 1;
+      const sourceHeight = Number(current.source_height_px) || Number(current.height_px) || 1;
+      const ratio = sourceHeight / sourceWidth;
+      if (body.width !== undefined && body.height === undefined) height = width * ratio;
+      else if (body.height !== undefined && body.width === undefined) width = height / ratio;
+      else if (body.width !== undefined && body.height !== undefined) height = width * ratio;
+    }
+
+    // Snapped against the block WITHOUT this picture in it, so the rule is
+    // measured against the measure the copy would have, not against the
+    // corridor the picture being moved is itself creating.
+    const others = (await repo.listBySection(section.id)).filter((image) => image.id !== parseInt(imageId, 10));
+    Object.assign(patch, await snapPlacement(section, clampToBlock(section, {
       x: body.x ?? Number(current.x_px),
       y: body.y ?? Number(current.y_px),
-      width: body.width ?? Number(current.width_px),
-      height: body.height ?? Number(current.height_px),
-    }));
+      width,
+      height,
+    }), others));
   }
 
   const updated = await repo.update(parseInt(imageId, 10), patch);

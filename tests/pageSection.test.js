@@ -314,3 +314,77 @@ test('a picture stays where it is when it is resized, and its order is kept', as
     server.close();
   }
 });
+
+// A picture may not be LEFT where the block can set nothing at all.
+//
+// The two NO_LEGAL_MEASURE blocks in this database were not dragged into it -
+// a picture defaults to HALF the block's width at its left edge, and on a
+// narrow block in large type that is already the fault: 190px wide, 16px
+// type, a 95px picture, and the 81px strip left beside it is under the 96px
+// one word needs. The block keeps its depth, keeps its copy, and prints none
+// of it.
+//
+// Enforced in the service as well as in the editor's drag, so a direct API
+// caller cannot make the layout the UI now refuses to.
+test('a picture that would leave the block unable to set a line is placed legally instead', async () => {
+  const app = createApp();
+  const server = app.listen(0);
+  const port = server.address().port;
+  let newspaper;
+
+  try {
+    const setupResult = await setup(port, 'Page section test - unprintable picture');
+    newspaper = setupResult.newspaper;
+    const page = setupResult.page;
+
+    // A narrow block set in large type, with real copy in it. Written
+    // straight to the row: the section PUT does not carry frame geometry (a
+    // block's size is the template's, moved by its own endpoint), and the
+    // rule under test is about the picture, not about that contract.
+    await pool.query(
+      `UPDATE page_sections
+          SET width_px=190, height_px=264, margin_px=4, column_count=1,
+              headline=$2, headline_font_px=17,
+              subheading=$3, subheading_font_px=16,
+              body_font_px=16, line_height=1.25, text_align='justify', body=$4
+        WHERE page_id=$1 AND section_key='lead'`,
+      [page.id, 'सातारा: पाणीटंचाईची सावट',
+        'अनेक भागात पाणीपुरवठा कमी झाला असून नागरिक त्रस्त आहेत.',
+        'पाणीपुरवठा कमी झाल्याने दैनंदिन जीवन विस्कळीत होऊन नागरिक त्रस्त आहेत.'],
+    );
+
+    const placed = await desk.json(`/api/pages/${page.id}/sections/lead/images`, {
+      method: 'POST',
+      body: JSON.stringify({ url: '/uploads/corridor-test.png', filename: 'c.png', x: 0, y: 151, width: 95, height: 88 }),
+    });
+    const picture = placed[0];
+
+    // 182px of measure and a 96px minimum column: a 95px picture cannot leave
+    // one anywhere, so the honest placement is the full measure.
+    assert.equal(Number(picture.width_px), 182, 'it must become a full-measure picture');
+    assert.equal(Number(picture.x_px), 4, 'flush with the measure, not the frame');
+    assert.equal(Number(picture.height_px), 88, 'and its height is never touched');
+    // Widening it alone is not enough: floating in the middle of the copy it
+    // would leave 15px above and 15px below, and one line of this type needs
+    // 25px. A full-measure picture goes at the top of the copy or the foot.
+    assert.ok(Number(picture.y_px) <= 130 || Number(picture.y_px) >= 170,
+      `a full-measure picture must go to the top or the foot, not float at ${picture.y_px}`);
+
+    // And the block really can set its copy again.
+    const shaper = await import('../public/editor/compose/shaper.js');
+    const metrics = await import('../public/editor/compose/font-metrics.js');
+    const adapter = await import('../public/editor/compose/section-adapter.js');
+    await Promise.all([metrics.ensureFontsLoaded(), shaper.ensureShaperReady()]);
+    const { rows } = await pool.query(
+      'SELECT * FROM page_sections WHERE page_id = $1 AND section_key = $2', [page.id, 'lead']);
+    const composed = adapter.composeSection({ ...rows[0], images: [{
+      x_px: picture.x_px, y_px: picture.y_px, width_px: picture.width_px, height_px: picture.height_px,
+      shape: 'rect', rotation: 0, stand_off_px: picture.stand_off_px,
+    }] }, {});
+    assert.ok(!composed.warnings.some((w) => w.code === 'NO_LEGAL_MEASURE'),
+      'the placement the service chose must be printable by the engine\'s own reckoning');
+  } finally {
+    if (newspaper) await cleanupNewspaper(newspaper.id);
+    server.close();
+  }
+});

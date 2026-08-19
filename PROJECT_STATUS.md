@@ -3759,7 +3759,57 @@ A paragraph closing on two or three words is how every printed newspaper sets;
 chasing it would mean forcing text. The diagnostic stays, the "open fault"
 framing was overcautious.
 
-Still open: `NO_LEGAL_MEASURE` is now reported accurately but still not
-*prevented* at placement time. With 2 blocks in 11153 reaching it and the
-warning trustworthy, snapping a picture at drag time is a UI change carrying
-more risk than the fault it removes — deferred deliberately, not forgotten.
+### 32. A picture may not leave a column too narrow to set in (2026-08-19)
+
+§31 left `NO_LEGAL_MEASURE` accurate but unprevented. It is prevented now, and
+the reason it had to be is that **neither of the two blocks that hit it was
+dragged there**: a new picture defaults to half the block's width at its left
+edge, and on a 190×264 block set in 16px type that is already the fault — the
+81px strip beside a 95px picture is under the 96px one word needs.
+
+**The rule is the ordinary newspaper one.** A page is set on a modular grid
+and a picture is placed on it, so what is left beside it is a whole column or
+nothing at all. `public/editor/layout/corridor-snap.js` states the three legal
+placements: flush to an edge, inset by at least `MIN_CORRIDOR_EM`, or spanning
+the measure. (Web typography hit the same wall from the other side and asked
+CSS for a `minimum-column-width`, for the same reason: a leftover sliver is
+not a narrow column, it is a hole.)
+
+**The vertical half of the rule was found by measurement, not by reasoning.**
+Widening a picture to the measure and leaving it where it was made block 39131
+*worse*: a full-measure picture cannot be passed, only sat above or below, and
+at y=151 it left 15px of copy above and 15px below where one line of 16px type
+needs 25px — so the block still set nothing. A full-measure picture goes to
+the top of the copy or the foot. If neither end leaves room for a line, the
+picture is left alone and the warning stands: that is a picture this block
+cannot take, and shuffling it about would only look like a fix.
+
+**The trigger is narrow on purpose.** An earlier version snapped whenever a
+corridor fell in the dead zone, and it broke a real test by moving a picture a
+caller had explicitly placed at x=40 — a placement that was perfectly
+printable, because the other side of it was a whole column. The trigger is now
+`leavesNoLegalColumn()`, the engine's own answer about the block as a whole,
+so the snap is a repair and never a style rule.
+
+Enforced in two places, because they are two ways in: the editor's drag
+(`block-frame.js`, on the **drop** — the trigger costs a composition, and
+settling a picture when the pointer comes up is how a snap behaves anyway) and
+`sectionImage.service.js`'s `add`/`update`, so a direct API caller cannot make
+the layout the UI refuses to.
+
+Verified live in the running app, both directions:
+
+| dropped | result |
+|---|---|
+| inside the unprintable window | snapped flush right, copy sets again, warning becomes an ordinary fill note |
+| anywhere printable | **left exactly where it was put** |
+
+Saved as x_px 128 — the exact logical value, no round-trip drift (the drop now
+saves the rectangle it last previewed rather than re-deriving one from screen
+pixels, which could give up a pixel and put a corridor back in the dead zone).
+
+**Database sweep: `NO_LEGAL_MEASURE` 51 → 2 → 1**, and the last one is block
+39131, which nobody has touched since. That is deliberate: this repairs a
+placement being *made* and never rewrites a stored row. An edition carrying a
+bad placement keeps it, and keeps its warning, until someone touches the
+picture. All 11273 sections compose without a throw.

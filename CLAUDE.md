@@ -145,6 +145,47 @@ This gap had already been found and hand-fixed once in `tests/compose.test.js`
 and had come back in a script and a test, which is why the refusal is in the
 engine and not in its callers. `tests/exactShaping.test.js` holds it.
 
+### A picture may not leave a column too narrow to set in
+
+A photograph placed so that the strip of measure beside it is under one word
+wide leaves a block that keeps its depth, keeps its copy, and prints **none of
+it**. `NO_LEGAL_MEASURE` reports that, but reporting is not preventing — and
+neither of the two blocks in this database that hit it was dragged there. **A
+new picture defaults to half the block's width at its left edge**, and on a
+190px block set in 16px type that is already the fault: the 81px left beside a
+95px picture is under the 96px one word needs.
+
+`public/editor/layout/corridor-snap.js` holds the rule, and it is the ordinary
+newspaper one — a picture is placed on the grid, so what is left beside it is
+a whole column or nothing at all:
+
+- flush to an edge of the measure, leaving one column of type;
+- inset by at least `MIN_CORRIDOR_EM`;
+- **spanning the measure — and then at the top of the copy or the foot**, never
+  floating mid-column. Widening a picture to the measure *alone* can make
+  matters worse: measured on the real block, the full-measure repair left 15px
+  of copy above and 15px below where one line needs 25px, so it still set
+  nothing. The two halves of that repair are one move.
+
+**The trigger is `leavesNoLegalColumn()`, not "some corridor is narrow".** A
+dead corridor on one side of a picture is not a fault when the other side is a
+whole column — that is an ordinary page. Only a placement that makes the block
+unprintable is moved, so this never fights a desk over a legal-but-unusual
+picture. Verified live both ways: dropped inside the unprintable window it
+snaps flush and the copy comes back; dropped anywhere printable it stays
+exactly where it was put.
+
+Enforced in **two** places, because they are two different ways in: the
+editor's drag (`block-frame.js`, on the drop, not on every pointermove — the
+trigger costs a composition) and `sectionImage.service.js`'s `add`/`update`,
+so a direct API caller cannot make the layout the UI refuses to. It never
+changes a picture's height, and changes its width only in the span case.
+
+It repairs a placement being **made**; it never rewrites stored rows. An
+edition already carrying a bad placement keeps it, and keeps its warning,
+until someone touches the picture — silently moving pictures in saved pages is
+not this system's to do.
+
 ### The engine's own findings must be rendered, and only the real ones
 
 `composeBlock()` returns `violations` and `warnings` on every composition.

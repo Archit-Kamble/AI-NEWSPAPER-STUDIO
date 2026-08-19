@@ -33,6 +33,9 @@ import { sanitise, sanitiseSize } from "../layout/rich-text.js";
 
 import { placedPictureStyle } from "../layout/picture-style.js";
 import { resizeRect, RESIZE_HANDLES } from "../layout/image-resize.js";
+import { snapPictureToLegalCorridor, leavesNoLegalColumn } from "../layout/corridor-snap.js";
+import { MIN_CORRIDOR_EM } from "../compose/intervals.js";
+import { blockExpectsCopy } from "../layout/block-kinds.js";
 import { smartCardMarkup } from "../smart-cards/smart-cards.js";
 // The same functions the page canvas draws a headline, a deck and a flowed
 // body with - so the WYSIWYG frame and the newspaper page can never drift
@@ -548,7 +551,45 @@ function bindTextFrames() {
   // explicit collapsed selection at the end of the text if there was none -
   // "double-click the body" should always land somewhere typeable, not just
   // somewhere scrolled-into-view.
-  const activateBodyEditor = () => {
+  // A thin, fading line from where the desk double-clicked to where the
+  // real editor lit up - drawn in absolute (document, not viewport)
+  // coordinates, so it stays correctly anchored to both endpoints through
+  // the scroll without having to track the scroll animation itself: an
+  // element's position in the DOCUMENT does not move when the page
+  // scrolls, only where it happens to sit relative to the viewport does.
+  // Purely cosmetic (reads "this opened over there", not "the page did
+  // something unrelated") - it never changes what gets focused or edited.
+  function drawJumpTrail(fromX, fromY, toRect) {
+    if (!toRect) return;
+    const toX = toRect.left + toRect.width / 2 + window.scrollX;
+    const toY = toRect.top + window.scrollY;
+    const dx = toX - fromX;
+    const dy = toY - fromY;
+    if (Math.hypot(dx, dy) < 24) return; // Already right there - nothing to connect.
+
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("class", "body-jump-trail");
+    svg.style.cssText = "position:absolute;left:0;top:0;width:1px;height:1px;overflow:visible;pointer-events:none;z-index:9999;";
+    svg.style.left = `${Math.min(fromX, toX)}px`;
+    svg.style.top = `${Math.min(fromY, toY)}px`;
+
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", fromX - Math.min(fromX, toX));
+    line.setAttribute("y1", fromY - Math.min(fromY, toY));
+    line.setAttribute("x2", toX - Math.min(fromX, toX));
+    line.setAttribute("y2", toY - Math.min(fromY, toY));
+    line.setAttribute("stroke", "#c41e3a");
+    line.setAttribute("stroke-width", "1.5");
+    line.setAttribute("stroke-dasharray", "4 3");
+    line.style.cssText = "opacity:0.6;transition:opacity 0.5s ease-out 0.15s;";
+    svg.appendChild(line);
+    document.body.appendChild(svg);
+
+    requestAnimationFrame(() => { line.style.opacity = "0"; });
+    setTimeout(() => svg.remove(), 700);
+  }
+
+  const activateBodyEditor = (originEvent) => {
     hooks.onSelectPart?.("body");
 
     const writing = document.getElementById("edWritingSurface");
@@ -566,7 +607,16 @@ function bindTextFrames() {
     // this is that report, not a different bug: `just-activated` is a brief,
     // impossible-to-miss pulse rather than a permanent border colour.
     writing?.classList.add("is-body-target", "just-activated");
-    writing?.scrollIntoView({ behavior: "smooth", block: "center" });
+    // Only jump if the writing surface genuinely is not visible yet. A desk
+    // who has already scrolled the Block Editor into view and is
+    // double-clicking a SECOND time (to select a different word, say) does
+    // not expect the page to leap again on every click - the pulse alone is
+    // enough of a cue once the surface is already on screen.
+    const rect = writing?.getBoundingClientRect();
+    const viewportH = window.innerHeight || document.documentElement.clientHeight;
+    const alreadyVisible = rect && rect.top >= 0 && rect.bottom <= viewportH;
+    if (originEvent) drawJumpTrail(originEvent.pageX, originEvent.pageY, rect);
+    if (!alreadyVisible) writing?.scrollIntoView({ behavior: "smooth", block: "center" });
     setTimeout(() => writing?.classList.remove("just-activated"), 700);
 
     requestAnimationFrame(() => {
@@ -584,7 +634,7 @@ function bindTextFrames() {
   body?.addEventListener("dblclick", (event) => {
     event.preventDefault();
     event.stopPropagation();
-    activateBodyEditor();
+    activateBodyEditor(event);
   });
 
   const page = document.getElementById("edFramePage");
@@ -608,7 +658,7 @@ function bindTextFrames() {
 
     event.preventDefault();
     event.stopPropagation();
-    activateBodyEditor();
+    activateBodyEditor(event);
   }, true);
 
   page?.addEventListener("click", (event) => {
@@ -692,6 +742,30 @@ function previewImageRect(id, logical) {
   );
 }
 
+// The block's own measure and its minimum legal column, for the corridor
+// snap. Read from the SAME composition everything else on this page is drawn
+// from, so the picture snaps against the measure the words are actually set
+// in rather than a re-derived guess at it.
+function corridorRuleFor(image) {
+  const composition = sectionComposition({ ...state.section, images: state.images || [] }, state.view);
+  if (!composition || !composition.content) return null;
+  const bodyPx = composition.typography?.bodyPx || 0;
+  return {
+    contentLeft: composition.content.left,
+    contentRight: composition.content.right,
+    standOffPx: Number(image?.stand_off_px ?? image?.standOffPx) || 0,
+    minCorridorPx: MIN_CORRIDOR_EM * bodyPx,
+    columnCount: composition.columns?.length || 1,
+    bodyTop: composition.bodyTop,
+    bodyBottom: composition.content.bottom,
+    bandHeightPx: bodyPx * (composition.typography?.lineHeight || 0),
+    // A display advert or a photo block is a picture and nothing else - there
+    // is no column of type to protect, so nothing is snapped. Same gate as
+    // NO_LEGAL_MEASURE's, from the same catalog.
+    expectsCopy: blockExpectsCopy(state.section?.block_type),
+  };
+}
+
 // Recomposing on every pointermove would run the exact engine dozens of
 // times inside one browser frame - coalesce to one recomposition per paint.
 let reflowFrame = null;
@@ -763,6 +837,24 @@ function bindPictureFrames() {
     const imageIndex = state.images.findIndex((image) => Number(image.id) === id);
     const originalImage = imageIndex >= 0 ? { ...state.images[imageIndex] } : null;
 
+    // A cut-out is trimmed to one exact silhouette - there is no more
+    // subject to reveal by stretching it, only wasted frame around it that
+    // strands the resize handles far from the picture a desk can actually
+    // see (found live: handles drawn at the frame's corners, a third of the
+    // frame's width away from the visible person once fit_mode was fixed to
+    // `contain` for cutouts - see image-geometry.js). So a cut-out's aspect
+    // ratio is locked always, not only while Shift is held - Shift stays the
+    // opt-in lock for every other shape, where stretching to reveal more of
+    // a rectangular photo is a legitimate choice.
+    const lockAspect = originalImage?.shape === "cutout";
+
+    // Once per drag, not once per pointermove: this runs the exact engine, and
+    // neither the block's measure nor its body size changes while a picture is
+    // being dragged. (The reflow below is coalesced to one per paint for the
+    // same reason.)
+    const corridorRule = corridorRuleFor(originalImage);
+    let lastLogical = null;
+
     frame.classList.add("is-dragging");
 
     const move = (moveEvent) => {
@@ -774,7 +866,7 @@ function bindPictureFrames() {
         // Read fresh on every move, not just at pointerdown - a desk holding
         // or releasing Shift mid-drag sees the aspect lock engage or let go
         // immediately, the way every page-layout tool's own handles do.
-        screenRect = resizeRect(from, corner, dx, dy, { bounds, preserveAspect: moveEvent.shiftKey });
+        screenRect = resizeRect(from, corner, dx, dy, { bounds, preserveAspect: lockAspect || moveEvent.shiftKey });
       } else {
         // Kept on the page: a frame dragged off the block would print off
         // the page, and the character grid would count cells that do not
@@ -787,6 +879,8 @@ function bindPictureFrames() {
         };
       }
 
+      const logical = logicalRectFromScreen(screenRect, scale);
+      lastLogical = logical;
       frame.style.width = `${screenRect.width}px`;
       frame.style.height = `${screenRect.height}px`;
       frame.style.left = `${screenRect.x}px`;
@@ -798,7 +892,7 @@ function bindPictureFrames() {
       // so writing the in-progress rectangle there before asking for that
       // recomposition is the whole mechanism.
       if (imageIndex >= 0) {
-        previewImageRect(id, logicalRectFromScreen(screenRect, scale));
+        previewImageRect(id, logical);
         requestImagePreviewReflow();
       }
     };
@@ -812,11 +906,45 @@ function bindPictureFrames() {
 
     const done = () => {
       cleanup();
-      hooks.onPatchImage?.(id, {
+
+      // A picture may not be LEFT where the block can no longer set a line -
+      // the frame would keep its depth, keep its copy, and print none of it.
+      // Repaired on the drop rather than on every pointermove: the trigger is
+      // the engine's own answer (leavesNoLegalColumn), which costs a
+      // composition, and settling the picture when the pointer comes up is how
+      // a snap behaves in every layout tool anyway. The live reflow during the
+      // drag has already shown the desk the copy going; letting go puts it
+      // right. See corridor-snap.js for the rule and why it is the ordinary
+      // newspaper one.
+      if (lastLogical && corridorRule) {
+        const proposed = { ...state.section, images: state.images || [] };
+        if (leavesNoLegalColumn(sectionComposition(proposed, state.view))) {
+          const snapped = snapPictureToLegalCorridor(lastLogical, corridorRule);
+          if (snapped.snapped) {
+            lastLogical = { x: snapped.x, y: snapped.y, width: snapped.width, height: snapped.height };
+            frame.style.left = `${Math.round(snapped.x / scale)}px`;
+            frame.style.top = `${Math.round(snapped.y / scale)}px`;
+            frame.style.width = `${Math.round(snapped.width / scale)}px`;
+            frame.style.height = `${Math.round(snapped.height / scale)}px`;
+            previewImageRect(id, lastLogical);
+            layoutTextFrames();
+          }
+        }
+      }
+
+      // The rectangle that was last previewed, not one re-derived from the
+      // frame's screen pixels: a snapped placement is exact in the block's own
+      // coordinates, and a round trip through screen space and back would give
+      // it up to a pixel of drift - enough to put a corridor back inside the
+      // dead zone it was just snapped out of.
+      const saved = lastLogical || {
         x: Math.round((parseFloat(frame.style.left) || 0) * scale),
         y: Math.round((parseFloat(frame.style.top) || 0) * scale),
         width: Math.round(frame.offsetWidth * scale),
         height: Math.round(frame.offsetHeight * scale),
+      };
+      hooks.onPatchImage?.(id, {
+        x: saved.x, y: saved.y, width: saved.width, height: saved.height,
       });
     };
 

@@ -1359,6 +1359,38 @@ async function downloadPressFile() {
   );
 }
 
+/**
+ * The story in the selected block continues into the block just shift-clicked.
+ *
+ * The same endpoint "Carry over" uses, with the target named instead of found:
+ * jump.service.js has always accepted one and had never once been given one,
+ * so the only continuation a desk could ask for was "the first empty block on
+ * a later page". A big story running into a second leg on the SAME page is the
+ * commoner arrangement by far, and it is what the desk asked for.
+ */
+async function continueInto(targetKey) {
+  const page = store.getCurrentPage();
+  const key = store.getState().selectedSectionKey;
+  if (!page || !key) return showNotice("Select the block the story starts in first, then shift-click the one it continues into.");
+  if (key === targetKey) return showNotice("A story cannot continue into itself.");
+
+  await saveNow();
+  const response = await fetch(`/api/pages/${page.id}/sections/${encodeURIComponent(key)}/carry-over`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ toPageId: page.id, toSectionKey: targetKey }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) return showNotice(result.error || "This story could not be continued into that block.");
+
+  const pages = await fetch(`/api/newspapers/${store.getState().newspaper.id}/pages`).then((r) => r.json());
+  pages.forEach((updated) => store.replacePage(updated, { structural: true }));
+  showNotice(
+    `The story continues into "${result.to.sectionKey}" — ${result.to.chars} characters. `
+    + "No jump line: the two legs are on the same page, so a reader simply carries on.",
+  );
+}
+
 async function carryOver() {
   const page = store.getCurrentPage();
   const key = store.getState().selectedSectionKey;
@@ -1534,6 +1566,7 @@ function renderPageArea() {
   const page = store.getCurrentPage();
   renderCanvas(page, state.newspaper, state, {
     onSelectSection: selectSection,
+    onContinueInto: continueInto,
     onSectionAction,
     onMoveSection: moveSection,
     guides: pageGuides,

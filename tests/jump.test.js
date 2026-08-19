@@ -76,6 +76,51 @@ test('a story too long for its block is carried onto the first empty block on a 
   });
 });
 
+test('a story continuing into a SECOND LEG on the same page sets no jump line and no second headline', async () => {
+  await withEdition(async ({ desk, page1 }) => {
+    // Two blocks on one page, which is the commoner arrangement by far and the
+    // one a desk asks for by shift-clicking the second: the reader's eye simply
+    // carries on, so there is no page to name and nothing to announce. A
+    // repeated headline halfway down a page reads as a second story.
+    const source = page1.sections.find((s) => s.section_key === 'anchor');
+    const target = page1.sections.find((s) => s.section_key !== 'anchor'
+      && s.block_type === 'article' && !s.headline && !s.body);
+    assert.ok(target, 'the dense template must offer a second empty article block');
+
+    await desk.json(`/api/pages/${page1.id}/sections/${source.section_key}`, {
+      method: 'PUT',
+      body: JSON.stringify({ headline: 'लांब बातमी', body: LONG_BODY }),
+    });
+
+    const result = await desk.json(`/api/pages/${page1.id}/sections/${source.section_key}/carry-over`, {
+      method: 'POST',
+      body: JSON.stringify({ toPageId: page1.id, toSectionKey: target.section_key }),
+    });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(result.samePage, true);
+    assert.equal(result.carryLine, '', 'no jump line at all');
+
+    const pages = await desk.json(`/api/newspapers/${page1.newspaper_id || page1.newspaperId}/pages`);
+    const after = pages.find((p) => p.id === page1.id);
+    const head = after.sections.find((s) => s.section_key === source.section_key);
+    const leg = after.sections.find((s) => s.section_key === target.section_key);
+
+    assert.ok(!head.body.includes('उर्वरित'), 'the first leg says nothing about a page turn');
+    assert.ok(!leg.body.includes('वरून'), 'and the second leg picks up without announcing it');
+    assert.equal(leg.headline, '', 'the second leg carries no headline of its own');
+    assert.equal(leg.continued_from_section_id, head.id, 'but the two are still one story');
+
+    // And reunite still puts it back, with no stray lines to strip.
+    const back = await desk.json(`/api/pages/${page1.id}/sections/${source.section_key}/reunite`, {
+      method: 'POST', body: JSON.stringify({}),
+    });
+    assert.equal(back.ok, true, JSON.stringify(back));
+    const reunited = (await desk.json(`/api/newspapers/${page1.newspaper_id || page1.newspaperId}/pages`))
+      .find((p) => p.id === page1.id).sections.find((s) => s.section_key === source.section_key);
+    assert.equal(reunited.body.replace(/\s+/g, ' ').trim(), LONG_BODY.replace(/\s+/g, ' ').trim());
+  });
+});
+
 test('a continuation that would overset the landing block is refused, not silently written oversized', async () => {
   await withEdition(async ({ desk, page1, page2 }) => {
     const sourceKey = 'anchor';

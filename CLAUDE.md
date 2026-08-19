@@ -672,6 +672,29 @@ A second copy of any of these is the failure mode this project has already been 
 
 **Whitespace is classified, not counted.** A ragged right end is how type is set and is never a hole; a gap a photograph made unusable was never counted as usable in the first place. `largestHoleLines` is the one number the desk and the writer act on, and `HOLE_LINES` (4) matches `storyWriter.service.js` deliberately.
 
+### Two blocks, one story — shift-click the second
+
+`jump.service.js`'s `carryOver()` has always taken an explicit
+`{ toPageId, toSectionKey }` and **had never once been given one**: the only
+continuation a desk could ask for was "find the first empty block on a LATER
+page", which is the page-turn idiom. The commoner arrangement by far is a big
+story running into a second leg **on the same page**, and there was no way to
+say which block.
+
+Shift-click is that way — no second selection model, no mode to enter and leave,
+and the gesture every layout tool already uses to mean "and this one too".
+
+**A same-page continuation is not a jump, so it sets no jump line and no second
+headline.** The two lines exist because a reader has to turn a page; a story
+carrying on in the next leg needs neither, and every printed page runs stories
+across two or three legs without saying so. A repeated headline halfway down a
+page reads as a second story rather than the same one. The landing block is
+therefore also *measured* without one — reserving rows for a headline that is
+never set would refuse continuations that fit.
+
+`reunite()` puts it back either way: stripping an absent pick-up line is a
+no-op, so one expression covers both.
+
 ### A wide block sets in COLUMNS
 
 `measureColumns()` has always been able to work a column count out from a

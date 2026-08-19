@@ -4480,3 +4480,41 @@ The control moved from a number input in Typography to **Properties → Columns*
 what Auto would do in this block's own numbers rather than leaving it a promise.
 
 837 tests, **80/80** on the controls net.
+
+### 42. Two blocks, one story (2026-08-19)
+
+The desk: *"for big news we can able to select two news blocks, so remaining
+news will fill automatically to that second news block."*
+
+Most of this already existed. `jump.service.js`'s `carryOver()` splits a story
+at a sentence (or a word, if no sentence is within reach), writes the first part
+back, writes the remainder into another block, links the two with
+`continued_from_section_id`, and `reunite()` undoes it. It has always accepted an
+explicit `{ toPageId, toSectionKey }`.
+
+**It had never once been given one.** The only caller passed `"{}"`, so the only
+continuation a desk could ask for was `findLanding()`'s — the first empty block
+on a **later** page. That is the page-turn idiom, and it is the rarer of the two.
+
+Two changes, and they are one idea:
+
+- **Shift-click a second block** continues the selected story into it
+  (`canvas.js` → `workspace.js`'s `continueInto`). No second selection model, no
+  mode; the gesture every layout tool uses for "and this one too".
+- **A same-page continuation is not a jump.** The two Marathi lines
+  (`(उर्वरित पान ४ वर)` / `(पान १ वरून)`) exist because a reader has to turn a
+  page. A story carrying on in the next leg needs neither — every printed page
+  runs stories across two or three legs without announcing it — and the second
+  leg carries **no headline**, because a repeated headline halfway down a page
+  reads as a second story. The landing block is measured without one too:
+  reserving rows for a headline that is never set would refuse continuations
+  that actually fit.
+
+Verified live on the front page: a 646-character story shift-clicked into the
+anchor left 230 characters in the first leg and 415 in the second, with no jump
+line, no second headline, and `continued_from_section_id` linking them. And the
+refusal still works and still says what a sub-editor can do about it — a
+415-character tail into a 359-character block reports both numbers rather than
+silently oversetting.
+
+840 tests.

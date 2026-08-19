@@ -23,6 +23,13 @@ const pool = require('../config/db');
 const { devanagari } = require('../layout/identity');
 
 // The two lines. Marathi papers word them like this.
+//
+// They exist because a reader has to TURN A PAGE. A story continuing into a
+// second leg on the same page needs neither - the reader's eye simply carries
+// on, and every printed page runs stories across two or three legs without
+// saying so. So a same-page continuation sets no lines at all, and its second
+// leg carries no headline either: a repeated headline halfway down a page
+// reads as a second story, not as the same one.
 const carryLine = (pageNumber) => `(उर्वरित पान ${devanagari(pageNumber)} वर)`;
 const pickUpLine = (pageNumber) => `(पान ${devanagari(pageNumber)} वरून)`;
 
@@ -123,8 +130,10 @@ async function carryOver(pageId, sectionKey, { toPageId, toSectionKey } = {}) {
   if (target.id === source.id) return { error: 'A story cannot continue into itself.' };
 
   const budget = await budgetFor(source);
-  const carry = carryLine(target.page_number);
-  const pickUp = pickUpLine(source.page_number);
+  // A continuation on the SAME page is not a jump: see carryLine() above.
+  const samePage = Number(target.page_id) === Number(source.page_id);
+  const carry = samePage ? '' : carryLine(target.page_number);
+  const pickUp = samePage ? '' : pickUpLine(source.page_number);
 
   // The jump line is printed, so it is paid for out of the first part's budget.
   const room = budget - carry.length - 1;
@@ -144,9 +153,16 @@ async function carryOver(pageId, sectionKey, { toPageId, toSectionKey } = {}) {
   // anything is written, rather than left for preflight to catch after the
   // fact - "never truncate, never silently overflow" applies to a jump line
   // exactly as it does to a first draft.
-  const targetBudget = await budgetFor({ ...target, headline: source.headline, subheading: target.subheading || '' });
+  // The second leg of a same-page story carries no headline of its own, so it
+  // is measured without one - measuring it with the first leg's headline would
+  // reserve rows nothing is ever set in and refuse continuations that fit.
+  const targetBudget = await budgetFor({
+    ...target,
+    headline: samePage ? '' : source.headline,
+    subheading: target.subheading || '',
+  });
   const targetRoom = targetBudget - pickUp.length - 1;
-  if (`${pickUp} ${tail}`.length > targetBudget) {
+  if (`${pickUp} ${tail}`.trim().length > targetBudget) {
     return {
       error: targetRoom < 40
         ? 'The block this would land on is too small to hold a continuation and its pick-up line.'
@@ -159,7 +175,7 @@ async function carryOver(pageId, sectionKey, { toPageId, toSectionKey } = {}) {
     await client.query('BEGIN');
     await client.query(
       `UPDATE page_sections SET body = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
-      [source.id, `${head}\n\n${carry}`],
+      [source.id, carry ? `${head}\n\n${carry}` : head],
     );
     // The continuation carries the story's own headline so a reader turning the
     // page knows what they are picking up, and records where it came from.
@@ -169,7 +185,8 @@ async function carryOver(pageId, sectionKey, { toPageId, toSectionKey } = {}) {
               language = $7, status = 'ready', continued_from_section_id = $8,
               updated_at = CURRENT_TIMESTAMP
         WHERE id = $1`,
-      [target.id, source.headline || '', `${pickUp} ${tail}`, source.category, source.location,
+      [target.id, samePage ? '' : (source.headline || ''), `${pickUp} ${tail}`.trim(),
+       source.category, source.location,
        source.reporter_name, source.language || 'Marathi', source.id],
     );
     await client.query('COMMIT');
@@ -182,6 +199,7 @@ async function carryOver(pageId, sectionKey, { toPageId, toSectionKey } = {}) {
 
   return {
     ok: true,
+    samePage,
     from: { pageNumber: source.page_number, sectionKey: source.section_key, chars: head.length },
     to: { pageId: target.page_id, pageNumber: target.page_number, sectionKey: target.section_key, chars: tail.length },
     carryLine: carry,
@@ -202,6 +220,8 @@ async function reunite(pageId, sectionKey) {
   );
   if (!parts.length) return { error: 'This story does not continue anywhere.' };
 
+  // A same-page second leg has no pick-up line to strip; one that jumped a page
+  // does. Stripping an absent line is a no-op, so one expression covers both.
   const tail = parts
     .map((part) => String(part.body || '').replace(/^\(पान [^)]*\)\s*/, ''))
     .join('\n\n');

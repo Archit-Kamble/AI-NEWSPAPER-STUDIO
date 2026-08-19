@@ -132,6 +132,21 @@ export function renderCanvas(page, newspaper, selection, callbacks = {}) {
         handlers.onSectionAction?.(element.dataset.sectionKey, actionBtn.dataset.sectionAction);
         return;
       }
+      // Shift+click a SECOND block: the story running in the block already
+      // selected continues into this one. It is the oldest arrangement on a
+      // printed page - a lead runs down its first leg and carries on in the
+      // next - and the software already knew how to do it (jump.service.js's
+      // carryOver, which has always taken an explicit target and never been
+      // given one). What was missing was a way for a desk to SAY which second
+      // block, and shift-click is that: no second selection model, no mode to
+      // enter and leave, and the same gesture every layout tool uses to mean
+      // "and this one too".
+      if (event.shiftKey) {
+        event.preventDefault();
+        event.stopPropagation();
+        handlers.onContinueInto?.(element.dataset.sectionKey);
+        return;
+      }
       handlers.onSelectSection?.(element.dataset.sectionKey);
     });
 

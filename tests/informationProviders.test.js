@@ -192,11 +192,51 @@ test('search: one feed failing does not stop another feed from being read', asyn
   assert.equal(result.errors.length, 1);
 });
 
-test('search: a query with no significant words (too short) matches everything', async (t) => {
+test('search: a query with no significant words matches NOTHING, not everything', async (t) => {
   withFeeds(t, ['http://feed.example/one']);
   const xml = '<rss><channel><item><title>Any headline at all</title></item></channel></rss>';
   withFetch(t, async () => ({ ok: true, text: async () => xml }));
 
-  const result = await rss.search('हो');
-  assert.equal(result.items.length, 1, 'a query with nothing 3+ characters long falls back to "no filter"');
+  // This asserted the opposite - that a query with nothing 3+ characters long
+  // "falls back to no filter". Measured against the nine real feeds, that is
+  // what a blank seed did: 539 unrelated items came back, and index.js graded
+  // the pile `verified` and would have handed it to the model as VERIFIED
+  // SOURCE DATA. A retrieval layer whose whole purpose is that the model never
+  // writes a current event from anything but checked, RELEVANT facts must not
+  // have a branch that returns the entire wire. Nothing to match on is a
+  // failed retrieval, and a failed retrieval is a refusal.
+  assert.equal((await rss.search('हो')).items.length, 0);
+  assert.equal((await rss.search('')).items.length, 0);
+  assert.equal((await rss.search('   ')).items.length, 0);
+});
+
+test('RSS: a CDATA-wrapped pubDate is read, not thrown away as unparseable', () => {
+  // The Hindu, Hindustan Times and NDTV all wrap the date exactly as they wrap
+  // the title. cleanText() unwrapped CDATA for the title, link and description
+  // and the date was the one field that never got it - so `new Date('<![CDATA[
+  // Thu, 20 Aug 2026 02:04:59 +0530]]>')` was Invalid, publishedAt was null,
+  // and freshness.js correctly treats an undated source as stale. Measured
+  // live: 180 of those three feeds' 180 items discarded, silently.
+  const xml = '<rss><channel><title>W</title><item><title>T</title>'
+    + '<link>http://e/1</link><pubDate><![CDATA[Thu, 20 Aug 2026 02:04:59 +0530]]></pubDate>'
+    + '</item></channel></rss>';
+  const [item] = rss.parseFeed(xml).items;
+  assert.equal(item.publishedAt, '2026-08-19T20:34:59.000Z');
+});
+
+test('RSS: PIB\'s day-first "17/08/2026 12:08 IST" is read as a real instant', () => {
+  // The Press Information Bureau is the only OFFICIAL (.gov.in) source in the
+  // configured set - the one trust tier that can verify a fact on its own -
+  // and every one of its items was being dropped. `new Date` reads the 17 as a
+  // month and gives up; IST is not one of the zone names RFC 822 allows.
+  const xml = '<rss><channel><title>PIB</title><item><title>T</title>'
+    + '<link>http://e/1</link><pubDate>17/08/2026 12:08 IST</pubDate></item></channel></rss>';
+  const [item] = rss.parseFeed(xml).items;
+  assert.equal(item.publishedAt, '2026-08-17T06:38:00.000Z', 'IST is +05:30');
+});
+
+test('RSS: a date that is genuinely unreadable is still null, not a guess', () => {
+  const xml = '<rss><channel><title>W</title><item><title>T</title>'
+    + '<link>http://e/1</link><pubDate>sometime last Thursday</pubDate></item></channel></rss>';
+  assert.equal(rss.parseFeed(xml).items[0].publishedAt, null);
 });

@@ -95,10 +95,51 @@ function allBlocks(xml, name) {
   return xml.match(new RegExp(`<${name}[\\s>][\\s\\S]*?<\\/${name}>`, 'gi')) || [];
 }
 
+// A source with no parseable date is treated as STALE and dropped, never as
+// fresh (freshness.js) - which is the right way round, and it makes this
+// function load-bearing: every date it fails to read silently deletes a whole
+// publisher from the retrieval. Measured against the nine researched feeds,
+// this used to read five of them:
+//
+//   PIB (the only OFFICIAL .gov.in source)  0 of  20 items dated
+//   The Hindu                               0 of  60
+//   Hindustan Times                         0 of 100
+//   NDTV                                    0 of  20
+//
+// 200 of 539 items, including both of the highest-trust sources in the set,
+// discarded as stale - so nearly every query came back `insufficient` and
+// every "Write empty blocks" refused. Two causes, and neither is exotic:
+//
+//   * The Hindu, HT and NDTV wrap the date in CDATA, exactly as they wrap
+//     their titles. `unwrapCdata` already existed and was already applied to
+//     the title, link and description through cleanText() - the date was the
+//     one field that never got it, so `new Date('<![CDATA[Thu, 20 Aug 2026
+//     02:04:59 +0530]]>')` was an Invalid Date.
+//   * PIB writes `17/08/2026 12:08 IST`. Day first, and a timezone ABBREVIATION
+//     rather than an offset - `new Date` reads "17" as a month and gives up.
+//     RFC 822 allows a named zone and IST is not one of the names it names, so
+//     this is handled here rather than hoped for.
+const DAY_FIRST = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})[\sT]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(IST)?\s*$/i;
+
 function parseDate(raw) {
   if (!raw) return null;
-  const date = new Date(raw.trim());
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  const text = unwrapCdata(String(raw)).trim();
+  if (!text) return null;
+
+  const date = new Date(text);
+  if (!Number.isNaN(date.getTime())) return date.toISOString();
+
+  const dayFirst = DAY_FIRST.exec(text);
+  if (dayFirst) {
+    const [, d, m, y, hh, mm, ss, ist] = dayFirst;
+    const pad = (n, width = 2) => String(n).padStart(width, '0');
+    // IST is +05:30. Without it the string is read as the server's own local
+    // time, which is what `new Date` would have done for a well-formed one.
+    const iso = `${y}-${pad(m)}-${pad(d)}T${pad(hh)}:${mm}:${pad(ss || 0)}${ist ? '+05:30' : ''}`;
+    const built = new Date(iso);
+    if (!Number.isNaN(built.getTime())) return built.toISOString();
+  }
+  return null;
 }
 
 function looksLikeFeed(xml) {
@@ -196,7 +237,16 @@ function queryWordsFor(query) {
 }
 
 function matchesQuery(item, queryWords) {
-  if (!queryWords.length) return true;
+  // No words to match on means NOTHING matches, not everything. It read
+  // `return true` here, so a blank seed handed the model the entire contents
+  // of every configured feed - measured: 539 unrelated items, returned as
+  // status `verified`, which is the one thing this layer exists to make
+  // impossible. intent.js gates the live path and no caller does this today;
+  // a safety layer with a "match everything" branch in it is one edit away
+  // from being no safety layer, and CLAUDE.md already records this exact
+  // failure once (significantWords stripping a district's only real word and
+  // "silently matching everything").
+  if (!queryWords.length) return false;
   const haystack = new Set(significantWords(`${item.title} ${item.description}`));
   return queryWords.some((word) => haystack.has(word));
 }

@@ -83,6 +83,8 @@ function paragraphRow(composition, row) {
 // bury the two blocks that genuinely cannot be printed.
 const ENGINE_FAULTS = {
   NO_LEGAL_MEASURE: "error",
+  // Not a fault - a choice the block is holding open. See compose.js.
+  HEADLINE_COULD_FILL: "info",
   HEADLINE_AUTO_FITTED: "info",
   DECK_AUTO_FITTED: "info",
   KICKER_AUTO_FITTED: "info",

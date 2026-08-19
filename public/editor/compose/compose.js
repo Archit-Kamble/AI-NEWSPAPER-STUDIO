@@ -1725,6 +1725,21 @@ export function composeBlock(input = {}) {
     previous = flow.key;
   }
 
+  // See the recomposition at the foot of this function: this block's headline
+  // WOULD fill its measure at a larger size, and the only thing standing in
+  // the way is that the copy is already at the foot. That is a choice between
+  // a straight right edge and a sentence, it belongs to the desk, and the desk
+  // can only make it if it is told the choice exists.
+  const denied = input.headlineGrowthDenied;
+  if (denied) {
+    warnings.push({
+      code: 'HEADLINE_COULD_FILL',
+      detail: `This headline would fill its measure at ${denied.px}px rather than ${denied.requestedPx}px, `
+        + `but the block is full: ${denied.charsOver} characters of copy would have no room. `
+        + 'Cut the copy and set the headline larger, or leave it as it is.',
+    });
+  }
+
   const bodyTop = previous ? y + gapBetween(previous, 'body', result.bands[previous].resolvedPx) : content.top;
   result.bodyTop = bodyTop;
 
@@ -1810,7 +1825,20 @@ export function composeBlock(input = {}) {
   // be cut is a block the desk is about to work on anyway, and copyFit's
   // trimToFit() will re-compose it the moment it does.
   if (result.bands.headline?.grew && (body.overset || result.bands.deck?.overset)) {
-    return composeBlock({ ...input, headlineGrowth: false });
+    return composeBlock({
+      ...input,
+      headlineGrowth: false,
+      // What the block gave up, carried into the second pass so it can be
+      // REPORTED. A headline that stops short of its measure on a block full
+      // to the foot is not a defect the software may fix on its own - the fix
+      // is a sentence out of somebody's story - but it is a decision, and a
+      // decision nobody was told about is one nobody can take.
+      headlineGrowthDenied: {
+        px: result.bands.headline.resolvedPx,
+        requestedPx: result.bands.headline.requestedPx,
+        charsOver: clusters(body.overset || result.bands.deck?.overset || '').length,
+      },
+    });
   }
 
   result.bodyLines = body.lines;

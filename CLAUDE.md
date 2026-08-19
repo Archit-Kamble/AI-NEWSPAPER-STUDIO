@@ -212,6 +212,13 @@ fits — and the block is composed once more with the growth withheld. One level
 of recursion by construction (`headlineGrowth: false` cannot re-enter). 9 blocks
 in 5084 hit it; `BODY_OVERSET` is unchanged either way.
 
+**But the desk is told**, because on a block already full to the foot this is a
+choice between a straight right edge and a sentence, and that is an editorial
+decision the software may not take on its own. `HEADLINE_COULD_FILL` names the
+size it would have used and the exact number of characters that would have to
+go. A decision nobody was told about is one nobody can make — which is why a
+block that simply took the room it had says nothing at all.
+
 Across all 5084 blocks with a headline: longest-line fill **73.6% → 76.6%**,
 headlines at or over 92% filled **1089 → 2787**, display share 20.0% → 20.6%.
 

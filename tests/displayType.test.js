@@ -96,6 +96,15 @@ test('filling the headline never costs a word: growth yields to overset copy', (
   assert.equal(full.bands.headline.resolvedPx, LEAD.headlineFontPx, 'back to the size the design asked for');
   assert.equal(full.overset.body, '', 'no copy pushed off the block');
   assert.notEqual(full.fitState, 'OVERSET');
+
+  // And the desk is TOLD. A headline short of its measure on a block full to
+  // the foot is a choice between a straight right edge and a sentence; the
+  // software may not make it, and nobody can make it who was never shown it.
+  const told = full.warnings.find((w) => w.code === 'HEADLINE_COULD_FILL');
+  assert.ok(told, 'the block must report the size it could have been set at');
+  assert.match(told.detail, /\d+px/);
+  assert.ok(!roomy.warnings.some((w) => w.code === 'HEADLINE_COULD_FILL'),
+    'and must not say it about a block that simply took the room');
 });
 
 // ------------------------------------------------------------- alignment ---

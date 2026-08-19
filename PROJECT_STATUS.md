@@ -3948,6 +3948,14 @@ once more with the growth withheld. Recursion is one level by construction.
 Measured: 9 blocks in 5084 hit this, and `BODY_OVERSET` across the database is
 unchanged at 17 either way (24 without the fallback).
 
+**And the desk is told.** On a block full to the foot this is a choice between a
+straight right edge and a sentence — an editorial decision, not a compositor's —
+so `HEADLINE_COULD_FILL` names the size the headline would have used and the
+exact number of characters that would have to go. The block the desk
+photographed is one of the nine, and now says so on screen: *"This headline
+would fill its measure at 26px rather than 24px, but the block is full: 10
+characters of copy would have no room."*
+
 **Across all 5084 blocks carrying a headline:** longest-line fill 73.6% →
 76.6%, headlines at or over 92% filled **1089 → 2787**, display share 20.0% →
 20.6%, `OVERSET` unchanged, `FITS` 972 → 993.

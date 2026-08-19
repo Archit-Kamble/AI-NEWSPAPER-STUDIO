@@ -73,6 +73,37 @@ export function breakPieces(text) {
   return pieces;
 }
 
+/**
+ * A run of whitespace, set as one space - which is what a compositor does.
+ *
+ * Two spaces mid-line are a typewriter habit; no printed newspaper sets one.
+ * They arrive here without anybody typing them: the paragraph policy merges
+ * two authored paragraphs by substituting each interior newline with a space
+ * (compose.js), so a reporter's "...घेतला.\n\nशाळा..." becomes
+ * "...घेतला.  शाळा..." - same length, same offsets, which is exactly the
+ * property that keeps `line.at` valid and a sub-editor's marks in the right
+ * place. The stored copy is never edited to fix this. It is SET as one space
+ * instead, at the two places setting happens: the width it is measured at and
+ * the ink it is painted with.
+ *
+ * Returns the collapsed text and, for every index in it, where that character
+ * came from - so a mark held against the original text can be moved onto the
+ * collapsed one exactly rather than approximately.
+ */
+export function setSpaces(text) {
+  const source = String(text ?? '');
+  if (!/\s\s/.test(source)) return { text: source, from: null };
+
+  let out = '';
+  const from = [];
+  for (let i = 0; i < source.length; i += 1) {
+    if (/\s/.test(source[i]) && out.length && /\s/.test(out[out.length - 1])) continue;
+    out += source[i];
+    from.push(i);
+  }
+  return { text: out, from };
+}
+
 /** Trailing whitespace removed at a cluster boundary. */
 export function trimEndClusters(text) {
   return String(text || '').replace(/\s+$/u, '');

@@ -274,6 +274,11 @@ function styledBodyRuns(line, marks, prefixLength, richText) {
   const at = (line.at || 0) - prefixLength;
   return richText.styledRuns(line.text, at, marks, line.fontPx).map((run) => ({
     ...run,
+    // Set as it prints: a run of whitespace is one space, the same rule the
+    // width was measured with and the browser paints (graphemes.js's
+    // setSpaces). Without it the press file carried a double word space where
+    // the compositor had merged two paragraphs and the browser did not.
+    text: String(run.text ?? '').replace(/\s\s+/g, ' '),
     family: line.family,
     weight: line.weight,
   }));

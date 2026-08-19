@@ -17,6 +17,7 @@ import { textWithMarks, plainText } from '../layout/rich-text.js';
 import { presentationRanges, renderPresentation } from '../layout/editorial-presentation.js';
 import { publicationFamily } from './font-metrics.js';
 import { headlineSegments } from './accent.js';
+import { setSpaces } from './graphemes.js';
 
 // The measured font, painted. Every line now carries the family/weight
 // compose.js actually measured it in (see compose.js); this turns that back
@@ -44,6 +45,34 @@ function faceStyle(line) {
 // Marks and semantic ranges are held against the whole flow's plain text, and
 // a line is a slice of it. This clips both to the slice and rebases them onto
 // it, which is how a bolded phrase survives being broken across three lines.
+/**
+ * A line's text as it is SET, with its ranges moved onto it.
+ *
+ * The same one-space rule the widths were measured with (graphemes.js's
+ * setSpaces) - painting the raw run instead would put ink where no width was
+ * reserved, which is the one thing this renderer exists not to do. The ranges
+ * are remapped through setSpaces' own index table, so a bold phrase that
+ * happens to start or end at a collapsed space lands on exactly the same
+ * words it did before.
+ */
+function asSet(text, ranges) {
+  const { text: out, from } = setSpaces(text);
+  if (!from) return { text, ranges };
+  const at = new Map(from.map((source, index) => [source, index]));
+  const moved = (index) => {
+    for (let i = index; i >= 0; i -= 1) if (at.has(i)) return at.get(i) + (i === index ? 0 : 1);
+    return 0;
+  };
+  return {
+    text: out,
+    ranges: ranges.map((range) => ({
+      ...range,
+      start: Math.min(out.length, moved(range.start)),
+      end: Math.min(out.length, moved(Math.max(0, range.end - 1)) + 1),
+    })),
+  };
+}
+
 function sliceRanges(ranges, from, length) {
   return ranges
     .filter((range) => range.end > from && range.start < from + length)
@@ -56,12 +85,9 @@ function sliceRanges(ranges, from, length) {
 
 function lineHtml(line, { marks, semantic, offset }) {
   const at = (line.at || 0) - offset;
-  return renderPresentation(
-    line.text,
-    sliceRanges(marks, at, line.text.length),
-    sliceRanges(semantic, at, line.text.length),
-    escapeHtml,
-  );
+  const bold = asSet(line.text, sliceRanges(marks, at, line.text.length));
+  const sense = asSet(line.text, sliceRanges(semantic, at, line.text.length));
+  return renderPresentation(bold.text, bold.ranges, sense.ranges, escapeHtml);
 }
 
 // The painted word: one word of the headline in the paper's colour, which is
@@ -95,8 +121,11 @@ function headlineLineHtml(line, view, segments, marks) {
   // used, now that a display line carries one (compose.js's setDisplayFlow).
   // A phrase emphasised across the headline's line break is therefore still
   // emphasised on both halves.
-  if (marks.length) return renderPresentation(text, sliceRanges(marks, line.at || 0, text.length), [], escapeHtml);
-  return escapeHtml(text);
+  if (marks.length) {
+    const set = asSet(text, sliceRanges(marks, line.at || 0, text.length));
+    return renderPresentation(set.text, set.ranges, [], escapeHtml);
+  }
+  return escapeHtml(setSpaces(text).text);
 }
 
 const BAND_CLASS = {
@@ -122,12 +151,15 @@ export function composedMarkup(composition, view, { datelinePrefix = '' } = {}) 
       const bandMarks = band.marks || [];
       const html = key === 'headline'
         ? headlineLineHtml(line, view, headlineSegments?.[lineIndex], bandMarks)
-        : renderPresentation(
-          line.text,
-          sliceRanges(bandMarks, line.at || 0, line.text.length),
-          presentationRanges(line.text, view.editorialPresentation, key === 'deck' ? 'subheading' : key),
-          escapeHtml,
-        );
+        : (() => {
+          const set = asSet(line.text, sliceRanges(bandMarks, line.at || 0, line.text.length));
+          return renderPresentation(
+            set.text,
+            set.ranges,
+            presentationRanges(set.text, view.editorialPresentation, key === 'deck' ? 'subheading' : key),
+            escapeHtml,
+          );
+        })();
       // A justified display line stretches its word spaces and, past that,
       // its glyphs - exactly as a justified body line does, and painted the
       // same way. Absent on every left/centre/right line, so nothing is

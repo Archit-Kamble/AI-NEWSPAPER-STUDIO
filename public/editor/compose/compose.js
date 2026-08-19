@@ -27,7 +27,7 @@
 
 import { measureWidth as hmtxWidth, minLineHeightFor, faceAscent, faceDescent, fontsReady, publicationWeight } from './font-metrics.js';
 import { shapeWidthPx, isShaperReady } from './shaper.js';
-import { breakPieces, clusters, trimEndClusters } from './graphemes.js';
+import { breakPieces, clusters, trimEndClusters, setSpaces } from './graphemes.js';
 import {
   planParagraphs, mayNeedPolicy, MIN_PARAGRAPH_LINES, MAX_PARAGRAPH_LINES, MAX_PARAGRAPH_SENTENCES,
 } from './paragraph-policy.js';
@@ -41,7 +41,13 @@ export const ENGINE_VERSION = 'sahas-compose/2';
 // same-shape, slightly-wide fallback for the moment before it has - never a
 // guessed constant. See shaper.js for exactly how much this matters for
 // conjunct-heavy Marathi (up to +80% on a bare summed-advance measurement).
-function measure(text, fontPx, family, weight, letterSpacingPx = 0) {
+function measure(rawText, fontPx, family, weight, letterSpacingPx = 0) {
+  // Set as it will PRINT: a run of whitespace is one space (graphemes.js's
+  // setSpaces). Measuring the raw run instead reserved a double word space in
+  // the middle of a line wherever the paragraph policy had merged two
+  // paragraphs - and then the justifier distributed the slack around it, so
+  // one gap on the line was twice its neighbours.
+  const text = setSpaces(rawText).text;
   const base = isShaperReady() ? shapeWidthPx(text, fontPx, family, weight) : null;
   const width = base !== null ? base : hmtxWidth(text, fontPx, family, weight);
   if (!letterSpacingPx) return width;

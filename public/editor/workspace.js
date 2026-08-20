@@ -17,7 +17,7 @@
 // This is the only module that talks to the section API and the only one that
 // subscribes to the store on behalf of the views. Views never import each other.
 
-import { renderCanvas, refreshSection, refreshSelection, refreshGuides } from "./canvas/canvas.js";
+import { renderCanvas, refreshSection, refreshSelection, refreshGuides, refreshColumnRules } from "./canvas/canvas.js";
 import { renderMiniMap, configure as configureCanvasView, applyTransform } from "./canvas/canvas-view.js";
 import { refreshRulers } from "./canvas/ruler.js";
 import { setGuidesVisible } from "./canvas/page-guides.js";
@@ -1850,6 +1850,7 @@ function subscribeViews() {
     const view = currentView();
     if (!section || !view) return;
     refreshSection(section, view, { selected: true, dirty: store.isDirty() });
+    if (source === "properties-panel") refreshColumnRules(section, view);
     refreshExternalEditor(section, view, currentStory(), source, store.getSelectedPart(), store.getSelectedImageIds());
   });
 
@@ -1900,6 +1901,7 @@ function subscribeViews() {
     // survive, which is the whole reason PAGE_SYNC exists as a topic separate
     // from PAGE.
     repaintSections(page);
+    refreshColumnRules(null, null, page);
 
     const section = store.getSelectedSection();
     if (section) refreshDockSavedAt(section);

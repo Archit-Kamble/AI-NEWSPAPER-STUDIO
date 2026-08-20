@@ -363,6 +363,20 @@ const BODY = 'सातारा : नगरपालिकेच्या स�
     await page.keyboard.press('Escape');
     await page.waitForTimeout(700);
     const blockClass = () => page.locator(`.newspaper-section[data-section-key="${KEY}"]`).getAttribute('class');
+    const ruleCount = () => page.locator('.page-rules i').count();
+    const expectedRules = (border) => page.evaluate(async ([key, wanted]) => {
+      const store = await import('/editor/store.js');
+      const rules = await import('/editor/canvas/column-rules.js');
+      const grid = await import('/editor/canvas/grid.js');
+      const current = store.getCurrentPage();
+      const hypothetical = {
+        ...current,
+        sections: current.sections.map((section) => section.section_key === key
+          ? { ...section, border_style: wanted }
+          : section),
+      };
+      return rules.columnRulesFor(hypothetical, grid.getGeometry()).length;
+    }, [KEY, border]);
     const storedBorder = () => page.evaluate(async ([ed, key]) => {
       const pages = await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json());
       return pages[0].sections.find((s) => s.section_key === key).border_style;
@@ -375,12 +389,16 @@ const BODY = 'सातारा : नगरपालिकेच्या स�
     await page.locator('[data-prop-border] [data-border="box"]').click();
     await page.waitForTimeout(1200);
     say(/ruled-box/.test(await blockClass()), 'pressing Box rules the block on the page immediately');
+    say(await ruleCount() === await expectedRules('box'),
+      'and the page removes the separator hairline beside that box immediately');
     await page.waitForTimeout(3200);
     say((await storedBorder()) === 'box', 'and the row carries it', String(await storedBorder()));
 
     await page.locator('[data-prop-border] [data-border="none"]').click();
     await page.waitForTimeout(1200);
     say(!/ruled-box/.test(await blockClass()), 'pressing None takes it off again');
+    say(await ruleCount() === await expectedRules('none'),
+      'and page-owned separator rules return from the same live decision');
     await page.waitForTimeout(3200);
     say((await storedBorder()) === 'none', 'and that is what is stored', String(await storedBorder()));
   }

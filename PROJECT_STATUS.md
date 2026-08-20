@@ -4772,3 +4772,19 @@ service enforces the same range, and `section-model.js` converts legacy/imported
 zero or missing values to the canonical 1 rather than 12. The integration test
 proves a zero request receives 400 and leaves the saved 1 untouched. Targeted
 verification (together with the palette boundary it shares): **23/23**.
+
+### 52. Post-brief audit — boxing a block updates page rules live (2026-08-20)
+
+The opt-in-border group correctly treated a box as its own separator, but only
+a full page render rebuilt `page-rules`. Choosing Box repainted the block and
+left the gutter hairline beside it — two rules where a printer draws one —
+until reload. The first repair also exposed a lifecycle edge in the controls
+net: the live draft removed the rule, then autosave rebuilt it from the stale
+page captured at initial render.
+
+`refreshColumnRules()` now composes page furniture with the live selected
+border and replaces its cached page with the fresh `PAGE_SYNC` rows when save
+lands. A pure geometry regression holds that either boxed neighbour removes the
+shared rule. The real controls net now checks the DOM rule count after Box and
+again after None, across the autosave boundary: **83/83**, no console/page
+errors. Unit verification: **1/1**.

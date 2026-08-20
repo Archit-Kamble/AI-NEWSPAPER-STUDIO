@@ -902,6 +902,10 @@ Two things already follow from the field and are why it is one control and not
 a stylesheet rule: a box costs the block room (`BOX_INSET_PX` — a printed panel
 sets its type 3–4 mm inside its own rule) and the page draws no hairline in the
 gutter beside a boxed block (`column-rules.js` — its box IS the separator).
+That page-owned rule layer must refresh from the live draft **and** the fresh
+page returned by autosave; refreshing only the block leaves a double rule until
+reload, while rebuilding from the initial page puts it back as soon as save
+lands.
 
 ### The page reserves its own furniture
 

@@ -38,26 +38,70 @@ const LEAD = {
   headlineFontPx: 24, subheadingFontPx: 13, bodyFontPx: 10, lineHeight: 1.45,
 };
 
-const fillOf = (band) => Math.max(...band.lines.map((line) => line.width / line.measure));
+const fillOf = (band) => compose.headlineBandFit(band).fill;
 
-test('a headline short of its measure grows until it reaches the 95% bar', () => {
+test('a headline short of its measure auto-fits until its complete line shape reaches the 95% bar', () => {
   // 81% of its measure on both lines at the size geometry.js chose for this
   // block: the shape of the desk's own complaint, on a block with no picture
   // in it so the fixture is about the type and nothing else.
   const headline = 'जिल्ह्यात पाणीटंचाईवर उपाययोजना सुरू';
   const frame = { ...LEAD, width: 270 };
-  const asked = compose.composeBlock({ ...frame, headline, headlineGrowth: false });
+  const asked = compose.composeBlock({ ...frame, headline, headlineLocked: true });
   const set = compose.composeBlock({ ...frame, headline });
 
   assert.ok(fillOf(asked.bands.headline) < 0.95,
     `this fixture must start SHORT or it tests nothing (it filled ${(100 * fillOf(asked.bands.headline)).toFixed(0)}%)`);
 
-  assert.ok(set.bands.headline.grew, 'the engine must have adjusted it');
+  assert.ok(set.bands.headline.grew || set.bands.headline.shrunk, 'the engine must have adjusted it');
   assert.ok(fillOf(set.bands.headline) >= 0.95,
     `and it must actually fill - got ${(100 * fillOf(set.bands.headline)).toFixed(0)}%`);
 
-  const smaller = compose.composeBlock({ ...frame, headline, headlineFontPx: set.bands.headline.resolvedPx - 1, headlineGrowth: false });
-  assert.ok(fillOf(smaller.bands.headline) < 0.95, 'no smaller growing size may already have reached the bar');
+  const nearerRequested = compose.composeBlock({
+    ...frame, headline, headlineFontPx: set.bands.headline.resolvedPx + 0.5, headlineLocked: true,
+  });
+  assert.ok(fillOf(nearerRequested.bands.headline) < 0.95,
+    'the selected down-fit is the largest size below the requested rung whose whole line shape passes');
+});
+
+test('headline working lines fill, the close is not a widow, and the deck stays one-line and subordinate', () => {
+  const headline = 'सातारकरांच्या सुरक्षिततेसाठी खड्डेमुक्त रस्ते';
+  const subheading = 'सुरक्षित प्रवास आणि नागरिकांचे आरोग्य जपण्याची गरज';
+  const shapes = [
+    { width: 307, height: 296, padding: 1, headlineFontPx: 28, subheadingFontPx: 15 },
+    { width: 190, height: 264, padding: 1, headlineFontPx: 17, subheadingFontPx: 11 },
+    { width: 150, height: 264, padding: 1, headlineFontPx: 14, subheadingFontPx: 11 },
+  ];
+
+  for (const frame of shapes) {
+    const set = compose.composeBlock({
+      ...frame, headline, subheading, bodyFontPx: 6.4, lineHeight: 1.45,
+    });
+    const quality = compose.headlineBandFit(set.bands.headline);
+    const close = set.bands.headline.lines.at(-1);
+    const closeWords = close.text.trim().split(/\s+/u).length;
+
+    assert.ok(quality.fill >= 0.95, `${frame.width}px headline working lines must reach 95%`);
+    assert.ok(set.bands.headline.lineCount === 1 || closeWords >= 2,
+      `${frame.width}px headline must not close on one word`);
+    assert.equal(set.bands.deck.lineCount, 1, `${frame.width}px deck is a subordinate one-line flow`);
+    assert.ok(set.bands.deck.resolvedPx <= set.bands.headline.resolvedPx * 0.65 + 0.05,
+      `${frame.width}px deck must stay below the headline's resolved hierarchy rung`);
+    assert.equal(set.overset.headline, '');
+    assert.equal(set.overset.deck, '');
+  }
+});
+
+test('a full-width one-word close still fails the shared headline gate', () => {
+  const quality = compose.headlineBandFit({
+    lines: [
+      { text: 'पहिली कार्यरत ओळ', width: 96, measure: 100 },
+      { text: 'दीर्घशब्द', width: 98, measure: 100 },
+    ],
+  });
+
+  assert.equal(quality.closeAcceptable, false);
+  assert.equal(quality.fill, 0,
+    'proposal acceptance must not mistake one wide closing word for a professional headline');
 });
 
 test('a headline whose words cannot fill the measure is left at the size the design gave it', () => {

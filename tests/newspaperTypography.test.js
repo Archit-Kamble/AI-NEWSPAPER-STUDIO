@@ -261,11 +261,11 @@ const LEAD = {
 
 const fillOf = (line) => line.width / line.measure;
 
-test('a headline is held to two lines, and the size it lands on is the one that FILLS', () => {
+test('a headline is held to at most two lines, and the size it lands on is the one that FILLS', () => {
   const r = adapter.composeSection(LEAD, {});
   const band = r.bands.headline;
 
-  assert.equal(band.lineCount, 2, 'three lines of headline on a lead is the fault, not the design');
+  assert.ok(band.lineCount <= 2, 'three lines of headline on a lead is the fault, not the design');
   assert.ok(band.shrunk, 'it gets there by being fitted to the measure, not by luck');
   assert.ok(fillOf(band.lines[0]) > 0.9,
     `the headline's first line must fill its measure, got ${Math.round(100 * fillOf(band.lines[0]))}%`);

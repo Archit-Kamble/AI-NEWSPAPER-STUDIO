@@ -406,6 +406,9 @@ function briefFor({
       ? '    characters that carry the story forward rather than repeating the headline.'
       : '',
     writeSubheading
+      ? '    Write complete, grammatical Marathi — never telegram style, and never drop the postposition or possessive ending a phrase requires.'
+      : '',
+    writeSubheading
       ? '    That is a measured line of this block, in the deck\'s own type - longer and it'
       : '',
     writeSubheading
@@ -501,7 +504,7 @@ function headlineOptionsBrief({
     sourceBlock,
     '',
     Number.isFinite(currentFill)
-      ? `The exact compositor currently fills ${(currentFill * 100).toFixed(1)}% of the longest headline line; the production target is at least 95%.`
+      ? `The exact compositor currently rates the headline's complete line shape at ${(currentFill * 100).toFixed(1)}%; every working line must reach 95%, and the closing line may not be a one-word widow.`
       : '',
     `Each alternative must be ${minChars} to ${maxChars} characters.`,
     'Spread the alternatives across that whole range, including at least two in its',

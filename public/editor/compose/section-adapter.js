@@ -10,7 +10,7 @@
 // answer to "what composition does this block have", whether it is asked by
 // the page canvas, the Block Editor, the worklist, preflight or the AI brief.
 
-import { composeBlock } from './compose.js';
+import { composeBlock, headlineBandFit } from './compose.js';
 import { clusters } from './graphemes.js';
 import { textWithMarks } from '../layout/rich-text.js';
 // The dateline opens the body and therefore occupies the body's room, so it
@@ -382,11 +382,9 @@ export function bodyOverset(result) {
     || Boolean(result?.violations?.some((v) => v.code === 'BODY_UNBREAKABLE_TOKEN_OVERSET'));
 }
 
-/** Longest-line headline fill: one full line plus a short close is normal. */
+/** Complete headline-line fit: full working lines plus a legal short close. */
 export function headlineFill(result) {
-  const lines = result?.bands?.headline?.lines || [];
-  if (!lines.length) return 1;
-  return Math.max(...lines.map((line) => (line.measure > 0 ? line.width / line.measure : 0)));
+  return headlineBandFit(result?.bands?.headline).fill;
 }
 
 /**

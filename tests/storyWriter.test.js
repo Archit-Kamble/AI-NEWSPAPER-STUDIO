@@ -239,6 +239,8 @@ test('the deck is required, and the body has a floor as well as a ceiling', () =
 
   assert.match(brief, /subheading is REQUIRED/i, 'the deck is not optional');
   assert.match(brief, /never empty/i);
+  assert.match(brief, /complete, grammatical Marathi/i,
+    'the one-line limit must not produce telegram-style Marathi with missing endings');
   assert.doesNotMatch(brief, /Leave it empty/i, 'the old escape hatch is gone');
 
   // The RESERVOIR, not a target - and it is the reservoir that is quoted as

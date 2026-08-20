@@ -191,7 +191,8 @@ and the setting disagreed: `typeScaleFor()` picked 24px for a 268×248 lead on a
 two-line basis and the engine set **three lines at 54%, 53% and 53% of their
 measure, taking 50% of the block**. Holding the budget is what makes the fit
 happen — over budget is a failure, so the size steps down until it sets in two,
-and the size it lands on is the one whose longest line comes closest to filling.
+and the size it lands on is the one whose working lines fill without leaving a
+one-word closing widow.
 That block now sets at 22px: **97% and 48%, taking 33%**, and hands 40px of a
 240px block back to the story.
 
@@ -218,10 +219,24 @@ on the row still wins, so a splash can be given three.
 
 **Holding the line budget is not the same as filling the measure**, and the desk
 reported the second one next: a headline set in two lines at 85% and 52% of
-their measures. Both lines short is what a reader sees as a mistake; one short
-closing line is how every printed headline is set. So `fitDisplayFlow()` steps
-UP as well as down — the words are the reporter's, so the only lever left is the
-size, and every layout tool ships this move.
+their measures. Every working line must reach the 95% bar. A closing line may
+be shorter, as ordinary newspaper setting requires, but it must carry at least
+two words and 30% of its measure — never a stranded one-word widow.
+
+The first implementation measured only the longest line. That made the three
+visual verification blocks report 99.6%, 98.1% and 96.8% even though two really
+set as **49% / 100%** and **48% / 98%**. A max cannot distinguish those from a
+professional descending head. `headlineBandFit()` is now the shared metric:
+the minimum working-line fill plus the legal-close rule. `fitDisplayFlow()`
+searches downward in 0.5 px steps as well as upward because line breaks are
+discontinuous — half a pixel can move a whole Marathi word and repair the
+shape. It keeps the largest passing size nearest the requested hierarchy rung.
+
+The deck has its own related rule: it prefers **one line**, yields to more only
+when one line is physically impossible at legible size, and may not exceed 65%
+of the headline's **resolved** size. Capping it against the requested headline
+size is wrong after auto-fit; that is how the deck became almost as large as
+the headline and read as a second headline.
 
 Three rules, each arrived at by measuring the alternative:
 

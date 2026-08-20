@@ -151,7 +151,8 @@ const MAX_DISPLAY_SHARE = 0.5;
 // a headline that stops two-fifths short of its measure reads as unfinished.
 // Holding the line budget is what makes the fit happen: over the budget is a
 // failure, so fitDisplayFlow() steps the size down until it sets in two, and
-// the size it lands on is the one whose longest line comes closest to filling.
+// the size it lands on is the one whose working lines fill without creating a
+// one-word closing widow.
 //
 // Measured on the real 268x248 lead a desk reported: 24px set THREE lines at
 // 54%, 53% and 53% of their measure, taking 50% of the block. Held to two, it
@@ -185,10 +186,25 @@ const HEADLINE_MAX_LINES = 2;
 // moves.
 //
 // The desk's production bar is 95%. This is deliberately the same visible
-// standard as the body, though the measurements are different: a headline is
-// judged by its longest line (a short closing line is ordinary), while body
-// copy is judged by occupied equivalent line area.
+// standard as the body, though the measurements are different: every working
+// headline line must reach it, while a legal two-word-or-longer closing line
+// may be naturally shorter. Body copy is judged by occupied equivalent area.
 const HEADLINE_FILL_TARGET = 0.95;
+
+// A full second line does not redeem a stranded first line. The old metric
+// took only the longest line, so 49% / 100% was reported as a 100%-filled
+// headline and then grown into exactly that bad break. Every line except the
+// natural closing line must fill the measure; the close may be shorter, but
+// it must still be at least two words and substantial enough to read as a
+// line rather than a widow.
+const HEADLINE_CLOSE_MIN_FILL = 0.30;
+const HEADLINE_CLOSE_MIN_WORDS = 2;
+const DISPLAY_FIT_STEP_PX = 0.5;
+
+// A deck explains the headline; it must not become another headline after the
+// headline auto-fits down. The catalog starts decks near 0.55 of headline
+// size. This is the outside hierarchy guard for an explicit/custom size.
+const DECK_MAX_HEADLINE_RATIO = 0.65;
 
 // How far a headline may grow to reach that.
 //
@@ -443,17 +459,34 @@ function setDisplayFlow(text, {
 }
 
 /**
- * How close a set band comes to its own measure, judged on its LONGEST line.
- *
- * The longest line and not the mean, because that is what the eye reads: a
- * two-line headline whose first line is flush and whose second is short is an
- * ordinary printed headline, and a two-line headline where BOTH lines stop
- * short is a mistake. Averaging the two cannot tell those apart.
+ * How close the headline's complete line shape comes to a printable setting.
+ * Working lines must fill; a natural closing line may be shorter, but never a
+ * stranded one-word widow. A max or mean cannot distinguish 49% / 100% from
+ * the professional 98% / 45% descending shape.
  */
-function bandFill(set) {
-  if (!set || !set.lines.length) return 1;
-  return Math.max(...set.lines.map((line) => (line.measure > 0 ? line.width / line.measure : 0)));
+export function headlineBandFit(set) {
+  const lines = set?.lines || [];
+  if (!lines.length) return { fill: 1, closeAcceptable: true, fills: [] };
+  const fills = lines.map((line) => (line.measure > 0 ? line.width / line.measure : 0));
+  if (lines.length === 1) return { fill: fills[0], closeAcceptable: true, fills };
+
+  const close = lines[lines.length - 1];
+  const closeWords = String(close.text || '').trim().split(/\s+/u).filter(Boolean).length;
+  const closeFill = fills[fills.length - 1];
+  const closeAcceptable = closeWords >= HEADLINE_CLOSE_MIN_WORDS
+    && closeFill >= HEADLINE_CLOSE_MIN_FILL;
+  const workingFill = Math.min(...fills.slice(0, -1));
+  return {
+    // A bad close must fail the same scalar gate every caller already uses;
+    // this keeps headline choice, the AI panel and the compositor on one rule.
+    fill: closeAcceptable ? workingFill : 0,
+    closeAcceptable,
+    closeWords,
+    fills,
+  };
 }
+
+const bandFill = (set) => headlineBandFit(set).fill;
 
 /**
  * The SMALLEST size, up to `maxPx`, at which this flow actually fills its
@@ -483,7 +516,7 @@ function growToFill(text, options, { maxPx, fillTarget, set, failed }) {
   if (bandFill(set) >= fillTarget) return null;
 
   let best = null;
-  for (let px = Math.floor(options.fontPx) + 1; px <= maxPx; px += 1) {
+  for (let px = options.fontPx + DISPLAY_FIT_STEP_PX; px <= maxPx + 0.001; px += DISPLAY_FIT_STEP_PX) {
     const attempt = setDisplayFlow(text, { ...options, fontPx: px });
     if (failed(attempt)) break;
     const fill = bandFill(attempt);
@@ -548,6 +581,19 @@ function fitDisplayFlow(text, options, { locked, minPx, maxPx = 0, fillTarget = 
     const attemptOptions = passes[pass];
     const first = setDisplayFlow(text, attemptOptions);
     if (!failed(first)) {
+      // Line breaks are discontinuous. Making type larger can turn a good
+      // descending two-line head into a stranded one-word first line, while
+      // half a pixel down restores the professional break. Search down from
+      // the requested hierarchy rung before considering growth, and accept
+      // only the first (largest) size whose complete line shape passes.
+      if (pass === 0 && fillTarget > 0 && bandFill(first) < fillTarget) {
+        for (let px = options.fontPx - DISPLAY_FIT_STEP_PX; px >= minPx - 0.001; px -= DISPLAY_FIT_STEP_PX) {
+          const attempt = setDisplayFlow(text, { ...attemptOptions, fontPx: px });
+          if (!failed(attempt) && bandFill(attempt) >= fillTarget) {
+            return { ...attempt, resolvedPx: px, shrunk: true };
+          }
+        }
+      }
       // Only from the pass that got what it wanted. A flow already forced
       // past its preferred line budget, or already given the display share
       // ceiling's own last relaxation, is a flow with nothing to spare -
@@ -560,10 +606,16 @@ function fitDisplayFlow(text, options, { locked, minPx, maxPx = 0, fillTarget = 
         ? { ...grown.set, resolvedPx: grown.px, shrunk: false, grew: true }
         : { ...first, resolvedPx: options.fontPx, shrunk: false };
     }
-    for (let px = options.fontPx - 1; px >= minPx; px -= 1) {
+    let firstClean = null;
+    for (let px = options.fontPx - DISPLAY_FIT_STEP_PX; px >= minPx - 0.001; px -= DISPLAY_FIT_STEP_PX) {
       const attempt = setDisplayFlow(text, { ...attemptOptions, fontPx: px });
-      if (!failed(attempt)) return { ...attempt, resolvedPx: px, shrunk: true };
+      if (failed(attempt)) continue;
+      firstClean ||= { set: attempt, px };
+      if (!(pass === 0 && fillTarget > 0) || bandFill(attempt) >= fillTarget) {
+        return { ...attempt, resolvedPx: px, shrunk: true };
+      }
     }
+    if (firstClean) return { ...firstClean.set, resolvedPx: firstClean.px, shrunk: true };
   }
 
   const floor = setDisplayFlow(text, { ...options, fontPx: minPx });
@@ -1769,7 +1821,7 @@ export function composeBlock(input = {}) {
   const flows = [
     { key: 'kicker', ...flowOf(input.kicker), px: Math.round(bodyPx * 1.05), min: MIN_LEGIBLE_PX, maxLines: 2, locked: true, align: headlineAlign, ...DISPLAY_TYPOGRAPHY.kicker },
     { key: 'headline', ...flowOf(input.headline), px: num(input.headlineFontPx, 34), min: Math.max(MIN_LEGIBLE_PX, bodyPx * 1.1), maxLines: num(input.headlineMaxLines, 4), preferLines: HEADLINE_MAX_LINES, locked: Boolean(input.headlineLocked), align: headlineAlign, ...DISPLAY_TYPOGRAPHY.headline },
-    { key: 'deck', ...flowOf(input.subheading), px: num(input.subheadingFontPx, 20), min: Math.max(MIN_LEGIBLE_PX, bodyPx), maxLines: num(input.deckMaxLines, 3), locked: Boolean(input.subheadingLocked), align: deckAlign, ...DISPLAY_TYPOGRAPHY.deck },
+    { key: 'deck', ...flowOf(input.subheading), px: num(input.subheadingFontPx, 20), min: Math.max(MIN_LEGIBLE_PX, bodyPx), maxLines: num(input.deckMaxLines, 3), preferLines: 1, locked: Boolean(input.subheadingLocked), align: deckAlign, ...DISPLAY_TYPOGRAPHY.deck },
   ].filter((flow) => flow.text.trim());
 
   let y = content.top;
@@ -1781,15 +1833,19 @@ export function composeBlock(input = {}) {
 
   for (const flow of flows) {
     const displayLineHeight = Math.max(1.1, lineHeight - 0.15);
+    const headlinePx = Number(result.bands.headline?.resolvedPx) || 0;
+    const effectivePx = flow.key === 'deck' && headlinePx > 0 && !flow.locked
+      ? Math.max(flow.min, Math.min(flow.px, Math.round(headlinePx * DECK_MAX_HEADLINE_RATIO * 10) / 10))
+      : flow.px;
     // Where this flow's first baseline should fall. Null for the first flow on
     // the block, which starts at the top of the content and nowhere else.
     const baselineAt = lastBaseline
       ? baselineAfter(lastBaseline, {
         key: flow.key,
-        fontPx: flow.px,
+        fontPx: effectivePx,
         family: flow.family,
         weight: flow.weight,
-        lineBox: flow.px * displayLineHeight,
+        lineBox: effectivePx * displayLineHeight,
       })
       : null;
 
@@ -1814,7 +1870,7 @@ export function composeBlock(input = {}) {
       bottomLimit: Math.min(content.bottom, content.top + room * MAX_DISPLAY_SHARE, y + room * share),
       column: { start: content.left, end: content.right },
       images,
-      fontPx: flow.px,
+      fontPx: effectivePx,
       lineHeight: displayLineHeight,
       family: flow.family,
       weight: flow.weight,
@@ -1837,6 +1893,7 @@ export function composeBlock(input = {}) {
       roomyBottomLimit: Math.min(content.bottom, y + room * share),
     });
 
+    const hierarchyShrunk = set.resolvedPx < flow.px - 0.05;
     result.bands[flow.key] = {
       top: set.top,
       height: set.height,
@@ -1844,7 +1901,7 @@ export function composeBlock(input = {}) {
       lineCount: set.lineCount,
       requestedPx: flow.px,
       resolvedPx: set.resolvedPx,
-      shrunk: set.shrunk,
+      shrunk: set.shrunk || hierarchyShrunk,
       grew: Boolean(set.grew),
       align: flow.align,
       // The flow's own marks, carried on the band so render.js can re-apply
@@ -1861,7 +1918,7 @@ export function composeBlock(input = {}) {
       });
     }
     for (const v of set.violations) violations.push({ ...v, code: `${flow.key.toUpperCase()}_${v.code}` });
-    if (set.shrunk) {
+    if (set.shrunk || hierarchyShrunk) {
       warnings.push({ code: `${flow.key.toUpperCase()}_AUTO_FITTED`, detail: `Set at ${set.resolvedPx}px rather than the requested ${flow.px}px.` });
     }
 

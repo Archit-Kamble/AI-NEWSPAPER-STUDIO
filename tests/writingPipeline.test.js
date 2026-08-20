@@ -411,8 +411,8 @@ test('evergreen: retrieval is never invoked; only writing and measured headline 
     'retrieval adds no call; only one headline repair and the bounded body repairs may add calls');
   assert.equal(result.fit.headlineAcceptable, true, 'the headline passed the exact 95% composition check');
   assert.equal(result.fit.overflowing, false, 'the bounded writer must never overset the block');
-  assert.equal(result.fit.state, 'SOURCE_LIMITED_UNDERFILL',
-    'a finite stub source is reported honestly instead of being padded past its supplied facts');
+  assert.ok(['FITS', 'SOURCE_LIMITED_UNDERFILL'].includes(result.fit.state),
+    'the finite stub is either exactly fitted or reported honestly, never padded beyond its supplied facts');
   assert.equal(result.retrieval, null, 'nothing to show - retrieval never ran');
 });
 

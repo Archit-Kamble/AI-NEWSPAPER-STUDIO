@@ -107,7 +107,7 @@ test('a second measured addition closes the hole when the first improves it but 
     resizeBriefFor: () => 'brief',
     askForMore: async () => {
       calls += 1;
-      return { data: { additions: [SENTENCE.repeat(calls === 1 ? 1 : 8)] } };
+      return { data: { additions: [SENTENCE.repeat(calls === 1 ? 1 : 11)] } };
     },
   });
 

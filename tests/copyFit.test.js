@@ -138,7 +138,10 @@ test('Auto columns use the highest exact count that sets every word around a cut
     line_height: 1.45, headline_font_px: 24, subheading_font_px: 14, body_font_px: 12,
   };
   const images = [taperedCutout()];
-  const body = SENTENCE.repeat(5).trim();
+  // The display compositor now repairs the headline/deck hierarchy and gives
+  // the story two more lines. Keep this fixture explicitly on the same
+  // geometry boundary: two columns overset, one legal column fits.
+  const body = SENTENCE.repeat(7).trim();
 
   const auto = await copyFit.measureFit(section, images, { ...OVER, body });
   const one = await copyFit.measureFit({ ...section, column_count: 1 }, images, { ...OVER, body });
@@ -155,7 +158,7 @@ test('Auto columns use the highest exact count that sets every word around a cut
     section,
     images,
     proposal: { ...OVER, body },
-    askForMore: async () => ({ data: { additions: ['याबाबत पुढील काम सुरू आहे.'] } }),
+    askForMore: async () => ({ data: { additions: [SENTENCE.repeat(3).trim()] } }),
     resizeBriefFor: () => 'the exact wording is irrelevant to this geometry test',
   });
 

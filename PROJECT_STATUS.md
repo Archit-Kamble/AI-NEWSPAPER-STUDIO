@@ -4968,3 +4968,45 @@ large default; those fixtures now state their intended type/source volume
 explicitly instead of inheriting a publication default. Final verification:
 **861/861** Node unit/integration tests, and three real Chrome renders with no
 console/page errors.
+
+### 58. Display type is judged as a complete shape (2026-08-20)
+
+The body in all three proof blocks was already correct; this pass changes only
+headline/deck composition. The earlier headline percentage was misleading
+because it measured the single fullest line. On the 307 px proof that reported
+99.6%, the two lines actually occupied about 49% and 100% of their own
+measures, leaving a stranded word above a full line. The 190 px proof had the
+same 48%/98% shape. A reader sees the complete headline, not its best line.
+
+`headlineBandFit()` is now the one shared gate used by composition and proposal
+acceptance. Every working headline line must reach 95%; a closing line may be
+short, as newspaper headlines ordinarily close, but it must contain at least
+two words and occupy at least 30% of its measure. A one-word widow therefore
+cannot make a headline look fitted merely because another line is full. The
+fitter searches in half-pixel type steps around the publication's requested
+size and chooses the nearest legal complete shape; existing maximum-line,
+display-share, legibility, hierarchy and no-lost-body-word protections still
+win.
+
+The deck now prefers one line and, unless the desk explicitly locks its size,
+may not exceed 65% of the resolved headline size. That keeps it visibly
+subordinate after headline auto-fit. The writer brief also requires a complete
+grammatical Marathi deck rather than telegram-style copy with a dropped
+postposition or possessive ending. No body-size, body-flow, column or picture
+wrapping rule changed.
+
+The corrected clean Chrome proofs use the same three exact shapes and no new AI
+call:
+
+- 307 × 296: 27 px headline, **97.57%** working-line fill, legal two-word
+  close; 15 px one-line deck at **97.0%**; body **99.18%**;
+- 190 × 264: 16.5 px headline, **96.74%** working-line fill, legal two-word
+  close; 9.2 px one-line deck at **96.5%**; body **100%**;
+- 150 × 264: 13 px headline, **96.81%** working-line fill, legal two-word
+  close; 7.5 px one-line deck at **100%**; body **100%**.
+
+All three are `FITS` with zero body overset and zero display overset, and the
+rendered proofs have no console/page errors. The regression set covers all
+three shapes, the shared acceptance metric, deck hierarchy and Marathi deck
+instruction. Final verification passes **863/863** Node unit/integration tests.
+Smart Cards remain untouched.

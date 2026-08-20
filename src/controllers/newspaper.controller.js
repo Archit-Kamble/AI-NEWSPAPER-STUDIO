@@ -190,6 +190,21 @@ async function publishUploadedEpaperPdf(req, res) {
   res.status(status).json(result);
 }
 
+// A released PDF is an image authority, while its story rectangles are a
+// desk-owned overlay. This deliberately changes only the frozen release
+// manifest and regenerated share crops, never the live newsroom page.
+async function updateEpaperMap(req, res) {
+  const result = await epaperPublicationService.updateEpaperMap(
+    parseInt(req.params.id, 10),
+    req.body || {},
+  );
+  if (result.ok) return res.json(result);
+  const status = result.code === 'EPAPER_NOT_FOUND' || result.code === 'EPAPER_PAGE_NOT_FOUND' ? 404
+    : result.code === 'EPAPER_MAP_STALE' ? 409
+      : 400;
+  res.status(status).json(result);
+}
+
 async function unpublishEpaper(req, res) {
   const result = await epaperPublicationService.unpublishEdition(parseInt(req.params.id, 10));
   if (!result.ok) return res.status(result.code === 'EPAPER_NOT_FOUND' ? 404 : 400).json(result);
@@ -313,7 +328,7 @@ module.exports = {
   create, start, resize, ladder, supportedPageCounts, list, latest, getOne, update, saveFinalFiles,
   createDistrictEdition, listDistrictEditions, printedPages,
   epaper, epaperHtml, selectedEpaperHtml, epaperPreviewHtml, epaperCanvasCaptureHtml, epaperList, selectEpaper,
-  epaperAsset, epaperPdf, publishEpaper, publishCurrentEpaper, publishUploadedEpaperPdf, unpublishEpaper,
+  epaperAsset, epaperPdf, publishEpaper, publishCurrentEpaper, publishUploadedEpaperPdf, updateEpaperMap, unpublishEpaper,
   preflight, worklist, status, history, features, compositionPlan, compositionApply,
   scribus, pressPackage,
 };

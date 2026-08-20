@@ -4,6 +4,39 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zzi. Released e-paper map adjustment for uploaded PDFs (2026-08-20)
+
+Implemented on the isolated, unmerged branch `codex/epaper-map-editor`. The
+saved editor geometry remains the initial map for both an exact canvas release
+and a PDF release, but an externally designed PDF can legitimately place a
+story somewhere else. The owner E-paper screen therefore now provides **Map
+blocks** for every released issue: page image plus overlay frames; drag to
+move, drag any corner to resize, or enter exact **X / Y / width / height**;
+add a missing block or delete a false one; then save.
+
+`PATCH /api/newspapers/:id/epaper/map` changes only the released manifest. It
+keeps frozen text for saved stories, permits titled manual blocks, regenerates
+only that page's branded PNG story cards from the released page raster, and
+atomically swaps the full release directory. It never updates `page_sections`
+or live newsroom copy. A revision number rejects a stale second editor rather
+than letting it silently overwrite the first editor's map. Thus both
+`editor_snapshot` and `uploaded_pdf` releases have a precise, operator-owned
+map without making the public URL writable.
+
+The PDF release chooser no longer exposes an Edition dropdown: it has date and
+search fields with selectable matching editions. Both owner-list and archive
+search normalise Devanagari digits and include English date forms, so `15 Aug
+2099` finds `शनिवार, १५ ऑगस्ट २०९९`. Reader share controls are compact,
+icon-led destination groups; double-clicking a visible news block downloads
+its branded PNG directly, while a normal tap still opens its sharing card.
+
+Verification: `node --test tests/epaper.test.js tests/epaperPublication.test.js`
+passes **9/9**, including an uploaded-PDF fixture that adds a manual rectangle,
+regenerates its `story-1-manual-*.png`, and proves live editor geometry is
+unchanged.
+
+---
+
 ## 0zzh. Exact e-paper hotspot/crop alignment (2026-08-20)
 
 Implemented on the isolated, unmerged branch

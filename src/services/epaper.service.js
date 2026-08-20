@@ -236,6 +236,19 @@ function dateText(meta) {
   return date?.day ? `${date.day} ${date.monthYear}, ${date.weekday}` : meta.date;
 }
 
+function englishSearchDate(value) {
+  const date = String(value || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
+  const when = new Date(`${date}T12:00:00Z`);
+  const short = new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
+  }).format(when);
+  const long = new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC',
+  }).format(when);
+  return `${date} ${short} ${long}`;
+}
+
 function storyId(pageNumber, item) {
   return `story-p${pageNumber}-${String(item.sectionKey || item.id).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
 }
@@ -262,17 +275,17 @@ function shareControls(item, pageNumber) {
   return `<div class="story-share" data-share-title="${escapeHtml(item.headline)}" data-share-url="${escapeHtml(readerUrl)}" data-share-image="${image}">
     <a class="share-action share-download" href="${image}" download>${icon('download')}<span>PNG</span></a>
     <button class="share-action share-native" type="button" data-share-file>${icon('share')}<span>Share</span></button>
-    <div class="share-app">
+    <div class="share-app share-whatsapp">
       <span class="share-brand whatsapp">${icon('whatsapp')}<b>WhatsApp</b></span>
       <button type="button" data-share-file data-share-target="WhatsApp Status">Status</button>
       <a href="#" data-direct-share="whatsapp">Send</a>
     </div>
-    <div class="share-app">
+    <div class="share-app share-instagram">
       <span class="share-brand instagram">${icon('instagram')}<b>Instagram</b></span>
       <button type="button" data-share-file data-share-target="Instagram Story">Story</button>
       <button type="button" data-share-file data-share-target="Instagram Post">Post</button>
     </div>
-    <div class="share-app">
+    <div class="share-app share-facebook">
       <span class="share-brand facebook">${icon('facebook')}<b>Facebook</b></span>
       <button type="button" data-share-file data-share-target="Facebook Story">Story</button>
       <a href="#" data-direct-share="facebook">Post</a>
@@ -366,10 +379,14 @@ function renderHtml(snapshot) {
 }
 
 function renderArchiveHtml(editions) {
-  const cards = editions.map((item) => `<article class="archive-card" data-archive-card data-search="${escapeHtml(`${item.name} ${item.district} ${item.date}`.toLowerCase())}">
+  const cards = editions.map((item) => {
+    const marathi = dateText({ date: item.date, dateLine: dateLine(item.date) });
+    const search = `${item.name} ${item.district} ${item.date} ${marathi} ${englishSearchDate(item.date)}`.toLocaleLowerCase();
+    return `<article class="archive-card" data-archive-card data-search="${escapeHtml(search)}">
     <a class="archive-cover" href="${item.readerUrl}"><img src="${escapeHtml(item.coverUrl)}" alt="${escapeHtml(item.name)} ${escapeHtml(item.date)} cover" loading="lazy"></a>
     <div class="archive-card-copy"><p class="archive-date">${escapeHtml(item.date)}</p><h2>${escapeHtml(item.name)}</h2><p>${escapeHtml(item.district || 'सातारा')} · ${devanagari(item.pageCount)} pages</p><div class="archive-actions"><a href="${item.readerUrl}">Read edition</a>${item.pdfUrl ? `<a href="${escapeHtml(item.pdfUrl)}" download>Download PDF</a>` : ''}</div></div>
-  </article>`).join('');
+  </article>`;
+  }).join('');
   return `<!doctype html><html lang="mr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#a90d27"><title>दैनिक साहस वार्ता — E-paper</title><link rel="stylesheet" href="/epaper.css"></head><body class="epaper-archive"><header class="archive-header"><img src="${LOGO_URL}" alt="दैनिक साहस वार्ता"><div><h1>E-paper archive</h1><p>Published editions, newest update first</p></div></header><main class="archive-main"><label class="archive-search"><span>Find an edition</span><input type="search" placeholder="Search date, district or newspaper…" data-archive-search></label><p class="archive-empty" data-archive-empty ${editions.length ? 'hidden' : ''}>No published editions yet.</p><section class="archive-grid">${cards}</section></main><script src="/epaper-reader.js" defer></script></body></html>`;
 }
 

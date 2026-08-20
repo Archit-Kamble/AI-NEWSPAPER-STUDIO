@@ -1,4 +1,6 @@
 (() => {
+  const devanagariDigits = { '०': '0', '१': '1', '२': '2', '३': '3', '४': '4', '५': '5', '६': '6', '७': '7', '८': '8', '९': '9' };
+  const searchText = (value) => String(value || '').toLocaleLowerCase().replace(/[०-९]/g, (digit) => devanagariDigits[digit]);
   const toast = (message) => {
     const node = document.querySelector('.epaper-toast');
     if (!node) return;
@@ -14,7 +16,7 @@
     const cards = [...document.querySelectorAll('[data-archive-card]')];
     const empty = document.querySelector('[data-archive-empty]');
     const paint = () => {
-      const query = search.value.trim().toLocaleLowerCase();
+      const query = searchText(search.value.trim());
       let shown = 0;
       cards.forEach((card) => {
         const match = !query || (card.dataset.search || '').includes(query);
@@ -114,10 +116,38 @@
     document.documentElement.style.overflow = '';
   };
 
+  // A single tap opens the card. A desktop double-click is a deliberate fast
+  // path to the PNG itself, without making the reader first save a screenshot.
+  const pendingStoryOpen = new WeakMap();
+  const scheduleStoryOpen = (opener) => {
+    clearTimeout(pendingStoryOpen.get(opener));
+    const timer = setTimeout(() => {
+      pendingStoryOpen.delete(opener);
+      openDialog(opener.dataset.storyDialog);
+    }, 230);
+    pendingStoryOpen.set(opener, timer);
+  };
+  const downloadStoryPng = (opener) => {
+    const dialog = document.getElementById(opener.dataset.storyDialog);
+    const download = dialog?.querySelector('.share-download');
+    if (!download?.href) return false;
+    const link = document.createElement('a');
+    link.href = download.href;
+    link.download = download.getAttribute('download') || 'sahas-varta-story.png';
+    document.body.append(link);
+    link.click();
+    link.remove();
+    toast('Story PNG downloaded.');
+    return true;
+  };
+
   document.addEventListener('click', async (event) => {
     const opener = event.target.closest('[data-story-dialog]');
     if (opener) {
-      if (openDialog(opener.dataset.storyDialog)) event.preventDefault();
+      if (opener.classList.contains('story-hotspot') && event.detail > 0) {
+        event.preventDefault();
+        scheduleStoryOpen(opener);
+      } else if (openDialog(opener.dataset.storyDialog)) event.preventDefault();
       return;
     }
     const closer = event.target.closest('[data-close-dialog]');
@@ -165,6 +195,15 @@
       share.querySelector('.share-download')?.click();
       toast(`PNG downloaded. Open ${target} and choose it from your gallery.`);
     }
+  });
+
+  document.addEventListener('dblclick', (event) => {
+    const opener = event.target.closest('.story-hotspot[data-story-dialog]');
+    if (!opener) return;
+    event.preventDefault();
+    clearTimeout(pendingStoryOpen.get(opener));
+    pendingStoryOpen.delete(opener);
+    downloadStoryPng(opener);
   });
 
   document.querySelectorAll('dialog').forEach((dialog) => {

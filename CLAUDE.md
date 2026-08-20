@@ -131,13 +131,23 @@ crops with the real masthead composed above them. Only editorial news blocks
 are clickable; adverts, features and Smart Cards are deliberately outside this
 release pass.
 
-**There is one e-paper mapping source.** `epaper.buildEdition()` derives each
-populated editorial block's percentage rectangle from its saved page geometry.
-The exact-canvas and uploaded-PDF paths both freeze and render those same
-rectangles for reader hotspots and story-card crops. Do not add an independent
-PDF coordinate map: it will drift from the editor. A PDF must be exported from
-the same saved layout for the block rectangles to describe it exactly; the
-page-count check prevents attaching a different edition by accident.
+**There is one initial e-paper mapping source, plus an explicit released-map
+adjustment.** `epaper.buildEdition()` derives every populated editorial block's
+percentage rectangle from its saved page geometry. Exact-canvas releases freeze
+that geometry unchanged. A finished PDF exported from that same layout also
+starts from it, and the page-count check prevents attaching a different edition
+by accident.
+
+An externally designed uploaded PDF can legitimately need different story
+rectangles. The desk-only **Map blocks** tool is the sole exception: it edits
+the immutable release's own manifest, not `page_sections`, by moving/resizing
+or adding/deleting overlays in page X/Y/width/height coordinates. On save,
+`PATCH /api/newspapers/:id/epaper/map` validates a complete page map,
+regenerates that page's branded story PNGs and atomically swaps the release
+directory. Existing frozen story text is retained; manual blocks must have a
+title. A `mapRevision` prevents two open map editors from silently overwriting
+one another. Never infer a second map automatically from PDF text or silently
+alter a live layout — this explicit operator adjustment is the durable boundary.
 
 For the exact current-canvas path, that rule also bans **editor Fit scale**.
 `renderCanvas()` has a ResizeObserver that can reapply its normal fit-to-dock
@@ -158,6 +168,12 @@ release when none is selected); other releases remain private until the owner
 chooses their radio button. “Current day” follows the newsroom’s newest
 publication date, rather than trusting the host machine clock (important for
 planned/test editions).
+
+Its optional PDF publisher uses a date picker plus searchable edition results,
+not an opaque Edition dropdown. Search indexes Marathi and English dates and
+normalises Devanagari digits (`15 Aug 2099` therefore finds `१५ ऑगस्ट २०९९`).
+Every release row has **Map blocks**, including private releases, because map
+adjustment is a desk action and never exposed to the public reader.
 
 Public access is gated in three places:
 

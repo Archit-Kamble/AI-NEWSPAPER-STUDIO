@@ -56,6 +56,7 @@ router.get('/:id/epaper', requireDesk, newspaperController.epaper);
 router.post('/:id/publish', newspaperController.publishEpaper);
 router.post('/:id/publish-current', newspaperController.publishCurrentEpaper);
 router.post('/:id/epaper/pdf', publicationUpload.single('printPdf'), newspaperController.publishUploadedEpaperPdf);
+router.patch('/:id/epaper/map', newspaperController.updateEpaperMap);
 router.post('/:id/epaper/select', newspaperController.selectEpaper);
 router.delete('/:id/epaper', newspaperController.unpublishEpaper);
 

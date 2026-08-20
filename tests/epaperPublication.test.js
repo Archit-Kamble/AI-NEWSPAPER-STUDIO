@@ -194,6 +194,36 @@ test('an uploaded e-paper PDF publishes a draft without press approval and keeps
     const files = await publicationRepository.latestByNewspaper(editionId);
     assert.ok(files.some((file) => file.file_type === 'epaper_pdf'));
     assert.ok(!files.some((file) => file.file_type === 'print_pdf'));
+
+    // An uploaded PDF can have a different visual arrangement from the live
+    // page. The desk remaps only the frozen public manifest, adds a missed
+    // block, and gets a fresh PNG crop without changing live newsroom frames.
+    const sourcePage = snapshot.pages[0];
+    const remapped = await publication.updateEpaperMap(editionId, {
+      pageNumber: sourcePage.number,
+      mapRevision: 0,
+      articles: sourcePage.articles.map((article) => ({
+        id: article.id,
+        x: 16,
+        y: 24,
+        width: 220,
+        height: 180,
+      })).concat({
+        id: 'manual-uploadedpdf1',
+        headline: 'PDF-only story',
+        x: 280,
+        y: 120,
+        width: 190,
+        height: 160,
+      }),
+    });
+    assert.equal(remapped.ok, true, JSON.stringify(remapped));
+    assert.equal(remapped.mapRevision, 1);
+    assert.ok(remapped.page.articles.some((article) => article.id === 'manual-uploadedpdf1'));
+    await fs.access(path.join(epaper.editionDirectory(editionId), 'story-1-manual-uploadedpdf1.png'));
+    const edited = await epaper.readRelease(editionId);
+    assert.equal(edited.pages[0].articles.find((article) => article.id === 'manual-uploadedpdf1').hotspot.leftPct, Number((280 / sourcePage.width * 100).toFixed(4)));
+    assert.deepEqual((await epaper.buildEdition(editionId)).pages[0].articles.map((article) => article.hotspot), live.pages[0].articles.map((article) => article.hotspot), 'remapping never writes live editor frames');
   } finally {
     if (editionId) await fs.rm(epaper.editionDirectory(editionId), { recursive: true, force: true });
     if (pdfPath) await fs.rm(pdfPath, { force: true });

@@ -78,15 +78,17 @@ svg { width: 1.25rem; height: 1.25rem; fill: none; stroke: currentColor; stroke-
 .story-dialog-heading p { margin: 0 0 3px; color: var(--red); font-size: .76rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .story-dialog-heading h2 { margin: 0; font: 700 clamp(1.25rem, 4vw, 1.8rem)/1.3 "Sahas Sans", sans-serif; }
 .story-card-image { display: block; width: 100%; height: auto; border: 1px solid #ddd6cf; background: white; }
-.story-share { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; padding-top: 16px; }
-.share-action, .share-app { min-height: 48px; border: 1px solid #ded8d1; border-radius: 12px; background: #faf9f7; }
-.share-action { padding: 10px 12px; display: flex; align-items: center; justify-content: center; gap: 8px; color: #292625; text-decoration: none; cursor: pointer; font-weight: 700; }
+.story-share { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; padding-top: 14px; }
+.share-action, .share-app { min-height: 40px; border: 1px solid #ded8d1; border-radius: 10px; background: #faf9f7; }
+.share-action { padding: 8px 9px; display: flex; align-items: center; justify-content: center; gap: 6px; color: #292625; text-decoration: none; cursor: pointer; font-size: .78rem; font-weight: 800; }
+.share-action svg, .share-brand svg { width: 1.05rem; height: 1.05rem; }
 .share-action:disabled, .share-app button:disabled { opacity: .48; cursor: wait; }
-.share-app { grid-column: 1 / -1; padding: 8px; display: grid; grid-template-columns: minmax(130px, 1fr) auto auto; align-items: center; gap: 7px; }
-.share-brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.share-brand svg { flex: 0 0 24px; }
+.share-app { grid-column: span 2; padding: 5px 7px; display: grid; grid-template-columns: minmax(92px, 1fr) auto auto; align-items: center; gap: 5px; }
+.share-brand { display: flex; align-items: center; gap: 5px; min-width: 0; font-size: .76rem; }
+.share-brand svg { flex: 0 0 17px; }
 .share-brand.whatsapp { color: #138a45; }.share-brand.instagram { color: #bb1c72; }.share-brand.facebook { color: #1769d2; }
-.share-app button, .share-app a { min-height: 36px; padding: 7px 11px; border: 0; border-radius: 9px; color: white; background: #2f2c2b; text-decoration: none; cursor: pointer; font-weight: 700; }
+.share-app button, .share-app a { min-height: 29px; padding: 5px 7px; border: 0; border-radius: 7px; color: white; background: #2f2c2b; text-decoration: none; cursor: pointer; font-size: .72rem; font-weight: 800; }
+.share-instagram button { background: #c12e7b; }.share-facebook button, .share-facebook a { background: #1769d2; }
 .share-download { color: white; background: var(--red); border-color: var(--red); }
 .share-x { color: white; background: #111; }.share-linkedin { color: white; background: #1767a8; }.share-email { color: white; background: #2686b1; }
 .share-help { grid-column: 1 / -1; margin: 2px 4px 0; color: var(--muted); font-size: .76rem; line-height: 1.4; }
@@ -136,7 +138,7 @@ svg { width: 1.25rem; height: 1.25rem; fill: none; stroke: currentColor; stroke-
   .story-dialog { width: 100vw; max-width: none; max-height: 100dvh; border-radius: 0; }
   .story-dialog-shell { max-height: 100dvh; padding: 12px; padding-bottom: max(18px, env(safe-area-inset-bottom)); }
   .story-share { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .share-app { grid-template-columns: 1fr auto auto; }
+  .share-app { grid-column: 1 / -1; grid-template-columns: 1fr auto auto; }
   .share-brand b { font-size: .8rem; }
   .archive-header { padding: 16px; grid-template-columns: 1fr; gap: 14px; }
   .archive-header img { max-width: 430px; }

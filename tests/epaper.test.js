@@ -92,4 +92,10 @@ test('the editor Publish action is one confirmation, while optional PDF e-paper 
   assert.doesNotMatch(publicationUi, /scribusFile|final-files|publishEpaper|printPdf/);
   assert.match(managementUi, /Publish from a finished PDF/);
   assert.match(managementUi, /\/epaper\/pdf/);
+  assert.match(managementUi, /data-epaper-pdf-date/);
+  assert.match(managementUi, /data-map-epaper/);
+  assert.doesNotMatch(managementUi, /data-epaper-pdf-edition/);
+  const readerUi = await fs.readFile(path.join(epaper.PUBLIC_DIR, 'epaper-reader.js'), 'utf8');
+  assert.match(readerUi, /dblclick/);
+  assert.match(readerUi, /Story PNG downloaded/);
 });

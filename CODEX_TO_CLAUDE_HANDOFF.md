@@ -140,6 +140,33 @@ Fit transform. A browser proof reads the lead's exact stored 137/144/229/248
 rectangle on a 660×1060 capture surface. Do not compensate by modifying
 manifest percentages or adding a second crop map.
 
+## Follow-up: manual released e-paper map editor
+
+`codex/epaper-map-editor` is a separate unmerged branch. It is the deliberate
+answer to the remaining uploaded-PDF case: a PDF made outside the editor can
+have correct pages but story rectangles different from the saved editor layout.
+
+- Every released issue now has **Map blocks** in desk E-paper management.
+  It shows the actual released page raster with selectable overlay blocks;
+  operators drag/move, resize from all four corners, enter X/Y/width/height,
+  add titled manual blocks and delete wrong blocks.
+- `PATCH /api/newspapers/:id/epaper/map` writes only the frozen release
+  manifest. Existing released story text cannot be altered through this route.
+  Save recrops/rebuilds that page's 1080 px branded PNG cards and atomically
+  swaps the release directory; it never touches live `page_sections`.
+- The map has a revision guard, so a stale second browser window gets a conflict
+  instead of overwriting a newer map. This applies to both `uploaded_pdf` and
+  `editor_snapshot` releases, but is desk-only and does not change safe public
+  `/epaper` URL behavior.
+- The optional PDF publisher replaces its Edition dropdown with date plus
+  searchable results; owner/archive search supports English forms such as
+  `15 Aug 2099` for Marathi-date editions. Reader sharing controls are compact
+  icon-led groups, and double-clicking a news block downloads its PNG directly.
+
+Focused `epaper` + `epaperPublication` tests pass 9/9, including a real
+uploaded-PDF fixture that adds a manual block, writes its story PNG and proves
+the live layout's hotspots are untouched.
+
 ## Codex-era commits after the imported Claude history
 
 The imported handoff and `PROJECT_STATUS.md` indicate that the audit/fill work

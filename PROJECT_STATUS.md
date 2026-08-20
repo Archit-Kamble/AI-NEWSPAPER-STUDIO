@@ -4,6 +4,27 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zzh. Exact e-paper hotspot/crop alignment (2026-08-20)
+
+Implemented on the isolated, unmerged branch
+`codex/epaper-hotspot-alignment`. A review of the user’s private e-paper
+edition 13542 found that its manifest rectangles were correctly calculated
+from each saved `page_sections.x_px/y_px/width_px/height_px`, but the captured
+PNG was not at that same scale. `renderCanvas()` registers an editor
+ResizeObserver; after the e-paper capture cleared its initial Fit transform,
+that observer restored a 0.927 Fit scale (the 660 px capture viewport minus
+the editor’s 48 px Fit padding). The image was therefore shrunken while the
+red reader hotspot and PNG story crop still used true page coordinates.
+
+The capture stylesheet now pins `.newspaper-canvas` to
+`transform:none!important`, so the observer cannot reintroduce Fit scale. A
+real browser diagnostic against edition 13542 proves a 660×1060 canvas and the
+lead frame at its stored **137, 144, 229, 248** dimensions. Because the
+captured PNG is 2×, its reader rectangle/crop is exactly those dimensions ×2,
+not a separate mapping approximation. Focused e-paper tests pass **9/9**.
+
+---
+
 ## 0zzg. Separate one-click web publishing from optional PDF e-paper release (2026-08-20)
 
 Implemented on the isolated, unmerged branch

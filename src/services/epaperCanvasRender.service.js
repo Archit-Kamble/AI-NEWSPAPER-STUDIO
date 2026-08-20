@@ -49,7 +49,7 @@ function canvasCaptureHtml(payload) {
 <link rel="stylesheet" href="/styles.css"><style>
   html,body{margin:0!important;padding:0!important;overflow:hidden!important;background:#fff!important}
   body{width:${Number(payload.newspaper?.page_width_px) || 660}px;height:${Number(payload.newspaper?.page_height_px) || 1060}px}
-  #canvas{width:100%;height:100%}.canvas-stage{width:100%;height:100%;overflow:hidden}.canvas-viewport{position:absolute!important;inset:0!important;display:block!important;overflow:hidden!important;background:#fff!important}.canvas-sizer{margin:0!important}.newspaper-canvas{box-shadow:none!important;border:0!important}
+  #canvas{width:100%;height:100%}.canvas-stage{width:100%;height:100%;overflow:hidden}.canvas-viewport{position:absolute!important;inset:0!important;display:block!important;overflow:hidden!important;background:#fff!important}.canvas-sizer{margin:0!important}.newspaper-canvas{transform:none!important;box-shadow:none!important;border:0!important}
 </style></head><body class="print-view epaper-canvas-capture"><main id="canvas"></main>
 <script>window.__EPAPER_CANVAS_CAPTURE__=${serialisedPayload(payload)};</script>
 <script type="module" src="/editor/epaper-canvas-capture.js"></script>

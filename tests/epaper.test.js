@@ -79,6 +79,7 @@ test('the exact-canvas capture handoff is one-use, opaque and never a public edi
   assert.equal(canvasCapture.takeCanvasCapture(token), null, 'a capture URL cannot be replayed');
   const html = canvasCapture.canvasCaptureHtml(payload);
   assert.match(html, /epaper-canvas-capture\.js/);
+  assert.match(html, /\.newspaper-canvas\{transform:none!important;/, 'the canvas capture must never re-enter editor Fit scale after its page map is frozen');
   assert.doesNotMatch(html, /<\/script><script>bad\(\)<\/script>/, 'edition copy cannot end the embedded JSON script');
   assert.match(html, /\\u003c\/script>/);
 });

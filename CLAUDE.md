@@ -139,6 +139,16 @@ PDF coordinate map: it will drift from the editor. A PDF must be exported from
 the same saved layout for the block rectangles to describe it exactly; the
 page-count check prevents attaching a different edition by accident.
 
+For the exact current-canvas path, that rule also bans **editor Fit scale**.
+`renderCanvas()` has a ResizeObserver that can reapply its normal fit-to-dock
+transform after initial render. In the e-paper capture viewport this is 0.927
+(660 px minus Fit's 48 px padding), which creates an image/map mismatch even
+when all stored block coordinates are correct. The capture stylesheet owns
+`.newspaper-canvas { transform:none!important }`; do not weaken it. This makes
+the screenshot's 660×1060 CSS page and every `page_sections` rectangle the same
+coordinate plane (the PNG is simply 2×). `tests/epaper.test.js` protects the
+rule.
+
 The owner E-paper screen (`/api/epapers`, desk-only) is a searchable release
 list with a radio button. Its checked row is the only public release. The safe
 share link is always the canonical, ID-free `GET /epaper`; it has no session,

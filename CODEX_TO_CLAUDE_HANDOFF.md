@@ -126,6 +126,20 @@ Focused e-paper/publication/production testing passed 17/17, including the
 new draft PDF release test which confirms unchanged status, `uploaded_pdf`,
 the public download and exact frozen/live hotspot equality.
 
+## Follow-up: repair exact current-canvas hotspot scale
+
+`codex/epaper-hotspot-alignment` is a separate unmerged child branch. The
+private e-paper edition 13542 exposed a real mismatch: saved block rectangles
+were correct, but the capture canvas was silently re-scaled to editor Fit by a
+ResizeObserver after `epaper-canvas-capture.js` had cleared the first transform.
+The page PNG painted at 0.927× while its red click map and story crop remained
+at true page coordinates. The fix is deliberately tiny and at the correct
+boundary: the one-use capture HTML applies
+`.newspaper-canvas { transform:none!important }`, preventing any later editor
+Fit transform. A browser proof reads the lead's exact stored 137/144/229/248
+rectangle on a 660×1060 capture surface. Do not compensate by modifying
+manifest percentages or adding a second crop map.
+
 ## Codex-era commits after the imported Claude history
 
 The imported handoff and `PROJECT_STATUS.md` indicate that the audit/fill work

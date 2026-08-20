@@ -929,6 +929,10 @@ never the same width — `दैनिक साहस वार्ता` again
 page's centre line. `1fr auto 1fr` puts it on the centre line whatever the ears
 say, on the page foot and the inside-page folio alike, and a verso page reorders
 its ears rather than reversing the box so the middle column stays the middle.
+The Scribus footer makes the same promise explicitly: its three frames are
+aligned left / centre / right. Putting the date in the middle third but leaving
+that frame left-aligned begins it one-third across the page; it does not centre
+it.
 
 **The AI disclosure is standing furniture, in the imprint band, in Marathi**
 (`identity.js`'s `aiDisclosure`). It says both halves of what is true here — the
@@ -940,8 +944,6 @@ would have swallowed a disclosure silently, which for a disclosure is the one
 failure that matters. `scribus.service.js` emits it too — a press file that
 dropped it would print a paper that does not carry it.
 
-
-`geometry.js`'s `regionsFor` owns the footer band **and** page one's top-left corner (`header.earWidthPx`). The corner used to be reserved only by the presence of the `masthead-advert` block, so deleting that block moved the newspaper's name into the corner and stretched it across the space — found live on edition 13542. A region the page owns cannot be removed by deleting something out of it. `pageSection.service.js` additionally refuses to delete a structurally reserved frame (409; clear its contents instead), narrowly — ordinary editorial frames stay freely deletable.
 
 The page foot carries the paper, the date and the page number, and nothing else. The Act printline belongs to the page-two imprint, which already prints it; setting it on every page duplicated a legal statement and read as an unwanted rule.
 

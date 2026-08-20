@@ -4681,3 +4681,21 @@ complete suite passes **850/850**.
 
 Smart Cards remain deliberately deferred while the other completed groups are
 audited one at a time.
+
+### 47. Post-brief audit — the press footer is centred too (2026-08-20)
+
+The page-furniture group correctly moved the browser footer and folio to a
+`1fr auto 1fr` grid, but its Scribus counterpart still emitted three equal
+frames with `ALIGN="0"` on all three. The date therefore began at one-third of
+the measure rather than being centred on its centre line, and the right ear
+began at two-thirds rather than aligning to the outer edge.
+
+`footerFrames()` now emits the three visual positions as left / centre / right
+alignment on both recto and verso pages. The existing outer-edge order remains
+unchanged. `tests/scribusComposition.test.js` now reads each generated
+`PAGEOBJECT`, holding the title, date and page-number alignment as well as their
+order. Targeted verification: **21/21**.
+
+The handoff was corrected at the same time: an obsolete paragraph claiming the
+corner advert was still undeletable contradicted the completed conditional-ear
+implementation immediately above it, and has been removed.

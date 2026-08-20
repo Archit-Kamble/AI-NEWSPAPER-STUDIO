@@ -4226,6 +4226,61 @@ body.print-view .mono-forme-warning { display: none; }
   }
 }
 
+/* ---------------------------------------------------------------- E-paper ---
+   The dashboard manages RELEASED snapshots, never the newsroom edition
+   itself. "Delete public copy" therefore unpublishes a derivative and keeps
+   the edition/PDF recoverable. */
+.epaper-admin-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s4);
+  margin-bottom: var(--s4);
+}
+.epaper-admin-heading h2,
+.epaper-admin-heading p { margin: 0; }
+.epaper-admin-heading .btn-secondary { width: auto; white-space: nowrap; text-decoration: none; }
+.epaper-admin-search { display: grid; gap: 6px; max-width: 620px; margin-bottom: var(--s5); font-weight: 700; }
+.epaper-admin-search input { min-height: 46px; padding: 10px 13px; border: 1px solid var(--border); border-radius: 9px; background: white; }
+.epaper-admin-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: var(--s4); }
+.epaper-admin-card { display: grid; grid-template-columns: minmax(110px, 36%) 1fr; min-height: 250px; overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: white; box-shadow: 0 7px 24px rgba(32, 28, 26, .07); }
+.epaper-admin-card[hidden] { display: none; }
+.epaper-admin-cover { overflow: hidden; background: #e7e4de; }
+.epaper-admin-cover img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.epaper-admin-copy { min-width: 0; padding: var(--s4); display: flex; flex-direction: column; }
+.epaper-admin-copy h3 { margin: 3px 0; }
+.epaper-admin-copy p { margin: 0 0 4px; color: var(--secondary); }
+.epaper-admin-copy small { color: var(--secondary); }
+.epaper-admin-date { color: var(--accent) !important; font-size: .78rem; font-weight: 700; }
+.epaper-admin-actions { display: grid; gap: 6px; margin-top: auto; padding-top: var(--s3); }
+.epaper-admin-actions .btn-secondary { margin: 0; text-align: center; text-decoration: none; }
+.epaper-admin-actions .epaper-delete { color: #a60f27; border-color: #e6aab4; }
+
+.publication-dialog { width: min(94vw, 680px); max-height: calc(100vh - 48px); overflow: auto; }
+.publication-kicker { margin: 0 0 3px; color: var(--accent); font-size: .76rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.publication-dialog h3 { margin-top: 0; font-size: 1.55rem; }
+.publication-steps { margin: var(--s4) 0; padding: 0; display: grid; gap: 10px; list-style: none; counter-reset: publish-step; }
+.publication-steps li { position: relative; min-height: 54px; padding: 9px 10px 9px 52px; display: grid; gap: 2px; border: 1px solid var(--border); border-radius: 9px; background: #fafafa; counter-increment: publish-step; }
+.publication-steps li::before { content: counter(publish-step); position: absolute; left: 11px; top: 10px; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; color: #666; background: #ececee; font-weight: 800; }
+.publication-steps li.done { border-color: #a9dbc0; background: #f0faf4; }
+.publication-steps li.done::before { content: "✓"; color: white; background: #218650; }
+.publication-steps span { color: var(--secondary); font-size: .82rem; }
+.publication-files { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: var(--s4); }
+.publication-files a { padding: 8px 11px; border-radius: 999px; color: #333; background: #eeece9; text-decoration: none; font-size: .82rem; font-weight: 700; }
+.publication-upload { padding: 12px; border: 1px solid var(--border); border-radius: 10px; }
+.publication-upload summary { cursor: pointer; font-weight: 800; }
+.publication-release { margin-top: var(--s4); padding-top: var(--s4); border-top: 1px solid var(--border); }
+
+@media (max-width: 700px) {
+  .epaper-admin-heading { display: grid; }
+  .epaper-admin-heading .btn-secondary { width: 100%; }
+  .epaper-admin-card { grid-template-columns: 120px 1fr; }
+}
+@media (max-width: 470px) {
+  .epaper-admin-card { grid-template-columns: 1fr; }
+  .epaper-admin-cover { aspect-ratio: 330 / 250; }
+}
+
 /* --- "What's left" (public/editor/worklist-panel.js) -----------------------
    Shares the preflight panel's shell deliberately: preflight says what is
    wrong, this says what is not done yet, and a desk should not have to learn

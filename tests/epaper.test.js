@@ -1,0 +1,67 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const fs = require('node:fs/promises');
+const os = require('node:os');
+const publication = require('../src/services/epaperPublication.service');
+const epaper = require('../src/services/epaper.service');
+
+test('hotspot percentages become an exact, bounded raster crop', () => {
+  assert.deepEqual(
+    publication.cropBox({ width: 2000, height: 3000 }, {
+      leftPct: 10, topPct: 20, widthPct: 30, heightPct: 40,
+    }),
+    { x: 200, y: 600, w: 600, h: 1200 },
+  );
+  assert.deepEqual(
+    publication.cropBox({ width: 100, height: 100 }, {
+      leftPct: -5, topPct: 99.8, widthPct: 0, heightPct: 50,
+    }),
+    { x: 0, y: 99, w: 1, h: 1 },
+    'a corrupt edge rectangle is bounded rather than reading outside the PNG',
+  );
+});
+
+test('a story share image is a real 1080px PNG with the nameplate above the printed crop', async (t) => {
+  const { Jimp } = await import('jimp');
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'sahas-epaper-card-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const output = path.join(directory, 'story.png');
+  const page = new Jimp({ width: 1200, height: 1800, color: 0xe9e5ddff });
+  const nameplate = await Jimp.read(path.join(epaper.PUBLIC_DIR, epaper.LOGO_URL));
+
+  await publication.storyCard(page, nameplate, {
+    hotspot: { leftPct: 10, topPct: 10, widthPct: 45, heightPct: 55 },
+  }, output);
+
+  const card = await Jimp.read(output);
+  assert.equal(card.bitmap.width, 1080, 'social cards have a stable, high-resolution width');
+  assert.ok(card.bitmap.height > 1000, 'the printed story crop is retained below the masthead');
+  assert.equal((await fs.readFile(output)).subarray(1, 4).toString(), 'PNG');
+});
+
+test('reader HTML carries mobile page navigation, PNG story affordances, PDF and accessible text', () => {
+  const html = epaper.renderHtml({
+    edition: { id: 42, title: 'दैनिक साहस वार्ता', district: 'सातारा', date: '2026-08-20', dateLine: null, volumeLine: 'वर्ष १', pdfUrl: '/epaper/42/pdf' },
+    pages: [{ number: 1, imageUrl: '/uploads/epaper/42/page-1.png', imageWidth: 1200, imageHeight: 1800, articles: [{
+      id: 7, sectionKey: 'lead', headline: 'स्पष्ट बातमी', body: 'वाचता येणारा मजकूर.', pictures: [],
+      hotspot: { leftPct: 10, topPct: 20, widthPct: 60, heightPct: 30 },
+      shareImageUrl: '/uploads/epaper/42/story-1-7.png',
+    }] }],
+  });
+  assert.match(html, /data-page-button="1"/);
+  assert.match(html, /data-page-stage/);
+  assert.match(html, /story-1-7\.png/);
+  assert.match(html, /Whole newspaper PDF/);
+  assert.match(html, /वाचता येणारा मजकूर/);
+  assert.match(html, /WhatsApp/);
+  assert.match(html, /Instagram/);
+  assert.match(html, /Facebook/);
+  assert.match(html, /LinkedIn/);
+});
+
+test('published asset paths reject traversal, manifests and non-PNG files before lookup', async () => {
+  assert.equal(await epaper.publishedAsset(42, '../manifest.json'), null);
+  assert.equal(await epaper.publishedAsset(42, 'manifest.json'), null);
+  assert.equal(await epaper.publishedAsset(42, 'page-1.jpg'), null);
+});

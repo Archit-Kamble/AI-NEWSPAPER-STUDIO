@@ -51,6 +51,8 @@ router.get('/:id/district-editions', requireDesk, newspaperController.listDistri
 router.get('/:id/printed-pages', requireDesk, newspaperController.printedPages);
 
 router.get('/:id/epaper', newspaperController.epaper);
+router.post('/:id/publish', newspaperController.publishEpaper);
+router.delete('/:id/epaper', newspaperController.unpublishEpaper);
 
 // GET is left open by deskWrites above (it guards writes only), so these five
 // - desk-internal production state, not the finished public edition - repeat

@@ -80,6 +80,38 @@ Starting an edition also:
 
 Asking for more pages adds them at their proper rung. Asking for fewer never removes a page — there may be work on it.
 
+### Publishing the public e-paper
+
+The newsroom edition is mutable; a published issue is not. `POST
+/api/newspapers/:id/publish` is therefore a real release boundary, not a status
+label on the live editor. It requires central press readiness and the accepted
+final PDF, rasterises that PDF at 180 DPI, and writes one frozen manifest plus
+page/story PNGs under `public/uploads/epaper/:id/`. Only after the complete
+replacement succeeds does the newspaper become `published`.
+
+The final PDF is the visual authority. The public reader does not reconstruct
+the page from live HTML, because a later editor change must not alter an issue
+already distributed. Story cards are 1080 px PNG crops of the accepted page
+with the real masthead composed above them. Only editorial news blocks are
+clickable; adverts, features and Smart Cards are deliberately outside this
+release pass.
+
+Public access is gated in three places:
+
+- `GET /epaper/:id` and the JSON equivalent load the frozen manifest only when
+  the newspaper status is `published`;
+- generated `/uploads/epaper/:id/*.png` files are intercepted before general
+  static serving and checked against both that status and the manifest's asset
+  list;
+- the whole-paper download uses `GET /epaper/:id/pdf`, which performs the same
+  status check instead of exposing the raw upload URL in public markup.
+
+`DELETE /api/newspapers/:id/epaper` means **remove the public copy**, not delete
+the newsroom edition: it hides the issue first, removes only generated
+derivatives, leaves the final-PDF record intact, and returns the edition to
+`finalised`. Archive cards come from frozen manifests and are sorted by their
+publication/republish time, newest first.
+
 ### Type sizes are derived, and fractional
 
 `typeScaleFor()` in `src/layout/geometry.js` sets a block's default type from its size, and the headline may never take more than half the block's usable height at two lines. A rule with a cliff in it (the old "cap at 18px below 160px tall") gives a full-width banner a headline that consumes the whole block, leaving a character budget of **zero** — a hole nothing can be written into. `tests/layout.test.js` holds this: no article block in any layout may be born unable to carry a sentence.

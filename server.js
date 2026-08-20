@@ -42,6 +42,11 @@ function createApp() {
 
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+  // Generated e-paper assets sit under public/uploads for deployment
+  // simplicity, but they are not ordinary static uploads. This route comes
+  // first so a guessed PNG URL cannot reveal an edition before Publish or
+  // after the desk removes its public copy.
+  app.get("/uploads/epaper/:id/:filename", asyncRoute(newspaperController.epaperAsset));
   app.use(express.static(path.join(__dirname, "public")));
   app.use(
     session({
@@ -109,9 +114,12 @@ function createApp() {
     res.json(ai.status());
   });
 
-  // The e-paper as a plain readable page a search engine can index. Public,
-  // like the JSON form at GET /api/newspapers/:id/epaper - not part of that
-  // router's mount path, so it stays wired directly here.
+  // The immutable published archive. Both routes are public by design, but
+  // their service returns ONLY a snapshot created by the desk's Publish
+  // action; knowing an unfinished edition id reveals nothing.
+  app.get("/api/epapers", asyncRoute(newspaperController.epaperList));
+  app.get("/epaper", asyncRoute(newspaperController.epaperArchiveHtml));
+  app.get("/epaper/:id/pdf", asyncRoute(newspaperController.epaperPdf));
   app.get("/epaper/:id", asyncRoute(newspaperController.epaperHtml));
 
   // Page API

@@ -4,6 +4,54 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zze. Public e-paper release, mobile reader and archive (2026-08-20)
+
+Implemented on the isolated, unmerged branch `codex/epaper-public-reader` at
+the user's request. Publish is now a release boundary: it requires the shared
+press-readiness gate and final PDF, rasterises the accepted PDF at 180 DPI, and
+atomically creates an immutable public manifest, page PNGs and 1080 px branded
+story PNGs. The story image is cropped from the accepted page and carries the
+real SAHAS nameplate, so sharing no longer depends on a blurry phone
+screenshot. Adverts, features and Smart Cards are excluded; this pass touches
+editorial news blocks only.
+
+Anonymous readers can see only a newspaper explicitly marked `published`.
+Reader HTML/JSON, generated PNG assets and the whole-PDF download each repeat
+that gate; direct generated-asset URLs cannot bypass it. Republishing swaps a
+complete new snapshot into place. Removing an e-paper hides it first and
+deletes only generated derivatives, preserving the newsroom edition and final
+PDF record.
+
+The public UI is mobile-first: sticky top page numbers, previous/next controls,
+horizontal touch swipe, clickable story rectangles over the exact page image,
+a full-screen phone story dialog, visible searchable story text, and PNG/share
+actions for the system share sheet, WhatsApp Status/Send, Instagram
+Story/Post, Facebook Story/Post, X, LinkedIn and email. The whole-paper PDF is
+available from the header. The public archive is newest-publication first and
+searchable.
+
+The admin sidebar now places E-paper directly below Settings. Its management
+screen shows the public archive, search, view/PDF actions and an explicit
+“Delete public copy” action whose confirmation says the newsroom edition and
+PDF are retained. The workspace Publish dialog now presents the real three
+steps: pass pages, upload final PDF, build/release e-paper.
+
+Verification used press-ready fixture edition 37673 without changing its
+content: a temporary one-page PDF was rasterised by the real `/usr/bin/pdftoppm`
+path into 1 page and 10 story cards, the reader/archive/admin were exercised in
+Chromium at phone and desktop sizes, a synthetic second page proved button and
+touch-swipe navigation, and the opened story card reported a natural width of
+1080 px with zero console errors. Delete-public-copy returned reader and direct
+PNG requests to 404 while retaining the final-PDF database record; the fixture
+was restored to `finalised` and all temporary public files were removed.
+Screenshots are in `/tmp/sahas-epaper-verification/`.
+
+Automated verification: focused e-paper/publication/production tests **14/14
+pass**; final repository suite **870/870 pass** after the published-only PDF
+route and Smart Card exclusion.
+
+---
+
 ## 0zzd. Release gate — SAHAS original 11-problem v1 closed (2026-08-17)
 
 The original 11 problems this repair project set out to close are all PASS,

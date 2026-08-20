@@ -2,6 +2,7 @@ const newspaperService = require('../services/newspaper.service');
 const editionStartService = require('../services/editionStart.service');
 const districtEditionService = require('../services/districtEdition.service');
 const epaperService = require('../services/epaper.service');
+const epaperPublicationService = require('../services/epaperPublication.service');
 const preflightService = require('../services/preflight.service');
 const worklistService = require('../services/worklist.service');
 const signoffService = require('../services/signoff.service');
@@ -95,15 +96,54 @@ async function printedPages(req, res) {
 }
 
 async function epaper(req, res) {
-  const edition = await epaperService.buildEdition(parseInt(req.params.id, 10));
-  if (!edition) return res.status(404).json({ error: 'No such edition.' });
+  const edition = await epaperService.loadPublishedEdition(parseInt(req.params.id, 10));
+  if (!edition) return res.status(404).json({ error: 'No published edition.' });
   res.json(edition);
 }
 
 async function epaperHtml(req, res) {
-  const edition = await epaperService.buildEdition(parseInt(req.params.id, 10));
-  if (!edition) return res.status(404).type('html').send('<h1>No such edition.</h1>');
+  const edition = await epaperService.loadPublishedEdition(parseInt(req.params.id, 10));
+  if (!edition) return res.status(404).type('html').send('<h1>This edition has not been published.</h1>');
   res.type('html').send(epaperService.renderHtml(edition));
+}
+
+async function epaperList(req, res) {
+  res.json(await epaperService.listPublishedEditions());
+}
+
+async function epaperArchiveHtml(req, res) {
+  res.type('html').send(epaperService.renderArchiveHtml(await epaperService.listPublishedEditions()));
+}
+
+async function epaperAsset(req, res) {
+  const asset = await epaperService.publishedAsset(parseInt(req.params.id, 10), req.params.filename);
+  if (!asset) return res.status(404).end();
+  res.set('Cache-Control', 'public, max-age=86400, immutable');
+  res.sendFile(asset);
+}
+
+async function epaperPdf(req, res) {
+  const pdf = await epaperService.publishedPdf(parseInt(req.params.id, 10));
+  if (!pdf) return res.status(404).end();
+  res.download(pdf.file, pdf.name);
+}
+
+async function publishEpaper(req, res) {
+  const result = await epaperPublicationService.publishEdition(
+    parseInt(req.params.id, 10),
+    req.session.user,
+  );
+  if (result.ok) return res.json(result);
+  const status = result.code === 'EPAPER_NOT_FOUND' ? 404
+    : result.code === 'PRESS_NOT_READY' || result.code === 'EPAPER_PAGE_COUNT_MISMATCH' ? 409
+      : 400;
+  res.status(status).json(result);
+}
+
+async function unpublishEpaper(req, res) {
+  const result = await epaperPublicationService.unpublishEdition(parseInt(req.params.id, 10));
+  if (!result.ok) return res.status(result.code === 'EPAPER_NOT_FOUND' ? 404 : 400).json(result);
+  res.json(result);
 }
 
 // Preflight: everything that must be true before a page reaches the plate.
@@ -222,6 +262,7 @@ async function pressPackage(req, res) {
 module.exports = {
   create, start, resize, ladder, supportedPageCounts, list, latest, getOne, update, saveFinalFiles,
   createDistrictEdition, listDistrictEditions, printedPages,
-  epaper, epaperHtml, preflight, worklist, status, history, features, compositionPlan, compositionApply,
+  epaper, epaperHtml, epaperList, epaperArchiveHtml, epaperAsset, epaperPdf, publishEpaper, unpublishEpaper,
+  preflight, worklist, status, history, features, compositionPlan, compositionApply,
   scribus, pressPackage,
 };

@@ -33,6 +33,36 @@ async function findAll() {
 }
 
 /**
+ * The public archive, newest publication action first.
+ *
+ * `updated_at` changes when an edition is published or republished, so it is
+ * the public archive's "last updated" clock. Draft/finalised editions never
+ * enter this query: knowing an id must not reveal a paper that has not been
+ * released by the desk.
+ */
+async function findPublished() {
+  const { rows } = await pool.query(
+    `SELECT n.id, n.name, n.publication_date, n.district, n.status,
+            n.updated_at AS published_at,
+            COUNT(DISTINCT p.id)::int AS page_count,
+            pdf.storage_path AS print_pdf
+       FROM newspapers n
+       LEFT JOIN pages p ON p.newspaper_id = n.id
+       LEFT JOIN LATERAL (
+         SELECT storage_path
+           FROM publication_files
+          WHERE newspaper_id = n.id AND file_type = 'print_pdf'
+          ORDER BY created_at DESC
+          LIMIT 1
+       ) pdf ON TRUE
+      WHERE n.status = 'published'
+      GROUP BY n.id, pdf.storage_path
+      ORDER BY n.updated_at DESC, n.publication_date DESC, n.id DESC`,
+  );
+  return rows;
+}
+
+/**
  * The edition for one date - a paper is a singleton per date.
  *
  * District editions hang off a parent, so only the parent counts as "the"
@@ -99,4 +129,4 @@ async function update(id, updates) {
   return rows[0] || null;
 }
 
-module.exports = { create, findAll, findById, findByDate, findAllByDate, findPrevious, update };
+module.exports = { create, findAll, findPublished, findById, findByDate, findAllByDate, findPrevious, update };

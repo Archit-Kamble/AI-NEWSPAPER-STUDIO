@@ -14,6 +14,9 @@ const { printsColourByDefault } = require('../src/layout/formes');
 const { quote } = require('../src/layout/rateCard');
 const { splitAt } = require('../src/services/jump.service');
 const sudoku = require('../src/features/sudoku');
+const epaper = require('../src/services/epaper.service');
+const fs = require('node:fs/promises');
+const path = require('node:path');
 
 test.after(() => pool.end());
 
@@ -123,6 +126,7 @@ test('a district edition shares its parent pages and owns only its own', async (
 
   let parentId = null;
   let childId = null;
+  let pdfPath = null;
   try {
     const parent = await post('/api/newspapers', { name: 'District test', publicationDate: '2026-08-04' }).then((r) => r.json());
     parentId = parent.id;
@@ -153,19 +157,56 @@ test('a district edition shares its parent pages and owns only its own', async (
       'एकदाच दुरुस्त',
     );
 
-    // And the e-paper serves the words, not a picture of them.
-    const html = await desk(`/epaper/${parentId}`).then((r) => r.text());
+    // Merely knowing an edition id must not reveal unpublished newsroom copy.
+    const unpublished = await fetch(`${base}/epaper/${parentId}`);
+    assert.equal(unpublished.status, 404);
+
+    // Publication freezes one immutable manifest. The reader serves that
+    // snapshot as page images/hotspots AND searchable text; it never reads the
+    // subsequently editable newsroom rows for an anonymous request.
+    const snapshot = await epaper.buildEdition(parentId);
+    snapshot.edition.status = 'published';
+    snapshot.edition.pdfUrl = `/epaper/${parentId}/pdf`;
+    snapshot.pages[0].imageUrl = `/uploads/epaper/${parentId}/page-1.png`;
+    await fs.mkdir(epaper.editionDirectory(parentId), { recursive: true });
+    await fs.writeFile(epaper.manifestPath(parentId), JSON.stringify(snapshot));
+    await fs.writeFile(path.join(epaper.editionDirectory(parentId), 'page-1.png'), Buffer.from('published-page'));
+    const pdfName = `epaper-gate-${process.pid}-${parentId}.pdf`;
+    pdfPath = path.join(epaper.PUBLIC_DIR, 'uploads', pdfName);
+    await fs.writeFile(pdfPath, Buffer.from('published-pdf'));
+    await pool.query(
+      `INSERT INTO publication_files (newspaper_id, file_type, storage_path) VALUES ($1, 'print_pdf', $2)`,
+      [parentId, `/uploads/${pdfName}`],
+    );
+    assert.equal(
+      (await fetch(`${base}/uploads/epaper/${parentId}/page-1.png`)).status,
+      404,
+      'a generated asset cannot bypass the publication status gate',
+    );
+    assert.equal((await fetch(`${base}/epaper/${parentId}/pdf`)).status, 404);
+    await pool.query(`UPDATE newspapers SET status = 'published' WHERE id = $1`, [parentId]);
+
+    const html = await fetch(`${base}/epaper/${parentId}`).then((r) => r.text());
     assert.match(html, /एकदाच दुरुस्त/);
     // The headline carries its own alignment now (schema.sql's headline_align),
     // so the tag is no longer bare.
     assert.match(html, /<h3 style="text-align:/);
-    assert.ok(!html.includes('<script'), 'the archive must not need JavaScript to be read');
+    assert.match(html, /class="epaper-transcript"/, 'the archive text remains readable/indexable without its enhancements');
+    assert.match(html, /data-page-stage/, 'the public reader carries the page-image viewer');
 
-    const data = await desk(`/api/newspapers/${parentId}/epaper`).then((r) => r.json());
+    const data = await fetch(`${base}/api/newspapers/${parentId}/epaper`).then((r) => r.json());
     const hotspot = data.pages[0].articles[0].hotspot;
     assert.ok(hotspot.widthPct > 0 && hotspot.widthPct <= 100);
     assert.ok(hotspot.topPct >= 0 && hotspot.topPct < 100);
+    const publicPage = await fetch(`${base}/uploads/epaper/${parentId}/page-1.png`);
+    assert.equal(publicPage.status, 200);
+    assert.equal(await publicPage.text(), 'published-page');
+    const publicPdf = await fetch(`${base}/epaper/${parentId}/pdf`);
+    assert.equal(publicPdf.status, 200);
+    assert.equal(await publicPdf.text(), 'published-pdf');
   } finally {
+    if (parentId) await fs.rm(epaper.editionDirectory(parentId), { recursive: true, force: true });
+    if (pdfPath) await fs.rm(pdfPath, { force: true });
     if (childId) await pool.query('DELETE FROM newspapers WHERE id = $1', [childId]);
     if (parentId) await pool.query('DELETE FROM newspapers WHERE id = $1', [parentId]);
     server.close();

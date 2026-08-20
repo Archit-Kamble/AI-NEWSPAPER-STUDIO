@@ -32,34 +32,92 @@ async function findAll() {
   return rows;
 }
 
-/**
- * The public archive, newest publication action first.
- *
- * `updated_at` changes when an edition is published or republished, so it is
- * the public archive's "last updated" clock. Draft/finalised editions never
- * enter this query: knowing an id must not reveal a paper that has not been
- * released by the desk.
- */
-async function findPublished() {
+// An e-paper release is deliberately separate from the newsroom / press
+// status. A draft can be frozen as a web proof, while only an explicitly
+// selected release is reachable from the public canonical URL.
+async function findEpaperReleases() {
   const { rows } = await pool.query(
     `SELECT n.id, n.name, n.publication_date, n.district, n.status,
-            n.updated_at AS published_at,
-            COUNT(DISTINCT p.id)::int AS page_count,
-            pdf.storage_path AS print_pdf
+            n.epaper_released_at, n.epaper_selected, n.epaper_source
        FROM newspapers n
-       LEFT JOIN pages p ON p.newspaper_id = n.id
-       LEFT JOIN LATERAL (
-         SELECT storage_path
-           FROM publication_files
-          WHERE newspaper_id = n.id AND file_type = 'print_pdf'
-          ORDER BY created_at DESC
-          LIMIT 1
-       ) pdf ON TRUE
-      WHERE n.status = 'published'
-      GROUP BY n.id, pdf.storage_path
-      ORDER BY n.updated_at DESC, n.publication_date DESC, n.id DESC`,
+      WHERE n.epaper_released_at IS NOT NULL
+      ORDER BY n.epaper_released_at DESC, n.publication_date DESC, n.id DESC`,
   );
   return rows;
+}
+
+async function findPublicEpaper() {
+  const { rows } = await pool.query(
+    `SELECT * FROM newspapers WHERE epaper_selected = TRUE AND epaper_released_at IS NOT NULL
+      ORDER BY epaper_released_at DESC, id DESC LIMIT 1`,
+  );
+  return rows[0] || null;
+}
+
+async function selectPublicEpaper(id) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `UPDATE newspapers SET epaper_selected = FALSE, updated_at = CURRENT_TIMESTAMP
+        WHERE epaper_selected = TRUE AND id <> $1`,
+      [id],
+    );
+    const { rows } = await client.query(
+      `UPDATE newspapers SET epaper_selected = TRUE, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1 AND epaper_released_at IS NOT NULL RETURNING *`,
+      [id],
+    );
+    await client.query('COMMIT');
+    return rows[0] || null;
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function recordEpaperRelease(id, { source, selected = false } = {}) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    if (selected) {
+      await client.query(
+        `UPDATE newspapers SET epaper_selected = FALSE, updated_at = CURRENT_TIMESTAMP
+          WHERE epaper_selected = TRUE AND id <> $1`,
+        [id],
+      );
+    }
+    const { rows } = await client.query(
+      `UPDATE newspapers
+          SET epaper_released_at = CURRENT_TIMESTAMP,
+              epaper_selected = $2,
+              epaper_source = COALESCE($3, epaper_source),
+              updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1
+        RETURNING *`,
+      [id, selected, source || null],
+    );
+    await client.query('COMMIT');
+    return rows[0] || null;
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function clearEpaperRelease(id) {
+  const { rows } = await pool.query(
+    `UPDATE newspapers
+        SET epaper_released_at = NULL, epaper_selected = FALSE, epaper_source = NULL,
+            updated_at = CURRENT_TIMESTAMP
+      WHERE id = $1 RETURNING *`,
+    [id],
+  );
+  return rows[0] || null;
 }
 
 /**
@@ -129,4 +187,4 @@ async function update(id, updates) {
   return rows[0] || null;
 }
 
-module.exports = { create, findAll, findPublished, findById, findByDate, findAllByDate, findPrevious, update };
+module.exports = { create, findAll, findEpaperReleases, findPublicEpaper, selectPublicEpaper, recordEpaperRelease, clearEpaperRelease, findById, findByDate, findAllByDate, findPrevious, update };

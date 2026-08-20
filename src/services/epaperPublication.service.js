@@ -9,6 +9,7 @@
 
 const path = require('path');
 const fs = require('fs/promises');
+const os = require('os');
 const crypto = require('crypto');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
@@ -23,6 +24,11 @@ const CARD_WIDTH = 1080;
 const CARD_PADDING = 36;
 const CARD_HEADER = 246;
 const CARD_MAX_CROP_HEIGHT = 2300;
+const CURRENT_RENDER_SCALE = 2;
+
+const escapeHtml = (value) => String(value ?? '')
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 function failure(code, error, extra = {}) {
   return { ok: false, code, error, ...extra };
@@ -135,6 +141,96 @@ async function replaceDirectory(tempDir, finalDir) {
   if (hadPrevious) await fs.rm(backup, { recursive: true, force: true });
 }
 
+function currentPageHtml(snapshot, page, logoDataUrl) {
+  const width = Number(page.width) || 660;
+  const height = Number(page.height) || 1060;
+  const articles = (page.articles || []).map((item) => {
+    const h = item.hotspot || {};
+    const picture = item.pictures?.[0]?.url
+      ? `<img class="current-picture" src="${escapeHtml(item.pictures[0].url)}" alt="">` : '';
+    return `<article class="current-story" style="left:${Number(h.leftPct) || 0}%;top:${Number(h.topPct) || 0}%;width:${Number(h.widthPct) || 0}%;height:${Number(h.heightPct) || 0}%;--headline:${Math.max(9, Number(item.headlineFontPx) || 18)}px;--deck:${Math.max(7, Number(item.subheadingFontPx) || 13)}px;--body:${Math.max(6, Number(item.bodyFontPx) || 8)}px;--leading:${Math.max(1.2, Number(item.lineHeight) || 1.45)};--columns:${Math.max(1, Number(item.columnCount) || 1)};text-align:${['left','center','right','justify'].includes(item.bodyAlign) ? item.bodyAlign : 'justify'}">
+      ${item.kicker ? `<p class="current-kicker">${escapeHtml(item.kicker)}</p>` : ''}
+      ${item.headline ? `<h1 style="text-align:${escapeHtml(item.headlineAlign || 'left')}">${escapeHtml(item.headline)}</h1>` : ''}
+      ${item.subheading ? `<p class="current-deck" style="text-align:${escapeHtml(item.subheadingAlign || 'left')}">${escapeHtml(item.subheading)}</p>` : ''}
+      ${picture}<div class="current-body">${escapeHtml(item.body || '')}</div>
+    </article>`;
+  }).join('');
+  return `<!doctype html><html lang="mr"><meta charset="utf-8"><style>
+    @font-face{font-family:SahasDeva;src:url(file://${path.join(epaper.PUBLIC_DIR, 'assets', 'fonts', 'NotoSerifDevanagari-Regular.ttf')}) format('truetype');font-weight:400;}@font-face{font-family:SahasDeva;src:url(file://${path.join(epaper.PUBLIC_DIR, 'assets', 'fonts', 'NotoSerifDevanagari-Bold.ttf')}) format('truetype');font-weight:700;}
+    *{box-sizing:border-box}html,body{margin:0;width:${width}px;height:${height}px;background:#fff;color:#171414}body{font-family:SahasDeva,serif}.current-page{position:relative;width:${width}px;height:${height}px;overflow:hidden;background:white}.current-masthead{position:absolute;z-index:2;top:8px;left:20px;width:calc(100% - 40px);height:70px;object-fit:contain;border-bottom:2px solid #c8102e}.current-story{position:absolute;overflow:hidden;padding:3px 4px;border-top:1px solid #302c2b;background:#fff}.current-story h1{margin:0 0 2px;font:700 var(--headline)/1.12 SahasDeva,serif}.current-kicker{margin:0 0 2px;color:#a90d27;font:700 max(7px,calc(var(--headline)*.42))/1.1 SahasDeva,serif}.current-deck{margin:0 0 3px;color:#494342;font:var(--deck)/1.25 SahasDeva,serif}.current-picture{display:block;float:right;max-width:48%;max-height:45%;margin:0 0 3px 5px;object-fit:cover}.current-body{white-space:pre-wrap;column-count:var(--columns);column-gap:8px;font:var(--body)/var(--leading) SahasDeva,serif;overflow:hidden}.current-story:has(.current-body:empty){display:none}
+  </style><body><main class="current-page"><img class="current-masthead" src="${logoDataUrl}" alt="">${articles}</main></body></html>`;
+}
+
+async function embeddedUploadUrl(url) {
+  const file = publicFile(url);
+  if (!file) return '';
+  try {
+    const extension = path.extname(file).slice(1).toLowerCase();
+    const mime = ({ jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' })[extension];
+    if (!mime) return '';
+    return `data:${mime};base64,${(await fs.readFile(file)).toString('base64')}`;
+  } catch {
+    return '';
+  }
+}
+
+async function pageWithEmbeddedPictures(page) {
+  return {
+    ...page,
+    articles: await Promise.all((page.articles || []).map(async (article) => ({
+      ...article,
+      pictures: await Promise.all((article.pictures || []).map(async (picture) => ({
+        ...picture,
+        url: await embeddedUploadUrl(picture.url),
+      }))),
+    }))),
+  };
+}
+
+async function renderCurrentPages(snapshot, outputDir, { run = execFileAsync, chromeBin = process.env.EPAPER_CHROME_BIN || '/usr/bin/google-chrome' } = {}) {
+  const logo = await fs.readFile(path.join(epaper.PUBLIC_DIR, epaper.LOGO_URL));
+  const logoDataUrl = `data:image/png;base64,${logo.toString('base64')}`;
+  const sourceDir = await fs.mkdtemp(path.join(os.tmpdir(), 'sahas-epaper-current-'));
+  try {
+    for (const page of snapshot.pages) {
+      const width = Number(page.width) || 660;
+      const height = Number(page.height) || 1060;
+      const htmlPath = path.join(sourceDir, `page-${page.number}.html`);
+      const outputPath = path.join(outputDir, `page-${page.number}.png`);
+      await fs.writeFile(htmlPath, currentPageHtml(snapshot, await pageWithEmbeddedPictures(page), logoDataUrl), 'utf8');
+      await run(chromeBin, [
+        '--headless=new', '--no-sandbox', '--disable-gpu',
+        `--force-device-scale-factor=${CURRENT_RENDER_SCALE}`,
+        `--screenshot=${outputPath}`, `--window-size=${width},${height}`,
+        `file://${htmlPath}`,
+      ], { timeout: 90000, maxBuffer: 1024 * 1024 });
+    }
+  } finally {
+    await fs.rm(sourceDir, { recursive: true, force: true });
+  }
+}
+
+async function finishRelease(snapshot, paper, tempDir, options = {}) {
+  const pageFiles = await numberedPageFiles(tempDir);
+  if (pageFiles.length !== snapshot.pages.length) {
+    return failure('EPAPER_PAGE_COUNT_MISMATCH', `The generated e-paper has ${pageFiles.length} pages but this edition has ${snapshot.pages.length}.`);
+  }
+  snapshot.edition = {
+    ...snapshot.edition,
+    source: options.source || 'press_pdf',
+    status: paper.status,
+    publishedAt: new Date().toISOString(),
+    pdfUrl: options.pdfUrl || '',
+    readerUrl: '/epaper',
+  };
+  await enrichSnapshot(snapshot, pageFiles, tempDir, options);
+  await fs.writeFile(path.join(tempDir, 'manifest.json'), `${JSON.stringify(snapshot, null, 2)}\n`, 'utf8');
+  await replaceDirectory(tempDir, epaper.editionDirectory(paper.id));
+  const selected = await epaper.selectAfterRelease(paper.id, { ...paper, epaper_source: snapshot.edition.source });
+  snapshot.edition.selected = Boolean(selected.epaper_selected);
+  return { ok: true, edition: snapshot.edition, pages: snapshot.pages.length, stories: snapshot.pages.reduce((n, page) => n + page.articles.length, 0), selected: Boolean(selected.epaper_selected) };
+}
+
 async function publishEdition(newspaperId, actor, options = {}) {
   const id = Number(newspaperId);
   const paper = await newspaperRepository.findById(id);
@@ -167,20 +263,32 @@ async function publishEdition(newspaperId, actor, options = {}) {
       );
     }
 
-    snapshot.edition = {
-      ...snapshot.edition,
-      status: 'published',
-      publishedAt: new Date().toISOString(),
-      pdfUrl: `/epaper/${id}/pdf`,
-      readerUrl: `/epaper/${id}`,
-    };
-    await enrichSnapshot(snapshot, pageFiles, tempDir, options);
-    await fs.writeFile(path.join(tempDir, 'manifest.json'), `${JSON.stringify(snapshot, null, 2)}\n`, 'utf8');
-    await replaceDirectory(tempDir, epaper.editionDirectory(id));
-    await newspaperRepository.update(id, { status: 'published' });
-    return { ok: true, edition: snapshot.edition, pages: snapshot.pages.length, stories: snapshot.pages.reduce((n, page) => n + page.articles.length, 0) };
+    return await finishRelease(snapshot, paper, tempDir, { ...options, source: 'press_pdf', pdfUrl: `/epaper/${id}/pdf` });
   } catch (error) {
     return failure('EPAPER_BUILD_FAILED', `The e-paper could not be built: ${error.message}`);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+async function publishCurrentEdition(newspaperId, actor, options = {}) {
+  const id = Number(newspaperId);
+  const paper = await newspaperRepository.findById(id);
+  if (!paper) return failure('EPAPER_NOT_FOUND', 'No such edition.');
+  const snapshot = await epaper.buildEdition(id);
+  if (!snapshot?.pages?.length) return failure('EPAPER_CURRENT_EMPTY', 'This edition has no pages to publish.');
+
+  await fs.mkdir(epaper.EPAPER_DIR, { recursive: true });
+  const tempDir = await fs.mkdtemp(path.join(epaper.EPAPER_DIR, `.publishing-current-${id}-`));
+  try {
+    await (options.renderCurrentPages || renderCurrentPages)(snapshot, tempDir, options);
+    return await finishRelease(snapshot, paper, tempDir, { ...options, source: 'editor_snapshot', pdfUrl: '' });
+  } catch (error) {
+    const unavailable = error.code === 'ENOENT' || /google-chrome|chrome/i.test(error.message || '');
+    return failure(
+      unavailable ? 'CURRENT_EPAPER_RENDERER_UNAVAILABLE' : 'EPAPER_CURRENT_BUILD_FAILED',
+      unavailable ? 'Current e-paper publishing needs Google Chrome on this server. Set EPAPER_CHROME_BIN if it is installed elsewhere.' : `The current e-paper could not be built: ${error.message}`,
+    );
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   }
@@ -191,13 +299,13 @@ async function unpublishEdition(newspaperId) {
   const paper = await newspaperRepository.findById(id);
   if (!paper) return failure('EPAPER_NOT_FOUND', 'No such edition.');
   // Hide first. If derivative cleanup fails, no anonymous route can reach it.
-  await newspaperRepository.update(id, { status: 'finalised' });
+  await newspaperRepository.clearEpaperRelease(id);
   await fs.rm(epaper.editionDirectory(id), { recursive: true, force: true });
-  return { ok: true, id, status: 'finalised' };
+  return { ok: true, id };
 }
 
 module.exports = {
   RASTER_DPI,
   publicFile, cropBox, rasterizePdf, numberedPageFiles, storyCard, enrichSnapshot,
-  publishEdition, unpublishEdition,
+  currentPageHtml, renderCurrentPages, publishEdition, publishCurrentEdition, unpublishEdition,
 };

@@ -10,7 +10,9 @@ because it is later. The user's direct visual judgment is the acceptance gate.
 - Codex must commit the completed task but must **not merge it**.
 - Claude will decide whether to merge, cherry-pick individual commits, or
   discard the branch when Claude usage becomes available again.
-- The current e-paper task is isolated on `codex/epaper-public-reader`.
+- The original public-reader task is isolated on `codex/epaper-public-reader`.
+- Its follow-up, current-editor publication and public-radio selection, is
+  isolated on `codex/epaper-selection-current-publish` and has not been merged.
 
 ## Current Codex task: public e-paper
 
@@ -48,6 +50,33 @@ Live proof used fixture edition 37673 temporarily and restored it to
 were removed. Screenshots are under `/tmp/sahas-epaper-verification/`. Focused
 e-paper/publication/production tests are 14/14 and the final full suite is
 870/870; consult `PROJECT_STATUS.md` for the live-proof details.
+
+## Follow-up: publish the current editor and select one public issue
+
+The user needs to publish the current newspaper before Scribus/CMYK PDF is
+available, while retaining the strict press-final path. The follow-up branch
+adds a distinct **current editor web proof** release route:
+
+- `POST /api/newspapers/:id/publish-current` freezes the live page geometry
+  through local Chrome; no PDF and no press-readiness pass are required.
+- It keeps `newspapers.status` unchanged. In particular, a draft remains a
+  draft and is never misrepresented as press-final.
+- E-paper state is now dedicated: `epaper_released_at`, `epaper_selected` and
+  `epaper_source`, with a partial unique index allowing exactly one public
+  selection. `schema.sql` includes guarded migration/backfill and the local
+  database was migrated non-destructively.
+- The owner E-paper dashboard is a searchable list. A radio button selects the
+  single issue at safe canonical `/epaper`; owner previews/list are desk-only.
+  The public URL has no edition ID or write capability. Private release assets
+  are available only to a signed-in desk preview.
+- A current-date release selects itself by default; otherwise an owner can
+  change selection via `POST /api/newspapers/:id/epaper/select`.
+- Delete removes only frozen derivatives and e-paper metadata, preserving the
+  newsroom / press status and any uploaded final PDF.
+
+Focused tests are now 15/15. A real no-write Chrome render of the user’s four
+page edition 13742 created 1320×2120 page PNGs successfully; nothing was
+published or altered in that edition during that proof.
 
 ## Codex-era commits after the imported Claude history
 

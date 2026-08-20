@@ -56,7 +56,7 @@ test('publish freezes a complete snapshot and unpublish removes only its derivat
     assert.equal(result.pages, 1);
     assert.ok(result.stories > 0);
 
-    const snapshot = await epaper.loadPublishedEdition(editionId);
+    const snapshot = await epaper.readRelease(editionId);
     assert.equal(snapshot.edition.pdfUrl, `/epaper/${editionId}/pdf`);
     assert.equal(snapshot.pages[0].imageWidth, 1200);
     assert.ok(snapshot.pages[0].articles.every((article) => article.shareImageUrl));
@@ -64,7 +64,7 @@ test('publish freezes a complete snapshot and unpublish removes only its derivat
 
     const removed = await publication.unpublishEdition(editionId);
     assert.equal(removed.ok, true);
-    assert.equal(await epaper.loadPublishedEdition(editionId), null);
+    assert.equal(await epaper.readRelease(editionId), null);
     await fs.access(pdfPath);
     const files = await publicationRepository.latestByNewspaper(editionId);
     assert.ok(files.some((file) => file.file_type === 'print_pdf'), 'the final-PDF record survives unpublish');
@@ -73,6 +73,63 @@ test('publish freezes a complete snapshot and unpublish removes only its derivat
     if (editionId) await fs.rm(epaper.editionDirectory(editionId), { recursive: true, force: true });
     if (pdfPath) await fs.rm(pdfPath, { force: true });
     await removeEdition(editionId);
+    const closed = new Promise((resolve) => server.close(resolve));
+    server.closeAllConnections?.();
+    await closed;
+  }
+});
+
+test('current-editor publishing freezes a draft without changing its press status or needing a PDF', async () => {
+  const server = createApp().listen(0);
+  const port = server.address().port;
+  let editionId = null;
+  let previousSelected = null;
+
+  try {
+    previousSelected = (await pool.query(
+      'SELECT id FROM newspapers WHERE epaper_selected = TRUE LIMIT 1',
+    )).rows[0]?.id || null;
+    await ensureAdmin();
+    const today = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date());
+    const { newspaper } = await newEdition(port, 'Current e-paper fixture', {
+      pages: [[1, 'front']], date: today,
+    });
+    editionId = newspaper.id;
+
+    const result = await publication.publishCurrentEdition(editionId, null, {
+      renderCurrentPages: async (snapshot, directory) => {
+        const { Jimp } = await import('jimp');
+        for (const page of snapshot.pages) {
+          await new Jimp({ width: 1320, height: 2120, color: 0xffffffff })
+            .write(path.join(directory, `page-${page.number}.png`));
+        }
+      },
+    });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(result.selected, true, 'the first release becomes the selected public e-paper');
+
+    const paper = (await pool.query(
+      'SELECT status, epaper_released_at, epaper_selected, epaper_source FROM newspapers WHERE id = $1', [editionId],
+    )).rows[0];
+    assert.equal(paper.status, 'draft', 'web proof publishing never claims press-final status');
+    assert.ok(paper.epaper_released_at);
+    assert.equal(paper.epaper_selected, true);
+    assert.equal(paper.epaper_source, 'editor_snapshot');
+
+    const manifest = JSON.parse(await fs.readFile(epaper.manifestPath(editionId), 'utf8'));
+    assert.equal(manifest.edition.source, 'editor_snapshot');
+    assert.equal(manifest.edition.pdfUrl, '');
+    assert.ok(await epaper.loadSelectedEdition(), 'the public reader resolves the selected proof');
+  } finally {
+    if (editionId) {
+      await fs.rm(epaper.editionDirectory(editionId), { recursive: true, force: true });
+      await removeEdition(editionId);
+    }
+    if (previousSelected) await pool.query(
+      'UPDATE newspapers SET epaper_selected = TRUE WHERE id = $1', [previousSelected],
+    );
     const closed = new Promise((resolve) => server.close(resolve));
     server.closeAllConnections?.();
     await closed;

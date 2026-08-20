@@ -49,7 +49,7 @@ app.use("/api/features",   deskWrites,    src/routes/feature.routes.js)
 app.use("/api",            deskWrites,    src/routes/page.routes.js)
 ```
 
-Those go Route → Controller (`src/controllers/*.controller.js`) → Service (`src/services/*.service.js`) → Repository (`src/repositories/*.repository.js`) → PostgreSQL, which is the target shape. All still-inline `server.js` routes are stateless lookups with no database access at all — `/api/templates`, `/api/geometry`, `/api/identity`, `/api/ai/status`, `/api/health` — plus `/api/uploads/images` (multer only, no business logic) and `/epaper/:id` (delegates straight to `newspaperController.epaperHtml`, kept in `server.js` only because it sits outside the `/api/newspapers` mount path). There is no more `src/db.js` — it held only `authenticateUser`, a duplicate of `user.repository.js` plus a bcrypt check; that logic now lives in `auth.service.js` and the file was deleted rather than kept as a second copy.
+Those go Route → Controller (`src/controllers/*.controller.js`) → Service (`src/services/*.service.js`) → Repository (`src/repositories/*.repository.js`) → PostgreSQL, which is the target shape. All still-inline `server.js` routes are stateless lookups with no database access at all — `/api/templates`, `/api/geometry`, `/api/identity`, `/api/ai/status`, `/api/health` — plus `/api/uploads/images` (multer only, no business logic) and public `/epaper` routes (delegating straight to `newspaperController` because they sit outside the `/api/newspapers` mount path). There is no more `src/db.js` — it held only `authenticateUser`, a duplicate of `user.repository.js` plus a bcrypt check; that logic now lives in `auth.service.js` and the file was deleted rather than kept as a second copy.
 
 **Section production actions are addressed by `sectionKey` (e.g. `"lead"`), not a numeric id** — `write`, `fill`, `carry-over`, `reunite`, `fit` and `rate` all live in `pageSection.controller.js`/`pageSection.service.js` alongside the numeric-id section CRUD (`update`/`create`/`remove`/`move`), because `pageSection.service.js` already addressed sections by key internally (`saveSection(pageId, sectionKey, ...)`) — there was no real domain boundary to justify a separate controller. Page-level actions (`colour`, `state`) live in `page.controller.js` instead, next to `create`/`list`/`update`, matching how they're addressed (by `pageId` alone).
 
@@ -82,35 +82,55 @@ Asking for more pages adds them at their proper rung. Asking for fewer never rem
 
 ### Publishing the public e-paper
 
-The newsroom edition is mutable; a published issue is not. `POST
-/api/newspapers/:id/publish` is therefore a real release boundary, not a status
-label on the live editor. It requires central press readiness and the accepted
-final PDF, rasterises that PDF at 180 DPI, and writes one frozen manifest plus
-page/story PNGs under `public/uploads/epaper/:id/`. Only after the complete
-replacement succeeds does the newspaper become `published`.
+The newsroom edition is mutable; a released web issue is not. E-paper release
+is deliberately separate from an edition's editorial/press `status`: a current
+editor proof must never make a draft look press-final. `newspapers` therefore
+carries `epaper_released_at`, `epaper_selected`, and `epaper_source`, with a
+partial unique index enforcing exactly one selected public issue.
 
-The final PDF is the visual authority. The public reader does not reconstruct
-the page from live HTML, because a later editor change must not alter an issue
-already distributed. Story cards are 1080 px PNG crops of the accepted page
-with the real masthead composed above them. Only editorial news blocks are
-clickable; adverts, features and Smart Cards are deliberately outside this
+There are two release paths, both writing the same immutable manifest and
+page/story PNGs under `public/uploads/epaper/:id/` atomically:
+
+- `POST /api/newspapers/:id/publish` is **press-final**. It requires central
+  press readiness and the accepted CMYK PDF, then rasterises that PDF at 180
+  DPI. The final PDF is the visual authority and remains the whole-paper
+  download.
+- `POST /api/newspapers/:id/publish-current` is a clearly labelled **current
+  editor web proof**. It requires neither Scribus nor PDF/sign-off, renders the
+  current frozen page geometry with local Chrome (`EPAPER_CHROME_BIN` overrides
+  `/usr/bin/google-chrome`), and never changes the edition's press status.
+
+Later newsroom edits cannot alter either release. Story cards are 1080 px PNG
+crops with the real masthead composed above them. Only editorial news blocks
+are clickable; adverts, features and Smart Cards are deliberately outside this
 release pass.
+
+The owner E-paper screen (`/api/epapers`, desk-only) is a searchable release
+list with a radio button. Its checked row is the only public release. The safe
+share link is always the canonical, ID-free `GET /epaper`; it has no session,
+token or write authority. Owner previews use `GET /epaper/preview/:id` and
+remain desk-only. A current-date release is selected by default (or the first
+release when none is selected); other releases remain private until the owner
+chooses their radio button. “Current day” follows the newsroom’s newest
+publication date, rather than trusting the host machine clock (important for
+planned/test editions).
 
 Public access is gated in three places:
 
-- `GET /epaper/:id` and the JSON equivalent load the frozen manifest only when
-  the newspaper status is `published`;
+- `GET /epaper` loads only the frozen manifest of the selected radio issue;
+- an ID route can load a release publicly only when it is that same selected
+  issue; owner previews are separately desk-gated;
 - generated `/uploads/epaper/:id/*.png` files are intercepted before general
-  static serving and checked against both that status and the manifest's asset
-  list;
+  static serving and checked against the selection plus the manifest's asset
+  list (a signed-in desk may read a private release for preview);
 - the whole-paper download uses `GET /epaper/:id/pdf`, which performs the same
   status check instead of exposing the raw upload URL in public markup.
 
 `DELETE /api/newspapers/:id/epaper` means **remove the public copy**, not delete
 the newsroom edition: it hides the issue first, removes only generated
-derivatives, leaves the final-PDF record intact, and returns the edition to
-`finalised`. Archive cards come from frozen manifests and are sorted by their
-publication/republish time, newest first.
+derivatives, leaves the final-PDF record intact and leaves the editorial/press
+status untouched. Release rows come from frozen manifests and are sorted by
+their publication/republish time, newest first.
 
 ### Type sizes are derived, and fractional
 

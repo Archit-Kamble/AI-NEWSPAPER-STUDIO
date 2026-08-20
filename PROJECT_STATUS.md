@@ -4,6 +4,46 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zzf. Current-editor e-paper publishing and single public selection (2026-08-20)
+
+Implemented on the isolated, unmerged branch
+`codex/epaper-selection-current-publish`, on top of the preceding e-paper
+branch. The press-final path remains strict: a CMYK PDF and press readiness
+are still required for `POST /api/newspapers/:id/publish`. A second explicit
+path, `POST /api/newspapers/:id/publish-current`, freezes the current editable
+page geometry through local headless Chrome and creates the same immutable
+page/story PNG release without pretending the edition is ready for press. It
+uses the source label `editor_snapshot`, does not create a PDF download, and
+does not change the newspaper's editorial/press status. `EPAPER_CHROME_BIN`
+may override the default `/usr/bin/google-chrome`.
+
+This deliberately corrected an early modelling mistake before it escaped into
+the UI: the radio-selected public e-paper cannot reuse `newspapers.status`.
+`epaper_released_at`, `epaper_selected`, and `epaper_source` now carry the web
+release state, and a partial unique index guarantees exactly one selected
+public issue. `schema.sql` contains guarded backfill for the old published
+rows; the local SAHAS database received the same non-destructive migration.
+Deleting a generated e-paper now clears only those e-paper fields and files,
+never changes a draft/finalised/press state.
+
+The owner-facing E-paper screen is now a responsive searchable list rather
+than a card gallery. Every row has a radio button, private Preview, optional
+PDF and Delete. The checked row is exposed through the one safe canonical URL,
+`/epaper`; the URL has no edition ID, login state, token or write capability.
+Owner previews and the release list remain desk-only. Public requests can read
+only the checked issue and its manifest-listed PNG/PDF assets; a signed-in desk
+can preview the other private releases. The newest newsroom publication date
+becomes the default selected issue (or the first release when no selection
+exists), so planned/test dates do not depend on the host machine clock.
+
+Verification: focused `epaper`, `epaperPublication`, and `production` suites
+passed **15/15**. The current-editor test proves a draft can release without a
+PDF and remains `draft`. A real Chrome render against the existing 4-page
+edition 13742 (`मंगळवार, १ सप्टेंबर २०९९`) produced four 1320×2120 PNGs without
+publishing or changing that edition. The temporary render was removed.
+
+---
+
 ## 0zze. Public e-paper release, mobile reader and archive (2026-08-20)
 
 Implemented on the isolated, unmerged branch `codex/epaper-public-reader` at

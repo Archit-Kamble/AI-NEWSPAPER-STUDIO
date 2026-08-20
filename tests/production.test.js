@@ -184,7 +184,12 @@ test('a district edition shares its parent pages and owns only its own', async (
       'a generated asset cannot bypass the publication status gate',
     );
     assert.equal((await fetch(`${base}/epaper/${parentId}/pdf`)).status, 404);
-    await pool.query(`UPDATE newspapers SET status = 'published' WHERE id = $1`, [parentId]);
+    await pool.query(
+      `UPDATE newspapers
+          SET epaper_released_at = CURRENT_TIMESTAMP, epaper_selected = TRUE
+        WHERE id = $1`,
+      [parentId],
+    );
 
     const html = await fetch(`${base}/epaper/${parentId}`).then((r) => r.text());
     assert.match(html, /एकदाच दुरुस्त/);
@@ -194,7 +199,11 @@ test('a district edition shares its parent pages and owns only its own', async (
     assert.match(html, /class="epaper-transcript"/, 'the archive text remains readable/indexable without its enhancements');
     assert.match(html, /data-page-stage/, 'the public reader carries the page-image viewer');
 
-    const data = await fetch(`${base}/api/newspapers/${parentId}/epaper`).then((r) => r.json());
+    const canonical = await fetch(`${base}/epaper`).then((r) => r.text());
+    assert.match(canonical, /एकदाच दुरुस्त/, 'the shareable public URL resolves only the selected issue');
+    const privateList = await fetch(`${base}/api/epapers`);
+    assert.equal(privateList.status, 401, 'the owner list is never an anonymous archive API');
+    const data = await desk(`/api/newspapers/${parentId}/epaper`).then((r) => r.json());
     const hotspot = data.pages[0].articles[0].hotspot;
     assert.ok(hotspot.widthPct > 0 && hotspot.widthPct <= 100);
     assert.ok(hotspot.topPct >= 0 && hotspot.topPct < 100);

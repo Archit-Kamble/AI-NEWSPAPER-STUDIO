@@ -4,9 +4,9 @@
 // A released issue must not change because somebody later opens yesterday's
 // layout and moves a picture. `epaperPublication.service.js` therefore writes
 // one immutable manifest beside the page/story PNGs made from the accepted
-// final PDF. Public readers load only that manifest and only while the
-// newspaper row says `published`; the live edition remains available to the
-// desk through buildEdition() for preview and republishing.
+// final PDF or a current-editor proof. Public readers load only that manifest
+// while the newspaper row has its explicit e-paper selection; the live edition
+// remains available to the desk through buildEdition() for preview and republishing.
 
 const path = require('path');
 const fs = require('fs/promises');
@@ -87,6 +87,12 @@ async function buildEdition(newspaperId) {
           category: section.category || '',
           location: section.location || '',
           reporter: section.reporter_name || '',
+          bodyAlign: safeAlignment(section.text_align),
+          headlineFontPx: Number(section.headline_font_px) || 18,
+          subheadingFontPx: Number(section.subheading_font_px) || 13,
+          bodyFontPx: Number(section.body_font_px) || 8,
+          columnCount: Math.max(1, Number(section.column_count) || 1),
+          lineHeight: Number(section.line_height) || 1.45,
           continuedFrom: section.continued_from_section_id || null,
           pictures: (section.images || []).map((image) => ({ url: image.url, caption: image.caption || '' })),
           hotspot: {
@@ -96,14 +102,15 @@ async function buildEdition(newspaperId) {
             heightPct: Number(((Number(section.height_px) / pageHeight) * 100).toFixed(3)),
           },
         })),
+      width: pageWidth,
+      height: pageHeight,
     })),
   };
 }
 
-/** Public means published: knowing an id never reveals an unfinished issue. */
-async function loadPublishedEdition(newspaperId) {
+async function readRelease(newspaperId, { publicOnly = false } = {}) {
   const paper = await newspaperRepository.findById(Number(newspaperId));
-  if (!paper || paper.status !== 'published') return null;
+  if (!paper || !paper.epaper_released_at || (publicOnly && !paper.epaper_selected)) return null;
   try {
     const manifest = JSON.parse(await fs.readFile(manifestPath(newspaperId), 'utf8'));
     return Number(manifest?.edition?.id) === Number(newspaperId) ? manifest : null;
@@ -112,10 +119,20 @@ async function loadPublishedEdition(newspaperId) {
   }
 }
 
-async function listPublishedEditions() {
-  const rows = await newspaperRepository.findPublished();
+/** Public means the one selected release: knowing an id never reveals a draft. */
+async function loadPublishedEdition(newspaperId) {
+  return readRelease(newspaperId, { publicOnly: true });
+}
+
+async function loadSelectedEdition() {
+  const selected = await newspaperRepository.findPublicEpaper();
+  return selected ? readRelease(selected.id, { publicOnly: true }) : null;
+}
+
+async function listReleasedEditions() {
+  const rows = await newspaperRepository.findEpaperReleases();
   const editions = await Promise.all(rows.map(async (row) => {
-    const snapshot = await loadPublishedEdition(row.id);
+    const snapshot = await readRelease(row.id);
     if (!snapshot) return null;
     const meta = snapshot.edition || {};
     return {
@@ -124,10 +141,13 @@ async function listPublishedEditions() {
       district: meta.district || '',
       date: String(meta.date || row.publication_date).slice(0, 10),
       pageCount: snapshot.pages?.length || 0,
-      publishedAt: meta.publishedAt || row.published_at,
+      publishedAt: meta.publishedAt || row.epaper_released_at,
       pdfUrl: meta.pdfUrl || '',
-      readerUrl: meta.readerUrl || `/epaper/${row.id}`,
+      previewUrl: `/epaper/preview/${row.id}`,
+      publicUrl: '/epaper',
       coverUrl: snapshot.pages?.[0]?.imageUrl || LOGO_URL,
+      selected: row.epaper_selected === true,
+      source: row.epaper_source || meta.source || 'press_pdf',
     };
   }));
   return editions
@@ -135,14 +155,37 @@ async function listPublishedEditions() {
     .sort((a, b) => new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0) || b.id - a.id);
 }
 
+async function selectReleasedEdition(newspaperId) {
+  const snapshot = await readRelease(newspaperId);
+  if (!snapshot) return null;
+  await newspaperRepository.selectPublicEpaper(Number(newspaperId));
+  return { ...snapshot, edition: { ...snapshot.edition, readerUrl: '/epaper' } };
+}
+
+async function selectAfterRelease(newspaperId, paper) {
+  const selected = await newspaperRepository.findPublicEpaper();
+  const date = String(paper.publication_date).slice(0, 10);
+  // "Today" is the newsroom's current edition, not necessarily the host
+  // machine's wall-clock date (a test or a planned issue can deliberately use
+  // a later publication date). A newly released issue becomes public when it
+  // is at least as current as the selected issue; backfilling an older archive
+  // never steals the public URL.
+  const selectedDate = String(selected?.publication_date || '').slice(0, 10);
+  const shouldSelect = !selected || Number(selected.id) === Number(newspaperId) || date >= selectedDate;
+  return newspaperRepository.recordEpaperRelease(Number(newspaperId), {
+    source: paper.epaper_source || undefined,
+    selected: shouldSelect,
+  });
+}
+
 /**
  * Resolve a generated public PNG only while its owning snapshot is published.
  * Express' general static middleware must never be allowed to bypass this.
  */
-async function publishedAsset(newspaperId, filename) {
+async function releasedAsset(newspaperId, filename, { includePrivate = false } = {}) {
   const clean = String(filename || '');
   if (!/^(?:page-\d+|story-\d+-[a-zA-Z0-9_-]+)\.png$/i.test(clean)) return null;
-  const snapshot = await loadPublishedEdition(newspaperId);
+  const snapshot = await readRelease(newspaperId, { publicOnly: !includePrivate });
   if (!snapshot) return null;
   const urls = (snapshot.pages || []).flatMap((page) => [
     page.imageUrl,
@@ -152,9 +195,13 @@ async function publishedAsset(newspaperId, filename) {
   return path.join(editionDirectory(newspaperId), clean);
 }
 
+async function publishedAsset(newspaperId, filename) {
+  return releasedAsset(newspaperId, filename);
+}
+
 /** The accepted PDF is public through this named, status-gated route only. */
-async function publishedPdf(newspaperId) {
-  const snapshot = await loadPublishedEdition(newspaperId);
+async function releasedPdf(newspaperId, { includePrivate = false } = {}) {
+  const snapshot = await readRelease(newspaperId, { publicOnly: !includePrivate });
   if (!snapshot) return null;
   const files = await publicationRepository.latestByNewspaper(Number(newspaperId));
   const url = files.find((file) => file.file_type === 'print_pdf')?.storage_path;
@@ -163,6 +210,10 @@ async function publishedPdf(newspaperId) {
   const root = path.resolve(PUBLIC_DIR, 'uploads') + path.sep;
   if (!file.startsWith(root)) return null;
   return { file, name: `sahas-varta-${snapshot.edition.date}.pdf` };
+}
+
+async function publishedPdf(newspaperId) {
+  return releasedPdf(newspaperId);
 }
 
 function dateText(meta) {
@@ -191,7 +242,7 @@ function icon(name) {
 
 function shareControls(item, pageNumber) {
   const id = storyId(pageNumber, item);
-  const readerUrl = `/epaper/${item.editionId || ''}#${id}`;
+  const readerUrl = `${item.readerUrl || '/epaper'}#${id}`;
   const image = escapeHtml(item.shareImageUrl || '');
   return `<div class="story-share" data-share-title="${escapeHtml(item.headline)}" data-share-url="${escapeHtml(readerUrl)}" data-share-image="${image}">
     <a class="share-action share-download" href="${image}" download>${icon('download')}<span>PNG</span></a>
@@ -218,7 +269,7 @@ function shareControls(item, pageNumber) {
   </div>`;
 }
 
-function articleTranscript(item, pageNumber, editionId) {
+function articleTranscript(item, pageNumber) {
   const id = storyId(pageNumber, item);
   const pictures = (item.pictures || []).map((picture) =>
     `<figure><img src="${escapeHtml(picture.url)}" alt="${escapeHtml(picture.caption)}" loading="lazy">${picture.caption ? `<figcaption>${escapeHtml(picture.caption)}</figcaption>` : ''}</figure>`).join('');
@@ -237,7 +288,7 @@ function articleTranscript(item, pageNumber, editionId) {
       <button type="button" class="story-dialog-close" data-close-dialog aria-label="Close">${icon('close')}</button>
       <div class="story-dialog-heading"><p>Share this story</p><h2 id="title-${id}">${escapeHtml(item.headline)}</h2></div>
       <img class="story-card-image" src="${escapeHtml(item.shareImageUrl)}" alt="PNG share card: ${escapeHtml(item.headline)}" loading="lazy">
-      ${shareControls({ ...item, editionId }, pageNumber)}
+      ${shareControls({ ...item, readerUrl: '/epaper' }, pageNumber)}
     </div>
   </dialog>` : ''}`;
 }
@@ -263,7 +314,7 @@ function renderHtml(snapshot) {
   const title = `${meta.title} — ${when}`;
   const cover = pages[0]?.imageUrl || LOGO_URL;
   const pageButtons = pages.map((page) => `<button type="button" data-page-button="${page.number}" ${page.number === 1 ? 'aria-current="page"' : ''}>${devanagari(page.number)}</button>`).join('');
-  const transcript = pages.map((page) => `<section class="transcript-page"><h2>पृष्ठ ${devanagari(page.number)}</h2>${page.articles.map((item) => articleTranscript(item, page.number, meta.id)).join('')}</section>`).join('');
+  const transcript = pages.map((page) => `<section class="transcript-page"><h2>पृष्ठ ${devanagari(page.number)}</h2>${page.articles.map((item) => articleTranscript(item, page.number)).join('')}</section>`).join('');
 
   return `<!doctype html>
 <html lang="mr">
@@ -310,6 +361,8 @@ function renderArchiveHtml(editions) {
 module.exports = {
   PUBLIC_DIR, EPAPER_DIR, LOGO_URL,
   editionDirectory, manifestPath,
-  buildEdition, loadPublishedEdition, listPublishedEditions, publishedAsset, publishedPdf,
+  buildEdition, readRelease, loadPublishedEdition, loadSelectedEdition,
+  listReleasedEditions, selectReleasedEdition, selectAfterRelease,
+  releasedAsset, publishedAsset, releasedPdf, publishedPdf,
   renderHtml, renderArchiveHtml,
 };

@@ -4738,3 +4738,22 @@ prose merely because `feature_key` is absent.
 The unit regression holds both the retrieval object across the concurrent
 coordinator and the unkeyed-feature exclusion. `workspace.js` syntax-checks;
 targeted verification: **11/11**.
+
+### 50. Post-brief audit — the palette is enforced at storage (2026-08-20)
+
+The colour group bounded every visible control, inline mark and Scribus
+separation, but the section save API still accepted arbitrary
+`backgroundColor` and `accentColor` strings. The background value is inserted
+into the canvas's style attribute, so this was both a four-plate invariant gap
+and a stored-style injection path for a direct API caller.
+
+`pageSection.service.js` now loads the shared `inks.js` catalogue and rejects
+foreign grounds, accents, border modes and headline treatments before any
+update. `section-model.js` sanitises row values too, protecting legacy/imported
+data before a renderer sees it. Valid palette values round-trip unchanged;
+invalid values receive 400 and leave the accepted row untouched.
+
+The regressions hold both halves: a hostile persisted style is reduced to no
+ground/default paper red in the editor model, and an integration request proves
+the server accepts cream, rejects the arbitrary follow-up, and retains cream.
+Targeted verification: **22/22**.

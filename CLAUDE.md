@@ -792,6 +792,13 @@ catalogue — the browser draws its controls from it, and `scribus.service.js`
 reaches it through the same dynamic `import()` the character grid does, so a
 colour can never mean one thing on screen and another on the plate.
 
+The palette is also a **server boundary**, not trust placed in those controls.
+`pageSection.service.js` rejects a foreign tint/accent or treatment before the
+row is written, and `section-model.js` sanitises persisted values on read for
+older/imported editions. This is security as well as press correctness: a block
+ground is interpolated into the canvas's style attribute, so arbitrary stored
+text may never reach that renderer.
+
 | | | control |
 |---|---|---|
 | `INKS` | a colour on selected **words**, stored as `data-sahas-ink` | the marks toolbar |

@@ -4654,3 +4654,30 @@ The pre-existing uncommitted Groq, WEBP decoding and cut-out geometry work —
 including `tests/browser/sweep.tmp.js` — was inspected but neither modified nor
 staged during this close-out. The next product priority remains **Smart Cards**,
 followed by Scribus/CMYK download, the site's own UI, and handover.
+
+### 46. Post-brief audit — Auto columns reach the AI compositor (2026-08-20)
+
+The desk deferred Smart Cards and asked for a second pass over the eight
+completed prompt-1060 groups first. The wide-block group had one real split
+left: the canvas correctly treated `column_count = NULL` as Auto, but both
+`storyWriter.service.js` and `copyFit.service.js` converted it with
+`Number(NULL) || 1` before calling the shared compositor. An Auto 268 px block
+therefore printed in two columns while the AI budget and its accept/trim check
+measured one.
+
+Measured on the same 268 × 304 block, the writer's Auto result was byte-for-byte
+the explicit-one result (574 target characters, 478–861 range); the real
+explicit-two result kept the 574 target but had a 359–574 range. More seriously,
+the same test copy was judged `FITS` in 11 one-column lines but `OVERSET` in 24
+two-column lines. That is enough for the AI path to accept copy the page cannot
+print.
+
+The three local overrides are removed. `section-adapter.js` now receives the
+persisted row unchanged and remains the single authority: NULL infers the count,
+explicit 1 remains one, and explicit 2 remains two. New regressions compare
+Auto against both explicit states in the writer and copy-fit paths. Targeted
+verification: **34/34** across `storyWriter.test.js` and `copyFit.test.js`; the
+complete suite passes **850/850**.
+
+Smart Cards remain deliberately deferred while the other completed groups are
+audited one at a time.

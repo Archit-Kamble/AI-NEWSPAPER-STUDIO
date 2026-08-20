@@ -107,6 +107,26 @@ test('copy that already fits is returned untouched - trimming is a repair, never
   assert.equal(trimmed.cut, 0);
 });
 
+// The canvas and preflight infer columns through section-adapter. Copy-fit is
+// load-bearing too: it decides whether AI copy is accepted or cut. NULL means
+// Auto, not one column, so it must reach the adapter without being coerced.
+test('copy-fit composes an Auto-column block exactly like its inferred column count', async () => {
+  const section = {
+    width_px: 268, height_px: 304, margin_px: 1, column_count: null,
+    line_height: 1.45, headline_font_px: 24, subheading_font_px: 14, body_font_px: 12,
+  };
+  const body = SENTENCE.repeat(5).trim();
+
+  const auto = await copyFit.measureFit(section, [], { ...OVER, body });
+  const one = await copyFit.measureFit({ ...section, column_count: 1 }, [], { ...OVER, body });
+  const two = await copyFit.measureFit({ ...section, column_count: 2 }, [], { ...OVER, body });
+
+  assert.equal(auto.state, two.state);
+  assert.equal(auto.overset, two.overset);
+  assert.deepEqual(auto.fill, two.fill, 'Auto and explicit two must pour into the same geometry');
+  assert.notDeepEqual(auto.fill, one.fill, 'explicit one must remain a different composition');
+});
+
 test('a cut at a sentence boundary, not mid-word - a block is cut from the bottom, the way a sub-editor cuts', async () => {
   const block = BLOCKS[0];
   const trimmed = await copyFit.trimToFit(block.section, block.images, { ...OVER, body: SENTENCE.repeat(20) });

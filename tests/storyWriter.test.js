@@ -188,6 +188,24 @@ test('pictures on the block reduce the budget the AI is given', async () => {
   assert.equal(withPicture.hasPictures, true);
 });
 
+// NULL is the persisted meaning of Auto. The page adapter infers two columns
+// for this 268 px measure; coercing NULL with `Number(null) || 1` made the AI
+// brief measure a different, one-column page from the one the desk saw.
+test('an Auto-column AI brief uses the same inferred columns as the page', async () => {
+  const section = {
+    width_px: 268, height_px: 304, margin_px: 1, column_count: null,
+    line_height: 1.45, headline_font_px: 24, subheading_font_px: 14, body_font_px: 12,
+    headline: 'मथळा', subheading: '', body: '',
+  };
+
+  const auto = await writer.measure(section, []);
+  const one = await writer.measure({ ...section, column_count: 1 }, []);
+  const two = await writer.measure({ ...section, column_count: 2 }, []);
+
+  assert.deepEqual(auto, two, 'Auto must use the adapter\'s inferred two-column composition');
+  assert.notDeepEqual(auto, one, 'an explicit one-column instruction must remain distinct');
+});
+
 // Filling the block accurately is the whole job. Three things were wrong: the
 // budget was measured on a block with no headline on it, the deck was optional
 // so it came back empty, and a body that came back short was accepted.

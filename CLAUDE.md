@@ -761,6 +761,13 @@ is not a legal column count, so it can never collide with a real one:
 `draftFromSection`'s `|| 1` had to go — it turned every NULL straight back into
 an explicit single column.
 
+**Server-side composition must preserve that NULL too.** The AI writer and
+copy-fit service both hand their live overrides to `section-adapter.js`; they
+must omit `columnCount` and let the adapter read `section.column_count`. A local
+`Number(section.column_count) || 1` makes an Auto 268 px block compose as one
+column for the AI while the canvas composes it as two. Explicit 1 still wins —
+the adapter is the one place that distinguishes an instruction from Auto.
+
 **Properties → Columns is the one control**, offering Auto and 1–4, with a note
 saying what Auto would actually do in this block's own numbers. It used to be a
 number input in Typography, which could not say "auto" at all — so a desk who

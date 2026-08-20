@@ -29,7 +29,7 @@
 // editor is the page, enlarged - not a second rendering of it, and nothing
 // about being enlarged can move a line.
 
-import { sanitise, sanitiseSize, fromPlainText, plainText } from "../layout/rich-text.js";
+import { sanitise, sanitiseSize } from "../layout/rich-text.js";
 import { INKS, sanitiseInk } from "../layout/inks.js";
 import {
   markDisplayField, clearDisplayField, activeDisplayField, applyDisplayMark, holdSelection,
@@ -44,9 +44,7 @@ import { blockExpectsCopy } from "../layout/block-kinds.js";
 // The Devanagari-safe floor. The inline body editor sets the story at its
 // real leading, and 1.45 is already at the edge of clipping a matra stack -
 // see CLAUDE.md's note on why line_height must never be tidied downward.
-import {
-  DEFAULT_BODY_FONT_PX, MIN_LINE_HEIGHT as MIN_BODY_LINE_HEIGHT,
-} from "../layout/text-flow.js";
+import { DEFAULT_BODY_FONT_PX } from "../layout/text-flow.js";
 import { smartCardMarkup } from "../smart-cards/smart-cards.js";
 // The same functions the page canvas draws a headline, a deck and a flowed
 // body with - so the WYSIWYG frame and the newspaper page can never drift
@@ -412,24 +410,6 @@ function layoutTextFrames() {
 // existing state/persistence path and counter owner.
 let inlineTextEdit = null;
 
-// What the body currently holds, ready to store.
-//
-// Unlike a headline or a deck - which are ONE flow each, so fieldValue()
-// flattens every block tag out of them - the story IS its paragraphs, and
-// they are what `paragraph-policy.js` and every offset in `line.at` are
-// counted against. So the block structure a contenteditable accumulates is
-// kept and normalised rather than flattened: a browser's <div>-per-Enter
-// becomes the <p> the rest of this codebase stores.
-function bodyValue(element) {
-  if (!element) return "";
-  const html = sanitise(element.innerHTML || "")
-    .replace(/<div(\s[^>]*)?>/gi, "<p>")
-    .replace(/<\/div\s*>/gi, "</p>");
-  // Marks and whitespace and nothing else is an EMPTY block, not a story made
-  // of nothing - the same rule fieldValue() keeps for a headline.
-  return plainText(html).trim() ? html : "";
-}
-
 const INLINE_TEXT = {
   headline: {
     part: "headline",
@@ -448,42 +428,6 @@ const INLINE_TEXT = {
     label: "Edit subheading",
     source: () => String(state.view.subheading || ""),
     read: fieldValue,
-  },
-  // The story is edited where it is SET, like everything else on this page.
-  //
-  // A double click on the body used to scroll down to the Quill box below the
-  // newspaper page and put the cursor in that, which the desk read - fairly -
-  // as "the body is not editable, it redirects." Every other object on this
-  // page is typed into where it prints, and there was no reason the story
-  // could not be: the frame that already sits over the whole body band becomes
-  // the writing surface, exactly as the headline's does.
-  //
-  // It is not a second copy of the words. There is one document, Quill's, and
-  // the commit below goes back into it through Quill's own clipboard - so the
-  // undo stack, the marks, the counters and the save path are the ones that
-  // were already there. What the frame shows during the edit is the body at
-  // its real face, size, leading and measure, in a plain rectangle: a block
-  // whose copy runs around a photograph will re-flow around it the moment the
-  // edit closes, which is the same bargain the headline's inline editor makes.
-  body: {
-    part: "body",
-    // The composed body is one span PER LINE, class `section-body-line`
-    // (compose/render.js) - `.section-body` is the canvas's own CSS markup,
-    // which the composed renderer does not emit at all. A selector that
-    // matches nothing hides nothing, and the desk types over the old words.
-    selector: ".section-body-line",
-    frameId: "edBodyFrame",
-    label: "Edit the story",
-    multiline: true,
-    source: () => String(state.view.body || ""),
-    read: bodyValue,
-    commit: (value) => {
-      if (!quill) return;
-      // Through Quill's own clipboard, at source "user", so the existing
-      // text-change listener turns it into the one body patch every other
-      // keystroke goes through. Nothing here writes the draft directly.
-      quill.clipboard.dangerouslyPasteHTML(quillHtmlFromStored(value), "user");
-    },
   },
 };
 
@@ -579,6 +523,7 @@ function caretAt(frame, at) {
 // truth this text is edited FROM in the first place.
 function beginInlineTextEdit(part, at = null) {
   finishInlineTextEdit();
+  document.getElementById("edWritingSurface")?.classList.remove("is-body-target");
 
   const config = INLINE_TEXT[part];
   if (!config) return;
@@ -604,30 +549,14 @@ function beginInlineTextEdit(part, at = null) {
     // frame itself: the frame lives in the editor's own display pixels, not
     // behind the canonical layer's separate CSS scale() transform.
     const scale = pageScale();
-    if (part === "body") {
-      // The story's own face, size, leading and alignment - the block's, not
-      // the comfortable editing chrome the Quill box below is given. A desk
-      // typing here is looking at the type that will print.
-      frame.style.fontFamily = publicationFamily(state.view.fontFamily).css;
-      frame.style.fontWeight = "400";
-      frame.style.fontSize = `${(Number(state.view.bodyFontPx) || DEFAULT_BODY_FONT_PX) / scale}px`;
-      frame.style.lineHeight = String(Math.max(MIN_BODY_LINE_HEIGHT, Number(state.view.lineHeight) || 1.45));
-      frame.style.textAlign = state.view.textAlign || "left";
-      // A story is long, and the frame is exactly the band the copy has. Copy
-      // that runs past it while it is being typed has to be reachable, and it
-      // is put back inside the block by the compositor the moment the edit
-      // closes - either it fits, or the block says so as it always has.
-      frame.style.overflow = "auto";
-    } else {
-      // Headline/deck are always the sans face, at the stylesheet's own
-      // weights (compose.js's DISPLAY_TYPOGRAPHY) - never derived from any
-      // input, so this is fixed rather than looked up.
-      frame.style.fontFamily = publicationFamily("sans").css;
-      frame.style.fontWeight = part === "headline" ? "700" : "400";
-      frame.style.fontSize = `${(Number(state.view[`${part}FontPx`]) || 16) / scale}px`;
-      frame.style.lineHeight = String(Math.max(1.1, (Number(state.view.lineHeight) || 1.25) - 0.15));
-      frame.style.textAlign = "left";
-    }
+    // Headline/deck are always the sans face, at the stylesheet's own
+    // weights (compose.js's DISPLAY_TYPOGRAPHY) - never derived from any
+    // input, so this is fixed rather than looked up.
+    frame.style.fontFamily = publicationFamily("sans").css;
+    frame.style.fontWeight = part === "headline" ? "700" : "400";
+    frame.style.fontSize = `${(Number(state.view[`${part}FontPx`]) || 16) / scale}px`;
+    frame.style.lineHeight = String(Math.max(1.1, (Number(state.view.lineHeight) || 1.25) - 0.15));
+    frame.style.textAlign = "left";
     frame.style.padding = "0";
     frame.style.pointerEvents = "auto";
 
@@ -635,7 +564,7 @@ function beginInlineTextEdit(part, at = null) {
     // Rich, not "plaintext-only": marking a word inside a headline is exactly
     // what a sub-editor does, and this is the surface where the desk can see
     // the headline at its real size while doing it.
-    frame.innerHTML = fieldHtml(config.multiline ? fromPlainText(source) : source);
+    frame.innerHTML = fieldHtml(source);
     frame.setAttribute("contenteditable", "true");
     frame.setAttribute("role", "textbox");
     frame.setAttribute("aria-label", config.label);
@@ -657,9 +586,9 @@ function beginInlineTextEdit(part, at = null) {
     );
 
     frame.addEventListener("keydown", (event) => {
-      // Enter ends a HEADLINE - it is one flow and cannot carry a break. In
-      // the story it starts a paragraph, which is what a writer means by it.
-      if (event.key === "Enter" && !config.multiline) {
+      // Enter ends a display flow - headline/deck do not carry authored line
+      // breaks; the compositor decides their lines from the measure.
+      if (event.key === "Enter") {
         event.preventDefault();
         frame.blur();
       } else if (event.key === "Escape") {
@@ -680,10 +609,7 @@ function beginInlineTextEdit(part, at = null) {
     const range = caretAt(frame, at) || (() => {
       const fallback = document.createRange();
       fallback.selectNodeContents(frame);
-      // A headline is short, so the caret goes to the end of it - that is
-      // where a sub-editor is about to type. A story is long: the top is the
-      // honest default when the click point cannot be resolved.
-      fallback.collapse(Boolean(config.multiline));
+      fallback.collapse(false);
       return fallback;
     })();
     selection?.removeAllRanges();
@@ -709,29 +635,33 @@ function bindTextFrames() {
   });
 
 
-  // The story is typed where it prints.
-  //
-  // This used to scroll the page down to the Quill box below the newspaper and
-  // put the cursor in that. The reasoning was that the canonical layer is a
-  // read-only replica and must not become a second copy of the words - but the
-  // headline and the deck had already shown how to do it without one: the hit
-  // frame becomes the writing surface, and the commit goes back into the ONE
-  // document through the path every other keystroke uses. For the body that
-  // document is Quill's, and Quill's own clipboard is the way in.
-  //
-  // A desk reads a jump as "the body is not editable, it redirects somewhere
-  // else", and they are right to: nothing else on this page behaves that way.
-  // The Quill box below is untouched and still the same document - a desk who
-  // prefers a long comfortable writing surface still has one.
-  const activateBodyEditor = (originEvent) => {
-    beginInlineTextEdit("body", originEvent ? { x: originEvent.clientX, y: originEvent.clientY } : null);
+  // Quill is the story's ONE editable document. The exact compositor remains
+  // visible on the page and repaints from Quill on every keystroke; it must
+  // never be hidden behind a temporary browser-flow rectangle, because CSS
+  // cannot reproduce the compositor's columns, paragraph balancing or image
+  // runaround. That temporary surface is why the story looked different until
+  // the desk clicked outside. Headline/deck stay safe as semantic overlays:
+  // each is one short flow; the body is not.
+  const activateBodyEditor = () => {
+    finishInlineTextEdit();
+    hooks.onSelectPart?.("body");
+    const writing = document.getElementById("edWritingSurface");
+    writing?.classList.add("is-body-target");
+    writing?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    requestAnimationFrame(() => {
+      if (!quill) return;
+      quill.focus();
+      if (!quill.getSelection()) {
+        quill.setSelection(Math.max(0, quill.getLength() - 1), 0, "silent");
+      }
+    });
   };
 
   body?.addEventListener("click", () => hooks.onSelectPart?.("body"));
   body?.addEventListener("dblclick", (event) => {
     event.preventDefault();
     event.stopPropagation();
-    activateBodyEditor(event);
+    activateBodyEditor();
   });
 
   const page = document.getElementById("edFramePage");
@@ -755,7 +685,7 @@ function bindTextFrames() {
 
     event.preventDefault();
     event.stopPropagation();
-    activateBodyEditor(event);
+    activateBodyEditor();
   }, true);
 
   page?.addEventListener("click", (event) => {
@@ -1321,13 +1251,8 @@ function refreshMarksToolbarState() {
   toolbar.classList.toggle("is-display-target", Boolean(field));
   toolbar.setAttribute("aria-label", `Marks — ${PART_LABEL[part] || "Body"}`);
   toolbar.querySelectorAll(".ql-list").forEach((button) => {
-    // The body typed IN PLACE on the page is a third case, and it is disabled
-    // for a different reason than a headline is: a list is a perfectly good
-    // body form, but these two buttons are QUILL's, and while the story is
-    // being typed on the page Quill is holding the pre-edit document - so a
-    // press here would bullet copy the desk cannot see and the commit would
-    // throw it away. Bold, italic, underline and size all aim at the frame
-    // and survive the commit; a list is set in the writing surface below.
+    // A display field cannot carry a list. The body never becomes one of
+    // these temporary fields; it stays in Quill, where list semantics live.
     button.toggleAttribute("disabled", Boolean(field));
     button.title = !field ? ""
       : part === "body" ? "Set a list in the writing surface below the page"
@@ -1430,6 +1355,9 @@ export async function mountFrame(section, view, images, callbacks, selectedPart 
   // reselecting "body" every time any OTHER part is selected. Only "user"
   // is a person actually choosing to edit the body.
   quill.on("selection-change", (range, oldRange, source) => {
+    const writing = document.getElementById("edWritingSurface");
+    if (range) writing?.classList.add("is-body-target");
+    else if (source === "user") writing?.classList.remove("is-body-target");
     if (source === "user" && range) hooks.onSelectPart?.("body");
   });
 
@@ -1483,12 +1411,7 @@ export function refreshFrame(section, view, images, source, selectedPart, select
 
   // Never while the desk is typing: replacing the document under a cursor
   // throws it back to the start, which is how a rich editor becomes unusable.
-  // `quill.hasFocus()` is false while the story is being typed IN PLACE on the
-  // page (INLINE_TEXT.body), and the words there are not in Quill yet - so
-  // that edit has to be named as well, or every autosave tick would push the
-  // pre-edit copy back into the document the commit is about to write into.
   if (source === "block-frame" || !quill || quill.hasFocus()) return;
-  if (inlineTextEdit?.config?.part === "body") return;
   const wanted = view.body || "";
   if (copyFromFrame() !== wanted) quill.clipboard.dangerouslyPasteHTML(quillHtmlFromStored(wanted), "silent");
 }

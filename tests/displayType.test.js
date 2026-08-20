@@ -104,6 +104,60 @@ test('a full-width one-word close still fails the shared headline gate', () => {
     'proposal acceptance must not mistake one wide closing word for a professional headline');
 });
 
+test('each transition uses the resolved line BELOW it, baseline to baseline', () => {
+  const result = compose.composeBlock({
+    width: 240, height: 420, padding: 1,
+    headline: 'सातारकरांच्या सुरक्षिततेसाठी खड्डेमुक्त रस्ते',
+    subheading: 'नागरिकांच्या सुरक्षिततेसाठी प्रशासनाने तातडीच्या उपाययोजना करण्याची आवश्यकता',
+    body: 'सातारा शहरातील नागरिकांनी रस्त्यांची दुरुस्ती करण्याची मागणी केली आहे. '.repeat(12),
+    headlineFontPx: 28, subheadingFontPx: 15, bodyFontPx: 6.4, lineHeight: 1.45,
+  });
+  const headline = result.bands.headline;
+  const deck = result.bands.deck;
+  const headlineLast = headline.lines.at(-1);
+  const deckFirst = deck.lines[0];
+  const deckLast = deck.lines.at(-1);
+  const bodyFirst = result.bodyLines[0];
+  const displayLeading = Math.max(1.1, result.typography.lineHeight - 0.15);
+
+  assert.ok(deck.resolvedPx < Math.min(15, headline.resolvedPx * 0.65) - 0.5,
+    'fixture: the one-line deck must resolve below both its request and hierarchy cap');
+
+  const headlineToDeck = Math.max(
+    1.35 * deck.resolvedPx * displayLeading,
+    headlineLast.fontPx * metrics.faceDescent('sans', 700)
+      + deckFirst.fontPx * metrics.faceAscent('sans', 400),
+  );
+  assert.ok(Math.abs((deckFirst.baseline - headlineLast.baseline) - headlineToDeck) < 0.02,
+    'headline→deck spacing must use the resolved deck line, never its larger requested size');
+
+  const deckToBody = Math.max(
+    1.50 * result.typography.bodyPx * result.typography.lineHeight,
+    deckLast.fontPx * metrics.faceDescent('sans', 400)
+      + result.typography.bodyPx * metrics.faceAscent('serif', 400),
+  );
+  assert.ok(Math.abs((bodyFirst.baseline - deckLast.baseline) - deckToBody) < 0.02,
+    'deck→body spacing must be the body line below, not the deck box above');
+});
+
+test('Devanagari lines keep a steady safe baseline through matras and velantis', () => {
+  const result = compose.composeBlock({
+    width: 230, height: 360, padding: 1, bodyFontPx: 8, lineHeight: 1,
+    headline: 'शिक्षिकेने विद्यार्थिनींसाठी ज्ञानेश्वरीचे वाचन केले',
+    headlineFontPx: 18,
+    body: 'शिक्षिकेने विद्यार्थिनींसाठी ज्ञानेश्वरीचे वाचन केले. क्षेत्रातील शेतकऱ्यांनी पिकांची माहिती दिली. '.repeat(6),
+  });
+
+  assert.ok(result.typography.lineHeight >= metrics.minLineHeightFor('serif', 400),
+    'the body leading must clear the publication face design box, including upper/lower vowel signs');
+  for (let i = 1; i < result.bodyLines.length; i += 1) {
+    if (Math.abs(result.bodyLines[i].x - result.bodyLines[i - 1].x) > 0.1) continue;
+    assert.ok(result.bodyLines[i].baseline - result.bodyLines[i - 1].baseline
+      >= result.typography.bodyPx * metrics.minLineHeightFor('serif', 400) - 0.02,
+    'a matra-heavy lower line must never collide with the line above');
+  }
+});
+
 test('a headline whose words cannot fill the measure is left at the size the design gave it', () => {
   // One short word across a full-width block. No legible size fills 296px of
   // measure with it, and inflating it a quarter to go from a fifth of the

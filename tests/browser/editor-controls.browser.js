@@ -312,6 +312,39 @@ const BODY = 'सातारा : नगरपालिकेच्या स�
     await page.waitForTimeout(500);
   }
 
+  // The desk's photographed failure included one enlarged word in the body.
+  // It is not enough for that mark to survive in Quill: the exact composed
+  // preview must paint the same size while Quill still has focus, otherwise
+  // double-click has merely traded one two-renderer failure for another.
+  {
+    await focusPart('body');
+    await page.evaluate(() => {
+      const root = document.querySelector('#edQuill .ql-editor');
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      const node = walker.nextNode();
+      const range = document.createRange();
+      range.setStart(node, 0);
+      range.setEnd(node, Math.min(6, node.data.length));
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    });
+    await page.locator(`${marksToolbar} .ed-quill-size-btn[data-size="28px"]`).click();
+    await page.waitForTimeout(700);
+    say(/data-sahas-size="28"/.test((await draft()).body),
+      'a selected body word is stored at its own size');
+    say(await page.evaluate((key) => {
+      const block = document.querySelector(`.newspaper-section[data-section-key="${key}"]`);
+      return [...block.querySelectorAll('.section-body-line span')]
+        .some((el) => getComputedStyle(el).fontSize === '28px');
+    }, KEY), 'and that word is visibly 28 px in the exact composed preview');
+    say(await page.evaluate(() => document.activeElement?.classList.contains('ql-editor')),
+      'the exact repaint does not take focus away from the body document');
+    await selectAllIn('body');
+    await page.locator(`${marksToolbar} .ql-clean`).click();
+    await page.waitForTimeout(500);
+  }
+
   // A list is a body form. The button must not pretend otherwise.
   {
     await focusPart('headline');

@@ -5010,3 +5010,54 @@ rendered proofs have no console/page errors. The regression set covers all
 three shapes, the shared acceptance metric, deck hierarchy and Marathi deck
 instruction. Final verification passes **863/863** Node unit/integration tests.
 Smart Cards remain untouched.
+
+### 59. Body editing keeps the exact composition, and vertical rhythm follows the line below (2026-08-20)
+
+The two desk screenshots were not a focus blur or a small CSS difference. On
+double-click, the body was replaced by a second browser-flow rectangle. That
+surface had different line breaking, leading, paragraph depth and selected-run
+placement from the exact compositor, then changed back when focus left it. It
+was the old two-renderer failure in a new place.
+
+The temporary body `contenteditable` has been removed. Quill is again the one
+body document and input surface; a body double-click selects Body, focuses that
+actual module-level Quill instance and leaves the exact composed block visible.
+Quill's existing `text-change` path recomposes the canonical page on every
+keystroke, before focus leaves the editor. Headline and deck retain their short
+semantic overlays; Smart Cards were not touched.
+
+The vertical-rhythm audit found two independent implementation drifts from the
+existing compositor rule. An auto-fitted lower display flow calculated its
+baseline gap from the requested size before fitting, so a deck requested at
+15 px but resolved at 7.7 px retained 15 px worth of false air. Each size
+candidate now calculates its own target baseline from its resolved size. The
+body transition also no longer clamps itself below the previous flow's entire
+line-box bottom: unused line-box slack may overlap, while the exact face-metric
+clearance still prevents ink collision. The result is the stated professional
+rule at every transition: baseline-to-baseline spacing is defined by the line
+below — headline, deck or body — and never by the larger line above.
+
+Devanagari safety remains metric-led rather than word-led. The publication
+serif's full 1.555 em design ascent/descent is the body-leading floor, covering
+matras, velantis and deep conjuncts on every line. Varying leading according to
+the glyphs that happen to occur on one row would make the column rhythm dance,
+so that was deliberately not introduced. The already measured 1 px block inset
+and boxed-block inset were also left unchanged; neither screenshot showed an
+inset fault.
+
+Live Chrome proof after double-click compared every canonical body's text,
+rich HTML, x/y, width, height, font size and line height: **all 5 lines were
+identical before and after focus**. Quill held focus, the body frame had no
+`contenteditable`, and every exact line remained visible. A separate controls
+check selected a body word at 28 px and proved both the stored
+`data-sahas-size="28"` mark and a visibly 28 px run in the exact composed block
+while Quill still held focus. The rendered evidence is
+`artifacts/news-block-verification/body-edit-exact-live.png`.
+
+Verification on this tree: **865/865** Node unit/integration tests and
+**86/86** real editor-control checks with no console or page errors. The new
+workspace assertions for Quill focus, no alternate body renderer, live exact
+recomposition, paragraph Enter and persistence all pass. The complete workspace
+run finished **219/221**; its only failures were the pre-existing image-history
+redo and two-picture keyboard-nudge checks in the user's separate unstaged image
+work, with `ERRORS: (none)`. No provider call was made.

@@ -386,6 +386,22 @@ and it has to — the size is not settled until it runs (`fitDisplayFlow` tries
 several), and where a line box starts to put its baseline in a given place
 depends on the size it is finally set at.
 
+The target is resolved **inside each size attempt**, for the same reason. A
+deck requested at 15 px can resolve to 7.7 px to hold its one-line role; using
+15 px to calculate its gap and then painting 7.7 px type leaves a false band of
+air. The current candidate supplies its own resolved size and line box to
+`baselineAfter()`. The body follows the same rule and may let its line box
+overlap the display line box's unused slack: the face-metric clearance prevents
+ink collision, while forcing box-bottom-after-box-bottom would reintroduce a
+gap based on the larger line above.
+
+This is also the Devanagari safety rule. The clearance uses the publication
+faces' real design ascent/descent and the body leading is floored at the face's
+full 1.555 em design box, so matras, velantis and deep conjuncts cannot collide.
+It is deliberately not varied word by word: changing the baseline because one
+line happens to carry a tall mark makes the column's rhythm dance. The face
+box protects every line and the resolved type below defines the steady rhythm.
+
 **A boxed block sets its type inside the box, not against it**
 (`BOX_INSET_PX`). The box is ink; a printed panel insets its type 3–4 mm.
 
@@ -875,42 +891,29 @@ text may never reach that renderer.
   that order, because a ground emitted after the type would paint over the
   story.
 
-### The story is typed where it prints
+### The story has one input and one exact live preview
 
-A double click on the body used to scroll the page **down** to the Quill box
-below the newspaper and put the cursor in that. The desk read that as *"the body
-is not editable, it is redirecting"* — and they were right to: nothing else on
-the page behaves that way. The frame that already sits over the body band
-becomes the writing surface, exactly as the headline's does
-(`INLINE_TEXT.body` in `block-frame.js`).
+The body must not become a temporary `contenteditable` rectangle on double
+click. That was tried: it could paint the right face, size and leading, but it
+could not reproduce the compositor's columns, paragraph balancing or arbitrary
+picture/cut-out runaround. The block therefore changed appearance while it had
+focus and changed back on blur — exactly the two-layout failure the canonical
+renderer was built to remove.
 
-It is **not** a second copy of the words, which is the objection the old comment
-raised. There is one document, Quill's, and the commit goes back into it through
-**Quill's own clipboard** at source `"user"` — so the existing `text-change`
-listener makes the one body patch every other keystroke already makes, and the
-undo stack, the counters and the save path are the ones that were there.
+Quill remains the body's **one editable document**. A body double click selects
+the body, brings that writing surface to the nearest visible position, focuses
+the actual module-level Quill instance and places a real selection if Quill has
+none. The exact canonical page is never hidden or replaced. Quill's existing
+`text-change` path updates the shared draft and recomposes that page on every
+keystroke, so the desk can see the real columns, image exclusion, line endings
+and overflow state before focus leaves the editor.
 
-Four things the body needs that a headline does not:
-
-- **A caret, not just focus.** `activeElement` was the frame, `contenteditable`
-  was `"true"`, and every keystroke was still dropped — because the selection
-  was wherever the double click had left it, *outside*. `caretAt()` resolves the
-  click point into the frame (`caretRangeFromPoint`), falling back to the top.
-- **`.section-body-line`, not `.section-body`.** The composed body is one span
-  per LINE (`compose/render.js`); `.section-body` is the canvas's CSS markup and
-  matches nothing here. A selector that matches nothing hides nothing, so the
-  desk typed over the old words.
-- **Enter is a paragraph**, not the end of the edit (`multiline`), and the
-  commit keeps the block tags rather than flattening them (`bodyValue`) — the
-  story *is* its paragraphs.
-- **The canonical lines stay hidden across re-renders.** They were hidden once,
-  at open, and any refresh at all rebuilt the layer and put them back.
-
-The **list buttons** are disabled while the story is typed in place, and for a
-different reason than a headline's are: they are Quill's, and Quill holds the
-pre-edit document, so a press would bullet copy nobody can see and the commit
-would throw it away. Bold, italic, underline and size aim at the frame and
-survive the round trip. A list is set in the writing surface below.
+This is an honest separation of jobs, not two renderers: Quill owns input,
+selection, marks, paragraphs and undo; `composeBlock()` owns what prints. A web
+`contenteditable` cannot become a second page-layout engine merely by being
+positioned over the right rectangle. Headline/deck remain semantic inline
+overlays because each is one short flow; their complete source is committed
+through the existing fields and then recomposed.
 
 ### Nothing on the page is ruled unless a person ruled it
 

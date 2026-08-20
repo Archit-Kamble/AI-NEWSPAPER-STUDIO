@@ -288,7 +288,7 @@ function num(value, fallback) {
  */
 function setDisplayFlow(text, {
   top, bottomLimit, column, images, fontPx, lineHeight, family, weight, maxLines, letterSpacingPx = 0,
-  align = 'left', marks = null, baselineAt = null, floor = null,
+  align = 'left', marks = null, previousBaseline = null, flowKey = '', floor = null,
 }) {
   const pieces = breakPieces(text);
   if (!pieces.length) return { lines: [], height: 0, bottom: top, overset: '', lineCount: 0, violations: [] };
@@ -300,6 +300,15 @@ function setDisplayFlow(text, {
   // where a line box has to start to put its baseline in a given place depends
   // on the size it is finally set at. Computing the top outside would place
   // every shrunk or grown flow at the ascent of a size it was not set in.
+  const baselineAt = previousBaseline
+    ? baselineAfter(previousBaseline, {
+      key: flowKey,
+      fontPx,
+      family,
+      weight,
+      lineBox: fontPx * lineHeight,
+    })
+    : null;
   if (baselineAt !== null) {
     top = baselineAt - fontPx * faceAscent(family, weight);
     if (floor !== null && top < floor) top = floor;
@@ -1837,18 +1846,6 @@ export function composeBlock(input = {}) {
     const effectivePx = flow.key === 'deck' && headlinePx > 0 && !flow.locked
       ? Math.max(flow.min, Math.min(flow.px, Math.round(headlinePx * DECK_MAX_HEADLINE_RATIO * 10) / 10))
       : flow.px;
-    // Where this flow's first baseline should fall. Null for the first flow on
-    // the block, which starts at the top of the content and nowhere else.
-    const baselineAt = lastBaseline
-      ? baselineAfter(lastBaseline, {
-        key: flow.key,
-        fontPx: effectivePx,
-        family: flow.family,
-        weight: flow.weight,
-        lineBox: effectivePx * displayLineHeight,
-      })
-      : null;
-
     // The headline is the one flow with a share limit: it is the page's
     // hierarchy, but a block that is all headline holds no story.
     const share = flow.key === 'headline' ? MAX_HEADLINE_SHARE : 0.7;
@@ -1859,7 +1856,12 @@ export function composeBlock(input = {}) {
     // limit ended up taking half the block between them.
     const set = fitDisplayFlow(flow.text, {
       top: y,
-      baselineAt,
+      // A candidate's own RESOLVED size defines the baseline gap above it.
+      // fitDisplayFlow() may try several sizes, so this cannot be reduced to
+      // one number here from the requested size without making auto-fitted
+      // decks/headlines carry the wrong vertical rhythm.
+      previousBaseline: lastBaseline,
+      flowKey: flow.key,
       // The only hard floor is the block's own content edge. A band's BOX may
       // legitimately begin above the previous band's box bottom - that box
       // carries a full line's slack below its ink, and closing that slack is
@@ -1958,7 +1960,7 @@ export function composeBlock(input = {}) {
   // than a function of how big that block's headline happened to be.
   const bodyLineBox = bodyPx * lineHeight;
   const bodyTop = lastBaseline
-    ? Math.max(y, baselineAfter(lastBaseline, {
+    ? Math.max(content.top, baselineAfter(lastBaseline, {
       key: 'body', fontPx: bodyPx, family: bodyFamily, weight: bodyWeight, lineBox: bodyLineBox,
     }) - bodyPx * faceAscent(bodyFamily, bodyWeight))
     : content.top;

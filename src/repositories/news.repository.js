@@ -93,6 +93,18 @@ async function findByStatus(status) {
   return rows;
 }
 
+async function setStatus(id, { status, reviewerId = null, reviewNote = '' }) {
+  const { rows } = await pool.query(
+    `UPDATE news_items
+        SET status = $2, reviewed_by = $3, reviewed_at = CURRENT_TIMESTAMP,
+            review_note = $4, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $1
+      RETURNING *`,
+    [id, status, reviewerId, reviewNote || null],
+  );
+  return rows[0] || null;
+}
+
 // A composition run owns a stable in-memory snapshot of this result. Only
 // desk-approved newsroom material attached to the requested edition is
 // eligible; drafts and rejected copy must never become autonomous output.
@@ -123,7 +135,8 @@ async function update(id, news) {
             editorial_priority=$11,
             desired_page_role=$12,
             image_urls=$13,
-            status=$14
+            status=$14,
+            updated_at=CURRENT_TIMESTAMP
         WHERE id=$15
         RETURNING *;
     `;
@@ -161,6 +174,6 @@ module.exports = {
   findById,
   findByStatus,
   findForComposition,
-  update,
+  update, setStatus,
   remove,
 };

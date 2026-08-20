@@ -9,7 +9,7 @@ const { geometryOf } = require('./src/layout/geometry');
 const { identityFor } = require('./src/layout/identity');
 const ai = require('./src/services/ai');
 const { asyncRoute } = require('./src/middleware/asyncRoute');
-const { deskWrites, requireDesk, requireSignIn } = require('./src/middleware/auth');
+const { deskWrites, requireAdmin, requireDesk, requireSignIn } = require('./src/middleware/auth');
 const { syncTemplates } = require('./src/layout/syncTemplates');
 const { upload } = require('./src/middleware/upload');
 const newsRoutes = require('./src/routes/news.routes');
@@ -17,6 +17,8 @@ const newspaperRoutes = require('./src/routes/newspaper.routes');
 const pageRoutes = require('./src/routes/page.routes');
 const authRoutes = require('./src/routes/auth.routes');
 const featureRoutes = require('./src/routes/feature.routes');
+const reporterRoutes = require('./src/routes/reporter.routes');
+const settingsRoutes = require('./src/routes/settings.routes');
 const newspaperController = require('./src/controllers/newspaper.controller');
 
 dotenv.config();
@@ -57,6 +59,12 @@ function createApp() {
   });
 
   app.use("/api/auth", authRoutes);
+
+  // Owner-only identity and publication setup. These routes intentionally sit
+  // outside the deskWrites mount: reporter profile/contact data is private and
+  // cannot become public merely because GET is normally read-only.
+  app.use('/api/reporters', requireAdmin, reporterRoutes);
+  app.use('/api/settings', requireAdmin, settingsRoutes);
 
   // News API
   // Reporters file here, so signing in is enough; the desk-only check is on

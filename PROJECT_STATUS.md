@@ -4,6 +4,35 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zzk. Owner reporter desk and durable general settings (2026-08-20)
+
+Implemented on isolated, unmerged branch `codex/reporter-settings`. The former
+Reporter and Settings placeholders are now real owner-only production tools.
+
+**Reporters** are persistent user identities with contact and coverage fields
+(name, email, phone, district, beat and owner notes), a bcrypt-protected login,
+active/blocked state and immutable filing history. The owner can search by
+name/email/district/beat, create a login, open an individual profile, edit its
+details, block or restore access, see every filed story, and approve/reject
+from that profile with a retained review note. Blocking revokes an already-open
+reporter session on its next request as well as refusing later logins; it never
+deletes their stories.
+
+This pass also closed a real permission gap: a reporter now sees and edits only
+their own `news_items`; their session, rather than a forgeable `reporterId` or
+byline field, owns the filing. Reporters cannot approve/reject work and cannot
+edit desk-approved copy. Desk review stores reviewer, timestamp and note.
+
+**Settings** now persists one owner-maintained, validated publication record:
+publication/publisher identity, office address, contact email/phone, public
+website, newsroom timezone and default writing language. Existing editions are
+never silently changed by setup edits. The schema migration was applied to the
+local database. Verification: the full suite passes **867/867**, and focused
+reporter/press integration tests pass **14/14**, including full create → file →
+review → block → restore behavior.
+
+---
+
 ## 0zzd. Release gate — SAHAS original 11-problem v1 closed (2026-08-17)
 
 The original 11 problems this repair project set out to close are all PASS,

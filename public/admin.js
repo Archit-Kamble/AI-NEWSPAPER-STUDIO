@@ -1,5 +1,7 @@
 import { renderWorkspace } from "./editor/workspace.js";
 import { renderEditions } from "./admin/editions.js";
+import { renderReporterManagement } from "./admin/reporters.js";
+import { renderGeneralSettings } from "./admin/settings.js";
 import { escapeHtml } from "./editor/format.js";
 
 const app = document.getElementById("app");
@@ -407,15 +409,15 @@ async function showPastNews() {
 }
 
 function showReporters() {
-  document.getElementById("rightPanel").innerHTML = "<h3>Reporters</h3>";
-  document.getElementById("content").innerHTML =
-    '<div class="form-section"><h2>Reporters</h2><p>Feature coming soon</p></div>';
+  renderReporterManagement(document.getElementById("content"), {
+    rightPanel: document.getElementById("rightPanel"),
+  });
 }
 
 function showSettings() {
-  document.getElementById("rightPanel").innerHTML = "<h3>Settings</h3>";
-  document.getElementById("content").innerHTML =
-    '<div class="form-section"><h2>Settings</h2><p>Feature coming soon</p></div>';
+  renderGeneralSettings(document.getElementById("content"), {
+    rightPanel: document.getElementById("rightPanel"),
+  });
 }
 
 async function showReporterCreateNews() {

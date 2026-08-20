@@ -66,7 +66,7 @@ test('a resize repair carries the same instruction, not just the length change',
 test('filling remaining space carries the same instruction', () => {
   const brief = writer.fillBriefFor({
     view: { headline: 'चाचणी', subheading: '', body: 'सुरुवातीचा मजकूर.' },
-    notes: '', room: { budget: 400, used: 100, remaining: 300, cols: 40 },
+    notes: '', room: { budget: 400, used: 100, remaining: 300, columns: 2, fillRatio: 0.5, holeLines: 4 },
     language: 'Marathi', section: { width_px: 268, height_px: 248 },
   });
   assert.match(brief, /live result, score or status/i);
@@ -81,6 +81,43 @@ test('the guardrail sits alongside the existing no-invented-facts rule, not inst
     section: { width_px: 268, height_px: 248 }, language: 'Marathi', isLead: false,
   });
   assert.match(brief, /no casualty figures, no rupee amounts, no dates/i);
+});
+
+test('an AI headline below 95% is replaced only after exact composition of alternatives', async (t) => {
+  withOnlyGemini(t, {
+    async askForJson() {
+      return { data: { headlines: [
+        'शहरातील पाणीटंचाईवर प्रशासनाची उपाययोजना सुरू',
+        'पाणीटंचाईवर शहर प्रशासनाकडून उपाययोजना सुरू',
+        'शहरातील पाणी प्रश्नावर प्रशासनाच्या उपाययोजना',
+        'पाणीटंचाई निवारणासाठी शहरात उपाययोजना सुरू',
+        'शहराच्या पाणी प्रश्नावर प्रशासनाच्या उपाययोजना सुरू',
+        'पाणीटंचाई दूर करण्यासाठी शहर प्रशासनाचे प्रयत्न सुरू',
+        'शहरातील पाणीटंचाईच्या प्रश्नावर प्रशासनाच्या उपाययोजना सुरू',
+        'शहराची पाणीटंचाई दूर करण्यासाठी प्रशासनाकडून प्रयत्न सुरू',
+      ] } };
+    },
+  });
+
+  const section = {
+    width_px: 268, height_px: 248, margin_px: 4, column_count: 1,
+    line_height: 1.45, headline_font_px: 24, subheading_font_px: 13, body_font_px: 10,
+  };
+  const result = await writer.settleGeneratedHeadline({
+    section,
+    images: [],
+    proposal: { headline: 'लहान मथळा', subheading: '', body: '' },
+    seed: 'शहरातील पाणीटंचाई',
+    fit: { headlineChars: 60, cols: 40 },
+    language: 'Marathi',
+    tier: 'basic',
+    accentStyle: false,
+  });
+
+  assert.equal(result.calls, 1);
+  assert.equal(result.acceptable, true);
+  assert.ok(result.fill >= 0.95);
+  assert.notEqual(result.headline, 'लहान मथळा');
 });
 
 // -------------------------------------------------- Part 7: response type ---
@@ -187,12 +224,12 @@ test('call-count matrix: good fit, hole, and overflow - measured on a real block
 
   const scenarios = [
     { name: 'good fit (composed to the foot)', body: full, expectCalls: 0 },
-    { name: 'genuine hole', body: REAL_SENTENCE, expectCalls: 1 },
+    { name: 'genuine hole', body: REAL_SENTENCE, expectCalls: copyFit.MAX_FILL_CALLS },
     // The change that saves the most money: overflow is repaired by a free,
     // deterministic sentence-boundary cut. It used to cost a paid call that
     // was not even guaranteed to come back the right length.
     { name: 'overflow', body: REAL_SENTENCE.repeat(40), expectCalls: 0 },
-    { name: 'empty', body: '', expectCalls: 1 },
+    { name: 'empty', body: '', expectCalls: copyFit.MAX_FILL_CALLS },
   ];
 
   for (const s of scenarios) {
@@ -317,7 +354,19 @@ function wordFill(n) {
 }
 
 function compliantResponse(prompt) {
-  const headlineLimit = /headline must be at most (\d+) characters/.exec(prompt);
+  if (/HEADLINE TO RESET:/.test(prompt)) {
+    return { headlines: [
+      'शहरातील पाणीटंचाईवर प्रशासनाची उपाययोजना सुरू',
+      'पाणीटंचाईवर शहर प्रशासनाकडून उपाययोजना सुरू',
+      'शहरातील पाणी प्रश्नावर प्रशासनाच्या उपाययोजना',
+      'पाणीटंचाई निवारणासाठी शहरात उपाययोजना सुरू',
+      'शहराच्या पाणी प्रश्नावर प्रशासनाच्या उपाययोजना सुरू',
+      'पाणीटंचाई दूर करण्यासाठी शहर प्रशासनाचे प्रयत्न सुरू',
+      'शहरातील पाणीटंचाईच्या प्रश्नावर प्रशासनाच्या उपाययोजना सुरू',
+      'शहराची पाणीटंचाई दूर करण्यासाठी प्रशासनाकडून प्रयत्न सुरू',
+    ] };
+  }
+  const headlineLimit = /headline must be \d+ to (\d+) characters/.exec(prompt);
   const deckLimit = /one line of \d+ to (\d+)/.exec(prompt);
   const bodyRange = /between (\d+) and (\d+) characters/.exec(prompt);
   return {
@@ -337,7 +386,7 @@ function withTrustedDomain(t) {
   });
 }
 
-test('evergreen: retrieval is never invoked, exactly one AI call, as before', async (t) => {
+test('evergreen: retrieval is never invoked; only writing and measured headline repair may call AI', async (t) => {
   const { desk, page } = await withBlock(t, 'ZZ information evergreen');
 
   let rssCalls = 0;
@@ -353,7 +402,8 @@ test('evergreen: retrieval is never invoked, exactly one AI call, as before', as
 
   assert.ok(result.proposal, 'the block was written');
   assert.equal(rssCalls, 0, 'an evergreen seed must never reach the information layer');
-  assert.equal(aiCalls, 1, 'exactly one AI call, same as a request with no retrieval concept at all');
+  assert.ok(aiCalls >= 1 && aiCalls <= 2, 'retrieval adds no call; only an exact headline repair may add one');
+  assert.equal(result.fit.headlineAcceptable, true, 'the headline passed the exact 95% composition check');
   assert.equal(result.retrieval, null, 'nothing to show - retrieval never ran');
 });
 

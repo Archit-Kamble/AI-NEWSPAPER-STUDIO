@@ -127,9 +127,14 @@ export function maxLegibleColumns(section, view, widthPx, ceiling = 4) {
   return count;
 }
 
-export function measureColumns(section, view, widthPx) {
+function explicitColumnCount(section, view) {
   const explicit = Number(pick(section, view, 'columnCount', 'column_count', undefined));
-  if (Number.isInteger(explicit) && explicit >= 1) return explicit;
+  return Number.isInteger(explicit) && explicit >= 1 ? explicit : null;
+}
+
+export function measureColumns(section, view, widthPx) {
+  const explicit = explicitColumnCount(section, view);
+  if (explicit !== null) return explicit;
 
   const margin = positive(pick(section, view, 'marginPx', 'margin_px', 12), 12);
   const usable = Math.max(0, widthPx - 2 * margin);
@@ -240,7 +245,10 @@ export function composeSection(section = {}, view = {}) {
     end: mark.end + prefix.length,
   }));
 
-  return composeBlock({
+  const expectsCopy = blockExpectsCopy(section.block_type ?? section.blockType ?? view.blockType);
+  const preferredColumns = measureColumns(section, view, width);
+  const explicitColumns = explicitColumnCount(section, view);
+  const input = {
     width,
     height,
     padding,
@@ -259,7 +267,7 @@ export function composeSection(section = {}, view = {}) {
     // says what each block kind is for. A full-bleed advert leaves no column
     // wide enough to set type in and that is the finished advert, not a
     // fault - see NO_LEGAL_MEASURE in compose.js.
-    expectsCopy: blockExpectsCopy(section.block_type ?? section.blockType ?? view.blockType),
+    expectsCopy,
     headlineFontPx: positive(pick(section, view, 'headlineFontPx', 'headline_font_px', 34), 34),
     subheadingFontPx: positive(pick(section, view, 'subheadingFontPx', 'subheading_font_px', 20), 20),
     bodyFontPx,
@@ -311,11 +319,43 @@ export function composeSection(section = {}, view = {}) {
     headlineGrowth: pick(section, view, 'headlineGrowth', 'headline_growth', undefined),
     deckMaxLines: pick(section, view, 'deckMaxLines', 'deck_max_lines', undefined),
     letterSpacingPx: Number(pick(section, view, 'letterSpacingPx', 'letter_spacing_px', 0)) || 0,
-    columnCount: measureColumns(section, view, width),
+    columnCount: preferredColumns,
     headlineLocked: Boolean(pick(section, view, 'headlineLocked', 'headline_locked', false)),
     subheadingLocked: Boolean(pick(section, view, 'subheadingLocked', 'subheading_locked', false)),
     images: obstaclesOf(section),
-  });
+  };
+
+  const preferred = composeBlock(input);
+  preferred.columnDecision = {
+    mode: explicitColumns === null ? 'auto' : 'explicit',
+    preferred: preferredColumns,
+    resolved: preferred.columns.length,
+  };
+
+  // Auto is allowed to react to the copy; an explicit count is not. Width is
+  // still the professional first choice, but a photograph can make that
+  // nominal count hold LESS copy than the next count down. If the preferred
+  // Auto setting actually oversets, try the remaining legal settings against
+  // the same words and the same image scanlines, and take the highest count
+  // that prints every word. This is deliberately a fallback, not a fill
+  // trick: copy that merely ends short never makes the columns jump around.
+  if (explicitColumns === null && preferredColumns > 1 && expectsCopy && bodyText.trim() && bodyOverset(preferred)) {
+    for (let count = preferredColumns - 1; count >= 1; count -= 1) {
+      const candidate = composeBlock({ ...input, columnCount: count });
+      if (bodyOverset(candidate)) continue;
+      candidate.columnDecision = {
+        mode: 'auto', preferred: preferredColumns, resolved: count, reason: 'copy-fit',
+      };
+      candidate.warnings.push({
+        code: 'AUTO_COLUMNS_REDUCED_FOR_COPY',
+        detail: `Auto chose ${count} ${count === 1 ? 'column' : 'columns'} instead of ${preferredColumns}: `
+          + 'this is the highest count that sets every word around the pictures in this block.',
+      });
+      return candidate;
+    }
+  }
+
+  return preferred;
 }
 
 /**
@@ -334,6 +374,13 @@ export function composeSection(section = {}, view = {}) {
 export function bodyOverset(result) {
   return Boolean(result?.overset?.body)
     || Boolean(result?.violations?.some((v) => v.code === 'BODY_UNBREAKABLE_TOKEN_OVERSET'));
+}
+
+/** Longest-line headline fill: one full line plus a short close is normal. */
+export function headlineFill(result) {
+  const lines = result?.bands?.headline?.lines || [];
+  if (!lines.length) return 1;
+  return Math.max(...lines.map((line) => (line.measure > 0 ? line.width / line.measure : 0)));
 }
 
 /**

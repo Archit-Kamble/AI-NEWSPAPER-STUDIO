@@ -15,7 +15,7 @@
 
 import { escapeHtml } from "../format.js";
 import { TINTS } from "../layout/inks.js";
-import { measureColumns, maxLegibleColumns } from "../compose/section-adapter.js";
+import { composeSection, measureColumns, maxLegibleColumns } from "../compose/section-adapter.js";
 import { PART_LABEL } from "./typography-panel.js";
 // The Layer control reuses the EXACT arithmetic the Story panel's "Bring
 // forward"/"Send back" buttons already use - not a second copy of
@@ -101,14 +101,30 @@ function numberField(id, label, value, { min, max, step = 1, unit = "" } = {}) {
 // see that they are the same answer here.
 function columnsNote(section, view) {
   const width = Number(section.width_px) || 0;
-  const auto = measureColumns(section, view, width);
+  const autoSection = { ...section, columnCount: null, column_count: null };
+  const autoView = { ...view, columnCount: null, column_count: null };
+  const preferred = measureColumns(autoSection, autoView, width);
+  // The width-derived count is the first choice. The final Auto count also
+  // sees the current words and pictures, because a cut-out can make two
+  // nominal columns hold less copy than one. This is the same composition the
+  // canvas paints, not a second estimate made for the inspector.
+  let auto = preferred;
+  try {
+    auto = composeSection(autoSection, autoView).columns.length || preferred;
+  } catch {
+    // Before the browser's font/shaper assets are ready, the width answer is
+    // the only honest preview. The canvas will repaint this note once ready.
+  }
   const most = maxLegibleColumns(section, view, width, 4);
   const cap = most < 4
     ? ` This block is too narrow for ${most === 1 ? "two" : `${most + 1}`} columns${most === 1 ? "" : " or more"} - they are greyed out because a column that narrow sets no words at all, not fewer.`
     : "";
+  const fitted = auto < preferred
+    ? ` Auto normally prefers ${preferred}, but the current copy would overflow there; ${auto} is the highest count that sets every word around the pictures.`
+    : "";
   return (auto === 1
-    ? "Auto sets this block in one column - it is not wide enough for two that could still be read."
-    : `Auto sets this block in ${auto} columns. A column is aimed at the 59 mm a printed page uses, and never made too narrow to set a word in.`) + cap;
+    ? "Auto sets this block in one column."
+    : `Auto sets this block in ${auto} columns. A column is aimed at the 59 mm a printed page uses, and never made too narrow to set a word in.`) + fitted + cap;
 }
 
 function blockPropertiesMarkup(section, view, page) {

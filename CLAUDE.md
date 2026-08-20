@@ -225,7 +225,7 @@ size, and every layout tool ships this move.
 
 Three rules, each arrived at by measuring the alternative:
 
-- **All or nothing** (`HEADLINE_FILL_TARGET`, 0.92). "Any improvement" was tried
+- **All or nothing** (`HEADLINE_FILL_TARGET`, 0.95). "Any improvement" was tried
   and is wrong in a way that is obvious once seen: one short word on a full-width
   block cannot fill 296px of measure at any legible size, so it inflated 30px →
   37px to go from 19% to 24% — a quarter larger, still five-sixths empty, and the
@@ -236,7 +236,8 @@ Three rules, each arrived at by measuring the alternative:
 - **`HEADLINE_GROWTH_CAP` (1.25) is a HIERARCHY bound**, not a typographic one.
   A page reads as one page because the bigger block shouts louder, and
   `byMeasure = width/11` is the rung. Measured over 5084 blocks and 429 pages:
-  1.25 takes headlines at/over 92% filled from 1089 to 2787 for four more pages
+  In the original 92%-target sweep, 1.25 took headlines at/over 92% filled from
+  1089 to 2787 for four more pages
   where a smaller block out-shouts the biggest; 1.4 costs nine times that for one
   sixth more; 1.6 breaks two pages in three. The table is beside the constant.
 
@@ -253,8 +254,22 @@ size it would have used and the exact number of characters that would have to
 go. A decision nobody was told about is one nobody can make — which is why a
 block that simply took the room it had says nothing at all.
 
-Across all 5084 blocks with a headline: longest-line fill **73.6% → 76.6%**,
-headlines at or over 92% filled **1089 → 2787**, display share 20.0% → 20.6%.
+Across all 5084 blocks in that original sweep: longest-line fill **73.6% →
+76.6%**, headlines at or over its 92% bar **1089 → 2787**, display share 20.0%
+→ 20.6%. The production acceptance bar is now 95% for both headline and body.
+
+**A model's character count is a search range, never headline geometry.** The
+first writing brief uses `measuredHeadlineLimit()` as a conservative bound, but
+real Marathi word shapes of the same character count can be materially narrower
+or wider. A live 268×248 lead proved why the bound cannot also be the repair
+ceiling: alternatives constrained to its 38-character bound left the headline
+only **82.47%** full. The repair asks for eight semantically equivalent
+alternatives spread across 75–160% of that estimate, then shapes every one with
+the exact compositor and accepts only a non-overset result at or above 95%. On
+the same block the real provider supplied a 56-character legal alternative that
+composed at **97.32%** in one repair call. Current-news repairs receive the same
+delimited verified-facts block as the original brief; changing line breaks must
+never become permission to add a fact.
 
 ### Every control names the object it acts on
 
@@ -1011,9 +1026,9 @@ Copy never arrives the right length, and a sub-editor has exactly three moves. A
 So the loop runs the other way round. The AI supplies editorial material; **SAHAS decides what fits, where, how much is still fillable, and when fitting is finished.**
 
 - **`measureFit()`** composes through the exact engine and reports the engine's own `fitState`, plus `displayOverset` (a headline or deck with no room for its own text is a block that does not fit, whatever the body did).
-- **`isAcceptablyFilled(fit)` is the ONE authority on "is this block finished"**: nothing overset — body, headline, deck or kicker — and the block **at least 95% set** (`ACCEPTABLE_FILL_RATIO`), or with literally nothing fillable left. "Under one whole line empty" was the first attempt and is far too slack on a small block: 4.83 of 5.83 lines is under a line empty and only 83% set, which is exactly the "Layout looks balanced" a desk was shown at 87% while looking at an obviously short column. `isUnderfilled()` — the repair trigger — now chases the **same** bar rather than a share rule of its own, and `layout-panel.js`'s `WHITESPACE_THRESHOLD` is that bar too, so the panel and the writer cannot tell a desk two different stories. `MIN_FILLABLE_LINES` (0.25 — a quarter of a line is two or three words, the smallest thing a model can be asked to add) is *policy*: it decides whether a hole is worth a call, never whether the block fits. `ACCEPTANCE_EPSILON` (0.01) absorbs the two-decimal rounding and is not a knob.
+- **`isAcceptablyFilled(fit)` is the ONE authority on "is this block finished"**: nothing overset — body, headline, deck or kicker — and the block **at least 95% set** (`ACCEPTABLE_FILL_RATIO`), or with literally nothing fillable left. "Under one whole line empty" was the first attempt and is far too slack on a small block: 4.83 of 5.83 lines is under a line empty and only 83% set, which is exactly the "Layout looks balanced" a desk was shown at 87% while looking at an obviously short column. `isUnderfilled()` — the repair trigger — now chases the **same** bar rather than a share rule of its own, and `layout-panel.js`'s `WHITESPACE_THRESHOLD` is that bar too, so the panel and the writer cannot tell a desk two different stories. `MIN_FILLABLE_LINES` (0.25 — a quarter of a line is two or three words, the smallest thing a model can be asked to add) is *policy*: it decides whether a hole is worth a call, never whether the block fits. `ACCEPTANCE_EPSILON` is machine precision only; the old 0.01 quietly made 94% pass a stated 95% bar.
 - **`trimToFit()`** cuts back to the longest prefix that fits, by binary search over the composed result, at the strongest boundary that still fills the block: **paragraph if that alone is already acceptable, otherwise sentence, and a word only as the emergency fallback** for a single sentence longer than the block. Deterministic, free, always converges.
-- **`settleToFit()`** trims if long, then loops — bounded by `MAX_FILL_CALLS` (1) — asking only for **further paragraphs to APPEND**, never a rewrite. It stops early if a repair fails to shrink the hole, and a repair that fits worse is discarded, so a failed second attempt never costs the desk the copy it already had.
+- **`settleToFit()`** trims if long, then loops — bounded by `MAX_FILL_CALLS` (2) — asking only for **further paragraphs to APPEND**, never a rewrite. The second call is available only after the first answer has been composed and remains below 95%; this closes the measured case where one useful addition still stopped short. A worse answer is discarded, so a failed second attempt never costs the desk the copy it already had.
 
 **A repair used to be accepted for having made the hole SMALLER.** That only proves the result got less bad: a block could go 55% full → 70% full and be returned as done. Acceptance is now the geometric condition, and when the bounded budget runs out without reaching it the result says **`SOURCE_LIMITED_UNDERFILL`** — the block still has room and the material available would not fill it. That is an honest production state (add source material, use a larger picture, choose a smaller block) and the AI panel shows it. **Never dress it up as `FITS`** — that is what puts a half-empty block on a printed page.
 
@@ -1033,9 +1048,9 @@ The model is now asked for **more copy than the block will print**, told so expl
 
 **"Fill remaining area with AI" repairs both directions through the same exact
 settle controller as "Write this block".** Overset copy is cut first, for free.
-If that sentence-boundary cut itself lands short of the 95% bar, one bounded
-addition call fills the newly opened hole and the result is composed again
-around the same pictures. `trimmedOnly: true` still means the cut itself landed
+If that sentence-boundary cut itself lands short of the 95% bar, up to two
+bounded addition passes fill the newly opened hole and each result is composed
+again around the same pictures. `trimmedOnly: true` still means the cut itself landed
 at the foot and no provider was called. The explicit-fill path must never stop
 at a coarse sentence cut and exchange an overflow for an underflow.
 
@@ -1044,6 +1059,21 @@ a local `Number(section.column_count) || 1`: on the 268 × 304 cut-out regressio
 the old one-column override says the 299-character draft fits, while the real
 Auto/two-column masked pour reports three characters overset. The shared settle
 path ends with no overset and a 1.00 weighted fill ratio.
+
+Auto's width-derived count is the professional first choice, not an immutable
+guess. If that count oversets current copy around the real image scanlines,
+`composeSection()` tries lower legal counts and uses the highest one that sets
+every word. An explicit desk count is never changed, and merely short copy does
+not make Auto jump. The Properties note reports the same resolved composition.
+
+The user's "line matrix" is already inside `composeBlock()`: every baseline has
+its own legal horizontal intervals after columns, rectangular pictures and
+alpha-mask cut-outs are excluded. The API is not asked to reproduce that matrix
+or predict glyph widths. It receives the matrix's measured result — exact fill
+ratio, equivalent missing lines and resolved columns — supplies editorial
+material, and the local HarfBuzz compositor pours it back through every interval.
+That closed loop is the guarantee; a model's character estimate is only a
+calibrated request size.
 
 ### How full is this block? In WEIGHTED USABLE GEOMETRY — `bodyFill()`
 
@@ -1089,11 +1119,11 @@ Don't redesign this workflow when it lands. `POST /api/newspapers/:id/final-file
 
 ## Engineering rules
 
-- **Current overflow baseline: `52c9556`.** The desk explicitly chose this
-  state after the temporary Claude-baseline rollback did not remove the visible
-  overflow. Diagnose the remaining concrete block from here. Fix only the
-  proven boundary; do not broadly retune headline/deck fitting, derived font
-  sizes, the compositor or irregular-image wrapping.
+- **The overflow diagnosis started from desk-selected baseline `52c9556`.** Fix
+  only proven boundaries from that line; do not broadly retune derived font
+  sizes, replace the compositor or disturb irregular-image wrapping. Later
+  commits are incremental verified fixes, not permission to reintroduce the
+  abandoned broad redesign.
 - Never rewrite a working module unless necessary; prefer incremental migration with small commits.
 - Never guess schema — read `schema.sql`. It uses `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` for additive migrations; follow that pattern for new columns.
 - Before changing code, determine: what's live, what's legacy, what's dead. Delete only code confirmed dead (unreachable AND unimported, or actually empty *and* not a documented planned stub — see above).

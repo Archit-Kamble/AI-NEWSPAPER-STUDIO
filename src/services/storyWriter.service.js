@@ -362,6 +362,7 @@ function briefFor({
   // one was not - see headline-reserve.js's own note on why the grid's `cols`
   // is the wrong unit for display type.
   const headlineChars = fit.headlineChars || headlineLimit(fit.cols);
+  const headlineFloor = Math.max(12, Math.round(headlineChars * 0.6));
   const deckChars = fit.deckChars || subheadingLimit(fit.cols);
   // How much to ask for. NOT "the exact space left on the block" - that
   // sentence used to be here and it was not true: the space left cannot be
@@ -390,7 +391,7 @@ function briefFor({
     '  * Never repeat yourself, and never invent a fact to make it longer.',
     '    Copy that runs out of real material stops; it does not stretch.',
     writeHeadline
-      ? `  * The headline must be at most ${headlineChars} characters.`
+      ? `  * The headline must be ${headlineFloor} to ${headlineChars} characters and written to fill its one or two allotted lines.`
       : '  * This block prints NO HEADLINE. Fill the headline field with a few words'
         + ' for the desk\'s reference only - it will not be printed - and write the'
         + ' body so it stands on its own without one, opening with what the story is.',
@@ -468,6 +469,130 @@ const ADDITIONS_SCHEMA = {
   },
 };
 
+const HEADLINE_OPTIONS_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['headlines'],
+  properties: {
+    headlines: {
+      type: 'array',
+      minItems: 8,
+      description: 'Eight or more semantically equivalent newspaper headlines, with no new facts.',
+      items: { type: 'string' },
+    },
+  },
+};
+
+function headlineOptionsBrief({
+  headline, seed, minChars, maxChars, language, verifiedContext, currentFill,
+}) {
+  const languageName = LANGUAGE_NAMES[language] || LANGUAGE_NAMES.Marathi;
+  const sourceBlock = verifiedContextBlock(verifiedContext);
+  return [
+    `You are a sub-editor on a Marathi daily newspaper, working in ${languageName}.`,
+    '',
+    'The headline below is factually acceptable but does not fill its allotted measure.',
+    'Return at least eight alternative headlines for the SAME story. Each must preserve',
+    'the meaning exactly, add no name, number, date, quotation or claim, and use different',
+    'word lengths and breaks so the newspaper compositor can test what really fits.',
+    sourceBlock,
+    '',
+    Number.isFinite(currentFill)
+      ? `The exact compositor currently fills ${(currentFill * 100).toFixed(1)}% of the longest headline line; the production target is at least 95%.`
+      : '',
+    `Each alternative must be ${minChars} to ${maxChars} characters.`,
+    'Spread the alternatives across that whole range, including at least two in its',
+    'longest third. Character count is only a search range: the newspaper will shape',
+    'every Marathi word against the real line measures and reject anything that oversets.',
+    'Do not return labels, explanations, markdown or a rewritten story.',
+    '',
+    `SUBJECT GIVEN BY THE DESK: ${seed}`,
+    `HEADLINE TO RESET: ${headline}`,
+  ].join('\n');
+}
+
+async function settleGeneratedHeadline({
+  section, images, proposal, seed, fit, language, tier, accentStyle, verifiedContext,
+}) {
+  const adapter = await ensureComposeReady();
+  const target = copyFit.ACCEPTABLE_FILL_RATIO;
+  const compose = (headline) => adapter.composeSection(
+    { ...section, images: images || [] },
+    { ...proposal, headline, body: '', headlineGrowth: false },
+  );
+  const assess = (headline) => {
+    const composed = compose(headline);
+    const band = composed.bands?.headline;
+    const invalid = !String(headline || '').trim()
+      || Boolean(band?.overset)
+      || (composed.violations || []).some((v) => /^HEADLINE_/.test(v.code || ''));
+    return {
+      headline,
+      composed,
+      fill: invalid ? 0 : adapter.headlineFill(composed),
+      invalid,
+      resolvedPx: Number(band?.resolvedPx) || 0,
+      lines: Number(band?.lineCount) || 0,
+    };
+  };
+
+  const initial = assess(proposal.headline);
+  if (!initial.invalid && initial.fill >= target) {
+    return { headline: proposal.headline, fill: initial.fill, acceptable: true, calls: 0, provider: null };
+  }
+
+  const measuredChars = Math.max(12, Number(fit.headlineChars) || headlineLimit(fit.cols));
+  // `headlineChars` is a conservative reservation made with one stand-in word
+  // shape. It is useful for the first brief, but it is not a hard capacity:
+  // real Marathi words of the same character count can be materially narrower
+  // or wider. An exact repair therefore searches beyond that estimate and lets
+  // composition reject the genuinely overlong candidates. Reusing the bound
+  // as a ceiling produced a real 82.5%-filled headline after repair because
+  // the model was forbidden to offer the longer, legal shapes the block needed.
+  const minChars = Math.max(12, Math.round(measuredChars * 0.75));
+  const maxChars = Math.max(minChars, Math.min(140, Math.ceil(measuredChars * 1.6)));
+  const response = await ai.askForJson(
+    headlineOptionsBrief({
+      headline: proposal.headline, seed, minChars, maxChars, language, verifiedContext,
+      currentFill: initial.fill,
+    }),
+    HEADLINE_OPTIONS_SCHEMA,
+    { tier },
+  );
+  if (response.error) {
+    return {
+      headline: proposal.headline, fill: initial.fill, acceptable: false, calls: 1,
+      provider: null, error: response.error,
+    };
+  }
+
+  const seen = new Set();
+  const candidates = (response.data.headlines || [])
+    .map((value) => sanitiseAccentMarks(String(value || '').trim(), accentStyle))
+    .filter((value) => value && !seen.has(value) && seen.add(value))
+    .map(assess)
+    .filter((candidate) => !candidate.invalid && candidate.fill >= target)
+    .sort((a, b) => {
+      // Preserve the page's hierarchy first; then prefer fewer display rows,
+      // then the line closest to a fully-filled measure without overrunning it.
+      const requested = Number(section.headline_font_px) || 0;
+      return Math.abs(a.resolvedPx - requested) - Math.abs(b.resolvedPx - requested)
+        || a.lines - b.lines
+        || Math.abs(1 - a.fill) - Math.abs(1 - b.fill);
+    });
+
+  const chosen = candidates[0];
+  return chosen
+    ? {
+      headline: chosen.headline, fill: chosen.fill, acceptable: true, calls: 1,
+      provider: response.provider, tier: response.tier, fellBackTo: response.fellBackTo,
+    }
+    : {
+      headline: proposal.headline, fill: initial.fill, acceptable: false, calls: 1,
+      provider: response.provider, tier: response.tier, fellBackTo: response.fellBackTo,
+    };
+}
+
 // `resizeNeeded()` and its HOLE_LINES constant used to live here: a
 // character-count predictor deciding whether to spend a second call. It is
 // gone. It was already unreachable from write() - copyFit.settleToFit()
@@ -482,9 +607,14 @@ const ADDITIONS_SCHEMA = {
  * already have read. This asks for the same story at a different length, and
  * says which way to go.
  */
-function resizeBriefFor({ proposal, used, budget, language, verifiedContext }) {
+function resizeBriefFor({ proposal, used, budget, language, verifiedContext, holeLines, fillRatio }) {
   const languageName = LANGUAGE_NAMES[language] || LANGUAGE_NAMES.Marathi;
   const wanted = Math.max(0, Math.round(budget - used));
+  // Missing short is expensive; missing long is composed and cut for free.
+  // Ask for a controlled surplus so provider length variance lands on the
+  // safe side of the exact compositor rather than leaving the foot white.
+  const requested = Math.max(wanted, Math.ceil(wanted * 1.2));
+  const upper = Math.max(requested, Math.ceil(wanted * 1.4));
   const sourceBlock = verifiedContextBlock(verifiedContext);
 
   return [
@@ -495,11 +625,13 @@ function resizeBriefFor({ proposal, used, budget, language, verifiedContext }) {
     '',
     'Do NOT rewrite it. Do not repeat it, do not summarise it, and do not change a',
     'word of what is already there — a desk may already have read and approved it.',
-    `Write only the FURTHER PARAGRAPHS that should follow it: about ${wanted} more`,
-    'characters of context and background about the same subject, as an array of',
+    Number.isFinite(fillRatio)
+      ? `The exact compositor currently sets ${(fillRatio * 100).toFixed(1)}% of the body area; ${Number(holeLines || 0).toFixed(2)} equivalent lines remain.`
+      : '',
+    `Write only the FURTHER PARAGRAPHS that should follow it: at least ${wanted} characters,`,
+    `aiming for ${requested} and never more than ${upper}, as an array of`,
     'whole paragraphs, in the order they should be printed. Least important last.',
-    'A little more than that is fine; the newspaper composes the page and takes',
-    'what fits.',
+    'The newspaper composes the answer against every real line and takes only what fits.',
     '',
     'If there is not enough real material to say anything further, return an empty',
     'array. A block that is honestly short is a production decision the desk can',
@@ -611,6 +743,26 @@ async function write(pageId, sectionKey, {
     author: String(section.reporter_name || '').trim() || (await textFlow()).DEFAULT_BYLINE,
   };
 
+  // A character range in the first brief improves the odds; it cannot prove a
+  // headline fills, because shaped Marathi words break at different widths.
+  // When it misses, ask for alternatives and let the same exact compositor
+  // used by the canvas choose one. Body settlement happens afterwards, around
+  // the headline actually selected.
+  const headlineSet = writeHeadline
+    ? await settleGeneratedHeadline({
+      section,
+      images,
+      proposal,
+      seed: clean,
+      fit,
+      language: language || section.language,
+      tier,
+      accentStyle,
+      verifiedContext,
+    })
+    : { headline: '', fill: 1, acceptable: true, calls: 0, provider: null };
+  proposal.headline = headlineSet.headline;
+
   // Now measure against the headline and deck it actually wrote - the real
   // hole, not the planned one - and repair it to fit.
   //
@@ -626,7 +778,7 @@ async function write(pageId, sectionKey, {
     language: language || section.language,
     verifiedContext,
     tier,
-    // The one paid repair this is allowed to spend, and only in the
+    // The bounded paid repairs this is allowed to spend, and only in the
     // direction a repair is the only remedy - see settleToFit().
     askForMore: (brief) => ai.askForJson(brief, ADDITIONS_SCHEMA, { tier }),
     resizeBriefFor,
@@ -656,9 +808,9 @@ async function write(pageId, sectionKey, {
       // honest verdict on whether it got there. `SOURCE_LIMITED_UNDERFILL`
       // means the block still has room and the material available would not
       // fill it - a real production state, never dressed up as a fit.
-      state: settle.state,
+      state: settle.state === 'FITS' && !headlineSet.acceptable ? 'HEADLINE_UNDERFILLED' : settle.state,
       engineState: settle.fit.state,
-      acceptable: settle.acceptable,
+      acceptable: settle.acceptable && headlineSet.acceptable,
       holeLines: settle.fit.holeLines,
       // The honest, range-free answer to "how full is it" - lines, not
       // characters. This is what the desk's read-out quotes.
@@ -670,6 +822,10 @@ async function write(pageId, sectionKey, {
       // for free" from "trimmed and then repaired", and the difference is
       // money.
       repairCalls: settle.calls,
+      headlineFill: headlineSet.fill,
+      headlineAcceptable: headlineSet.acceptable,
+      headlineRepairCalls: headlineSet.calls,
+      headlineRepairProvider: headlineSet.provider,
       // True when the deterministic sentence-boundary cut was what finally
       // made it fit - free, and the guarantee that this always converges.
       trimmed: settle.trimmed,
@@ -700,6 +856,10 @@ async function write(pageId, sectionKey, {
  */
 function fillBriefFor({ view, notes, room, language, section }) {
   const languageName = LANGUAGE_NAMES[language] || LANGUAGE_NAMES.Marathi;
+  const upper = Math.max(room.budget, Math.ceil(room.budget * 1.12));
+  const fillRatio = Number.isFinite(Number(room.fillRatio)) ? Number(room.fillRatio) : 0;
+  const holeLines = Number.isFinite(Number(room.holeLines)) ? Number(room.holeLines) : 0;
+  const columns = Math.max(1, Math.round(Number(room.columns) || 1));
 
   return [
     `You are a sub-editor on a Marathi daily newspaper, working in ${languageName}.`,
@@ -714,8 +874,10 @@ function fillBriefFor({ view, notes, room, language, section }) {
     'FIT:',
     `  * Return the WHOLE body: what is below, unchanged and in the same order,`,
     `    followed by the new paragraphs.`,
-    `  * The whole thing must be between ${Math.round(room.budget * 0.95)} and ${room.budget} characters.`,
+    `  * Return at least ${room.budget} characters and no more than ${upper} characters for the whole body.`,
     `    It is ${room.used} now, so you are adding roughly ${room.remaining} characters.`,
+    `  * The exact compositor currently sets ${(fillRatio * 100).toFixed(1)}% of the body area;`,
+    `    ${holeLines.toFixed(2)} equivalent lines remain across its real columns and picture corridors.`,
     '  * Short paragraphs, separated by a blank line. Plain newspaper prose, no markdown.',
     '',
     'WHAT YOU MUST NOT DO — read this twice:',
@@ -730,7 +892,7 @@ function fillBriefFor({ view, notes, room, language, section }) {
     '  * If filling the space would mean stating a live result, score or status that is not',
     '    already in the copy below, do not invent one - carry the story on in general terms.',
     '',
-    `Block: ${section.width_px} × ${section.height_px} px, ${room.cols} characters across.`,
+    `Block: ${section.width_px} × ${section.height_px} px, ${columns} composed ${columns === 1 ? 'column' : 'columns'}.`,
     '',
     'THE COPY SO FAR:',
     view.body || '(the block is empty — write it from the headline above)',
@@ -825,7 +987,7 @@ async function fillRemaining(pageId, sectionKey, { notes, tier, language } = {})
         repairCalls: settled.calls,
       },
       // Still null when the sentence cut itself lands at the foot. When it
-      // opens a visible hole, `settleToFit()` spends one bounded addition call
+      // opens a visible hole, `settleToFit()` spends bounded addition calls
       // rather than hand the desk a different kind of bad fit.
       provider: repairTransport?.provider || null,
       tier: repairTransport?.tier,
@@ -851,12 +1013,24 @@ async function fillRemaining(pageId, sectionKey, { notes, tier, language } = {})
   // block, around this block's own pictures - never a sample-based constant.
   const target = current.targetChars || room.bodyCharBudget;
   const remaining = Math.max(0, target - current.charsUsed);
+  // `target` and `current.charsUsed` include the dateline because it occupies
+  // real body room. The model returns only the authored body, so its whole-body
+  // target is what is already authored plus the exact geometric shortfall—not
+  // the dateline-inclusive target quoted as though the model must repeat it.
+  const authoredTarget = used + remaining;
 
   const result = await ai.askForJson(
     fillBriefFor({
       view,
       notes: String(notes || section.ai_notes || '').trim(),
-      room: { budget: target, used, remaining, cols: room.cols },
+      room: {
+        budget: authoredTarget,
+        used,
+        remaining,
+        columns: current.composed.columns.length,
+        holeLines: current.fill.holeLines,
+        fillRatio: current.fill.ratio,
+      },
       language: language || section.language,
       section,
     }),
@@ -872,7 +1046,7 @@ async function fillRemaining(pageId, sectionKey, { notes, tier, language } = {})
   // answer commonly overshoots by part of a sentence; a sentence-boundary cut
   // can then leave the foot visibly short. The old path stopped at that cut.
   // This one trims for free and, only when the resulting hole is still real,
-  // asks once for further paragraphs and composes them again around the same
+  // asks for further paragraphs (at most twice) and composes them again around the same
   // pictures before returning the proposal.
   const settled = await copyFit.settleToFit({
     section,
@@ -920,8 +1094,8 @@ async function fillRemaining(pageId, sectionKey, { notes, tier, language } = {})
 
 module.exports = {
   write, fillRemaining, measure, planningFit,
-  briefFor, resizeBriefFor, fillBriefFor,
-  STORY_SCHEMA, BODY_SCHEMA, ADDITIONS_SCHEMA,
+  briefFor, resizeBriefFor, fillBriefFor, headlineOptionsBrief, settleGeneratedHeadline,
+  STORY_SCHEMA, BODY_SCHEMA, ADDITIONS_SCHEMA, HEADLINE_OPTIONS_SCHEMA,
   // Exported so the rule can be held by tests without calling a model.
   sanitiseAccentMarks,
 };

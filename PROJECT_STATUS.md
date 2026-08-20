@@ -4878,3 +4878,50 @@ seen by the desk. At the desk's explicit request, the repository is restored to
 not a claim that overflow is solved: the remaining failing block must be
 measured from this state and fixed narrowly, without another broad typography,
 headline/deck or image-wrap redesign.
+
+### 56. Exact 95% fill loop — line geometry remains authoritative (2026-08-20)
+
+The remaining work was continued incrementally; Smart Cards were not touched.
+The compositor already held the proposed "matrix": each physical baseline is
+poured through its own legal horizontal intervals after columns, photographs
+and alpha-mask cut-outs are excluded. Sending that raw matrix to a language
+model would create a second, approximate shaper. Instead, SAHAS closes the loop
+around the existing authority: it reports exact occupied/empty equivalent lines
+and resolved columns to the prompt, composes the answer locally with HarfBuzz,
+and accepts it only when the same geometry reaches the production bar.
+
+The body bar is now literally 95%, not 94% hidden behind a one-percentage-point
+epsilon. A useful first addition that still stops below the bar may receive one
+more bounded addition request; both are append-only and re-composed, and a worse
+answer never replaces better copy. `fillRemaining()` also fixes the authored
+body target so its API request does not count the compositor-added dateline as
+copy the model must reproduce.
+
+Auto columns remain width-led. Only when the preferred Auto count actually
+oversets the current words around the current pictures does the adapter try
+lower legal counts, choosing the highest count that prints every word. Explicit
+desk-selected columns never move, and underfill alone never causes column
+jitter. Properties reports that exact resolved choice rather than a width-only
+prediction.
+
+Headline and body have separate exact gates at 95%. The first prompt's measured
+headline character limit remains a conservative planning bound. If the shaped
+headline misses, one optional call returns eight fact-equivalent alternatives
+spread beyond that bound; each is composed locally, and only a non-overset
+candidate at or above 95% can replace the original. Verified current-news facts
+travel into this repair prompt unchanged. This does not retune default font
+sizes or alter existing copy/image wrapping.
+
+Measured through the configured real provider, without saving a proposal:
+
+- the complete write held body copy at **98.04%**, with **0.16 equivalent lines**
+  left, zero overflow and zero body repair calls;
+- the first, too-narrow headline search exposed an **82.47%** result and the
+  conservative 38-character ceiling as the cause;
+- after widening only the alternative search, the same 268×248 lead selected a
+  56-character legal headline at **97.32%** in one repair call.
+
+Verification: the focused composition/writing/current-news set passes **111/111**;
+the complete Node unit/integration suite passes **858/858**. No server was left
+running, no proposal was written to the database, and the pre-existing Groq,
+WEBP/cut-out and sweep changes remain unstaged and unmodified by this work.

@@ -58,7 +58,7 @@ test('the brief carries the block, its measure, and what is already written', as
   seen = storyWriter.fillBriefFor({
     view: { headline: 'शेतकऱ्यांसाठी योजना', subheading: 'मंत्रिमंडळाचा निर्णय', body: EXISTING },
     notes: 'जिल्हानिहाय आकडेवारी टाळा',
-    room: { budget: 900, used: 120, remaining: 780, cols: 40 },
+    room: { budget: 900, used: 120, remaining: 780, columns: 2, fillRatio: 0.42, holeLines: 7.25 },
     language: 'Marathi',
     section,
   });
@@ -70,7 +70,8 @@ test('the brief carries the block, its measure, and what is already written', as
   assert.match(seen, /120/, 'what is used');
   assert.match(seen, /जिल्हानिहाय आकडेवारी टाळा/, "the desk's own notes");
   assert.match(seen, /300 × 400 px/, 'the block');
-  assert.match(seen, /40 characters across/, 'its measure');
+  assert.match(seen, /2 composed columns/, 'its exact column setting');
+  assert.match(seen, /7\.25 equivalent lines/, 'the measured matrix shortfall');
 
   // The two rules that matter most.
   assert.match(seen, /without changing a word of what is already there/i);

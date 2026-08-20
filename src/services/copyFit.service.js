@@ -198,11 +198,11 @@ async function measureFit(section, images, over = {}) {
   };
 }
 
-// Floating-point tolerance ONLY - the equivalents arrive rounded to two
-// decimal places, so a block that is geometrically exactly full can read
-// 1.00 rather than 0.999. Not a policy knob: widening it would re-introduce
-// exactly the "how empty is too empty" argument this function exists to end.
-const ACCEPTANCE_EPSILON = 0.01;
+// Floating-point tolerance ONLY. One percentage point used to sit here, which
+// quietly changed the stated 95% production bar into 94%. The ratio itself is
+// calculated before the line read-out is rounded, so only machine precision
+// needs forgiving.
+const ACCEPTANCE_EPSILON = Number.EPSILON * 16;
 
 /**
  * IS THIS BLOCK FINISHED? The one authority, and the only one.
@@ -395,7 +395,11 @@ function openingTarget(capacity) {
  * that cannot be filled from the material available is an honest production
  * state; a lie about it is what puts a half-empty block on a printed page.
  */
-const MAX_FILL_CALLS = 1;
+// Two repair calls, at most. The first is usually enough; the second exists
+// for the exact case the desk keeps seeing: the first addition improves the
+// block but still stops below 95%. Each pass is re-composed before another is
+// allowed, so this is a bounded closed loop, not two blind requests.
+const MAX_FILL_CALLS = 2;
 
 async function settleToFit({
   section, images, proposal, language, verifiedContext, askForMore, resizeBriefFor,
@@ -444,6 +448,7 @@ async function settleToFit({
     // eslint-disable-next-line no-await-in-loop
     const repaired = await askForMore(resizeBriefFor({
       proposal: { ...proposal, body }, used: fit.charsUsed, budget: target, language, verifiedContext,
+      holeLines: fit.holeLines, fillRatio: fit.fill.ratio,
     }));
     if (repaired?.error) break;
 
@@ -475,7 +480,14 @@ async function settleToFit({
     // A repair that fits WORSE is discarded: a second attempt is allowed to
     // fail, and a model that came back shorter than it started must not cost
     // the desk the copy it already had.
-    if (candidateFit.fill.emptyEquivalentLines >= fit.fill.emptyEquivalentLines) break;
+    if (candidateFit.fill.emptyEquivalentLines >= fit.fill.emptyEquivalentLines) {
+      // Keep the copy the desk already had. If this answer merely overshot in
+      // one indivisible sentence, a second bounded attempt may still supply a
+      // shorter sentence that fits the measured hole; do not spend it when no
+      // attempts remain.
+      if (calls < maxCalls) continue;
+      break;
+    }
 
     body = candidate;
     fit = candidateFit;

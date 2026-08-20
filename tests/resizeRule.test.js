@@ -89,13 +89,32 @@ test('CASE 6/7 - a very short answer, and an empty one, are repaired', async () 
   }
 });
 
-test('exactly ONE paid call is spent on a hole, and the repair is APPENDED, never a rewrite', async () => {
+test('repair calls are bounded and APPENDED, never rewrites', async () => {
   const opening = SENTENCE.repeat(2);
   const run = await settle(opening, { data: { additions: [SENTENCE.repeat(3)] } });
-  assert.equal(run.calls, 1, 'bounded: every attempt is billed');
+  assert.ok(run.calls >= 1 && run.calls <= copyFit.MAX_FILL_CALLS, 'bounded: every attempt is billed');
   assert.ok(run.body.startsWith(opening.trim().slice(0, 40)),
     'the copy the desk may already have read must survive the repair word for word');
   assert.ok(run.fit.fill.occupiedEquivalentLines > 2, 'and the block is fuller than it was');
+});
+
+test('a second measured addition closes the hole when the first improves it but remains under 95%', async () => {
+  let calls = 0;
+  const run = await copyFit.settleToFit({
+    section: BLOCK,
+    images: [],
+    proposal: { ...OVER, body: SENTENCE },
+    resizeBriefFor: () => 'brief',
+    askForMore: async () => {
+      calls += 1;
+      return { data: { additions: [SENTENCE.repeat(calls === 1 ? 1 : 8)] } };
+    },
+  });
+
+  assert.equal(calls, 2, 'the first improving answer is re-measured rather than accepted below the bar');
+  assert.equal(run.fit.overset, false);
+  assert.equal(run.acceptable, true);
+  assert.ok(run.fit.fill.ratio >= copyFit.ACCEPTABLE_FILL_RATIO);
 });
 
 test('a repair that fits WORSE is discarded - a failed second attempt never costs the desk its copy', async () => {
@@ -136,7 +155,7 @@ test('a headline with no room for itself makes the block unacceptable, whatever 
 test('a block with no room for copy at all is never sent to a model', async () => {
   const noRoom = { ...BLOCK, width_px: 40, height_px: 30 };
   const run = await settle('', { data: { additions: ['x'] } });
-  assert.ok(run.calls <= 1);
+  assert.ok(run.calls <= copyFit.MAX_FILL_CALLS);
   const fit = await copyFit.measureFit(noRoom, [], { headline: '', subheading: '', body: '' });
   assert.ok(fit.fill.emptyEquivalentLines < 1 || fit.displayOverset,
     'a frame its pictures or its margins have filled has nothing to write into');

@@ -181,10 +181,11 @@ const HEADLINE_MAX_LINES = 2;
 // only in the direction of FILLING: a headline already at its measure never
 // moves.
 //
-// Measured across 300 real article blocks carrying a headline and copy: 216
-// of them set their longest line under 92% of its measure, and letting the
-// size grow closes 210 of those - mean longest-line fill 74.7% -> 95.6%.
-const HEADLINE_FILL_TARGET = 0.92;
+// The desk's production bar is 95%. This is deliberately the same visible
+// standard as the body, though the measurements are different: a headline is
+// judged by its longest line (a short closing line is ordinary), while body
+// copy is judged by occupied equivalent line area.
+const HEADLINE_FILL_TARGET = 0.95;
 
 // How far a headline may grow to reach that.
 //
@@ -478,12 +479,19 @@ function growToFill(text, options, { maxPx, fillTarget, set, failed }) {
   if (!(maxPx > options.fontPx) || !(fillTarget > 0)) return null;
   if (bandFill(set) >= fillTarget) return null;
 
+  let best = null;
   for (let px = Math.floor(options.fontPx) + 1; px <= maxPx; px += 1) {
     const attempt = setDisplayFlow(text, { ...options, fontPx: px });
-    if (failed(attempt)) return null;
-    if (bandFill(attempt) >= fillTarget) return { set: attempt, px };
+    if (failed(attempt)) break;
+    const fill = bandFill(attempt);
+    if (!best || fill > best.fill) best = { set: attempt, px, fill };
+    if (fill >= fillTarget) return { set: attempt, px };
   }
-  return null;
+  // A hierarchy cap can make 95% physically unreachable. Keep a near-full
+  // result when it is already professional rather than falling all the way
+  // back to a visibly short design size; never inflate a genuinely short
+  // headline merely because 31% is marginally better than 24%.
+  return best && best.fill >= 0.9 ? { set: best.set, px: best.px } : null;
 }
 
 /**
@@ -542,7 +550,9 @@ function fitDisplayFlow(text, options, { locked, minPx, maxPx = 0, fillTarget = 
       // ceiling's own last relaxation, is a flow with nothing to spare -
       // growing it there would be buying a straight right edge with the very
       // room those relaxations were granted to protect.
-      const grown = pass === 0 ? growToFill(text, attemptOptions, { maxPx, fillTarget, set: first, failed }) : null;
+      const grown = pass === 0
+        ? growToFill(text, attemptOptions, { maxPx, fillTarget, set: first, failed })
+        : null;
       return grown
         ? { ...grown.set, resolvedPx: grown.px, shrunk: false, grew: true }
         : { ...first, resolvedPx: options.fontPx, shrunk: false };

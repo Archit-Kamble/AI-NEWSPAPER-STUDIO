@@ -265,7 +265,8 @@ test('a repair asks only for FURTHER paragraphs - it is never asked to cut, and 
   // (copyFit.trimToFit), so paying a model to do it was waste that also came
   // with no guarantee the answer fit.
   assert.match(repair, /further paragraphs/i);
-  assert.match(repair, /200 more/, 'and it is told how much more, measured from the real composition');
+  assert.match(repair, /at least 200 characters/, 'and it is told the exact shortage measured from the composition');
+  assert.match(repair, /aiming for 240/, 'the request deliberately lands long because exact trimming is free');
   assert.match(repair, /Do NOT rewrite it/i, 'copy the desk may already have read is never thrown away');
   assert.doesNotMatch(repair, /Cut it to at most/i, 'nobody pays a model to cut any more');
 

@@ -218,7 +218,8 @@ test('the brief says which parts to write, and the length rules follow', async (
   const args = { seed: 'शहरातील पाणीपुरवठा', notes: '', fit, section, language: 'Marathi', isLead: true };
 
   const ordinary = storyWriter.briefFor(args);
-  assert.match(ordinary, /The headline must be at most 40 characters/);
+  assert.match(ordinary, /The headline must be 24 to 40 characters/);
+  assert.match(ordinary, /fill its one or two allotted lines/);
   assert.match(ordinary, /The subheading is REQUIRED/);
 
   const bare = storyWriter.briefFor({ ...args, writeHeadline: false, writeSubheading: false });

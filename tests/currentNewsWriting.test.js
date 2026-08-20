@@ -71,13 +71,26 @@ async function withBlock(t, name) {
 }
 
 function compliantResponse(prompt) {
-  const headlineLimit = /headline must be at most (\d+) characters/.exec(prompt);
+  if (/HEADLINE TO RESET:/.test(prompt)) {
+    return { headlines: [
+      'शहरातील पाणीटंचाईवर प्रशासनाची उपाययोजना सुरू',
+      'पाणीटंचाईवर शहर प्रशासनाकडून उपाययोजना सुरू',
+      'शहरातील पाणी प्रश्नावर प्रशासनाच्या उपाययोजना',
+      'पाणीटंचाई निवारणासाठी शहरात उपाययोजना सुरू',
+      'शहराच्या पाणी प्रश्नावर प्रशासनाच्या उपाययोजना सुरू',
+      'पाणीटंचाई दूर करण्यासाठी शहर प्रशासनाचे प्रयत्न सुरू',
+      'शहरातील पाणीटंचाईच्या प्रश्नावर प्रशासनाच्या उपाययोजना सुरू',
+      'शहराची पाणीटंचाई दूर करण्यासाठी प्रशासनाकडून प्रयत्न सुरू',
+    ] };
+  }
+  const headlineLimit = /headline must be \d+ to (\d+) characters/.exec(prompt);
   const deckLimit = /one line of \d+ to (\d+)/.exec(prompt);
   const bodyRange = /between (\d+) and (\d+) characters/.exec(prompt);
+  const words = (n) => 'शब्द '.repeat(Math.ceil(n / 5)).slice(0, n);
   return {
-    headline: 'क'.repeat(headlineLimit ? Number(headlineLimit[1]) : 30),
-    subheading: 'क'.repeat(deckLimit ? Number(deckLimit[1]) : 60),
-    body: 'क'.repeat(bodyRange ? Number(bodyRange[2]) : 400),
+    headline: words(headlineLimit ? Number(headlineLimit[1]) : 30),
+    subheading: words(deckLimit ? Number(deckLimit[1]) : 60),
+    body: words(bodyRange ? Number(bodyRange[2]) : 400),
   };
 }
 

@@ -132,7 +132,7 @@ test('copy-fit composes an Auto-column block exactly like its inferred column co
 // one-column server override said FITS while the page itself overflowed. The
 // image mask and the inferred count must travel through the same API call;
 // proving either one in isolation is not enough.
-test('Auto columns and a cut-out share the canvas geometry through copy-fit and settle without overflow or underfill', async () => {
+test('Auto columns use the highest exact count that sets every word around a cut-out', async () => {
   const section = {
     width_px: 268, height_px: 304, margin_px: 1, column_count: null,
     line_height: 1.45, headline_font_px: 24, subheading_font_px: 14, body_font_px: 12,
@@ -144,10 +144,12 @@ test('Auto columns and a cut-out share the canvas geometry through copy-fit and 
   const one = await copyFit.measureFit({ ...section, column_count: 1 }, images, { ...OVER, body });
   const two = await copyFit.measureFit({ ...section, column_count: 2 }, images, { ...OVER, body });
 
-  assert.equal(auto.overset, true, 'the actual Auto/cut-out page detects the excess');
-  assert.equal(one.overset, false, 'the removed one-column override would falsely accept it');
-  assert.equal(auto.oversetChars, two.oversetChars);
-  assert.deepEqual(auto.fill, two.fill, 'Auto and explicit two use the same masked scanlines');
+  assert.equal(two.overset, true, 'the width-preferred two-column setting really does overflow');
+  assert.equal(one.overset, false, 'one column sets every word around the same cut-out');
+  assert.equal(auto.overset, false, 'Auto must not keep a count that hides copy when a legal count fits');
+  assert.deepEqual(auto.fill, one.fill, 'Auto falls back through the same masked scanlines, not an estimate');
+  assert.equal(auto.composed.columnDecision.preferred, 2);
+  assert.equal(auto.composed.columnDecision.resolved, 1);
 
   const settled = await copyFit.settleToFit({
     section,
@@ -159,7 +161,7 @@ test('Auto columns and a cut-out share the canvas geometry through copy-fit and 
 
   assert.equal(settled.fit.overset, false, 'the final copy has no hidden text below the block');
   assert.equal(settled.acceptable, true, 'and the sentence cut is repaired instead of left short');
-  assert.equal(settled.fit.fill.ratio, 1, 'the irregular image block reaches its foot');
+  assert.ok(settled.fit.fill.ratio >= 0.95, 'the irregular image block reaches the production bar');
 });
 
 test('a cut at a sentence boundary, not mid-word - a block is cut from the bottom, the way a sub-editor cuts', async () => {
@@ -227,7 +229,7 @@ test('settleToFit asks for more copy only when there is a real hole, and never a
     resizeBriefFor: () => 'brief',
   });
 
-  assert.equal(asked, 1, 'exactly one paid call for the one case a model can actually fix');
+  assert.equal(asked, copyFit.MAX_FILL_CALLS, 'a second bounded attempt is allowed when the first fits worse');
   assert.equal(settled.body, proposal.body, 'a worse answer is discarded, not printed');
 });
 
@@ -314,6 +316,8 @@ test('a block is finished at 95% set, and chased until it is', () => {
   // set, and it is what let a desk be shown "Layout looks balanced" while
   // looking at a column with a visibly short foot.
   assert.equal(copyFit.isAcceptablyFilled(fit(4.83, 5.83)), false, '83% set is not finished');
+  assert.equal(copyFit.isAcceptablyFilled(fit(18.9, 20)), false, '94.5% is not rounded up and called 95%');
+  assert.equal(copyFit.isAcceptablyFilled(fit(19, 20)), true, 'the stated 95% bar is the real bar');
   assert.equal(copyFit.isAcceptablyFilled(fit(5.6, 5.83)), true, '96% set is');
   assert.equal(copyFit.isAcceptablyFilled(fit(13, 14)), false, '93% on a big block is not finished either');
 
@@ -351,7 +355,7 @@ test('settleToFit fills a small block that is proportionally half empty, which t
 
   if (before.fill.holeLines >= 1 && before.fill.holeLines < 4
       && before.fill.holeLines / before.fill.linesAvailable >= 0.25) {
-    assert.equal(asked, 1,
+    assert.equal(asked, copyFit.MAX_FILL_CALLS,
       `a block with ${before.fill.holeLines} of ${before.fill.linesAvailable} lines empty must be filled, not left`);
   }
 });

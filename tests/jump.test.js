@@ -121,6 +121,40 @@ test('a story continuing into a SECOND LEG on the same page sets no jump line an
   });
 });
 
+test('an explicit continuation target with work in it is refused without changing either story', async () => {
+  await withEdition(async ({ desk, page1 }) => {
+    const source = page1.sections.find((s) => s.section_key === 'anchor');
+    const target = page1.sections.find((s) => s.section_key !== source.section_key
+      && s.block_type === 'article');
+    assert.ok(target, 'the template must have a second article block');
+
+    const sourceBody = LONG_BODY;
+    const targetHeadline = 'आधीपासून असलेली बातमी';
+    const targetBody = 'हा मजकूर दुसऱ्या बातमीचा आहे आणि तो कधीही पुसला जाऊ नये.';
+    await desk.json(`/api/pages/${page1.id}/sections/${source.section_key}`, {
+      method: 'PUT', body: JSON.stringify({ headline: 'लांब बातमी', body: sourceBody }),
+    });
+    await desk.json(`/api/pages/${page1.id}/sections/${target.section_key}`, {
+      method: 'PUT', body: JSON.stringify({ headline: targetHeadline, body: targetBody }),
+    });
+
+    const result = await desk.json(`/api/pages/${page1.id}/sections/${source.section_key}/carry-over`, {
+      method: 'POST',
+      body: JSON.stringify({ toPageId: page1.id, toSectionKey: target.section_key }),
+    });
+    assert.match(result.error, /empty news block/i);
+
+    const after = (await desk.json(`/api/newspapers/${page1.newspaper_id || page1.newspaperId}/pages`))
+      .find((p) => p.id === page1.id);
+    const unchangedSource = after.sections.find((s) => s.section_key === source.section_key);
+    const unchangedTarget = after.sections.find((s) => s.section_key === target.section_key);
+    assert.equal(unchangedSource.body, sourceBody, 'the source is not split on a refused move');
+    assert.equal(unchangedTarget.headline, targetHeadline, 'the other story keeps its headline');
+    assert.equal(unchangedTarget.body, targetBody, 'the other story keeps its body');
+    assert.equal(unchangedTarget.continued_from_section_id, null);
+  });
+});
+
 test('a continuation that would overset the landing block is refused, not silently written oversized', async () => {
   await withEdition(async ({ desk, page1, page2 }) => {
     const sourceKey = 'anchor';

@@ -43,6 +43,25 @@ test('a ground is one of the paper\'s tints, and white is stored as nothing', ()
   assert.equal(inks.tintSeparation(null), 'None');
 });
 
+test('a persisted foreign colour is removed before it can reach a canvas style', async () => {
+  const model = await import('../public/editor/section-model.js');
+  const draft = model.draftFromSection({
+    section_key: 'lead', background_color: 'red; background:url(evil)', accent_color: '#7f3fbf',
+  });
+  assert.equal(draft.backgroundColor, null);
+  assert.equal(draft.accentColor, '#c8102e', 'a foreign accent falls back to the paper red');
+
+  const payload = model.payloadFromDraft({ ...draft, backgroundColor: '#fbf3e9', accentColor: '#17458f' });
+  assert.equal(payload.backgroundColor, '#fbf3e9');
+  assert.equal(payload.accentColor, '#17458f');
+});
+
+test('an imported zero margin becomes the paper minimum, never the old web padding', async () => {
+  const model = await import('../public/editor/section-model.js');
+  assert.equal(model.draftFromSection({ section_key: 'lead', margin_px: 0 }).marginPx, 1);
+  assert.equal(model.draftFromSection({ section_key: 'lead' }).marginPx, 1);
+});
+
 test('an ABSENT size is not a size of zero', () => {
   // `getAttribute` returns null for a span carrying no size; Number(null) is 0
   // and Number.isFinite(0) is true, so the clamp turned every stray <span>

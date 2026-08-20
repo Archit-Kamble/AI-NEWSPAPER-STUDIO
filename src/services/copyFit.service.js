@@ -113,7 +113,6 @@ function viewFor(section, over = {}) {
     subheading: over.subheading ?? (section.subheading || ''),
     body: over.body ?? (section.body || ''),
     marginPx: Number(section.margin_px) || 12,
-    columnCount: Number(section.column_count) || 1,
     lineHeight: Number(section.line_height) || 1.45,
     headlineFontPx: Number(section.headline_font_px) || 24,
     subheadingFontPx: Number(section.subheading_font_px) || 14,

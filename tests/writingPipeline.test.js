@@ -218,14 +218,12 @@ test('call-count matrix: no room means zero calls, not one that gets refused', a
 
 // -------------------------------------------------- Part 14: Fill Remaining ---
 
-test('Fill Remaining uses the shared exact settle controller, not a second fit rule', () => {
-  // A whole-body response can overshoot; cutting it at a sentence may then
-  // expose a visible hole. The explicit fill action now delegates that final
-  // trim-and-one-bounded-repair decision to the same controller as write().
-  // The old `resizeNeeded` predictor must stay gone.
-  const src = writer.fillRemaining.toString();
-  assert.match(src, /copyFit\.settleToFit/);
-  assert.doesNotMatch(src, /resizeNeeded/);
+test('Fill Remaining never invokes the resize pipeline', () => {
+  // fillRemaining's own source is the authority: it must not reach for the
+  // writer's repair path or make a second ai.askForJson call under any
+  // condition. (`resizeNeeded` itself is gone - see resizeRule.test.js.)
+  const src = writer.fillBriefFor.toString();
+  assert.doesNotMatch(src, /resizeNeeded|resizeBriefFor/);
 });
 
 test('Fill Remaining asks for exactly one call when there is room', async (t) => {

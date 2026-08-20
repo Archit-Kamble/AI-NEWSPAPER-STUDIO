@@ -84,11 +84,7 @@ const NUMBER_FIELDS = [
   // "auto", so a desk who once touched it could never hand the decision back
   // to the engine - and after schema.sql made NULL the ordinary state, "auto"
   // is the value nearly every block carries.
-  // One pixel is the physical hair of air that keeps type off its frame. Zero
-  // was never honoured by the compositor (which requires a positive inset),
-  // so offering it made the control read 0 while the page silently used the
-  // old 12 px fallback.
-  { id: "tyMargin", field: "marginPx", label: "Margins (px)", min: 1, max: 60, step: 1 },
+  { id: "tyMargin", field: "marginPx", label: "Margins (px)", min: 0, max: 60, step: 1 },
   // The floor, not just this control's default: below it, Devanagari vowel
   // signs crop against the next line (text-flow.js's MIN_LINE_HEIGHT). What
   // this input offers has to match what section-model.js actually stores, or

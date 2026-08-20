@@ -26,7 +26,6 @@ test('an empty block is written - from its headline, or from today\'s news when 
     { section_key: 'reporter-copy', headline: 'बातमी', body: '', news_item_id: 4 },
     { section_key: 'masthead-advert', headline: 'जाहिरात', body: '', block_type: 'advert' },
     { section_key: 'lead-pictures', headline: 'छायाचित्र', body: '', block_type: 'photo' },
-    { section_key: 'calendar-space', headline: '', body: '', block_type: 'feature' },
     { section_key: 'rashi', headline: 'राशिभविष्य', body: '', feature_key: 'rashi' },
     { section_key: 'puzzle', headline: 'सुडोकू', body: '', smart_card_key: 'sudoku' },
   ]));
@@ -50,7 +49,6 @@ test('an empty block is written - from its headline, or from today\'s news when 
   assert.match(why['reporter-copy'], /reporter/, "a reporter's story belongs to the reporter");
   assert.match(why['masthead-advert'], /advert/);
   assert.match(why['lead-pictures'], /photograph/);
-  assert.match(why['calendar-space'], /feature/);
   assert.match(why.rashi, /standing feature/);
   assert.match(why.puzzle, /standing feature/);
   assert.equal(why.third, undefined, 'a block with no headline is no longer skipped');
@@ -98,25 +96,6 @@ test('one request per block, never one request for the page', async () => {
   assert.equal(new Set(seen).size, 7, 'and each block asked for exactly once');
   assert.equal(batch.written, 7);
   assert.equal(batch.failed, 0);
-});
-
-test('a bulk proposal keeps the same verified-source evidence as a single proposal', async () => {
-  const retrieval = {
-    status: 'verified',
-    query: 'सातारा आजच्या ताज्या बातम्या',
-    sources: [{ publisher: 'विश्वसनीय वृत्त', url: 'https://example.test/story' }],
-  };
-  const batch = await bulk.runBulk({
-    blocks: [{ sectionKey: 'empty', fromToday: true }],
-    request: async () => ({
-      proposal: { headline: 'आजची बातमी', body: 'तपासलेला मजकूर' },
-      fit: { charsUsed: 20, bodyCharBudget: 30 },
-      retrieval,
-    }),
-  });
-
-  assert.deepEqual(batch.results[0].retrieval, retrieval,
-    'the desk must be able to inspect the publishers and links before accepting');
 });
 
 test('no more than the concurrency limit are ever in the air at once', async () => {

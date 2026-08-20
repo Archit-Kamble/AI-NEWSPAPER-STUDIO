@@ -342,14 +342,13 @@ test('the folio order matches the outer-edge rule: recto is title, date, page; v
   const rectoXml = await scribus.buildDocument(newspaper, [recto]);
   const versoXml = await scribus.buildDocument(newspaper, [verso]);
 
-  const objectOf = (xml, needle) => {
+  const xOf = (xml, needle) => {
     const at = xml.indexOf(`CH="${needle}"`);
     assert.ok(at >= 0, `"${needle}" not found`);
     const objStart = xml.lastIndexOf('<PAGEOBJECT', at);
-    const objEnd = xml.indexOf('</PAGEOBJECT>', at);
-    return xml.slice(objStart, objEnd);
+    const match = /XPOS="([\d.]+)"/.exec(xml.slice(objStart, at));
+    return Number(match[1]);
   };
-  const xOf = (xml, needle) => Number(/XPOS="([\d.]+)"/.exec(objectOf(xml, needle))[1]);
 
   const rectoTitleX = xOf(rectoXml, identityModule.identity.title);
   const rectoPageX = xOf(rectoXml, `पृष्ठ ${identityModule.devanagari(3)}`);
@@ -358,21 +357,6 @@ test('the folio order matches the outer-edge rule: recto is title, date, page; v
   const versoTitleX = xOf(versoXml, identityModule.identity.title);
   const versoPageX = xOf(versoXml, `पृष्ठ ${identityModule.devanagari(4)}`);
   assert.ok(versoPageX < versoTitleX, 'verso: the page number must sit to the LEFT of the title - the outer-edge rule');
-
-  const date = identityModule.dateLine(newspaper.publication_date);
-  const dateText = `${date.day} ${date.monthYear}`;
-  assert.match(objectOf(rectoXml, identityModule.identity.title), /<para ALIGN="0"\/>/,
-    'the recto title is aligned to the left ear');
-  assert.match(objectOf(rectoXml, dateText), /<para ALIGN="1"\/>/,
-    'the date is centred on the page, not left-aligned at the start of its third');
-  assert.match(objectOf(rectoXml, `पृष्ठ ${identityModule.devanagari(3)}`), /<para ALIGN="2"\/>/,
-    'the recto page number is aligned to the outer right edge');
-  assert.match(objectOf(versoXml, `पृष्ठ ${identityModule.devanagari(4)}`), /<para ALIGN="0"\/>/,
-    'the verso page number is aligned to the outer left edge');
-  assert.match(objectOf(versoXml, dateText), /<para ALIGN="1"\/>/,
-    'the verso date remains centred too');
-  assert.match(objectOf(versoXml, identityModule.identity.title), /<para ALIGN="2"\/>/,
-    'the verso title is aligned to the right ear');
 });
 
 // ---------------------------------------------------------- multi-page ---

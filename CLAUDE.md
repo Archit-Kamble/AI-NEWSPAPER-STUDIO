@@ -125,12 +125,6 @@ not the gutter and is not asked to be one: it is the hair of air that keeps type
 off its own frame's edge, **0.5 mm (1 px)**, the smallest step this page has.
 Across → 4 mm, down → 5 mm, which is the printed page.
 
-One pixel is also the enforced minimum. The Typography control and save service
-accept 1–60, never 0: the compositor has always required a positive inset, so a
-zero formerly shown in the control was silently rendered through its old 12 px
-fallback. `section-model.js` normalises an imported zero to 1 before any view
-uses it.
-
 It can only ever GIVE a block room, so nothing can overset on it: swept over all
 4603 sections carrying copy, `BODY_OVERSET` went **15 → 13**. `UNDERFILLED` rises
 (3611 → 3666) and that is the honest reading — the same words in a wider measure
@@ -707,11 +701,7 @@ publication — and every seed names the day in Marathi, which is exactly what
 `information/intent.js` classifies as `current_news`. So `write()` fetches and
 verifies real sources **before spending a call** and returns a Marathi refusal if
 it cannot. An empty block is written from today's checked news or it is not
-written at all, and the desk is told which blocks came from the wire. The bulk
-coordinator must retain `result.retrieval`: each successful current-news row
-shows the same collapsed publisher/trust/date/link evidence as a single-block
-proposal before the desk accepts it. A `block_type: feature` frame is standing
-furniture even when a legacy row has no `feature_key`; bulk prose skips it.
+written at all, and the desk is told which blocks came from the wire.
 
 ### Two blocks, one story — shift-click the second
 
@@ -735,13 +725,6 @@ never set would refuse continuations that fit.
 
 `reunite()` puts it back either way: stripping an absent pick-up line is a
 no-op, so one expression covers both.
-
-An explicit landing is still a destructive write, so the service — not only
-the Shift-click UI — proves it is an empty editorial block in the same edition
-before splitting the source. Existing headline/deck/body copy, a booked story,
-a feature, an advert or another continuation all refuse the move. A placed
-picture is allowed because an empty landing may already carry its photograph;
-its exclusion is included when the landing capacity is measured.
 
 ### A wide block sets in COLUMNS
 
@@ -778,13 +761,6 @@ is not a legal column count, so it can never collide with a real one:
 `draftFromSection`'s `|| 1` had to go — it turned every NULL straight back into
 an explicit single column.
 
-**Server-side composition must preserve that NULL too.** The AI writer and
-copy-fit service both hand their live overrides to `section-adapter.js`; they
-must omit `columnCount` and let the adapter read `section.column_count`. A local
-`Number(section.column_count) || 1` makes an Auto 268 px block compose as one
-column for the AI while the canvas composes it as two. Explicit 1 still wins —
-the adapter is the one place that distinguishes an instruction from Auto.
-
 **Properties → Columns is the one control**, offering Auto and 1–4, with a note
 saying what Auto would actually do in this block's own numbers. It used to be a
 number input in Typography, which could not say "auto" at all — so a desk who
@@ -797,13 +773,6 @@ to be one the press can separate. `public/editor/layout/inks.js` is the one
 catalogue — the browser draws its controls from it, and `scribus.service.js`
 reaches it through the same dynamic `import()` the character grid does, so a
 colour can never mean one thing on screen and another on the plate.
-
-The palette is also a **server boundary**, not trust placed in those controls.
-`pageSection.service.js` rejects a foreign tint/accent or treatment before the
-row is written, and `section-model.js` sanitises persisted values on read for
-older/imported editions. This is security as well as press correctness: a block
-ground is interpolated into the canvas's style attribute, so arbitrary stored
-text may never reach that renderer.
 
 | | | control |
 |---|---|---|
@@ -902,10 +871,6 @@ Two things already follow from the field and are why it is one control and not
 a stylesheet rule: a box costs the block room (`BOX_INSET_PX` — a printed panel
 sets its type 3–4 mm inside its own rule) and the page draws no hairline in the
 gutter beside a boxed block (`column-rules.js` — its box IS the separator).
-That page-owned rule layer must refresh from the live draft **and** the fresh
-page returned by autosave; refreshing only the block leaves a double rule until
-reload, while rebuilding from the initial page puts it back as soon as save
-lands.
 
 ### The page reserves its own furniture
 
@@ -957,10 +922,6 @@ never the same width — `दैनिक साहस वार्ता` again
 page's centre line. `1fr auto 1fr` puts it on the centre line whatever the ears
 say, on the page foot and the inside-page folio alike, and a verso page reorders
 its ears rather than reversing the box so the middle column stays the middle.
-The Scribus footer makes the same promise explicitly: its three frames are
-aligned left / centre / right. Putting the date in the middle third but leaving
-that frame left-aligned begins it one-third across the page; it does not centre
-it.
 
 **The AI disclosure is standing furniture, in the imprint band, in Marathi**
 (`identity.js`'s `aiDisclosure`). It says both halves of what is true here — the
@@ -972,6 +933,8 @@ would have swallowed a disclosure silently, which for a disclosure is the one
 failure that matters. `scribus.service.js` emits it too — a press file that
 dropped it would print a paper that does not carry it.
 
+
+`geometry.js`'s `regionsFor` owns the footer band **and** page one's top-left corner (`header.earWidthPx`). The corner used to be reserved only by the presence of the `masthead-advert` block, so deleting that block moved the newspaper's name into the corner and stretched it across the space — found live on edition 13542. A region the page owns cannot be removed by deleting something out of it. `pageSection.service.js` additionally refuses to delete a structurally reserved frame (409; clear its contents instead), narrowly — ordinary editorial frames stay freely deletable.
 
 The page foot carries the paper, the date and the page number, and nothing else. The Act printline belongs to the page-two imprint, which already prints it; setting it on every page duplicated a legal statement and read as an unwanted rule.
 
@@ -1031,19 +994,7 @@ The model is now asked for **more copy than the block will print**, told so expl
 
 **A cut-out photograph needs no special case, deliberately.** Its exclusion comes from its real alpha mask (`compose/exclusion.js`, via `section-adapter.js`'s `obstacleFromImage` — `mask` is carried), so an irregular silhouette narrows the individual scanlines it actually crosses. Nothing models that; it only asks.
 
-**"Fill remaining area with AI" repairs both directions through the same exact
-settle controller as "Write this block".** Overset copy is cut first, for free.
-If that sentence-boundary cut itself lands short of the 95% bar, one bounded
-addition call fills the newly opened hole and the result is composed again
-around the same pictures. `trimmedOnly: true` still means the cut itself landed
-at the foot and no provider was called. The explicit-fill path must never stop
-at a coarse sentence cut and exchange an overflow for an underflow.
-
-Auto columns and image exclusion travel together into this path. Do not restore
-a local `Number(section.column_count) || 1`: on the 268 × 304 cut-out regression,
-the old one-column override says the 299-character draft fits, while the real
-Auto/two-column masked pour reports three characters overset. The shared settle
-path ends with no overset and a 1.00 weighted fill ratio.
+**"Fill remaining area with AI" repairs both directions.** Overset copy is cut to fit with no model call at all (`trimmedOnly: true`). Verified live: 672 → 279 characters, 4 of 4 lines, no provider called; and 55 → 159 characters, 3 of 3 lines, one call.
 
 ### How full is this block? In WEIGHTED USABLE GEOMETRY — `bodyFill()`
 
@@ -1089,6 +1040,12 @@ Don't redesign this workflow when it lands. `POST /api/newspapers/:id/final-file
 
 ## Engineering rules
 
+- **Additions are not permission to retune production composition.** The desk
+  spent weeks calibrating headline/deck fit, derived font sizes, body fill and
+  irregular-image wrapping. New features must attach at their own boundary;
+  do not change those load-bearing rules unless the desk explicitly names that
+  subsystem and asks for a change. The rejected Codex audit after `3e464a3`
+  was fully rolled back for violating this rule.
 - Never rewrite a working module unless necessary; prefer incremental migration with small commits.
 - Never guess schema — read `schema.sql`. It uses `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` for additive migrations; follow that pattern for new columns.
 - Before changing code, determine: what's live, what's legacy, what's dead. Delete only code confirmed dead (unreachable AND unimported, or actually empty *and* not a documented planned stub — see above).

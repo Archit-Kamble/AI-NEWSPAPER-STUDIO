@@ -182,39 +182,6 @@ export function refreshGuides(guides) {
   renderGuides(guides);
 }
 
-/**
- * Rebuilds page-owned separator rules after a live block-border decision.
- *
- * `refreshSection()` can repaint one block, but a rule belongs to the PAIR of
- * blocks on either side of a gutter. Leaving the page layer alone after Box
- * was chosen drew a hairline beside the new box until the next full render —
- * exactly the double-rule the page-furniture model says must never exist.
- */
-export function refreshColumnRules(section = null, view = null, syncedPage = null) {
-  const canvas = document.querySelector('.newspaper-canvas');
-  const geometry = getGeometry();
-  // PAGE_SYNC carries the rows that just came back from autosave. Keeping the
-  // initial render's page here made the live draft remove a rule correctly,
-  // then put it back from stale `border_style: none` as soon as save landed.
-  if (syncedPage) renderedPage = syncedPage;
-  if (!canvas || !renderedPage || !geometry) return;
-
-  const page = section && view
-    ? {
-      ...renderedPage,
-      sections: (renderedPage.sections || []).map((row) =>
-        row.section_key === section.section_key
-          ? { ...row, border_style: view.borderStyle || row.border_style || 'none' }
-          : row),
-    }
-    : renderedPage;
-  const markup = columnRulesMarkup(page, geometry);
-  canvas.querySelector('.page-rules')?.remove();
-  if (!markup) return;
-  const firstBlock = canvas.querySelector('.newspaper-section');
-  if (firstBlock) firstBlock.insertAdjacentHTML('beforebegin', markup);
-}
-
 function applyBlockTint(element, view) {
   if (view.backgroundColor) element.style.setProperty("--block-tint", view.backgroundColor);
   else element.style.removeProperty("--block-tint");

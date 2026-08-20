@@ -133,6 +133,7 @@ async function measure(section, images, over = {}) {
     subheading: over.subheading ?? (section.subheading || ''),
     body: '',
     marginPx: Number(section.margin_px) || 12,
+    columnCount: Number(section.column_count) || 1,
     lineHeight: Number(section.line_height) || 1.45,
     headlineFontPx: Number(section.headline_font_px) || 24,
     subheadingFontPx: Number(section.subheading_font_px) || 14,
@@ -291,6 +292,7 @@ async function planningFit(section, images, { writeHeadline = true, writeSubhead
   const probe = adapter.composeSection({ ...section, images: images || [] }, {
     ...limitProbeView(),
     marginPx: Number(section.margin_px) || 12,
+    columnCount: Number(section.column_count) || 1,
     lineHeight: Number(section.line_height) || 1.45,
     headlineFontPx: Number(section.headline_font_px) || 24,
     subheadingFontPx: Number(section.subheading_font_px) || 14,
@@ -785,54 +787,26 @@ async function fillRemaining(pageId, sectionKey, { notes, tier, language } = {})
   // the same deterministic sentence-boundary cut `write()` settles with.
   const current = await copyFit.measureFit(section, images, view);
   if (current.overset) {
-    // Cutting to a whole sentence can expose a new hole. `write()` already
-    // handles that by letting the exact compositor trim first and then asking
-    // once for further paragraphs when the cut lands short; the explicit
-    // "Fill remaining" action must use the same controller. Returning the
-    // raw trim here was the one path that could turn an overflow into an
-    // underflow and call that the completed result.
-    let repairTransport = null;
-    const settled = await copyFit.settleToFit({
-      section,
-      images,
-      proposal: view,
-      language: language || section.language,
-      tier,
-      askForMore: async (brief) => {
-        repairTransport = await ai.askForJson(brief, ADDITIONS_SCHEMA, { tier });
-        return repairTransport;
-      },
-      resizeBriefFor,
-    });
+    const trimmed = await copyFit.trimToFit(section, images, view);
     return {
-      proposal: { body: settled.body },
+      proposal: { body: trimmed.body },
       fit: {
-        bodyCharBudget: settled.fit.capacity.bodyCharCapacity,
-        bodyCharRange: settled.fit.capacity.bodyCharRange,
-        charsUsed: settled.fit.charsUsed,
-        charsRemaining: Math.max(
-          0,
-          settled.fit.capacity.bodyCharCapacity - settled.fit.charsUsed,
-        ),
+        bodyCharBudget: trimmed.fit.capacity.bodyCharCapacity,
+        bodyCharRange: trimmed.fit.capacity.bodyCharRange,
+        charsUsed: trimmed.fit.charsUsed,
+        charsRemaining: 0,
         charsBefore: used,
-        overflowing: settled.fit.overset,
-        state: settled.state,
-        engineState: settled.fit.state,
-        acceptable: settled.acceptable,
-        holeLines: settled.fit.holeLines,
-        fill: settled.fit.fill,
-        trimmed: settled.trimmed,
-        repairCalls: settled.calls,
+        overflowing: false,
+        state: copyFit.isAcceptablyFilled(trimmed.fit) ? 'FITS' : 'SOURCE_LIMITED_UNDERFILL',
+        engineState: trimmed.fit.state,
+        acceptable: copyFit.isAcceptablyFilled(trimmed.fit),
+        holeLines: trimmed.fit.holeLines,
+        fill: trimmed.fit.fill,
+        trimmed: true,
       },
-      // Still null when the sentence cut itself lands at the foot. When it
-      // opens a visible hole, `settleToFit()` spends one bounded addition call
-      // rather than hand the desk a different kind of bad fit.
-      provider: repairTransport?.provider || null,
-      tier: repairTransport?.tier,
-      fellBackTo: repairTransport?.fellBackTo,
-      handover: repairTransport?.handover || null,
-      retriedAt: repairTransport?.retriedAt,
-      trimmedOnly: settled.calls === 0,
+      // No provider was asked - cutting is arithmetic, not authorship.
+      provider: null,
+      trimmedOnly: true,
     };
   }
   // NOT `state === 'FITS'`. That verdict carries HOLE_LINES (4), the threshold
@@ -868,23 +842,18 @@ async function fillRemaining(pageId, sectionKey, { notes, tier, language } = {})
   let body = String(result.data.body || '').trim();
   if (!body) return { error: 'The AI returned nothing to add.' };
 
-  // Use the same exact settle controller as "Write this block". A whole-body
-  // answer commonly overshoots by part of a sentence; a sentence-boundary cut
-  // can then leave the foot visibly short. The old path stopped at that cut.
-  // This one trims for free and, only when the resulting hole is still real,
-  // asks once for further paragraphs and composes them again around the same
-  // pictures before returning the proposal.
-  const settled = await copyFit.settleToFit({
-    section,
-    images,
-    proposal: { ...view, body },
-    language: language || section.language,
-    tier,
-    askForMore: (brief) => ai.askForJson(brief, ADDITIONS_SCHEMA, { tier }),
-    resizeBriefFor,
-  });
-  body = settled.body;
-  const filled = settled.fit;
+  // Filling a hole is exactly when a model overshoots, and an overshoot that
+  // reaches the desk as "now it overflows" would just move the same problem
+  // one step down the line. Composed, and cut back to the last whole sentence
+  // that fits if it did overshoot - free, and it always converges.
+  let filled = await copyFit.measureFit(section, images, { ...view, body });
+  let trimmed = false;
+  if (filled.overset) {
+    const cut = await copyFit.trimToFit(section, images, { ...view, body });
+    body = cut.body;
+    filled = cut.fit;
+    trimmed = true;
+  }
 
   return {
     // Only the body changes. The headline and the deck the desk wrote stay
@@ -902,13 +871,12 @@ async function fillRemaining(pageId, sectionKey, { notes, tier, language } = {})
       // reach the foot of the block says so - the desk can then add source
       // material, resize the picture or move the story, which is a decision
       // it can only make if it is told the truth.
-      state: settled.state,
+      state: copyFit.isAcceptablyFilled(filled) ? 'FITS' : 'SOURCE_LIMITED_UNDERFILL',
       engineState: filled.state,
-      acceptable: settled.acceptable,
+      acceptable: copyFit.isAcceptablyFilled(filled),
       holeLines: filled.holeLines,
       fill: filled.fill,
-      trimmed: settled.trimmed,
-      repairCalls: settled.calls,
+      trimmed,
     },
     provider: result.provider,
     tier: result.tier,

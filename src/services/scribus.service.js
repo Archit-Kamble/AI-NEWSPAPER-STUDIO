@@ -568,12 +568,11 @@ function footerFrames(newspaper, page, geometry, identity, { pageOffsetMm, ownPa
   const footYMm = mm(region.footer.footTop) + pageOffsetMm;
   const footHeightMm = mm(region.footer.footHeightPx);
 
-  // Three even columns across the foot, left to right in VISUAL order. The
-  // browser achieves the verso flip by reordering the two ears while keeping
-  // its date in the centre grid column; Scribus has no grid, so the frames are
-  // placed and aligned directly: left / centre / right. Merely putting the
-  // date in the middle THIRD and leaving it ALIGN=0 starts it one-third across
-  // the page — it does not centre it on the page.
+  // Three even columns across the foot, left to right in VISUAL order - the
+  // browser achieves the verso flip with CSS `flex-direction:row-reverse`
+  // (masthead.js/styles.css's .foot-verso); Scribus has no flex, so the
+  // three frames are placed directly in the order a reader would actually
+  // see them, recto (title, date, page) or verso (page, date, title).
   const thirdMm = widthMm / 3;
   const pageLabel = `पृष्ठ ${devanagari(page.page_number)}`;
   const columns = verso ? [pageLabel, dateText, identity.title] : [identity.title, dateText, pageLabel];
@@ -585,7 +584,7 @@ function footerFrames(newspaper, page, geometry, identity, { pageOffsetMm, ownPa
       xMm: leftMm + index * thirdMm, yMm: footYMm,
       widthMm: thirdMm, heightMm: footHeightMm,
       runs: [{ text, family: 'sans', weight, bold: false, italic: false, underline: false, fontPx: 18 }],
-      align: index, ownPage,
+      align: 0, ownPage,
     }));
   });
 

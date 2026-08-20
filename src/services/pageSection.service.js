@@ -11,14 +11,6 @@ const comparable = (value) => JSON.stringify(value ?? null);
 const G = geometryOf({});
 const MIN_HEIGHT_PX = G.baselinePx * 4;
 
-let palettePromise;
-function presentationPalette() {
-  if (!palettePromise) palettePromise = import('../../public/editor/layout/inks.js');
-  return palettePromise;
-}
-
-const supplied = (value) => value !== undefined && value !== null && String(value).trim() !== '';
-
 const nearest = (value, points) =>
   points.reduce((best, p) => (Math.abs(p - value) < Math.abs(best - value) ? p : best), points[0]);
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
@@ -105,29 +97,6 @@ async function saveSection(pageId, sectionKey, body) {
   const before = beforePage?.sections?.find((section) => section.section_key === sectionKey);
   const semantic = await normalizeStoryMetadata(body);
   if (semantic.error) return semantic;
-  const palette = await presentationPalette();
-  const backgroundColor = supplied(body.backgroundColor)
-    ? palette.sanitiseTint(body.backgroundColor)
-    : null;
-  const accentColor = supplied(body.accentColor)
-    ? palette.sanitiseInk(body.accentColor)
-    : null;
-  if (supplied(body.backgroundColor) && backgroundColor === null) {
-    return { error: 'The block ground must be one of the newspaper palette tints.' };
-  }
-  if (supplied(body.accentColor) && accentColor === null) {
-    return { error: 'The headline accent must be one of the newspaper palette inks.' };
-  }
-  if (supplied(body.borderStyle) && !['none', 'box'].includes(body.borderStyle)) {
-    return { error: 'The border style must be none or box.' };
-  }
-  if (supplied(body.headlineStyle) && !['plain', 'accent', 'reverse'].includes(body.headlineStyle)) {
-    return { error: 'The headline treatment must be plain, accent or reverse.' };
-  }
-  if (supplied(body.marginPx)
-      && (!Number.isFinite(Number(body.marginPx)) || Number(body.marginPx) < 1 || Number(body.marginPx) > 60)) {
-    return { error: 'The block margin must be between 1 and 60 pixels.' };
-  }
   const article = {
     newsItemId: body.newsItemId || body.sourceNewsId,
     storyType: semantic.storyType,
@@ -171,9 +140,9 @@ async function saveSection(pageId, sectionKey, body) {
     borderStyle: body.borderStyle,
     borderWidthPx: body.borderWidthPx,
     borderColor: body.borderColor,
-    backgroundColor,
+    backgroundColor: body.backgroundColor,
     headlineStyle: body.headlineStyle,
-    accentColor,
+    accentColor: body.accentColor,
     // What structured card is placed in this block, and its payload. Never
     // `feature_key`, which is the layout's word for what the block is FOR and
     // is not the desk's to change.

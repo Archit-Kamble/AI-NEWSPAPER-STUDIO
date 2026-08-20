@@ -4,6 +4,24 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zzj. E-paper app handoff and masthead identity (2026-08-20)
+
+On `codex/epaper-map-editor`, the public reader no longer shows an **All
+editions** header control. Its masthead now carries an explicit crop of the
+real SAHAS lion mark from the approved nameplate, beside the newspaper name.
+
+Story actions remain compact and brand-led. WhatsApp Send and Facebook’s share
+dialog directly open their services. Status, Instagram Story/Post and Facebook
+Story use the browser’s real file-share path when an installed mobile app is
+available; that is the only browser-safe way to hand a PNG to a specific
+installed app. Desktop fallback downloads the PNG and opens the relevant web
+service. A website cannot silently publish into a user’s Status/Story/Post or
+force the OS share sheet to choose an app; the UI now says and behaves exactly
+that way rather than falsely claiming a direct post occurred. `epaper` tests
+pass **6/6**.
+
+---
+
 ## 0zzi. Released e-paper map adjustment for uploaded PDFs (2026-08-20)
 
 Implemented on the isolated, unmerged branch `codex/epaper-map-editor`. The

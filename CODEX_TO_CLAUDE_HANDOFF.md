@@ -167,6 +167,14 @@ Focused `epaper` + `epaperPublication` tests pass 9/9, including a real
 uploaded-PDF fixture that adds a manual block, writes its story PNG and proves
 the live layout's hotspots are untouched.
 
+The final small reader follow-up on the same branch removes the “All editions”
+header button and adds an explicit lion crop from the real masthead. It also
+makes the limits of social handoff explicit: Send and Facebook share links can
+open their services directly, while Status/Story/Post must hand a PNG to the
+installed app through the OS share sheet; desktop downloads the PNG and opens
+the relevant web app. A browser cannot target/publish to a user’s private
+Status or Story directly. Focused reader tests pass 6/6.
+
 ## Codex-era commits after the imported Claude history
 
 The imported handoff and `PROJECT_STATUS.md` indicate that the audit/fill work

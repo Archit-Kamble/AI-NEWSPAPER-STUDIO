@@ -116,6 +116,16 @@
     document.documentElement.style.overflow = '';
   };
 
+  // Browsers are intentionally not allowed to post a file directly to a
+  // Status or Story. They may hand it to the installed app through Web Share;
+  // on desktop we open that app's web destination alongside the PNG download.
+  const appDestination = (app, { url, text }) => ({
+    'whatsapp-status': 'https://web.whatsapp.com/',
+    'instagram-story': 'https://www.instagram.com/',
+    'instagram-post': 'https://www.instagram.com/',
+    'facebook-story': `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}&quote=${encodeURIComponent(text)}`,
+  }[app] || '');
+
   // A single tap opens the card. A desktop double-click is a deliberate fast
   // path to the PNG itself, without making the reader first save a screenshot.
   const pendingStoryOpen = new WeakMap();
@@ -193,7 +203,9 @@
       catch (error) { if (error.name !== 'AbortError') toast(`Could not open sharing: ${error.message}`); }
     } else {
       share.querySelector('.share-download')?.click();
-      toast(`PNG downloaded. Open ${target} and choose it from your gallery.`);
+      const destination = appDestination(shareButton.dataset.shareApp, { url, text: data.text });
+      if (destination) window.open(destination, '_blank', 'noopener,noreferrer');
+      toast(destination ? `PNG downloaded and ${target} opened. Choose the PNG from your gallery.` : `PNG downloaded. Open ${target} and choose it from your gallery.`);
     }
   });
 

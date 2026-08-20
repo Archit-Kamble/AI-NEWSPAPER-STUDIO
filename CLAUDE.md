@@ -186,6 +186,16 @@ Public access is gated in three places:
 - the whole-paper download uses `GET /epaper/:id/pdf`, which performs the same
   status check instead of exposing the raw upload URL in public markup.
 
+The public reader header intentionally carries the real SAHAS nameplate plus a
+cropped lion mark and does **not** carry an “All editions” navigation control.
+Sharing is constrained by the receiving platforms: WhatsApp Send and Facebook
+web share can open their own URLs directly; a website cannot post into WhatsApp
+Status, Instagram Story/Post or Facebook Story, nor select an app inside the
+OS share sheet. Those buttons must use `navigator.share()` with the generated
+PNG when available, then offer the honest desktop fallback: download the PNG
+and open the destination’s web app. Never report that a story/status was
+published merely because the handoff succeeded.
+
 `DELETE /api/newspapers/:id/epaper` means **remove the public copy**, not delete
 the newsroom edition: it hides the issue first, removes only generated
 derivatives, leaves the final-PDF record intact and leaves the editorial/press

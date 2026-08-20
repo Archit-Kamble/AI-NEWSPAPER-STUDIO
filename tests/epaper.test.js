@@ -59,6 +59,8 @@ test('reader HTML carries mobile page navigation, PNG story affordances, PDF and
   assert.match(html, /Instagram/);
   assert.match(html, /Facebook/);
   assert.match(html, /LinkedIn/);
+  assert.doesNotMatch(html, />All editions</);
+  assert.match(html, /reader-lion-mark/);
 });
 
 test('published asset paths reject traversal, manifests and non-PNG files before lookup', async () => {
@@ -98,4 +100,6 @@ test('the editor Publish action is one confirmation, while optional PDF e-paper 
   const readerUi = await fs.readFile(path.join(epaper.PUBLIC_DIR, 'epaper-reader.js'), 'utf8');
   assert.match(readerUi, /dblclick/);
   assert.match(readerUi, /Story PNG downloaded/);
+  assert.match(readerUi, /web\.whatsapp\.com/);
+  assert.match(readerUi, /instagram\.com/);
 });

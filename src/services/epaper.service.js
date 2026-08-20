@@ -277,17 +277,17 @@ function shareControls(item, pageNumber) {
     <button class="share-action share-native" type="button" data-share-file>${icon('share')}<span>Share</span></button>
     <div class="share-app share-whatsapp">
       <span class="share-brand whatsapp">${icon('whatsapp')}<b>WhatsApp</b></span>
-      <button type="button" data-share-file data-share-target="WhatsApp Status">Status</button>
+      <button type="button" data-share-file data-share-target="WhatsApp Status" data-share-app="whatsapp-status">Status</button>
       <a href="#" data-direct-share="whatsapp">Send</a>
     </div>
     <div class="share-app share-instagram">
       <span class="share-brand instagram">${icon('instagram')}<b>Instagram</b></span>
-      <button type="button" data-share-file data-share-target="Instagram Story">Story</button>
-      <button type="button" data-share-file data-share-target="Instagram Post">Post</button>
+      <button type="button" data-share-file data-share-target="Instagram Story" data-share-app="instagram-story">Story</button>
+      <button type="button" data-share-file data-share-target="Instagram Post" data-share-app="instagram-post">Post</button>
     </div>
     <div class="share-app share-facebook">
       <span class="share-brand facebook">${icon('facebook')}<b>Facebook</b></span>
-      <button type="button" data-share-file data-share-target="Facebook Story">Story</button>
+      <button type="button" data-share-file data-share-target="Facebook Story" data-share-app="facebook-story">Story</button>
       <a href="#" data-direct-share="facebook">Post</a>
     </div>
     <a class="share-action share-x" href="#" data-direct-share="x" aria-label="Post on X">${icon('x')}<span>X</span></a>
@@ -359,10 +359,9 @@ function renderHtml(snapshot) {
 </head>
 <body class="epaper-reader">
 <header class="reader-header">
-  <a class="reader-brand" href="/epaper"><img src="${LOGO_URL}" alt="${escapeHtml(meta.title)}"></a>
+  <a class="reader-brand" href="/epaper" aria-label="${escapeHtml(meta.title)} public e-paper"><img src="${LOGO_URL}" alt="${escapeHtml(meta.title)}"><span class="reader-lion-mark" role="img" aria-label="Sahas Varta lion mark"></span></a>
   <div class="reader-meta"><strong>${escapeHtml(when)}</strong><span>${escapeHtml(meta.district)} · ${escapeHtml(meta.volumeLine)}</span></div>
   <div class="reader-downloads">
-    <a href="/epaper" class="reader-archive-link">All editions</a>
     ${meta.pdfUrl ? `<a class="reader-pdf" href="${escapeHtml(meta.pdfUrl)}" download>${icon('download')}<span>Whole newspaper PDF</span></a>` : ''}
   </div>
 </header>

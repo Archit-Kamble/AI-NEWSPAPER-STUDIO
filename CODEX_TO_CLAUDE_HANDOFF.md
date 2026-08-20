@@ -76,7 +76,10 @@ adds a distinct **current editor web proof** release route:
 
 Focused tests are now 15/15. A real no-write Chrome render of the user’s four
 page edition 13742 created 1320×2120 page PNGs successfully; nothing was
-published or altered in that edition during that proof.
+published or altered in that edition during that proof. The user then asked to
+release it despite empty blocks: it is now a live selected `editor_snapshot`
+(4 pages / 33 story cards), with the edition itself still `draft`. The Node
+server was restarted on the follow-up branch and `/epaper` returned 200.
 
 ## Codex-era commits after the imported Claude history
 

@@ -42,6 +42,13 @@ PDF and remains `draft`. A real Chrome render against the existing 4-page
 edition 13742 (`मंगळवार, १ सप्टेंबर २०९९`) produced four 1320×2120 PNGs without
 publishing or changing that edition. The temporary render was removed.
 
+Follow-up live release: the desk then requested that exact edition be
+published even with remaining empty blocks. `publishCurrentEdition(13742)`
+succeeded with **4 pages / 33 story cards**, source `editor_snapshot`, selected
+`true`, and newspaper status still `draft`. The stale Node server was restarted
+on this branch; anonymous `GET /epaper` and its selected page-one PNG both
+returned 200.
+
 ---
 
 ## 0zze. Public e-paper release, mobile reader and archive (2026-08-20)

@@ -430,6 +430,8 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
       'a body double click focuses the one real Quill document directly from the page');
     say(await page.locator('#edWritingSurface').evaluate((el) => el.classList.contains('is-canonical-body-editor')),
       'the alternate browser-flow body surface is hidden while the exact body is edited in place');
+    say(await page.locator('#edBodyFrame').evaluate((el) => el.classList.contains('is-direct-body-editing')),
+      'the exact body itself visibly identifies that it is the active typing target');
     say(await page.locator('#edBodyFrame').evaluate((el) => !el.hasAttribute('contenteditable')),
       'the body frame never becomes a second browser-flow renderer');
     say(await page.evaluate(() => {

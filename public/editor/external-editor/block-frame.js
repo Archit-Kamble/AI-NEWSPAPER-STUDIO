@@ -421,6 +421,7 @@ function endCanonicalBodyEdit({ blur = false } = {}) {
   if (!canonicalBodyEdit) return;
   canonicalBodyEdit = false;
   document.getElementById("edWritingSurface")?.classList.remove("is-canonical-body-editor", "is-body-target");
+  document.getElementById("edBodyFrame")?.classList.remove("is-direct-body-editing");
   // The source document is intentionally hidden while the exact composition
   // remains on the page. Once the desk targets another object it must also
   // give up keyboard focus: otherwise Arrow/Delete and editor history keys
@@ -465,6 +466,10 @@ function beginCanonicalBodyEdit(point) {
   canonicalBodyEdit = true;
   const writing = document.getElementById("edWritingSurface");
   writing?.classList.add("is-body-target", "is-canonical-body-editor");
+  // The exact lines stay visible, so this explicit frame state is the visible
+  // equivalent of a caret/focus ring. Without it the body did accept typing,
+  // but looked like ordinary read-only copy while Quill was hidden.
+  document.getElementById("edBodyFrame")?.classList.add("is-direct-body-editing");
   quill.focus();
   quill.setSelection(bodyOffsetAt(point) ?? Math.max(0, quill.getLength() - 1), 0, "silent");
 }

@@ -4719,3 +4719,22 @@ identity contract.
 The integration regression writes two stories, attempts to continue the first
 into the second, and verifies both bodies and the second headline remain exact.
 Targeted verification: **6/6**.
+
+### 49. Post-brief audit — bulk current news keeps its sources (2026-08-20)
+
+The writer already returned verified retrieval evidence for every headline-less
+current-news proposal. `runBulk()` discarded that field, while the bulk panel
+told the desk the source list could be opened. It could not: only a single-block
+AI panel retained and rendered it. That made the large top-level action less
+auditable than the endpoint it called.
+
+Bulk results now carry `retrieval` unchanged, and every relevant proposal row
+uses the existing `retrievalStatusMarkup()` to show the status and collapsed
+publisher/trust/date/link list before acceptance. No source text enters the
+article. The candidate filter also skips `block_type: feature` directly, so a
+legacy/unkeyed standing-feature frame cannot be filled with general current-news
+prose merely because `feature_key` is absent.
+
+The unit regression holds both the retrieval object across the concurrent
+coordinator and the unkeyed-feature exclusion. `workspace.js` syntax-checks;
+targeted verification: **11/11**.

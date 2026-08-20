@@ -73,6 +73,7 @@ export function candidatesOn(page, { place = '' } = {}) {
 
     if (section.block_type === "advert") { skip("advert space"); continue; }
     if (section.block_type === "photo") { skip("wants a photograph"); continue; }
+    if (section.block_type === "feature") { skip("standing feature space"); continue; }
     if (section.feature_key || section.smart_card_key) { skip("a standing feature"); continue; }
     if (section.news_item_id) { skip("a reporter's story"); continue; }
     if (body) { skip("already written"); continue; }
@@ -129,7 +130,17 @@ export async function runBulk({ blocks, request, onProgress, concurrency = CONCU
         const result = await request(block);
         outcome = result?.error
           ? { sectionKey: block.sectionKey, error: result.error }
-          : { sectionKey: block.sectionKey, proposal: result.proposal, fit: result.fit, provider: result.provider };
+          : {
+            sectionKey: block.sectionKey,
+            proposal: result.proposal,
+            fit: result.fit,
+            provider: result.provider,
+            // A headline-less candidate is written from current sources. The
+            // writer returns the checked URLs and publishers; dropping them
+            // here makes a bulk proposal less auditable than the same single
+            // proposal even though both came through the same endpoint.
+            retrieval: result.retrieval || null,
+          };
       } catch (error) {
         // One block failing must never take the batch down. A provider having a
         // bad minute should cost the desk that block, not the page.

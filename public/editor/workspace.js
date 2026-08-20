@@ -48,7 +48,7 @@ import {
 } from "./external-editor/external-editor.js";
 import { applyStoredLayout, bindResizers, setEditorCollapsed, getSizes } from "./layout/resizer.js";
 import { showPublicationFiles } from "./publication.js";
-import { loadAiStatus, getAiTier } from "./external-editor/ai-panel.js";
+import { loadAiStatus, getAiTier, retrievalStatusMarkup } from "./external-editor/ai-panel.js";
 import { renderWorklist } from "./worklist-panel.js";
 import * as store from "./store.js";
 import * as history from "./history/history.js";
@@ -1522,6 +1522,7 @@ function showBulkProposals(batch, skipped, { fromToday = 0 } = {}) {
       <strong>${escapeHtml(result.sectionKey)}</strong>
       <span class="bulk-headline">${escapeHtml(result.proposal.headline)}</span>
       <span class="muted">${result.fit.charsUsed} of ${result.fit.bodyCharBudget} characters</span>
+      ${result.retrieval ? `<div class="bulk-retrieval">${retrievalStatusMarkup(result.retrieval)}</div>` : ""}
       <button type="button" class="ext-editor-btn ext-editor-btn-primary" data-bulk-accept="${escapeHtml(result.sectionKey)}">Accept</button>
     </li>`;
   }).join("");
@@ -1532,8 +1533,8 @@ function showBulkProposals(batch, skipped, { fromToday = 0 } = {}) {
 
   // Said plainly, because a block written from the wire and a block written
   // from a headline somebody typed are not the same kind of proposal - the
-  // first one's facts came from sources the desk can open (the AI panel's
-  // retrieval list), the second one's did not.
+  // first one's facts came from sources the desk can open in that proposal's
+  // own row, the second one's did not.
   const todayNote = fromToday
     ? `<p class="muted ext-note">${fromToday} block${fromToday === 1 ? "" : "s"} had no headline, so ${fromToday === 1 ? "it was" : "they were"} written from today's checked news for this edition's own ground. A block whose sources could not be verified is refused rather than invented — that refusal is what you will see in its row.</p>`
     : "";

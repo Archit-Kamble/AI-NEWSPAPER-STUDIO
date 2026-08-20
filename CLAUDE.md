@@ -701,7 +701,11 @@ publication — and every seed names the day in Marathi, which is exactly what
 `information/intent.js` classifies as `current_news`. So `write()` fetches and
 verifies real sources **before spending a call** and returns a Marathi refusal if
 it cannot. An empty block is written from today's checked news or it is not
-written at all, and the desk is told which blocks came from the wire.
+written at all, and the desk is told which blocks came from the wire. The bulk
+coordinator must retain `result.retrieval`: each successful current-news row
+shows the same collapsed publisher/trust/date/link evidence as a single-block
+proposal before the desk accepts it. A `block_type: feature` frame is standing
+furniture even when a legacy row has no `feature_key`; bulk prose skips it.
 
 ### Two blocks, one story — shift-click the second
 

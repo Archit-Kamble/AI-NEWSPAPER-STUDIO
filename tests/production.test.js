@@ -210,6 +210,10 @@ test('a partial save does not reset the fields it was not asked about', async ()
       method: 'PUT', body: JSON.stringify({ backgroundColor: 'red; background:url(evil)' }),
     });
     assert.equal(foreignTint.status, 400, 'an arbitrary style value is rejected at the API boundary');
+    const zeroMargin = await desk(`/api/pages/${page.id}/sections/lead`, {
+      method: 'PUT', body: JSON.stringify({ marginPx: 0 }),
+    });
+    assert.equal(zeroMargin.status, 400, 'zero is not offered when the compositor cannot honour it');
 
     const after = await desk(`/api/newspapers/${paper.id}/pages`).then((r) => r.json());
     const lead = after[0].sections.find((s) => s.section_key === 'lead');
@@ -218,6 +222,7 @@ test('a partial save does not reset the fields it was not asked about', async ()
     assert.equal(lead.headline_font_px, before.headline_font_px, 'the type scale must survive a save');
     assert.equal(lead.body_font_px, before.body_font_px);
     assert.equal(lead.background_color, '#fbf3e9', 'a rejected colour leaves the accepted tint untouched');
+    assert.equal(Number(lead.margin_px), 1, 'a rejected zero leaves the paper minimum untouched');
     assert.equal(advert.border_style, advertBefore.border_style, 'the layout box must survive a save');
   } finally {
     if (paperId) await pool.query('DELETE FROM newspapers WHERE id = $1', [paperId]);

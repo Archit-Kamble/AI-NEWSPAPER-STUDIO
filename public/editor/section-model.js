@@ -127,7 +127,12 @@ export function draftFromSection(section) {
     columnCount: Number.isInteger(Number(section.column_count)) && Number(section.column_count) >= 1
       ? Number(section.column_count)
       : null,
-    marginPx: Number.isFinite(Number(section.margin_px)) ? Number(section.margin_px) : 12,
+    // The compositor requires a positive inset. Canonical newspaper blocks use
+    // 1 px; normalising an imported 0 here avoids the old `0 || 12` jump that
+    // made a control set to zero draw twelve pixels instead.
+    marginPx: Number.isFinite(Number(section.margin_px))
+      ? Math.min(60, Math.max(1, Number(section.margin_px)))
+      : 1,
     // A floor, not a default (text-flow.js's MIN_LINE_HEIGHT comment explains
     // why: Devanagari vowel signs stack above and below the baseline, and a
     // shorter line height crops them). The character grid has always assumed

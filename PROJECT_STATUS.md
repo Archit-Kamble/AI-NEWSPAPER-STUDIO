@@ -4757,3 +4757,18 @@ The regressions hold both halves: a hostile persisted style is reduced to no
 ground/default paper red in the editor model, and an integration request proves
 the server accepts cream, rejects the arbitrary follow-up, and retains cream.
 Targeted verification: **22/22**.
+
+### 51. Post-brief audit — the margin control tells the truth (2026-08-20)
+
+The gutter group established 1 px as the block's physical minimum, but
+Typography still offered 0. The exact compositor deliberately accepts only a
+positive inset, so selecting zero did not produce zero: `positive(0, 12)`
+silently restored the old 12 px web padding while the control continued to read
+0.
+
+The live database contains **12,152 rows at 1 px and none at 0**, so no desk
+choice depended on the false value. The control now offers 1–60, the save
+service enforces the same range, and `section-model.js` converts legacy/imported
+zero or missing values to the canonical 1 rather than 12. The integration test
+proves a zero request receives 400 and leaves the saved 1 untouched. Targeted
+verification (together with the palette boundary it shares): **23/23**.

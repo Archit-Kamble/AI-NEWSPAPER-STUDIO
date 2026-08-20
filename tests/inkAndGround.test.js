@@ -56,6 +56,12 @@ test('a persisted foreign colour is removed before it can reach a canvas style',
   assert.equal(payload.accentColor, '#17458f');
 });
 
+test('an imported zero margin becomes the paper minimum, never the old web padding', async () => {
+  const model = await import('../public/editor/section-model.js');
+  assert.equal(model.draftFromSection({ section_key: 'lead', margin_px: 0 }).marginPx, 1);
+  assert.equal(model.draftFromSection({ section_key: 'lead' }).marginPx, 1);
+});
+
 test('an ABSENT size is not a size of zero', () => {
   // `getAttribute` returns null for a span carrying no size; Number(null) is 0
   // and Number.isFinite(0) is true, so the clamp turned every stray <span>

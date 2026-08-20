@@ -124,6 +124,10 @@ async function saveSection(pageId, sectionKey, body) {
   if (supplied(body.headlineStyle) && !['plain', 'accent', 'reverse'].includes(body.headlineStyle)) {
     return { error: 'The headline treatment must be plain, accent or reverse.' };
   }
+  if (supplied(body.marginPx)
+      && (!Number.isFinite(Number(body.marginPx)) || Number(body.marginPx) < 1 || Number(body.marginPx) > 60)) {
+    return { error: 'The block margin must be between 1 and 60 pixels.' };
+  }
   const article = {
     newsItemId: body.newsItemId || body.sourceNewsId,
     storyType: semantic.storyType,

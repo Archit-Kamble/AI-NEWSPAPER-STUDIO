@@ -125,6 +125,12 @@ not the gutter and is not asked to be one: it is the hair of air that keeps type
 off its own frame's edge, **0.5 mm (1 px)**, the smallest step this page has.
 Across → 4 mm, down → 5 mm, which is the printed page.
 
+One pixel is also the enforced minimum. The Typography control and save service
+accept 1–60, never 0: the compositor has always required a positive inset, so a
+zero formerly shown in the control was silently rendered through its old 12 px
+fallback. `section-model.js` normalises an imported zero to 1 before any view
+uses it.
+
 It can only ever GIVE a block room, so nothing can overset on it: swept over all
 4603 sections carrying copy, `BODY_OVERSET` went **15 → 13**. `UNDERFILLED` rises
 (3611 → 3666) and that is the honest reading — the same words in a wider measure

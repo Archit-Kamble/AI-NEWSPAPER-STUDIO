@@ -81,6 +81,23 @@ release it despite empty blocks: it is now a live selected `editor_snapshot`
 (4 pages / 33 story cards), with the edition itself still `draft`. The Node
 server was restarted on the follow-up branch and `/epaper` returned 200.
 
+## Follow-up correction: exact editor canvas capture
+
+The first current-editor snapshot was rejected visually: it was an HTML
+approximation rather than the newspaper the editor showed. The child branch
+`codex/epaper-exact-canvas` replaces it with the real
+`public/editor/canvas/canvas.js` renderer in its already-existing print view.
+Chrome receives a random one-use, two-minute local route with the persisted
+single-page payload, renders the ordinary canvas modules, then captures the
+result at 2×. The route cannot enumerate editions, carries no session or write
+capability, and is consumed on first read. Do not replace this with a parallel
+HTML reflow implementation.
+
+The user’s selected edition 13742 has been republished through this exact path.
+Its resulting public 1320×2120 PNG was visually compared with the editor
+canvas and matches its masthead, sections, image transforms, newspaper rules,
+type and footer.
+
 ## Codex-era commits after the imported Claude history
 
 The imported handoff and `PROJECT_STATUS.md` indicate that the audit/fill work

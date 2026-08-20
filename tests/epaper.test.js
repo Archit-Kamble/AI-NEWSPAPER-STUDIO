@@ -5,6 +5,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const publication = require('../src/services/epaperPublication.service');
 const epaper = require('../src/services/epaper.service');
+const canvasCapture = require('../src/services/epaperCanvasRender.service');
 
 test('hotspot percentages become an exact, bounded raster crop', () => {
   assert.deepEqual(
@@ -64,4 +65,20 @@ test('published asset paths reject traversal, manifests and non-PNG files before
   assert.equal(await epaper.publishedAsset(42, '../manifest.json'), null);
   assert.equal(await epaper.publishedAsset(42, 'manifest.json'), null);
   assert.equal(await epaper.publishedAsset(42, 'page-1.jpg'), null);
+});
+
+test('the exact-canvas capture handoff is one-use, opaque and never a public editor route', () => {
+  const token = canvasCapture.createCanvasCapture(
+    { id: 42, page_width_px: 660, page_height_px: 1060 },
+    { page_number: 1, sections: [{ headline: '</script><script>bad()</script>' }] },
+    1,
+  );
+  assert.match(token, /^[A-Za-z0-9_-]{40,}$/);
+  const payload = canvasCapture.takeCanvasCapture(token);
+  assert.equal(payload.page.page_number, 1);
+  assert.equal(canvasCapture.takeCanvasCapture(token), null, 'a capture URL cannot be replayed');
+  const html = canvasCapture.canvasCaptureHtml(payload);
+  assert.match(html, /epaper-canvas-capture\.js/);
+  assert.doesNotMatch(html, /<\/script><script>bad\(\)<\/script>/, 'edition copy cannot end the embedded JSON script');
+  assert.match(html, /\\u003c\/script>/);
 });

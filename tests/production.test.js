@@ -127,6 +127,7 @@ test('a district edition shares its parent pages and owns only its own', async (
   let parentId = null;
   let childId = null;
   let pdfPath = null;
+  let previousSelectedEpaperId = null;
   try {
     const parent = await post('/api/newspapers', { name: 'District test', publicationDate: '2026-08-04' }).then((r) => r.json());
     parentId = parent.id;
@@ -184,6 +185,10 @@ test('a district edition shares its parent pages and owns only its own', async (
       'a generated asset cannot bypass the publication status gate',
     );
     assert.equal((await fetch(`${base}/epaper/${parentId}/pdf`)).status, 404);
+    previousSelectedEpaperId = (await pool.query(
+      'SELECT id FROM newspapers WHERE epaper_selected = TRUE LIMIT 1',
+    )).rows[0]?.id || null;
+    await pool.query('UPDATE newspapers SET epaper_selected = FALSE WHERE epaper_selected = TRUE');
     await pool.query(
       `UPDATE newspapers
           SET epaper_released_at = CURRENT_TIMESTAMP, epaper_selected = TRUE
@@ -218,6 +223,9 @@ test('a district edition shares its parent pages and owns only its own', async (
     if (pdfPath) await fs.rm(pdfPath, { force: true });
     if (childId) await pool.query('DELETE FROM newspapers WHERE id = $1', [childId]);
     if (parentId) await pool.query('DELETE FROM newspapers WHERE id = $1', [parentId]);
+    if (previousSelectedEpaperId) await pool.query(
+      'UPDATE newspapers SET epaper_selected = TRUE WHERE id = $1', [previousSelectedEpaperId],
+    );
     server.close();
   }
 });

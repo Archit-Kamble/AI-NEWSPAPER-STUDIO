@@ -97,8 +97,17 @@ page/story PNGs under `public/uploads/epaper/:id/` atomically:
   download.
 - `POST /api/newspapers/:id/publish-current` is a clearly labelled **current
   editor web proof**. It requires neither Scribus nor PDF/sign-off, renders the
-  current frozen page geometry with local Chrome (`EPAPER_CHROME_BIN` overrides
-  `/usr/bin/google-chrome`), and never changes the edition's press status.
+  exact current canvas in its existing print-view mode with local Chrome
+  (`EPAPER_CHROME_BIN` overrides `/usr/bin/google-chrome`), and never changes
+  the edition's press status. It must never reconstruct stories through a
+  second text-layout implementation: page furniture, typography, flow around
+  images, Smart Cards, rules and marks are all the same browser canvas the
+  desk approved.
+
+  Chrome receives a one-use random local capture URL containing one frozen
+  page payload. It expires in two minutes and carries no session or write
+  permission; it is not a public reader route. This is how the normal canvas
+  can be captured without making raw editor APIs public.
 
 Later newsroom edits cannot alter either release. Story cards are 1080 px PNG
 crops with the real masthead composed above them. Only editorial news blocks

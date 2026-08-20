@@ -108,6 +108,18 @@ async function buildEdition(newspaperId) {
   };
 }
 
+// The browser canvas receives its full persisted page rows, not the smaller
+// public reader manifest. Current-editor publishing uses this shape solely for
+// a one-use local capture, so every real setting - image transform, marks,
+// border, Smart Card and exact type choice - is painted by the same module the
+// desk sees before it presses Publish.
+async function buildCanvasEdition(newspaperId) {
+  const paper = await newspaperRepository.findById(Number(newspaperId));
+  if (!paper) return null;
+  const pages = await districtEditions.pagesOf(Number(newspaperId));
+  return { newspaper: paper, pages };
+}
+
 async function readRelease(newspaperId, { publicOnly = false } = {}) {
   const paper = await newspaperRepository.findById(Number(newspaperId));
   if (!paper || !paper.epaper_released_at || (publicOnly && !paper.epaper_selected)) return null;
@@ -361,7 +373,7 @@ function renderArchiveHtml(editions) {
 module.exports = {
   PUBLIC_DIR, EPAPER_DIR, LOGO_URL,
   editionDirectory, manifestPath,
-  buildEdition, readRelease, loadPublishedEdition, loadSelectedEdition,
+  buildEdition, buildCanvasEdition, readRelease, loadPublishedEdition, loadSelectedEdition,
   listReleasedEditions, selectReleasedEdition, selectAfterRelease,
   releasedAsset, publishedAsset, releasedPdf, publishedPdf,
   renderHtml, renderArchiveHtml,

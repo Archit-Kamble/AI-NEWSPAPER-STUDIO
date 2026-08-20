@@ -125,6 +125,7 @@ function createApp() {
   app.get("/epaper", asyncRoute(newspaperController.selectedEpaperHtml));
   app.get("/epaper/:id/pdf", asyncRoute(newspaperController.epaperPdf));
   app.get("/epaper/:id", asyncRoute(newspaperController.epaperHtml));
+  app.get("/_internal/epaper-canvas/:token", asyncRoute(newspaperController.epaperCanvasCaptureHtml));
 
   // Page API
   app.use("/api", deskWrites, pageRoutes);

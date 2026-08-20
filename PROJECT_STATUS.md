@@ -49,6 +49,16 @@ succeeded with **4 pages / 33 story cards**, source `editor_snapshot`, selected
 on this branch; anonymous `GET /epaper` and its selected page-one PNG both
 returned 200.
 
+Correction after visual review: the first current-editor implementation was a
+separate simplified HTML re-typeset and therefore visibly unlike the approved
+newspaper. It was replaced on child branch `codex/epaper-exact-canvas` by a
+one-use local Chrome capture of `public/editor/canvas/canvas.js` in the existing
+`print-view` mode. The generated page exactly carries the canvas masthead,
+page furniture, image transforms, flow, rules, typography and structured
+blocks; there is no second news-page renderer. Edition 13742 was republished
+with this exact four-page capture and its public page-one PNG was visually
+checked against the editor canvas.
+
 ---
 
 ## 0zze. Public e-paper release, mobile reader and archive (2026-08-20)

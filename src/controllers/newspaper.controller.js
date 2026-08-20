@@ -3,6 +3,7 @@ const editionStartService = require('../services/editionStart.service');
 const districtEditionService = require('../services/districtEdition.service');
 const epaperService = require('../services/epaper.service');
 const epaperPublicationService = require('../services/epaperPublication.service');
+const epaperCanvasCapture = require('../services/epaperCanvasRender.service');
 const preflightService = require('../services/preflight.service');
 const worklistService = require('../services/worklist.service');
 const signoffService = require('../services/signoff.service');
@@ -120,6 +121,15 @@ async function epaperPreviewHtml(req, res) {
   const edition = await epaperService.readRelease(parseInt(req.params.id, 10));
   if (!edition) return res.status(404).type('html').send('<h1>This e-paper is unavailable.</h1>');
   res.type('html').send(epaperService.renderHtml(edition));
+}
+
+// Chrome receives this only while producing a current-editor PNG. The random
+// payload token is one-use and expires in two minutes; it grants no session or
+// write action and cannot be used as a public e-paper URL.
+async function epaperCanvasCaptureHtml(req, res) {
+  const payload = epaperCanvasCapture.takeCanvasCapture(req.params.token);
+  if (!payload) return res.status(404).type('html').send('<h1>Capture expired.</h1>');
+  res.type('html').send(epaperCanvasCapture.canvasCaptureHtml(payload));
 }
 
 async function epaperList(req, res) {
@@ -289,7 +299,7 @@ async function pressPackage(req, res) {
 module.exports = {
   create, start, resize, ladder, supportedPageCounts, list, latest, getOne, update, saveFinalFiles,
   createDistrictEdition, listDistrictEditions, printedPages,
-  epaper, epaperHtml, selectedEpaperHtml, epaperPreviewHtml, epaperList, selectEpaper,
+  epaper, epaperHtml, selectedEpaperHtml, epaperPreviewHtml, epaperCanvasCaptureHtml, epaperList, selectEpaper,
   epaperAsset, epaperPdf, publishEpaper, publishCurrentEpaper, unpublishEpaper,
   preflight, worklist, status, history, features, compositionPlan, compositionApply,
   scribus, pressPackage,

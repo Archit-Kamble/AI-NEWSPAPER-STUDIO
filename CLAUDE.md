@@ -1068,6 +1068,16 @@ Both reset the block they drive first, so they can be run repeatedly. They need 
 
 **A browser test that crashes is worse than one that fails.** `workspace.browser.js` died at check 18 of 211 for months — its geometry section read `.section-content`, which the composed renderer does not emit — and everything after it silently never ran. Three real bugs were sitting behind it (a selected picture that never showed selected, a sideways scroll at 900px, a Smart Card check pointing at a removed element). If you change a renderer's DOM, run the net and read the LAST line, not the first failure.
 
+The guide-drag section later exposed a second way for that net to stop early:
+Chrome intermittently garbage-collected the promise returned by a
+`page.evaluate()` that was awaiting a dynamic import while the canvas was being
+re-rendered. Modules used on that hot path are loaded once and parked on
+`window`; `evalRetry()` retries only the transient GC/execution-context errors,
+once. The top-level crash handler prints the exact passed/ran tally before the
+error and says that later checks did not run, so a partial run cannot resemble a
+green one. After that hardening the whole net completed **222/222 three
+consecutive times**, with no browser errors or crashes.
+
 The dev database is full of test fixtures — 221 editions across 13 dates, named `साहस`, `ZZ …`, `8/3/2026 Edition`. Tests that create an edition must remove it in `t.after(...)`. `POST /api/newspapers` is **not** idempotent; only `POST /api/newspapers/start` is, and only that one is wired to a button.
 
 ### Housekeeping every session

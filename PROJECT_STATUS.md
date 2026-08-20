@@ -4603,3 +4603,54 @@ tree).
 
 Next, in the desk's own order: **Smart Cards**, then the Scribus/CMYK download,
 then the site's own UI, then handover.
+
+### 45. The bug sweep reaches the last line (2026-08-20)
+
+A running-app audit continued beyond the three stale AI-provider assertions
+recorded in §44. Four narrow commits closed the concrete faults it found:
+
+- `4d2efe7` — production GETs carrying unpublished editions, pages, pictures and
+  guides now repeat `requireDesk`, because router-level `deskWrites` deliberately
+  leaves GET open. The login form also stopped guessing a user's role from
+  whether their email contains `admin`; the authenticated user row now decides
+  both authorization and dashboard.
+- `797395c` — the AI writer/effort status repaints when its asynchronous status
+  request lands; the story footer and Space panel read the same exact composed
+  character range; and new blocks on a full page cascade over legal grid origins
+  instead of stacking at one unreachable coordinate. The workspace net now
+  asserts provider invariants rather than naming whichever vendors happen to be
+  configured in `.env`.
+- `9ac8409` — RSS dates wrapped in CDATA and PIB's day-first `IST` dates are
+  parsed rather than silently classed stale, restoring four of nine configured
+  feeds. An empty query no longer matches every fetched article and labels the
+  unrelated set verified.
+- `8d7d309` — `maxLegibleColumns()` is the one column-width floor used by both
+  automatic composition and Properties → Columns. Counts that would leave no
+  legal measure are disabled instead of being offered to the desk.
+
+The final workspace-net run then stopped after 171 passing checks with
+`page.evaluate: Resulting promise was garbage collected`, in the guide-drag
+section. This was a harness failure, not a product assertion: `syncGuides()` and
+`restoreGeometry()` each awaited dynamic imports inside `page.evaluate()` while
+the canvas was being repainted. The uncommitted hardening left at takeover was
+completed without rewriting it:
+
+- `evalRetry()` retries only the two transient Playwright/Chrome failures
+  (`garbage collected` and `Execution context was destroyed`), once;
+- `/editor/store.js` and `/editor/canvas/page-guides.js` are imported once and
+  retained on `window`, removing dynamic imports from the repeated hot path;
+- a top-level crash now prints how many checks ran and passed **before** the
+  crash, plus any failures, and explicitly says later checks never ran.
+
+**Verification:** Claude had already obtained 846/846 unit tests, 222/222 on the
+workspace net and 81/81 on the controls net before this test-only hardening.
+The takeover first syntax-checked the written patch and then ran the complete
+workspace net three consecutive times. All three runs exited 0 at **222/222**,
+with zero `FAIL` lines, `ERRORS: (none)` and zero `CRASH` lines. Their complete
+logs are in `/tmp/sahas-workspace-crash-verify-20260820/run-{1,2,3}.txt` for the
+life of this machine.
+
+The pre-existing uncommitted Groq, WEBP decoding and cut-out geometry work —
+including `tests/browser/sweep.tmp.js` — was inspected but neither modified nor
+staged during this close-out. The next product priority remains **Smart Cards**,
+followed by Scribus/CMYK download, the site's own UI, and handover.

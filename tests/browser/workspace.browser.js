@@ -1283,8 +1283,20 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
     // same page-guides.js function the app itself calls on every real
         // mutation, so the test drives the app into a state it could reach
     // through ordinary use, not a fabricated one.
-    const syncGuides = (pid) => page.evaluate(async (p) => {
-      const mod = await import('/editor/canvas/page-guides.js');
+    const evalRetry = async (fn, arg) => {
+      try { return await page.evaluate(fn, arg); } catch (error) {
+        if (!/garbage collected|Execution context was destroyed/i.test(error.message)) throw error;
+        await page.waitForTimeout(400);
+        return page.evaluate(fn, arg);
+      }
+    };
+    await evalRetry(async () => { window.__sahasStore = await import('/editor/store.js'); });
+
+    // Same shape, same hazard as restoreGeometry below - this one runs after
+    // every guide create and delete, so it is on the hot path too.
+    const syncGuides = (pid) => evalRetry(async (p) => {
+      const mod = window.__sahasGuides || await import('/editor/canvas/page-guides.js');
+      window.__sahasGuides = mod;
       const guides = await fetch(`/api/pages/${p}/guides`).then((r) => r.json());
       mod.renderGuides(guides);
     }, pid);
@@ -1314,13 +1326,20 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
     // showing the previous drag's committed position while the database had
     // already moved on, which is what made an early version of this test
     // flaky - not the product, the test's own bypassed state.
-    const restoreGeometry = (pid, key, rect) => page.evaluate(
+    // `page.evaluate` returning a promise that awaits a dynamic import can lose
+    // that promise to Chrome's GC - Playwright reports it as "Resulting promise
+    // was garbage collected", and it killed this net intermittently in the
+    // guides section, taking every check after it down silently. The module is
+    // fetched ONCE and parked on window, so the hot path (called after every
+    // drag, while the canvas is re-rendering) has no import in it at all; and
+    // the call is retried once, because an execution context torn down mid-
+    // evaluate is a race, not a failure.
+    const restoreGeometry = (pid, key, rect) => evalRetry(
       async ([p, k, r]) => {
         const updated = await fetch(`/api/pages/${p}/sections/${encodeURIComponent(k)}/geometry`, {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(r),
         }).then((res) => res.json());
-        const store = await import('/editor/store.js');
-        store.replacePage(updated, { structural: true });
+        (window.__sahasStore || await import('/editor/store.js')).replacePage(updated, { structural: true });
       },
       [pid, key, rect],
     );
@@ -1873,4 +1892,17 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
   if (failed.length) console.log('FAILED:', failed.map((f) => f.name).join(' | '));
   await browser.close();
   process.exit(failed.length || errors.length ? 1 : 0);
-})().catch((error) => { console.error('CRASH', error.message); process.exit(1); });
+})().catch((error) => {
+  // A browser test that crashes is worse than one that fails: everything after
+  // the crash silently never runs, and this net once died at check 18 of 211
+  // for months with three real bugs sitting behind it (CLAUDE.md, "Testing").
+  // A crash used to print one line and nothing else - not even how far it got -
+  // so "217 lines of PASS then CRASH" looked much like a clean run to anyone
+  // skimming. It now prints the tally first and says plainly that the rest of
+  // the net never ran.
+  console.log(`\n${results.filter((r) => r.ok).length}/${results.length} checks ran and passed BEFORE the crash`);
+  const failed = results.filter((r) => !r.ok);
+  if (failed.length) console.log('FAILED:', failed.map((f) => f.name).join(' | '));
+  console.error('CRASH (the checks after this point never ran):', error.message);
+  process.exit(1);
+});

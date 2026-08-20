@@ -726,6 +726,13 @@ never set would refuse continuations that fit.
 `reunite()` puts it back either way: stripping an absent pick-up line is a
 no-op, so one expression covers both.
 
+An explicit landing is still a destructive write, so the service — not only
+the Shift-click UI — proves it is an empty editorial block in the same edition
+before splitting the source. Existing headline/deck/body copy, a booked story,
+a feature, an advert or another continuation all refuse the move. A placed
+picture is allowed because an empty landing may already carry its photograph;
+its exclusion is included when the landing capacity is measured.
+
 ### A wide block sets in COLUMNS
 
 `measureColumns()` has always been able to work a column count out from a

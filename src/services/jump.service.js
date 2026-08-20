@@ -92,7 +92,7 @@ function splitAt(text, limit) {
  */
 async function findLanding(newspaperId, fromPageNumber) {
   const { rows } = await pool.query(
-    `SELECT ps.*, p.page_number
+    `SELECT ps.*, p.page_number, p.newspaper_id
        FROM page_sections ps JOIN pages p ON p.id = ps.page_id
       WHERE p.newspaper_id = $1
         AND p.page_number > $2
@@ -128,6 +128,24 @@ async function carryOver(pageId, sectionKey, { toPageId, toSectionKey } = {}) {
     return { error: 'There is no empty block on a later page to carry this into.' };
   }
   if (target.id === source.id) return { error: 'A story cannot continue into itself.' };
+  if (Number(target.newspaper_id) !== Number(source.newspaper_id)) {
+    return { error: 'A story cannot continue into a different edition.' };
+  }
+
+  // An explicit target comes from a shift-click, so unlike findLanding() it
+  // has not passed through the empty-news-block WHERE clause. Never turn that
+  // convenience into an overwrite primitive: a mis-click on another story,
+  // a standing feature or an advert must leave both blocks untouched. A
+  // placed picture is allowed — an empty editorial frame may already have its
+  // photograph, and budgetFor() measures the continuation around it.
+  const targetHasCopy = [target.headline, target.subheading, target.body]
+    .some((value) => String(value || '').trim());
+  const targetIsReserved = ['advert', 'feature'].includes(String(target.block_type || '').toLowerCase())
+    || target.feature_key || target.smart_card_key || target.news_item_id
+    || target.continued_from_section_id;
+  if (targetHasCopy || targetIsReserved) {
+    return { error: 'Choose an empty news block for the continuation — the selected block already has work in it.' };
+  }
 
   const budget = await budgetFor(source);
   // A continuation on the SAME page is not a jump: see carryLine() above.

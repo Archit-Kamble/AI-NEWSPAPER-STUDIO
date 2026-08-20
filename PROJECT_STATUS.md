@@ -4699,3 +4699,23 @@ order. Targeted verification: **21/21**.
 The handoff was corrected at the same time: an obsolete paragraph claiming the
 corner advert was still undeletable contradicted the completed conditional-ear
 implementation immediately above it, and has been removed.
+
+### 48. Post-brief audit — a continuation cannot overwrite another story (2026-08-20)
+
+The same-page continuation group made Shift-click name an explicit landing,
+but only the automatic later-page finder required an empty block. The explicit
+path accepted any section and its `UPDATE` replaced that section's headline and
+body. A mis-click could therefore destroy another story; a direct request could
+also name a block from a different edition.
+
+`carryOver()` now proves every target belongs to the source edition and is an
+empty editorial landing before it splits or writes either block. Copy, booked
+stories, features, Smart Cards, adverts and existing continuations are refused.
+A placed photograph remains legal and is measured normally, because a desk may
+prepare the picture before flowing its continuation. `findLanding()` now
+selects `newspaper_id` too, so automatic and explicit targets carry the same
+identity contract.
+
+The integration regression writes two stories, attempts to continue the first
+into the second, and verifies both bodies and the second headline remain exact.
+Targeted verification: **6/6**.

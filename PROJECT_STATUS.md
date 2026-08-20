@@ -4824,3 +4824,48 @@ The user's pre-existing Groq, WEBP and cut-out changes, the recovered prompt
 history, `AGENTS.md` and `tests/browser/sweep.tmp.js` remain unstaged and were
 not modified by this audit. Smart Cards remain deferred until the desk asks to
 resume them.
+
+### 54. Regression response — exact fill stays exact after an overflow cut (2026-08-20)
+
+The desk reported that the post-audit page had returned to the old failure:
+blocks were either overfull or underfull, and copy no longer appeared to respect
+the picture. Two different faults had to be separated before changing the
+compositor again.
+
+First, the Auto-column correction in `fd928c5` is not the regression. Measured
+on the three saved front-page article blocks carrying cut-outs, the old local
+one-column override reports every one as `FITS`; the canvas's real Auto/two-
+column pour reports **14, 33 and 36 characters overset**. Reinstating that
+override would only hide the excess from the API while the page still clips it.
+The compositor and its alpha-mask exclusion were not changed by the group
+audit.
+
+The real product gap was one step later. `fillRemaining()` composed the model's
+whole-body answer and trimmed an overshoot to the previous sentence, but then
+returned immediately. A sentence is a coarse unit: the cut can remove the
+overflow and expose a visible hole, exchanging one bad fit for the other.
+`write()` already solved this with `copyFit.settleToFit()`; the explicit Fill
+action now uses that same controller in both directions. It trims first, asks
+once for further paragraphs only when the cut remains below the real geometric
+bar, and composes again with the same Auto columns and image mask. It still
+returns an honest `SOURCE_LIMITED_UNDERFILL` if the source/model cannot supply
+enough real material; it never invents filler and never overwrites the row
+before the desk accepts the proposal.
+
+The new regression uses the complete failure shape together — a 268 × 304 Auto
+block, a tapered transparent mask and 299 characters of Marathi prose. The old
+one-column measurement falsely says it fits; the real masked Auto pour catches
+the excess; settle ends with **no body/display overset, 1.00 weighted fill**.
+
+Second, the completed workspace-net run had itself polluted edition 13742:
+its Smart Card persistence check accepted a Sudoku into `third-lead` and never
+restored the article fields. That was my test damage, not composition. The net
+now snapshots and restores those fields after the check. The live fixture was
+restored to an article and re-composed at **FITS, no body overset, no display
+overset, 1.00 fill, zero fillable lines left**. Smart Card product work remains
+deferred.
+
+Targeted verification: **58/58** across copy-fit, writer, Fill Remaining and
+writing-pipeline tests; the complete suite passes **856/856**. The browser net
+syntax-checks; its write-capable full run was deliberately not repeated against
+the recovered edition.

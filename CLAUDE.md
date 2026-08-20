@@ -1031,7 +1031,19 @@ The model is now asked for **more copy than the block will print**, told so expl
 
 **A cut-out photograph needs no special case, deliberately.** Its exclusion comes from its real alpha mask (`compose/exclusion.js`, via `section-adapter.js`'s `obstacleFromImage` — `mask` is carried), so an irregular silhouette narrows the individual scanlines it actually crosses. Nothing models that; it only asks.
 
-**"Fill remaining area with AI" repairs both directions.** Overset copy is cut to fit with no model call at all (`trimmedOnly: true`). Verified live: 672 → 279 characters, 4 of 4 lines, no provider called; and 55 → 159 characters, 3 of 3 lines, one call.
+**"Fill remaining area with AI" repairs both directions through the same exact
+settle controller as "Write this block".** Overset copy is cut first, for free.
+If that sentence-boundary cut itself lands short of the 95% bar, one bounded
+addition call fills the newly opened hole and the result is composed again
+around the same pictures. `trimmedOnly: true` still means the cut itself landed
+at the foot and no provider was called. The explicit-fill path must never stop
+at a coarse sentence cut and exchange an overflow for an underflow.
+
+Auto columns and image exclusion travel together into this path. Do not restore
+a local `Number(section.column_count) || 1`: on the 268 × 304 cut-out regression,
+the old one-column override says the 299-character draft fits, while the real
+Auto/two-column masked pour reports three characters overset. The shared settle
+path ends with no overset and a 1.00 weighted fill ratio.
 
 ### How full is this block? In WEIGHTED USABLE GEOMETRY — `bodyFill()`
 

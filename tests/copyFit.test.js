@@ -127,6 +127,41 @@ test('copy-fit composes an Auto-column block exactly like its inferred column co
   assert.notDeepEqual(auto.fill, one.fill, 'explicit one must remain a different composition');
 });
 
+// This is the complete failure shape reported by the desk: Auto columns, an
+// irregular transparent picture, and enough prose that the obsolete
+// one-column server override said FITS while the page itself overflowed. The
+// image mask and the inferred count must travel through the same API call;
+// proving either one in isolation is not enough.
+test('Auto columns and a cut-out share the canvas geometry through copy-fit and settle without overflow or underfill', async () => {
+  const section = {
+    width_px: 268, height_px: 304, margin_px: 1, column_count: null,
+    line_height: 1.45, headline_font_px: 24, subheading_font_px: 14, body_font_px: 12,
+  };
+  const images = [taperedCutout()];
+  const body = SENTENCE.repeat(5).trim();
+
+  const auto = await copyFit.measureFit(section, images, { ...OVER, body });
+  const one = await copyFit.measureFit({ ...section, column_count: 1 }, images, { ...OVER, body });
+  const two = await copyFit.measureFit({ ...section, column_count: 2 }, images, { ...OVER, body });
+
+  assert.equal(auto.overset, true, 'the actual Auto/cut-out page detects the excess');
+  assert.equal(one.overset, false, 'the removed one-column override would falsely accept it');
+  assert.equal(auto.oversetChars, two.oversetChars);
+  assert.deepEqual(auto.fill, two.fill, 'Auto and explicit two use the same masked scanlines');
+
+  const settled = await copyFit.settleToFit({
+    section,
+    images,
+    proposal: { ...OVER, body },
+    askForMore: async () => ({ data: { additions: ['याबाबत पुढील काम सुरू आहे.'] } }),
+    resizeBriefFor: () => 'the exact wording is irrelevant to this geometry test',
+  });
+
+  assert.equal(settled.fit.overset, false, 'the final copy has no hidden text below the block');
+  assert.equal(settled.acceptable, true, 'and the sentence cut is repaired instead of left short');
+  assert.equal(settled.fit.fill.ratio, 1, 'the irregular image block reaches its foot');
+});
+
 test('a cut at a sentence boundary, not mid-word - a block is cut from the bottom, the way a sub-editor cuts', async () => {
   const block = BLOCKS[0];
   const trimmed = await copyFit.trimToFit(block.section, block.images, { ...OVER, body: SENTENCE.repeat(20) });

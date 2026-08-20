@@ -1717,6 +1717,23 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
 
   // ------------------------------------------------------- a Smart Card ---
   {
+    // Accepting a card writes its flattened print fallback into the section's
+    // headline/body fields. Snapshot those fields first and put them back
+    // after the persistence checks; otherwise a successful browser net leaves
+    // its shared article fixture looking like a Sudoku until somebody notices.
+    const beforeCard = await page.evaluate(async ([ed, key]) => {
+      const pages = await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json());
+      const section = pages[0].sections.find((s) => s.section_key === key);
+      return {
+        headline: section.headline || '',
+        subheading: section.subheading || '',
+        body: section.body || '',
+        smartCardKey: section.smart_card_key || null,
+        smartCardData: section.smart_card_data || null,
+        status: section.status || 'editing',
+      };
+    }, [ED, KEY]);
+
     await page.locator('[data-smart-card="sudoku"]').click();
     await page.locator('#smartCardGenerate').click();
     await page.waitForTimeout(4000);
@@ -1776,6 +1793,20 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
       }), ED);
     say(stored.key === 'sudoku' && stored.rows === 9 && stored.solution,
       'stored as data, with the solution text could never carry', JSON.stringify(stored));
+
+    await page.evaluate(async ([ed, key, snapshot]) => {
+      const pages = await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json());
+      await fetch(`/api/pages/${pages[0].id}/sections/${key}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(snapshot),
+      });
+    }, [ED, KEY, beforeCard]);
+    await openEdition();
+    await block().click();
+    await page.waitForTimeout(1200);
+    say(await block().locator('.smart-card').count() === 0,
+      'and the net restores the article fixture after testing the card');
   }
 
   // --------------------------------------------------------- print view ---

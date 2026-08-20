@@ -4788,3 +4788,39 @@ lands. A pure geometry regression holds that either boxed neighbour removes the
 shared rule. The real controls net now checks the DOM rule count after Box and
 again after None, across the autosave boundary: **83/83**, no console/page
 errors. Unit verification: **1/1**.
+
+### 53. The eight completed groups have been re-audited (2026-08-20)
+
+Smart Cards were deliberately left untouched. The prompt-1060 work was traced
+again from control/API through storage, canvas, exact composition and press
+output. Seven groups had a concrete gap worth changing; the direct body-editing
+group was already internally consistent and its live net passed every relevant
+step (real caret, hidden composed lines, typing, Enter as a paragraph, blur back
+into the one Quill document, autosave and reload).
+
+The audit commits, one bounded correction at a time:
+
+- `fd928c5` — NULL/Auto columns reach the AI writer and copy-fit compositor;
+- `4a7d09e` — the Scribus footer aligns left / centre / right, so its date is
+  actually centred;
+- `870dd0b` — an explicit continuation cannot overwrite occupied work or cross
+  into another edition;
+- `ace5b28` — bulk current-news proposals retain and show their verified source
+  evidence, and unkeyed feature frames stay out;
+- `af468cc` — palette grounds/accents/treatments are enforced at the save
+  boundary and sanitised on read;
+- `2202e25` — the margin control/API/model agree on the compositor's 1 px
+  minimum;
+- `e634286` — page-owned separator rules follow a live Box/None decision across
+  autosave rather than leaving or restoring a double rule.
+
+Final combined verification on the current tree:
+
+- **855/855** Node unit/integration tests;
+- **83/83** real controls checks, no console or page errors;
+- **222/222** complete workspace checks, `ERRORS: (none)`.
+
+The user's pre-existing Groq, WEBP and cut-out changes, the recovered prompt
+history, `AGENTS.md` and `tests/browser/sweep.tmp.js` remain unstaged and were
+not modified by this audit. Smart Cards remain deferred until the desk asks to
+resume them.

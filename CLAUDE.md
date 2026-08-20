@@ -1050,6 +1050,35 @@ Body/display overset and an underfilled headline also disable acceptance. An
 honest `SOURCE_LIMITED_UNDERFILL` remains reviewable — insufficient supplied
 facts must not be padded with invented material merely to colour the bar green.
 
+The AI panel's visible fit language must name the **exact compositor**. Its old
+character-grid schematic is retained only for the explicitly unimplemented
+"More AI actions" request preview; it is never a real write/fill decision.
+`write` and `fill` both run the server-side exact settle loop after saving the
+live draft, then accept only the exact fingerprint they were measured against.
+
+### Direct exact-body editing is a bridge, not a second renderer
+
+`block-frame.js` retains the exact `bodyLines` composition it paints. A body
+double-click maps the page coordinate through the selected line's source offset
+(`line.at`, after removing the dateline prefix) into the one Quill document; a
+drag maps both endpoints into an authored Quill selection. The marks toolbar can
+therefore change a character, word, phrase or paragraph directly where it
+prints, while the exact composition remains the only visible body.
+
+Do not make the canonical body `contenteditable`: browser flow cannot reproduce
+the compositor's columns, balanced paragraphs or alpha-mask runaround. While
+this direct body bridge is active, Quill's alternate surface is hidden and has a
+body-target marker. Leaving for a display flow, picture or whole block blurs
+Quill and removes that marker. A hidden Quill root may receive programmatic
+focus during history refresh, which must not steal Arrow/Delete/Ctrl+Z from a
+selected layout object; `workspace.js` treats Quill as typing only while that
+marker is present.
+
+Picture PATCH responses contain the entire image list. Picture mutations are
+therefore serialized per workspace: parallel multi-select nudges otherwise risk
+an older response replacing a newer sibling coordinate. Bulk nudge persists in
+order and records one history step only after all selected pictures commit.
+
 Copy never arrives the right length, and a sub-editor has exactly three moves. All three exist:
 
 - **Cut it** — the worklist and preflight both say by how many characters.

@@ -414,9 +414,10 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
   //
   // A temporary contenteditable over the body looked plausible only on a
   // plain one-column block. It could not reproduce exact columns, paragraph
-  // balancing or picture runaround, so the page visibly changed on double
-  // click and changed back on blur. Quill is the one editable document; the
-  // canonical composition stays visible and repaints from it while typing.
+  // balancing or picture runaround. A body double-click therefore keeps the
+  // exact composition visible and focuses Quill invisibly behind it; the
+  // placed-line bridge maps the clicked page position into Quill's one source
+  // document, so there is no scroll/jump to a second-looking body surface.
   {
     const bodyOf = () => page.evaluate(async ([ed, key]) => {
       const pages = await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json());
@@ -426,7 +427,9 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
     await page.locator('#edBodyFrame').dblclick();
     await page.waitForTimeout(700);
     say(await page.evaluate(() => document.activeElement?.classList.contains('ql-editor')),
-      'a body double click focuses the one real Quill document');
+      'a body double click focuses the one real Quill document directly from the page');
+    say(await page.locator('#edWritingSurface').evaluate((el) => el.classList.contains('is-canonical-body-editor')),
+      'the alternate browser-flow body surface is hidden while the exact body is edited in place');
     say(await page.locator('#edBodyFrame').evaluate((el) => !el.hasAttribute('contenteditable')),
       'the body frame never becomes a second browser-flow renderer');
     say(await page.evaluate(() => {

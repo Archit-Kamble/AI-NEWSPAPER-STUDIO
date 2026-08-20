@@ -232,6 +232,11 @@ async function deleteGuide(guideId) {
 // occupied, and therefore how much copy the AI is asked for.
 
 let sectionImages = [];
+// Picture rows are returned as a complete list. Two concurrent PATCH calls
+// can therefore race: an older response can arrive last and replace a newer
+// local list. A single per-workspace queue preserves each edit's real order
+// for multi-select nudge, history replay and quick successive key presses.
+let imagePatchQueue = Promise.resolve();
 
 async function loadSectionImages() {
   const page = store.getCurrentPage();
@@ -401,14 +406,23 @@ async function persistImagePatch(imageId, patch) {
   const page = store.getCurrentPage();
   const key = store.getState().selectedSectionKey;
   if (!page || !key) return null;
-
-  const response = await fetch(
-    `/api/pages/${page.id}/sections/${encodeURIComponent(key)}/images/${imageId}`,
-    { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) },
-  );
-  if (!response.ok) return null;
-  sectionImages = await response.json();
-  return sectionImages;
+  const pageId = page.id;
+  const apply = async () => {
+    const response = await fetch(
+      `/api/pages/${pageId}/sections/${encodeURIComponent(key)}/images/${imageId}`,
+      { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) },
+    );
+    if (!response.ok) return null;
+    const rows = await response.json();
+    // A response for a block the desk has since left is still valid on the
+    // server, but must never replace the image list now shown for another
+    // block.
+    if (store.getCurrentPage()?.id === pageId && store.getState().selectedSectionKey === key) sectionImages = rows;
+    return rows;
+  };
+  const pending = imagePatchQueue.then(apply, apply);
+  imagePatchQueue = pending.catch(() => null);
+  return pending;
 }
 
 function imagePatchLabel(patch) {
@@ -469,7 +483,9 @@ async function reconcileImages(images) {
       const wantValue = coerce(wanted[rowKey] ?? (coerce === Number ? 0 : ""));
       if (wasValue !== wantValue) patch[patchKey] = wanted[rowKey];
     }
-    if (Object.keys(patch).length) await persistImagePatch(wanted.id, patch);
+    if (Object.keys(patch).length) {
+      await persistImagePatch(wanted.id, patch);
+    }
   }
   redrawCompose();
 }
@@ -1712,7 +1728,15 @@ function repaintSections(page) {
 // cursor, not the selected object. Every shortcut here is guarded on that.
 
 function isTypingTarget(el) {
-  return Boolean(el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable));
+  if (!el) return false;
+  if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") return true;
+  // Quill can receive programmatic focus while the workspace refreshes its
+  // one body document after undo/redo. That is not a desk typing into the
+  // body, so it must not swallow picture/history shortcuts. A real body edit
+  // marks its source surface explicitly; display fields remain ordinary rich
+  // contenteditables and retain browser-native text editing shortcuts.
+  if (el.closest?.("#edWritingSurface")) return el.closest("#edWritingSurface")?.classList.contains("is-body-target") === true;
+  return Boolean(el.isContentEditable);
 }
 
 function nudgeSelectedImage(dx, dy) {
@@ -1770,13 +1794,20 @@ async function alignSelectedImages(kind) {
 function nudgeSelectedImages(dx, dy) {
   const rows = selectedImageRows();
   if (rows.length < 2) return false;
-  Promise.all(rows.map((row) => persistImagePatch(row.id, {
-    x: Math.round((Number(row.x_px) || 0) + dx),
-    y: Math.round((Number(row.y_px) || 0) + dy),
-  }))).then(() => {
+  (async () => {
+    // Each PATCH returns the complete image list, so this deliberately uses
+    // the same ordered path as alignment. Parallel requests were able to
+    // overwrite a moved sibling with a stale response.
+    for (const row of rows) {
+      const result = await persistImagePatch(row.id, {
+        x: Math.round((Number(row.x_px) || 0) + dx),
+        y: Math.round((Number(row.y_px) || 0) + dy),
+      });
+      if (!result) return showNotice("The selected pictures could not be moved.");
+    }
     redrawCompose();
     history.record(store.getDraft(), { coalesce: false, label: "Pictures moved", kind: "image", images: sectionImages });
-  });
+  })();
   return true;
 }
 

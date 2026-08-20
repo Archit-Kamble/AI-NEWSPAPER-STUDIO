@@ -5061,3 +5061,43 @@ recomposition, paragraph Enter and persistence all pass. The complete workspace
 run finished **219/221**; its only failures were the pre-existing image-history
 redo and two-picture keyboard-nudge checks in the user's separate unstaged image
 work, with `ERRORS: (none)`. No provider call was made.
+
+### 60. Direct exact-body editing and editor-wide keyboard handoff are complete (2026-08-20)
+
+Task 3 closed the last body-editing workflow gap without reopening the
+two-renderer problem. The exact compositor now retains the placed body lines it
+paints in the Block Editor. A body double-click maps the page coordinate through
+that exact line (`line.at`) into the one Quill body document; a drag across
+visible composed copy maps both ends into a real Quill selection. The existing
+marks toolbar still applies to a character, word, sentence or selection, but
+the desk never jumps down to a browser-wrapped second copy. The hidden writing
+surface is an input bridge only; the exact composition is the only body shown.
+
+The handoff is explicit. Choosing a headline, subheading, picture or empty page
+ends direct body mode, blurs Quill and removes its body-target marker. This
+prevents a programmatically focused hidden Quill root after Undo from consuming
+the next Ctrl+Shift+Z or Arrow key as text input. The workspace keyboard guard
+now recognizes Quill as active typing only while that marker is set. This fixed
+the real resize redo regression while preserving native text undo during an
+actual body edit.
+
+Picture row mutations now run through one ordered queue. Image PATCH responses
+return the complete list, so parallel multi-picture requests could otherwise
+arrive out of order and replace a moved sibling with stale coordinates. Bulk
+nudge uses the same ordered persistence path as alignment and records one image
+history entry only after both rows are committed. The page is also guarded from
+installing a late response for a block the desk has already left.
+
+The AI write/fill accept path was audited rather than duplicated: it saves live
+draft changes first, requests the server's exact `copyFit.settleToFit()` loop,
+then accepts only if the response fingerprint recomposes identically against the
+current typography, columns and images. It blocks true body/display overset and
+headline underfill, but leaves an honest `SOURCE_LIMITED_UNDERFILL` reviewable
+instead of inventing prose. The visible panel copy now calls this the exact
+compositor; the old character-grid diagram remains only for clearly marked
+unimplemented request previews and never decides a real write or fill.
+
+Verification: `node tests/browser/workspace.browser.js` **222/222**, zero
+console/page errors; `node tests/browser/editor-controls.browser.js` **86/86**,
+including separate headline/subheading/body alignment, type size, marks, ink,
+lists and selected-body-word size. No provider call was made for this work.

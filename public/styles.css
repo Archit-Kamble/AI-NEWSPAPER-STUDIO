@@ -4852,6 +4852,19 @@ body.print-view .page-imprint {
   box-shadow: 0 0 0 2px rgba(196, 30, 58, 0.12);
 }
 .frame-writing-surface[hidden] { display: none; }
+/* Direct body editing keeps Quill (the one rich-text/range document) focused,
+   while the exact composed body remains the only visible story. This prevents
+   the old jump to a differently wrapped browser-flow copy below the block. */
+.frame-writing-surface.is-canonical-body-editor {
+  height: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
 .frame-writing-label {
   margin-bottom: 6px;
   color: #7a7a84;

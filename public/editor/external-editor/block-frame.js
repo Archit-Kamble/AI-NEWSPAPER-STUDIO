@@ -44,7 +44,7 @@ import { blockExpectsCopy } from "../layout/block-kinds.js";
 // The Devanagari-safe floor. The inline body editor sets the story at its
 // real leading, and 1.45 is already at the edge of clipping a matra stack -
 // see CLAUDE.md's note on why line_height must never be tidied downward.
-import { DEFAULT_BODY_FONT_PX } from "../layout/text-flow.js";
+import { DEFAULT_BODY_FONT_PX, datelineText } from "../layout/text-flow.js";
 import { smartCardMarkup } from "../smart-cards/smart-cards.js";
 // The same functions the page canvas draws a headline, a deck and a flowed
 // body with - so the WYSIWYG frame and the newspaper page can never drift
@@ -77,7 +77,12 @@ let hooks = {};
 // Shift+click could leave the two disagreeing: a picture dropped from the
 // Set by Shift+click stayed selected on screen because the OTHER field still
 // named it. One field, no drift.
-let state = { section: null, view: null, images: [], selectedIds: new Set(), selectedPart: "block" };
+let state = {
+  section: null, view: null, images: [], selectedIds: new Set(), selectedPart: "block",
+  // The placed lines that painted the canvas. Direct body interaction maps
+  // through these exact positions instead of asking browser flow to re-wrap.
+  composition: null,
+};
 
 // ---------------------------------------------------------------- loading ---
 
@@ -336,6 +341,7 @@ function layoutTextFrames() {
   // own flow map with its own defaults, which is precisely how the editor
   // came to disagree with the page about where a headline was.
   const composition = sectionComposition(renderSection, state.view);
+  state.composition = composition;
   const measure = composition ? composition.content.measure : (Number(state.section.width_px) || 0) - margin * 2;
 
   // Where each flow actually ended up. An absent flow has no band at all -
@@ -409,6 +415,59 @@ function layoutTextFrames() {
 // renderer used by Layout. The separate plain inputs remain only as the
 // existing state/persistence path and counter owner.
 let inlineTextEdit = null;
+let canonicalBodyEdit = false;
+
+function endCanonicalBodyEdit({ blur = false } = {}) {
+  if (!canonicalBodyEdit) return;
+  canonicalBodyEdit = false;
+  document.getElementById("edWritingSurface")?.classList.remove("is-canonical-body-editor", "is-body-target");
+  // The source document is intentionally hidden while the exact composition
+  // remains on the page. Once the desk targets another object it must also
+  // give up keyboard focus: otherwise Arrow/Delete and editor history keys
+  // keep going to an invisible contenteditable instead of the selected
+  // picture or block.
+  if (blur && quill?.hasFocus()) quill.blur();
+}
+
+// Maps a pointer on the exact composed page to Quill's one source document.
+// `line.at` is the compositor's source offset; dateline text is composed
+// before authored body text, so it is removed before addressing Quill.
+function bodyOffsetAt(point) {
+  const page = document.getElementById("edFramePage");
+  const lines = state.composition?.bodyLines || [];
+  if (!page || !lines.length || !point) return null;
+  const rect = page.getBoundingClientRect();
+  const scale = pageScale();
+  const x = (point.x - rect.left) * scale;
+  const y = (point.y - rect.top) * scale;
+  const line = lines.reduce((best, candidate) => {
+    const vertical = Math.max(0, Math.max(candidate.y - y, y - (candidate.y + candidate.height)));
+    const horizontal = Math.max(0, Math.max(candidate.x - x, x - (candidate.x + candidate.measure)));
+    const score = vertical * 4 + horizontal;
+    return !best || score < best.score ? { line: candidate, score } : best;
+  }, null)?.line;
+  if (!line) return null;
+  // A justified line is painted across its full measure, not merely its
+  // natural glyph advance. Map pointer positions through that painted measure
+  // so a click near a justified line's right edge does not incorrectly land
+  // in its final word.
+  const fraction = Math.max(0, Math.min(1, (x - line.x) / Math.max(1, line.measure)));
+  const authored = Math.round((Number(line.at) || 0) + String(line.text || "").length * fraction)
+    - datelineText(state.view || {}).length;
+  const length = quill ? Math.max(0, quill.getLength() - 1) : 0;
+  return Math.max(0, Math.min(length, authored));
+}
+
+function beginCanonicalBodyEdit(point) {
+  finishInlineTextEdit();
+  hooks.onSelectPart?.("body");
+  if (!quill) return;
+  canonicalBodyEdit = true;
+  const writing = document.getElementById("edWritingSurface");
+  writing?.classList.add("is-body-target", "is-canonical-body-editor");
+  quill.focus();
+  quill.setSelection(bodyOffsetAt(point) ?? Math.max(0, quill.getLength() - 1), 0, "silent");
+}
 
 const INLINE_TEXT = {
   headline: {
@@ -522,6 +581,7 @@ function caretAt(frame, at) {
 // full semantic text from `state.view`, which is also the actual source of
 // truth this text is edited FROM in the first place.
 function beginInlineTextEdit(part, at = null) {
+  endCanonicalBodyEdit();
   finishInlineTextEdit();
   document.getElementById("edWritingSurface")?.classList.remove("is-body-target");
 
@@ -622,46 +682,30 @@ function bindTextFrames() {
   const subheading = document.getElementById("edSubheadingFrame");
   const body = document.getElementById("edBodyFrame");
 
-  headline?.addEventListener("click", () => hooks.onSelectPart?.("headline"));
+  headline?.addEventListener("click", () => {
+    endCanonicalBodyEdit({ blur: true });
+    hooks.onSelectPart?.("headline");
+  });
   headline?.addEventListener("dblclick", (event) => {
     event.preventDefault();
     beginInlineTextEdit("headline");
   });
 
-  subheading?.addEventListener("click", () => hooks.onSelectPart?.("subheading"));
+  subheading?.addEventListener("click", () => {
+    endCanonicalBodyEdit({ blur: true });
+    hooks.onSelectPart?.("subheading");
+  });
   subheading?.addEventListener("dblclick", (event) => {
     event.preventDefault();
     beginInlineTextEdit("subheading");
   });
 
 
-  // Quill is the story's ONE editable document. The exact compositor remains
-  // visible on the page and repaints from Quill on every keystroke; it must
-  // never be hidden behind a temporary browser-flow rectangle, because CSS
-  // cannot reproduce the compositor's columns, paragraph balancing or image
-  // runaround. That temporary surface is why the story looked different until
-  // the desk clicked outside. Headline/deck stay safe as semantic overlays:
-  // each is one short flow; the body is not.
-  const activateBodyEditor = () => {
-    finishInlineTextEdit();
-    hooks.onSelectPart?.("body");
-    const writing = document.getElementById("edWritingSurface");
-    writing?.classList.add("is-body-target");
-    writing?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    requestAnimationFrame(() => {
-      if (!quill) return;
-      quill.focus();
-      if (!quill.getSelection()) {
-        quill.setSelection(Math.max(0, quill.getLength() - 1), 0, "silent");
-      }
-    });
-  };
-
   body?.addEventListener("click", () => hooks.onSelectPart?.("body"));
   body?.addEventListener("dblclick", (event) => {
     event.preventDefault();
     event.stopPropagation();
-    activateBodyEditor();
+    beginCanonicalBodyEdit({ x: event.clientX, y: event.clientY });
   });
 
   const page = document.getElementById("edFramePage");
@@ -685,11 +729,32 @@ function bindTextFrames() {
 
     event.preventDefault();
     event.stopPropagation();
-    activateBodyEditor();
+    beginCanonicalBodyEdit({ x: event.clientX, y: event.clientY });
+  }, true);
+
+  // A drag across the visible composed body selects that range in Quill. The
+  // toolbar can therefore mark a character, word, sentence or phrase directly
+  // where it prints, without a second browser-flow body appearing below.
+  page?.addEventListener("pointerdown", (event) => {
+    if (!canonicalBodyEdit || event.target.closest(".pic-frame")) return;
+    const rect = body?.getBoundingClientRect();
+    if (!rect || event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) return;
+    const start = bodyOffsetAt({ x: event.clientX, y: event.clientY });
+    if (start === null) return;
+    event.preventDefault();
+    window.addEventListener("pointerup", (up) => {
+      const end = bodyOffsetAt({ x: up.clientX, y: up.clientY });
+      quill?.focus();
+      const finish = end ?? start;
+      quill?.setSelection(Math.min(start, finish), Math.abs(finish - start), "silent");
+    }, { once: true });
   }, true);
 
   page?.addEventListener("click", (event) => {
-    if (event.target === event.currentTarget) hooks.onSelectPart?.("block");
+    if (event.target === event.currentTarget) {
+      endCanonicalBodyEdit({ blur: true });
+      hooks.onSelectPart?.("block");
+    }
   });
 }
 
@@ -821,6 +886,7 @@ function bindPictureFrames() {
     if (!frame) return;
     if (event.target.closest("[data-pic-remove]")) return;
 
+    endCanonicalBodyEdit({ blur: true });
     event.preventDefault();
     const id = Number(frame.dataset.imageId);
     const handle = event.target.closest("[data-pic-size]");
@@ -1261,8 +1327,15 @@ function refreshMarksToolbarState() {
 }
 
 export async function mountFrame(section, view, images, callbacks, selectedPart = "block", selectedImageIds = []) {
+  // The editor can be mounted again while a previous block had direct body
+  // input active (edition reload, or reopening the workspace). Its hidden
+  // source document must never follow that old block into the new one.
+  endCanonicalBodyEdit({ blur: true });
   hooks = callbacks || {};
-  state = { section, view, images: images || [], selectedIds: new Set(selectedImageIds), selectedPart };
+  state = {
+    section, view, images: images || [], selectedIds: new Set(selectedImageIds), selectedPart,
+    composition: null,
+  };
 
   const host = document.getElementById("edQuill");
   if (!host) return;
@@ -1389,6 +1462,11 @@ export async function mountFrame(section, view, images, callbacks, selectedPart 
 
 /** Live sync: the block changed under us. */
 export function refreshFrame(section, view, images, source, selectedPart, selectedImageIds) {
+  // Selecting another block is also leaving the direct body target, even
+  // though the click happened on the page canvas rather than inside this
+  // frame. Without this handoff the prior block's hidden Quill document could
+  // remain focused while the desk was looking at a different block.
+  if (canonicalBodyEdit && state.section?.id !== section?.id) endCanonicalBodyEdit({ blur: true });
   state = {
     ...state,
     section,
@@ -1396,6 +1474,7 @@ export function refreshFrame(section, view, images, source, selectedPart, select
     images: images || [],
     selectedPart: selectedPart ?? state.selectedPart,
     selectedIds: selectedImageIds ? new Set(selectedImageIds) : state.selectedIds,
+    composition: null,
   };
   layoutPage();
   layoutTextFrames();

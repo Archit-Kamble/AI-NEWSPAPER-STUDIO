@@ -47,11 +47,10 @@ export function buildAiRequest(intent, view) {
 
 // Step 6 of the flow, and the heart of it.
 //
-// The AI is not asked for "about 400 words". It is handed the block as a
-// character grid - H for headline, S for subheading, T for copy, I for where
-// the picture sits - and a character budget that already accounts for the
-// picture's shape. A ragged cut-out produces ragged rows, so text runaround is
-// part of the same brief rather than a separate problem.
+// This preview is for the unfinished, explicitly marked "More AI actions"
+// only. It remains a helpful schematic for a person reading a future request,
+// but it is never a fit decision: Write and Fill go to the server's exact
+// compositor, which measures real shaped lines, columns and picture runaround.
 export function fitBrief(section, view, images = []) {
   const map = buildFlowMap(section, view, images.map(flowImageFromRow));
   const fit = flowFit(map);
@@ -197,7 +196,7 @@ export function aiPanelMarkup(view) {
         <label class="toggle"><input type="checkbox" id="edAiWriteHeadline" checked> Write a headline</label>
         <label class="toggle"><input type="checkbox" id="edAiWriteSubheading" checked> Write a subheading</label>
       </div>
-      <p class="ai-seed-note" id="edAiSeedNote">It is written to fit — the character grid says how much room this block has.</p>
+      <p class="ai-seed-note" id="edAiSeedNote">It is written to fit — the exact compositor measures this block's real lines, columns and picture room.</p>
     </div>
 
     <section class="ai-retrieval" id="aiRetrievalStatus" hidden></section>

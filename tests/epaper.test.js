@@ -82,3 +82,13 @@ test('the exact-canvas capture handoff is one-use, opaque and never a public edi
   assert.doesNotMatch(html, /<\/script><script>bad\(\)<\/script>/, 'edition copy cannot end the embedded JSON script');
   assert.match(html, /\\u003c\/script>/);
 });
+
+test('the editor Publish action is one confirmation, while optional PDF e-paper publishing lives in management', async () => {
+  const publicationUi = await fs.readFile(path.join(epaper.PUBLIC_DIR, 'editor', 'publication.js'), 'utf8');
+  const managementUi = await fs.readFile(path.join(epaper.PUBLIC_DIR, 'admin', 'epapers.js'), 'utf8');
+  assert.match(publicationUi, /id="confirmPublish"/);
+  assert.match(publicationUi, /\/publish-current/);
+  assert.doesNotMatch(publicationUi, /scribusFile|final-files|publishEpaper|printPdf/);
+  assert.match(managementUi, /Publish from a finished PDF/);
+  assert.match(managementUi, /\/epaper\/pdf/);
+});

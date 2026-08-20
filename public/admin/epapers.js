@@ -13,7 +13,9 @@ function publishedWhen(value) {
 }
 
 function sourceLabel(item) {
-  return item.source === 'editor_snapshot' ? 'Current editor snapshot' : 'Final PDF / Scribus';
+  if (item.source === 'editor_snapshot') return 'Current editor snapshot';
+  if (item.source === 'uploaded_pdf') return 'Uploaded e-paper PDF';
+  return 'Press-final PDF';
 }
 
 function row(item) {
@@ -26,25 +28,39 @@ function row(item) {
 }
 
 export async function renderEpapers(host, { rightPanel } = {}) {
-  if (rightPanel) rightPanel.innerHTML = '<h3>E-paper</h3><p>The checked issue is the only public e-paper. Other released issues stay private to this list until selected.</p>';
+  if (rightPanel) rightPanel.innerHTML = '<h3>E-paper</h3><p>The checked issue is the only public e-paper. Publish the editor view in one confirmation, or upload an optional finished PDF here. Both use the saved news-block frames for their maps.</p>';
   host.innerHTML = '<div class="form-section"><h2>E-paper</h2><p class="muted">Loading released editions…</p></div>';
 
   let editions;
+  let newspapers;
   try {
-    const response = await fetch('/api/epapers');
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    editions = await response.json();
+    const [releasesResponse, newspapersResponse] = await Promise.all([
+      fetch('/api/epapers'), fetch('/api/newspapers'),
+    ]);
+    if (!releasesResponse.ok || !newspapersResponse.ok) throw new Error(`HTTP ${releasesResponse.status}/${newspapersResponse.status}`);
+    [editions, newspapers] = await Promise.all([releasesResponse.json(), newspapersResponse.json()]);
   } catch (error) {
     console.error('E-paper list failed:', error);
     host.innerHTML = '<div class="form-section"><h2>E-paper</h2><p>The e-paper list could not be loaded.</p></div>';
     return;
   }
 
+  const editionOptions = newspapers.map((item) => {
+    const date = marathiDate(item.publication_date || item.date || '');
+    return `<option value="${Number(item.id)}">${escapeHtml(`${date} — ${item.name || 'Newspaper'} (${Number(item.page_count) || 0} pages)`)}</option>`;
+  }).join('');
+
   host.innerHTML = `<div class="form-section epaper-admin">
     <div class="epaper-admin-heading"><div><h2>E-paper</h2><p>Released editions · latest first. Select exactly one issue for the public link.</p></div></div>
     <div class="epaper-public-url"><label for="epaperPublicUrl">Public E-paper URL</label><div><input id="epaperPublicUrl" readonly value="${escapeHtml(`${window.location.origin}/epaper`)}"><button class="btn-secondary" type="button" data-copy-epaper-url>Copy URL</button><a class="btn-secondary" href="/epaper" target="_blank" rel="noopener">Open public view</a></div><p class="muted">This URL is read-only. It never carries an editor session, selected edition id or write permission.</p></div>
+    <form class="epaper-pdf-publish" data-epaper-pdf-form>
+      <div><h3>Publish from a finished PDF</h3><p>Optional. Upload the finished PDF for an edition when it is the exact page readers should see. Its page count must match the edition. Every populated news block keeps the same saved page rectangle for its click target and share crop.</p></div>
+      <label><span>Edition</span><select data-epaper-pdf-edition ${editionOptions ? '' : 'disabled'}>${editionOptions || '<option>No editions available</option>'}</select></label>
+      <label><span>PDF</span><input type="file" accept="application/pdf,.pdf" data-epaper-pdf-file ${editionOptions ? '' : 'disabled'}></label>
+      <button class="btn-submit" type="submit" data-epaper-pdf-submit ${editionOptions ? '' : 'disabled'}>Upload PDF &amp; publish</button>
+    </form>
     <label class="epaper-admin-search"><span>Search</span><input type="search" placeholder="Date, district or newspaper…" data-epaper-search></label>
-    <p class="muted" data-epaper-empty ${editions.length ? 'hidden' : ''}>No released e-paper yet. Open an edition and choose final-PDF or current-editor publishing.</p>
+    <p class="muted" data-epaper-empty ${editions.length ? 'hidden' : ''}>No released e-paper yet. Use Publish in the editor, or upload a finished PDF above.</p>
     <div class="epaper-admin-list">${editions.map(row).join('')}</div>
   </div>`;
 
@@ -68,6 +84,28 @@ export async function renderEpapers(host, { rightPanel } = {}) {
     const url = host.querySelector('#epaperPublicUrl').value;
     try { await navigator.clipboard.writeText(url); window.alert('Public e-paper URL copied.'); }
     catch { window.prompt('Copy this public e-paper URL:', url); }
+  });
+
+  host.querySelector('[data-epaper-pdf-form]')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const file = form.querySelector('[data-epaper-pdf-file]').files[0];
+    const id = Number(form.querySelector('[data-epaper-pdf-edition]').value);
+    if (!file || !id) return window.alert('Choose both an edition and a PDF.');
+    const button = form.querySelector('[data-epaper-pdf-submit]');
+    const data = new FormData();
+    data.append('printPdf', file);
+    button.disabled = true;
+    button.textContent = 'Building e-paper…';
+    const response = await fetch(`/api/newspapers/${id}/epaper/pdf`, { method: 'POST', body: data });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      button.disabled = false;
+      button.textContent = 'Upload PDF & publish';
+      return window.alert(result.error || 'The PDF could not be published as an e-paper.');
+    }
+    window.alert(`Published ${result.pages} PDF pages and mapped ${result.stories} news blocks.`);
+    renderEpapers(host, { rightPanel });
   });
 
   host.querySelectorAll('[data-select-epaper]').forEach((radio) => {

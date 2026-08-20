@@ -109,10 +109,35 @@ page/story PNGs under `public/uploads/epaper/:id/` atomically:
   permission; it is not a public reader route. This is how the normal canvas
   can be captured without making raw editor APIs public.
 
+The workspace **Publish** button means only the second route. It is one
+confirmation and must not show or gate on Scribus, CMYK PDF, press readiness
+or page sign-off; empty blocks are valid for a web release. The press-final
+route remains available to press production elsewhere, but it is not the
+editor's daily public-publish action.
+
+`POST /api/newspapers/:id/epaper/pdf` is the optional finished-PDF web release
+route exposed from the desk-only E-paper management screen. It needs an
+edition-matching page count but not press readiness. Its upload is stored as
+`publication_files.file_type = 'epaper_pdf'`, not `print_pdf`, so it cannot
+misrepresent an unapproved web PDF as a CMYK press artifact or change the
+edition's press status. The frozen source is `uploaded_pdf`, and the public
+download route reads that exact e-paper PDF. The old publication-files check
+constraint must include `epaper_pdf`; the guarded migration is in
+`schema.sql` and must be applied manually because the schema never runs at
+boot.
+
 Later newsroom edits cannot alter either release. Story cards are 1080 px PNG
 crops with the real masthead composed above them. Only editorial news blocks
 are clickable; adverts, features and Smart Cards are deliberately outside this
 release pass.
+
+**There is one e-paper mapping source.** `epaper.buildEdition()` derives each
+populated editorial block's percentage rectangle from its saved page geometry.
+The exact-canvas and uploaded-PDF paths both freeze and render those same
+rectangles for reader hotspots and story-card crops. Do not add an independent
+PDF coordinate map: it will drift from the editor. A PDF must be exported from
+the same saved layout for the block rectangles to describe it exactly; the
+page-count check prevents attaching a different edition by accident.
 
 The owner E-paper screen (`/api/epapers`, desk-only) is a searchable release
 list with a radio button. Its checked row is the only public release. The safe

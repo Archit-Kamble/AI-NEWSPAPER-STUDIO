@@ -43,6 +43,16 @@ async function latestPdf(newspaperId) {
   return files.find((file) => file.file_type === 'print_pdf')?.storage_path || null;
 }
 
+async function latestEpaperPdf(newspaperId) {
+  const files = await publicationRepository.latestByNewspaper(newspaperId);
+  // An e-paper upload belongs to the web release and never claims to be the
+  // accepted CMYK press artifact. A real press PDF remains a fallback for the
+  // stricter production release route.
+  return files.find((file) => file.file_type === 'epaper_pdf')?.storage_path
+    || files.find((file) => file.file_type === 'print_pdf')?.storage_path
+    || null;
+}
+
 async function rasterizePdf(pdfPath, outputPrefix, { run = execFileAsync } = {}) {
   await run(process.env.PDFTOPPM_BIN || '/usr/bin/pdftoppm', [
     '-png', '-cropbox', '-r', String(RASTER_DPI), pdfPath, outputPrefix,
@@ -248,6 +258,58 @@ async function publishCurrentEdition(newspaperId, actor, options = {}) {
   }
 }
 
+// E-paper PDF publishing is intentionally independent of press readiness.
+// A desk may receive an already-designed PDF for web publication while blocks
+// are still empty or editorial sign-off is incomplete. The saved block frames
+// remain the sole map for page links and share-image crops; no second,
+// PDF-specific coordinate system is introduced here.
+async function publishUploadedPdfEdition(newspaperId, uploadedFile, actor, options = {}) {
+  const id = Number(newspaperId);
+  const paper = await newspaperRepository.findById(id);
+  if (!paper) return failure('EPAPER_NOT_FOUND', 'No such edition.');
+  if (!uploadedFile?.filename) return failure('EPAPER_PDF_REQUIRED', 'Choose a PDF to publish.');
+
+  const pdfUrl = `/uploads/${uploadedFile.filename}`;
+  const pdfPath = publicFile(pdfUrl);
+  if (!pdfPath) return failure('EPAPER_PDF_INVALID', 'The uploaded PDF could not be found.');
+  let recorded = false;
+  try {
+    await fs.access(pdfPath);
+    const snapshot = await epaper.buildEdition(id);
+    if (!snapshot?.pages?.length) return failure('EPAPER_CURRENT_EMPTY', 'This edition has no pages to publish.');
+
+    await fs.mkdir(epaper.EPAPER_DIR, { recursive: true });
+    const tempDir = await fs.mkdtemp(path.join(epaper.EPAPER_DIR, `.publishing-pdf-${id}-`));
+    try {
+      const rasterize = options.rasterize || rasterizePdf;
+      await rasterize(pdfPath, path.join(tempDir, 'page'), options);
+      const pageFiles = await numberedPageFiles(tempDir);
+      if (pageFiles.length !== snapshot.pages.length) {
+        return failure(
+          'EPAPER_PAGE_COUNT_MISMATCH',
+          `The uploaded PDF has ${pageFiles.length} pages but this edition has ${snapshot.pages.length}.`,
+        );
+      }
+      await publicationRepository.save(id, 'epaper_pdf', pdfUrl, actor?.id);
+      recorded = true;
+      return await finishRelease(snapshot, paper, tempDir, {
+        ...options,
+        source: 'uploaded_pdf',
+        pdfUrl: `/epaper/${id}/pdf`,
+      });
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
+  } catch (error) {
+    return failure('EPAPER_BUILD_FAILED', `The e-paper could not be built: ${error.message}`);
+  } finally {
+    // Multer has already written the temporary upload into public/uploads. If
+    // it could not become a release record, remove it so failed page-count or
+    // rasterisation attempts do not accumulate orphaned public files.
+    if (!recorded) await fs.rm(pdfPath, { force: true }).catch(() => {});
+  }
+}
+
 async function unpublishEdition(newspaperId) {
   const id = Number(newspaperId);
   const paper = await newspaperRepository.findById(id);
@@ -260,6 +322,6 @@ async function unpublishEdition(newspaperId) {
 
 module.exports = {
   RASTER_DPI,
-  publicFile, cropBox, rasterizePdf, numberedPageFiles, storyCard, enrichSnapshot,
-  renderCurrentPages, publishEdition, publishCurrentEdition, unpublishEdition,
+  publicFile, latestEpaperPdf, cropBox, rasterizePdf, numberedPageFiles, storyCard, enrichSnapshot,
+  renderCurrentPages, publishEdition, publishCurrentEdition, publishUploadedPdfEdition, unpublishEdition,
 };

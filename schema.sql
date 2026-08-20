@@ -294,11 +294,19 @@ CREATE TABLE IF NOT EXISTS section_images (
 CREATE TABLE IF NOT EXISTS publication_files (
   id SERIAL PRIMARY KEY,
   newspaper_id INTEGER NOT NULL REFERENCES newspapers(id) ON DELETE CASCADE,
-  file_type VARCHAR(30) NOT NULL CHECK (file_type IN ('scribus_project', 'print_pdf')),
+  file_type VARCHAR(30) NOT NULL CHECK (file_type IN ('scribus_project', 'print_pdf', 'epaper_pdf')),
   storage_path VARCHAR(1000) NOT NULL,
   uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- A web PDF is deliberately a third artifact: it may be uploaded before
+-- press sign-off, so it must never be stored as the CMYK print PDF merely to
+-- make e-paper publication work. Rebuild the original named check safely for
+-- databases created before this artifact existed.
+ALTER TABLE publication_files DROP CONSTRAINT IF EXISTS publication_files_file_type_check;
+ALTER TABLE publication_files ADD CONSTRAINT publication_files_file_type_check
+  CHECK (file_type IN ('scribus_project', 'print_pdf', 'epaper_pdf'));
 
 CREATE TABLE IF NOT EXISTS edition_history (
   id SERIAL PRIMARY KEY,

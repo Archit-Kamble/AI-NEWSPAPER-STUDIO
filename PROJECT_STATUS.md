@@ -4,6 +4,40 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zzg. Separate one-click web publishing from optional PDF e-paper release (2026-08-20)
+
+Implemented on the isolated, unmerged branch
+`codex/epaper-publish-workflow`. The main editor **Publish** control is now a
+single confirmation: it freezes the exact current canvas through
+`POST /api/newspapers/:id/publish-current`. It no longer presents Scribus,
+CMYK PDF, press-readiness or sign-off steps. Empty blocks are allowed, and a
+draft remains a draft; press production continues to have its own strict
+`final-files` / `publish` route for when it is actually needed.
+
+E-paper management now has the optional **Publish from a finished PDF** form.
+It lists the desk's editions, accepts a PDF, checks that its page count matches
+the edition, rasterises it into the same immutable release directory, and
+offers the original PDF from the public reader. This route is
+`POST /api/newspapers/:id/epaper/pdf`; it intentionally bypasses press
+readiness but never writes `print_pdf` or changes the paper's press status.
+Instead it stores a distinct `publication_files.file_type = 'epaper_pdf'` and
+marks the frozen manifest/row source `uploaded_pdf`. `schema.sql` migrates the
+existing check constraint, and the local database received that migration.
+
+Both current-canvas and PDF releases use the exact same saved normalized
+editorial-block rectangles from `epaper.buildEdition()` for reader click maps
+and story-image crops. There is no PDF-only remapper that could drift from the
+editor geometry. Therefore a finished PDF exported from the same saved layout
+has the precise page image the designer approved and each populated news block
+retains its own page rectangle. Adverts, Smart Cards and standing features
+remain intentionally non-clickable.
+
+Verification: focused e-paper/publication/production suites passed **17/17**,
+including a new draft PDF release proof that verifies its source, public PDF,
+unchanged draft status and equality of all frozen/live block rectangles.
+
+---
+
 ## 0zzf. Current-editor e-paper publishing and single public selection (2026-08-20)
 
 Implemented on the isolated, unmerged branch

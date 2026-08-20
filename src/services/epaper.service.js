@@ -211,12 +211,15 @@ async function publishedAsset(newspaperId, filename) {
   return releasedAsset(newspaperId, filename);
 }
 
-/** The accepted PDF is public through this named, status-gated route only. */
+/** The PDF named by the frozen release is public through this route only. */
 async function releasedPdf(newspaperId, { includePrivate = false } = {}) {
   const snapshot = await readRelease(newspaperId, { publicOnly: !includePrivate });
   if (!snapshot) return null;
   const files = await publicationRepository.latestByNewspaper(Number(newspaperId));
-  const url = files.find((file) => file.file_type === 'print_pdf')?.storage_path;
+  const source = snapshot.edition?.source;
+  const url = source === 'uploaded_pdf'
+    ? files.find((file) => file.file_type === 'epaper_pdf')?.storage_path
+    : files.find((file) => file.file_type === 'print_pdf')?.storage_path;
   if (!String(url || '').startsWith('/uploads/')) return null;
   const file = path.resolve(PUBLIC_DIR, `.${url}`);
   const root = path.resolve(PUBLIC_DIR, 'uploads') + path.sep;

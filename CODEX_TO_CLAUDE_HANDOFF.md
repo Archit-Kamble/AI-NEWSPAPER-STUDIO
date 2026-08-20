@@ -98,6 +98,34 @@ Its resulting public 1320×2120 PNG was visually compared with the editor
 canvas and matches its masthead, sections, image transforms, newspaper rules,
 type and footer.
 
+## Follow-up: simple Publish plus optional e-paper PDF
+
+The branch `codex/epaper-publish-workflow` contains this separate unmerged
+commit. It corrects the workflow split the user called out:
+
+- The workspace Publish dialog is now one confirmation that releases the
+  current exact editor canvas. It contains no Scribus upload, CMYK PDF,
+  sign-off or press-readiness control. Empty blocks are valid and the edition
+  status is never changed.
+- E-paper management, not Publish, has a **Publish from a finished PDF** form
+  with an edition selector. `POST /api/newspapers/:id/epaper/pdf` validates the
+  page count, rasterises the PDF, creates the normal immutable page/story
+  release and keeps the current radio-selection lifecycle.
+- The uploaded web PDF has a new explicit `epaper_pdf` file type and frozen
+  source `uploaded_pdf`; it is not saved as `print_pdf`, requires no press
+  gate, and cannot accidentally make a draft claim press-final status.
+  `schema.sql` alters the check constraint and the local database migration
+  was run with the existing `DB_*` connection values.
+- Current editor and PDF releases share the same normalized persisted
+  editorial-block rectangles. No PDF-only mapper was added; one saved geometry
+  source drives reader hotspots and social-card crops. This is exact when the
+  uploaded PDF is exported from that same layout. A page-count mismatch returns
+  a conflict and removes the failed temporary upload.
+
+Focused e-paper/publication/production testing passed 17/17, including the
+new draft PDF release test which confirms unchanged status, `uploaded_pdf`,
+the public download and exact frozen/live hotspot equality.
+
 ## Codex-era commits after the imported Claude history
 
 The imported handoff and `PROJECT_STATUS.md` indicate that the audit/fill work

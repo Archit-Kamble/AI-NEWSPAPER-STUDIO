@@ -177,6 +177,19 @@ async function publishCurrentEpaper(req, res) {
   res.status(status).json(result);
 }
 
+async function publishUploadedEpaperPdf(req, res) {
+  const result = await epaperPublicationService.publishUploadedPdfEdition(
+    parseInt(req.params.id, 10),
+    req.file,
+    req.session.user,
+  );
+  if (result.ok) return res.json(result);
+  const status = result.code === 'EPAPER_NOT_FOUND' ? 404
+    : result.code === 'EPAPER_PAGE_COUNT_MISMATCH' ? 409
+      : 400;
+  res.status(status).json(result);
+}
+
 async function unpublishEpaper(req, res) {
   const result = await epaperPublicationService.unpublishEdition(parseInt(req.params.id, 10));
   if (!result.ok) return res.status(result.code === 'EPAPER_NOT_FOUND' ? 404 : 400).json(result);
@@ -300,7 +313,7 @@ module.exports = {
   create, start, resize, ladder, supportedPageCounts, list, latest, getOne, update, saveFinalFiles,
   createDistrictEdition, listDistrictEditions, printedPages,
   epaper, epaperHtml, selectedEpaperHtml, epaperPreviewHtml, epaperCanvasCaptureHtml, epaperList, selectEpaper,
-  epaperAsset, epaperPdf, publishEpaper, publishCurrentEpaper, unpublishEpaper,
+  epaperAsset, epaperPdf, publishEpaper, publishCurrentEpaper, publishUploadedEpaperPdf, unpublishEpaper,
   preflight, worklist, status, history, features, compositionPlan, compositionApply,
   scribus, pressPackage,
 };

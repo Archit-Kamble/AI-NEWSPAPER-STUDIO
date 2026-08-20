@@ -26,10 +26,13 @@ edit desk-approved copy. Desk review stores reviewer, timestamp and note.
 **Settings** now persists one owner-maintained, validated publication record:
 publication/publisher identity, office address, contact email/phone, public
 website, newsroom timezone and default writing language. Existing editions are
-never silently changed by setup edits. The schema migration was applied to the
-local database. Verification: the full suite passes **867/867**, and focused
-reporter/press integration tests pass **14/14**, including full create → file →
-review → block → restore behavior.
+never silently changed by setup edits. Its editable identity fields are applied
+through the one shared `identityFor()` provider, so the canvas furniture,
+e-paper metadata and Scribus output change together after an edition refresh;
+registered artwork/RNI/legal declaration remain protected. The schema migration
+was applied to the local database. Verification: the full suite passes
+**867/867**, and focused reporter/press integration tests pass **14/14**,
+including full create → file → review → block → restore behavior.
 
 ---
 

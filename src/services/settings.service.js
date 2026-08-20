@@ -1,10 +1,17 @@
 const settingsRepository = require('../repositories/settings.repository');
+const { applyPublicationSettings } = require('../layout/identity');
 
 const TIMEZONES = new Set(['Asia/Kolkata', 'UTC']);
 const LANGUAGES = new Set(['mr', 'hi', 'en']);
 const text = (value, max) => String(value || '').trim().slice(0, max);
 
 async function generalSettings() { return settingsRepository.get(); }
+
+async function hydratePublicationIdentity() {
+  const settings = await generalSettings();
+  applyPublicationSettings(settings);
+  return settings;
+}
 
 async function saveGeneralSettings(body, actor) {
   const publicationName = text(body?.publicationName, 200);
@@ -22,7 +29,10 @@ async function saveGeneralSettings(body, actor) {
     publisherName: text(body?.publisherName, 200), address: text(body?.address, 4000),
     contactPhone: text(body?.contactPhone, 40),
   }, actor?.id || null);
+  // Canvas masthead/folios, e-paper metadata and Scribus all consume
+  // identityFor(), so this is the one update that reaches every output.
+  applyPublicationSettings(settings);
   return { settings };
 }
 
-module.exports = { generalSettings, saveGeneralSettings };
+module.exports = { generalSettings, saveGeneralSettings, hydratePublicationIdentity };

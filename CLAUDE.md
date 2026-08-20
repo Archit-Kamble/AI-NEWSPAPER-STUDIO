@@ -1043,7 +1043,12 @@ protected access.
 
 General publication settings are one validated owner-only record
 (`publication_settings`): identity, contact details, website, timezone and
-default writing language. Editing it never retroactively rewrites an edition.
+default writing language. Its editable identity fields feed the canvas
+masthead/folio furniture, e-paper metadata and Scribus output; therefore an
+open edition picks them up on refresh without changing its stories or layout.
+The registered nameplate artwork, RNI registration and legal printer's
+declaration are deliberately not general text settings. Editing it never
+retroactively rewrites an edition's content or geometry.
 
 ## Fitting copy to the hole
 

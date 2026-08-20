@@ -115,6 +115,37 @@ const identity = {
   imprintPage: 2,
 };
 
+// The registered nameplate artwork, RNI number and printer's declaration stay
+// in the canonical identity above: changing those needs a verified legal/brand
+// asset, not a text field. The owner-maintained publication details below are
+// the parts that may safely appear throughout the living newspaper furniture.
+const editableIdentityDefaults = Object.freeze({
+  title: identity.title,
+  owner: identity.owner,
+  office: identity.office,
+  phone: identity.phone,
+  email: identity.email,
+  website: identity.website,
+  epaper: identity.epaper,
+  timezone: identity.timezone,
+});
+
+function visibleWebsite(url) {
+  return String(url || '').trim().replace(/^https?:\/\//i, '').replace(/\/$/, '');
+}
+
+function applyPublicationSettings(settings = {}) {
+  identity.title = String(settings.publication_name || editableIdentityDefaults.title).trim();
+  identity.owner = String(settings.publisher_name || editableIdentityDefaults.owner).trim();
+  identity.office = String(settings.address || editableIdentityDefaults.office).trim();
+  identity.phone = String(settings.contact_phone || editableIdentityDefaults.phone).trim();
+  identity.email = String(settings.contact_email || editableIdentityDefaults.email).trim();
+  identity.website = visibleWebsite(settings.public_website) || editableIdentityDefaults.website;
+  identity.epaper = identity.website ? `${identity.website.replace(/\/$/, '')}/epaper` : editableIdentityDefaults.epaper;
+  identity.timezone = String(settings.timezone || editableIdentityDefaults.timezone).trim();
+  return identity;
+}
+
 // --- Marathi date line -------------------------------------------------------
 // The date is the loudest thing in the left ear of a Marathi front page: a
 // numeral two or three times the size of anything near it. It has to be set in
@@ -203,4 +234,4 @@ function identityFor(isoDate, pageCount) {
   };
 }
 
-module.exports = { identity, identityFor, numberingFor, dateLine, devanagari, WEEKDAYS, MONTHS };
+module.exports = { identity, identityFor, applyPublicationSettings, numberingFor, dateLine, devanagari, WEEKDAYS, MONTHS };

@@ -5,6 +5,8 @@ const bcrypt = require('bcryptjs');
 const pool = require('../src/config/db');
 const { createApp } = require('../server');
 const { signIn } = require('./helpers/desk');
+const { identityFor } = require('../src/layout/identity');
+const settingsService = require('../src/services/settings.service');
 
 test.after(() => pool.end());
 
@@ -92,12 +94,19 @@ test('general settings are owner-only, validated, and persist as one durable rec
     assert.equal(save.status, 200);
     assert.equal((await save.json()).publication_name, 'Sahas Varta Test');
     assert.equal((await (await owner('/api/settings/general')).json()).contact_email, 'desk@example.test');
+    const identity = identityFor('2026-08-20', 4);
+    assert.equal(identity.title, 'Sahas Varta Test');
+    assert.equal(identity.owner, 'Owner');
+    assert.equal(identity.office, 'Satara');
+    assert.equal(identity.email, 'desk@example.test');
+    assert.equal(identity.website, 'example.test');
     assert.equal((await fetch(`http://127.0.0.1:${port}/api/settings/general`)).status, 401);
   } finally {
     if (before) await pool.query(
       `UPDATE publication_settings SET publication_name=$1, publisher_name=$2, address=$3, contact_email=$4, contact_phone=$5, public_website=$6, timezone=$7, default_language=$8 WHERE singleton=TRUE`,
       [before.publication_name, before.publisher_name, before.address, before.contact_email, before.contact_phone, before.public_website, before.timezone, before.default_language],
     );
+    if (before) await settingsService.hydratePublicationIdentity();
     const closed = new Promise((resolve) => server.close(resolve));
     server.closeAllConnections?.();
     await closed;

@@ -20,6 +20,7 @@ const featureRoutes = require('./src/routes/feature.routes');
 const reporterRoutes = require('./src/routes/reporter.routes');
 const settingsRoutes = require('./src/routes/settings.routes');
 const newspaperController = require('./src/controllers/newspaper.controller');
+const { hydratePublicationIdentity } = require('./src/services/settings.service');
 
 dotenv.config();
 
@@ -151,7 +152,8 @@ if (require.main === module) {
   // the server accepts a request.
   syncTemplates()
     .then((count) => console.log(`Synced ${count} layouts`))
-    .catch((error) => console.error('Layout sync failed:', error.message))
+    .then(() => hydratePublicationIdentity())
+    .catch((error) => console.error('Publication settings load failed:', error.message))
     .finally(() => {
       app.listen(port, () => {
         console.log(`Server running on http://localhost:${port}`);

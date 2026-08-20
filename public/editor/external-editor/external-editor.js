@@ -321,7 +321,10 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
     onSelectPart: callbacks.onSelectPart,
     onToggleImageSelection: callbacks.onToggleImageSelection,
   });
-  bindAiPanel(callbacks.getView, callbacks.getSection, callbacks.onPatch, notify, callbacks.getImages, callbacks.getPage);
+  bindAiPanel(
+    callbacks.getView, callbacks.getSection, callbacks.onPatch, notify,
+    callbacks.getImages, callbacks.getPage, callbacks.onSave,
+  );
   bindDockToggle(callbacks);
   // Typography, Story details, History and the small layout are bound by
   // renderToolsRail - they live beside the page now, not in this dock.

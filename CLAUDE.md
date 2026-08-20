@@ -1008,6 +1008,30 @@ Editors never search a dropdown of thousands of stories. The writing panel carri
 
 ## Fitting copy to the hole
 
+### Running body type is a publication style, not a rectangle function
+
+The editor's physical scale is 2 px/mm. `public/editor/layout/publication-type.js`
+owns the running-copy default for both browser and Node: **9 pt = 6.4 editor px**
+at the database's one-decimal precision. `typeScaleFor()` may derive headline
+hierarchy from the frame, but it must never derive body size from frame width —
+a wider newspaper story gains columns, not larger prose. Every fallback must
+read the shared catalogue; do not reintroduce a local 10/16 px default.
+
+The schema migration changes the default only. Existing `body_font_px` values
+may be explicit desk choices and are never mass-backfilled.
+
+### An AI proposal belongs to one exact block snapshot
+
+Saving before the request is necessary but not sufficient: type, columns or a
+picture may change while the provider answers. Every write/fill response carries
+the exact compositor fingerprint, and Accept re-composes the proposed words
+against the current live draft and images. If the fingerprint differs, the
+proposal is stale and must be refused; it is never accepted and then repaired.
+This is the same compositor comparison, locally, and costs no provider call.
+Body/display overset and an underfilled headline also disable acceptance. An
+honest `SOURCE_LIMITED_UNDERFILL` remains reviewable — insufficient supplied
+facts must not be padded with invented material merely to colour the bar green.
+
 Copy never arrives the right length, and a sub-editor has exactly three moves. All three exist:
 
 - **Cut it** — the worklist and preflight both say by how many characters.

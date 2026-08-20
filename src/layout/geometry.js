@@ -10,7 +10,9 @@
 // generated at `printDpi` from the millimetres, never by scaling these pixels
 // up - see PROJECT_STATUS.md on the export pipeline.
 
-const PX_PER_MM = 2;
+const {
+  PX_PER_MM, BODY_TEXT_PT, DEFAULT_BODY_FONT_PX,
+} = require('../../public/editor/layout/publication-type');
 
 const DEFAULTS = {
   pageWidthMm: 330,
@@ -246,6 +248,8 @@ module.exports = {
   hasLegalImprint,
   footerBandPx,
   regionForPage,
+  BODY_TEXT_PT,
+  DEFAULT_BODY_FONT_PX,
 };
 
 // Default type sizes for a block, scaled to how wide it is.
@@ -253,8 +257,9 @@ module.exports = {
 // A fixed 34px headline is right for a lead and absurd for a single-column
 // filler: in a 96px block it consumed every row, leaving a character budget of
 // zero. National dailies size the headline to the measure, and so does this -
-// roughly one line of headline across the block, with body text held between
-// legible newsprint limits.
+// roughly one line of headline across the block. Body copy does NOT scale with
+// the rectangle: it is the paper's standing 9pt reading size, and wide blocks
+// gain columns instead of turning their prose into display type.
 // The block's own margin and the line box the character grid uses, so the two
 // agree about how many lines a headline costs. A Devanagari line needs 1.45 of
 // its type size - the vowel signs stack above the shirorekha and below the
@@ -302,6 +307,6 @@ function typeScaleFor(widthPx, heightPx) {
   return {
     headlineFontPx: headlineFitted,
     subheadingFontPx: clamp(headlineFitted * 0.55, 11, 22),
-    bodyFontPx: clamp(width / 26, 9, 16),
+    bodyFontPx: DEFAULT_BODY_FONT_PX,
   };
 }

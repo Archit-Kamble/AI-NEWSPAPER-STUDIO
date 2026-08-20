@@ -21,6 +21,10 @@
 //
 // All of this is in editor pixels (2 px per mm of the 330 x 530 mm page).
 
+import './publication-type.js';
+
+export const DEFAULT_BODY_FONT_PX = globalThis.SahasPublicationType.DEFAULT_BODY_FONT_PX;
+
 // Average glyph advance as a fraction of font size, measured rather than
 // guessed: probed in a real browser against the newspaper's own font stack.
 // Marathi body copy in Noto Serif Devanagari averaged ~0.36 across three
@@ -98,7 +102,10 @@ export function flowViewFromSection(section = {}, overrides = {}) {
     lineHeight: Math.max(MIN_LINE_HEIGHT, numeric(flowValue(section, overrides, "lineHeight", "line_height", MIN_LINE_HEIGHT), MIN_LINE_HEIGHT)),
     headlineFontPx: numeric(flowValue(section, overrides, "headlineFontPx", "headline_font_px", 34), 34),
     subheadingFontPx: numeric(flowValue(section, overrides, "subheadingFontPx", "subheading_font_px", 20), 20),
-    bodyFontPx: numeric(flowValue(section, overrides, "bodyFontPx", "body_font_px", 16), 16),
+    bodyFontPx: numeric(
+      flowValue(section, overrides, "bodyFontPx", "body_font_px", DEFAULT_BODY_FONT_PX),
+      DEFAULT_BODY_FONT_PX,
+    ),
   };
 }
 
@@ -218,7 +225,7 @@ export function buildFlowMap(section, view, images = []) {
   const contentWidth = Math.max(0, blockWidth - padding * 2);
   const contentHeight = Math.max(0, blockHeight - padding * 2);
 
-  const bodyFont = Number(view.bodyFontPx) || 16;
+  const bodyFont = Number(view.bodyFontPx) || DEFAULT_BODY_FONT_PX;
   const lineHeight = Math.max(MIN_LINE_HEIGHT, Number(view.lineHeight) || 1.25);
 
   const cellWidth = Math.max(1, bodyFont * AVG_CHAR_WIDTH_RATIO);

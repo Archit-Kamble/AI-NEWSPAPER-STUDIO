@@ -79,7 +79,7 @@ const LIST_STYLES = [
 const NUMBER_FIELDS = [
   { id: "tyHeadlineSize", field: "headlineFontPx", label: "Headline size (px)", min: 8, max: 140, step: 1 },
   { id: "tySubheadingSize", field: "subheadingFontPx", label: "Subheadline size (px)", min: 8, max: 90, step: 1 },
-  { id: "tyBodySize", field: "bodyFontPx", label: "Body size (px)", min: 6, max: 48, step: 1 },
+  { id: "tyBodySize", field: "bodyFontPx", label: "Body size (px)", min: 6, max: 48, step: 0.1 },
   // Columns moved to Properties, and had to: a number input cannot express
   // "auto", so a desk who once touched it could never hand the decision back
   // to the engine - and after schema.sql made NULL the ordinary state, "auto"

@@ -34,8 +34,6 @@ const WORDS_PER_MINUTE = 200;
 // Sizes a desk actually sets body copy in, in editor px (2px per mm). The
 // block's own derived size is added when it is not one of these, so opening a
 // story never silently changes its type.
-const BODY_SIZES = [7, 8, 8.5, 9, 9.5, 10, 11, 12, 13, 14, 16, 18, 20, 24];
-
 let budgetOf = null;
 let escapeBound = false;
 

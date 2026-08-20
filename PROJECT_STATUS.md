@@ -4925,3 +4925,46 @@ Verification: the focused composition/writing/current-news set passes **111/111*
 the complete Node unit/integration suite passes **858/858**. No server was left
 running, no proposal was written to the database, and the pre-existing Groq,
 WEBP/cut-out and sweep changes remain unstaged and unmodified by this work.
+
+### 57. Professional running type and snapshot-safe AI acceptance (2026-08-20)
+
+The photographed 307 × 296 block was not proof that the exact compositor had
+miscounted its own lines. Its persisted typography changed while the provider
+was answering: the proposal had been measured at 10 px and the live draft was
+then saved at 14 px/one column. The AI panel accepted the stale proposal into
+that different block, where it necessarily overset. The screenshot's 14 editor
+px is about 19.8 pt at the publication's physical 2 px/mm scale — display type,
+not newspaper running copy.
+
+Running body type is now one publication style: **9 pt**, stored as **6.4 editor
+px** (9.07 pt after the schema's one-decimal precision). Block width changes
+the automatic column count and headline hierarchy; it never enlarges the prose.
+`publication-type.js` is the shared browser/Node catalogue, and every missing-
+value fallback in composition, AI planning, copy fit, diagnostics and editing
+reads that one value. Existing rows are deliberately not mass-rewritten because
+a saved type size can be a desk decision; the schema default and every newly
+created layout block use 6.4.
+
+AI acceptance is now tied to the exact composition it was measured on. The
+editor flushes the live draft before requesting copy; the server returns the
+compositor fingerprint; and Accept re-composes the proposal against the current
+words, type, columns and complete image geometry. A mismatch is refused with a
+save-and-write-again instruction. Body/display overset and a headline below its
+exact gate are never accept-enabled. This spends no provider call and introduces
+no second fit formula.
+
+Bounded live proof used one successful generated reservoir and no retry after
+the second prompt found every configured provider unavailable. The same copy
+was then cut locally at newspaper boundaries for two further shapes:
+
+- 307 × 296: **98.8% body**, **99.6% headline**, no overset;
+- 190 × 264: **99.5% body**, **98.1% headline**, paragraph-boundary cut;
+- 150 × 264: **100% body**, **96.8% headline**, sentence-boundary cut.
+
+Clean rendered evidence is under `artifacts/news-block-verification/`. Focused
+verification passes **146/146**. The complete suite initially exposed five old
+fixtures whose intended carry-over/source-demand state depended on the former
+large default; those fixtures now state their intended type/source volume
+explicitly instead of inheriting a publication default. Final verification:
+**861/861** Node unit/integration tests, and three real Chrome renders with no
+console/page errors.

@@ -230,6 +230,23 @@ test('sizing type down for a short block never makes it bigger', () => {
   assert.ok(typeScaleFor(620, 90).headlineFontPx < typeScaleFor(620, 600).headlineFontPx);
 });
 
+test('running body type is one professional 9pt publication size, whatever shape holds it', async () => {
+  const {
+    typeScaleFor, BODY_TEXT_PT, DEFAULT_BODY_FONT_PX, pxToMm, mmToPt,
+  } = require('../src/layout/geometry');
+  const browserType = await import('../public/editor/layout/text-flow.js');
+
+  assert.equal(BODY_TEXT_PT, 9);
+  assert.equal(Number(mmToPt(pxToMm(DEFAULT_BODY_FONT_PX)).toFixed(2)), 9.07);
+  assert.equal(browserType.DEFAULT_BODY_FONT_PX, DEFAULT_BODY_FONT_PX,
+    'browser and server must never carry different publication defaults');
+
+  for (const [width, height] of [[96, 160], [190, 264], [307, 296], [620, 224]]) {
+    assert.equal(typeScaleFor(width, height).bodyFontPx, DEFAULT_BODY_FONT_PX,
+      `${width}x${height}: width changes columns and headline hierarchy, not running-copy size`);
+  }
+});
+
 // --- one gap, everywhere -----------------------------------------------------
 //
 // Horizontally the gap was always right, because it is the column gutter and

@@ -8,7 +8,7 @@
 // records for the duplicated template catalog.
 
 import { isExplicit } from "./status/section-status.js";
-import { MIN_LINE_HEIGHT } from "./layout/text-flow.js";
+import { DEFAULT_BODY_FONT_PX, MIN_LINE_HEIGHT } from "./layout/text-flow.js";
 import { normalizeEditorialPriority, resolveStoryType } from "./layout/story-types.js";
 import { sanitiseInk, sanitiseTint } from "./layout/inks.js";
 
@@ -107,7 +107,7 @@ export function draftFromSection(section) {
     editorialPresentation: section.editorial_presentation || null,
     headlineFontPx: Number(section.headline_font_px) || 34,
     subheadingFontPx: Number(section.subheading_font_px) || 20,
-    bodyFontPx: Number(section.body_font_px) || 16,
+    bodyFontPx: Number(section.body_font_px) || DEFAULT_BODY_FONT_PX,
     imageFlipH: section.image_flip_h === true,
     imageFlipV: section.image_flip_v === true,
     fontFamily: section.font_family || "",

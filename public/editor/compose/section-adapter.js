@@ -17,7 +17,7 @@ import { textWithMarks } from '../layout/rich-text.js';
 // is composed as part of the flow. One definition, in the module that has
 // always owned it - a second copy here is exactly the drift this codebase
 // has been bitten by before.
-import { datelineText } from '../layout/text-flow.js';
+import { datelineText, DEFAULT_BODY_FONT_PX } from '../layout/text-flow.js';
 import { columnGutterPx } from './compose.js';
 import { blockExpectsCopy } from '../layout/block-kinds.js';
 // A side-effect module shared with Scribus, so it installs onto globalThis
@@ -117,7 +117,10 @@ const MIN_COLUMN_EM = 10;
  */
 export function maxLegibleColumns(section, view, widthPx, ceiling = 4) {
   const margin = positive(pick(section, view, 'marginPx', 'margin_px', 12), 12);
-  const bodyPx = positive(pick(section, view, 'bodyFontPx', 'body_font_px', 16), 16);
+  const bodyPx = positive(
+    pick(section, view, 'bodyFontPx', 'body_font_px', DEFAULT_BODY_FONT_PX),
+    DEFAULT_BODY_FONT_PX,
+  );
   const usable = Math.max(0, widthPx - 2 * margin);
   const gutter = columnGutterPx(bodyPx);
   const floorPx = MIN_COLUMN_EM * bodyPx;
@@ -227,7 +230,10 @@ export function composeSection(section = {}, view = {}) {
     ? BOX_INSET_PX + positive(pick(section, view, 'borderWidthPx', 'border_width_px', 1), 1)
     : 0;
   const padding = positive(pick(section, view, 'marginPx', 'margin_px', 12), 12) + boxInset;
-  const bodyFontPx = positive(pick(section, view, 'bodyFontPx', 'body_font_px', 16), 16);
+  const bodyFontPx = positive(
+    pick(section, view, 'bodyFontPx', 'body_font_px', DEFAULT_BODY_FONT_PX),
+    DEFAULT_BODY_FONT_PX,
+  );
   const prefix = datelineText(view);
 
   // Bold/italic/underline runs, not flattened away before composition sees

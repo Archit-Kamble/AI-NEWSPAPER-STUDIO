@@ -14,6 +14,7 @@
 import { escapeHtml } from "../format.js";
 import { buildFlowMap, flowAscii, flowFit, flowImageFromRow } from "../layout/text-flow.js";
 import { plainText } from "../layout/rich-text.js";
+import { composeSection } from "../compose/section-adapter.js";
 
 export const AI_ACTIONS = [
   { id: "aiGenerateLayout", label: "Generate Layout", intent: "layout" },
@@ -278,6 +279,7 @@ export function retrievalStatusMarkup(retrieval) {
 function proposalMarkup(result) {
   const { proposal, fit } = result;
   const over = fit.overflowing;
+  const blocked = proposalCannotPrint(fit);
   return `
     <h4>Written by ${escapeHtml(result.provider || "AI")}${result.fellBackTo ? " (fallback)" : ""}
       <span class="muted">review before accepting</span></h4>
@@ -290,9 +292,10 @@ function proposalMarkup(result) {
     ${underfillNote(fit)}
     <div class="ai-proposal-body">${escapeHtml(proposal.body).replace(/\n{2,}/g, "</p><p>").replace(/\n/g, "<br>")}</div>
     <div class="ext-editor-toolbar">
-      <button type="button" class="ext-editor-btn ext-editor-btn-primary" id="aiAcceptStory">Accept into the block</button>
+      <button type="button" class="ext-editor-btn ext-editor-btn-primary" id="aiAcceptStory"${blocked ? " disabled" : ""}>${blocked ? "Cannot accept — does not fit" : "Accept into the block"}</button>
       <button type="button" class="ext-editor-btn" id="aiDiscardStory">Discard</button>
     </div>
+    ${blocked ? '<p class="ai-proposal-underfill">This proposal cannot be accepted because exact composition still oversets or its headline remains underfilled. Discard it and write again.</p>' : ""}
     <p class="ai-proposal-warn">The desk must check every fact before this is printed. It enters the block as
        <strong>needs review</strong>.</p>`;
 }
@@ -339,6 +342,7 @@ function underfillNote(fit) {
 function fillProposalMarkup(result) {
   const { proposal, fit } = result;
   const added = fit.charsUsed - fit.charsBefore;
+  const blocked = proposalCannotPrint(fit);
   return `
     <h4>Filled by ${escapeHtml(result.provider || "AI")}${result.fellBackTo ? " (fallback)" : ""}
       <span class="muted">review before accepting</span></h4>
@@ -350,11 +354,41 @@ function fillProposalMarkup(result) {
     ${result.retriedAt ? `<p class="muted ext-note">Written at the ${escapeHtml(result.retriedAt)} tier — the tier you asked for could not finish inside its output limit.</p>` : ""}
     <div class="ai-proposal-body">${escapeHtml(proposal.body).replace(/\n{2,}/g, "</p><p>").replace(/\n/g, "<br>")}</div>
     <div class="ext-editor-toolbar">
-      <button type="button" class="ext-editor-btn ext-editor-btn-primary" id="aiAcceptFill">Accept into the block</button>
+      <button type="button" class="ext-editor-btn ext-editor-btn-primary" id="aiAcceptFill"${blocked ? " disabled" : ""}>${blocked ? "Cannot accept — does not fit" : "Accept into the block"}</button>
       <button type="button" class="ext-editor-btn" id="aiDiscardFill">Discard</button>
     </div>
     <p class="ai-proposal-warn">The desk must check every fact before this is printed. It enters the block as
        <strong>needs review</strong>.</p>`;
+}
+
+// A proposal was measured on the persisted block. Typography, columns or a
+// picture can change while the provider is answering; accepting that stale
+// answer is how copy measured at 10px was allowed into a live 14px body and
+// immediately overset. The composition fingerprint covers the words, type,
+// columns and complete image geometry. Re-compose at click time and require
+// the identical fingerprint—no second fit formula and no API call.
+export function proposalSnapshotMatches(section, view, images, proposal, expectedFingerprint) {
+  if (!expectedFingerprint || !section || !view) return false;
+  try {
+    const composed = composeSection(
+      { ...section, images: images || [] },
+      { ...view, ...proposal },
+    );
+    const notReady = composed.fontReady === false
+      || (composed.warnings || []).some((warning) => /^(FONT|SHAPING)_NOT_READY$/.test(warning.code || ""));
+    return !notReady && composed.fingerprint === expectedFingerprint;
+  } catch {
+    return false;
+  }
+}
+
+export function proposalCannotPrint(fit = {}) {
+  return Boolean(
+    fit.overflowing
+    || fit.displayOverflowing
+    || fit.engineState === "OVERSET"
+    || fit.state === "HEADLINE_UNDERFILLED",
+  );
 }
 
 /**
@@ -375,7 +409,7 @@ function confirmReplacement(view) {
   return window.confirm(`${what}\n\nReplace the headline, subheading and body with the AI's version?`);
 }
 
-export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, getPage) {
+export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, getPage, onSave) {
   const seed = document.getElementById("edAiSeed");
   const write = document.getElementById("aiWriteStory");
   const host = document.getElementById("aiStoryProposal");
@@ -387,10 +421,6 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, g
   // never stored.
 
   write?.addEventListener("click", async () => {
-    const page = getPage?.();
-    const section = getSection();
-    const view = getView();
-    if (!page || !section) return onNotify("Choose a block first.");
     if (!seed?.value.trim()) {
       seed?.focus();
       return onNotify("Say what the story is about first — a few words is enough.");
@@ -401,6 +431,13 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, g
     write.textContent = "Writing to the measure…";
     if (retrievalHost) { retrievalHost.hidden = true; retrievalHost.innerHTML = ""; }
     try {
+      // The server measures the persisted row. Flush live typography/column
+      // edits first, then resolve fresh objects after PAGE_SYNC replaces them.
+      await onSave?.();
+      const page = getPage?.();
+      const section = getSection();
+      const view = getView();
+      if (!page || !section) return onNotify("Choose a block first.");
       const response = await fetch(
         `/api/pages/${page.id}/sections/${encodeURIComponent(section.section_key)}/write`,
         {
@@ -433,6 +470,15 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, g
       host.hidden = false;
       host.innerHTML = proposalMarkup(result);
       document.getElementById("aiAcceptStory")?.addEventListener("click", () => {
+        if (proposalCannotPrint(result.fit)) {
+          return onNotify("This proposal does not meet the block's exact print fit. Discard it and write again.");
+        }
+        if (!proposalSnapshotMatches(
+          getSection(), getView(), getImages?.() || [], result.proposal,
+          result.fit.compositionFingerprint,
+        )) {
+          return onNotify("The block's type, columns or pictures changed while this was being written. Save, then write it again for the current shape.");
+        }
         // "Write this block" replaces the headline, the deck AND the body. On an
         // empty block that is the whole point; on a block somebody has already
         // written - or a reporter has filed - it is destruction, and one click
@@ -480,15 +526,15 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, g
   const fill = document.getElementById("aiFillRemaining");
   const fillHost = document.getElementById("aiFillProposal");
   fill?.addEventListener("click", async () => {
-    const page = getPage?.();
-    const section = getSection();
-    const view = getView();
-    if (!page || !section) return onNotify("Choose a block first.");
-
     const label = fill.textContent;
     fill.disabled = true;
     fill.textContent = "Measuring, then writing…";
     try {
+      await onSave?.();
+      const page = getPage?.();
+      const section = getSection();
+      const view = getView();
+      if (!page || !section) return onNotify("Choose a block first.");
       const response = await fetch(
         `/api/pages/${page.id}/sections/${encodeURIComponent(section.section_key)}/fill`,
         {
@@ -507,6 +553,15 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, g
       fillHost.hidden = false;
       fillHost.innerHTML = fillProposalMarkup(result);
       document.getElementById("aiAcceptFill")?.addEventListener("click", () => {
+        if (proposalCannotPrint(result.fit)) {
+          return onNotify("This proposal does not meet the block's exact print fit. Discard it and fill again.");
+        }
+        if (!proposalSnapshotMatches(
+          getSection(), getView(), getImages?.() || [], result.proposal,
+          result.fit.compositionFingerprint,
+        )) {
+          return onNotify("The block's type, columns or pictures changed while this was being written. Save, then fill it again for the current shape.");
+        }
         // Only the body. The headline and the deck the desk wrote are not
         // touched, and nothing is saved until autosave carries the draft - the
         // reporter's copy is still in the block's history either way.

@@ -33,6 +33,9 @@ import {
 } from './paragraph-policy.js';
 import { subtract, viableIntervals, MIN_CORRIDOR_EM } from './intervals.js';
 import { bandObstacles, imageFingerprint } from './exclusion.js';
+import '../layout/publication-type.js';
+
+const DEFAULT_BODY_FONT_PX = globalThis.SahasPublicationType.DEFAULT_BODY_FONT_PX;
 
 export const ENGINE_VERSION = 'sahas-compose/2';
 
@@ -1644,7 +1647,7 @@ export function composeBlock(input = {}) {
   const measureAvail = content.right - content.left;
   const room = content.bottom - content.top;
 
-  const bodyPx = Math.max(MIN_LEGIBLE_PX, num(input.bodyFontPx, 16));
+  const bodyPx = Math.max(MIN_LEGIBLE_PX, num(input.bodyFontPx, DEFAULT_BODY_FONT_PX));
   // The line box can never be shorter than the face itself needs. Marathi
   // stacks signs above the shirorekha and below the baseline; a box tighter
   // than ascent + descent crops them, which is a property of the script and

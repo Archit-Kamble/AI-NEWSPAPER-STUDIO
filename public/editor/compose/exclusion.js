@@ -30,6 +30,7 @@
 // crude without the page looking crude.
 
 import { normalise } from './intervals.js';
+import '../layout/publication-type.js';
 // The SAME crop/fit/flip transform paint (picture-style.js) and resize
 // (image-resize.js) already resolve a placement through - a cutout's
 // exclusion envelope follows it too, computed straight from the obstacle
@@ -45,11 +46,12 @@ import { resolvePlacedImage, isWholeSourceCrop, sourceRectToFrameBounds } from '
 // pixels would be one thing at 9pt and another at 24pt; in ems it is the same
 // optical gap at every size, which is what a printer actually keeps.
 export const STAND_OFF_EM = 0.6;
+const DEFAULT_BODY_FONT_PX = globalThis.SahasPublicationType.DEFAULT_BODY_FONT_PX;
 
 export function standOffPx(image, bodyFontPx) {
   const explicit = Number(image?.standOffPx ?? image?.stand_off_px);
   if (Number.isFinite(explicit) && explicit > 0) return explicit;
-  return STAND_OFF_EM * (Number(bodyFontPx) || 16);
+  return STAND_OFF_EM * (Number(bodyFontPx) || DEFAULT_BODY_FONT_PX);
 }
 
 // ------------------------------------------------------------ mask cleanup ---

@@ -44,6 +44,9 @@
 //   measured on the prose that is actually going in.
 
 const MIN_SENTENCE_CHARS = 12;
+const {
+  DEFAULT_BODY_FONT_PX,
+} = require('../../public/editor/layout/publication-type');
 
 // Two different thresholds, for two genuinely different decisions - and
 // conflating them is what made "Fill remaining area with AI" refuse a block
@@ -116,7 +119,7 @@ function viewFor(section, over = {}) {
     lineHeight: Number(section.line_height) || 1.45,
     headlineFontPx: Number(section.headline_font_px) || 24,
     subheadingFontPx: Number(section.subheading_font_px) || 14,
-    bodyFontPx: Number(section.body_font_px) || 10,
+    bodyFontPx: Number(section.body_font_px) || DEFAULT_BODY_FONT_PX,
   };
 }
 

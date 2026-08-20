@@ -53,7 +53,7 @@ test('a story too long for its block is carried onto the first empty block on a 
     const sourceKey = page1.sections.find((s) => s.section_key === 'anchor').section_key;
     await desk.json(`/api/pages/${page1.id}/sections/${sourceKey}`, {
       method: 'PUT',
-      body: JSON.stringify({ headline: 'लांब बातमी', body: LONG_BODY }),
+      body: JSON.stringify({ headline: 'लांब बातमी', body: LONG_BODY, bodyFontPx: 16 }),
     });
 
     const result = await desk.json(`/api/pages/${page1.id}/sections/${sourceKey}/carry-over`, {
@@ -89,7 +89,7 @@ test('a story continuing into a SECOND LEG on the same page sets no jump line an
 
     await desk.json(`/api/pages/${page1.id}/sections/${source.section_key}`, {
       method: 'PUT',
-      body: JSON.stringify({ headline: 'लांब बातमी', body: LONG_BODY }),
+      body: JSON.stringify({ headline: 'लांब बातमी', body: LONG_BODY, bodyFontPx: 16 }),
     });
 
     const result = await desk.json(`/api/pages/${page1.id}/sections/${source.section_key}/carry-over`, {
@@ -132,7 +132,7 @@ test('an explicit continuation target with work in it is refused without changin
     const targetHeadline = 'आधीपासून असलेली बातमी';
     const targetBody = 'हा मजकूर दुसऱ्या बातमीचा आहे आणि तो कधीही पुसला जाऊ नये.';
     await desk.json(`/api/pages/${page1.id}/sections/${source.section_key}`, {
-      method: 'PUT', body: JSON.stringify({ headline: 'लांब बातमी', body: sourceBody }),
+      method: 'PUT', body: JSON.stringify({ headline: 'लांब बातमी', body: sourceBody, bodyFontPx: 16 }),
     });
     await desk.json(`/api/pages/${page1.id}/sections/${target.section_key}`, {
       method: 'PUT', body: JSON.stringify({ headline: targetHeadline, body: targetBody }),
@@ -163,7 +163,7 @@ test('a continuation that would overset the landing block is refused, not silent
     const hugeBody = LONG_BODY.repeat(6);
     await desk.json(`/api/pages/${page1.id}/sections/${sourceKey}`, {
       method: 'PUT',
-      body: JSON.stringify({ headline: 'खूप मोठी बातमी', body: hugeBody }),
+      body: JSON.stringify({ headline: 'खूप मोठी बातमी', body: hugeBody, bodyFontPx: 16 }),
     });
 
     // Empty every block on page two except one narrow column, so findLanding()
@@ -205,7 +205,7 @@ test('reunite() undoes a carry-over, restoring the body to one piece and emptyin
   await withEdition(async ({ desk, page1, page2 }) => {
     await desk.json(`/api/pages/${page1.id}/sections/anchor`, {
       method: 'PUT',
-      body: JSON.stringify({ headline: 'लांब बातमी', body: LONG_BODY }),
+      body: JSON.stringify({ headline: 'लांब बातमी', body: LONG_BODY, bodyFontPx: 16 }),
     });
     const carried = await desk.json(`/api/pages/${page1.id}/sections/anchor/carry-over`, {
       method: 'POST', body: JSON.stringify({}),

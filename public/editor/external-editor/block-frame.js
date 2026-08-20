@@ -44,7 +44,9 @@ import { blockExpectsCopy } from "../layout/block-kinds.js";
 // The Devanagari-safe floor. The inline body editor sets the story at its
 // real leading, and 1.45 is already at the edge of clipping a matra stack -
 // see CLAUDE.md's note on why line_height must never be tidied downward.
-import { MIN_LINE_HEIGHT as MIN_BODY_LINE_HEIGHT } from "../layout/text-flow.js";
+import {
+  DEFAULT_BODY_FONT_PX, MIN_LINE_HEIGHT as MIN_BODY_LINE_HEIGHT,
+} from "../layout/text-flow.js";
 import { smartCardMarkup } from "../smart-cards/smart-cards.js";
 // The same functions the page canvas draws a headline, a deck and a flowed
 // body with - so the WYSIWYG frame and the newspaper page can never drift
@@ -398,7 +400,7 @@ function layoutTextFrames() {
   // page. The canonical preview above remains the authority for actual fit.
   const editor = document.querySelector("#edWritingSurface .ql-editor");
   if (editor) {
-    editor.style.fontSize = `${Math.max(15, Number(state.view.bodyFontPx) || 10)}px`;
+    editor.style.fontSize = `${Math.max(15, Number(state.view.bodyFontPx) || DEFAULT_BODY_FONT_PX)}px`;
     editor.style.lineHeight = String(Math.max(1.45, Number(state.view.lineHeight) || 1.45));
     editor.style.textAlign = state.view.textAlign || "left";
     editor.style.fontFamily = publicationFamily(state.view.fontFamily).css;
@@ -608,7 +610,7 @@ function beginInlineTextEdit(part, at = null) {
       // typing here is looking at the type that will print.
       frame.style.fontFamily = publicationFamily(state.view.fontFamily).css;
       frame.style.fontWeight = "400";
-      frame.style.fontSize = `${(Number(state.view.bodyFontPx) || 16) / scale}px`;
+      frame.style.fontSize = `${(Number(state.view.bodyFontPx) || DEFAULT_BODY_FONT_PX) / scale}px`;
       frame.style.lineHeight = String(Math.max(MIN_BODY_LINE_HEIGHT, Number(state.view.lineHeight) || 1.45));
       frame.style.textAlign = state.view.textAlign || "left";
       // A story is long, and the frame is exactly the band the copy has. Copy

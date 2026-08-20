@@ -83,6 +83,11 @@ function compliantResponse(prompt) {
       'शहराची पाणीटंचाई दूर करण्यासाठी प्रशासनाकडून प्रयत्न सुरू',
     ] };
   }
+  const additionRange = /aiming for (\d+) and never more than (\d+)/.exec(prompt);
+  if (additionRange) {
+    const words = (n) => 'शब्द '.repeat(Math.ceil(n / 5)).slice(0, n);
+    return { additions: [words(Number(additionRange[2]))] };
+  }
   const headlineLimit = /headline must be \d+ to (\d+) characters/.exec(prompt);
   const deckLimit = /one line of \d+ to (\d+)/.exec(prompt);
   const bodyRange = /between (\d+) and (\d+) characters/.exec(prompt);

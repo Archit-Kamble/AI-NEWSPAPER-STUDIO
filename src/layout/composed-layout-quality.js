@@ -3,6 +3,9 @@
 // canvas interaction; this module is the composition-quality diagnostic seam.
 
 const { analyzeLayout } = require('./layout-quality');
+const {
+  DEFAULT_BODY_FONT_PX,
+} = require('../../public/editor/layout/publication-type');
 
 const UTILIZATION_V1 = Object.freeze({
   severelyUnderfilledBodyRatio: 0.22,
@@ -43,7 +46,7 @@ function flowView(section = {}) {
     lineHeight: Math.max(1.45, Number(section.line_height) || 1.45),
     headlineFontPx: Number(section.headline_font_px) || 34,
     subheadingFontPx: Number(section.subheading_font_px) || 20,
-    bodyFontPx: Number(section.body_font_px) || 16,
+    bodyFontPx: Number(section.body_font_px) || DEFAULT_BODY_FONT_PX,
   };
 }
 

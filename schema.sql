@@ -120,7 +120,10 @@ CREATE TABLE IF NOT EXISTS page_sections (
   subheading TEXT,
   subheading_font_px INTEGER NOT NULL DEFAULT 20,
   body TEXT,
-  body_font_px INTEGER NOT NULL DEFAULT 16,
+  -- 6.4 editor px = 9.07 pt at 2 px/mm: the publication's running-copy size.
+  -- See public/editor/layout/publication-type.js. Block width changes columns,
+  -- never body size.
+  body_font_px NUMERIC(5,1) NOT NULL DEFAULT 6.4,
   category VARCHAR(100),
   location VARCHAR(120),
   tags TEXT,
@@ -503,6 +506,9 @@ ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS carried_from_section_id INTEG
 ALTER TABLE page_sections ALTER COLUMN headline_font_px TYPE NUMERIC(5,1);
 ALTER TABLE page_sections ALTER COLUMN subheading_font_px TYPE NUMERIC(5,1);
 ALTER TABLE page_sections ALTER COLUMN body_font_px TYPE NUMERIC(5,1);
+-- Schema is not applied at boot. This changes the default only; existing rows
+-- may carry a desk-selected size and are deliberately never mass-overwritten.
+ALTER TABLE page_sections ALTER COLUMN body_font_px SET DEFAULT 6.4;
 
 -- ---------------------------------------------------------------------------
 -- Stage 4: page guides.

@@ -183,8 +183,8 @@ test('the reviewed provider-call cap is bound into the Plan token; Apply cannot 
     editionId = newspaper.id;
     await pool.query(
       `INSERT INTO news_items (newspaper_id,title,description,status,story_type,editorial_priority,desired_page_role)
-       VALUES ($1,'बजेट बंधन चाचणी बातमी','ही बातमी वास्तविक वृत्त पुरवठा साखळीतून पुरवली गेली आहे, त्यामुळे रचना खरी मागणी नोंदवते.','approved','LEAD',5,'FRONT')`,
-      [editionId],
+       VALUES ($1,'बजेट बंधन चाचणी बातमी',$2,'approved','LEAD',5,'FRONT')`,
+      [editionId, 'ही बातमी वास्तविक वृत्त पुरवठा साखळीतून पुरवली गेली आहे, त्यामुळे रचना खरी मागणी नोंदवते. '.repeat(4)],
     );
 
     const derived = await workflow.planEditionComposition({ editionId, aiMode: 'production' });
@@ -242,8 +242,8 @@ test('on a real disposable edition, Plan derives the budget from actual assigned
     editionId = newspaper.id;
     await pool.query(
       `INSERT INTO news_items (newspaper_id,title,description,status,story_type,editorial_priority,desired_page_role)
-       VALUES ($1,'बजेट चाचणी बातमी','ही बातमी वास्तविक वृत्त पुरवठा साखळीतून पुरवली गेली आहे, त्यामुळे रचना खरी मागणी नोंदवते.','approved','LEAD',5,'FRONT')`,
-      [editionId],
+       VALUES ($1,'बजेट चाचणी बातमी',$2,'approved','LEAD',5,'FRONT')`,
+      [editionId, 'ही बातमी वास्तविक वृत्त पुरवठा साखळीतून पुरवली गेली आहे, त्यामुळे रचना खरी मागणी नोंदवते. '.repeat(4)],
     );
     const before = (await pool.query('SELECT headline FROM page_sections WHERE page_id = $1', [pages[0].id])).rows;
     assert.ok(before.every((row) => !row.headline), 'fixture starts with no headlines written');

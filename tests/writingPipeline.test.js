@@ -315,7 +315,7 @@ async function withBlock(t, name) {
 // (That happened once, here, during this phase: two unrelated tests each
 // hung for 49s/100s waiting on a real provider before this was found.)
 function withProvider(t, askForJson) {
-  withProviders(t, { gemini: { askForJson } });
+  withOnlyGemini(t, { askForJson });
 }
 
 function withRss(t, stub) {
@@ -366,6 +366,8 @@ function compliantResponse(prompt) {
       'शहराची पाणीटंचाई दूर करण्यासाठी प्रशासनाकडून प्रयत्न सुरू',
     ] };
   }
+  const additionRange = /aiming for (\d+) and never more than (\d+)/.exec(prompt);
+  if (additionRange) return { additions: [wordFill(Number(additionRange[2]))] };
   const headlineLimit = /headline must be \d+ to (\d+) characters/.exec(prompt);
   const deckLimit = /one line of \d+ to (\d+)/.exec(prompt);
   const bodyRange = /between (\d+) and (\d+) characters/.exec(prompt);
@@ -401,9 +403,16 @@ test('evergreen: retrieval is never invoked; only writing and measured headline 
   });
 
   assert.ok(result.proposal, 'the block was written');
+  assert.match(result.fit.compositionFingerprint, /^[0-9a-z]+$/,
+    'acceptance is tied to the exact typography/image snapshot the server measured');
+  assert.equal(result.fit.displayOverflowing, false);
   assert.equal(rssCalls, 0, 'an evergreen seed must never reach the information layer');
-  assert.ok(aiCalls >= 1 && aiCalls <= 2, 'retrieval adds no call; only an exact headline repair may add one');
+  assert.ok(aiCalls >= 1 && aiCalls <= 1 + 1 + copyFit.MAX_FILL_CALLS,
+    'retrieval adds no call; only one headline repair and the bounded body repairs may add calls');
   assert.equal(result.fit.headlineAcceptable, true, 'the headline passed the exact 95% composition check');
+  assert.equal(result.fit.overflowing, false, 'the bounded writer must never overset the block');
+  assert.equal(result.fit.state, 'SOURCE_LIMITED_UNDERFILL',
+    'a finite stub source is reported honestly instead of being padded past its supplied facts');
   assert.equal(result.retrieval, null, 'nothing to show - retrieval never ran');
 });
 

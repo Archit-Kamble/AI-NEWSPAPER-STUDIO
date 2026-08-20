@@ -36,6 +36,9 @@ const ai = require('./ai');
 const information = require('./information');
 const sectionImages = require('../repositories/sectionImage.repository');
 const copyFit = require('./copyFit.service');
+const {
+  DEFAULT_BODY_FONT_PX,
+} = require('../../public/editor/layout/publication-type');
 
 let flowModule = null;
 async function textFlow() {
@@ -136,7 +139,7 @@ async function measure(section, images, over = {}) {
     lineHeight: Number(section.line_height) || 1.45,
     headlineFontPx: Number(section.headline_font_px) || 24,
     subheadingFontPx: Number(section.subheading_font_px) || 14,
-    bodyFontPx: Number(section.body_font_px) || 10,
+    bodyFontPx: Number(section.body_font_px) || DEFAULT_BODY_FONT_PX,
   };
   const map = buildFlowMap(section, view, (images || []).map(flowImageFromRow));
 
@@ -294,7 +297,7 @@ async function planningFit(section, images, { writeHeadline = true, writeSubhead
     lineHeight: Number(section.line_height) || 1.45,
     headlineFontPx: Number(section.headline_font_px) || 24,
     subheadingFontPx: Number(section.subheading_font_px) || 14,
-    bodyFontPx: Number(section.body_font_px) || 10,
+    bodyFontPx: Number(section.body_font_px) || DEFAULT_BODY_FONT_PX,
     body: '',
   });
 
@@ -822,6 +825,8 @@ async function write(pageId, sectionKey, {
       // for free" from "trimmed and then repaired", and the difference is
       // money.
       repairCalls: settle.calls,
+      displayOverflowing: settle.fit.displayOverset,
+      compositionFingerprint: settle.fit.composed.fingerprint,
       headlineFill: headlineSet.fill,
       headlineAcceptable: headlineSet.acceptable,
       headlineRepairCalls: headlineSet.calls,
@@ -985,6 +990,8 @@ async function fillRemaining(pageId, sectionKey, { notes, tier, language } = {})
         fill: settled.fit.fill,
         trimmed: settled.trimmed,
         repairCalls: settled.calls,
+        displayOverflowing: settled.fit.displayOverset,
+        compositionFingerprint: settled.fit.composed.fingerprint,
       },
       // Still null when the sentence cut itself lands at the foot. When it
       // opens a visible hole, `settleToFit()` spends bounded addition calls
@@ -1083,6 +1090,8 @@ async function fillRemaining(pageId, sectionKey, { notes, tier, language } = {})
       fill: filled.fill,
       trimmed: settled.trimmed,
       repairCalls: settled.calls,
+      displayOverflowing: filled.displayOverset,
+      compositionFingerprint: filled.composed.fingerprint,
     },
     provider: result.provider,
     tier: result.tier,

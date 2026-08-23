@@ -182,6 +182,13 @@ const say = (ok, what, detail = '') => {
     const bad = [];
     for (let i = 0; i < n; i += 1) if (s.c[i] !== s.e[i]) bad.push(i);
     const picOk = (!s.pic && !s.ePicSrc) || (s.pic && s.pic.src === s.ePicSrc);
+    // Print the two lines, not just their index: a parity failure you cannot
+    // read is a failure nobody can act on.
+    if (bad.length) {
+      const i = bad[0];
+      console.log(`      canvas[${i}]: ${String(s.c[i]).slice(0, 150)}`);
+      console.log(`      editor[${i}]: ${String(s.e[i]).slice(0, 150)}`);
+    }
     return say(bad.length === 0 && picOk, `  ↳ ${what} — layout and Block Editor identical`,
       bad.length ? `${bad.length}/${n} lines differ, first at ${bad[0]}` : `${n} lines${s.pic ? ' + picture' : ''}`);
   };
@@ -292,6 +299,36 @@ const say = (ok, what, detail = '') => {
   say(/COUNCIL/.test(s.head), 'a headline typed on the page reaches the layout', s.head.slice(0, 60));
   parity(s, 'headline written on the page');
 
+  // THE DECK, DOUBLE-CLICKED STRAIGHT AFTER THE HEADLINE. This is the exact
+  // gesture that once put a subheading into the story: the first press commits
+  // the headline, that re-composes the block, the deck's box moves out from
+  // under the pointer (39px on a real 112x168 block), and the second press -
+  // and therefore the `dblclick` - lands on the body. A double click belongs
+  // to the object its FIRST press landed on, so this has to open the deck.
+  const deckBox = await frameBox('edSubheadingFrame');
+  if (deckBox && deckBox.height > 4) {
+    await page.mouse.dblclick(deckBox.x + deckBox.width / 2, deckBox.y + deckBox.height / 2);
+    await settle(700);
+    const opened = await page.evaluate(() => {
+      const frame = document.getElementById('edSubheadingFrame');
+      return frame?.getAttribute('contenteditable') === 'true' && document.activeElement === frame;
+    });
+    say(opened, 'double-clicking the deck right after the headline opens the DECK, not the body');
+    await page.keyboard.type('WORK STARTS IN SATARA', { delay: 25 });
+    await page.keyboard.press('Enter');
+    await settle(1500);
+    const landed = await page.evaluate(() => ({
+      deck: document.getElementById('edStorySubheading')?.innerText || '',
+      story: document.querySelector('#edWritingSurface .ql-editor')?.innerText || '',
+    }));
+    say(/WORK STARTS/.test(landed.deck) && !/WORK STARTS/.test(landed.story),
+      'and the words go into the subheading, never into the story',
+      `deck="${landed.deck.slice(0, 30)}" story="${landed.story.slice(0, 30)}"`);
+    parity(await snap(), 'deck written on the page');
+  } else {
+    say(true, 'this block is too shallow to set a deck at all', JSON.stringify(deckBox));
+  }
+
   const bodyFrame = await frameBox('edBodyFrame');
   await page.mouse.dblclick(bodyFrame.x + bodyFrame.width / 2, bodyFrame.y + 20);
   await settle(800);
@@ -368,7 +405,7 @@ const say = (ok, what, detail = '') => {
   await press('#edQuillInk .ed-quill-ink-btn:not(.is-none)', 'an ink colours the headline, and only the headline',
     (b, a) => a.head !== b.head && /color/i.test(a.head) && a.bodyMarks === b.bodyMarks);
   await selectAllIn('edStoryHeadline');
-  await press('#edQuillSize .ed-quill-size-btn[data-size="28px"]', 'a size mark resizes words in the headline only',
+  await press('#edQuillSize .ed-quill-size-btn:last-child', 'a size mark resizes words in the headline only',
     (b, a) => a.head !== b.head && a.bodyMarks === b.bodyMarks);
 
   await quill.click();

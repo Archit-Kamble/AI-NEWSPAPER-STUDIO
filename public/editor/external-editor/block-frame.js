@@ -65,6 +65,7 @@ import { PART_LABEL } from "./typography-panel.js";
 // actually measured in either.
 import { publicationFamily } from "../compose/font-metrics.js";
 import { snapToCluster } from "../compose/graphemes.js";
+import "../layout/publication-type.js";
 
 let quill = null;
 let hooks = {};
@@ -134,6 +135,19 @@ export function blockFrameMarkup() {
                data-sahas-size mark, not an arbitrary style - see
                copyFromFrame().
 
+               OFFERED IN POINTS, AGAINST THIS BLOCK'S OWN BODY. The mark is
+               stored as an absolute number of BLOCK pixels (rich-text.js's
+               sanitiseSize), and a block's running body is 6.4 of them - 9pt
+               at 2px/mm. So the fixed 12/14/18/22/28 this toolbar used to
+               offer were browser-CSS numbers in a block-pixel field: the
+               SMALLEST of them was 1.9x the copy and the largest 4.4x.
+               Photographed on a real block, a 22px run inside 7px type opens
+               its own row to three and a half times the leading and leaves a
+               hole above and below - which is not emphasis, it is the same
+               fault the drop cap exists to prevent, in the middle of a
+               paragraph. The sizes are derived from the block instead, and
+               labelled in points, which is the unit a printer sets in.
+
                Plain buttons, not a <select> wrapped in Quill's own Picker:
                a select with class="ql-size" IS what Quill auto-converts into
                a custom .ql-picker widget, and in this bundled Quill 2.0.3 a
@@ -145,11 +159,11 @@ export function blockFrameMarkup() {
                invoked). Bold/italic/underline are plain <button class="ql-*">
                and work correctly, so size uses the same shape instead of
                fighting the Picker abstraction. -->
-          <button type="button" class="ed-quill-size-btn" data-size="12px" title="12px">12</button>
-          <button type="button" class="ed-quill-size-btn" data-size="14px" title="14px">14</button>
-          <button type="button" class="ed-quill-size-btn" data-size="18px" title="18px">18</button>
-          <button type="button" class="ed-quill-size-btn" data-size="22px" title="22px">22</button>
-          <button type="button" class="ed-quill-size-btn" data-size="28px" title="28px">28</button>
+          <!-- Filled in by refreshSizeButtons(), from the BLOCK's own body
+               size - see its note. Static px numbers here were the fault:
+               they are absolute BLOCK pixels, and a block's body is 6.4 of
+               them, so the smallest "emphasis" on offer was already twice the
+               copy. -->
         </span>
         <!-- The paper's inks. The second exception to "colour is the
              layout's, not the selection's", and bounded the same way the
@@ -474,6 +488,34 @@ function renderPlaceholders(composition, parts, zoom, section, view) {
   }).join("");
 }
 
+/**
+ * The size marks this block can sensibly offer, in points.
+ *
+ * The mark is stored as an absolute number of BLOCK pixels, so the sizes worth
+ * offering depend entirely on the block: emphasis inside 9pt running copy is
+ * not the same number as emphasis inside 12pt. These are ratios of the block's
+ * own body - a step down, and three steps up - resolved to real sizes and
+ * labelled in the unit a printer sets in.
+ *
+ * The largest is 1.8x deliberately. Anything more opens the row it lands on by
+ * more than the copy around it can absorb, and a word standing two lines tall
+ * in the middle of a paragraph is a drop cap in the wrong place.
+ */
+const SIZE_STEPS = [0.85, 1.2, 1.45, 1.8];
+
+function refreshSizeButtons() {
+  const host = document.getElementById("edQuillSize");
+  if (!host) return;
+  const type = globalThis.SahasPublicationType;
+  const bodyPx = Number(state.view?.bodyFontPx) || DEFAULT_BODY_FONT_PX;
+  host.innerHTML = SIZE_STEPS.map((step) => {
+    const px = Math.round(bodyPx * step * 10) / 10;
+    const pt = Math.round(type.editorPxToPt(px) * 10) / 10;
+    return `<button type="button" class="ed-quill-size-btn" data-size="${px}px"
+      title="${pt} pt \u2014 ${step}\u00d7 the body">${pt}</button>`;
+  }).join("");
+}
+
 function layoutTextFrames() {
   const page = document.getElementById("edFramePage");
   const canonical = document.getElementById("edCanonicalContent");
@@ -623,6 +665,8 @@ function layoutTextFrames() {
 
   // Quill is deliberately comfortable editing chrome, outside the newspaper
   // page. The canonical preview above remains the authority for actual fit.
+  refreshSizeButtons();
+
   const editor = document.querySelector("#edWritingSurface .ql-editor");
   if (editor) {
     editor.style.fontSize = `${Math.max(15, Number(state.view.bodyFontPx) || DEFAULT_BODY_FONT_PX)}px`;
@@ -956,11 +1000,39 @@ function bindTextFrames() {
   // through refreshFrame(), and it has not returned by the time the second
   // press arrives.
   let armed = null;
+  // A DOUBLE CLICK IS ONE GESTURE, AND IT BELONGS TO THE OBJECT ITS FIRST
+  // PRESS LANDED ON.
+  //
+  // The frames move between the two presses - the first one commits the flow
+  // that was open, that re-composes the block, and the deck's box shifted 39px
+  // on a real 112x168 block while a double click was in progress. The second
+  // press then lands on whatever is now under the pointer, which is the body,
+  // and the body's own dblclick opens it for typing. Measured on that block:
+  // the subheading a desk then typed went into Quill, and because the caret
+  // was mid-string the STORY was later inserted into the middle of it - the
+  // deck's words ended up split, half at the start of the copy and half at
+  // the end.
+  //
+  // So a second press within the double-click window that lands on a different
+  // object selects it and nothing more; it can never open it.
+  const DOUBLE_CLICK_MS = 500;
+  let gesture = { part: null, at: 0 };
+  const stray = (part, now) => Boolean(gesture.part) && gesture.part !== part
+    && now - gesture.at < DOUBLE_CLICK_MS;
+
+  const beginners = {};
   const clickToEdit = (frame, part, begin) => {
+    beginners[part] = begin;
     frame?.addEventListener("pointerdown", (event) => {
       if (event.button !== 0) return;
-      const already = armed === part || state.selectedPart === part;
+      const now = event.timeStamp || Date.now();
+      const followUp = stray(part, now);
+      const already = !followUp && (armed === part || state.selectedPart === part);
       armed = part;
+      // A stray second press does NOT take ownership of the gesture: the
+      // gesture still belongs to the flow the first press landed on, and that
+      // is what the double click below will open.
+      if (!followUp) gesture = { part, at: now };
       // The page's own background handler must not also fire and reset the
       // selection to the whole block.
       event.stopPropagation();
@@ -970,20 +1042,35 @@ function bindTextFrames() {
       event.preventDefault();
       begin(event);
     });
-    // A double click opens it straight away, without waiting for the second
-    // press to be recognised as "already selected".
-    frame?.addEventListener("dblclick", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      if (inlineTextEdit?.config?.part === part || (part === "body" && canonicalBodyEdit)) return;
-      armed = part;
-      begin(event);
-    });
   };
 
   clickToEdit(headline, "headline", () => beginInlineTextEdit("headline"));
   clickToEdit(subheading, "subheading", () => beginInlineTextEdit("subheading"));
   clickToEdit(body, "body", (event) => beginCanonicalBodyEdit({ x: event.clientX, y: event.clientY }));
+
+  // ONE double-click handler for the whole page, and it opens the flow the
+  // GESTURE belongs to - not whatever the second press happened to land on.
+  //
+  // A per-frame `dblclick` listener cannot do this. The `dblclick` event is
+  // dispatched on the element that received both presses, or on their common
+  // ancestor when they differ - and here they differ routinely, because the
+  // first press commits the flow that was open and the re-composition moves
+  // every frame. Measured on a 112x168 block: the deck's box moved 39px
+  // between the two presses of one double click, so the second press (and
+  // therefore the `dblclick`) landed on the body, and the subheading a desk
+  // typed next went into the story.
+  document.getElementById("edFramePage")?.addEventListener("dblclick", (event) => {
+    if (event.target.closest(".pic-frame")) return;
+    const owner = gesture.part;
+    const begin = owner && beginners[owner];
+    if (!begin) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (inlineTextEdit?.config?.part === owner) return;
+    if (owner === "body" && canonicalBodyEdit) return;
+    armed = owner;
+    begin(event);
+  }, true);
 
   const page = document.getElementById("edFramePage");
 
@@ -994,8 +1081,11 @@ function bindTextFrames() {
     if (event.target.closest(".pic-frame")) return;
     // A display frame's own box can overlap the body's. This handler runs in
     // the CAPTURE phase, so without this it would take a click meant for the
-    // headline or the deck and open the body instead.
+    // headline or the deck and open the body instead - and the same is true of
+    // a gesture that merely BEGAN on one of them and finished here because the
+    // frame moved out from under the pointer.
     if (event.target === headline || event.target === subheading) return;
+    if (gesture.part && gesture.part !== "body") return;
 
     const rect = body?.getBoundingClientRect();
     if (!rect) return;

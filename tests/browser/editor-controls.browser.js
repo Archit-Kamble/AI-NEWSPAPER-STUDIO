@@ -302,11 +302,17 @@ const BODY = 'सातारा : नगरपालिकेच्या स�
     await page.waitForTimeout(500);
     say(/<u>/i.test((await draft()).headline), 'underline marks the headline');
     await selectAllIn('headline');
-    await page.locator(`${marksToolbar} .ed-quill-size-btn[data-size="28px"]`).click();
+    // The largest emphasis this block offers. The sizes are derived from the
+    // block's own body (block-frame.js's refreshSizeButtons) rather than being
+    // fixed browser-CSS numbers, so the net asks the button what it stores
+    // instead of hard-coding a value that is only right for one block.
+    const biggest = await page.locator(`${marksToolbar} .ed-quill-size-btn:last-child`).getAttribute('data-size');
+    const biggestPx = String(parseFloat(biggest));
+    await page.locator(`${marksToolbar} .ed-quill-size-btn:last-child`).click();
     await page.waitForTimeout(500);
-    say(/data-sahas-size="28"/.test((await draft()).headline),
+    say(new RegExp(`data-sahas-size="${biggestPx}"`).test((await draft()).headline),
       'a phrase inside the headline can be set at its own size',
-      (await draft()).headline.slice(0, 90));
+      `${biggest} — ${(await draft()).headline.slice(0, 70)}`);
     await selectAllIn('headline');
     await page.locator(`${marksToolbar} .ql-clean`).click();
     await page.waitForTimeout(500);
@@ -329,15 +335,17 @@ const BODY = 'सातारा : नगरपालिकेच्या स�
       selection.removeAllRanges();
       selection.addRange(range);
     });
-    await page.locator(`${marksToolbar} .ed-quill-size-btn[data-size="28px"]`).click();
+    const bodySize = await page.locator(`${marksToolbar} .ed-quill-size-btn:last-child`).getAttribute('data-size');
+    const bodySizePx = String(parseFloat(bodySize));
+    await page.locator(`${marksToolbar} .ed-quill-size-btn:last-child`).click();
     await page.waitForTimeout(700);
-    say(/data-sahas-size="28"/.test((await draft()).body),
-      'a selected body word is stored at its own size');
-    say(await page.evaluate((key) => {
+    say(new RegExp(`data-sahas-size="${bodySizePx}"`).test((await draft()).body),
+      'a selected body word is stored at its own size', bodySize);
+    say(await page.evaluate(([key, want]) => {
       const block = document.querySelector(`.newspaper-section[data-section-key="${key}"]`);
       return [...block.querySelectorAll('.section-body-line span')]
-        .some((el) => getComputedStyle(el).fontSize === '28px');
-    }, KEY), 'and that word is visibly 28 px in the exact composed preview');
+        .some((el) => Math.abs(parseFloat(getComputedStyle(el).fontSize) - parseFloat(want)) < 0.2);
+    }, [KEY, bodySize]), `and that word is visibly ${bodySize} in the exact composed preview`);
     say(await page.evaluate(() => document.activeElement?.classList.contains('ql-editor')),
       'the exact repaint does not take focus away from the body document');
     await selectAllIn('body');

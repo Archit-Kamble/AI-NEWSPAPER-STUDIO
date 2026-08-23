@@ -1121,6 +1121,27 @@ composed block never set a drop cap at all. `tests/dropCap.test.js` holds it,
 including that a block which has not asked for one composes byte for byte as
 before.
 
+### A size mark is offered in POINTS, against the block's own body
+
+The marks toolbar offered 12, 14, 18, 22 and 28. Those are browser-CSS numbers
+in a **block-pixel** field — `rich-text.js`'s `sanitiseSize` stores an absolute
+number of block pixels, and a block's running body is **6.4** of them (9 pt at
+2 px/mm). So the smallest "emphasis" on offer was 1.9× the copy and the largest
+4.4×. Photographed: a 22 px run inside 7 px type opens its own row to three and
+a half times the leading and leaves a hole above and below — which is not
+emphasis, it is the drop cap's own fault happening in the middle of a paragraph.
+
+`refreshSizeButtons()` derives them from `state.view.bodyFontPx` as ratios of
+the block's own body — 0.85, 1.2, 1.45, 1.8 — and labels them in **points**,
+which is the unit a printer sets in. On a 9 pt block: 7.7, 10.9, 13.2, 16.3.
+The largest is 1.8× deliberately; more than that opens the row by more than the
+copy around it can absorb.
+
+Storage is unchanged — still an absolute size in block pixels — so no existing
+mark moves. Only what the toolbar offers is derived, and it is derived per
+block, because emphasis inside 9 pt copy is not the same number as emphasis
+inside 12 pt.
+
 ### A picture's landing place is SETTLED, not computed once
 
 `copyStartsAt()` returned the block's current `bodyTop`. But where the copy

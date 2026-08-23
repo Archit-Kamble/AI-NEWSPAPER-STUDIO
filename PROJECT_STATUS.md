@@ -5652,3 +5652,26 @@ block, layer order; Box / Oval / Cut-out; **Remove background** (the real U²-Ne
 path — a `.png` at `contain`, on both surfaces); Border, Ground, Columns,
 Headline treatment. Every step compared the newspaper canvas against the Block
 Editor page and they were identical throughout.
+
+### The size marks were in the wrong unit
+
+Driving the marks by hand turned up one more: the toolbar offered 12/14/18/22/28
+and those are **block pixels**, against a body of **6.4**. So the smallest
+emphasis a sub-editor could apply was already 1.9× the copy, and the largest
+4.4×. Photographed on a real block — a 22 px run inside 7 px type opens its own
+row to three and a half times the leading and leaves a hole above and below,
+which is the drop cap's own fault happening in the middle of a paragraph.
+
+They are derived from the block's own body now — 0.85, 1.2, 1.45, 1.8 — and
+labelled in **points**: 7.7, 10.9, 13.2, 16.3 on a 9 pt block. Storage is
+unchanged, so no existing mark moves.
+
+### What the nets say now
+
+| net | |
+|---|---|
+| `npm test` | 885 |
+| `tests/browser/workspace.browser.js` | 223/223 |
+| `tests/browser/editor-controls.browser.js` | 86/86 |
+| `tests/browser/editor-parity.browser.js` × 5 blocks | 70, 72, 57, 57, 69 |
+| all three flows written by double click, six block sizes | 6/6 |

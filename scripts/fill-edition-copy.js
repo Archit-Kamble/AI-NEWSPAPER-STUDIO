@@ -78,6 +78,47 @@ const HEADLINES = [
   'वाहतूक जनजागृती मोहीम',
   'नेत्रतपासणी शिबिर',
   'शाळकरी मुलांचे वृक्षारोपण',
+  // Longer candidates exist so a WIDE block has something that can actually
+  // fill its measure. Without them the pool topped out around 28 characters
+  // and a 620px banner could only ever reach 62% of its column, however the
+  // headline was chosen - see headlineFor() below.
+  'पाणीपुरवठा योजनेचे काम अंतिम टप्प्यात आले असल्याची माहिती',
+  'रस्ते दुरुस्तीसाठी स्वतंत्र निधी मंजूर करण्यात आला आहे',
+  'विद्यार्थ्यांना मोफत पुस्तक वाटपाचा कार्यक्रम जाहीर',
+  'शेतकऱ्यांना बियाणे आणि खतांचे वितरण करण्यात येणार',
+  'घनकचरा व्यवस्थापनावर सविस्तर चर्चा करण्यात आली',
+  'वाचनालयात रविवारपासून पुस्तक प्रदर्शन भरवण्यात येणार',
+  'नेत्रतपासणी शिबिराचे आयोजन करण्यात आले होते',
+  'वाहतूक नियमांबाबत जनजागृती मोहीम हाती घेतली',
+  'दूध उत्पादकांना वाढीव दराने बिले अदा करण्याचा निर्णय',
+  'ग्रामपंचायतीच्या सभेत घनकचरा व्यवस्थापनावर चर्चा',
+  // The pool must comfortably EXCEED the number of blocks an edition has, or
+  // duplicates are forced arithmetically however well they are chosen: 26
+  // headlines across 36 blocks meant at least ten repeats. Deliberately spread
+  // across lengths, because the choice is by measure - a 111px brief and a
+  // 620px banner need candidates that can fill quite different columns.
+  'जिल्हा परिषदेच्या शाळांमध्ये डिजिटल वर्ग सुरू',
+  'तालुका क्रीडा स्पर्धेचे उद्घाटन उत्साहात पार पडले',
+  'नगरपालिकेच्या वतीने स्वच्छता मोहीम राबवण्यात आली',
+  'बाजार समितीत शेतमालाची आवक वाढली असल्याचे चित्र',
+  'आरोग्य विभागाकडून लसीकरण मोहिमेला गती देण्यात आली',
+  'पर्यटन विकासासाठी नवीन आराखडा तयार करण्यात येणार',
+  'महिला बचत गटांच्या उत्पादनांना बाजारपेठ मिळाली',
+  'ग्रामीण भागात इंटरनेट सुविधा पोहोचवण्याचे नियोजन',
+  'सहकारी संस्थांच्या निवडणुका पुढील महिन्यात होणार',
+  'क्रीडा संकुलाच्या कामाला लवकरच सुरुवात होणार आहे',
+  'पूरनियंत्रण उपाययोजनांचा आढावा घेण्यात आला',
+  'वनविभागाकडून वृक्षलागवडीचे उद्दिष्ट निश्चित',
+  'शिक्षकांच्या रिक्त जागा भरण्याची प्रक्रिया सुरू',
+  'पाणीटंचाई निवारणासाठी टँकर सुरू करण्यात आले',
+  'रेशन दुकानांची तपासणी मोहीम हाती घेण्यात आली',
+  'उद्यानाच्या सुशोभीकरणाचे काम पूर्ण',
+  'नवीन बसफेऱ्या सुरू करण्याची मागणी',
+  'साखर कारखान्याचा गळीत हंगाम सुरू',
+  'विहिरींचे खोलीकरण पूर्ण झाले',
+  'ग्रंथालयाला नवीन पुस्तके मिळाली',
+  'अंगणवाडी इमारतीचे लोकार्पण',
+  'पशुवैद्यकीय शिबिर संपन्न',
 ];
 
 const DECKS = [
@@ -98,6 +139,54 @@ const REPORTERS = ['साहस वार्ता'];
 // A stable pick, so the same block gets the same copy on every run - two
 // screenshots of the same edition must be comparable.
 const pick = (list, seed) => list[Math.abs(seed) % list.length];
+
+/**
+ * The headline in the pool that best FILLS this block's measure.
+ *
+ * The pool used to be indexed by block number alone, so a 25-character
+ * headline could land on a 620px banner and set at 62% of its column - and a
+ * one-line headline lying two-fifths short of the measure is the single most
+ * obvious thing that makes a made-up page read as a mock-up. The fixture is
+ * what the desk judges the layout by, so a fixture that cannot produce a
+ * professional headline makes the whole page unjudgeable.
+ *
+ * This is the same principle storyWriter's settleGeneratedHeadline() applies
+ * to real copy, with the same authority: candidates are SHAPED by the exact
+ * compositor and the one that actually fills is taken. A character count is a
+ * search range, never headline geometry (CLAUDE.md) - which is exactly why
+ * every candidate is composed rather than measured by length.
+ *
+ * Ties break on the stable seed, so two runs of the same edition still
+ * produce the same page.
+ */
+function headlineFor(compose, section, placed, base, seed, used = new Set()) {
+  const start = Math.abs(seed) % HEADLINES.length;
+  const ordered = HEADLINES.map((_, i) => HEADLINES[(start + i) % HEADLINES.length]);
+  let best = null;
+  let fallback = null;
+  for (const headline of ordered) {
+    // A newspaper never runs the same headline twice on the same day. Choosing
+    // purely on fit made that happen immediately - the widest-filling candidate
+    // is the widest for every wide block - so a headline already used is only
+    // taken if nothing unused will do at all.
+    if (used.has(headline)) { fallback = fallback || headline; continue; }
+    const composed = compose.composeSection(
+      { ...section, images: placed },
+      { ...base, headline, body: '' },
+    );
+    const band = composed.bands?.headline;
+    // A headline with no room at all is not a candidate at any fill.
+    if (!band || band.overset) continue;
+    const fill = compose.headlineFill(composed);
+    if (!best || fill > best.fill) best = { headline, fill };
+    // Good enough is good enough - and the FIRST one that fills wins, so the
+    // seed still decides between equally good candidates.
+    if (fill >= 0.95) { used.add(best.headline); return best.headline; }
+  }
+  const chosen = best ? best.headline : (fallback || ordered[0]);
+  used.add(chosen);
+  return chosen;
+}
 
 /**
  * Sentences added until the block is genuinely full - COMPOSED, not counted.
@@ -192,6 +281,8 @@ function bodyFor(compose, section, images, view, seed) {
 
   let written = 0;
   let skipped = 0;
+  // One edition, one headline each - see headlineFor().
+  const usedHeadlines = new Set();
 
   for (const [index, section] of sections.entries()) {
     // Adverts are sold space and standing features are filled by the software
@@ -199,15 +290,23 @@ function bodyFor(compose, section, images, view, seed) {
     if (section.block_type === 'advert' || section.feature_key || section.smart_card_key) { skipped += 1; continue; }
     if (!['article', 'briefs', 'photo'].includes(String(section.block_type))) { skipped += 1; continue; }
 
-    const headline = pick(HEADLINES, index * 7 + section.page_number);
     const subheading = section.height_px > 240 ? pick(DECKS, index * 3) : '';
     const location = pick(LOCATIONS, index);
     const reporter = pick(REPORTERS, index * 5);
+    const placed = imagesBySection.get(section.id) || [];
+
+    // The headline is chosen AFTER the pictures are known, because the measure
+    // it has to fill is what is left beside them.
+    const headline = headlineFor(
+      compose, section, placed,
+      { subheading, location, author: reporter },
+      index * 7 + section.page_number,
+      usedHeadlines,
+    );
 
     // Compose the block with its real headline and deck but no body, so the
     // budget returned is the room the STORY has - after the display type has
     // taken what it needs, and after the photographs have taken theirs.
-    const placed = imagesBySection.get(section.id) || [];
     const probe = compose.composeSection(
       { ...section, images: placed },
       { headline, subheading, body: '', location, author: reporter },

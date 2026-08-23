@@ -167,7 +167,7 @@ async function saveSection(pageId, sectionKey, body) {
     letterSpacingPx: body.letterSpacingPx,
     paragraphSpacingPx: body.paragraphSpacingPx,
     listStyle: body.listStyle,
-    dropCap: body.dropCap,
+    dropCapLines: body.dropCapLines,
     borderStyle: body.borderStyle,
     borderWidthPx: body.borderWidthPx,
     borderColor: body.borderColor,

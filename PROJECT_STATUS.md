@@ -5506,3 +5506,149 @@ Two things the net had to learn, both of which had made it lie:
 - **Probe with a single token.** A composed line is one span, and a line break
   falls between words, so a two-word probe can be split across two spans and
   read as absent when it is on the page.
+
+---
+
+## §49 — The editor, driven by hand: five faults, and a drop cap
+
+**Date: 2026-08-24.** The desk's report was three things at once: *"I find this
+WATER SCHEME CLEARED in many news block"*, *"fix editor also"*, and *"use every
+type of functionality... take screenshot to judge them, don't rely on code"*.
+So this was done by driving the running app and photographing every step — a
+block built from nothing entirely through the editor's own controls, never
+through an API.
+
+### 0. The pollution, and the test that caused it
+
+`WATER SCHEME CLEARED` stood on five blocks of edition 40294 — the picture
+reference edition. It is the parity net's own test headline. The net writes
+into a real block on a real edition, which is the point of it, and simply left
+its copy there.
+
+Fixed at the cause: `keepBlock()`/`giveBlockBack()` snapshot every field and
+every picture placement before the run and restore them after, and the run's
+last check asserts the block came back as it was found. The five blocks were
+refilled with `scripts/fill-edition-copy.js`.
+
+### 1. A typed subheading was appended to the story
+
+The worst of them, and it destroyed editorial content silently.
+
+Reproduced by hand: on an empty block, type a headline on the page, then double
+click where the deck goes and type it. Result — `subheading` NULL, and the
+deck's words the last sentence of the **body**, stored that way.
+
+Two independent causes, both found by instrumenting the real page rather than
+reading code:
+
+- Committing the headline made the block "written", which withdrew the deck's
+  prompt, which left its band empty, which placed its frame `display: none`.
+  A hidden frame cannot take the click, so the double click fell **through** to
+  the body frame underneath and opened the body for typing.
+- And the frames move during a click. Pressing one flow blurs the one before
+  it, that commit re-composes the block, and the raw event trace shows the
+  consequence exactly:
+
+  ```
+  pointerdown: edSubheadingFrame
+  mousedown:   edSubheadingFrame
+  mouseup:     edFramePage      <- the frame moved 32px out from under it
+  click:       edFramePage
+  ```
+
+  A `click` is dispatched on the common ancestor when down and up differ, so
+  the deck's own handler never ran at all.
+
+Both are fixed. Selection happens on **pointer-down**, the way a layout tool
+does it, and the press does not reach the page's background handler. Click to
+select, click again to edit — a double click still works because it is two
+clicks. And the flow the desk is **addressing** is prompted whether the block
+is written or not, so its frame has real geometry to be present at.
+
+The always-on version of that prompt was tried first and is wrong for its own
+reason: photographed, it drew grey display type across the first line of a
+story that was already set. It is offered on an unwritten block, and on the
+flow being edited or selected — including by clicking into the Subheading field
+below the page, which selects that object like any other route.
+
+### 2. Marks split Devanagari syllables
+
+Dragging across the composed page and pressing bold produced `द<strong>िली` —
+the consonant in one run, its matra in the next — and the browser drew the
+orphaned matra on a dotted circle. Photographed.
+
+`bodyOffsetAt()` maps a pointer position to an offset by proportion, which is
+plain code-unit arithmetic. `graphemes.js` gained `snapToCluster()`, beside the
+`clusters()` it is built on: a caret snaps to the nearer boundary, a selection
+grows outward. **15 drags at 15 different fractions, zero split aksharas.**
+
+### 3. The selection chip covered the words it was naming
+
+`.frame-selection-label` sat at the selected frame's top-left corner — on the
+body frame, exactly where the story's first words are. It is outside the page
+now (the page is `overflow: hidden`, so a label above a frame at the top would
+be clipped), and it also carries the direct-body-edit state that used to be a
+second chip drawn at the body frame's top **right**, over a justified column
+whose lines reach that edge.
+
+### 4. There was no way back to the block's own properties
+
+Properties shows Border, Ground, Columns, Drop cap and Headline treatment only
+while the whole block is the selected object — and every one of those is a
+decision made after the story is written. Clicking the block on the newspaper
+did nothing, because `selectSection()` returned early when the key had not
+changed. The only route back was the Escape key. Clicking a block that is
+already open now selects the block itself.
+
+### 5. A picture landed inside the headline anyway
+
+`copyStartsAt()` returned the block's current `bodyTop`. But where the copy
+starts is not fixed: placing a picture there can push it down, because the
+headline is re-fitted with the picture in the frame. Measured on a real 190×264
+second lead — headline **one** line ending at y=26, picture placed at y=27, and
+with it there the headline re-fitted to **two** lines ending at y=49, its
+second line set in the 89 px corridor beside the picture.
+
+The placement is settled now rather than computed once: place, compose, and if
+the copy starts lower, move down to meet it. Bounded at three passes. On that
+block the picture lands at y=47 and the headline keeps one line at its full
+188 px measure.
+
+### The drop cap
+
+The desk asked to "make one character big at the start". Pressing the size
+button does that and the result is not a drop cap: a size mark is a property of
+a **run**, so it makes the one row it lands on three and a half times taller
+and leaves the letter on a stilt with a band of white beneath it. Photographed.
+
+A drop cap is a property of the **frame** — a rectangle at the top of the first
+column that type may not enter, which is exactly what a photograph is. So it
+contributes one interval to the obstacle set and nothing else in the pour
+changes.
+
+Measured in the browser against the publication serif at 200 px to size it
+honestly: an ordinary akshara's ink ascent is **0.625 em** (क म ग ट पा रा ना हा
+सु ल क्ष सा), rising to 0.895–0.905 only where an above-base matra is present;
+the face's design box is 1.555 em. Sizing by the box drew a letter a little over
+half the depth it had reserved. The cap's head stroke now sets on the first
+line's head stroke and its baseline on the last line it spans.
+
+`page_sections.drop_cap_lines` (0 = none) replaces a `drop_cap` BOOLEAN that
+persisted, had a Typography checkbox, and reached nothing but a CSS class on
+that panel's own **preview** paragraph — the composed block never set a drop cap
+at all. Properties → Drop cap offers None / 2 / 3 / 4.
+
+`tests/dropCap.test.js` holds it — seven checks, every one verified to fail
+when its own fix is reverted, including that a block which has not asked for a
+drop cap composes byte for byte as before.
+
+### What was exercised by hand, and photographed
+
+Headline, subheading and story typed **on the page**; the same three in the
+fields below it; ink on a word; a size mark on a phrase; bold on a dragged
+phrase; a drop cap at 2, 3 and 4 lines; a picture added through **+ Add a
+picture**; Bigger, Smaller, Rotate, Flip H, Flip V, Fit to block, Fit inside
+block, layer order; Box / Oval / Cut-out; **Remove background** (the real U²-Net
+path — a `.png` at `contain`, on both surfaces); Border, Ground, Columns,
+Headline treatment. Every step compared the newspaper canvas against the Block
+Editor page and they were identical throughout.

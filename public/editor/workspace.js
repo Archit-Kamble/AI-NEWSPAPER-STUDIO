@@ -591,7 +591,19 @@ async function requestSmartCard({ key, variant }) {
 
 function selectSection(sectionKey) {
   const state = store.getState();
-  if (state.selectedSectionKey === sectionKey) return;
+  if (state.selectedSectionKey === sectionKey) {
+    // CLICKING THE BLOCK THAT IS ALREADY OPEN SELECTS THE BLOCK ITSELF.
+    //
+    // It used to do nothing at all, and that left a desk stuck: Properties
+    // shows Border, Ground, Columns, Drop cap and Headline treatment only
+    // while the whole BLOCK is the selected object, and every one of those is
+    // a decision made after the story is written. Once the caret had been in
+    // the body, the only way back to them was the Escape key - which is not
+    // discoverable, and is not what a layout tool does. Clicking a frame you
+    // are inside selects that frame; this is that gesture.
+    selectPart("block");
+    return;
+  }
 
   // Leaving a section with unsaved work must not lose it: the debounce timer is
   // never given the chance to expire after the draft has been swapped out.

@@ -905,11 +905,108 @@ function paragraphsFrom(text, starts) {
  * column, a band's gaps are used left to right. Paragraph boundaries force a
  * fresh row; ordinary word-space boundaries do not.
  */
+// THE DROP CAP - an initial letter set over several lines, with the copy
+// running round it.
+//
+// A sub-editor's instinct is to select the first character and press a bigger
+// size, and until now that is all the editor could do. The result is not a
+// drop cap: a 28px run inside an 8px line simply makes that ONE row 3.5 times
+// taller, so the opening letter sits on a stilt with a band of white under it
+// and the paragraph resumes four lines down. Photographed on a real block; it
+// is the fault the size button was always going to produce, because a size
+// mark is a property of a RUN and a drop cap is a property of the FRAME.
+//
+// It is not a special case in the pour, and deliberately so. A drop cap is a
+// rectangle at the top of the first column that type may not enter - which is
+// exactly what a photograph is, and this engine has run type round those since
+// it was written. So the cap contributes one more interval to the obstacle set
+// and nothing else in `fillRow`, `viableIntervals` or the balancer changes at
+// all.
+//
+// Its size is derived, never asked for: the cap's own design box is made to
+// span DROP_CAP_LINES body line boxes, so "3 lines" means three lines whatever
+// the block's body size is. The gutter beside it is the character's own side
+// bearing plus a hair; a printed drop cap does not stand off further than that.
+const DROP_CAP_MAX_LINES = 6;
+// The air between the cap and the copy beside it, in the BODY's em rather
+// than the cap's: it is the copy that has to clear the letter, so the gap
+// should read the same whether the cap is two lines deep or four. Half an em
+// is what a printed initial leaves.
+const DROP_CAP_GUTTER_EM = 0.5;
+
+// THE FACE'S REAL NUMBERS, measured in the browser against the publication
+// serif at 200px and recorded here rather than guessed - the same way this
+// project arrived at MIN_LINE_HEIGHT.
+//
+// `measureText().actualBoundingBoxAscent` over twenty aksharas:
+//
+//     क म ग ट पा रा ना हा सु ल क्ष सा   0.625 em   <- shirorekha to baseline
+//     भा थ ध अ                          0.63-0.64
+//     श्री वि दे जि                       0.895-0.905  (an above-base matra)
+//
+// So an ordinary letter's BODY - the part a drop cap is aligned by, from the
+// head stroke down to the baseline - is 0.625 em, and it is that height, not
+// the design box, that has to span the lines. Sizing by the design box (1.555
+// em) drew a letter a little over half the depth it had reserved, sitting in
+// its own hole; that is the same fault the size button already had, only
+// tidier.
+const SHIROREKHA_EM = 0.625;
+// And what the BROWSER lays the face out with - `fontBoundingBoxAscent` /
+// `Descent`, which is what decides where a baseline lands inside a line box.
+// Deliberately separate from faceAscent()/faceDescent(): those are this
+// engine's own measured INK extremes and are not the numbers CSS uses.
+const FACE_BOX_ASCENT_EM = 0.930;
+const FACE_BOX_DESCENT_EM = 0.625;
+
+/**
+ * The cap's own geometry, or null when the block has not asked for one.
+ *
+ * `text` is taken in CLUSTERS, never characters - a Marathi initial is an
+ * akshara (क्ष is one letter, not three), and slicing by code unit would set
+ * a bare consonant in 40px type and leave its matra behind in the copy.
+ *
+ * Aligned as a compositor aligns one: the cap's head stroke on the FIRST
+ * line's head stroke, and its baseline on the LAST line it spans.
+ */
+function dropCapOf(text, { lines, chars, bandHeight, fontPx, family, weight }) {
+  const count = Math.round(Number(lines) || 0);
+  if (!(count >= 2) || !text) return null;
+  const wanted = Math.max(1, Math.round(Number(chars) || 1));
+  const capText = clusters(text).slice(0, wanted).join('');
+  if (!capText.trim()) return null;
+
+  const deep = Math.min(count, DROP_CAP_MAX_LINES);
+  // Where the body's own first line puts its baseline and its head stroke.
+  const bodyBaseline = fontPx * faceAscent(family, weight);
+  const headStroke = bodyBaseline - fontPx * SHIROREKHA_EM;
+  // The cap's body has to reach from that head stroke down to the baseline of
+  // the last line it spans, which is (deep - 1) rows lower.
+  const capBody = (deep - 1) * bandHeight + fontPx * SHIROREKHA_EM;
+  const capFontPx = capBody / SHIROREKHA_EM;
+  // A glyph is centred in its line box by half-leading, so the line box that
+  // puts the head stroke exactly on the box top is the one where that leading
+  // cancels the difference between the face's box ascent and its head stroke.
+  const lineBoxPx = capFontPx * (FACE_BOX_ASCENT_EM + FACE_BOX_DESCENT_EM
+    - 2 * (FACE_BOX_ASCENT_EM - SHIROREKHA_EM));
+  return {
+    text: capText,
+    length: capText.length,
+    lines: deep,
+    fontPx: capFontPx,
+    lineBoxPx,
+    // Down from the body's top by the same hair the first line's own head
+    // stroke sits below it - so the two start on one line.
+    offsetY: headStroke,
+    width: measure(capText, capFontPx, family, weight),
+    gutter: fontPx * DROP_CAP_GUTTER_EM,
+  };
+}
+
 function pourBody(bodyInput, {
   top, bottom, columns, images, fontPx, lineHeight, family, weight, align: requestedAlign,
   paragraphSpacingPx = 0, letterSpacingPx = 0,
   italic = false, underline = false, firstLineIndentPx = 0,
-  paragraphStarts = null,
+  paragraphStarts = null, dropCapLines = 0, dropCapChars = 1,
 }) {
   let align = requestedAlign;
   const text = typeof bodyInput === 'object' && bodyInput ? String(bodyInput.text || '') : String(bodyInput || '');
@@ -931,16 +1028,35 @@ function pourBody(bodyInput, {
   const bandHeight = fontPx * lineHeight;
   const minCorridor = MIN_CORRIDOR_EM * fontPx;
 
+  // The initial letter, and the rectangle it keeps type out of. It stands in
+  // the FIRST column only - a drop cap belongs to the opening of the story,
+  // and one at the top of every column would read as three stories.
+  const cap = dropCapOf(text, {
+    lines: dropCapLines, chars: dropCapChars, bandHeight, fontPx, family, weight,
+  });
+  const capBottom = cap ? top + cap.lines * bandHeight : 0;
+  const capRight = cap && columns.length ? columns[0].start + cap.width + cap.gutter : 0;
+  // Every obstacle at a given band: the pictures, and the cap. One function so
+  // the calibration grid and the real pour cannot disagree about it - the
+  // capacity a desk is quoted has to be the capacity the copy actually pours
+  // into, and a cap the calibration could not see would overstate it by three
+  // lines' worth of measure.
+  const holesAt = (columnIndex, y0, y1) => {
+    const holes = bandObstacles(images, y0, y1, fontPx);
+    if (cap && columnIndex === 0 && y0 < capBottom - 0.5) holes.push({ start: columns[0].start, end: capRight });
+    return holes;
+  };
+
   // ---------------------------------------------------- capacity calibration ---
   // Every band's raw free space at the ordinary height, whatever is or is
   // not written into it - independent of `marks` on purpose (see above).
   // Only `result.capacity`/`result.whitespace` read this; the real pour
   // below never does, because a row it actually places a tall run on may
   // legitimately need more room than this grid assumes.
-  const strips = columns.map((column) => {
+  const strips = columns.map((column, columnIndex) => {
     const bands = [];
     for (let y = top; y + bandHeight <= bottom + 0.5; y += bandHeight) {
-      bands.push({ y, free: subtract([column], bandObstacles(images, y, y + bandHeight, fontPx)) });
+      bands.push({ y, free: subtract([column], holesAt(columnIndex, y, y + bandHeight)) });
     }
     const raw = bands.map((band) => band.free);
     const fullWidthPx = column.end - column.start;
@@ -978,19 +1094,19 @@ function pourBody(bodyInput, {
   // instead of an index into a precomputed uniform array. `isFirstRow`/
   // `isLastRow` reproduce viableIntervals()'s own block-edge exemption ("the
   // top and bottom of the block count as satisfied").
-  function rowGaps(column, y, height, isFirstRow, isLastRow) {
+  function rowGaps(column, columnIndex, y, height, isFirstRow, isLastRow) {
     if (y + height > bottom + 0.5) return null;
-    const here = subtract([column], bandObstacles(images, y, y + height, fontPx));
+    const here = subtract([column], holesAt(columnIndex, y, y + height));
     const fullWidthPx = column.end - column.start;
     const bands = [];
     let index = 0;
     if (!isFirstRow) {
-      bands.push(subtract([column], bandObstacles(images, y - height, y, fontPx)));
+      bands.push(subtract([column], holesAt(columnIndex, y - height, y)));
       index = 1;
     }
     bands.push(here);
     if (!isLastRow) {
-      bands.push(subtract([column], bandObstacles(images, y + height, y + 2 * height, fontPx)));
+      bands.push(subtract([column], holesAt(columnIndex, y + height, y + 2 * height)));
     }
     return { y, gaps: viableIntervals(bands, index, minCorridor, fullWidthPx) };
   }
@@ -999,17 +1115,17 @@ function pourBody(bodyInput, {
   // once that row is committed - a tall row pushes every later row in THIS
   // column down; other columns are unaffected, matching "reading order is
   // down a column and then into the next" exactly as before.
-  function makeCursor(column) {
+  function makeCursor(column, columnIndex) {
     let y = top;
     let first = true;
     return {
-      probe(height) { return rowGaps(column, y, height, first, y + height + height > bottom + 0.5); },
+      probe(height) { return rowGaps(column, columnIndex, y, height, first, y + height + height > bottom + 0.5); },
       commit(height) { y += height; first = false; },
       hasRoom(height) { return y + height <= bottom + 0.5; },
       get y() { return y; },
     };
   }
-  const cursors = columns.map(makeCursor);
+  const cursors = columns.map((column, columnIndex) => makeCursor(column, columnIndex));
 
   // A hard-overset piece's "is there room ANYWHERE" check, against the
   // calibration grid's real widths - a taller row changes HEIGHT, never
@@ -1377,7 +1493,15 @@ function pourBody(bodyInput, {
       }
     }
 
-    const pieces = breakPieces(paragraph.text);
+    // The cap's own letter is SET SEPARATELY, so the pour must not set it
+    // again - but every mark a sub-editor put on this copy is held against the
+    // authored text by offset, so nothing may shift. The first piece therefore
+    // loses its opening clusters and the paragraph's offset gains exactly the
+    // same number: `at` for every remaining piece is unchanged, to the
+    // character.
+    const capHere = cap && paragraphIndex === 0 ? cap.length : 0;
+    const paragraphOffset = paragraph.offset + capHere;
+    const pieces = breakPieces(capHere ? paragraph.text.slice(capHere) : paragraph.text);
     const paragraphSlots = [];
     let index = 0;
     let firstLineOfParagraph = true;
@@ -1400,7 +1524,7 @@ function pourBody(bodyInput, {
       if (colIndex >= cursors.length) break;
 
       const cursor = cursors[colIndex];
-      const result = fillRow(cursor, pieces, index, paraCharOffset, paragraph.offset,
+      const result = fillRow(cursor, pieces, index, paraCharOffset, paragraphOffset,
         indentPx > 0 && firstLineOfParagraph && paragraph.forcedBreak);
       // Either no room at the ordinary height at all, or a run on this row
       // needs more height than this column has left (BUG 1) - either way,
@@ -1472,7 +1596,7 @@ function pourBody(bodyInput, {
     // Every line of this paragraph is placed and its real measures are known,
     // so the paragraph can now be broken PROPERLY rather than greedily.
     if (index >= pieces.length) {
-      balanceParagraph(lines, pieces, paragraphSlots, paragraph.offset);
+      balanceParagraph(lines, pieces, paragraphSlots, paragraphOffset);
     }
 
     if (index < pieces.length) {
@@ -1485,7 +1609,7 @@ function pourBody(bodyInput, {
       // there to the end is unplaced, blank lines and all. Reassembling it
       // could only ever reproduce the source approximately - the old version
       // put back a single `\n` where the author had typed two.
-      overset = text.slice(paragraph.offset + paraCharOffset);
+      overset = text.slice(paragraphOffset + paraCharOffset);
       break;
     }
   }
@@ -1540,6 +1664,22 @@ function pourBody(bodyInput, {
     lines,
     overset,
     violations,
+    // Where the initial letter goes and how big it is. Drawn by render.js
+    // rather than composed as a line: it is one glyph in its own box, not a
+    // flow, and nothing follows it that needs a baseline from it.
+    dropCap: cap && columns.length ? {
+      text: cap.text,
+      at: 0,
+      x: columns[0].start,
+      y: top + cap.offsetY,
+      width: cap.width,
+      height: cap.lines * bandHeight,
+      lineBoxPx: cap.lineBoxPx,
+      fontPx: cap.fontPx,
+      lines: cap.lines,
+      family,
+      weight,
+    } : null,
     // The authoritative answer to "how full is the body", in equivalent
     // lines. `lines.length` is a FRAGMENT count and is never this number.
     occupancy: {
@@ -1835,6 +1975,7 @@ export function composeBlock(input = {}) {
     content: { ...content, measure: measureAvail, room },
     bands: {},
     bodyLines: [],
+    dropCap: null,
     columns: [],
     typography: { bodyPx, lineHeight, family: bodyFamily, weight: bodyWeight, italic: bodyItalic, underline: bodyUnderline },
     violations,
@@ -2098,6 +2239,10 @@ export function composeBlock(input = {}) {
     italic: bodyItalic,
     underline: bodyUnderline,
     firstLineIndentPx: Math.max(0, num(input.firstLineIndentPx, 0)),
+    // Off unless the block asks for it, so no stored row's composition can
+    // change: 0 is "no drop cap" and is what every existing block carries.
+    dropCapLines: Math.max(0, num(input.dropCapLines, 0)),
+    dropCapChars: Math.max(1, num(input.dropCapChars, 1)),
   };
 
   // ------------------------------------------------ the paragraph policy ---
@@ -2169,6 +2314,7 @@ export function composeBlock(input = {}) {
   }
 
   result.bodyLines = body.lines;
+  result.dropCap = body.dropCap || null;
   // What the compositor did with the author's breaks. Authored is what the
   // reporter typed; set is what this block's own measure can carry.
   result.typography.paragraphs = {

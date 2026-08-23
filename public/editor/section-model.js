@@ -55,7 +55,11 @@ export const DRAFT_FIELDS = [
   "letterSpacingPx",
   "paragraphSpacingPx",
   "listStyle",
-  "dropCap",
+  // The initial letter, in LINES. It replaces the `dropCap` BOOLEAN that used
+  // to sit here: that flag persisted, had a Typography checkbox, and reached
+  // nothing but a CSS class on the panel's own PREVIEW paragraph - the block
+  // itself never set a drop cap at all. 0 is off.
+  "dropCapLines",
   // Block decoration. These persist on the row, so they have to travel with the
   // draft as well - a template that boxes the advert slot would otherwise have
   // its box wiped by the first save of that block.
@@ -144,7 +148,7 @@ export function draftFromSection(section) {
     letterSpacingPx: Number(section.letter_spacing_px) || 0,
     paragraphSpacingPx: Number.isFinite(Number(section.paragraph_spacing_px)) ? Number(section.paragraph_spacing_px) : 8,
     listStyle: section.list_style || "none",
-    dropCap: section.drop_cap === true,
+    dropCapLines: Math.max(0, Number(section.drop_cap_lines) || 0),
     borderStyle: section.border_style || "none",
     borderWidthPx: Number(section.border_width_px) || 1,
     borderColor: section.border_color || "#111111",
@@ -244,7 +248,7 @@ export function payloadFromDraft(draft) {
     letterSpacingPx: draft.letterSpacingPx,
     paragraphSpacingPx: draft.paragraphSpacingPx,
     listStyle: draft.listStyle,
-    dropCap: draft.dropCap,
+    dropCapLines: Math.max(0, Number(draft.dropCapLines) || 0),
     borderStyle: draft.borderStyle,
     borderWidthPx: draft.borderWidthPx,
     borderColor: draft.borderColor,

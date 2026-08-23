@@ -64,6 +64,7 @@ import { PART_LABEL } from "./typography-panel.js";
 // should not paint a DIFFERENT face family than the one the story was
 // actually measured in either.
 import { publicationFamily } from "../compose/font-metrics.js";
+import { snapToCluster } from "../compose/graphemes.js";
 
 let quill = null;
 let hooks = {};
@@ -197,9 +198,17 @@ export function blockFrameMarkup() {
         <div class="frame frame-subheading" id="edSubheadingFrame" tabindex="-1" title="Double-click to edit the subheading"></div>
         <div class="frame frame-body" id="edBodyFrame" tabindex="-1"
              title="Double-click to edit body copy"></div>
-
-        <span class="frame-selection-label" id="edSelectionLabel" hidden></span>
       </div>
+
+      <!-- OUTSIDE the page, deliberately. Drawn inside it the chip sat at the
+           selected frame's own top-left corner - which on the body frame is
+           exactly where the story's first words are, so selecting the body
+           covered the opening of the story it was naming. The page is
+           overflow-hidden (overset copy may not spill onto the next block),
+           so a label placed above a frame at the top of the page would simply
+           be clipped away. It lives here, beside the page, and is positioned
+           against the page's own box. -->
+      <span class="frame-selection-label" id="edSelectionLabel" hidden></span>
 
       <!-- Quill is an EDITING CONTROL, not a second newspaper renderer. Keeping
            it outside the printable page means the enlarged page can remain
@@ -307,12 +316,23 @@ function updateSelectionLabel() {
   // silently destroy a label element living inside them. The page itself
   // never has its innerHTML replaced wholesale, only specific children
   // updated - so the label stays put there and is just repositioned.
-  const pageRect = page.getBoundingClientRect();
+  const frame = document.getElementById("edBlockFrame");
+  const originRect = (frame || page).getBoundingClientRect();
   const hostRect = host.getBoundingClientRect();
-  label.style.left = `${hostRect.left - pageRect.left + 2}px`;
-  label.style.top = `${hostRect.top - pageRect.top + 2}px`;
-  label.textContent = PART_LABEL[state.selectedPart] || state.selectedPart;
+  // The chip is also where the direct-body-edit state is named. It used to be
+  // a second chip drawn inside the body frame, at its top right - on top of a
+  // justified column, whose lines reach exactly that edge.
+  const naming = PART_LABEL[state.selectedPart] || state.selectedPart;
+  label.textContent = state.selectedPart === "body" && canonicalBodyEdit
+    ? `${naming} — typing · drag to select`
+    : naming;
   label.hidden = false;
+
+  // ABOVE the frame it names, never over the words inside it. Measured after
+  // the text is set, because the chip's height is its own line box.
+  const height = label.offsetHeight || 16;
+  label.style.left = `${hostRect.left - originRect.left}px`;
+  label.style.top = `${Math.max(0, hostRect.top - originRect.top - height - 2)}px`;
 }
 
 /** The block itself, selected: an outline around the whole page. */
@@ -360,11 +380,33 @@ const PLACEHOLDER_LABEL = { headline: "Headline", subheading: "Subheading", body
  *
  * A headline and a story are not optional on a block meant to carry copy - an
  * article block is never published without a headline - so a missing one is a
- * real omission and is always named. A DECK is optional (the AI panel has a
- * "Write a subheading" toggle for exactly that), so a permanent grey ghost on
- * every deck-less block would be noise rather than an affordance: it is
- * offered only while the block is still unwritten, and after that the field
- * below the page is where a deck is added.
+ * real omission and is always named.
+ *
+ * A DECK IS OPTIONAL, so its prompt is offered only while the block is still
+ * unwritten - and that is a rule about the PROMPT, not about the frame.
+ *
+ * The first version of this conflated the two and it cost a subheading. A flow
+ * with no prompt has no band, a frame with no band is placed `display: none`,
+ * and an object that is not on the page cannot be clicked or typed into at
+ * all: type a headline on the page and then double click where the deck goes,
+ * and committing the headline made the block "written", withdrew the deck's
+ * prompt, hid its frame mid-gesture, and the double click fell THROUGH to the
+ * body underneath. The deck the desk then typed was appended to the STORY and
+ * stored that way - `subheading` NULL, its words the last sentence of the copy.
+ *
+ * Both halves are fixed, separately, because they are separate faults:
+ *
+ *  - a press can no longer land on the wrong object (bindTextFrames, which
+ *    selects on pointer-down and never lets the page's own handler take a
+ *    press meant for a flow);
+ *  - and the deck is prompted whenever the desk is ADDRESSING it - editing it,
+ *    or having selected it, including by clicking into the Subheading field
+ *    below the page, which selects that object like any other route
+ *    (story-editor.js). See layoutTextFrames().
+ *
+ * Which leaves the prompt itself free to be what it should be: a ghost on an
+ * unwritten block, and never grey display type standing over a story that is
+ * already set - which is exactly what an always-on deck prompt drew.
  */
 function missingFlows(view, section) {
   if (!blockExpectsCopy(section?.block_type)) return [];
@@ -473,6 +515,36 @@ function layoutTextFrames() {
   // exactly where it is going to be set, and `bodyTop` follows it so the body
   // frame no longer swallows the whole empty block.
   const prompts = missingFlows(state.view, state.section);
+
+  // AN OBJECT THE DESK IS ADDRESSING IS ALWAYS ON THE PAGE.
+  //
+  // A flow with no words composes to no band, and a frame with no band is
+  // placed `display: none`. That is right for a flow nobody has asked for and
+  // catastrophic for one they have: hiding a focused contenteditable BLURS it,
+  // and every keystroke after that falls into the next editable on the page -
+  // which is Quill, the body.
+  //
+  // Measured exactly that way. On an empty block the deck prompt exists only
+  // while the block is unwritten, so: type a headline on the page, double
+  // click the deck, type it - and committing the headline made the block
+  // "written", the deck prompt went, the deck frame was hidden mid-edit, and
+  // the subheading a desk had just typed was appended to the STORY. Stored
+  // that way: `subheading` NULL, the deck's words the last sentence of the
+  // copy, and nothing on screen to say so.
+  //
+  // So the flow being edited, and the flow selected, are prompted whether or
+  // not they carry words: the prompt is what gives them real band geometry to
+  // be present at. The label itself is still withheld from a flow being typed
+  // into (see renderPlaceholders below) - this reserves the box, not the ink.
+  const addressable = blockExpectsCopy(state.section?.block_type)
+    ? [inlineTextEdit?.config?.part, state.selectedPart] : [];
+  for (const part of addressable) {
+    if (part !== "headline" && part !== "subheading") continue;
+    if (prompts.includes(part)) continue;
+    if (plainText(state.view[part] || "").trim()) continue;
+    prompts.push(part);
+  }
+
   const prompt = promptComposition(renderSection, state.view, prompts);
   if (prompt) {
     const promptBand = (key, fallback) => {
@@ -484,7 +556,12 @@ function layoutTextFrames() {
     };
     if (prompts.includes('headline')) headlineBox = promptBand('headline', headlineBox);
     if (prompts.includes('subheading')) deckBox = promptBand('deck', deckBox);
-    bodyTop = Number.isFinite(prompt.bodyTop) ? prompt.bodyTop : bodyTop;
+    // ONLY while the body itself is unwritten. The prompt composition reserves
+    // room for display type that is not set, so its `bodyTop` sits BELOW where
+    // real copy actually starts - taking it on a block that has a story (but,
+    // say, no headline yet) pushes the body's hit frame down past its own
+    // first lines, and those lines stop being clickable.
+    if (prompts.includes('body') && Number.isFinite(prompt.bodyTop)) bodyTop = prompt.bodyTop;
   }
 
   // Render once at the section's TRUE logical dimensions, then zoom the whole
@@ -520,7 +597,9 @@ function layoutTextFrames() {
     frame.style.right = "";
     frame.style.top = `${box.top / scale}px`;
     frame.style.height = `${box.height / scale}px`;
-    frame.style.display = present ? "" : "none";
+    // Belt and braces for the rule above: whatever the composition says, the
+    // frame carrying an open edit is never taken off the page under the caret.
+    frame.style.display = present || inlineTextEdit?.element === frame ? "" : "none";
     frame.classList.toggle("frame-selected", state.selectedPart === part);
     // A frame standing over a prompt rather than over real words says so, or
     // it is an invisible rectangle on an empty page again.
@@ -564,6 +643,7 @@ function endCanonicalBodyEdit({ blur = false } = {}) {
   canonicalBodyEdit = false;
   document.getElementById("edWritingSurface")?.classList.remove("is-canonical-body-editor", "is-body-target");
   document.getElementById("edBodyFrame")?.classList.remove("is-direct-body-editing");
+  updateSelectionLabel();
   // The source document is intentionally hidden while the exact composition
   // remains on the page. Once the desk targets another object it must also
   // give up keyboard focus: otherwise Arrow/Delete and editor history keys
@@ -575,7 +655,7 @@ function endCanonicalBodyEdit({ blur = false } = {}) {
 // Maps a pointer on the exact composed page to Quill's one source document.
 // `line.at` is the compositor's source offset; dateline text is composed
 // before authored body text, so it is removed before addressing Quill.
-function bodyOffsetAt(point) {
+function bodyOffsetAt(point, bias = 0) {
   const page = document.getElementById("edFramePage");
   const lines = state.composition?.bodyLines || [];
   if (!page || !lines.length || !point) return null;
@@ -598,7 +678,13 @@ function bodyOffsetAt(point) {
   const authored = Math.round((Number(line.at) || 0) + String(line.text || "").length * fraction)
     - datelineText(state.view || {}).length;
   const length = quill ? Math.max(0, quill.getLength() - 1) : 0;
-  return Math.max(0, Math.min(length, authored));
+  const offset = Math.max(0, Math.min(length, authored));
+  // NEVER INSIDE AN AKSHARA. That proportion is plain code-unit arithmetic, so
+  // it lands between a consonant and its matra about as often as not - and a
+  // caret or a mark boundary there splits the syllable. See
+  // graphemes.js's snapToCluster(): it is the same rule the compositor has
+  // always cut copy by, applied to the desk's own pointer.
+  return quill ? snapToCluster(quill.getText(), offset, bias) : offset;
 }
 
 function beginCanonicalBodyEdit(point) {
@@ -612,6 +698,7 @@ function beginCanonicalBodyEdit(point) {
   // equivalent of a caret/focus ring. Without it the body did accept typing,
   // but looked like ordinary read-only copy while Quill was hidden.
   document.getElementById("edBodyFrame")?.classList.add("is-direct-body-editing");
+  updateSelectionLabel();
   quill.focus();
   quill.setSelection(bodyOffsetAt(point) ?? Math.max(0, quill.getLength() - 1), 0, "silent");
 }
@@ -829,31 +916,74 @@ function bindTextFrames() {
   const subheading = document.getElementById("edSubheadingFrame");
   const body = document.getElementById("edBodyFrame");
 
-  headline?.addEventListener("click", () => {
-    endCanonicalBodyEdit({ blur: true });
-    hooks.onSelectPart?.("headline");
-  });
-  headline?.addEventListener("dblclick", (event) => {
-    event.preventDefault();
-    beginInlineTextEdit("headline");
-  });
+  // CLICK TO SELECT, CLICK AGAIN TO EDIT - and a double click still works,
+  // because a double click IS two clicks: the first selects the object, the
+  // second finds it already selected and opens it.
+  //
+  // A dblclick LISTENER alone could not be relied on, and the reason is
+  // specific to this page. Committing the flow the desk was in re-composes the
+  // block, so a frame can MOVE between the two clicks of a double click - the
+  // deck's box shifted from y=3 to y=108 the instant the headline above it
+  // committed. The second click then landed on whatever was now under the
+  // pointer, the `dblclick` event never fired on the frame at all, and (before
+  // this) it fell through to the body. Handling each click on its own terms
+  // makes the worst case a stray SELECTION rather than typing into the wrong
+  // object.
+  // ON POINTER-DOWN, not on click - and this is not a preference.
+  //
+  // A `click` is only dispatched on the element that received BOTH the
+  // mousedown and the mouseup; if they differ the browser dispatches it on
+  // their common ancestor instead. On this page they differ routinely, because
+  // pressing on one flow BLURS the flow before it, and that commit re-composes
+  // the block and moves every frame under the pointer. Measured on the deck,
+  // pressing it while the headline was open:
+  //
+  //     pointerdown: edSubheadingFrame
+  //     mousedown:   edSubheadingFrame
+  //     mouseup:     edFramePage      <- the frame moved 32px out from under it
+  //     click:       edFramePage
+  //
+  // So the deck's own click handler never ran, the page's background handler
+  // ran instead and selected the BLOCK, and a desk pressing the subheading got
+  // no subheading. The same movement is what let a double click fall through
+  // to the body frame underneath and put a typed deck into the story.
+  //
+  // Selecting on pointer-down is also simply what a layout tool does - it is
+  // the same press that would begin a drag.
+  //
+  // `armed` is the frame's OWN memory of the last press, deliberately not
+  // `state.selectedPart`: selection travels out to the workspace and back
+  // through refreshFrame(), and it has not returned by the time the second
+  // press arrives.
+  let armed = null;
+  const clickToEdit = (frame, part, begin) => {
+    frame?.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0) return;
+      const already = armed === part || state.selectedPart === part;
+      armed = part;
+      // The page's own background handler must not also fire and reset the
+      // selection to the whole block.
+      event.stopPropagation();
+      if (part !== "body") endCanonicalBodyEdit({ blur: true });
+      hooks.onSelectPart?.(part);
+      if (!already || inlineTextEdit || (part === "body" && canonicalBodyEdit)) return;
+      event.preventDefault();
+      begin(event);
+    });
+    // A double click opens it straight away, without waiting for the second
+    // press to be recognised as "already selected".
+    frame?.addEventListener("dblclick", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (inlineTextEdit?.config?.part === part || (part === "body" && canonicalBodyEdit)) return;
+      armed = part;
+      begin(event);
+    });
+  };
 
-  subheading?.addEventListener("click", () => {
-    endCanonicalBodyEdit({ blur: true });
-    hooks.onSelectPart?.("subheading");
-  });
-  subheading?.addEventListener("dblclick", (event) => {
-    event.preventDefault();
-    beginInlineTextEdit("subheading");
-  });
-
-
-  body?.addEventListener("click", () => hooks.onSelectPart?.("body"));
-  body?.addEventListener("dblclick", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    beginCanonicalBodyEdit({ x: event.clientX, y: event.clientY });
-  });
+  clickToEdit(headline, "headline", () => beginInlineTextEdit("headline"));
+  clickToEdit(subheading, "subheading", () => beginInlineTextEdit("subheading"));
+  clickToEdit(body, "body", (event) => beginCanonicalBodyEdit({ x: event.clientX, y: event.clientY }));
 
   const page = document.getElementById("edFramePage");
 
@@ -862,6 +992,10 @@ function bindTextFrames() {
   // double-click anywhere in the body area reliably activates editing.
   page?.addEventListener("dblclick", (event) => {
     if (event.target.closest(".pic-frame")) return;
+    // A display frame's own box can overlap the body's. This handler runs in
+    // the CAPTURE phase, so without this it would take a click meant for the
+    // headline or the deck and open the body instead.
+    if (event.target === headline || event.target === subheading) return;
 
     const rect = body?.getBoundingClientRect();
     if (!rect) return;
@@ -893,15 +1027,25 @@ function bindTextFrames() {
       const end = bodyOffsetAt({ x: up.clientX, y: up.clientY });
       quill?.focus();
       const finish = end ?? start;
-      quill?.setSelection(Math.min(start, finish), Math.abs(finish - start), "silent");
+      // A selection grows OUTWARD to whole aksharas, so a drag never loses a
+      // character the desk had covered and never marks half of one.
+      const text = quill ? quill.getText() : "";
+      const from = snapToCluster(text, Math.min(start, finish), -1);
+      const to = snapToCluster(text, Math.max(start, finish), 1);
+      quill?.setSelection(from, to - from, "silent");
     }, { once: true });
   }, true);
 
-  page?.addEventListener("click", (event) => {
-    if (event.target === event.currentTarget) {
-      endCanonicalBodyEdit({ blur: true });
-      hooks.onSelectPart?.("block");
-    }
+  // The bare page - not a frame, not a picture - is the whole block. On
+  // pointer-down for the same reason the frames are: a press that starts on
+  // the page background and ends somewhere the composition has moved to would
+  // otherwise be lost, and `armed` has to be cleared here or the next press on
+  // a frame would count as its second.
+  page?.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0 || event.target !== event.currentTarget) return;
+    armed = null;
+    endCanonicalBodyEdit({ blur: true });
+    hooks.onSelectPart?.("block");
   });
 }
 

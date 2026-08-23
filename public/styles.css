@@ -2822,13 +2822,6 @@ body.print-view .page-guides {
   max-height: 260px;
   overflow-y: auto;
 }
-.type-preview-body.drop-cap::first-letter {
-  float: left;
-  font-size: 2.8em;
-  line-height: 0.85;
-  padding: 4px 6px 0 0;
-  font-weight: 700;
-}
 
 .ext-image-preview.large {
   height: 240px;
@@ -4691,7 +4684,8 @@ body.print-view .page-imprint {
    one frame per picture. This replaced floated pictures, which can only touch
    the left or right edge of a column - which is why a photograph could never be
    put where the desk wanted it. */
-.block-frame { display: grid; justify-items: center; gap: var(--s2); }
+.block-frame {
+  position: relative; display: grid; justify-items: center; gap: var(--s2); }
 .frame-page {
   position: relative;
   background: white;
@@ -4773,23 +4767,11 @@ body.print-view .page-imprint {
   outline-offset: -2px;
   background: rgba(196, 30, 58, 0.055);
 }
-/* The exact composition must remain the readable surface while Quill owns the
-   one source document. Name that state on the page itself rather than sending
-   a desk down to a second, differently wrapped browser editor. */
-.frame-body.is-direct-body-editing::after {
-  content: "Editing body — type here · drag to select";
-  position: absolute;
-  right: 3px;
-  top: 3px;
-  z-index: 4;
-  padding: 2px 5px;
-  border-radius: 3px;
-  background: var(--accent);
-  color: #fff;
-  font: 700 9px/1.2 system-ui, sans-serif;
-  letter-spacing: .02em;
-  pointer-events: none;
-}
+/* The direct-edit state used to be named by a chip drawn INSIDE the frame, at
+   its top right - over the copy, on a justified column whose lines reach that
+   edge. It is said by the selection label outside the page now
+   (block-frame.js's updateSelectionLabel), where it covers nothing. The
+   outline below is what marks the state on the page itself. */
 .frame-pictures {
   z-index: 3;
 }
@@ -4976,9 +4958,9 @@ body.print-view .page-imprint {
    actually looking at. */
 .frame-selection-label {
   position: absolute;
-  top: 2px;
-  left: 2px;
-  z-index: 2;
+  top: 0;
+  left: 0;
+  z-index: 6;
   padding: 1px 6px;
   border-radius: 3px;
   background: var(--accent);
@@ -5298,3 +5280,15 @@ body.print-view .page-imprint {
 .ai-retrieval-sources summary { cursor: pointer; color: #55555e; }
 .ai-retrieval-sources ul { margin: var(--s1) 0 0; padding-left: 1.1em; }
 .ai-retrieval-sources li { margin-bottom: 0.3em; }
+
+/* The initial letter. Positioned by the compositor exactly like a composed
+   line is, so the editor and the newspaper canvas draw it from the same
+   numbers; the copy already runs round it because the pour excluded its
+   rectangle. `line-height` is its whole box, which is what centres the glyph
+   in the lines it spans. */
+.section-drop-cap {
+  display: block;
+  text-align: left;
+  overflow: visible;
+  white-space: nowrap;
+}

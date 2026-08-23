@@ -985,9 +985,158 @@ two things: the hit frame gets a real box, and the label is drawn in it.
 - **A headline and a story are named whenever they are missing** — an article
   block is never published without a headline. **A deck is offered only while
   the block is unwritten**, because a deck is optional (the AI panel has a
-  toggle for it) and a permanent ghost on every deck-less block is noise.
+  toggle for it) and a permanent ghost on every deck-less block is noise —
+  literally so: made permanent, it drew grey display type over the first line
+  of a story that was already set.
+- **But a prompt is what makes a flow REACHABLE, and that cost a subheading.**
+  A flow with no prompt has no band, a frame with no band is placed
+  `display: none`, and an object that is not on the page cannot be clicked or
+  typed into at all. Measured, by doing it: type a headline on the page, then
+  double-click where the deck goes. Committing the headline made the block
+  "written", withdrew the deck's prompt, hid its frame mid-gesture — and the
+  double click fell **through** to the body frame underneath. The subheading
+  the desk then typed was appended to the **story**, and stored that way:
+  `subheading` NULL, its words the last sentence of the copy, and nothing on
+  screen to say so.
+- So the flow the desk is **addressing** is prompted whether or not the block
+  is unwritten: the one being edited, and the one selected — including by
+  clicking into the Subheading field below the page, which selects that object
+  like every other route. The prompt is what gives it real band geometry to be
+  present at; the label is still withheld from a flow being typed into.
 - Only the display flows stand in. Pouring a stand-in **body** would move
   `bodyTop` and fill the frame with lines that are not the block's.
+- **`bodyTop` follows the prompt only while the BODY is unwritten.** The prompt
+  composition reserves room for display type that is not set, so its `bodyTop`
+  sits below where real copy starts — taking it on a block that has a story but
+  no headline yet pushed the body's hit frame down past its own first lines,
+  and those lines stopped being clickable.
+
+### An object is selected on POINTER-DOWN, like every layout tool
+
+A `click` is only dispatched on the element that received both the mousedown
+and the mouseup; if they differ the browser dispatches it on their common
+ancestor instead. **On this page they differ routinely**, because pressing on
+one flow blurs the flow before it, and that commit re-composes the block and
+moves every frame under the pointer. Measured on the deck, pressed while the
+headline was open:
+
+```
+pointerdown: edSubheadingFrame
+mousedown:   edSubheadingFrame
+mouseup:     edFramePage      <- the frame moved 32px out from under it
+click:       edFramePage
+```
+
+So the deck's own handler never ran, the page's background handler ran instead
+and selected the **block**, and a desk pressing the subheading got no
+subheading — while a *double* click, needing both presses to land on the same
+element, could miss entirely and fall through to the body.
+
+`bindTextFrames()` therefore selects on `pointerdown` and stops the press from
+reaching the page's own handler. **Click to select, click again to edit** — and
+a double click still works, because a double click is two clicks: the first
+selects the object, the second finds it already selected and opens it. The
+worst case is now a stray *selection* rather than typing into the wrong object.
+
+`armed` is the frames' own memory of the last press, deliberately **not**
+`state.selectedPart`: selection travels out to the workspace and back through
+`refreshFrame()`, and it has not returned by the time the second press arrives.
+
+**Clicking a block that is already open selects the block itself**
+(`selectSection()` in `workspace.js`). It used to return early and do nothing,
+which left a desk stuck: Properties shows Border, Ground, Columns, Drop cap and
+Headline treatment only while the whole block is the selected object, and every
+one of those is a decision made *after* the story is written — so once the caret
+had been in the body the only way back was the Escape key.
+
+### A mark may not begin or end inside an akshara
+
+The compositor has always cut copy at cluster boundaries; a sub-editor marking
+words on the page had no such rule. `bodyOffsetAt()` maps a pointer position to
+a character offset by proportion — `line.at + text.length × fraction` — which is
+plain code-unit arithmetic and lands between a consonant and its matra about as
+often as not. Bolding a dragged phrase produced `द<strong>िली`, and the browser
+drew the orphaned matra on a **dotted circle**. It is visible in a screenshot
+and it is stored that way.
+
+`graphemes.js`'s `snapToCluster(text, offset, bias)` is the rule, next to the
+`clusters()` it is built on. A caret snaps to the nearer boundary; a selection
+grows **outward** — start back, end forward — so a drag never loses a character
+the desk had covered and never marks half of one. Measured: 15 drags across a
+real block at fifteen different fractions, **zero** split aksharas.
+
+### The selection chip is outside the page
+
+`.frame-selection-label` sat at the selected frame's own top-left corner, which
+on the body frame is exactly where the story's first words are — so selecting
+the body covered the opening of the story it was naming. The page is
+`overflow: hidden` (overset copy may not spill onto the next block), so a label
+placed above a frame at the top of the page would simply be clipped away. It
+lives beside the page now, in `.block-frame`, positioned against the page's own
+box, and it also carries the direct-body-edit state that used to be a *second*
+chip drawn inside the body frame at its top right — on top of a justified
+column, whose lines reach exactly that edge.
+
+### The drop cap is a property of the FRAME, not a mark on a run
+
+A sub-editor's instinct is to select the first character and press a larger
+size, and until this existed that was the only thing the editor could do. The
+result is not a drop cap: a size mark makes the **one row** it lands on three
+and a half times taller and leaves the opening letter on a stilt with a band of
+white under it. Photographed on a real block.
+
+A drop cap is a rectangle at the top of the first column that type may not
+enter — which is exactly what a photograph is, and this engine has run type
+round those since it was written. So `dropCapOf()` contributes one more
+interval to the obstacle set and **nothing else in `fillRow`, `viableIntervals`
+or the balancer changes at all**.
+
+- **Stated in LINES** (`page_sections.drop_cap_lines`, 0 = none), because that
+  is how a compositor specifies it and how it stays right at any body size.
+  Properties → Drop cap offers None / 2 / 3 / 4.
+- **Taken in CLUSTERS.** A Marathi initial is an akshara — क्ष is one letter,
+  not three — and slicing by code unit would set a bare consonant in 40 px type
+  and leave its matra behind in the copy.
+- **Sized by its INK, not its design box.** Measured in the browser against the
+  publication serif at 200 px: an ordinary akshara's `actualBoundingBoxAscent`
+  is **0.625 em** (क म ग ट पा रा ना हा सु ल क्ष सा), rising to 0.895–0.905 only
+  where an above-base matra is present. The face's design box is 1.555 em, so
+  sizing the cap by the box drew a letter a little over half the depth it had
+  reserved, sitting in its own hole. The cap's head stroke is set on the first
+  line's head stroke and its baseline on the last line it spans.
+- `FACE_BOX_ASCENT_EM`/`FACE_BOX_DESCENT_EM` (0.930/0.625) are what the
+  **browser** lays the face out with — `fontBoundingBoxAscent`/`Descent`, which
+  is what decides where a baseline lands inside a line box. Deliberately
+  separate from `faceAscent()`/`faceDescent()`, which are this engine's own
+  measured ink extremes and are not the numbers CSS uses.
+- **The pour skips the cap's own clusters and the paragraph's offset gains
+  exactly the same number**, so `line.at` — and every bold and italic a
+  sub-editor set — is unchanged to the character.
+- The gutter is half a **body** em: it is the copy that has to clear the
+  letter, so the gap reads the same whether the cap is two lines deep or four.
+
+It replaces a `drop_cap` BOOLEAN that persisted, had a Typography checkbox, and
+reached nothing but a CSS class on that panel's own **preview** paragraph — the
+composed block never set a drop cap at all. `tests/dropCap.test.js` holds it,
+including that a block which has not asked for one composes byte for byte as
+before.
+
+### A picture's landing place is SETTLED, not computed once
+
+`copyStartsAt()` returned the block's current `bodyTop`. But where the copy
+starts is not a fixed property of the block: putting a picture there can push
+`bodyTop` down, because the headline above is re-fitted with the picture in the
+frame and may take a line it did not need before. Measured on a real 190×264
+second lead — the headline set **one** line ending at y=26, so the picture
+landed at y=27, and with it there the headline re-fitted to **two** lines
+ending at y=49, its second line set in the 89 px corridor beside the picture.
+Half a measure is a caption, not a headline; it is the exact fault that
+function exists to prevent, arriving by the back door.
+
+So the answer is settled rather than computed once: place, compose, and if the
+copy now starts lower, move down to meet it. Bounded at three passes like every
+other budget in this engine — it converges in one or two, because each pass can
+only push the display type down by whole lines.
 
 ### Leaving the body is leaving it, by whatever route
 

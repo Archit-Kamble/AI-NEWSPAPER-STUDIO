@@ -38,6 +38,7 @@ function frameDescriptorFromSection(section = {}, templateSection = null) {
     editorialPriority: templateSection?.editorialPriority ?? 3, feature_key: section.feature_key ?? templateSection?.featureKey ?? null,
     headline_font_px: section.headline_font_px, subheading_font_px: section.subheading_font_px, body_font_px: section.body_font_px,
     column_count: section.column_count, margin_px: section.margin_px, line_height: section.line_height, border_style: section.border_style, headline_style: section.headline_style,
+    drop_cap_lines: section.drop_cap_lines,
   };
 }
 

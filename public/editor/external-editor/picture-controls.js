@@ -159,11 +159,19 @@ export function renderPictureControls(images, selectedId, block, selectedIds = [
       <button type="button" class="ext-editor-btn" data-picture-do="fill">Fit to block</button>
       <button type="button" class="ext-editor-btn" data-picture-do="fit">Fit inside block</button>
     </div>
+    <!-- LAYER ORDER NEEDS SOMETHING TO BE ORDERED AGAINST. On a block carrying
+         one picture these four can only ever be presses that do nothing, and a
+         control that cannot act is not offered - the same rule the Fit control
+         already follows on a cut-out. Driven by hand on a real block, "Bring to
+         front" and "Send to back" both reported NO CHANGE, which is exactly
+         what they should have reported and exactly what a desk should not have
+         had to discover by pressing them. -->
     <div class="ext-editor-toolbar">
-      <button type="button" class="ext-editor-btn" data-picture-do="front">Bring to front</button>
-      <button type="button" class="ext-editor-btn" data-picture-do="forward">Bring forward</button>
-      <button type="button" class="ext-editor-btn" data-picture-do="backward">Send back</button>
-      <button type="button" class="ext-editor-btn" data-picture-do="back">Send to back</button>
+      ${[["front", "Bring to front"], ["forward", "Bring forward"],
+         ["backward", "Send back"], ["back", "Send to back"]].map(([key, label]) => `
+      <button type="button" class="ext-editor-btn"
+        ${state.images.length < 2 ? 'disabled title="Layer order needs a second picture on this block"' : ""}
+        data-picture-do="${key}">${label}</button>`).join("")}
     </div>
     <div class="ext-editor-toolbar">
       <button type="button" class="ext-editor-btn" data-picture-do="cutout">Remove background</button>

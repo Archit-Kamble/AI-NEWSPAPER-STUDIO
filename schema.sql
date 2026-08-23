@@ -611,3 +611,26 @@ ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS background_color VARCHAR(20);
 ALTER TABLE page_sections ALTER COLUMN column_count DROP NOT NULL;
 ALTER TABLE page_sections ALTER COLUMN column_count DROP DEFAULT;
 UPDATE page_sections SET column_count = NULL WHERE column_count = 1;
+
+-- THE DROP CAP - an initial letter set over several lines.
+--
+-- A sub-editor's instinct is to select the first character and press a larger
+-- size, and until this existed that was the only thing the editor could do. A
+-- size mark is a property of a RUN, so the result is not a drop cap: it makes
+-- one row of the column three times taller and leaves the opening letter on a
+-- stilt with a band of white beneath it. A drop cap is a property of the
+-- FRAME, and in this engine it is one more rectangle type may not enter - the
+-- same mechanism a photograph has always used (compose.js's dropCapOf).
+--
+-- Measured in LINES because that is how a compositor specifies it and how it
+-- stays right at any body size. 0 is no drop cap and is what every existing
+-- row carries, so nothing already on a page changes.
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS drop_cap_lines SMALLINT NOT NULL DEFAULT 0;
+
+-- The old `drop_cap` BOOLEAN is superseded by the count above and is no longer
+-- read or written by anything. It persisted and had a Typography checkbox, and
+-- the only thing it ever changed was a CSS class on that panel's own PREVIEW
+-- paragraph - the composed block never set a drop cap at all. The backfill is
+-- guarded in the ordinary way: only a row that really carries the flag gains
+-- the three lines a printed drop cap is usually set over.
+UPDATE page_sections SET drop_cap_lines = 3 WHERE drop_cap = TRUE AND drop_cap_lines = 0;

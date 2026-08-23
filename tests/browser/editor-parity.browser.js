@@ -60,6 +60,53 @@ const say = (ok, what, detail = '') => {
     await page.waitForTimeout(2500);
   }
 
+  // WHAT THIS RUN BORROWED, so it can be given back.
+  //
+  // This net writes into a REAL block on a REAL edition - that is the whole
+  // point of it - and the first version simply left its test copy there. A
+  // desk then found "WATER SCHEME CLEARED" standing on five blocks of the
+  // edition they were looking at. A test that damages the thing it is testing
+  // is not a test.
+  let borrowed = null;
+  async function keepBlock() {
+    borrowed = await page.evaluate(async ([ed, key]) => {
+      const pages = await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json());
+      const pg = pages.find((p) => p.sections.some((s) => s.section_key === key));
+      const s = pg.sections.find((x) => x.section_key === key);
+      const images = await fetch(`/api/pages/${pg.id}/sections/${key}/images`).then((r) => r.json());
+      return {
+        pageId: pg.id,
+        fields: {
+          headline: s.headline || '', subheading: s.subheading || '', body: s.body || '',
+          backgroundColor: s.background_color, borderStyle: s.border_style || 'none',
+          headlineStyle: s.headline_style || 'plain',
+          columnCount: s.column_count === null ? 0 : Number(s.column_count),
+          bodyFontPx: Number(s.body_font_px), headlineFontPx: Number(s.headline_font_px),
+          textAlign: s.text_align, headlineAlign: s.headline_align,
+        },
+        images: images.map((i) => ({ id: i.id, x: i.x_px, y: i.y_px, width: i.width_px,
+          height: i.height_px, shape: i.shape, fitMode: i.fit_mode, rotation: i.rotation,
+          flipH: i.flip_h, flipV: i.flip_v })),
+      };
+    }, [ED, KEY]);
+  }
+
+  async function giveBlockBack() {
+    if (!borrowed) return;
+    await page.evaluate(async ([key, kept]) => {
+      await fetch(`/api/pages/${kept.pageId}/sections/${key}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(kept.fields),
+      });
+      for (const image of kept.images) {
+        await fetch(`/api/pages/${kept.pageId}/sections/${key}/images/${image.id}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(image),
+        });
+      }
+    }, [KEY, borrowed]);
+  }
+
   // A repeatable starting point. The marks a previous run left behind are the
   // reason this exists: a test that presses "bold" on an already-bold headline
   // reads as a failure that is entirely its own doing.
@@ -202,6 +249,7 @@ const say = (ok, what, detail = '') => {
   };
 
   await openEdition();
+  await keepBlock();
 
   // ============================ 1. an EMPTY block can be written on ========
   // Reset, then CHECK the reset landed before anything is judged. An autosave
@@ -253,6 +301,26 @@ const say = (ok, what, detail = '') => {
   say(/council/.test(s.body), 'a story typed on the page reaches the layout', s.body.slice(0, 70));
   parity(s, 'story written on the page');
   say(s.prompts.length === 0, 'the prompts go once the block is written', JSON.stringify(s.prompts));
+
+  // AND THE OPTIONAL DECK IS STILL REACHABLE ON THE PAGE. A flow with no
+  // prompt has no band, a frame with no band is `display: none`, and an object
+  // that is not on the page cannot be clicked or typed into at all - which is
+  // how a typed subheading once fell through into the story. So the flow the
+  // desk is ADDRESSING is prompted whether the block is written or not:
+  // selecting it (here by clicking into its field, the route a desk actually
+  // takes on a finished block) has to put its frame back with real geometry.
+  await page.evaluate(() => document.getElementById('edStorySubheading')?.focus());
+  await settle(900);
+  const deckFrame = await page.evaluate(() => {
+    const frame = document.getElementById('edSubheadingFrame');
+    if (!frame) return null;
+    const box = frame.getBoundingClientRect();
+    return { shown: getComputedStyle(frame).display !== 'none', w: Math.round(box.width), h: Math.round(box.height) };
+  });
+  say(Boolean(deckFrame?.shown && deckFrame.w > 20 && deckFrame.h > 8),
+    'selecting the deck on a written block puts its frame back on the page', JSON.stringify(deckFrame));
+  await page.evaluate(() => document.getElementById('edStorySubheading')?.blur());
+  await settle(600);
   await leaveBodyEdit();
 
   // ============================ 2. the three fields ========================
@@ -354,6 +422,47 @@ const say = (ok, what, detail = '') => {
   await press('[data-prop-columns] [data-columns=""]:not([disabled])', 'Columns → Auto hands the decision back',
     () => true);
 
+  // ============================ 5b. the drop cap ===========================
+  //
+  // A property of the FRAME, not a mark on a run: it is one more rectangle
+  // type may not enter, so the copy runs round it and no other machinery
+  // changes. The check is that the first lines really move aside for it and
+  // that both surfaces draw the same letter in the same place.
+  const capOf = () => page.evaluate(() => {
+    const one = (root) => {
+      const cap = root?.querySelector('.section-drop-cap');
+      if (!cap) return null;
+      return `${cap.textContent}|${Math.round(parseFloat(cap.style.left) || 0)},`
+        + `${Math.round(parseFloat(cap.style.top) || 0)}|${Math.round(parseFloat(cap.style.fontSize) || 0)}`;
+    };
+    const lines = (root) => [...(root?.querySelectorAll('.section-body-line') || [])]
+      .map((l) => Math.round(parseFloat(l.style.left) || 0));
+    const canvas = document.querySelector('.newspaper-section.is-selected')
+      || document.querySelector('#edCanonicalContent')?.closest('.block-frame');
+    const editor = document.getElementById('edCanonicalContent');
+    return { cap: one(editor), xs: lines(editor) };
+  });
+  const capBefore = await capOf();
+  await press('[data-prop-drop-cap] [data-drop-cap="3"]', 'Drop cap → 3 lines',
+    (b, a) => Boolean(a.head !== undefined));
+  const capAfter = await capOf();
+  say(Boolean(capAfter.cap) && !capBefore.cap, 'a drop cap is set', capAfter.cap);
+  // The lines beside it move aside, and the ones that do are a PREFIX - a cap
+  // that narrowed a line halfway down the column would be an obstacle in the
+  // wrong place. How many there are depends on how much copy this block holds,
+  // so the shape is what is asserted, not a count.
+  // The block's own left edge, taken BEFORE the cap - not the minimum of the
+  // narrowed lines, which on a short story is every line it has.
+  const left = Math.min(...capBefore.xs);
+  const aside = capAfter.xs.map((x) => x > left);
+  const prefix = aside.indexOf(false) === -1 ? aside.length : aside.indexOf(false);
+  say(prefix > 0 && !aside.slice(prefix).includes(true),
+    'the lines beside the cap move aside, and they are the first ones',
+    `${capAfter.xs.join(',')} — ${prefix} aside`);
+  say(prefix <= 3, 'and never more than the three lines it was asked for', String(prefix));
+  await press('[data-prop-drop-cap] [data-drop-cap="0"]', 'Drop cap → None', () => true);
+  say(!(await capOf()).cap, 'and it comes off again');
+
   // ============================ 6. pictures ================================
   const pic = await show('#edFramePictures .pic-frame');
   if (!pic) {
@@ -393,6 +502,20 @@ const say = (ok, what, detail = '') => {
   }
 
   say(errors.length === 0, 'no console or page errors anywhere in this run', errors.slice(0, 3).join(' | ') || '(none)');
+
+  // Give the block back exactly as it was found.
+  await giveBlockBack();
+  await page.waitForTimeout(600);
+  const restored = await page.evaluate(async ([ed, key, kept]) => {
+    const pages = await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json());
+    for (const p of pages) {
+      const sec = p.sections.find((x) => x.section_key === key);
+      if (sec) return (sec.headline || '') === kept.fields.headline && (sec.body || '') === kept.fields.body;
+    }
+    return false;
+  }, [ED, KEY, borrowed]);
+  say(restored, 'the block this run borrowed is put back exactly as it was found');
+
   console.log(`\n${pass}/${ran} passed`);
   await browser.close();
   process.exit(pass === ran ? 0 : 1);

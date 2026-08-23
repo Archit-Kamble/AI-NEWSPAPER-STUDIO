@@ -210,6 +210,21 @@ export function composedMarkup(composition, view, { datelinePrefix = '' } = {}) 
   const { text: bodyText, marks } = textWithMarks(view.body);
   const semantic = presentationRanges(bodyText, view.editorialPresentation, 'body');
 
+  // THE INITIAL LETTER. Painted, not composed - it is one glyph in its own
+  // box rather than a flow, and the copy already runs round it because the
+  // pour treated it as an obstacle (compose.js's dropCapOf). Emitted BEFORE
+  // the body lines so a cap that overhangs its own box by a hair sits under
+  // the type rather than over it.
+  if (composition.dropCap) {
+    const capitalise = composition.dropCap;
+    pieces.push(
+      `<span class="section-composed section-drop-cap" style="left:${capitalise.x.toFixed(2)}px;`
+      + `top:${capitalise.y.toFixed(2)}px;width:${capitalise.width.toFixed(2)}px;`
+      + `height:${capitalise.height.toFixed(2)}px;font-size:${capitalise.fontPx.toFixed(2)}px;`
+      + `line-height:${(capitalise.lineBoxPx || capitalise.height).toFixed(2)}px;${faceStyle(capitalise)}">${escapeHtml(capitalise.text)}</span>`,
+    );
+  }
+
   for (const line of composition.bodyLines) {
     const html = lineHtml(line, { marks, semantic, offset: datelinePrefix.length });
     // The dateline opens the body rather than sitting apart from it, so it is

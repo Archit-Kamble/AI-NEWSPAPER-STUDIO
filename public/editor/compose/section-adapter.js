@@ -329,6 +329,10 @@ export function composeSection(section = {}, view = {}) {
     // printed newspaper spends one that way. One em, which is what a
     // compositor sets.
     firstLineIndentPx: positive(pick(section, view, 'firstLineIndentPx', 'first_line_indent_px', bodyFontPx), bodyFontPx),
+    // The initial letter, in LINES (schema.sql's drop_cap_lines). 0 - which is
+    // what every existing row carries - is no drop cap, so no stored block's
+    // composition changes by this existing at all.
+    dropCapLines: Math.max(0, Number(pick(section, view, 'dropCapLines', 'drop_cap_lines', 0)) || 0),
     // How many lines the display type may take. Left at the engine's own
     // defaults unless a caller states them - `headline-reserve.js` does, so
     // that the reservation and the real block are measured the same way.

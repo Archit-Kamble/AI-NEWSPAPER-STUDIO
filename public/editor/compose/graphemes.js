@@ -116,3 +116,38 @@ export function trimEndClusters(text) {
 export function clusterCount(text) {
   return clusters(text).length;
 }
+
+/**
+ * The nearest place a CARET or a MARK is allowed to sit.
+ *
+ * The compositor has always cut text at cluster boundaries; a sub-editor
+ * marking words on the page had no such rule. The page maps a pointer
+ * position to a character offset by proportion - `line.at + text.length ×
+ * fraction` - which is plain code-unit arithmetic and lands inside an akshara
+ * about as often as not. Bolding a dragged phrase then produced
+ * `द<strong>िली`: the consonant in one run, its matra in the next, and the
+ * browser drew the orphaned matra on a dotted circle. It is visible in a
+ * screenshot and it is stored that way.
+ *
+ * `bias` says which way to move when the offset is inside a cluster:
+ * -1 back to its start, +1 on to its end, 0 to whichever is nearer. A
+ * selection expands OUTWARD - start with -1, end with +1 - so marking never
+ * loses a character the desk had covered.
+ */
+export function snapToCluster(text, offset, bias = 0) {
+  const value = String(text || '');
+  const at = Math.max(0, Math.min(value.length, Math.round(Number(offset) || 0)));
+  if (!at || at >= value.length) return at;
+  let start = 0;
+  for (const piece of clusters(value)) {
+    const end = start + piece.length;
+    if (at <= start) return start;
+    if (at < end) {
+      if (bias < 0) return start;
+      if (bias > 0) return end;
+      return at - start <= end - at ? start : end;
+    }
+    start = end;
+  }
+  return start;
+}

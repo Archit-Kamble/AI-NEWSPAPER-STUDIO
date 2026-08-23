@@ -78,6 +78,16 @@ const HEADLINE_STYLES = [
   ["reverse", "Reversed"],
 ];
 
+// How deep an initial letter is set. Two is the shallowest that reads as a
+// drop cap rather than as a mistake; four is as deep as a newspaper column
+// goes before the letter starts to dominate the story it opens.
+const DROP_CAPS = [
+  [0, "None"],
+  [2, "2 lines"],
+  [3, "3 lines"],
+  [4, "4 lines"],
+];
+
 let boundHandlers = null;
 
 function normDeg(value) {
@@ -133,6 +143,7 @@ function blockPropertiesMarkup(section, view, page) {
   const headlineStyle = String(view.headlineStyle || section.headline_style || "plain");
   const rawColumns = view.columnCount ?? section.column_count ?? null;
   const columns = Number.isInteger(Number(rawColumns)) && Number(rawColumns) >= 1 ? Number(rawColumns) : null;
+  const dropCapLines = Math.max(0, Number(view.dropCapLines ?? section.drop_cap_lines ?? 0) || 0);
   return `
     <div class="field-grid">
       <div class="form-group"><label>Block type</label><p class="prop-readout">${escapeHtml(section.block_type || "article")}</p></div>
@@ -190,6 +201,18 @@ function blockPropertiesMarkup(section, view, page) {
         </div>
       </div>
       <p class="muted ext-note">${escapeHtml(columnsNote(section, view))}</p>
+    </div>
+
+    <div class="prop-section">
+      <h5 class="prop-heading">Drop cap</h5>
+      <div class="form-group">
+        <div class="segmented" data-prop-drop-cap>
+          ${DROP_CAPS.map(
+            ([value, label]) => `<button type="button" class="segment${dropCapLines === value ? " active" : ""}" data-drop-cap="${value}">${label}</button>`,
+          ).join("")}
+        </div>
+      </div>
+      <p class="muted ext-note">An initial letter set over the first lines of the story, with the copy running round it. It is stated in LINES, so it stays right whatever the block's body size is - and it is a property of the frame, not a size mark on a run: marking the first character bigger only makes one row of the column taller and leaves the letter on a stilt.</p>
     </div>
 
     <div class="prop-section">
@@ -435,6 +458,14 @@ function bindColumnButtons(handlers) {
   });
 }
 
+function bindDropCapButtons(handlers) {
+  document.querySelectorAll("[data-prop-drop-cap] [data-drop-cap]").forEach((button) => {
+    button.addEventListener("click", () => {
+      handlers.onPatch?.({ dropCapLines: Number(button.dataset.dropCap) }, "properties-panel");
+    });
+  });
+}
+
 function bindHeadlineStyleButtons(handlers) {
   document.querySelectorAll("[data-prop-headline-style] [data-headline-style]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -457,6 +488,7 @@ function bindBlockControls() {
   bindBorderButtons(boundHandlers);
   bindTintButtons(boundHandlers);
   bindColumnButtons(boundHandlers);
+  bindDropCapButtons(boundHandlers);
   bindHeadlineStyleButtons(boundHandlers);
 }
 

@@ -101,7 +101,11 @@ const NUMBER_FIELDS = [
 const TOGGLES = [
   { id: "tyItalic", field: "fontItalic", label: "Italic" },
   { id: "tyUnderline", field: "fontUnderline", label: "Underline" },
-  { id: "tyDropCap", field: "dropCap", label: "Drop cap" },
+  // "Drop cap" was here as a checkbox and was inert: it persisted, and the
+  // only thing it changed was a CSS class on this panel's own PREVIEW
+  // paragraph. A drop cap is a property of the FRAME - how many lines deep
+  // the initial letter is set and what the copy runs round - so it lives in
+  // Properties, stated in lines, and the compositor now actually sets it.
 ];
 
 function select(id, options, current) {
@@ -234,7 +238,7 @@ export function previewMarkup(view) {
   const bodyText = view.body || "Body text preview. Set the story text in the Story tab to see it composed here.";
   const bodyEl =
     view.listStyle === "none"
-      ? `<p class="type-preview-body${view.dropCap ? " drop-cap" : ""}" style="${bodyStyle}">${escapeText(bodyText)}</p>`
+      ? `<p class="type-preview-body" style="${bodyStyle}">${escapeText(bodyText)}</p>`
       : `<${view.listStyle === "number" ? "ol" : "ul"} class="type-preview-body" style="${bodyStyle}">
            ${bodyText
              .split(/\n+/)

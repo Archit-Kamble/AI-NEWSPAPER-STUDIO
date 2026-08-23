@@ -57,14 +57,41 @@ async function ensureComposeReady() {
  * would the body start if nothing had been placed yet", which is what
  * deciding where to place the FIRST picture actually needs to know.
  */
-async function copyStartsAt(section) {
+async function copyStartsAt(section, frame = null) {
   const adapter = await ensureComposeReady();
   if (!kindsModule) kindsModule = await import('../../public/editor/layout/block-kinds.js');
   const compose = (view) => adapter.composeSection({ ...section, images: [] }, view);
 
-  // On a block that HAS its headline, the block's own display type answers.
+  // On a block that HAS its headline, the block's own display type answers -
+  // BUT it has to be asked with the picture already standing there.
+  //
+  // Where the copy starts is not a fixed property of the block: putting a
+  // picture at the current `bodyTop` can push `bodyTop` down, because the
+  // headline above is re-fitted with the picture in the frame and may take a
+  // line it did not need before. Measured on a real 190x264 second lead: the
+  // headline set ONE line ending at y=26, so the picture landed at y=27 - and
+  // with it there the headline re-fitted to TWO lines ending at y=49, its
+  // second line set in the 89px corridor beside the picture. Half a measure is
+  // a caption, not a headline, and it is the exact fault this function exists
+  // to prevent, arriving by the back door.
+  //
+  // So the answer is settled rather than computed once: place, compose, and if
+  // the copy now starts lower, move down to meet it. Bounded at three passes
+  // like every other budget in this engine - it converges in one or two
+  // because each pass can only push the display type down by whole lines.
   if (String(section.headline || '').trim() || !kindsModule.blockExpectsCopy(section.block_type)) {
-    return Math.round(compose({ ...section, body: '' }).bodyTop);
+    let y = Math.round(compose({ ...section, body: '' }).bodyTop);
+    if (!frame) return y;
+    for (let pass = 0; pass < 3; pass += 1) {
+      const standing = adapter.composeSection(
+        { ...section, images: [{ ...frame, x_px: frame.x, y_px: y, width_px: frame.width, height_px: frame.height }] },
+        { ...section, body: '' },
+      );
+      const settled = Math.round(standing.bodyTop);
+      if (settled <= y) return y;
+      y = settled;
+    }
+    return y;
   }
 
   // On one that does not, `bodyTop` IS the top of the block - so a picture
@@ -282,9 +309,10 @@ async function add(pageId, sectionKey, body, ownerId) {
       ? Math.round(width / sourceRatio)
       : Math.round(Number(section.height_px) / 3));
 
+  const frame = clampToBlock(section, { x: body.x ?? 0, y: 0, width, height });
   const placement = await snapPlacement(section, clampToBlock(section, {
     x: body.x ?? 0,
-    y: body.y ?? (await copyStartsAt(section)),
+    y: body.y ?? (await copyStartsAt(section, frame)),
     width,
     height,
     shape: body.shape,

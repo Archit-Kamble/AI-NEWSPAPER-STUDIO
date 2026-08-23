@@ -81,6 +81,7 @@ const say = (ok, what, detail = '') => {
           backgroundColor: s.background_color, borderStyle: s.border_style || 'none',
           headlineStyle: s.headline_style || 'plain',
           columnCount: s.column_count === null ? 0 : Number(s.column_count),
+          dropCapLines: Number(s.drop_cap_lines) || 0,
           bodyFontPx: Number(s.body_font_px), headlineFontPx: Number(s.headline_font_px),
           textAlign: s.text_align, headlineAlign: s.headline_align,
         },

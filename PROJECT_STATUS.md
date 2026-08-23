@@ -5101,3 +5101,88 @@ Verification: `node tests/browser/workspace.browser.js` **222/222**, zero
 console/page errors; `node tests/browser/editor-controls.browser.js` **86/86**,
 including separate headline/subheading/body alignment, type size, marks, ink,
 lists and selected-body-word size. No provider call was made for this work.
+
+## §45 — "The fill in the news block": diagnosed, and it was not the fill
+
+The desk reported blocks that "sometimes overflow and sometimes underflow"
+and that "the heading and subheading are not filling properly - it should
+look like an actual newspaper block, not just a random block". Measured
+rather than assumed.
+
+**The fill machinery is sound.** `scripts/fill-edition-copy.js` over a
+disposable edition: **36 blocks, every one `FITS` at 98-100% set**, holes
+0-0.16 lines. Across all 4539 blocks in the database, `BODY_OVERSET` is
+**3 (0.1%)**. Overflow is not the problem and has not been for some time.
+
+**What the desk was opening was a test edition.**
+
+```
+POST /api/newspapers/start   (today)  ->  id 39359, created: false
+```
+
+Every block in 39359 held the 14-character stub `तपासलेला मजकूर`, composing
+at 5% of its column. Three correct behaviours combined into one fault:
+
+| | |
+|---|---|
+| `newspaper.service.js` | a dateless create takes `todayWhereWePrint()`, an unnamed one takes `'साहस'` |
+| 14 test files | `POST /api/newspapers` with a name and no date (one with neither) |
+| `POST /start` | idempotent **per date** — deliberately, so the button opens today's paper rather than making a second one |
+
+So a leaked test edition silently **became the desk's paper for the day**.
+661 editions had accumulated; **590 carried no block with more than 40
+characters**, and 536 were named `'साहस'`.
+
+Fixed by the convention this repository already uses everywhere else:
+disposable fixtures are dated `2099-*`, which `fill-edition-copy.js` has
+always enforced by refusing any other date. `press.test.js`'s "Date default
+test" is deliberately left dateless — it is the test that asserts the
+today-default, and it already removes its edition in a `finally`.
+
+Verified: a full run leaves **zero** editions dated today (was 1–2 per
+run); "Open Edition" mints a real edition (`created: true`, page ladder,
+proper name) and a second press returns the same id with `created: false`,
+so idempotency is untouched.
+
+**Database:** 590 empty editions removed (661 → 71), with the 9 reporter
+stories that pointed at them unlinked rather than deleted (`news_items`
+is the one FK that is `NO ACTION`, not `CASCADE`). All 1675 news items
+kept. The deleted list is in the session scratchpad. A fresh fixture was
+built through the real desk path — **edition 39441, dated 2099-12-01**,
+filled by the current code: 33 article blocks, **94% at ≥95% full, mean
+fill 99%, zero overset**. The workspace net runs **223/223** against it.
+
+### The one real defect found: a short headline said nothing at all
+
+`HEADLINE_COULD_FILL` only ever fired for `headlineGrowthDenied` — the
+narrow case where a larger size *would* have filled the measure and was
+withheld because the copy was already at the foot. The commonest case by
+far is the other one: too few words to fill at any legible size, which
+`fitDisplayFlow()` handles correctly by leaving the type at the size the
+design gave it ("all or nothing", `fillTo()`) — and then nobody was told.
+Measured on a properly filled edition: **8 headlines under the 95% bar,
+setting at 58–75% of their own column, 7 of them silent.**
+
+A one-line headline lying two-fifths short of its column is the single
+most obvious thing that makes a made-up page read as a mock-up, and a
+sub-editor who is never told cannot write the three words that would fix
+it. `HEADLINE_SHORT_OF_MEASURE` now says what it is short by, in the unit
+a sub-editor writes in: *"The headline fills 62% of its column. About 8
+more characters would fill it."* The estimate is a guide for **writing**
+and never geometry — real Marathi words of the same count set materially
+wider or narrower, which is exactly why the exact compositor and not the
+count is what finally judges a headline (`settleGeneratedHeadline`).
+
+Growing the type is deliberately **not** offered as the remedy and must
+not be reintroduced: a short headline blown up is still short, and it
+costs the story a line.
+
+### Still open
+
+- Codex's 18 commits on `codex/experimental-body-editor` are additive and
+  all tests pass; they have **not** been reviewed commit by commit yet.
+- Seven `codex/*` feature branches are unmerged (epaper reader, publish
+  workflow, map editor, hotspot alignment, exact canvas, selection/publish,
+  reporter settings).
+- 34% of blocks database-wide still carry a headline short of its measure.
+  They are now reported; nothing rewrites them.

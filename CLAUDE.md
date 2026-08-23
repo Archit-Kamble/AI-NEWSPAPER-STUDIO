@@ -962,6 +962,70 @@ text may never reach that renderer.
   that order, because a ground emitted after the type would paint over the
   story.
 
+### An EMPTY block has to show what it is waiting for
+
+`composeBlock()` of an unwritten article block returns nothing — no lines, so
+no bands — and `bandOf()` then hands the headline and deck hit frames a
+zero-height box. The Block Editor's page was therefore a **blank white
+rectangle**: no caret, no prompt, and the headline and the deck could not be
+reached ON THE PAGE at all, because a 0×0 frame cannot be clicked. A double
+click anywhere landed in the body, the only frame left. That is the "the editor
+is not editable" report, and it was the block a desk opens most — the one that
+has not been written yet. The canvas at least said `LEAD` / `EMPTY`; the editor
+said nothing, which is also the "different things are showing" half.
+
+A block whose flow is empty is composed a **second time with that flow's own
+label standing in for it** (`promptComposition()` in `block-frame.js`). That
+gives real band geometry — where the words will sit and at what size — used for
+two things: the hit frame gets a real box, and the label is drawn in it.
+
+- The prompts are **Block Editor chrome**. They are drawn in
+  `#edFramePlaceholders`, never in `edCanonicalContent`, so they cannot reach
+  the newspaper canvas, the composition, or anything that saves.
+- **A headline and a story are named whenever they are missing** — an article
+  block is never published without a headline. **A deck is offered only while
+  the block is unwritten**, because a deck is optional (the AI panel has a
+  toggle for it) and a permanent ghost on every deck-less block is noise.
+- Only the display flows stand in. Pouring a stand-in **body** would move
+  `bodyTop` and fill the frame with lines that are not the block's.
+
+### Leaving the body is leaving it, by whatever route
+
+`beginCanonicalBodyEdit()` collapses `#edWritingSurface` to nothing — that is
+what puts the caret on the page instead of in a second editor below it. The
+frame click handlers ended that state when the desk clicked another object on
+the page, but **nothing ended it when they moved to the headline FIELD under
+the page**, or Tabbed into it, or picked the object in Typography. The writing
+surface then stayed invisible and unclickable with no way back to it short of
+double-clicking the body again.
+
+The rule now lives in `refreshFrame()`, next to the one that already ends it
+when another BLOCK is selected: selection is the one place that knows about
+every route, so `selectedPart !== "body"` ends the direct body edit there.
+
+### A control that cannot act is not offered
+
+`image-geometry.js` resolves a cut-out's fit to `contain` whatever the row
+says — cover or stretch would crop into the silhouette, which is the one thing
+a cut-out exists to prevent. The Fit control still offered all three and marked
+the press active, so the UI claimed an effect the page then ignored. Cover and
+Stretch are now **disabled on a cut-out**, with a title saying why — the same
+rule the Columns control already follows for a count the block cannot hold.
+
+`tests/browser/editor-parity.browser.js` is the net for all of the above. It
+presses every control the Block Editor offers for text and for pictures, and
+after each one it checks two things: the control did what it says, and the
+newspaper canvas and the Block Editor page still show **exactly** the same
+composed block. Both, or a control that quietly writes to one surface passes.
+It also asserts WHICH object a mark landed on — comparing the body's marks
+rather than its line breaks, since a larger headline legitimately re-flows the
+copy under it.
+
+```bash
+node tests/browser/editor-parity.browser.js            # defaults to 40294 / anchor
+node tests/browser/editor-parity.browser.js 40294 brief-two
+```
+
 ### The story has one input and one exact live preview
 
 The body must not become a temporary `contenteditable` rectangle on double

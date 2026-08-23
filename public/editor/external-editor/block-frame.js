@@ -29,8 +29,9 @@
 // editor is the page, enlarged - not a second rendering of it, and nothing
 // about being enlarged can move a line.
 
-import { sanitise, sanitiseSize } from "../layout/rich-text.js";
+import { sanitise, sanitiseSize, plainText } from "../layout/rich-text.js";
 import { INKS, sanitiseInk } from "../layout/inks.js";
+import { escapeHtml } from "../format.js";
 import {
   markDisplayField, clearDisplayField, activeDisplayField, applyDisplayMark, holdSelection,
   fieldHtml, fieldValue, DISPLAY_TARGET_EVENT,
@@ -174,6 +175,17 @@ export function blockFrameMarkup() {
              is zoomed as one object; text therefore never reflows merely
              because the editor has more room. -->
         <div class="frame-canonical-content" id="edCanonicalContent"></div>
+
+        <!-- What the block is WAITING for. An empty article block composes to
+             nothing, so this page was a blank white rectangle with no caret,
+             no prompt and - because a band with no lines has no box - no
+             headline or deck frame to click at all. The canvas at least said
+             LEAD / EMPTY; here there was nothing, which is the "the editor is
+             not editable" report. These labels are drawn where the words will
+             actually be set, at the size they will be set in, and they are
+             Block-Editor chrome: never composed, never on the canvas, never
+             saved. -->
+        <div class="frame-placeholders" id="edFramePlaceholders" aria-hidden="true"></div>
 
         <!-- Interactive picture frames sit over the canonical text layer. They
              use the same persisted block-pixel geometry as the page canvas. -->
@@ -323,6 +335,103 @@ function applyBlockSelection() {
 // canvas does. The body cannot - CSS floats only touch a column's edges -
 // which is why the canonical composed layer, not Quill, is what the desk
 // looks at (see this file's own header).
+// ------------------------------------------------------- empty-block prompts ---
+//
+// An empty article block composes to nothing at all: no lines, so no bands, so
+// `bandOf()` returns a zero-height box and placeFrame() hides the headline and
+// deck frames outright. The desk was then shown a blank white rectangle with
+// no caret and nothing to double-click - the headline and the deck could not
+// be reached ON THE PAGE at any point, and a double click anywhere landed in
+// the body because the body frame is the only one left. That is the "editor is
+// not editable" report, and it is exactly the block a desk opens most: the one
+// that has not been written yet.
+//
+// So a block whose flow is empty is composed a second time with the flow's own
+// LABEL standing in for it. That gives the real band geometry - where the
+// words will sit and at what size - which is used for two things: the hit
+// frame gets a real box, and the label is drawn in it so the desk can see what
+// the block is waiting for. Both are Block Editor chrome. The label never
+// enters `state.view`, never reaches `sectionContentMarkup()` and so can never
+// appear on the newspaper canvas or in anything that saves.
+const PLACEHOLDER_LABEL = { headline: "Headline", subheading: "Subheading", body: "Write the story" };
+
+/**
+ * The flows this block wants and does not yet have.
+ *
+ * A headline and a story are not optional on a block meant to carry copy - an
+ * article block is never published without a headline - so a missing one is a
+ * real omission and is always named. A DECK is optional (the AI panel has a
+ * "Write a subheading" toggle for exactly that), so a permanent grey ghost on
+ * every deck-less block would be noise rather than an affordance: it is
+ * offered only while the block is still unwritten, and after that the field
+ * below the page is where a deck is added.
+ */
+function missingFlows(view, section) {
+  if (!blockExpectsCopy(section?.block_type)) return [];
+  if (view.smartCardKey && view.smartCardData) return [];
+  const empty = (part) => !plainText(view[part] || "").trim();
+  const unwritten = empty("headline") && empty("body");
+  return ["headline", "subheading", "body"]
+    .filter((part) => empty(part) && (part !== "subheading" || unwritten));
+}
+
+/**
+ * The block composed with a label standing in for each missing flow.
+ *
+ * Composed with the block's real pictures and no body: the body's own frame is
+ * placed from this composition's `bodyTop`, so an empty block's body starts
+ * below where its headline is going to be rather than at the top of the block.
+ */
+function promptComposition(section, view, parts) {
+  if (!parts.length) return null;
+  // Only the DISPLAY flows stand in. Pouring a stand-in body would move
+  // `bodyTop` and fill the frame with lines that are not the block's, and the
+  // body's own prompt needs nothing but the top of the copy.
+  const stand = { ...view, body: "" };
+  for (const part of parts) if (part !== "body") stand[part] = PLACEHOLDER_LABEL[part];
+  try {
+    return sectionComposition(section, stand);
+  } catch {
+    return null;
+  }
+}
+
+/** The labels, drawn at the exact lines the composition put them on. */
+function renderPlaceholders(composition, parts, zoom, section, view) {
+  const host = document.getElementById("edFramePlaceholders");
+  if (!host) return;
+  host.style.width = `${Number(section.width_px)}px`;
+  host.style.height = `${Number(section.height_px)}px`;
+  host.style.transform = `scale(${zoom})`;
+  if (!composition || !parts.length) { host.innerHTML = ""; return; }
+
+  const bandKey = { headline: "headline", subheading: "deck" };
+  const span = (style, label) => `<span class="frame-placeholder" style="${style}">${escapeHtml(label)}</span>`;
+  host.innerHTML = parts.flatMap((part) => {
+    if (part === "body") {
+      // The story has no band of its own until it exists, so its prompt is
+      // set as one line of body type at the top of the copy - where the
+      // first line will actually be.
+      const px = Number(composition.typography?.bodyPx) || 0;
+      const lh = Number(composition.typography?.lineHeight) || 1.45;
+      if (!px || !composition.content) return [];
+      return [span(`left:${composition.content.left.toFixed(2)}px;`
+        + `top:${composition.bodyTop.toFixed(2)}px;`
+        + `width:${composition.content.measure.toFixed(2)}px;`
+        + `height:${(px * lh).toFixed(2)}px;font-size:${px}px;`
+        + `line-height:${(px * lh).toFixed(2)}px;`
+        + `font-family:${publicationFamily(view.fontFamily).css}`, PLACEHOLDER_LABEL[part])];
+    }
+    const band = composition.bands?.[bandKey[part]];
+    return (band?.lines || []).map((line) => span(
+      `left:${line.x.toFixed(2)}px;top:${line.y.toFixed(2)}px;`
+      + `width:${line.measure.toFixed(2)}px;height:${line.height.toFixed(2)}px;`
+      + `font-size:${line.fontPx}px;line-height:${line.height.toFixed(2)}px;`
+      + `font-family:${publicationFamily("sans").css};`
+      + `font-weight:${part === "headline" ? 700 : 400}`, PLACEHOLDER_LABEL[part]));
+  }).join("");
+}
+
 function layoutTextFrames() {
   const page = document.getElementById("edFramePage");
   const canonical = document.getElementById("edCanonicalContent");
@@ -354,9 +463,29 @@ function layoutTextFrames() {
     return { left, width: right - left, top: band.top, height: band.height };
   };
 
-  const headlineBox = bandOf('headline', { left: margin, width: measure, top: margin, height: 0 });
-  const deckBox = bandOf('deck', { left: margin, width: measure, top: margin, height: 0 });
-  const bodyTop = composition ? composition.bodyTop : margin;
+  let headlineBox = bandOf('headline', { left: margin, width: measure, top: margin, height: 0 });
+  let deckBox = bandOf('deck', { left: margin, width: measure, top: margin, height: 0 });
+  let bodyTop = composition ? composition.bodyTop : margin;
+
+  // The flows this block wants and has not got yet, composed with their own
+  // labels standing in - see promptComposition()'s note. Their band geometry
+  // becomes the hit frame's box, so an unwritten headline can be clicked
+  // exactly where it is going to be set, and `bodyTop` follows it so the body
+  // frame no longer swallows the whole empty block.
+  const prompts = missingFlows(state.view, state.section);
+  const prompt = promptComposition(renderSection, state.view, prompts);
+  if (prompt) {
+    const promptBand = (key, fallback) => {
+      const band = prompt.bands?.[key];
+      if (!band || !band.lines.length) return fallback;
+      const left = Math.min(...band.lines.map((line) => line.x));
+      const right = Math.max(...band.lines.map((line) => line.x + line.measure));
+      return { left, width: right - left, top: band.top, height: band.height };
+    };
+    if (prompts.includes('headline')) headlineBox = promptBand('headline', headlineBox);
+    if (prompts.includes('subheading')) deckBox = promptBand('deck', deckBox);
+    bodyTop = Number.isFinite(prompt.bodyTop) ? prompt.bodyTop : bodyTop;
+  }
 
   // Render once at the section's TRUE logical dimensions, then zoom the whole
   // composition. This is the key parity rule: editor size changes can never
@@ -376,6 +505,12 @@ function layoutTextFrames() {
       .forEach((el) => { el.style.visibility = "hidden"; });
   }
 
+  // Drawn AFTER the canonical layer is rebuilt, so it is never left showing a
+  // prompt for a flow the desk has just written into. A flow being typed into
+  // has its prompt withheld as well - the live text is already there.
+  renderPlaceholders(prompt, prompts.filter((part) => inlineTextEdit?.config?.part !== part
+    && !(part === 'body' && canonicalBodyEdit)), zoom, state.section, state.view);
+
   // These frames are interaction/selection hit targets only; the words inside
   // them are rendered by the canonical layer above.
   const placeFrame = (frame, box, part, present) => {
@@ -387,10 +522,17 @@ function layoutTextFrames() {
     frame.style.height = `${box.height / scale}px`;
     frame.style.display = present ? "" : "none";
     frame.classList.toggle("frame-selected", state.selectedPart === part);
+    // A frame standing over a prompt rather than over real words says so, or
+    // it is an invisible rectangle on an empty page again.
+    frame.classList.toggle("is-prompt", Boolean(prompt) && prompts.includes(part));
   };
 
-  placeFrame(headlineFrame, headlineBox, "headline", Boolean(state.view.headline) && headlineBox.height > 0);
-  placeFrame(subheadingFrame, deckBox, "subheading", Boolean(state.view.subheading) && deckBox.height > 0);
+  // An EMPTY flow is placed too, on its prompt's box. It used to be hidden
+  // outright, which is what made an unwritten headline unreachable on the page.
+  placeFrame(headlineFrame, headlineBox, "headline",
+    headlineBox.height > 0 && (Boolean(state.view.headline) || prompts.includes('headline')));
+  placeFrame(subheadingFrame, deckBox, "subheading",
+    deckBox.height > 0 && (Boolean(state.view.subheading) || prompts.includes('subheading')));
 
   if (bodyFrame) {
     bodyFrame.style.left = `${margin / scale}px`;
@@ -1472,6 +1614,16 @@ export function refreshFrame(section, view, images, source, selectedPart, select
   // frame. Without this handoff the prior block's hidden Quill document could
   // remain focused while the desk was looking at a different block.
   if (canonicalBodyEdit && state.section?.id !== section?.id) endCanonicalBodyEdit({ blur: true });
+  // And leaving the body for another OBJECT ends it too, by whatever route the
+  // desk took. The frame click handlers below already did this for a click on
+  // the page itself, but a desk that moves to the headline FIELD under the
+  // page - or Tabs into it, or picks the object in Typography - was leaving
+  // the direct body edit running: `#edWritingSurface` stays collapsed to
+  // nothing while it is (that is what puts the caret on the page instead), so
+  // the separate writing surface stayed invisible and unclickable with no way
+  // back to it short of double-clicking the body again. Selection is the one
+  // place that knows about every route, so the rule lives here.
+  if (canonicalBodyEdit && selectedPart && selectedPart !== "body") endCanonicalBodyEdit({ blur: true });
   state = {
     ...state,
     section,

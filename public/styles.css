@@ -4794,6 +4794,40 @@ body.print-view .page-imprint {
   z-index: 3;
 }
 
+/* What an empty block is waiting for.
+   Drawn in the block's own display face at the size the words will really be
+   set in (block-frame.js's promptComposition()), so the prompt IS the preview.
+   It sits under the hit frames and never takes a click of its own: the frame
+   above it is what the desk actually presses. Chrome, not copy - it is not in
+   the canonical layer, so it can never reach the newspaper canvas or a save. */
+.frame-placeholders {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 1;
+}
+.frame-placeholder {
+  position: absolute;
+  display: block;
+  color: #b3b3bb;
+  white-space: nowrap;
+  user-select: none;
+}
+/* A frame with nothing in it yet still has to look like somewhere to type. */
+.frame-headline.is-prompt,
+.frame-subheading.is-prompt {
+  outline: 1px dashed #d6d6de;
+  outline-offset: 1px;
+}
+.frame-headline.is-prompt:hover,
+.frame-subheading.is-prompt:hover {
+  outline-color: var(--accent, #c8102e);
+  background: rgba(200, 16, 46, 0.04);
+}
+
 /* "Write a headline" / "Write a subheading" - what the model is asked to
    produce, not what the block is allowed to have. */
 .ai-parts { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 6px 0 0; }

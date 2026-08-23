@@ -124,10 +124,23 @@ export function renderPictureControls(images, selectedId, block, selectedIds = [
 
     <label class="preview-label">Fit</label>
     <div class="segmented">
-      ${FIT_MODES.map(
-        ([key, label]) =>
-          `<button type="button" class="segment${(image.fit_mode || "contain") === key ? " active" : ""}" data-picture-fit="${key}">${label}</button>`,
-      ).join("")}
+      ${(() => {
+        // A cut-out is always shown whole. image-geometry.js resolves its fit
+        // to `contain` whatever the row says - cover and stretch would crop
+        // INTO the silhouette, which is the one thing a cut-out exists to
+        // prevent - so those two are not offered here rather than offered,
+        // marked active on the press, and then quietly ignored by the page.
+        // Same rule the Columns control already follows for a count the block
+        // cannot hold: a choice that cannot take effect is not a choice.
+        const cut = (image.shape || "rect") === "cutout";
+        const shown = cut ? "contain" : (image.fit_mode || "contain");
+        return FIT_MODES.map(([key, label]) => {
+          const locked = cut && key !== "contain";
+          return `<button type="button" class="segment${shown === key ? " active" : ""}"
+            ${locked ? 'disabled title="A cut-out is always shown whole - cropping it would cut into the silhouette"' : ""}
+            data-picture-fit="${key}">${label}</button>`;
+        }).join("");
+      })()}
     </div>
 
     <label class="preview-label" for="edStandOff">Gap around the picture</label>

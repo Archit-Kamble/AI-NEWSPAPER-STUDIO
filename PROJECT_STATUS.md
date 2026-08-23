@@ -5436,3 +5436,73 @@ tests**, workspace net **223/223**, controls net **86/86**.
 
 `tests/pictureBlocks.test.js` is the net for all of it, and each of its five
 checks was confirmed to FAIL when its own fix is reverted.
+
+## §48 — The Block Editor: what an empty block shows, and what a control claims
+
+The desk's report was three things: *"in editor and in layout different things
+are showing"*, *"the editor is not editable"*, and *"any change in the editor
+should apply to the editor and the layout's block too"*.
+
+**None of it could be reproduced by reading code**, and two of the three were
+not true of a written block. Measured first, by driving the running app:
+
+- every one of the **45 blocks** in a filled edition, and **45** in a real
+  half-empty one, composed **byte-identical** markup in the newspaper canvas
+  and in the Block Editor page;
+- the headline field, the deck field, the writing surface and a body
+  double-click all reached **both** surfaces, immediately.
+
+The report was still right. It was about the block a desk opens most.
+
+### 1. An empty block was a blank white rectangle
+
+An unwritten article block composes to nothing, so `bandOf()` gave the headline
+and deck frames a **0×0 box** — unclickable — and the page drew nothing at all.
+A double click anywhere landed in the body, the only frame left, so **the
+headline and the deck could not be reached on the page at any point**. The
+canvas at least said `LEAD` / `EMPTY`; the editor said nothing.
+
+Fixed by composing the block a second time with each missing flow's own label
+standing in, and using that real band geometry for both the hit frame and a
+drawn prompt. Prompts live in their own layer, never in the printable one.
+
+### 2. The writing surface disappeared for good
+
+`beginCanonicalBodyEdit()` collapses `#edWritingSurface` to nothing — that is
+what moves the caret onto the page. The frame click handlers ended that state;
+moving to the headline **field** under the page did not. The big writing
+surface then stayed invisible with no way back. The rule now lives in
+`refreshFrame()`, where every route to another object is already known.
+
+### 3. Fit offered a cut-out something it cannot do
+
+`image-geometry.js` resolves a cut-out to `contain` whatever the row says.
+Cover and Stretch were still offered, went `active` on the press, and were then
+ignored by the page. They are disabled on a cut-out now, with a reason.
+
+### The net
+
+`tests/browser/editor-parity.browser.js` — 46 to 61 checks depending on what
+the block carries. Every control for text and pictures, and after each one both
+"did it do what it says" and "do the two surfaces still match".
+
+```
+anchor (cut-out)        59/59
+second-lead (rect pic)  61/61
+report-two (no picture) 46/46
+brief-two (no picture)  46/46
+lead (cut-out)          59/59
+```
+
+30+ parity comparisons per run, all identical. `878` unit tests, workspace net
+`223/223`, controls net `86/86`, and a sweep of all 45 blocks still identical
+across both surfaces.
+
+Two things the net had to learn, both of which had made it lie:
+
+- **Compare the body's MARKS, not its line breaks.** A 28px size mark on the
+  headline re-flows the copy under it, so a per-line comparison called every
+  display-size change a stray body edit.
+- **Probe with a single token.** A composed line is one span, and a line break
+  falls between words, so a two-word probe can be split across two spans and
+  read as absent when it is on the page.

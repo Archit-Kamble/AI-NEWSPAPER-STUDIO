@@ -5186,3 +5186,90 @@ costs the story a line.
   reporter settings).
 - 34% of blocks database-wide still carry a headline short of its measure.
   They are now reported; nothing rewrites them.
+
+## §46 — The fill, finished
+
+Final round. Every copy-carrying geometry in the template catalogue was
+swept — **30 of them, 620×224 down to 111×160**, each with and without a
+picture — and the blocks were **photographed** rather than trusted from a
+number. That is what turned up the last four faults: every one of them
+reads as fine in the metrics.
+
+**None was in the compositor.** In each case the engine did exactly the
+right thing and the *words handed to it* were wrong.
+
+| | fault | measured |
+|---|---|---|
+| 1 | the headline was chosen against an **empty** block, where the engine may grow the type to fill; once the copy is in, growth is withheld | `पाणीपुरवठा योजना अंतिम टप्प्यात` — 97% empty → **82%** with the copy |
+| 2 | a headline **shrunk to body size** still counts as "filling" | 46 chars at 7.5px against a 6.4px body — **1.17×**, which reads as bold body copy |
+| 3 | the filler **gave up** at the first sentence that did not fit | a 307×296 anchor beside a photograph stopped at **31%** of its column with twenty usable sentences left |
+| 4 | the seed was a function of block **position** only | **82%** of headlines shared between two editions; 11 of 33 blocks identical |
+
+Fixes, all on the writing side (`scripts/fill-edition-copy.js`):
+
+- selection composes with **`headlineGrowth: false`** — what
+  `settleGeneratedHeadline()` has always done. It is a *conservative*
+  reading, not an exact one (whether growth is allowed depends on how full
+  the block ends up), and conservative is what choosing needs: a candidate
+  cannot then set shorter than it advertised.
+- a candidate costing more than 15% of the block's **design size** is
+  refused. Free: every one of the 30 geometries has 17–33 candidates that
+  fill at full size.
+- the filler **tries every sentence** at each step, and the pool gained
+  ten short ones — the last fraction of a column is closed by a short
+  sentence, which is what a sub-editor has. The pool had been 61–79
+  characters throughout, so nothing could close a brief's last line (92%).
+- the seed is offset by the edition's **publication date**, and the chooser
+  **indexes into** the qualifying set rather than taking the first match.
+  Overlap **82% → 3–21%**, with zero duplicates inside any edition.
+
+The headline pool went 48 → 97, including eighteen brief-sized ones. That
+band is not decoration — measured on a 111×160 brief (design 13px, floor
+11px): **21 characters** sets one line at 12px and 99% of the measure;
+27 characters drops to 9.5px; 44 goes to two lines at 9.5px. A brief takes
+a short headline, and the pool held nine of them for six such blocks on
+page one.
+
+Also fixed: `headlineFor()` threw when *no* candidate composed at all —
+a frame too small or odd to carry any of them — which killed the run and
+left the edition half written.
+
+### Gold fixture — edition 40082 (2099-12-25)
+
+Built through the real desk path (`POST /api/newspapers/start`) and filled
+by this script:
+
+```
+body >= 95%       34/34    mean  99.9%
+headline >= 95%   34/34    mean  97.3%
+overset            0
+worst display     45%      (cap is 50%)
+min hierarchy     1.80x
+headlines shrunk   0
+duplicate heads    0
+```
+
+873 unit tests, workspace net **223/223** against this fixture, controls
+net green, no console errors.
+
+### Deliberately NOT changed
+
+`geometry.js`'s `HEADLINE_SHARE` gives the headline alone half the usable
+height and then adds the deck on top, so `typeScaleFor` budgets ~62% of
+several geometries for display while `compose.js` caps the three display
+bands together at 50%. It reads like a contradiction, and 37% of blocks do
+have their headline shrunk at compose time. Counting the deck into the
+budget was tried over 900 real blocks: it removes the over-40% outliers
+(17 → 0) and **costs headline fill (80% → 77%)**, because a smaller default
+drops headlines to one line with room to spare. The constants stay.
+
+The 229×120 strip carrying a deck is the one geometry over the cap (58%;
+44% without). One of 30 swept and 0 of 1979 real blocks — held as a known
+outlier in `tests/blockQuality.test.js` rather than special-cased.
+
+**Legacy editions keep their own type.** Editions dated before this work
+store `body_font_px` of 9–12 where the publication standard is 6.4 (9 pt).
+The design headline is identical, so their headline:body ratio reads
+1.28–1.58× against a fresh edition's 2.03×. `CLAUDE.md` is explicit that
+stored body sizes are never mass-backfilled; that is correct behaviour and
+not a fill defect.

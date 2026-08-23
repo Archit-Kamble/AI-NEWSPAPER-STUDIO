@@ -234,7 +234,22 @@ export function composeSection(section = {}, view = {}) {
     pick(section, view, 'bodyFontPx', 'body_font_px', DEFAULT_BODY_FONT_PX),
     DEFAULT_BODY_FONT_PX,
   );
-  const prefix = datelineText(view);
+  // The dateline is read the same way every other field is - the view first,
+  // then the row - and it is the ONLY field that used to read `view` alone.
+  //
+  // That made composeBlock()'s "one answer" untrue across callers: the page
+  // canvas builds its view with flowViewFromSection(), which carries location
+  // and author, so the page set the dateline and found room for it; every
+  // server-side caller that composes a STORED row with an empty view
+  // (preflight, the worklist's quoted capacity, copyFit's settle loop, the
+  // placement repair) measured the same block with no dateline at all - one
+  // whole body line shorter than what prints. Measured on this edition's own
+  // 150x176 blocks: 11 lines against 12, and a block the settle loop called
+  // 100% set really sets 90%.
+  const prefix = datelineText({
+    location: pick(section, view, 'location', 'location', ''),
+    author: pick(section, view, 'author', 'reporter_name', ''),
+  });
 
   // Bold/italic/underline runs, not flattened away before composition sees
   // them. `plainText()` and `textWithMarks()` share the same tag/newline/

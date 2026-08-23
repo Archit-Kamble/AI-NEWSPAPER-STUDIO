@@ -289,11 +289,16 @@ function num(value, fallback) {
 function setDisplayFlow(text, {
   top, bottomLimit, column, images, fontPx, lineHeight, family, weight, maxLines, letterSpacingPx = 0,
   align = 'left', marks = null, previousBaseline = null, flowKey = '', floor = null,
+  mayStraddle = false,
 }) {
   const pieces = breakPieces(text);
   if (!pieces.length) return { lines: [], height: 0, bottom: top, overset: '', lineCount: 0, violations: [] };
 
   const bandHeight = fontPx * lineHeight;
+  // How finely a fully blocked band is stepped past - see the `!gap` branch.
+  // An eighth of a line box leaves at most ~2px of unasked-for white under a
+  // picture while costing probes only on the bands a picture actually fills.
+  const clearanceProbe = Math.max(1, bandHeight / 8);
   // Placed by its first BASELINE when one is asked for, not by its box top.
   // This has to happen HERE rather than at the call site because the size is
   // not settled until this function runs: fitDisplayFlow() tries several, and
@@ -343,7 +348,58 @@ function setDisplayFlow(text, {
     // photograph - a headline split across a picture is not a headline. The
     // widest gap on this band is the measure it gets.
     const gap = free.reduce((best, piece) => (!best || piece.end - piece.start > best.end - best.start ? piece : best), null);
-    if (!gap) { y += bandHeight; continue; }
+    // A band with no legal gap at all is a band a photograph fills. It is
+    // advanced to where the picture ENDS, not by a whole line box.
+    //
+    // Stepping a full band from the block's top lands the display type
+    // anywhere from nothing to one entire line box below the picture,
+    // depending only on whether the picture's own depth happens to be a
+    // multiple of a band - so the white under a top picture is a different
+    // size on every block and nobody specified any of it. Measured across the
+    // picture fixture: 17px on a 190x264 second lead (more than a body line
+    // and a half), 10px on a 150x240, 4px on a 150x264 - same rule, same
+    // gesture, three different results.
+    //
+    // The advance is a fraction of the band rather than the obstacle's own
+    // bottom edge because a cut-out does not HAVE one bottom edge: its
+    // blocking extent is per-column, the silhouette rather than the frame.
+    // Probing converges on the real edge for every shape without a second
+    // copy of the exclusion geometry to keep in step with this one.
+    //
+    // The BODY deliberately keeps its whole-row step (pourBody's cursor): a
+    // body column has a baseline rhythm to hold against its neighbours, and
+    // resuming off-grid under a picture is what breaks it. Display type at
+    // the head of a block has no rhythm above it to keep.
+    if (!gap) {
+      // A photograph standing in the middle of a display flow would break the
+      // headline in TWO - half of it above the picture, half below - and a
+      // headline a picture runs through reads as two separate stories, which
+      // is the same fault as a headline split across a picture sideways that
+      // the widest-gap rule above already refuses. So the flow does not carry
+      // on past it: it begins again underneath, and the whole headline sets in
+      // one place.
+      //
+      // `y` only ever increases, so restarting terminates - each restart is
+      // strictly further down the block than the last, and the loop's own
+      // bottomLimit break ends it.
+      //
+      // It is a PREFERENCE, and it yields to overset like every other one:
+      // fitDisplayFlow's last pass sets `mayStraddle`, so a block with room
+      // above a picture and none below still sets its words rather than
+      // pushing them off the page.
+      if (lines.length && !mayStraddle) {
+        lines.length = 0;
+        violations.length = 0;
+        index = 0;
+        consumed = 0;
+        y += clearanceProbe;
+        top = y;
+        occupiedBottom = y;
+        continue;
+      }
+      y += clearanceProbe;
+      continue;
+    }
 
     const measure = gap.end - gap.start;
     const lineAt = consumed;
@@ -585,6 +641,14 @@ function fitDisplayFlow(text, options, { locked, minPx, maxPx = 0, fillTarget = 
   // off the page is a mistake in print. Measured: capping the display without
   // this took DECK_OVERSET across the database from 1 block to 7.
   if (roomyBottomLimit > options.bottomLimit) passes.push({ ...options, bottomLimit: roomyBottomLimit });
+  // Last of all: the flow may be broken across a photograph. Worse than a tall
+  // display band - a headline a picture runs through reads as two stories -
+  // so it comes after every other relaxation, and still only ahead of overset.
+  passes.push({
+    ...options,
+    bottomLimit: Math.max(options.bottomLimit, roomyBottomLimit || 0),
+    mayStraddle: true,
+  });
 
   for (let pass = 0; pass < passes.length; pass += 1) {
     const attemptOptions = passes[pass];

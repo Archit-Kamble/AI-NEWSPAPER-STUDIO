@@ -2,6 +2,10 @@ const pool = require('../config/db');
 const repo = require('../repositories/sectionImage.repository');
 const backgroundRemoval = require('./backgroundRemoval.service');
 const reviewInvalidation = require('./reviewInvalidation.service');
+// Dual CJS/ESM by design - see headline-reserve.js's own note.
+const {
+  standIn, headlineLimit, subheadingLimit, HEADLINE_LINES,
+} = require('../../public/editor/layout/headline-reserve.js');
 
 // Placements are clamped to the block they belong to. A picture that hangs
 // outside its block would be off the page in print, and the character grid
@@ -55,8 +59,73 @@ async function ensureComposeReady() {
  */
 async function copyStartsAt(section) {
   const adapter = await ensureComposeReady();
-  const result = adapter.composeSection({ ...section, images: [] }, { ...section, body: '' });
-  return Math.round(result.bodyTop);
+  if (!kindsModule) kindsModule = await import('../../public/editor/layout/block-kinds.js');
+  const compose = (view) => adapter.composeSection({ ...section, images: [] }, view);
+
+  // On a block that HAS its headline, the block's own display type answers.
+  if (String(section.headline || '').trim() || !kindsModule.blockExpectsCopy(section.block_type)) {
+    return Math.round(compose({ ...section, body: '' }).bodyTop);
+  }
+
+  // On one that does not, `bodyTop` IS the top of the block - so a picture
+  // dropped into an empty article block lands exactly where the headline is
+  // about to be set, which is the fault this whole function exists to prevent,
+  // reappearing on the one block that cannot show it yet.
+  //
+  // It does not merely cover the headline; it HALVES it. The headline is then
+  // set in whatever corridor the picture leaves beside it, and a headline in
+  // half a measure is a caption. Measured across every article block in this
+  // database carrying a picture and a headline: where the picture leaves the
+  // headline its full measure the headline fills 95.0% of it and not one sets
+  // in more than two lines; where the picture narrows it, mean fill is 59.4%,
+  // 52% are under the 95% bar and 46 of 96 run to three or four lines. 82 of
+  // those 96 leave the headline under half its own measure.
+  //
+  // An article block is never published without a headline, so the room one
+  // needs is reserved before the picture lands - the same reservation the
+  // Space panel makes on a headline-less block.
+  //
+  // Reserve too much and the headline comes in short: the body simply pours
+  // into the slack above the picture, which is an ordinary page. Reserve too
+  // little and the headline grows INTO the picture, and there is no good answer
+  // left - set it around the picture and it reads as two stories, set it
+  // underneath and the space above the picture is stranded where nothing can
+  // reach it. So the reservation errs long.
+  //
+  // It is measured in LINES, not characters. headline-reserve.js's character
+  // limits are a rough bound on what a model may write and say so themselves;
+  // as a POSITION they are far too short, because a headline is set in display
+  // type. Measured on a 229x480 centre column: the character limit's 32-char
+  // stand-in set one line at 16.5px and reserved 40px, while the real 48-char
+  // headline set two lines at 20px and needed 79px - so the picture landed
+  // inside the headline and 39px stranded above it.
+  //
+  // Two lines is not a guess either: it is the number geometry.js's
+  // typeScaleFor() has always SIZED a block's headline for (HEADLINE_LINES),
+  // so it is the display flow the block was designed around. Measured against
+  // every real headline in the picture fixture, it clears 30 of 33 and the
+  // three it misses miss by 4-8px, which the display flow's own
+  // never-split-a-headline rule then absorbs. The engine's MAX_DISPLAY_SHARE
+  // bounds the reservation on a shallow block, so it cannot run away.
+  const empty = compose({ ...section, headline: '', subheading: '', body: '' });
+  const cols = empty.capacity?.fullMeasureEquivalents > 0
+    ? Math.max(1, Math.round(empty.capacity.bodyCharCapacity / empty.capacity.fullMeasureEquivalents))
+    : 1;
+  const deck = standIn(subheadingLimit(cols));
+  const at = (chars) => compose({ ...section, headline: standIn(chars), subheading: deck, body: '' });
+
+  let chars = headlineLimit(cols);
+  let reserved = at(chars);
+  // Bounded: a stand-in that will not take a second line at any length this
+  // block can hold is a block whose headline is one line, and that is the
+  // answer rather than a reason to keep growing.
+  for (let i = 0; i < 6 && (reserved.bands?.headline?.lines?.length || 0) < HEADLINE_LINES; i += 1) {
+    const longer = at(Math.round(chars * 1.4));
+    if (longer.overset?.headline || longer.overset?.deck) break;
+    chars = Math.round(chars * 1.4);
+    reserved = longer;
+  }
+  return Math.round(reserved.bodyTop);
 }
 
 function clampToBlock(section, placement) {
@@ -196,14 +265,37 @@ async function add(pageId, sectionKey, body, ownerId) {
   // A new picture defaults to half the block's width, at the left of the copy -
   // clear of the headline, and inside the text, so the runaround is real from
   // the moment it lands. It is still immediately visible and draggable.
+  //
+  // Its DEPTH follows the photograph's own shape when the source dimensions
+  // are known, rather than a third of the block. A frame whose proportions
+  // have nothing to do with the picture in it is a frame the picture cannot
+  // fill: measured across the picture fixture, 11 of 16 placements showed
+  // white inside their own frame, the worst 54% of it. A newspaper picture
+  // fills its frame - white bars round a photograph is a thing print does not
+  // do - so the frame is cut to the picture where that is knowable.
+  const width = body.width ?? Math.round(Number(section.width_px) / 2);
+  const sourceRatio = Number(body.sourceWidth) > 0 && Number(body.sourceHeight) > 0
+    ? Number(body.sourceWidth) / Number(body.sourceHeight)
+    : 0;
+  const height = body.height
+    ?? (sourceRatio > 0
+      ? Math.round(width / sourceRatio)
+      : Math.round(Number(section.height_px) / 3));
+
   const placement = await snapPlacement(section, clampToBlock(section, {
     x: body.x ?? 0,
     y: body.y ?? (await copyStartsAt(section)),
-    width: body.width ?? Math.round(Number(section.width_px) / 2),
-    height: body.height ?? Math.round(Number(section.height_px) / 3),
+    width,
+    height,
     shape: body.shape,
     standOffPx: body.standOffPx,
-    fitMode: body.fitMode,
+    // And where the frame still cannot match - an explicit size from a caller,
+    // a desk's own free resize, a source nobody measured - the picture FILLS
+    // it and is cropped, which is what a picture desk does. `contain` letting
+    // the paper show through the frame is the one outcome print never wants;
+    // the desk's own Contain/Cover/Stretch control still overrides this, and
+    // no stored row is touched.
+    fitMode: body.fitMode ?? 'cover',
   }));
 
   // A photograph arrives with its caption; it should not need a second call to

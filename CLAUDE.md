@@ -464,6 +464,77 @@ pages is still not this system's to do; a person presses it.
 listener to it from `renderToolsRail()` binds to an element render has not
 written yet — the control draws perfectly and does nothing.
 
+### A picture may not stand where the headline goes, and it fills its frame
+
+Four rules, all arrived at by placing real photographs — a portrait, a Marathi
+districts map, a night street scene — into real block geometries and looking at
+the result. Every one of them reads as fine in the numbers.
+
+**Display type starts where the picture ENDS.** `setDisplayFlow()` advanced `y`
+by a whole `bandHeight` whenever a band had no legal gap, so a headline under a
+top picture landed on the first multiple of its own line box below the block's
+top — 17px of unasked-for white on a 190×264 second lead, 10px on a 150×240,
+4px on a 150×264: the same gesture, three answers. It now steps an eighth of a
+band. **The body deliberately keeps its whole-row step** (`pourBody`'s cursor):
+a body column has a baseline rhythm to hold against its neighbours, and
+resuming off-grid under a picture is what breaks it. Display type at the head of
+a block has nothing above it to keep.
+
+**A headline is never broken in two across a photograph.** Half above and half
+below reads as two stories — the same fault as a headline split sideways, which
+the widest-gap rule already refuses. The flow begins again underneath instead.
+Like every other preference here it yields to overset: `fitDisplayFlow`'s last
+pass sets `mayStraddle`, so a block with room above a picture and none below
+still sets its words.
+
+**A picture dropped into an EMPTY article block lands below the headline it is
+about to get.** `copyStartsAt()` composes the block's *current* display type,
+and on an empty block that is nothing — so the picture landed exactly where the
+headline was going and **halved its measure**. Measured across every article
+block in the database carrying a picture and a headline: where the picture
+leaves the headline its full measure it fills **95.0%** and not one runs past
+two lines; where the picture narrows it, mean fill is **59.4%**, 52% are under
+the bar and **46 of 96** run to three or four lines. 82 of those 96 leave the
+headline under half its own measure.
+
+The reservation is in **LINES, not characters**. `headline-reserve.js`'s
+character limits are a rough bound on what a model may *write* and say so
+themselves; as a *position* they are far too short, because a headline is set in
+display type — on a 229×480 column the 32-character stand-in set one line at
+16.5px and reserved 40px while the real 48-character headline needed 79px. Two
+lines is `HEADLINE_LINES`, the number `typeScaleFor()` has always SIZED a
+block's headline for. Reserve too much and the body simply pours into the slack
+above the picture, which is an ordinary page; reserve too little and there is no
+good answer left.
+
+**A picture fills its frame.** The default frame's proportions had nothing to do
+with the photograph's (`width/2 × height/3`) and `fit_mode` defaults to
+`contain`, so 11 of 16 placements showed the paper through the frame, the worst
+54% of it. The default frame now follows the source's own shape when the browser
+has measured it, and where it still cannot match the picture is **cropped**
+(`fitMode: 'cover'`) rather than letterboxed. **A cut-out is the exception and
+is never cropped** — its frame is the subject's own bounds and its mask
+describes that whole subject, so a cropped cut-out leaves the copy wrapping a
+silhouette the reader cannot see. `backgroundRemoval.service.js` sets `contain`
+when it replaces the picture.
+
+All of this changes NEW placements only; no stored row is touched.
+
+### The dateline is read from the ROW, like every other field
+
+`composeBlock()` promises the same numbers to everyone who asks. The dateline
+was the one field `section-adapter.js` read from the `view` alone while every
+other field went through `pick(section, view, …)` and fell back to the row.
+
+The page canvas builds its view with `flowViewFromSection()`, which carries
+`location` and `author` — so the page set the dateline and found room for it.
+`preflight.service.js`, `worklist.service.js`, `copyFit.service.js`'s
+`viewFor()` and the placement repair all compose a **stored row with an empty
+view**, and measured a block **one whole body line shorter than the one that
+prints**: 11 lines against 12 on a 150×176, and a block the settle loop called
+100% set really setting 90%. Anything that composes a persisted section must get
+the same answer the canvas does; `tests/pictureBlocks.test.js` holds it.
+
 ### The engine's own findings must be rendered, and only the real ones
 
 `composeBlock()` returns `violations` and `warnings` on every composition.
@@ -1211,6 +1282,13 @@ A task is complete only when: it builds/boots (`node server.js` or `npm test`'s 
 `npm test` runs `tests/*.test.js` via `node --test` against a real Postgres instance (`.env` / `DB_*` vars) and a real `createApp()` — not mocks. After any feature change, confirm: app boots, the routes you touched work, DB queries succeed, `npm test` still passes green.
 
 **`npm test` does not see the browser, and most of this product is the browser.** Every UI regression in this project was found by driving the running app, never by reading code. Log in as a desk user, open an edition, click a block, and look at a screenshot. A blank frame is a failure to launch.
+
+`tests/pictureBlocks.test.js` is the same idea for a block that carries a
+**photograph** — rectangle, cut-out, or none — and `tests/blockQuality.test.js`
+for the block that carries only type. Both are deterministic and cost no AI
+call. The cut-out path is real: `models/u2netp.onnx` is present, so
+`backgroundRemoval` runs the **model**, not `cutout.service.js`'s flood fill,
+and the PNGs it writes are 39–47% transparent.
 
 `tests/browser/workspace.browser.js` is that net, and it lives **in the repository on purpose** — it used to live in a scratch directory, which was wiped, and a hundred checks went with it. Run it against the running app:
 

@@ -103,7 +103,13 @@ async function removeBackground(sectionId, imageId, origin) {
   // transparent margin taken off. Scaled by where the subject sat inside the
   // original, the subject stays exactly where the desk put it and the box
   // stops being a rectangle around it.
-  const placement = { shape: 'cutout', mask: result.mask || null };
+  // A cut-out is never cropped. Its frame is the SUBJECT's own bounds (the
+  // trim below), and the mask describes that whole subject - so a frame that
+  // cropped it would leave the copy wrapping a silhouette the reader cannot
+  // see, and the visible ink and the exclusion would be two different shapes.
+  // An ordinary photograph fills its frame and is cropped (sectionImage's own
+  // note); this is the one placement where that must not happen.
+  const placement = { shape: 'cutout', mask: result.mask || null, fitMode: 'contain' };
   if (result.trim) {
     const trim = result.trim;
     const width = Number(image.width_px);

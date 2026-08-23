@@ -5273,3 +5273,166 @@ The design headline is identical, so their headline:body ratio reads
 1.28–1.58× against a fresh edition's 2.03×. `CLAUDE.md` is explicit that
 stored body sizes are never mass-backfilled; that is correct behaviour and
 not a fill defect.
+
+## §47 — The block that carries a PHOTOGRAPH
+
+§46 finished the block that carries only type. This is the same test with a
+picture in it: **real photographs, downloaded, not drawn** — a portrait, the
+Maharashtra districts map in Marathi, Chhatrapati Shivaji Terminus at night, a
+village house in a field — placed through the real desk API across all three
+conditions the desk actually produces:
+
+| condition | how |
+|---|---|
+| **no image** | 20 blocks |
+| **rectangle image** | 12 blocks — the ordinary press photograph and the map |
+| **cut-out** (background removed) | 6 blocks — through the real U²-Net path, not a stand-in |
+
+The cut-out matters: `models/u2netp.onnx` is present, so `backgroundRemoval`
+runs the **model**, not `cutout.service.js`'s flood fill. Verified on the real
+files: the written PNGs are **39–47% transparent**, so the masks are genuine
+irregular silhouettes and the runaround is being asked a real question.
+
+Four faults, and — unlike §46 — **three of them were in the engine or the
+placement service**, not in the words.
+
+### 1. Display type stepped a whole line box past a picture
+
+`setDisplayFlow()` advanced `y` by a full `bandHeight` whenever a band had no
+legal gap. So a headline under a top picture landed on the first multiple of
+its own line box below the block's top — anywhere from nothing to one entire
+box past where the picture ends, decided by whether the picture's depth happens
+to divide by the headline's leading:
+
+| block | picture | white under it |
+|---|---|---|
+| 190×264 second lead | 79px | **17px** |
+| 150×240 | 72px | **10px** |
+| 150×264 | 74px | 4px |
+
+Same gesture, three answers, none of them specified. It now advances by an
+eighth of a band, so the display type starts where the picture ends. **The
+body deliberately keeps its whole-row step** — a body column has a baseline
+rhythm to hold against its neighbours; display type at the head of a block has
+nothing above it to keep.
+
+### 2. A headline could be broken in two across a photograph
+
+Once the display flow could step finely, it could also step *through* a picture
+— half the headline above it, half below, which reads as two stories. The flow
+now begins again underneath instead. It is a **preference that yields to
+overset**, as every other one does: `fitDisplayFlow`'s last pass sets
+`mayStraddle`. Measured across all 238 article blocks carrying a picture: split
+flows **1 → 0**, overset 2 → 3, and the one extra was a block whose picture was
+genuinely in the wrong place.
+
+### 3. `composeSection()` gave a different answer depending on WHO ASKED
+
+The biggest of the four, and it had nothing to do with pictures. **The dateline
+was the one field the adapter read from the `view` alone.** Every other field
+goes through `pick(section, view, …)` and falls back to the row.
+
+The page canvas builds its view with `flowViewFromSection()`, which carries
+`location` and `author` — so the page set the dateline and found room for it.
+But `preflight.service.js`, `worklist.service.js`, `copyFit.service.js`'s
+`viewFor()` and the placement repair all compose a **stored row with an empty
+view**, and got a block **one whole body line shorter than the one that
+prints**. Measured on this fixture's 150×176 blocks: 11 lines against 12, and a
+block the settle loop called 100% set really sets 90%.
+
+Fixed in `section-adapter.js` — the dateline follows the same fallback as
+everything else. `tests/pictureBlocks.test.js` holds it.
+
+### 4. A picture landed where the headline was about to be
+
+`copyStartsAt()` exists precisely so a picture does not cover the headline, and
+its own docstring says so — but it composes the block's *current* display type,
+and on an **empty** article block that is nothing, so `bodyTop` is the top of
+the block and the picture landed exactly there. It does not merely cover the
+headline, it **halves** it: the headline is then set in whatever corridor is
+left beside the picture.
+
+Measured across every article block in the database carrying a picture and a
+headline:
+
+| | blocks | mean headline fill | under 95% | over 2 lines |
+|---|---|---|---|---|
+| picture leaves the headline its full measure | 124 | **95.0%** | 10% | **0** |
+| picture NARROWS the headline | 96 | **59.4%** | 52% | **46** |
+
+82 of those 96 leave the headline under half its own measure. On a 111×160
+brief it produced a **four-line headline filling 40%** of its column.
+
+An article block is never published without a headline, so the room one needs
+is now reserved before the picture lands — and **in lines, not characters**.
+`headline-reserve.js`'s character limits are a rough bound on what a model may
+write and say so themselves; as a *position* they are far too short, because a
+headline is set in display type. On a 229×480 centre column the 32-character
+stand-in set one line at 16.5px and reserved 40px, while the real 48-character
+headline set two lines at 20px and needed 79px. Two lines is not a guess
+either — it is what `geometry.js`'s `typeScaleFor()` has always SIZED a block's
+headline for. Against every real headline in the fixture it clears **30 of 33**,
+and the three it misses miss by 4–8px, which rule 2 then absorbs.
+
+### 5. The paper showed through the picture frames
+
+Not a fault anyone would find in a number: **11 of 16 placed pictures had white
+inside their own frame, the worst 54% of it.** The frame's proportions were
+chosen with no reference to the photograph's (`width/2 × height/3`) and
+`fit_mode` defaults to `contain`, so the picture letterboxed inside its own box.
+
+Two changes, both to NEW placements only:
+
+- the default frame **follows the photograph's own shape** when the source
+  dimensions are known (the browser already sends them);
+- where it still cannot match — an explicit size, a desk's free resize, a
+  source nobody measured — the picture **fills the frame and is cropped**
+  (`fitMode: 'cover'`), which is what a picture desk does.
+
+**A cut-out is the exception and is never cropped** (`backgroundRemoval` now
+sets `contain`): its frame is the subject's own bounds and its mask describes
+that whole subject, so a cropped cut-out would leave the copy wrapping a
+silhouette the reader cannot see. Result: **16 of 16 frames 100% covered.**
+
+### What was measured and deliberately NOT changed
+
+- **`MIN_CORRIDOR_EM` (6) stays.** A three-line sliver of two-word lines beside
+  a cut-out looks poor, and the constant's own comment says six ems is about
+  one Marathi word — while a real column needs ten (`MIN_COLUMN_EM`). But
+  across 14 851 real body lines only **36 are set below 8 em at all**, and they
+  average **2.39 words**; one-word lines are 125 of 14 851 (0.8%) and 111 of
+  those are in ordinary 10–13 em columns, not picture corridors. Raising the
+  floor would refuse corridors that are working, to repair 0.24% of the lines.
+- **The body's whole-row step past a full-measure picture stays.** It costs
+  10–16px (about one line) below such a picture. `spanTheMeasure()`'s own
+  comment already records this ("at the TOP it resumes at the first band
+  boundary at or after the picture, which can waste up to a whole line") and
+  compares top-against-foot precisely because of it. Recovering it means
+  restarting a column's baseline grid mid-block, which is the one thing the
+  grid exists to prevent.
+- **The editor chrome overlaps the headline.** `.section-chrome` (the block
+  key and the status badge) is in normal flow at the top of the block while the
+  composed lines are absolutely positioned from `content.top`, so the badge is
+  painted across the first headline line. It is editor-only — `body.print-view`
+  hides it, and Print view is where the page is judged — so it is recorded here
+  rather than redesigned unasked.
+
+### Result
+
+Edition **40294** (2099-11-11), built through the real desk API and filled by
+`fill-edition-copy.js`:
+
+```
+picture      blocks  hl>=95%  body>=95%  hl<=2 lines  overset  mean hl  mean body
+none             20       20         20           20        0    97.7%     100.0%
+rectangle        12       12         12           12        0    96.4%      99.8%
+cut-out           6        6          6            6        0    98.5%      99.8%
+ALL              38       38         38           38        0    97.4%      99.9%
+```
+
+Zero lines painted outside a block (measured in the browser, horizontally and
+vertically). Zero console or network errors across all four pages. **878 unit
+tests**, workspace net **223/223**, controls net **86/86**.
+
+`tests/pictureBlocks.test.js` is the net for all of it, and each of its five
+checks was confirmed to FAIL when its own fix is reverted.

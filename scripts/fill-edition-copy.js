@@ -56,6 +56,22 @@ const SENTENCES = [
   'महिला बचत गटांनी तयार केलेल्या वस्तूंना बाजारपेठेत चांगली मागणी आहे.',
   'संबंधित विभागाने नागरिकांच्या तक्रारींची तातडीने दखल घ्यावी अशी मागणी आहे.',
   'सांस्कृतिक कार्यक्रमात स्थानिक कलाकारांनी लोकनृत्याचे सादरीकरण केले.',
+  // SHORT sentences, deliberately. The pool was 61-79 characters throughout,
+  // so the smallest thing the filler could add was a line and a half - and on
+  // a 112x160 brief that left a whole line standing empty at the foot (92%
+  // set) because nothing in the pool was small enough to close it. Copy is
+  // written in whole sentences, so the last fraction of a column is closed by
+  // a SHORT one; a sub-editor has them and so must this.
+  'निर्णय एकमताने घेण्यात आला.',
+  'कार्यवाही सुरू आहे.',
+  'नागरिकांनी समाधान व्यक्त केले.',
+  'अहवाल लवकरच सादर होणार आहे.',
+  'तपशील नंतर जाहीर केला जाईल.',
+  'बैठकीस पदाधिकारी उपस्थित होते.',
+  'कामाची पाहणी करण्यात आली.',
+  'निधी मंजूर झाला आहे.',
+  'प्रक्रिया पूर्ण झाली आहे.',
+  'नियोजन अंतिम टप्प्यात आहे.',
 ];
 
 // Headlines are short, because short headlines are good journalism - and
@@ -119,6 +135,72 @@ const HEADLINES = [
   'ग्रंथालयाला नवीन पुस्तके मिळाली',
   'अंगणवाडी इमारतीचे लोकार्पण',
   'पशुवैद्यकीय शिबिर संपन्न',
+  // The pool must be much larger than one edition's block count, or uniqueness
+  // starves the later blocks and two editions converge: with 48 candidates for
+  // 33 blocks, 52% of headlines were shared between two dates. Choice has to
+  // survive to the last block on page four.
+  //
+  // Varied on purpose in CADENCE as well as length - a bank that all ends
+  // '... करण्यात आले' fills every measure and still reads as one voice.
+  'महामार्गाच्या रुंदीकरणाला मंजुरी',
+  'दुग्ध व्यवसायाला चालना देणार',
+  'शहरात नवीन उद्यान उभारणार',
+  'पिकांच्या नुकसानीचे पंचनामे सुरू',
+  'तलावातील गाळ काढण्याचे काम सुरू',
+  'शालेय पोषण आहाराची तपासणी',
+  'बालकांचे लसीकरण शंभर टक्के',
+  'मत्स्यबीज संकलनाला सुरुवात',
+  'नागरी सुविधांसाठी निधीची तरतूद',
+  'स्मशानभूमीच्या दुरुस्तीस मान्यता',
+  'कृषी पंपांना दिवसा वीजपुरवठा',
+  'गावठाण भूमापनाचे काम पूर्णत्वास',
+  'रोजगार मेळाव्यास तरुणांचा प्रतिसाद',
+  'बचत गटांना फिरता निधी मिळणार',
+  'दिव्यांगांसाठी स्वतंत्र कक्ष सुरू',
+  'ऐतिहासिक वाड्याचे जतन होणार',
+  'सौरऊर्जा प्रकल्पाचे भूमिपूजन',
+  'पाणंद रस्त्यांची कामे मार्गी',
+  'जनावरांच्या चाऱ्याची व्यवस्था',
+  'ग्रामसभेत विकासकामांचा आढावा',
+  'शेततळ्यांच्या अनुदानात वाढ',
+  'आपत्ती व्यवस्थापन पथक सज्ज',
+  'शहर वाहतुकीत बदल करण्यात आले असून नागरिकांना सूचना',
+  'जिल्हा रुग्णालयात नवीन यंत्रसामग्री दाखल झाली आहे',
+  'शेतमाल तारण योजनेचा लाभ घेण्याचे आवाहन करण्यात आले',
+  'पर्यावरण संवर्धनासाठी विशेष मोहीम राबवली जाणार आहे',
+  'ग्रामीण रस्त्यांच्या दर्जाबाबत तक्रारींची दखल घेतली',
+  'नगर परिषदेच्या अर्थसंकल्पास सर्वानुमते मान्यता मिळाली',
+  'क्रीडा साहित्य वाटपाचा कार्यक्रम उत्साहात पार पडला',
+  'सांडपाणी प्रक्रिया प्रकल्पाचे काम गतीने सुरू आहे',
+  // BRIEF-SIZED headlines, 20-25 characters. Measured on a 111x160 brief
+  // (design 13px, hierarchy floor 11px), this is the only band that works:
+  //
+  //   16 chars -> one line at 13px, 81% of the measure   (too short)
+  //   21 chars -> one line at 12px, 99%                  (right)
+  //   27 chars -> one line at  9.5px                     (under the floor)
+  //   44 chars -> two lines at 9.5px                     (under the floor)
+  //
+  // which is simply the typographic truth that a brief takes a short, punchy
+  // headline. Page one alone has six blocks this size and the pool held nine
+  // such headlines, so uniqueness starved the last of them down to 94%.
+  'निधी मंजूर करण्यात आला',
+  'रस्त्याचे काम सुरू झाले',
+  'पाणीपुरवठा सुरळीत झाला',
+  'शिबिरास उत्स्फूर्त प्रतिसाद',
+  'नवीन इमारतीचे भूमिपूजन',
+  'तक्रारींची दखल घेतली',
+  'गावात स्वच्छता मोहीम',
+  'पिकांचे पंचनामे सुरू',
+  'वीजजोडणी पूर्ववत झाली',
+  'बैठकीत आढावा घेतला',
+  'अनुदान वाटपास मान्यता',
+  'क्रीडा स्पर्धा उत्साहात',
+  'ग्रंथ प्रदर्शन भरणार',
+  'आरोग्य तपासणी शिबिर',
+  'रोजगार मेळावा संपन्न',
+  'तलाव खोलीकरण पूर्ण',
+  'दूध संकलन वाढले',
+  'नळजोडण्या मंजूर झाल्या',
 ];
 
 const DECKS = [
@@ -160,30 +242,78 @@ const pick = (list, seed) => list[Math.abs(seed) % list.length];
  * produce the same page.
  */
 function headlineFor(compose, section, placed, base, seed, used = new Set()) {
-  const start = Math.abs(seed) % HEADLINES.length;
-  const ordered = HEADLINES.map((_, i) => HEADLINES[(start + i) % HEADLINES.length]);
-  let best = null;
-  let fallback = null;
-  for (const headline of ordered) {
-    // A newspaper never runs the same headline twice on the same day. Choosing
-    // purely on fit made that happen immediately - the widest-filling candidate
-    // is the widest for every wide block - so a headline already used is only
-    // taken if nothing unused will do at all.
-    if (used.has(headline)) { fallback = fallback || headline; continue; }
+  const designPx = Number(base.headlineFontPx) || Number(section.headline_font_px) || 0;
+  const HIERARCHY_FLOOR = 0.85;
+
+  // EVERY candidate is measured, then one is chosen from those that qualify.
+  //
+  // Taking the first qualifying candidate from a seeded offset was the obvious
+  // shape and it does not vary enough: the qualifying set for a given geometry
+  // is much the same whatever the offset, so two editions kept landing on the
+  // same headline for the same block - 61% of blocks in the worst pair. Seeded
+  // INDEXING into the qualifying set gives a different answer per edition by
+  // construction, while staying perfectly deterministic for one edition.
+  const scored = [];
+  for (const headline of HEADLINES) {
+    // `headlineGrowth: false` is what makes this measurement honest, and is
+    // what storyWriter's settleGeneratedHeadline() does. Against an empty
+    // block the engine may grow the type until the words fill the measure, so
+    // a candidate reads as filling, is chosen, and then sets short once the
+    // copy is in and growth is withheld to keep a sentence on the page.
+    // Measured on a 307x120 strip: 97% empty -> 82% with the copy.
     const composed = compose.composeSection(
       { ...section, images: placed },
-      { ...base, headline, body: '' },
+      { ...base, headline, body: '', headlineGrowth: false },
     );
     const band = composed.bands?.headline;
-    // A headline with no room at all is not a candidate at any fill.
     if (!band || band.overset) continue;
-    const fill = compose.headlineFill(composed);
-    if (!best || fill > best.fill) best = { headline, fill };
-    // Good enough is good enough - and the FIRST one that fills wins, so the
-    // seed still decides between equally good candidates.
-    if (fill >= 0.95) { used.add(best.headline); return best.headline; }
+    const resolvedPx = Number(band.resolvedPx) || 0;
+    scored.push({
+      headline,
+      fill: compose.headlineFill(composed),
+      // A headline that has to SHRINK to fit is no longer a headline. Filling
+      // is necessary and not sufficient: the engine will take a too-long
+      // headline down until the words fit, and on a 150x232 block that gave 46
+      // characters at 7.5px against a 6.4px body - 1.17x, which reads as bold
+      // body copy. Every one of the 30 copy-carrying geometries has 17-33
+      // candidates that fill at the block's own design size, so insisting on
+      // hierarchy costs nothing.
+      keepsSize: !designPx || resolvedPx >= designPx * HIERARCHY_FLOOR,
+    });
   }
-  const chosen = best ? best.headline : (fallback || ordered[0]);
+
+  // Nothing composed at all - every candidate overset this block's headline
+  // band. That happens on a frame too small or too odd to carry any of them,
+  // and it must not throw: a fixture that dies on one unusual block leaves the
+  // whole edition half written. The shortest candidate is the best chance.
+  if (!scored.length) {
+    const shortest = [...HEADLINES].sort((x, y) => x.length - y.length)
+      .find((h) => !used.has(h)) || HEADLINES[0];
+    used.add(shortest);
+    return shortest;
+  }
+
+  const at = (list) => list[Math.abs(seed) % list.length];
+  // A newspaper never runs the same headline twice on the same day.
+  const fresh = (list) => list.filter((c) => !used.has(c.headline));
+  const good = scored.filter((c) => c.fill >= 0.95 && c.keepsSize);
+  const sized = scored.filter((c) => c.keepsSize);
+
+  // Among candidates that all clear the bar, the seed decides - that is what
+  // makes two editions differ. Among candidates that do NOT clear it, the seed
+  // must not decide: picking blind from the also-rans is how a 112x168 brief
+  // ended up with a headline filling 56% of its column while better ones sat
+  // unused. So every fallback takes the BEST fill it can still reach, with the
+  // seed only breaking exact ties.
+  const best = (list) => [...list].sort((x, y) => (y.fill - x.fill)
+    || (x.headline < y.headline ? -1 : 1))[0];
+
+  const freshGood = fresh(good);
+  const chosen = (freshGood.length ? at(freshGood)
+    : best(fresh(sized).length ? fresh(sized)
+      : fresh(scored).length ? fresh(scored)
+        : (good.length ? good : scored))).headline;
+
   used.add(chosen);
   return chosen;
 }
@@ -213,14 +343,34 @@ function bodyFor(compose, section, images, view, seed) {
 
   const out = [];
   let best = '';
-  for (let i = 0; i < SENTENCES.length * 6; i += 1) {
-    const candidate = [...out, SENTENCES[(seed + i) % SENTENCES.length]].join(' ');
-    const { ok, r } = fits(candidate);
-    if (!ok) break;
-    out.push(SENTENCES[(seed + i) % SENTENCES.length]);
-    best = candidate;
-    // Full to the foot: nothing more can be set in what is left.
-    if (r.whitespace.occupancy.emptyEquivalentLines < 0.25) break;
+  // At every step, try EVERY sentence and take the first that still fits -
+  // not just the next one in sequence.
+  //
+  // This used to break on the first sentence that did not fit, which reads as
+  // reasonable and is wrong whenever the space left is smaller than that
+  // particular sentence: a SHORTER one further down the pool would have gone
+  // in. It shows up worst on a block carrying a picture, where the copy runs
+  // out of room early and the residual is a fraction of a line - measured on
+  // one real edition, a 307x296 anchor beside a photograph stopped at 31% of
+  // its own column with twenty usable sentences still in the pool.
+  //
+  // Copy is written in whole sentences, so the last fraction of a column can
+  // only ever be closed by a short one. Trying them all is what closes it.
+  for (let guard = 0; guard < SENTENCES.length * 8; guard += 1) {
+    let added = false;
+    for (let k = 0; k < SENTENCES.length; k += 1) {
+      const sentence = SENTENCES[(seed + guard + k) % SENTENCES.length];
+      const candidate = [...out, sentence].join(' ');
+      const { ok, r } = fits(candidate);
+      if (!ok) continue;
+      out.push(sentence);
+      best = candidate;
+      added = true;
+      // Full to the foot: nothing more can be set in what is left.
+      if (r.whitespace.occupancy.emptyEquivalentLines < 0.25) return best;
+      break;
+    }
+    if (!added) break;
   }
   return best;
 }
@@ -232,6 +382,15 @@ function bodyFor(compose, section, images, view, seed) {
   if (!edition) throw new Error(`edition ${ED} does not exist`);
 
   const date = String(edition.publication_date).slice(0, 10);
+  // Two DIFFERENT editions must not come out with the same copy, and the SAME
+  // edition must come out identical on every run - two screenshots of one
+  // edition have to be comparable, which is what `pick`'s stable seed is for.
+  // Seeding from the block's position alone satisfies the second and breaks
+  // the first: measured across two 4-page editions, 82% of headlines were
+  // shared and 11 of 33 blocks got the identical headline. The edition's own
+  // publication DATE is the thing that differs between them and is fixed
+  // within one of them, so it is what the seed is offset by.
+  const editionSeed = [...date].reduce((h, ch) => ((h * 33) ^ ch.charCodeAt(0)) >>> 0, 5381) % 9973;
   if (!date.startsWith('2099-')) {
     throw new Error(`refusing to write copy into ${date} - this script is for disposable 2099-* editions only`);
   }
@@ -290,9 +449,9 @@ function bodyFor(compose, section, images, view, seed) {
     if (section.block_type === 'advert' || section.feature_key || section.smart_card_key) { skipped += 1; continue; }
     if (!['article', 'briefs', 'photo'].includes(String(section.block_type))) { skipped += 1; continue; }
 
-    const subheading = section.height_px > 240 ? pick(DECKS, index * 3) : '';
-    const location = pick(LOCATIONS, index);
-    const reporter = pick(REPORTERS, index * 5);
+    const subheading = section.height_px > 240 ? pick(DECKS, editionSeed + index * 3) : '';
+    const location = pick(LOCATIONS, editionSeed + index);
+    const reporter = pick(REPORTERS, editionSeed + index * 5);
     const placed = imagesBySection.get(section.id) || [];
 
     // The headline is chosen AFTER the pictures are known, because the measure
@@ -300,7 +459,7 @@ function bodyFor(compose, section, images, view, seed) {
     const headline = headlineFor(
       compose, section, placed,
       { subheading, location, author: reporter },
-      index * 7 + section.page_number,
+      editionSeed + index * 7 + section.page_number,
       usedHeadlines,
     );
 
@@ -312,7 +471,7 @@ function bodyFor(compose, section, images, view, seed) {
       { headline, subheading, body: '', location, author: reporter },
     );
 
-    const body = bodyFor(compose, section, placed, { headline, subheading, location, author: reporter }, index * 11);
+    const body = bodyFor(compose, section, placed, { headline, subheading, location, author: reporter }, editionSeed + index * 11);
 
     // A block whose photograph leaves no room for a sentence must not keep a
     // story anyway. Left alone, its old copy simply has nowhere to go, and the

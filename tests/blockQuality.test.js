@@ -260,3 +260,121 @@ test('the compositor sets these ten geometries exactly as recorded', async () =>
   }
   assert.deepEqual(drift, [], `\n  composition drifted:\n  ${drift.join('\n  ')}\n`);
 });
+
+// --- the writer's own rules, held --------------------------------------------
+//
+// Filling the measure is necessary and NOT sufficient. Three things were found
+// by photographing real blocks rather than reading their numbers, and each is
+// a rule the copy-writing side has to obey. They live here because they are
+// properties of a finished block, not of the compositor: the compositor does
+// exactly the right thing in every case below, and it is the words handed to
+// it that decide whether the block looks like a newspaper.
+
+test('a headline must be measured with growth WITHHELD, or the choice is flattered', async () => {
+  const { ensureFontsLoaded } = await import('../public/editor/compose/font-metrics.js');
+  const { ensureShaperReady } = await import('../public/editor/compose/shaper.js');
+  const compose = await import('../public/editor/compose/section-adapter.js');
+  await Promise.all([ensureFontsLoaded(), ensureShaperReady()]);
+
+  // Composed against an EMPTY block the engine is free to grow the type until
+  // the words fill the measure. Once the copy is in, growth is withheld to
+  // keep a sentence on the page - so a candidate chosen on the empty reading
+  // sets short on the real block. Measured on a 307x120 strip: 97% -> 82%.
+  const section = { section_key: 'strip', width_px: 307, height_px: 120, block_type: 'article', images: [] };
+  const base = { ...typeFor(307, 120), subheading: '', marginPx: 1, lineHeight: 1.45 };
+  const headline = 'पाणीपुरवठा योजना अंतिम टप्प्यात';
+
+  const flattered = compose.headlineFill(compose.composeSection(section, { ...base, headline, body: '' }));
+  const honest = compose.headlineFill(compose.composeSection(section, { ...base, headline, body: '', headlineGrowth: false }));
+  const real = compose.headlineFill(compose.composeSection(section, { ...base, headline, body: SENTENCES.join(' ') }));
+
+  assert.ok(flattered > honest + 0.1, `the empty reading should flatter: ${flattered} vs ${honest}`);
+  // `growth:false` is a CONSERVATIVE reading, not an exact prediction: whether
+  // the engine may grow the headline depends on how full the block ends up, so
+  // the real figure lands somewhere between the withheld reading and the
+  // flattered one. What matters for CHOOSING is that it never overstates -
+  // a candidate picked on it cannot then set shorter than advertised.
+  assert.ok(honest <= real + 0.02,
+    `growth:false must not overstate the real block: ${honest} vs ${real}`);
+});
+
+test('a headline may not be shrunk to body size to make it fit', async () => {
+  const { ensureFontsLoaded } = await import('../public/editor/compose/font-metrics.js');
+  const { ensureShaperReady } = await import('../public/editor/compose/shaper.js');
+  const compose = await import('../public/editor/compose/section-adapter.js');
+  await Promise.all([ensureFontsLoaded(), ensureShaperReady()]);
+
+  // The engine will take a too-long headline down until the words fit, and
+  // that is correct - overset is worse. But a headline set at 1.17x the body
+  // reads as bold body copy, not as the block's voice, so the WRITER must not
+  // hand it words that force the shrink. Every one of the 30 copy-carrying
+  // geometries has candidates that fill at the block's own design size.
+  const section = { section_key: 'g', width_px: 150, height_px: 232, block_type: 'article', images: [] };
+  const design = typeFor(150, 232);
+  const base = { ...design, subheading: '', marginPx: 1, lineHeight: 1.45 };
+
+  const tooLong = 'महिला बचत गटांच्या उत्पादनांना बाजारपेठ मिळाली';
+  const shrunk = compose.composeSection(section, { ...base, headline: tooLong, body: '', headlineGrowth: false });
+  const shrunkPx = Number(shrunk.bands.headline.resolvedPx);
+  assert.ok(shrunkPx < design.headlineFontPx * 0.85,
+    `this fixture must actually provoke the shrink: ${shrunkPx} of ${design.headlineFontPx}`);
+  assert.ok(shrunkPx / design.bodyFontPx < 1.6,
+    'and land near body size, which is the fault being guarded against');
+
+  // A brief-sized headline keeps the block's voice.
+  const right = compose.composeSection(section, { ...base, headline: 'निधी मंजूर करण्यात आला', body: '', headlineGrowth: false });
+  const rightPx = Number(right.bands.headline.resolvedPx);
+  assert.ok(rightPx >= design.headlineFontPx * 0.85, `expected full size, got ${rightPx}`);
+  assert.ok(rightPx / design.bodyFontPx >= 1.6, `expected hierarchy, got ${rightPx / design.bodyFontPx}`);
+});
+
+test('the last fraction of a column is closed by a SHORT sentence', async () => {
+  const { ensureFontsLoaded } = await import('../public/editor/compose/font-metrics.js');
+  const { ensureShaperReady } = await import('../public/editor/compose/shaper.js');
+  const compose = await import('../public/editor/compose/section-adapter.js');
+  await Promise.all([ensureFontsLoaded(), ensureShaperReady()]);
+
+  // Copy is written in whole sentences, so a writer can only ever get within
+  // about a line of the foot. A pool of uniformly long sentences cannot close
+  // that last line - on a 112x160 brief it left a whole line standing empty -
+  // and a filler that stops at the first sentence that does not fit leaves far
+  // more: measured on a 307x296 anchor beside a photograph, 31% of the column
+  // with twenty usable sentences still in the pool.
+  const section = { section_key: 'brief', width_px: 112, height_px: 160, block_type: 'article', images: [] };
+  const base = { ...typeFor(112, 160), headline: 'निधी मंजूर करण्यात आला', subheading: '', marginPx: 1, lineHeight: 1.45 };
+  const oversets = (body) => (compose.composeSection(section, { ...base, body }).violations || [])
+    .some((v) => /BODY_OVERSET/.test(v.code || v));
+
+  // Two fillers over the SAME pool. The only difference is what they do when
+  // the next sentence does not fit: one gives up, the other tries a shorter
+  // one. That single line is what left a 307x296 anchor beside a photograph at
+  // 31% of its column with twenty usable sentences still available.
+  const stopAtFirstMiss = () => {
+    let kept = '';
+    for (let i = 0; i < SENTENCES.length * 4; i += 1) {
+      const candidate = kept ? `${kept} ${SENTENCES[i % SENTENCES.length]}` : SENTENCES[i % SENTENCES.length];
+      if (oversets(candidate)) break;
+      kept = candidate;
+    }
+    return kept;
+  };
+  const tryThemAll = () => {
+    let kept = '';
+    for (let guard = 0; guard < 200; guard += 1) {
+      let grew = false;
+      for (const sentence of SENTENCES) {
+        const candidate = kept ? `${kept} ${sentence}` : sentence;
+        if (oversets(candidate)) continue;
+        kept = candidate; grew = true; break;
+      }
+      if (!grew) break;
+    }
+    return kept;
+  };
+  const fillOf = (body) => compose.bodyFill(compose.composeSection(section, { ...base, body })).ratio;
+
+  const giveUp = fillOf(stopAtFirstMiss());
+  const persist = fillOf(tryThemAll());
+  assert.ok(persist >= 0.95, `trying every sentence must fill the column, got ${persist}`);
+  assert.ok(persist >= giveUp, `persisting can never do worse: ${persist} vs ${giveUp}`);
+});

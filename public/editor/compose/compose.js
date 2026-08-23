@@ -1954,6 +1954,46 @@ export function composeBlock(input = {}) {
     });
   }
 
+  // And the commoner case by far, which said NOTHING AT ALL until now.
+  //
+  // HEADLINE_COULD_FILL above only fires when a bigger size WOULD have filled
+  // the measure and was withheld because the copy is already at the foot. The
+  // ordinary short headline - too few words to fill at any legible size, so
+  // fitDisplayFlow() correctly leaves it at the size the design gave it (see
+  // "all or nothing" on fillTo()) - produced no report of any kind. Measured
+  // across a properly filled fixture edition: eight headlines under the 95%
+  // bar, setting at 58-75% of their own measure, and SEVEN of them silent.
+  //
+  // That silence is the whole defect. A one-line headline lying two-fifths
+  // short of the column is the single most obvious thing that makes a made-up
+  // page read as a mock-up rather than a newspaper, and a sub-editor who is
+  // never told cannot write the three words that would fix it. Growing the
+  // type is deliberately NOT the answer here and must not be reintroduced: a
+  // short headline blown up is still short, and it costs the story a line.
+  //
+  // So the block is told what it is short BY, in the unit a sub-editor writes
+  // in - characters. The estimate is the honest one available: at this size
+  // the words reach `fill` of the measure, so filling it needs about
+  // `chars * (target/fill - 1)` more. It is a guide for writing, never
+  // geometry - real Marathi words of the same count set materially wider or
+  // narrower, which is exactly why the exact compositor, not the count, is
+  // what finally judges a headline (see settleGeneratedHeadline).
+  const headlineBand = result.bands.headline;
+  if (!denied && headlineBand && !headlineBand.overset) {
+    const band = headlineBandFit(headlineBand);
+    if (band.fills.length && band.fill > 0 && band.fill < HEADLINE_FILL_TARGET) {
+      const chars = (headlineBand.lines || [])
+        .reduce((total, line) => total + clusters(String(line.text || '')).length, 0);
+      const extra = Math.max(1, Math.round(chars * (HEADLINE_FILL_TARGET / band.fill - 1)));
+      warnings.push({
+        code: 'HEADLINE_SHORT_OF_MEASURE',
+        detail: `The headline fills ${Math.round(band.fill * 100)}% of its column. `
+          + `About ${extra} more characters would fill it. `
+          + 'No size change can repair this - the words are short, not the type.',
+      });
+    }
+  }
+
   // The copy starts where its FIRST BASELINE belongs, worked back to the top
   // of its line box - the same rule the display flows above are placed by, so
   // the sink under the display is one number on every block of the page rather

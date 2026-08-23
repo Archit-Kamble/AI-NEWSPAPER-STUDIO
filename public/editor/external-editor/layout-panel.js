@@ -85,6 +85,7 @@ const ENGINE_FAULTS = {
   NO_LEGAL_MEASURE: "error",
   // Not a fault - a choice the block is holding open. See compose.js.
   HEADLINE_COULD_FILL: "info",
+  HEADLINE_SHORT_OF_MEASURE: "info",
   HEADLINE_AUTO_FITTED: "info",
   DECK_AUTO_FITTED: "info",
   KICKER_AUTO_FITTED: "info",

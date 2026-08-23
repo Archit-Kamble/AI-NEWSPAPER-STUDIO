@@ -319,3 +319,55 @@ test('a selected-size mark in a deck really does change what fits', () => {
   assert.ok(sized.bands.deck.lines[0].width > plain.bands.deck.lines[0].width,
     'a word set at 40px is wider than the same word at the deck\'s own size');
 });
+
+// --- a headline too short for its measure must SAY so ---------------------
+//
+// HEADLINE_COULD_FILL only ever fired when a bigger size WOULD have filled the
+// measure and was withheld because the copy was already at the foot. The
+// ordinary short headline - too few words to fill at any legible size, which
+// is the commonest case by far - reported nothing at all. Measured across a
+// properly filled fixture edition: eight headlines under the 95% bar, setting
+// at 58-75% of their own measure, seven of them silent. A one-line headline
+// two-fifths short of its column is the single most obvious thing that makes a
+// made-up page read as a mock-up, and a sub-editor who is never told cannot
+// write the three words that would fix it.
+test('a headline that cannot fill its measure reports how short it is', async () => {
+  const { ensureFontsLoaded } = await import('../public/editor/compose/font-metrics.js');
+  const { ensureShaperReady } = await import('../public/editor/compose/shaper.js');
+  const { composeSection } = await import('../public/editor/compose/section-adapter.js');
+  await Promise.all([ensureFontsLoaded(), ensureShaperReady()]);
+
+  const section = { section_key: 'short-head', width_px: 307, height_px: 264, block_type: 'article', images: [] };
+  const view = {
+    headline: 'नवीन नोंदणी',
+    subheading: 'तपशील लवकरच',
+    body: 'सातारा : जिल्हा प्रशासनाने नवीन नोंदणी प्रक्रिया सुरू केली आहे. नागरिकांना ऑनलाइन अर्ज करता येणार आहे.',
+    headlineFontPx: 23, subheadingFontPx: 14, bodyFontPx: 12, lineHeight: 1.45, marginPx: 1,
+  };
+
+  const composed = composeSection(section, view);
+  const warning = (composed.warnings || []).find((w) => w.code === 'HEADLINE_SHORT_OF_MEASURE');
+  assert.ok(warning, 'a headline well short of its measure is reported');
+  assert.match(warning.detail, /fills \d+% of its column/);
+  assert.match(warning.detail, /more characters would fill it/);
+  // Growing the type is deliberately NOT offered as the remedy: a short
+  // headline blown up is still short, and it costs the story a line.
+  assert.match(warning.detail, /No size change can repair this/);
+});
+
+test('a headline that already fills its measure is not nagged about', async () => {
+  const { ensureFontsLoaded } = await import('../public/editor/compose/font-metrics.js');
+  const { ensureShaperReady } = await import('../public/editor/compose/shaper.js');
+  const { composeSection } = await import('../public/editor/compose/section-adapter.js');
+  await Promise.all([ensureFontsLoaded(), ensureShaperReady()]);
+
+  const section = { section_key: 'full-head', width_px: 307, height_px: 264, block_type: 'article', images: [] };
+  const composed = composeSection(section, {
+    headline: 'साताऱ्यातील राजकीय घडामोडींना वेग आला असून चर्चा रंगली',
+    subheading: 'तपशील लवकरच',
+    body: 'सातारा : जिल्हा प्रशासनाने नवीन नोंदणी प्रक्रिया सुरू केली आहे.',
+    headlineFontPx: 23, subheadingFontPx: 14, bodyFontPx: 12, lineHeight: 1.45, marginPx: 1,
+  });
+  const codes = (composed.warnings || []).map((w) => w.code);
+  assert.ok(!codes.includes('HEADLINE_SHORT_OF_MEASURE'), `unexpected: ${codes.join(',')}`);
+});

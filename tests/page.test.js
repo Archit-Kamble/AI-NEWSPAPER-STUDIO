@@ -8,7 +8,7 @@ const { signIn } = require('./helpers/desk');
 async function createNewspaper(desk, name) {
   const response = await desk('/api/newspapers', {
     method: 'POST',
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, publicationDate: '2099-01-01' }),
   });
   return response.json();
 }

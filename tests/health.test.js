@@ -74,7 +74,11 @@ test('admin workflow saves a page section and final Scribus/PDF files', async ()
   const jsonRequest = (pathName, method, body) => desk(pathName, { method, body: JSON.stringify(body) });
 
   try {
-    const newspaper = await jsonRequest('/api/newspapers', 'POST', { pageCount: 1 }).then((response) => response.json());
+    // Dated 2099 deliberately. A dateless create takes today (newspaper.service.js
+    // defaults to todayWhereWePrint), and POST /api/newspapers/start is idempotent
+    // PER DATE - so a test edition left on today's date becomes the edition the
+    // desk is handed when it presses "Open Edition", stubs and all.
+    const newspaper = await jsonRequest('/api/newspapers', 'POST', { pageCount: 1, publicationDate: '2099-01-01' }).then((response) => response.json());
     assert.equal(newspaper.page_width_px, 660);
     assert.equal(newspaper.page_height_px, 1060);
     assert.equal(newspaper.color_mode, 'CMYK');

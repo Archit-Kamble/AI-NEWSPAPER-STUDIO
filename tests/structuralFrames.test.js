@@ -17,7 +17,7 @@ async function setup(port) {
   const desk = await signIn(port);
   const newspaper = await desk.json('/api/newspapers', {
     method: 'POST',
-    body: JSON.stringify({ name: 'Structural frame repair test' }),
+    body: JSON.stringify({ name: 'Structural frame repair test', publicationDate: '2099-01-01' }),
   });
   const page = await desk.json(`/api/newspapers/${newspaper.id}/pages`, {
     method: 'POST',

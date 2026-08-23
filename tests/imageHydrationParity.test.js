@@ -40,7 +40,7 @@ async function withEdition(run) {
   try {
     newspaper = await desk.json('/api/newspapers', {
       method: 'POST',
-      body: JSON.stringify({ name: 'image hydration parity test' }),
+      body: JSON.stringify({ name: 'image hydration parity test', publicationDate: '2099-01-01' }),
     });
     const page = await desk.json(`/api/newspapers/${newspaper.id}/pages`, {
       method: 'POST',

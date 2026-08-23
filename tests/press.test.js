@@ -75,7 +75,7 @@ test('a reporter files copy but does not make up the page', async () => {
     // Making up the paper is not.
     const attempt = await reporter('/api/newspapers', {
       method: 'POST',
-      body: JSON.stringify({ name: 'Reporter should not be able to do this' }),
+      body: JSON.stringify({ name: 'Reporter should not be able to do this', publicationDate: '2099-01-01' }),
     });
     assert.equal(attempt.status, 403);
   } finally {

@@ -25,7 +25,7 @@ async function withEdition(run) {
   try {
     newspaper = await desk.json('/api/newspapers', {
       method: 'POST',
-      body: JSON.stringify({ name: 'sectionImage carry-forward test' }),
+      body: JSON.stringify({ name: 'sectionImage carry-forward test', publicationDate: '2099-01-01' }),
     });
     const page = await desk.json(`/api/newspapers/${newspaper.id}/pages`, {
       method: 'POST',
@@ -104,6 +104,90 @@ test('adding the SAME url as the auto-fill does not duplicate it - it becomes th
       body: JSON.stringify({ url, filename: 'same-photo.jpg' }),
     });
     assert.equal(images.length, 1, 'the carried-forward row and the desk\'s own add resolve to the one picture, not two');
+  });
+});
+
+// Found live: a cut-out (shape: 'cutout') resized via a plain API call that
+// only named a new width came back with its OLD height unchanged, stretching
+// the frame around the trimmed silhouette and stranding its own resize
+// handles a third of the frame's width from anything visible. A cut-out has
+// exactly one shape to show - there is no more subject a wider frame reveals,
+// only dead space - so its aspect ratio is preserved here regardless of
+// which single dimension a caller names, the same guarantee block-frame.js's
+// drag handles now enforce for a mouse-driven resize.
+test('resizing a cut-out by only one dimension preserves its aspect ratio, never stretching the silhouette', async () => {
+  await withEdition(async ({ desk, page }) => {
+    // page.sections[0] ("anchor" on the "dense" template) is 307x296 - large
+    // enough that neither resize below runs into clampToBlock()'s own
+    // ceiling, which would otherwise be indistinguishable from this test's
+    // own aspect-lock arithmetic being wrong.
+    const sectionKey = page.sections[0].section_key;
+    const [placed] = await desk.json(`/api/pages/${page.id}/sections/${sectionKey}/images`, {
+      method: 'POST',
+      body: JSON.stringify({ url: '/uploads/cutout-test.png', width: 40, height: 100, shape: 'cutout' }),
+    });
+    assert.equal(placed.shape, 'cutout');
+
+    // Width-only: height must follow the SAME 40:100 ratio, not stay at 100.
+    const afterWidth = await desk.json(`/api/pages/${page.id}/sections/${sectionKey}/images/${placed.id}`, {
+      method: 'PATCH', body: JSON.stringify({ width: 60 }),
+    });
+    const rowAfterWidth = afterWidth.find((row) => row.id === placed.id);
+    assert.equal(rowAfterWidth.width_px, 60);
+    assert.equal(rowAfterWidth.height_px, 150, '60/40 = 1.5x, so height must scale 100 -> 150 too');
+
+    // Height-only, from the now-60x150 row: width must follow back down.
+    const afterHeight = await desk.json(`/api/pages/${page.id}/sections/${sectionKey}/images/${placed.id}`, {
+      method: 'PATCH', body: JSON.stringify({ height: 100 }),
+    });
+    const rowAfterHeight = afterHeight.find((row) => row.id === placed.id);
+    assert.equal(rowAfterHeight.height_px, 100);
+    assert.equal(rowAfterHeight.width_px, 40, '100/150 = (2/3)x, so width must scale 60 -> 40 too');
+  });
+});
+
+// A frame already stretched crooked by an earlier call - before this
+// guarantee existed - must be able to self-correct, not lock in its own
+// wrong ratio forever. The source photograph's real dimensions (recorded on
+// media_assets at upload) are the authority here, not whatever the frame
+// currently happens to be.
+test('a cut-out whose frame is ALREADY the wrong ratio self-corrects from the source photo\'s real dimensions, not its own crooked frame', async () => {
+  await withEdition(async ({ desk, page }) => {
+    const sectionKey = page.sections[0].section_key;
+    const [placed] = await desk.json(`/api/pages/${page.id}/sections/${sectionKey}/images`, {
+      method: 'POST',
+      body: JSON.stringify({
+        url: '/uploads/cutout-test.png', width: 40, height: 100, shape: 'cutout',
+        sourceWidth: 40, sourceHeight: 100,
+      }),
+    });
+    // Stretch it crooked directly at the repository, the way a stray call
+    // made before this guarantee existed could have.
+    const repo = require('../src/repositories/sectionImage.repository');
+    await repo.update(placed.id, { width: 120, height: 105 });
+
+    const after = await desk.json(`/api/pages/${page.id}/sections/${sectionKey}/images/${placed.id}`, {
+      method: 'PATCH', body: JSON.stringify({ width: 80 }),
+    });
+    const row = after.find((r) => r.id === placed.id);
+    assert.equal(row.width_px, 80);
+    assert.equal(row.height_px, 200, '80 at the source\'s real 40:100 ratio is 200, not 70 (which 120:105 would have given)');
+  });
+});
+
+test('a plain "rect" picture is unaffected - it still resizes free-form, one dimension at a time', async () => {
+  await withEdition(async ({ desk, page }) => {
+    const sectionKey = page.sections[0].section_key;
+    const [placed] = await desk.json(`/api/pages/${page.id}/sections/${sectionKey}/images`, {
+      method: 'POST',
+      body: JSON.stringify({ url: '/uploads/rect-test.jpg', width: 40, height: 100, shape: 'rect' }),
+    });
+    const after = await desk.json(`/api/pages/${page.id}/sections/${sectionKey}/images/${placed.id}`, {
+      method: 'PATCH', body: JSON.stringify({ width: 60 }),
+    });
+    const row = after.find((r) => r.id === placed.id);
+    assert.equal(row.width_px, 60);
+    assert.equal(row.height_px, 100, 'a rect picture keeps its stated height - only a cutout locks aspect');
   });
 });
 

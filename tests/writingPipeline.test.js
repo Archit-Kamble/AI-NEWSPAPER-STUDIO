@@ -296,7 +296,7 @@ async function withBlock(t, name) {
   t.after(() => server.close());
   const desk = await signIn(server.address().port);
 
-  const newspaper = await desk.json('/api/newspapers', { method: 'POST', body: JSON.stringify({ name }) });
+  const newspaper = await desk.json('/api/newspapers', { method: 'POST', body: JSON.stringify({ name, publicationDate: '2099-01-01' }) });
   t.after(() => pool.query('DELETE FROM newspapers WHERE id = $1', [newspaper.id]));
 
   const page = await desk.json(`/api/newspapers/${newspaper.id}/pages`, {

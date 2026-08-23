@@ -25,7 +25,7 @@ async function withPage(t, name) {
 
   const newspaper = await desk.json('/api/newspapers', {
     method: 'POST',
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, publicationDate: '2099-01-01' }),
   });
   t.after(() => pool.query('DELETE FROM newspapers WHERE id = $1', [newspaper.id]));
 

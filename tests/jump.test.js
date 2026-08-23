@@ -25,7 +25,7 @@ async function withEdition(run) {
   try {
     newspaper = await desk.json('/api/newspapers', {
       method: 'POST',
-      body: JSON.stringify({ name: 'jump.service test' }),
+      body: JSON.stringify({ name: 'jump.service test', publicationDate: '2099-01-01' }),
     });
     const page1 = await desk.json(`/api/newspapers/${newspaper.id}/pages`, {
       method: 'POST',

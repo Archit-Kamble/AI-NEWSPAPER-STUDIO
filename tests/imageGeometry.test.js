@@ -52,6 +52,31 @@ test('an unrecognised fit_mode falls back to contain, never crashes', () => {
   assert.equal(result.fitMode, 'contain');
 });
 
+// A cut-out is trimmed tight to the subject already - cover or stretch on a
+// frame whose aspect ratio only approximately matches the trim (it is an
+// integer-rounded box, see backgroundRemoval.service.js) crops into the
+// subject, and worsens on every resize because cover recomputes its crop
+// every time. Found live: a cut-out placed with fit_mode 'cover' showed
+// only a cropped rectangle of the person, and "Bigger"/"Smaller" visibly
+// zoomed into it rather than cleanly resizing. shape:'cutout' overrides
+// whatever fit_mode is stored, in the one shared resolver, so the canvas
+// and the editor cannot disagree about it.
+test('shape "cutout" always resolves to contain, regardless of its stored fit_mode - cover/stretch would crop the trimmed subject', () => {
+  for (const fit_mode of ['cover', 'stretch', 'contain']) {
+    const result = geometry.resolvePlacedImage({
+      x: 0, y: 0, width: 100, height: 200, source_width_px: 90, source_height_px: 200, shape: 'cutout', fit_mode,
+    });
+    assert.equal(result.fitMode, 'contain', `fit_mode '${fit_mode}' on a cutout must still resolve to contain`);
+  }
+});
+
+test('a non-cutout shape is unaffected - "rect" still honours its own stored fit_mode', () => {
+  const result = geometry.resolvePlacedImage({
+    x: 0, y: 0, width: 100, height: 200, source_width_px: 90, source_height_px: 200, shape: 'rect', fit_mode: 'cover',
+  });
+  assert.equal(result.fitMode, 'cover');
+});
+
 // -------------------------------------------------------------- rotation ---
 
 test('a 90 degree rotation swaps the local target axes', () => {

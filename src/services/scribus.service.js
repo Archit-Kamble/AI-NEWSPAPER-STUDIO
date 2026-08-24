@@ -415,7 +415,7 @@ async function blockFrames(section, { pageIndex = 0, pageOffsetMm = 0 } = {}) {
       parts.push(lineFrame({
         xMm: mm(section.x_px) + mm(caption.x), yMm: mm(section.y_px) + mm(caption.y) + pageOffsetMm,
         widthMm: mm(caption.width), heightMm: mm(caption.height),
-        runs: [{ text: strip(image.caption), family: 'serif', weight: 400, bold: false, italic: false, underline: false, fontPx: PLACED_CAPTION_METRICS.fontPx }],
+        runs: [{ text: strip(image.caption), family: PLACED_CAPTION_METRICS.family, weight: PLACED_CAPTION_METRICS.weight, bold: false, italic: false, underline: false, fontPx: PLACED_CAPTION_METRICS.fontPx }],
         ownPage: pageIndex,
       }));
     }

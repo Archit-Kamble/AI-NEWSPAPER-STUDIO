@@ -223,7 +223,7 @@ async function blockItems(section) {
     if (caption && image.caption) {
       items.push(textItem(
         { x: x0 + mm(caption.x), y: y0 + mm(caption.y), width: mm(caption.width), height: mm(caption.height) },
-        [run(strip(image.caption), { family: 'serif', weight: 400, fontPx: PLACED_CAPTION_METRICS.fontPx })],
+        [run(strip(image.caption), { family: PLACED_CAPTION_METRICS.family, weight: PLACED_CAPTION_METRICS.weight, fontPx: PLACED_CAPTION_METRICS.fontPx })],
       ));
     }
   }

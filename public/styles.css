@@ -3918,6 +3918,7 @@ body.print-view .newspaper-canvas {
 .section-placed-caption {
   position: absolute;
   font-family: "Sahas Sans", "Noto Sans Devanagari", Arial, sans-serif;
+  font-weight: 700;
   color: #333;
   background: rgba(255, 255, 255, 0.9);
   box-sizing: border-box;
@@ -5555,3 +5556,42 @@ body.print-view .page-imprint {
 .reporter-stories { display: grid; gap: 8px; }.reporter-story { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding: 11px; border: 1px solid #e1ddd8; border-radius: 9px; background: #fff; }.reporter-story h4, .reporter-story p, .reporter-story small { margin: 0; }.reporter-story > div:first-child > p { margin-top: 3px; color: var(--secondary); }.reporter-story small { display: block; margin-top: 5px; color: var(--secondary); }.review-note { margin-top: 7px !important; padding: 7px 8px; border-left: 3px solid #c8a24a; background: #fcfaf3; font-size: .8rem; }.reporter-story-actions { display: flex; flex-wrap: wrap; align-content: flex-start; justify-content: flex-end; gap: 6px; }.reporter-story-actions .btn-secondary { width: auto; margin: 0; padding: 5px 8px; font-size: .76rem; }
 .general-settings { max-width: 860px; }.general-settings section { padding: var(--s4); border: 1px solid #e0dbd5; border-radius: 10px; background: #fbfaf8; }.general-settings section h3 { margin: 0 0 var(--s3); }.settings-saved { margin-left: var(--s2); font-size: .86rem; font-weight: 800; }.settings-saved--ok { color: #218650; }.settings-saved--error { color: #a60f27; }
 @media (max-width: 760px) { .reporter-admin-heading, .settings-heading { display: grid; }.reporter-admin-heading .btn-submit, .reporter-admin-heading .btn-secondary { width: 100%; }.reporter-row { grid-template-columns: 40px minmax(0, 1fr); }.reporter-counts { grid-column: 2; text-align: left; grid-template-columns: repeat(2, max-content); }.reporter-row-actions { grid-column: 2; justify-items: start; grid-auto-flow: column; justify-content: start; }.reporter-profile-grid { grid-template-columns: 1fr; }.reporter-story { grid-template-columns: 1fr; }.reporter-story-actions { justify-content: flex-start; } }
+
+/* --- a placed picture's caption ----------------------------------------- */
+
+/* Drawn in the Block Editor to match what the page canvas has always drawn
+   (.section-placed-caption) and what all four exports print. Same geometry,
+   from caption-geometry.js; only the unit differs. */
+.pic-frame .pic-caption {
+  box-sizing: border-box;
+  overflow: hidden;
+  color: #333;
+  /* The sans face, matching .section-placed-caption on the page canvas and
+     the family caption-geometry.js now states once for all three renderers. */
+  font-family: "Sahas Sans", "Noto Sans Devanagari", Arial, sans-serif;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.9);
+  pointer-events: none;
+}
+.pic-frame .pic-caption[hidden] { display: none; }
+
+/* The caption's field, in the Pictures panel. */
+.picture-caption-label {
+  display: block;
+  margin-top: 4px;
+}
+.picture-caption-label > span {
+  display: block;
+  font-size: 11px;
+  margin-bottom: 2px;
+}
+.picture-caption {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 12px;
+  padding: 4px 6px;
+  border: 1px solid var(--line, #d0d0d6);
+  border-radius: 3px;
+}

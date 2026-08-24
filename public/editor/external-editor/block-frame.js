@@ -46,7 +46,7 @@ import { blockExpectsCopy } from "../layout/block-kinds.js";
 // The Devanagari-safe floor. The inline body editor sets the story at its
 // real leading, and 1.45 is already at the edge of clipping a matra stack -
 // see CLAUDE.md's note on why line_height must never be tidied downward.
-import { DEFAULT_BODY_FONT_PX, datelineText } from "../layout/text-flow.js";
+import { DEFAULT_BODY_FONT_PX, datelineText, captionBox } from "../layout/text-flow.js";
 import { smartCardMarkup } from "../smart-cards/smart-cards.js";
 // The same functions the page canvas draws a headline, a deck and a flowed
 // body with - so the WYSIWYG frame and the newspaper page can never drift
@@ -1367,8 +1367,46 @@ function pictureMarkup(row) {
     <figure class="pic-frame" data-image-id="${row.id}" data-shape="${row.shape || "rect"}">
       <img src="${String(row.url || "")}" alt="" draggable="false">
       <button type="button" class="pic-remove" data-pic-remove aria-label="Take this picture off the block"></button>
+      <figcaption class="pic-caption"></figcaption>
       ${handles}
     </figure>`;
+}
+
+/**
+ * The caption under the photograph, drawn from the ONE caption geometry.
+ *
+ * The page canvas drew this (section-thumb.js) and the Block Editor did not,
+ * so the two halves of the same screen showed different blocks - the exact
+ * parity fault editor-parity.browser.js exists to catch, and it had been sitting
+ * in the one place that net could not see, because no field in the product
+ * could put a caption on a picture in the first place.
+ *
+ * `captionBox()` is the same function the canvas, the compositor's obstacle
+ * set, preflight and all four exports read, so this cannot be a second opinion
+ * about where the words go. It is only converted out of block pixels into the
+ * page's own screen pixels, which is what `scale` is.
+ */
+function paintCaption(frame, row, scale) {
+  const node = frame.querySelector(".pic-caption");
+  if (!node) return;
+  const box = captionBox(row);
+  if (!box) {
+    node.hidden = true;
+    node.textContent = "";
+    return;
+  }
+  node.hidden = false;
+  node.textContent = String(row.caption || "");
+  node.setAttribute("style", [
+    "position:absolute",
+    "left:0",
+    "top:100%",
+    "width:100%",
+    `height:${box.height / scale}px`,
+    `padding:${box.paddingY / scale}px ${box.paddingX / scale}px`,
+    `font-size:${box.fontPx / scale}px`,
+    `line-height:${box.lineHeight}`,
+  ].join(";"));
 }
 
 /** Draws each picture where its placement says it is, on the page. */
@@ -1397,6 +1435,7 @@ export function renderPictures(images) {
     if (!frame.classList.contains("is-dragging")) frame.setAttribute("style", `position:absolute;${style.frame}`);
     image.setAttribute("style", style.image);
     frame.dataset.shape = style.shape;
+    paintCaption(frame, row, scale);
     frame.classList.toggle("is-selected", state.selectedIds.has(row.id));
   }
 

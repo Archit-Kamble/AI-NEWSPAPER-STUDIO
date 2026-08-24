@@ -88,7 +88,15 @@ test('placed captions reserve the same canonical flow cells the browser paints',
   const base = { x_px: 20, y_px: 30, width_px: 120, height_px: 80, shape: 'rect', stand_off_px: 0 };
   const without = buildFlowMap(section, view, [flowImageFromRow(base)]);
   const one = { ...base, caption: 'लहान छायाचित्र मजकूर' };
-  const wrapped = { ...base, caption: 'मराठी छायाचित्राचा अधिक लांब मजकूर अनेक ओळींमध्ये सुरक्षितपणे मांडला जातो' };
+  // Long enough to run to several lines at the caption's own size. It used to
+  // be one sentence, which spanned two lines while a caption was set at 7.5 px
+  // and one line once it became 8 pt - so the two fixtures reserved the same
+  // grid cells and the budget assertion had nothing to compare. The rule being
+  // tested (a deeper caption reserves more) is unchanged; the fixture had to
+  // grow to keep exercising it.
+  const wrapped = { ...base, caption: 'मराठी छायाचित्राचा अधिक लांब मजकूर अनेक ओळींमध्ये सुरक्षितपणे मांडला जातो, '
+    + 'आणि त्याखाली छायाचित्रकाराचे नाव, ठिकाण आणि दिनांक अशी सर्व माहिती एकत्र दिली जाते, '
+    + 'ज्यामुळे हा मजकूर अनेक ओळींमध्ये पसरतो आणि अधिक जागा व्यापतो.' };
   const withOne = buildFlowMap(section, view, [flowImageFromRow(one)]);
   const withWrapped = buildFlowMap(section, view, [flowImageFromRow(wrapped)]);
   assert.ok(withOne.bodyCharBudget < without.bodyCharBudget);

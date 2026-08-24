@@ -198,7 +198,6 @@ function solveSubtitle(text, frame) {
 
   const ceiling = Math.max(0, frame.innerHeight) * MAX_SUBTITLE_SHARE;
   let chosen = null;
-  let widest = null;
   for (const fontPx of CANDIDATE_FONT_PX) {
     const wrapped = wrapSmartText(clean, { width: frame.innerWidth, fontPx, family: 'serif', weight: SUBTITLE_WEIGHT });
     const lineHeightPx = lineHeightFor(fontPx, 'serif', SUBTITLE_WEIGHT);
@@ -206,16 +205,19 @@ function solveSubtitle(text, frame) {
       fontPx, lineHeightPx, lines: wrapped.lines.map((l) => l.text),
       height: wrapped.lines.length * lineHeightPx + GAP_PX, hardOverset: wrapped.hardOverset,
     };
-    if (wrapped.hardOverset) { chosen = candidate; continue; }
-    // The first size that fits the width AND leaves the card most of itself.
-    if (candidate.height <= ceiling || !ceiling) return candidate;
-    // Remembered in case every size is over the share - a very tall subtitle
-    // on a very short card - so the smallest that at least fits the width is
-    // still what gets returned rather than nothing.
-    widest = candidate;
     chosen = candidate;
+    if (wrapped.hardOverset) continue;
+    // The largest size that fits the width AND leaves the card most of itself.
+    if (!ceiling || candidate.height <= ceiling) return candidate;
   }
-  return widest || chosen;
+  // Nothing fitted the share at any legible size. The subtitle is still DRAWN -
+  // never silently dropped, never shrunk past legibility to make a number come
+  // out right - and it is flagged, which is what turns the card OVERSET and
+  // tells the desk the block is too small for what is in it. Shrinking until
+  // it fitted would have traded a visible fault for an invisible one, and that
+  // is exactly what the first version of this ceiling did: a subtitle of two
+  // hundred words came back FITS, set in type nobody could read.
+  return { ...chosen, hardOverset: true };
 }
 
 // ----------------------------------------------------------------- sudoku ---

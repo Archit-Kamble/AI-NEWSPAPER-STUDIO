@@ -9,10 +9,12 @@ import {
   mastheadMarkup, folioMarkup, pageFootMarkup, registrationMarkup, imprintMarkup, contentRegion,
 } from "./masthead.js";
 import { columnRulesMarkup } from "./column-rules.js";
+import "../layout/borders.js";
 import { bindSectionDrag } from "./section-drag.js";
 import { viewOfSection } from "../section-model.js";
 import { computeMetrics } from "../layout/layout-metrics.js";
 import { rulerMarkup, rebuildRulers, bindRulers } from "./ruler.js";
+const { isRuled, borderWidthPx } = globalThis.SahasBorders;
 import { guideLayerMarkup, renderGuides, bindGuideInteractions, setGuidesVisible } from "./page-guides.js";
 
 let handlers = {};
@@ -112,7 +114,8 @@ export function renderCanvas(page, newspaper, selection, callbacks = {}) {
               <div class="${sectionClassName(view, { selected, dirty: selected && dirty, overflowing, atRightEdge, atFootEdge, hasImages: Boolean((section.images || []).length) })}"
                    data-section-key="${section.section_key}"
                    style="left:${section.x_px}px;top:${section.y_px}px;width:${section.width_px}px;height:${section.height_px}px;`
-              + `${view.backgroundColor ? `--block-tint:${view.backgroundColor};` : ""}"
+              + `${view.backgroundColor ? `--block-tint:${view.backgroundColor};` : ""}`
+              + `${blockRuleCss(view)}"
               >${sectionInnerHtml(section, view, { dirty: selected && dirty, selected })}</div>`;
           })
           .join("")}
@@ -222,6 +225,26 @@ function applyBlockTint(element, view) {
 
 // Part 14: repaint exactly one section. Used for every keystroke, so live
 // preview costs one innerHTML write on one box.
+/**
+ * The chosen rule width, as the custom property the ruled-* classes read.
+ *
+ * `border_width_px` has existed on the column since it was added and the
+ * compositor has always read it for the box inset - but the stylesheet had
+ * `border: 1.5px` written into it, so the number the block was composed
+ * against and the number it was drawn with were different, and no control
+ * could change either. A rule is specified in points now (layout/borders.js).
+ */
+function blockRuleCss(view) {
+  if (!isRuled(view.borderStyle)) return '';
+  return `--block-rule:${borderWidthPx(view.borderWidthPx)}px;`;
+}
+
+function applyBlockRule(element, view) {
+  const css = blockRuleCss(view);
+  if (css) element.style.setProperty('--block-rule', `${borderWidthPx(view.borderWidthPx)}px`);
+  else element.style.removeProperty('--block-rule');
+}
+
 export function refreshSection(section, view, { selected = false, dirty = false } = {}) {
   const element = sectionElement(section.section_key);
   if (!element) return;
@@ -236,6 +259,9 @@ export function refreshSection(section, view, { selected = false, dirty = false 
   // stored correctly, drawn correctly on a reload, and never appeared while a
   // desk was actually choosing it. Two paint paths, one of them updated.
   applyBlockTint(element, view);
+  // The rule's WIDTH is a value too, and travels the same way and for the same
+  // reason: a desk pressing "2 pt" must see 2 pt without a reload.
+  applyBlockRule(element, view);
   element.innerHTML = sectionInnerHtml(section, view, { dirty, selected });
 }
 

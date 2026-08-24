@@ -25,6 +25,9 @@
 // A gap wider than the grid's own gutter is not a gutter - it is a hole in the
 // layout, or two blocks that merely happen to be near each other. Ruling those
 // draws a line down the middle of white space nobody put there.
+import '../layout/borders.js';
+const { borderEdges, isBoxed } = globalThis.SahasBorders;
+
 const SLACK_PX = 2;
 
 // Below this the two blocks barely face each other at all - a rule would be a
@@ -34,11 +37,20 @@ const MIN_RUN_PX = 8;
 // An advert carries its own box (schema.sql's border_style), and a hairline
 // 3 px outside that box is two rules where a printer draws one. The same goes
 // for a block that has asked for a box of its own.
+//
+// And for one that has ruled the very edge this gutter runs along: a block set
+// to "Rule below" already draws the line under itself, so the page drawing a
+// second one 3 px lower is the same fault on one edge instead of four. The
+// axis matters - a rule below says nothing about the block's left and right
+// gutters - so this is asked per edge rather than per block.
 function rulable(section) {
   if (!section) return false;
   if (section.block_type === 'advert') return false;
-  return section.border_style !== 'box';
+  return !isBoxed(section.border_style);
 }
+
+/** Does this block already draw the line along this edge itself? */
+const edgeRuled = (section, edge) => borderEdges(section?.border_style).includes(edge);
 
 const box = (s) => ({
   left: Number(s.x_px) || 0,
@@ -100,9 +112,11 @@ export function columnRulesFor(page, geometry) {
         }
       }
 
-      // b sits BELOW a: a horizontal rule across the width they share.
+      // b sits BELOW a: a horizontal rule across the width they share -
+      // unless one of the two already rules that very edge itself, in which
+      // case the page would be drawing a second line 3 px from the first.
       const down = B.top - A.bottom;
-      if (down > 0 && down <= gutterY) {
+      if (down > 0 && down <= gutterY && !edgeRuled(a, 'bottom') && !edgeRuled(b, 'top')) {
         const from = Math.max(A.left, B.left);
         const to = Math.min(A.right, B.right);
         if (to - from >= MIN_RUN_PX) {

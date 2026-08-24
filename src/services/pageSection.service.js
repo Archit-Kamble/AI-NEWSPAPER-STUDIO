@@ -4,6 +4,9 @@ const { normalizeStoryMetadata } = require('./storyType.service');
 const { geometryOf, snapPointsX } = require('../layout/geometry');
 const { quote } = require('../layout/rateCard');
 const reviewInvalidation = require('./reviewInvalidation.service');
+// The one border catalogue, shared with the browser exactly as the character
+// grid, the block kinds, the picture style and the inks are.
+const { BORDER_KEYS, BORDER_WIDTHS } = require('../../public/editor/layout/borders');
 
 const PRINTABLE_FIELDS = ['news_item_id','kicker','headline','subheading','body','caption','image_url','smart_card_key','smart_card_data'];
 const comparable = (value) => JSON.stringify(value ?? null);
@@ -118,8 +121,24 @@ async function saveSection(pageId, sectionKey, body) {
   if (supplied(body.accentColor) && accentColor === null) {
     return { error: 'The headline accent must be one of the newspaper palette inks.' };
   }
-  if (supplied(body.borderStyle) && !['none', 'box'].includes(body.borderStyle)) {
-    return { error: 'The border style must be none or box.' };
+  // The one border catalogue, read by the canvas, the Block Editor and both
+  // press paths. This used to be the pair ['none', 'box'] while the Properties
+  // panel had offered a third button, "Rule below", since it was written - so
+  // pressing it sent a payload the server refused with a 400 and nothing
+  // happened on the page. A control that cannot act, found by reading the
+  // whitelist against the buttons.
+  if (supplied(body.borderStyle) && !BORDER_KEYS.includes(body.borderStyle)) {
+    return { error: `The border style must be one of ${BORDER_KEYS.join(', ')}.` };
+  }
+  // A rule is specified in points and stored in editor pixels; the ladder's
+  // own ends are the bounds. Nothing validated this before because nothing
+  // could set it - the column has existed, and been read by the compositor for
+  // the box inset, since it was added.
+  if (supplied(body.borderWidthPx)) {
+    const width = Number(body.borderWidthPx);
+    if (!Number.isFinite(width) || width < BORDER_WIDTHS[0].px || width > BORDER_WIDTHS[3].px) {
+      return { error: `The rule must be between ${BORDER_WIDTHS[0].pt} and ${BORDER_WIDTHS[3].pt} points.` };
+    }
   }
   if (supplied(body.headlineStyle) && !['plain', 'accent', 'reverse'].includes(body.headlineStyle)) {
     return { error: 'The headline treatment must be plain, accent or reverse.' };

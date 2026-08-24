@@ -120,6 +120,72 @@ const say = (ok, what, detail = '') => {
     say(true, 'caption screenshots written', `${SHOTS}/editor-caption.png, ${SHOTS}/canvas-caption.png`);
   }
 
+  // ---- the border control, which could not act ---------------------------
+  //
+  // "Rule below" had been in the Properties panel since it was written and the
+  // server's whitelist was ['none', 'box'], so pressing it sent a payload that
+  // came back 400 and the page never changed. This presses each button and
+  // checks the class actually lands on the block.
+  //
+  // THE RESTORE CARRIES THE WHOLE BLOCK, NEVER JUST THE FIELD IT CHANGED.
+  //
+  // PUT /api/pages/:pageId/sections/:key is a full replace for the fields it
+  // covers, so a payload of { borderStyle } sets every other one of them to
+  // its default - which is to say it blanks the headline, the deck and the
+  // story. This net did exactly that to edition 40294's lead block on its
+  // first run and had to refill it. CLAUDE.md records the same trap being hit
+  // by a hand-written probe once before; it is written into the harness now so
+  // it cannot be hit a third time.
+  const borderWas = await page.evaluate(async ([ed, key]) => {
+    const pages = await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json());
+    const pg = pages.find((p) => p.sections.some((s) => s.section_key === key));
+    return pg.sections.find((x) => x.section_key === key);
+  }, [ED, KEY]);
+  const restoreBorder = putBack;
+  putBack = async () => {
+    await restoreBorder();
+    await page.evaluate(async ([ed, key, was]) => {
+      const pages = await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json());
+      const pg = pages.find((p) => p.sections.some((s) => s.section_key === key));
+      // Every field the section carried, sent back as it was found.
+      const body = {
+        kicker: was.kicker || '', headline: was.headline || '', subheading: was.subheading || '',
+        body: was.body || '', caption: was.caption || '', reporterName: was.reporter_name || '',
+        category: was.category || '', location: was.location || '', tags: was.tags || [],
+        headlineFontPx: was.headline_font_px, subheadingFontPx: was.subheading_font_px,
+        bodyFontPx: was.body_font_px, lineHeight: was.line_height, textAlign: was.text_align,
+        marginPx: was.margin_px, columnCount: was.column_count ?? 0,
+        borderStyle: was.border_style || 'none', borderWidthPx: Number(was.border_width_px) || 1,
+        backgroundColor: was.background_color, headlineStyle: was.headline_style || 'plain',
+        dropCapLines: was.drop_cap_lines || 0,
+      };
+      await fetch(`/api/pages/${pg.id}/sections/${key}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    }, [ED, KEY, borderWas]).catch(() => {});
+  };
+
+  for (const [style, klass] of [['rule', 'ruled-rule'], ['rule-above', 'ruled-rule-above'],
+    ['rule-both', 'ruled-rule-both'], ['box', 'ruled-box']]) {
+    await page.locator(`[data-prop-border] [data-border="${style}"]`).click();
+    await page.waitForTimeout(1800);
+    const on = await page.evaluate((k) => {
+      const block = document.querySelector('.newspaper-section.active');
+      return block ? block.className : '';
+    }, klass);
+    say(on.includes(klass), `border "${style}" reaches the page`, on.slice(0, 90));
+  }
+
+  await page.locator('[data-prop-border-width] [data-border-width="2.82"]').click();
+  await page.waitForTimeout(1800);
+  const width = await page.evaluate(() => {
+    const block = document.querySelector('.newspaper-section.active');
+    return block ? block.style.getPropertyValue('--block-rule') : '';
+  });
+  say(width === '2.82px', 'and the 4 pt rule is the width the block is drawn with', width);
+  await page.locator('#canvasSurface').screenshot({ path: `${SHOTS}/canvas-borders.png` });
+
   console.log(`\nERRORS: ${errors.length ? errors.join('\n  ') : '(none)'}`);
   say(errors.length === 0, 'no console or page errors');
   await putBack();

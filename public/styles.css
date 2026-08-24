@@ -3840,11 +3840,23 @@ body.print-view .section-diagnostic {
 
 /* Rules a layout asked for. `box` is a boxed item, `rule` a hairline under the
    block - both are how a printed page separates one story from the next. */
+/* The rule the DESK chose, in the width it chose it in.
+   --block-rule is published by canvas.js from border_width_px, the column the
+   compositor has always read for the box inset. The stylesheet used to write
+   its own 1.5px and 1px here, so the number a block was composed against and
+   the number it was drawn with were two different numbers. */
 .newspaper-section.ruled-box {
-  border: 1.5px solid #111;
+  border: var(--block-rule, 0.71px) solid #111;
 }
 .newspaper-section.ruled-rule {
-  border-bottom: 1px solid #111;
+  border-bottom: var(--block-rule, 0.71px) solid #111;
+}
+.newspaper-section.ruled-rule-above {
+  border-top: var(--block-rule, 0.71px) solid #111;
+}
+.newspaper-section.ruled-rule-both {
+  border-top: var(--block-rule, 0.71px) solid #111;
+  border-bottom: var(--block-rule, 0.71px) solid #111;
 }
 
 /* ===========================================================================
@@ -3882,10 +3894,17 @@ body.print-view .newspaper-section[style*="--block-tint"] {
   background: var(--block-tint);
 }
 body.print-view .newspaper-section.ruled-box {
-  border: 1.5px solid #111;
+  border: var(--block-rule, 0.71px) solid #111;
 }
 body.print-view .newspaper-section.ruled-rule {
-  border-bottom: 1px solid #111;
+  border-bottom: var(--block-rule, 0.71px) solid #111;
+}
+body.print-view .newspaper-section.ruled-rule-above {
+  border-top: var(--block-rule, 0.71px) solid #111;
+}
+body.print-view .newspaper-section.ruled-rule-both {
+  border-top: var(--block-rule, 0.71px) solid #111;
+  border-bottom: var(--block-rule, 0.71px) solid #111;
 }
 body.print-view .newspaper-section:hover {
   outline: none;

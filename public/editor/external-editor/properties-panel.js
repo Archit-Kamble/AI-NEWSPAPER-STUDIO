@@ -41,11 +41,14 @@ const SHAPES = [
 // the column rules skip a boxed block entirely (column-rules.js) - its box IS
 // the separator, and a hairline 3 px outside it would be two rules where a
 // printer draws one. Both follow from this one field.
-const BORDERS = [
-  ["none", "None"],
-  ["box", "Box"],
-  ["rule", "Rule below"],
-];
+// The border vocabulary and the rule ladder come from the ONE catalogue
+// (layout/borders.js), which the canvas, the Block Editor, the .sla and the
+// print model all read. The list here used to be written out locally and had
+// drifted from what the server would accept: it offered "Rule below" and the
+// service's whitelist was ['none', 'box'], so that button sent a payload the
+// server refused and the page never changed.
+import "../layout/borders.js";
+const { BORDER_STYLES, BORDER_WIDTHS, isRuled, borderWidthPx } = globalThis.SahasBorders;
 
 // The tints come from the ONE colour catalogue (layout/inks.js), the same one
 // the ink marks and the press file read. A palette written out a second time
@@ -139,6 +142,7 @@ function columnsNote(section, view) {
 
 function blockPropertiesMarkup(section, view, page) {
   const border = String(view.borderStyle || section.border_style || "none");
+  const ruleWidth = borderWidthPx(view.borderWidthPx ?? section.border_width_px);
   const tint = view.backgroundColor ?? section.background_color ?? null;
   const headlineStyle = String(view.headlineStyle || section.headline_style || "plain");
   const rawColumns = view.columnCount ?? section.column_count ?? null;
@@ -157,12 +161,21 @@ function blockPropertiesMarkup(section, view, page) {
       <h5 class="prop-heading">Border</h5>
       <div class="form-group">
         <div class="segmented" data-prop-border>
-          ${BORDERS.map(
-            ([key, label]) => `<button type="button" class="segment${border === key ? " active" : ""}" data-border="${key}">${label}</button>`,
+          ${BORDER_STYLES.map(
+            (style) => `<button type="button" class="segment${border === style.key ? " active" : ""}" data-border="${style.key}">${style.label}</button>`,
           ).join("")}
         </div>
       </div>
-      <p class="muted ext-note">Nothing is ruled unless you rule it. A box sets the copy in a little way from its own line, the way a printed panel does, and the page draws no hairline in the gutter beside a block that already has a box.</p>
+      ${isRuled(border) ? `
+      <div class="form-group">
+        <label>Rule</label>
+        <div class="segmented" data-prop-border-width>
+          ${BORDER_WIDTHS.map(
+            (width) => `<button type="button" class="segment${Math.abs(ruleWidth - width.px) < 0.01 ? " active" : ""}" data-border-width="${width.px}">${width.label}</button>`,
+          ).join("")}
+        </div>
+      </div>` : ""}
+      <p class="muted ext-note">Nothing is ruled unless you rule it. A rule is specified in points, the way a printer specifies one. A box sets the copy in a little way from its own line, the way a printed panel does, and the page draws no hairline in the gutter beside a block that already has a box. There is no corner radius on purpose - every rule on a printed page meets its neighbour square.</p>
     </div>
 
     <div class="prop-section">
@@ -432,6 +445,11 @@ function bindBorderButtons(handlers) {
   document.querySelectorAll("[data-prop-border] [data-border]").forEach((button) => {
     button.addEventListener("click", () => {
       handlers.onPatch?.({ borderStyle: button.dataset.border }, "properties-panel");
+    });
+  });
+  document.querySelectorAll("[data-prop-border-width] [data-border-width]").forEach((button) => {
+    button.addEventListener("click", () => {
+      handlers.onPatch?.({ borderWidthPx: Number(button.dataset.borderWidth) }, "properties-panel");
     });
   });
 }

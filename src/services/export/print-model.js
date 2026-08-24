@@ -28,6 +28,7 @@ const HEADER_FOLIO_PX = HEADER.folioHeightPx;
 const { identityFor, dateLine, devanagari } = require('../../layout/identity');
 const { strip } = require('../../layout/plain-text');
 const { captionBox, PLACED_CAPTION_METRICS } = require('../../../public/editor/layout/caption-geometry');
+const { borderEdges, borderWidthPx } = require('../../../public/editor/layout/borders');
 const { smartCardLines } = require('./smart-card-lines');
 
 /** Editor pixels to millimetres. The one conversion, stated once. */
@@ -124,6 +125,32 @@ async function blockItems(section) {
       width: mm(section.width_px), height: mm(section.height_px),
       ink: section.background_color,
     });
+  }
+
+  // THE BLOCK'S OWN RULES, which no export drew.
+  //
+  // `border_style` has been a column since the schema was written and the
+  // canvas has drawn it since. Neither the .sla nor the print model drew
+  // anything at all - so a block a desk boxed printed boxed on the website and
+  // unruled in every download. Found by grepping this file for `border` and
+  // getting nothing back.
+  //
+  // Drawn after the ground and before the type, which is the order a printer
+  // lays them down, and at the width the desk specified rather than at a
+  // number written into a stylesheet.
+  const edges = borderEdges(section.border_style);
+  if (edges.length) {
+    const weight = borderWidthPx(section.border_width_px);
+    const w = mm(section.width_px);
+    const h = mm(section.height_px);
+    const t = mm(weight);
+    const RULES = {
+      top: { x: x0, y: y0, width: w, height: t },
+      bottom: { x: x0, y: y0 + h - t, width: w, height: t },
+      left: { x: x0, y: y0, width: t, height: h },
+      right: { x: x0 + w - t, y: y0, width: t, height: h },
+    };
+    for (const edge of edges) items.push({ kind: 'rule', ...RULES[edge], ink: RULE_INK });
   }
 
   const bands = composition.bands || {};
@@ -258,7 +285,7 @@ async function blockItems(section) {
  *     place |                                          |     RNI
  *      DAY  |          the registered plate            |  volume
  *  weekday  |                                          | pages | price
- *   月-year  |                                          |  epaper
+ *  monthyear |                                          |  epaper
  *     -----------------------------------------------------------
  *     owner ................................ office | phone | email
  *

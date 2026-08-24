@@ -6303,3 +6303,121 @@ where the desk put them.
 | IDML | 891 XML parts, all parse; `mimetype` first and stored; 4 spreads, 882 stories |
 | DOCX | every part parses; 183 paragraphs; headline, deck and story present |
 | all four through the real UI | downloaded, correctly named, no console errors |
+
+---
+
+## The professional-quality pass — 25 August 2026
+
+Eleven requirements, driven from real Marathi newspaper practice. Everything
+below was verified by rendering to a press PDF and looking at it, or by driving
+the running app and reading the screenshot — not by reading code.
+
+| # | what was asked | status |
+|---|---|---|
+| 0 | professional micro-details | **done via 4 and 10** — configurable rules, in points, per block and per edge |
+| 1 | website ↔ export must match | **done for PDF / IDML / Word.** Scribus still does its own walk and so still lacks the nameplate and folio |
+| 2 | professional Marathi justification | **done** — ragged interior lines 58 → 44 on a real edition, geometry provably unmoved |
+| 3 | multiple Marathi font families | **done** — four added, and three duplicated face catalogues collapsed into one |
+| 4 | news-block borders | **done** — and it fixed a control that had never worked |
+| 5 | image caption / info below image | **done** — the plumbing existed; nothing could reach it |
+| 6 | block inside a news block | **done** — `page_sections.inset_panels` |
+| 7 | image overlapping multiple blocks | **done** — `pages.overlay_images`, and both crossed stories set clear of it |
+| 8 | graphs / infographics | **done for bar and stat.** Pie and line deliberately absent — see below |
+| 9 | AI news image generation | **built, refusal path verified, success path NOT** — see below |
+| 10 | decorative elements between blocks | **done via 4** — plus double rules |
+
+### The four faults that were already in the product
+
+None of these were introduced by this pass; all four were found by it.
+
+1. **A control that could not act.** Properties had offered "Rule below" since
+   it was written and `pageSection.service.js` validated `borderStyle` against
+   `['none', 'box']`, so pressing it sent a payload the server refused with a
+   400 and the page never changed.
+
+2. **The canvas printed the RNI twice.** The registered nameplate artwork
+   carries `RNI No. MAHMUL/2015/67123` inside the mark — open the PNG and look
+   at the top right — and the canvas set it again as type in the ear.
+
+3. **Latin was drawn one character at a time.** HarfBuzz reserves the face's
+   `.notdef` advance for a character the publication face cannot set, one fixed
+   width for every letter, and the PDF writer drew each at that x. The
+   masthead's contact line printed as `sahasnews@gmai l .com`.
+
+4. **A face's `hhea` was trusted as what the script needs.** Noto Sans
+   Devanagari reports 1.304 and Tiro Devanagari Marathi reports 1.000, both
+   under the 1.475 em ink box measured for this script. Latent while there were
+   only two faces and the serif's 1.555 was the largest number anyway; it would
+   have cropped matras the day a desk chose one of the new faces. Floored at
+   1.45 now.
+
+### Requirement 2 — measured before anything was touched
+
+58 of 444 interior lines on a real four-page edition fell short of their
+measure, **and every one of them already had both justification levers pinned
+at their caps**. So no amount of tuning them could have helped; what was
+missing was the compositor's third lever, setting a line slightly tight to pull
+a word up.
+
+|  | edition 40294 | 819-block sweep |
+|---|---|---|
+| without compression | 58 ragged (13.06%) | 1405 (46.43%) |
+| with compression | **44 ragged (9.91%)** | **1360 (44.94%)** |
+| worst shortfall | 16.7% → **14.5%** | |
+| lines set tight | — | 108 (3.57%) |
+| interior line count | 444 → 444 | 3026 → 3026 |
+| mean fill | unchanged | 32.18% → 32.18% |
+
+The last two rows are the safety argument: the change lives in the balancer,
+which reassigns pieces across the slots the pour already fixed, so it cannot
+change how deep a paragraph sets or what the fill engine thinks a block holds.
+
+### Requirement 8 — why there is no pie chart
+
+The print model has four item kinds: `fill`, `text`, `image` and `rule`, and
+rules are axis-aligned. A pie needs bezier arcs and a line chart a polyline —
+in the PDF, the IDML, the `.sla` and Word, four separate pieces of geometry
+work. A chart that drew on screen and vanished from the plate would be worse
+than no chart, so the two rectangle-based kinds are exact everywhere and the
+other two are honestly absent. **Revisit if charts matter more than the rest.**
+
+### Requirement 9 — what is and is not verified
+
+The failure path is exercised end to end: this newsroom's Gemini key returns
+**429 with a quota message**, which classifies as `quotaExhausted` through the
+vocabulary `src/services/ai/` already uses, and the desk gets one sentence
+while the editor carries on. `imagen-3.0-generate-002` **404s** on this project
+entirely.
+
+**The success path has not been run against a live provider and nobody should
+read the code as saying it has.** The request shape is Google's documented
+image-generation call. Enable billing before an edition depends on it.
+
+The invariant that matters is testable without a provider and is tested:
+pressing "Suggest a picture" leaves the block with exactly as many pictures as
+it had, whether the provider answered or refused.
+
+### Still open
+
+- **`scribus.service.js` is the one export still on its own walk**, so it alone
+  lacks the nameplate, the folio and block borders. Moving it onto
+  `print-model.js` closes all three at once.
+- **A Smart Card does not avoid a page overlay.** A card is solved against the
+  block's frame rather than through the obstacle set, so a chart under an
+  overlay keeps its geometry and is covered. Prose blocks avoid it correctly.
+- **An inset panel holds text only.** It cannot hold a picture, a Smart Card or
+  another panel; `kind` exists so a richer one needs no migration.
+- **Two schema statements need running** on any database that is not dev:
+  `inset_panels` on `page_sections`, `overlay_images` on `pages`.
+
+### Verified
+
+| | |
+|---|---|
+| `npm test` | **911**, green |
+| `workspace.browser.js` | 223/223 |
+| `editor-controls.browser.js` | 86/86 |
+| `body-editing.browser.js` | 35/35 |
+| `editor-parity.browser.js` | 70/70 |
+| `visual-pass.browser.js` (new) | 38/38 |
+| press PDF | Ghostscript clean; masthead, folio, borders, chart, panel and overlay all rendered and looked at |

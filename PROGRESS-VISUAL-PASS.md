@@ -2,6 +2,10 @@
 
 Run 1 started 2026-08-25 00:31 IST. Autonomous.
 
+**ALL ELEVEN REQUIREMENTS ADDRESSED.** Read `PROJECT_STATUS.md`'s "professional-quality pass" section first — it is the full report, including the four faults that were already in the product and the two things that are honestly not done (Scribus's own walk; the AI image success path).
+
+**A continuation run should VERIFY rather than continue.** Nothing is half written. What is worth a second pass is screenshot-based visual QA across more layouts than the one edition this run drove, and the three items under "Still open" in PROJECT_STATUS.md.
+
 ## Ground rules this run is holding to
 
 - **Only ever `git add` explicit paths.** The working tree carried the user's own
@@ -50,19 +54,19 @@ and all four export formats share the defect because they share the walk.
 
 ## Status
 
-| # | status | files | evidence | next |
-|---|---|---|---|---|
-| 0 | PARTLY, via req 4 | see req 4 | rules above/below/box at a chosen weight, per block | double rules; section markers; ornaments |
-| 1 | **COMPLETE** for PDF/IDML/Word; Scribus still on its own walk | `export/print-model.js`, `export/pdf.writer.js`, `canvas/masthead.js` | `39677c3`; `masthead-fixed-crop.png`, `owner-line.png`, `bb-1.png` | move `scribus.service.js` onto the shared model |
-| 2 | **COMPLETE** | `compose/compose.js` | `f7ee835`; ragged 58→44 on ed. 40294, geometry provably unmoved | do NOT widen the range — 0.97/0.96 measured, worthless |
-| 3 | **COMPLETE** | `layout/typefaces.js` (new), `font-metrics.js`, `shaper.js`, `typography-panel.js`, `pdf.writer.js`, 6 TTFs | `e18686f`; Rozha One rendered to a press PDF; visual-pass checks all six | more faces are now a one-file change |
-| 4 | **COMPLETE** | `layout/borders.js` (new) + 7 files | `cab123e`; `block-box-export.png`; visual-pass presses every button | scribus draws no border either |
-| 5 | **COMPLETE** | `pictures-panel.js`, `block-frame.js`, `caption-geometry.js`, 3 more | `14a851e`; `editor-caption.png` | |
-| 6 | **COMPLETE** | `layout/inset-panels.js` (new) + 8 files, incl. `schema.sql` | `d71770d`; `panel-export2.png`; 0 of 24 lines under the panel | panel cannot hold a picture or a card yet — `kind` is there for it |
-| 7 | NOT STARTED | | | riskiest; `section_images` is per-block |
-| 8 | **COMPLETE** for bar + stat; pie/line deliberately absent | `smart-cards/layout.js`, `smart-cards.js`, `export/smart-card-lines.js`, `print-model.js`, `scribus.service.js` | `7d38639`, `607bf20`; `chart-export3.png`; canvas and export bar widths agree to 0.5 px | pie needs bezier arcs in 4 writers |
-| 9 | NOT STARTED | | | Gemini key present; provider image-gen support unverified |
-| 10 | PARTLY, via req 4 | see req 4 | | double rules, ornaments |
+| # | status | evidence |
+|---|---|---|
+| 0 | **COMPLETE** via 4 + 10 | `cab123e`, `3134240` |
+| 1 | **COMPLETE** for PDF/IDML/Word; Scribus still on its own walk | `39677c3`; `masthead-fixed-crop.png`, `owner-line.png`, `bb-1.png` |
+| 2 | **COMPLETE** | `f7ee835`; 58→44 ragged, geometry provably unmoved |
+| 3 | **COMPLETE** | `e18686f`; Rozha One rendered to a press PDF |
+| 4 | **COMPLETE** | `cab123e`; `block-box-export.png` |
+| 5 | **COMPLETE** | `14a851e`; `editor-caption.png` |
+| 6 | **COMPLETE** | `d71770d`; `panel-export2.png`, 0 of 24 lines under the panel |
+| 7 | **COMPLETE** | `fd02de9`; `overlay-export.png`, crosses 2 blocks, 0 lines under |
+| 8 | **COMPLETE** for bar + stat; pie/line deliberately absent | `7d38639`, `607bf20`; `chart-export3.png` |
+| 9 | **BUILT; refusal path verified, success path NOT** | `b5a9f7a`; 429 quota on this key |
+| 10 | **COMPLETE** | `3134240`; `double-rule3.png` |
 
 ## Run 1 notes
 

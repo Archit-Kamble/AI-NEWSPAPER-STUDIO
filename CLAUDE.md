@@ -1641,6 +1641,196 @@ The page foot carries the paper, the date and the page number, and nothing else.
 
 `node scripts/fill-edition-copy.js <editionId>` writes deterministic Marathi copy into a disposable `2099-*` edition, sized to each block's own measured capacity, and refuses any other date. Composition work has to be looked at to be believed, and driving a real edition through the AI writer costs money, is rate limited, and gives different copy every run so two screenshots cannot be compared.
 
+### The professional-quality pass — what it added, and what it costs
+
+Nine catalogues are now shared by the browser and the server, and the reason is
+always the same one: a second copy drifts. `text-flow.js` (the character grid),
+`block-kinds.js`, `picture-style.js`, `smart-cards.js`, `caption-geometry.js`,
+and four added by this pass:
+
+| | |
+|---|---|
+| `layout/typefaces.js` | which face, and which file. Replaced **three** copies — `font-metrics.js`, `shaper.js` and `pdf.writer.js` each had their own, and two of them had already drifted. |
+| `layout/borders.js` | how a block is ruled, in a printer's point ladder |
+| `layout/inset-panels.js` | the चौकट set inside a story |
+| `layout/page-overlays.js` | a picture laid on the page, across blocks |
+
+**The export carries the whole nameplate now, and a folio.** `print-model.js`
+used to emit the plate artwork, the strapline and a date; the canvas draws the
+editions line, the place, the weekday, the volume, the page count, the cover
+price, the e-paper address, the owner, the office, the telephone and the email.
+Inside pages had no folio at all. All four formats gained it together because
+they share the walk. **`scribus.service.js` still does its own walk and so
+still has neither** — moving it onto the shared model is the outstanding
+follow-up.
+
+**The RNI is set once, and the artwork is what sets it.** Open
+`public/assets/masthead/sahas-nameplate.png` and look at the top right: the
+registered mark carries the number. The canvas was setting it again as type.
+
+**Latin inside a Devanagari run is one span, laid out by the fallback font.**
+HarfBuzz reserves the face's `.notdef` advance for a character the publication
+face cannot set — one fixed width for every letter — and the PDF writer drew
+each at that x, so the contact line printed as `sahasnews@gmai l .com`. A
+contiguous span is now one string, and it runs on across punctuation the face
+*does* have when that punctuation sits inside the foreign word, which is what
+closes the gap in the middle of a URL.
+
+### The justifier has three levers, not two
+
+`justifyLine()` could only ever ADD space. Measured on a real four-page
+edition: **58 of 444 interior lines fell short of their measure, and every one
+of them already had both expanding levers pinned at their caps.** No further
+stretching could close them, because the word that would have filled them was
+on the next line and nothing could pull it up.
+
+Pulling it up means setting the line it comes from very slightly tight —
+InDesign's minimum word spacing and minimum glyph scaling. `MIN_GLYPH_SCALE`
+(0.98) and `MAX_SQUEEZE_WORD_SPACE_EM` (0.10) are deliberately weaker than the
+expansion range: condensed type shows more than expanded type at the same
+percentage, so a tight line is the compositor's last resort and not its habit.
+
+**Ragged interior lines 58 → 44 on the edition, 1405 → 1360 across 819 blocks.**
+
+**Why it is safe, and this is the whole argument:** it lives in the BALANCER,
+which reassigns pieces across the slots the *pour* already fixed. The slot
+count never changes, so nothing here can change how deep a paragraph sets, move
+any geometry, or alter what the fill engine thinks a block holds — measured and
+identical on both sides: interior line count 3026, mean fill 32.18%, overset.
+
+Three things it got wrong first, all found by measurement rather than reading:
+
+- Compression was offered on blocks set FLUSH LEFT, where nothing would ever
+  close the overhang. `willJustify` is resolved before the pour now.
+- A squeezed line's `width` did not say it had been squeezed, so it claimed to
+  reach past its column and the overflow guarantee failed on a line that drew
+  perfectly. The compressing path folds the squeeze into `line.width`; **the
+  expanding path deliberately does not and must not start** — there it
+  understates the drawn width, which is the safe direction.
+- Counting the breaker's PIECES instead of the justifier's SPACES promised room
+  that could not be delivered. Dropping the word-space term fixed it and threw
+  away 98% of the gain (210 lines → 4), so the breaker counts spaces exactly,
+  from a prefix sum built once per paragraph.
+
+**Do not widen the range.** 0.97 gives 1189 and 0.96 gives 1190 against 0.98's
+1195 on the same sweep — six lines in three thousand for another percent of
+visible condensation.
+
+### A block is ruled by a decision, in points
+
+`border_style` had a third button ("Rule below") the server refused with a 400,
+`border_width_px` was stored and read by the compositor with **no control able
+to set it** and a hard-coded 1.5px in the stylesheet, and **neither export drew
+a block border at all**. All three are closed. A rule is specified in POINTS —
+hairline, 1, 2, 4 — because that is how a printer specifies one. A double rule
+is drawn as **two lines**, never as one thicker one: the eye reads two thin
+lines as a boundary and one thick line as emphasis.
+
+The page's own gutter hairline now yields **per edge**: a block set to "Rule
+below" already draws that line, and a second one 3px under it is two rules
+where a printer draws one.
+
+There is deliberately **no corner radius**. Every rule on a printed page meets
+its neighbour square.
+
+### A photograph is captioned, and set smaller than the story
+
+`section_images.caption` has existed since the schema was written and every
+part of the chain was built — `caption-geometry.js` reserves its box, the
+canvas drew it, preflight measured it, the exports printed it — and **no field
+anywhere in the product could put a word into it.** The Pictures panel has it
+now.
+
+Two faults found doing it: the Block Editor did not draw the caption while the
+canvas did, and the face was named in three places with two of them
+disagreeing. And the size was backwards — 7.5px against a 6.4px body is 10.5pt
+under 9pt copy, so the caption was the largest small type on the block. It is
+**8 pt in the sans face**, which is what a printed daily sets.
+
+### Information graphics, and why there are only two kinds
+
+A bar chart and a stat row are rectangles and type, and a rectangle is
+something all four export writers already draw — the print model's four item
+kinds are `fill`, `text`, `image` and `rule`, and rules are axis-aligned. **A
+pie needs bezier arcs and a line chart a polyline**, in the PDF, the IDML, the
+`.sla` and Word: four separate pieces of geometry work. A chart that drew on
+screen and vanished from the plate is worse than no chart.
+
+The bars run ACROSS. A Marathi category label is long — छत्रपती संभाजीनगर — and
+a vertical bar chart has to set those sideways or abbreviate them.
+
+`smartCardLines()` gained a `kind`: an entry is a line of type unless it says
+`{ kind: 'bar' }`, which the print model draws as a `fill` and Scribus as the
+same polygon it already lays a block's ground down with.
+
+### A panel inside a block, and a picture across two
+
+**`page_sections.inset_panels`** is the चौकट — a fact box or pull quote set
+inside a story. **`pages.overlay_images`** is a photograph laid on the PAGE,
+crossing block boundaries.
+
+Both cost the engine exactly one more entry in the obstacle set and **nothing
+else changes** — `fillRow`, `viableIntervals` and the balancer already run type
+round rectangles, because that is what a photograph is to them. There is no
+panel-specific or overlay-specific arithmetic anywhere in the compositor and
+there must not be.
+
+**An overlay cannot be a block's picture.** `.newspaper-section` is
+`overflow: hidden` and must stay so, so a picture belonging to one block can
+never be seen outside it. A photograph spanning two stories is a fact about the
+PAGE, exactly as a column rule is a fact about a pair of blocks. Every block
+its rectangle touches gains it in that block's own coordinates; blocks it does
+not touch get nothing.
+
+**It does not snap to the column grid, deliberately.** A block snaps because a
+page reads as a page when its columns line up; crossing that grid is the entire
+reason a desk places one of these.
+
+**Known and left:** a Smart Card block does not set its own contents clear of
+an overlay — a card is solved against the block's frame rather than through the
+obstacle set. Prose blocks avoid it correctly.
+
+### A generated picture is proposed, never placed
+
+`POST /api/pages/:pageId/sections/:sectionKey/images/propose` returns
+CANDIDATES. Where a photograph sits decides how the copy sets around it, so a
+machine that both invents the picture and decides where it goes has decided how
+the story reads.
+
+Candidates are stored as ordinary media assets, so the placement path, the
+corridor snap, the cut-out service and the exports work on them without knowing
+where they came from. **Two, not one — a choice of one is not a choice.**
+
+**The success path is UNVERIFIED against a live provider.** This newsroom's key
+returns 429 (no image quota on the free tier) and Imagen 404s on the project.
+The refusal path is exercised end to end and the editor carries on. Enable
+billing before an edition depends on it.
+
+### Two schema changes that need applying
+
+`schema.sql` is not run at boot. These were applied to the dev database by hand
+and any other environment needs them:
+
+```sql
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS inset_panels JSONB;
+ALTER TABLE pages ADD COLUMN IF NOT EXISTS overlay_images JSONB;
+```
+
+### `tests/browser/visual-pass.browser.js`
+
+The net for all of the above: it drives the running app, presses the controls
+this pass added, and checks the two surfaces that must never disagree.
+
+**Its restore carries the WHOLE block, and that is not optional.**
+`PUT /api/pages/:pageId/sections/:key` is a full replace for the fields it
+covers, so a payload of `{ borderStyle }` blanks the headline, the deck and the
+story. This net did exactly that to edition 40294's lead block on its first run
+and it had to be refilled with `scripts/fill-edition-copy.js`.
+
+```bash
+node tests/browser/visual-pass.browser.js            # defaults to 40294 / lead
+```
+
 ## Page model
 
 ```

@@ -736,9 +736,113 @@ const MAX_GLYPH_STRETCH = 1.03;
 // this whole pass exists to remove.
 const JUSTIFY_MIN_EM = 13;
 
+// THE THIRD LEVER: SETTING A LINE TIGHT.
+//
+// The justifier could only ever ADD space. That is half of what a compositor
+// does, and it is the half that cannot fix the lines a desk actually
+// complains about. Measured across a real four-page edition: 58 of 444
+// interior lines fell short of their measure, and EVERY ONE OF THEM already
+// had both expanding levers pinned at their caps. No amount of further
+// stretching could close them, because the word that would have filled them
+// is on the next line and nothing could pull it up.
+//
+// Pulling it up means setting the line it comes from very slightly tight,
+// which is exactly what a printed newspaper does and what InDesign's
+// "minimum word spacing" and minimum glyph scaling exist for. The bounds
+// here are the conservative end of that range:
+//
+//   * a word space may lose 0.10 em - about a tenth of a Devanagari akshara,
+//     and the space is the one place a reader does not measure;
+//   * the glyphs may condense to 0.98, half of what they are allowed to
+//     stretch, because condensed type is more visible than expanded type at
+//     the same percentage - the shirorekha thickens against its counters.
+//
+// It is deliberately weaker than the expansion range. A tight line should be
+// the compositor's last resort, not its habit.
+// MEASURED, on a real four-page edition and on a sweep of the database.
+//
+//                          edition 40294        819 blocks
+//                       (444 interior lines)  (3026 interior lines)
+//   without compression   58 ragged  13.06%    1405 ragged  46.43%
+//   with compression      44 ragged   9.91%    1360 ragged  44.94%
+//   worst shortfall       16.7% -> 14.5%
+//   lines set tight        -                    108   3.57%
+//
+// (The sweep's 46% counts flush-left blocks, whose every line is ragged by
+// design, so the edition's 9.91% is the number that means anything. The sweep
+// is there to show nothing broke at scale.)
+//
+// And the things that must NOT move did not: interior line count identical at
+// 3026, mean fill identical at 32.18%, overset identical. The balancer only
+// reassigns pieces across the slots the pour already fixed, so none of this
+// can change how deep a paragraph sets or move any geometry - which is the
+// whole reason it was safe to do at all.
+//
+// Widening the range earns nothing: 0.97 gives 1189 and 0.96 gives 1190
+// against 0.98's 1195 on the same sweep - six lines in three thousand for
+// another percent of visible condensation. The conservative bound is also the
+// one that works, which is the best argument a constant can have.
+const MIN_GLYPH_SCALE = 0.98;
+const MAX_SQUEEZE_WORD_SPACE_EM = 0.10;
+
+/**
+ * How much wider than its measure a line may be set and still be closed by
+ * compression alone.
+ *
+ * THE SPACE COUNT MUST BE THE JUSTIFIER'S OWN, not the breaker's piece count.
+ * The two are not the same - a piece can be punctuation, and the line's
+ * trailing space is trimmed before it is set - and when the breaker's number
+ * was the larger one it promised room the justifier could not deliver, clamped
+ * at MIN_GLYPH_SCALE, and left the line hanging into the gutter.
+ * tests/compose.test.js caught it in one run: `a line crosses a gutter:
+ * x=12 w=199.02`. Dropping the word-space term entirely fixed that and threw
+ * away most of the gain with it - measured, 210 lines down to 4 - because the
+ * spaces are where most of the give is. So the breaker counts them exactly,
+ * from a prefix sum built once per paragraph.
+ */
+function compressibleBy(width, spaces = 0, fontPx = 0) {
+  if (!(width > 0)) return 0;
+  return spaces * MAX_SQUEEZE_WORD_SPACE_EM * fontPx + width * (1 - MIN_GLYPH_SCALE);
+}
+
 function justifyLine(line, slack) {
-  if (slack <= 0.5) return;
   const spaceCount = (line.text.match(/\s/gu) || []).length;
+
+  // The line is set TIGHT: it carries a word the measure cannot quite hold,
+  // and the alternative is the notch in the right edge that word would have
+  // left behind on the line above.
+  if (slack < -0.5) {
+    if (line.width <= 0) return;
+    const over = -slack;
+    const bySpace = spaceCount
+      ? Math.min(over, spaceCount * MAX_SQUEEZE_WORD_SPACE_EM * line.fontPx)
+      : 0;
+    if (bySpace > 0) {
+      line.wordSpacingPx = Number((-bySpace / spaceCount).toFixed(2));
+      // The line really IS narrower now, so its geometry has to say so.
+      // Leaving line.width at its natural value made a squeezed line claim to
+      // reach past the column it was set in, and the overflow guarantee - the
+      // one thing composeBlock() promises absolutely - is checked against
+      // exactly that number. tests/compose.test.js caught it:
+      // `line.x + line.width <= content.right` failed on a line that drew
+      // perfectly well.
+      //
+      // The expanding path deliberately does NOT do this, and must not start:
+      // there line.width understates the drawn width, which is the safe
+      // direction, and every existing measurement is calibrated against it.
+      line.width = Math.max(0, line.width - bySpace);
+    }
+    const left = over - bySpace;
+    if (left <= 0.5) return;
+    const scale = Math.max(MIN_GLYPH_SCALE, (line.width - left) / line.width);
+    if (scale < 0.999) {
+      line.glyphScaleX = Number(scale.toFixed(4));
+      line.width = line.width * scale;
+    }
+    return;
+  }
+
+  if (slack <= 0.5) return;
   if (!spaceCount) return;
 
   const bySpace = Math.min(slack, spaceCount * MAX_EXTRA_WORD_SPACE_EM * line.fontPx);
@@ -1036,6 +1140,23 @@ function pourBody(bodyInput, {
   });
   const capBottom = cap ? top + cap.lines * bandHeight : 0;
   const capRight = cap && columns.length ? columns[0].start + cap.width + cap.gutter : 0;
+
+  // WILL THIS BLOCK ACTUALLY BE JUSTIFIED? Resolved here, before the pour,
+  // because the line breaker needs to know.
+  //
+  // Only a line that will be justified may be set tight: compression is the
+  // JUSTIFIER's lever, so on a flush-left block nothing would ever close an
+  // overhang the breaker had allowed and the line would simply hang past its
+  // column. Found exactly that way - a 620x420 block with no alignment set had
+  // a body line 3.83 px past its measure carrying no glyph scale at all,
+  // because justifyLine had never run on it. tests/compose.test.js's overflow
+  // guarantee caught it, which is what that guarantee is for.
+  //
+  // It is the same pair of conditions the alignment resolves with further
+  // down, computed once here and read there rather than worked out twice.
+  const columnEm = columns.length ? (columns[0].end - columns[0].start) / fontPx : 0;
+  const tooNarrowToJustify = align === 'justify' && columnEm > 0 && columnEm < JUSTIFY_MIN_EM;
+  const willJustify = align === 'justify' && !tooNarrowToJustify;
   // Every obstacle at a given band: the pictures, and the cap. One function so
   // the calibration grid and the real pour cannot disagree about it - the
   // capacity a desk is quoted has to be the capacity the copy actually pours
@@ -1321,7 +1442,19 @@ function pourBody(bodyInput, {
    * is the notch in the right edge, and it is what the desk sees.
    */
   function slackCost(slack, measure, width, spaces) {
-    if (slack <= 0) return 0;
+    // A TIGHT line - one set a shade narrower than it wants to be. It ends
+    // flush, so the reader sees no notch; what they could see is the type
+    // being a touch close, so it is charged for on the same cubed scale but
+    // at four times the rate. That makes the solver prefer a slightly loose
+    // line to a slightly tight one at equal magnitude, and reach for tight
+    // only when the alternative is slack nothing can close.
+    if (slack < 0) {
+      const over = -slack;
+      const closable = compressibleBy(width, spaces, fontPx);
+      const residual = Math.max(0, over - closable);
+      return 4 * (over / measure) ** 3 + 100 * (residual / measure) ** 3;
+    }
+    if (slack === 0) return 0;
     const closable = spaces * MAX_EXTRA_WORD_SPACE_EM * fontPx + width * (MAX_GLYPH_STRETCH - 1);
     const residual = Math.max(0, slack - closable);
     // The residual dominates by two orders of magnitude, so the solver will
@@ -1356,6 +1489,20 @@ function pourBody(bodyInput, {
     for (let i = 0; i < full.length; i += 1) prefix.push(prefix[i] + full[i]);
     const widthOf = (from, to) => (to <= from ? 0 : prefix[to - 1] - prefix[from] + trimmed[to - 1]);
 
+    // The spaces the JUSTIFIER will find in the finished line, counted the way
+    // it counts them: over the joined pieces, less whatever trimEndClusters
+    // cuts off the last one. A prefix sum, so the breaker's inner loop stays
+    // O(1) per candidate.
+    const spacesIn = pieces.map((piece) => (piece.match(/\s/gu) || []).length);
+    const tailSpaces = pieces.map((piece) => {
+      const cut = trimEndClusters(piece);
+      return (piece.match(/\s/gu) || []).length - (cut.match(/\s/gu) || []).length;
+    });
+    const spacePrefix = [0];
+    for (let i = 0; i < spacesIn.length; i += 1) spacePrefix.push(spacePrefix[i] + spacesIn[i]);
+    const spacesOf = (from, to) => (to <= from ? 0
+      : Math.max(0, spacePrefix[to] - spacePrefix[from] - tailSpaces[to - 1]));
+
     const L = slots.length;
     const N = pieces.length;
     const INF = Infinity;
@@ -1372,13 +1519,21 @@ function pourBody(bodyInput, {
         // hole the geometry never allowed for.
         for (let k = i + 1; k <= N - (L - 1 - j); k += 1) {
           const width = widthOf(i, k);
-          if (width > measure + 0.5 && k > i + 1) break;
+          // A line may now run PAST its measure by as much as compression can
+          // take back - the third lever, added because every ragged line left
+          // on a real page had both expanding levers already at their caps and
+          // the word that would have filled them was stranded on the line
+          // below. Beyond that it is not a candidate, exactly as before.
+          //
+          // The slot count is fixed by the pour and this only reassigns pieces
+          // across those same slots, so nothing here can change how deep the
+          // paragraph sets or move any geometry.
+          const room = willJustify ? compressibleBy(width, spacesOf(i, k), fontPx) : 0;
+          if (width > measure + room + 0.5 && k > i + 1) break;
           const next = cost[j + 1][k];
           if (next === INF) continue;
-          // A line that does not fit is not a candidate at all, unless it is a
-          // single unbreakable piece - which the pour already accepted.
           const slack = measure - width;
-          if (slack < -0.5 && k > i + 1) continue;
+          if (slack < -room - 0.5 && k > i + 1) continue;
           // The last line of a paragraph is meant to be SHORT, not a stub. It
           // is set flush left and never justified, so its slack is free - but
           // only down to a point: with no penalty at all the solver happily
@@ -1672,17 +1827,20 @@ function pourBody(bodyInput, {
   // A column too narrow to justify is set flush left instead - one decision
   // for the whole block, so its right edge is consistently ragged rather
   // than sometimes straight. See JUSTIFY_MIN_EM.
-  const columnEm = columns.length ? (columns[0].end - columns[0].start) / fontPx : 0;
-  const tooNarrowToJustify = align === 'justify' && columnEm > 0 && columnEm < JUSTIFY_MIN_EM;
   if (tooNarrowToJustify) align = 'left';
 
   if (align && align !== 'left') {
     for (let i = 0; i < lines.length; i += 1) {
       const line = lines[i];
       const isLastOfParagraph = i === lines.length - 1 || lines[i + 1].paragraphBreak;
-      const slack = Math.max(0, line.measure - line.width);
-      if (align === 'right') line.x = line.x + slack;
-      else if (align === 'center') line.x = line.x + slack / 2;
+      // Justification needs the SIGNED slack: a negative one is a line the
+      // balancer chose to set tight, and clamping it to zero here would leave
+      // that line simply overhanging its measure. Right and centre still take
+      // the clamped one - there is nothing to distribute on an overfull line.
+      const slack = line.measure - line.width;
+      const positive = Math.max(0, slack);
+      if (align === 'right') line.x = line.x + positive;
+      else if (align === 'center') line.x = line.x + positive / 2;
       else if (align === 'justify' && !isLastOfParagraph) justifyLine(line, slack);
     }
   }

@@ -18,16 +18,26 @@
 // mechanism, no tokens to leak; just the check that was never made.
 
 const DESK_ROLES = ['admin', 'editor', 'chief_editor'];
+const userRepository = require('../repositories/user.repository');
 
 function currentUser(req) {
   return req.session?.user || null;
 }
 
 function requireSignIn(req, res, next) {
-  if (!currentUser(req)) {
+  const user = currentUser(req);
+  if (!user) {
     return res.status(401).json({ error: 'Sign in to do that.' });
   }
-  return next();
+  return userRepository.findById(user.id)
+    .then((live) => {
+      if (!live?.is_active) {
+        req.session?.destroy?.(() => {});
+        return res.status(403).json({ error: 'This reporter account is blocked. Contact the newspaper owner.' });
+      }
+      return next();
+    })
+    .catch(next);
 }
 
 /**
@@ -43,7 +53,22 @@ function requireDesk(req, res, next) {
   if (!DESK_ROLES.includes(user.role)) {
     return res.status(403).json({ error: 'Only an editor can make up the paper.' });
   }
-  return next();
+  return userRepository.findById(user.id)
+    .then((live) => {
+      if (!live?.is_active) {
+        req.session?.destroy?.(() => {});
+        return res.status(403).json({ error: 'This account is blocked. Contact the newspaper owner.' });
+      }
+      return next();
+    })
+    .catch(next);
+}
+
+function requireAdmin(req, res, next) {
+  const user = currentUser(req);
+  if (!user) return res.status(401).json({ error: 'Sign in to do that.' });
+  if (user.role !== 'admin') return res.status(403).json({ error: 'Only the newspaper owner can manage reporters and settings.' });
+  return requireDesk(req, res, next);
 }
 
 /**
@@ -58,4 +83,4 @@ function deskWrites(req, res, next) {
   return requireDesk(req, res, next);
 }
 
-module.exports = { requireSignIn, requireDesk, deskWrites, currentUser, DESK_ROLES };
+module.exports = { requireSignIn, requireDesk, requireAdmin, deskWrites, currentUser, DESK_ROLES };

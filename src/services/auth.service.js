@@ -7,6 +7,7 @@ async function authenticateUser(email, password) {
 
   const valid = await bcrypt.compare(password, user.password_hash);
   if (!valid) return null;
+  if (!user.is_active) return { blocked: true };
 
   return {
     id: user.id,
@@ -22,6 +23,7 @@ async function login({ email, password, role }) {
   }
 
   const user = await authenticateUser(email, password);
+  if (user?.blocked) return { error: 'This reporter account is blocked. Contact the newspaper owner.' };
   if (!user) return { error: 'Invalid credentials' };
 
   // `role` is optional, and asking for it is the caller saying "I expect this

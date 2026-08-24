@@ -39,7 +39,7 @@ Route → Controller → Service → Repository → PostgreSQL
 
 ## Current reality (read this before touching code)
 
-`server.js` is the entry point. The layering migration now covers every resource that touches the database; five resources are mounted from real route modules:
+`server.js` is the entry point. The layering migration now covers every resource that touches the database; seven resources are mounted from real route modules:
 
 ```
 app.use("/api/auth",       src/routes/auth.routes.js)
@@ -47,6 +47,8 @@ app.use("/api/news",       requireSignIn, src/routes/news.routes.js)
 app.use("/api/newspapers", deskWrites,    src/routes/newspaper.routes.js)
 app.use("/api/features",   deskWrites,    src/routes/feature.routes.js)
 app.use("/api",            deskWrites,    src/routes/page.routes.js)
+app.use("/api/reporters",  requireAdmin,  src/routes/reporter.routes.js)
+app.use("/api/settings",   requireAdmin,  src/routes/settings.routes.js)
 ```
 
 Those go Route → Controller (`src/controllers/*.controller.js`) → Service (`src/services/*.service.js`) → Repository (`src/repositories/*.repository.js`) → PostgreSQL, which is the target shape. All still-inline `server.js` routes are stateless lookups with no database access at all — `/api/templates`, `/api/geometry`, `/api/identity`, `/api/ai/status`, `/api/health` — plus `/api/uploads/images` (multer only, no business logic) and public `/epaper` routes (delegating straight to `newspaperController` because they sit outside the `/api/newspapers` mount path). There is no more `src/db.js` — it held only `authenticateUser`, a duplicate of `user.repository.js` plus a bcrypt check; that logic now lives in `auth.service.js` and the file was deleted rather than kept as a second copy.
@@ -54,6 +56,12 @@ Those go Route → Controller (`src/controllers/*.controller.js`) → Service (`
 **Section production actions are addressed by `sectionKey` (e.g. `"lead"`), not a numeric id** — `write`, `fill`, `carry-over`, `reunite`, `fit` and `rate` all live in `pageSection.controller.js`/`pageSection.service.js` alongside the numeric-id section CRUD (`update`/`create`/`remove`/`move`), because `pageSection.service.js` already addressed sections by key internally (`saveSection(pageId, sectionKey, ...)`) — there was no real domain boundary to justify a separate controller. Page-level actions (`colour`, `state`) live in `page.controller.js` instead, next to `create`/`list`/`update`, matching how they're addressed (by `pageId` alone).
 
 **`deskWrites` leaves every GET unauthenticated — it only guards writes.** Every GET route moved onto a `deskWrites`-mounted router that used to carry an explicit `requireDesk` inline (`preflight`, `worklist`, `status`, `history`, `scribus`, `press-package`, and now `fit` (GET) and `rate`) must repeat that `requireDesk` at the route level, or desk-only production data goes silently public. This has already bitten this migration twice — check `src/middleware/auth.js` before wiring any GET route into an existing router, don't assume the router-level middleware covers it.
+
+**Owner administration is not a `deskWrites` route.** `/api/reporters` and
+`/api/settings` are mounted behind `requireAdmin`, including their reads. A
+reporter account's active state is checked against PostgreSQL on every protected
+request: blocking an account therefore revokes an already-open session as well
+as preventing a later login.
 
 When continuing the migration, take one resource at a time, verify boot + `npm test` after each, small commits.
 
@@ -1643,7 +1651,25 @@ Each editorial block (`page_sections` row) currently carries: headline, subheadi
 
 ## Reporter workflow
 
-Editors never search a dropdown of thousands of stories. The writing panel carries a "Take from Reporter" bar that opens the story picker drawer (`public/editor/story-picker.js`, `story-explorer.js`); the fuller filtering by reporter/category/location/status/date is still to come, and `admin/reporter-browser.js` is the stub for it. Selecting a story auto-fills the editorial block; everything stays editable afterward.
+Editors never search a dropdown of thousands of stories. The writing panel carries a "Take from Reporter" bar that opens the story picker drawer (`public/editor/story-picker.js`, `story-explorer.js`). Selecting a story auto-fills the editorial block; everything stays editable afterward.
+
+The owner-facing Reporter desk (`public/admin/reporters.js`) is the account and
+review surface: it searches reporter profiles by name, email, district or beat;
+creates/edit reporter logins; shows a reporter's immutable filing history; and
+approves or rejects copy with a stored note. A reporter's session owns both
+`created_by` and the byline — never trust those values from a browser request.
+Reporters can see and edit only their own copy, cannot review it, and cannot
+change desk-approved copy. Blocking keeps the history but prevents all further
+protected access.
+
+General publication settings are one validated owner-only record
+(`publication_settings`): identity, contact details, website, timezone and
+default writing language. Its editable identity fields feed the canvas
+masthead/folio furniture, e-paper metadata and Scribus output; therefore an
+open edition picks them up on refresh without changing its stories or layout.
+The registered nameplate artwork, RNI registration and legal printer's
+declaration are deliberately not general text settings. Editing it never
+retroactively rewrites an edition's content or geometry.
 
 ## Fitting copy to the hole
 

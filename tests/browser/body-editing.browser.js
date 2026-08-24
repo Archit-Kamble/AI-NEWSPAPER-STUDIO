@@ -78,6 +78,14 @@ const say = (ok, what, detail = '') => {
     await page.locator(`.edition-row[data-edition-id="${ED}"] button`).click();
     await page.waitForSelector('#canvasSurface', { timeout: 25000 });
     await page.waitForTimeout(2500);
+    // The block may not be on page one - `centre-column`, the block the desk
+    // reported the headline fault on, is on page two. Walk the page pills
+    // until the canvas is showing it.
+    for (const pill of await page.locator('.page-pill').all()) {
+      if (await page.locator(`.newspaper-section[data-section-key="${KEY}"]`).count()) break;
+      await pill.click();
+      await page.waitForTimeout(2200);
+    }
     await page.locator(`.newspaper-section[data-section-key="${KEY}"]`).first().click();
     await page.waitForTimeout(2200);
     await page.evaluate(() => document.getElementById('edFramePage')?.scrollIntoView({ block: 'center' }));
@@ -318,6 +326,60 @@ const say = (ok, what, detail = '') => {
     say(stored.includes(`data-sahas-size="${px}"`),
       'a size chosen from the dropdown is stored on the marked words, in block pixels',
       `${value} -> ${(stored.match(/data-sahas-size="[^"]*"/g) || []).slice(0, 2)}`);
+  }
+
+  // ===================== 10b. the headline opens AS IT IS SET ==============
+  //
+  // The desk's report: "I tested सौरऊर्जा प्रकल्पाचे भूमिपूजन - after double
+  // clicking this headline in editor it changes". It did: photographed on a
+  // real 229x480 block, the last word vanished the instant the frame opened.
+  // The row asks for 21px, fitDisplayFlow() SETS at 20, and the editing frame
+  // was styled from the request - 5% wide of its own measure, which on a
+  // headline that fills its line is one word pushed onto a second line and cut
+  // off by the frame's own overflow. Nothing was lost from the copy; it just
+  // could not be seen, which is worse.
+  for (const part of ['headline', 'subheading']) {
+    const shown = await page.evaluate((flow) => {
+      const line = document.querySelector(`#edCanonicalContent .section-${flow === 'headline' ? 'headline' : 'subheading'}`);
+      if (!line) return null;
+      const box = line.getBoundingClientRect();
+      return { text: line.textContent, size: line.style.fontSize,
+        x: Math.round(box.left), y: Math.round(box.top) };
+    }, part);
+    if (!shown) { say(true, `this block has no ${part} to open`, ''); continue; }
+    await page.mouse.dblclick(await page.evaluate((flow) => {
+      const r = document.querySelector(`#edCanonicalContent .section-${flow === 'headline' ? 'headline' : 'subheading'}`).getBoundingClientRect();
+      return r.left + 24;
+    }, part), await page.evaluate((flow) => {
+      const r = document.querySelector(`#edCanonicalContent .section-${flow === 'headline' ? 'headline' : 'subheading'}`).getBoundingClientRect();
+      return r.top + r.height / 2;
+    }, part));
+    await page.waitForTimeout(1300);
+    const open = await page.evaluate((flow) => {
+      const frame = document.getElementById(flow === 'headline' ? 'edHeadlineFrame' : 'edSubheadingFrame');
+      const style = getComputedStyle(frame);
+      return { text: frame.textContent, size: style.fontSize, align: style.textAlign,
+        clipped: frame.scrollHeight > frame.clientHeight + 1 };
+    }, part);
+    say(open.text === shown.text, `the ${part} opens with every word it had`,
+      JSON.stringify({ was: shown.text, now: open.text }));
+    say(Math.abs(parseFloat(open.size) * (await page.evaluate(() => {
+      const p = document.getElementById('edFramePage');
+      return (Number(document.querySelector('.frame-canonical-content').style.width.replace('px', ''))) / p.getBoundingClientRect().width;
+    })) - parseFloat(shown.size)) < 0.25,
+      `and set in the size the compositor RESOLVED, not the size the row asked for`,
+      JSON.stringify({ composed: shown.size, editing: open.size }));
+    say(!open.clipped, `and nothing is cut off by the frame it is editing in`);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(700);
+    const back = await page.evaluate((flow) => {
+      const line = document.querySelector(`#edCanonicalContent .section-${flow === 'headline' ? 'headline' : 'subheading'}`);
+      const box = line.getBoundingClientRect();
+      return { text: line.textContent, size: line.style.fontSize, x: Math.round(box.left), y: Math.round(box.top) };
+    }, part);
+    say(back.text === shown.text && back.size === shown.size,
+      `and it is put back exactly as it was when the edit closes`,
+      JSON.stringify({ was: shown, now: back }));
   }
 
   // ===================== 11. Escape leaves the story, by keyboard ==========

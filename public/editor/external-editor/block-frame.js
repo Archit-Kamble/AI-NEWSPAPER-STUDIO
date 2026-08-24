@@ -58,7 +58,10 @@ import { smartCardMarkup } from "../smart-cards/smart-cards.js";
 import { sectionContentMarkup, sectionComposition, smartCardFrame } from "../canvas/section-thumb.js";
 // The same six words the Typography panel's "Editing: X" label uses - one
 // catalog for what a selected object is called, not two that could drift.
-import { PART_LABEL } from "./typography-panel.js";
+import { PART_LABEL, ALIGN_FIELD, ALIGNMENTS } from "./typography-panel.js";
+// The engine's own default for a display flow whose alignment nobody has set,
+// so the editing frame breaks its line exactly where the composition did.
+import { DEFAULT_DISPLAY_ALIGN } from "../compose/compose.js";
 // The same serif/sans classification the exact engine measures a body with
 // (compose/font-metrics.js) - Quill is comfort-typing chrome, not the
 // canonical preview (see above), so it does not have to pixel-match, but it
@@ -66,7 +69,7 @@ import { PART_LABEL } from "./typography-panel.js";
 // actually measured in either.
 import { publicationFamily } from "../compose/font-metrics.js";
 import { snapToCluster } from "../compose/graphemes.js";
-import { paintBodySelection } from "./body-caret.js";
+import { paintBodySelection, offsetAtPoint } from "./body-caret.js";
 import "../layout/publication-type.js";
 
 let quill = null;
@@ -786,33 +789,29 @@ function endCanonicalBodyEdit({ blur = false } = {}) {
 // before authored body text, so it is removed before addressing Quill.
 function bodyOffsetAt(point, bias = 0) {
   const page = document.getElementById("edFramePage");
-  const lines = state.composition?.bodyLines || [];
-  if (!page || !lines.length || !point) return null;
-  const rect = page.getBoundingClientRect();
-  const scale = pageScale();
-  const x = (point.x - rect.left) * scale;
-  const y = (point.y - rect.top) * scale;
-  const line = lines.reduce((best, candidate) => {
-    const vertical = Math.max(0, Math.max(candidate.y - y, y - (candidate.y + candidate.height)));
-    const horizontal = Math.max(0, Math.max(candidate.x - x, x - (candidate.x + candidate.measure)));
-    const score = vertical * 4 + horizontal;
-    return !best || score < best.score ? { line: candidate, score } : best;
-  }, null)?.line;
-  if (!line) return null;
-  // A justified line is painted across its full measure, not merely its
-  // natural glyph advance. Map pointer positions through that painted measure
-  // so a click near a justified line's right edge does not incorrectly land
-  // in its final word.
-  const fraction = Math.max(0, Math.min(1, (x - line.x) / Math.max(1, line.measure)));
-  const authored = Math.round((Number(line.at) || 0) + String(line.text || "").length * fraction)
-    - datelineText(state.view || {}).length;
+  const host = document.getElementById("edCanonicalContent");
+  if (!page || !point) return null;
+
+  // MEASURED OFF THE PAINTED GLYPHS, not interpolated across the line.
+  //
+  // This used to map the pointer by proportion - `line.at + text.length x
+  // ((x - line.x) / line.measure)` - which assumes every character is the same
+  // width. Devanagari is nothing like it: in the publication serif क is 711
+  // units, म is 556, and every vowel sign is ZERO, because a matra carries no
+  // advance of its own. So the offset could land several aksharas from the one
+  // the desk was pointing at, and picking out a single letter was guesswork.
+  // See body-caret.js's offsetAtPoint(): the composed line is a real element,
+  // so it is asked where its own letters are.
+  const composed = offsetAtPoint(host, point.x, point.y);
+  if (composed === null) return null;
+  const authored = composed - datelineText(state.view || {}).length;
   const length = quill ? Math.max(0, quill.getLength() - 1) : 0;
   const offset = Math.max(0, Math.min(length, authored));
-  // NEVER INSIDE AN AKSHARA. That proportion is plain code-unit arithmetic, so
-  // it lands between a consonant and its matra about as often as not - and a
-  // caret or a mark boundary there splits the syllable. See
-  // graphemes.js's snapToCluster(): it is the same rule the compositor has
-  // always cut copy by, applied to the desk's own pointer.
+  // NEVER INSIDE AN AKSHARA. offsetAtPoint() already walks whole aksharas, so
+  // this is the belt to its braces - and it still earns its place, because the
+  // clamp above and the dateline subtraction are plain arithmetic on a
+  // different string's indices. See graphemes.js's snapToCluster(): the same
+  // rule the compositor has always cut copy by, applied to the desk's pointer.
   return quill ? snapToCluster(quill.getText(), offset, bias) : offset;
 }
 
@@ -886,7 +885,16 @@ function finishInlineTextEdit({ cancel = false } = {}) {
   const { element, config } = edit;
 
   element?.classList.remove("is-inline-editing", "is-semantic-text-editor");
-  if (element) element.style.pointerEvents = "";
+  if (element) {
+    // Everything setInlineTypography() put on the frame comes back off, or the
+    // hit target keeps the editor's own height and overflow and stops matching
+    // the band layoutTextFrames() places it on.
+    element.style.pointerEvents = "";
+    element.style.height = "";
+    element.style.minHeight = "";
+    element.style.overflow = "";
+    element.style.textAlign = "";
+  }
   clearDisplayField(element);
 
   if (!element?.isConnected) return;
@@ -967,6 +975,69 @@ function caretAt(frame, at) {
 // the real composition placed) has no such limit - it is filled with the
 // full semantic text from `state.view`, which is also the actual source of
 // truth this text is edited FROM in the first place.
+/**
+ * SETS THE EDITING FRAME IN THE TYPE THE COMPOSITOR RESOLVED, not the type the
+ * row asked for.
+ *
+ * The desk's report was that double-clicking a headline changes it, and it
+ * does: photographed on a real 229x480 block, `सौरऊर्जा प्रकल्पाचे भूमिपूजन`
+ * came apart into `सौरऊर्जा प्रकल्पाचे` the instant the frame opened - the
+ * last word gone.
+ *
+ * The cause is one number. `headline_font_px` on that row is 21; the block
+ * SETS at 20, because fitDisplayFlow() searches for the size that fills the
+ * measure inside the line budget and 20 is what it settled on. The frame was
+ * styled from the requested 21, so the editable text ran 5% wide of the
+ * measure it had - and on a headline that already fills its line, 5% is one
+ * whole word pushed onto a second line, which `.frame-headline`'s own
+ * `overflow: hidden` then cut off. Nothing was lost from the copy; it simply
+ * could not be seen, which is worse.
+ *
+ * Three things therefore come from the composition rather than from the row:
+ *
+ * - the SIZE and the LINE BOX, off the band's own resolved lines;
+ * - the MEASURE, so the browser breaks the line where the compositor did
+ *   (the band's box is its INK extent - on a centred headline that is
+ *   narrower than the measure, and typing into an ink-tight box re-wraps on
+ *   the first keystroke);
+ * - the ALIGNMENT, which was hard-coded to `left`, so a centred headline
+ *   jumped to the left edge as it opened and back again on blur.
+ *
+ * And while it is open the frame may GROW: a desk writing a longer headline
+ * has to see the words. It commits on blur and the compositor re-fits it.
+ */
+function setInlineTypography(frame, part, scale) {
+  const band = state.composition?.bands?.[part === "headline" ? "headline" : "deck"];
+  const line = band?.lines?.[0];
+  const content = state.composition?.content;
+
+  const requested = Number(state.view[`${part}FontPx`]) || 16;
+  const px = Number(line?.fontPx) || requested;
+  frame.style.fontSize = `${px / scale}px`;
+  frame.style.lineHeight = Number(line?.height)
+    ? `${line.height / scale}px`
+    : String(Math.max(1.1, (Number(state.view.lineHeight) || 1.25) - 0.15));
+
+  // The frame is placed on the band's ink box by layoutTextFrames(); for
+  // editing it takes the whole measure instead, which is what the line was
+  // actually broken against.
+  if (content) {
+    frame.style.left = `${content.left / scale}px`;
+    frame.style.width = `${content.measure / scale}px`;
+  }
+
+  const align = String(state.view[ALIGN_FIELD[part]] || "").trim();
+  frame.style.textAlign = ALIGNMENTS.some((option) => option.value === align)
+    ? align : DEFAULT_DISPLAY_ALIGN;
+
+  // Never silently clip the words being typed. The frame carries a near-opaque
+  // ground while it is open, so growing over the flow below it reads as an
+  // editor state rather than as the page.
+  frame.style.height = "auto";
+  frame.style.minHeight = `${(band?.height || 0) / scale}px`;
+  frame.style.overflow = "visible";
+}
+
 function beginInlineTextEdit(part, at = null) {
   endCanonicalBodyEdit();
   finishInlineTextEdit();
@@ -1001,9 +1072,7 @@ function beginInlineTextEdit(part, at = null) {
     // input, so this is fixed rather than looked up.
     frame.style.fontFamily = publicationFamily("sans").css;
     frame.style.fontWeight = part === "headline" ? "700" : "400";
-    frame.style.fontSize = `${(Number(state.view[`${part}FontPx`]) || 16) / scale}px`;
-    frame.style.lineHeight = String(Math.max(1.1, (Number(state.view.lineHeight) || 1.25) - 0.15));
-    frame.style.textAlign = "left";
+    setInlineTypography(frame, part, scale);
     frame.style.padding = "0";
     frame.style.pointerEvents = "auto";
 
@@ -1245,17 +1314,29 @@ function bindTextFrames() {
     const start = bodyOffsetAt({ x: event.clientX, y: event.clientY });
     if (start === null) return;
     event.preventDefault();
-    window.addEventListener("pointerup", (up) => {
-      const end = bodyOffsetAt({ x: up.clientX, y: up.clientY });
-      quill?.focus();
-      const finish = end ?? start;
-      // A selection grows OUTWARD to whole aksharas, so a drag never loses a
-      // character the desk had covered and never marks half of one.
+
+    // A selection grows OUTWARD to whole aksharas, so a drag never loses a
+    // character the desk had covered and never marks half of one.
+    const mark = (point) => {
+      const finish = bodyOffsetAt(point) ?? start;
       const text = quill ? quill.getText() : "";
       const from = snapToCluster(text, Math.min(start, finish), -1);
       const to = snapToCluster(text, Math.max(start, finish), 1);
       quill?.setSelection(from, to - from, "silent");
       refreshBodyCaret();
+    };
+
+    // LIVE, while the pointer is still down. The selection used to be computed
+    // only on release, so a desk dragging across a phrase saw nothing at all
+    // until they let go and then had to judge whether they had got it - which
+    // is the other half of "selecting is not smooth". Every editor paints the
+    // band as the pointer moves, and now so does this one.
+    const move = (on) => mark({ x: on.clientX, y: on.clientY });
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", (up) => {
+      window.removeEventListener("pointermove", move);
+      quill?.focus();
+      mark({ x: up.clientX, y: up.clientY });
     }, { once: true });
   }, true);
 

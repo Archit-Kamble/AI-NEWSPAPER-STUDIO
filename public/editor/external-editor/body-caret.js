@@ -30,6 +30,8 @@
 // dateline's length - the same constant `bodyOffsetAt()` subtracts going the
 // other way. One number, stated once, in both directions.
 
+import { clusters } from '../compose/graphemes.js';
+
 const LINE_SELECTOR = '.section-body-line';
 
 /** Every text node under `root`, in document order. */
@@ -152,4 +154,76 @@ export function paintBodySelection({ layer, host, page, range, offset = 0, activ
     + `top:${(caret.top - origin.top).toFixed(2)}px;height:${caret.height.toFixed(2)}px;"></span>`);
 
   layer.innerHTML = pieces.join('');
+}
+
+// ------------------------------------------------------- pointer -> offset ---
+//
+// WHERE A POINTER REALLY IS IN THE COPY.
+//
+// The desk's report: "just like we easily select text, that is not smooth at
+// all - if I want to select one character in a word it is very difficult".
+//
+// It was mapped by PROPORTION: `line.at + text.length * ((x - line.x) /
+// line.measure)`. That is only correct if every character is the same width,
+// and in Devanagari they are nothing like it - in the publication serif क is
+// 711 units, म is 556, and every vowel sign is ZERO, because a matra takes no
+// advance of its own. So a line of plain consonants and a line of conjuncts of
+// the same character count are wildly different widths, and the offset the
+// pointer landed on could be several aksharas away from the one under it. The
+// desk was aiming at a letter and getting its neighbour.
+//
+// The painted line is right there, so it is asked instead: walk its aksharas,
+// measure each one's real box with a DOM Range, and return the boundary the
+// pointer is actually nearest. That is exact after word-spacing and after the
+// scaleX a justified line carries, for the same reason the caret is.
+//
+// It is O(aksharas in one line) - about twenty - and it runs on press, move
+// and release of a drag, which a browser does far more cheaply than it lays
+// the line out in the first place.
+
+/** The composed line the pointer is in or nearest to. */
+function lineNear(host, x, y) {
+  let best = null;
+  for (const span of host.querySelectorAll(LINE_SELECTOR)) {
+    const box = span.getBoundingClientRect();
+    if (!box.height) continue;
+    const vertical = Math.max(0, Math.max(box.top - y, y - box.bottom));
+    const horizontal = Math.max(0, Math.max(box.left - x, x - box.right));
+    const score = vertical * 4 + horizontal;
+    if (!best || score < best.score) best = { span, score };
+  }
+  return best?.span || null;
+}
+
+/**
+ * The source offset under a client point, measured off the painted glyphs.
+ *
+ * Returns the compositor's own offset space (the one `data-at` is in), so the
+ * caller subtracts the dateline exactly as it always did. Null when there is
+ * nothing composed to measure against.
+ */
+export function offsetAtPoint(host, x, y) {
+  if (!host) return null;
+  const span = lineNear(host, x, y);
+  if (!span) return null;
+  const at = Number(span.dataset.at) || 0;
+  const text = span.textContent || '';
+  if (!text) return at;
+
+  let start = 0;
+  for (const piece of clusters(text)) {
+    const end = start + piece.length;
+    const range = rangeIn(span, start, end);
+    const box = range?.getBoundingClientRect();
+    if (box && box.width) {
+      // Before this akshara: the boundary in front of it.
+      if (x < box.left) return at + start;
+      // Inside it: whichever of its own two edges is nearer, so a click on the
+      // left half puts the caret before the letter and on the right half after
+      // it - which is what makes selecting a single one possible at all.
+      if (x <= box.right) return at + (x - box.left <= box.right - x ? start : end);
+    }
+    start = end;
+  }
+  return at + text.length;
 }

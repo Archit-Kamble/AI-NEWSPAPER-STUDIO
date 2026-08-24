@@ -49,8 +49,35 @@ export function renderToolbar({ newspaper, hasSelection, storyPickerOpen, handle
         title: "Check the edition before it goes to the plate",
       })}
       ${button("tbExport", "export", "Press file", {
-        title: "Generate the Scribus document for this edition",
+        title: "The Scribus document and its photographs, packaged for the plate",
       })}
+      <!-- FOUR DESTINATIONS, ONE COMPOSITION. The press package above is the
+           file that goes to the plate and is gated on press readiness; these
+           are the working exports, and they are not - a designer needs the
+           InDesign document while the page is still being made up, and a
+           reporter wants the copy in Word before anybody has signed anything.
+           A <details> rather than a fifth button: the toolbar is already the
+           one constant on this screen and four more buttons would crowd out
+           the ones a desk presses all day. -->
+      <details class="toolbar-menu" id="tbDownloadMenu">
+        <summary class="toolbar-btn" title="Download this edition in another format">
+          <span class="toolbar-btn-label">Download</span>
+        </summary>
+        <div class="toolbar-menu-panel">
+          <button type="button" data-export="pdf">
+            <b>CMYK print PDF</b><small>Ready for the press — four-plate colour, type embedded</small>
+          </button>
+          <button type="button" data-export="indesign">
+            <b>Adobe InDesign</b><small>An .idml the designer opens directly</small>
+          </button>
+          <button type="button" data-export="scribus">
+            <b>Scribus</b><small>The .sla on its own, without the photographs</small>
+          </button>
+          <button type="button" data-export="word">
+            <b>Word</b><small>The edition’s copy as a manuscript, not the page</small>
+          </button>
+        </div>
+      </details>
       ${button("tbAI", "ai", "AI Compose", { title: "Plan AI composition from approved newsroom copy" })}
       ${button("tbPublish", "publish", "Publish", { primary: true })}
     </div>
@@ -63,6 +90,14 @@ export function renderToolbar({ newspaper, hasSelection, storyPickerOpen, handle
   document.getElementById("tbRedo").addEventListener("click", handlers.onRedo);
   document.getElementById("tbPreflight").addEventListener("click", handlers.onPreflight);
   document.getElementById("tbExport").addEventListener("click", handlers.onPressFile);
+  // Delegated on the menu, which survives - and the menu closes itself, or it
+  // would stand open over the page after the download starts.
+  document.getElementById("tbDownloadMenu")?.addEventListener("click", (event) => {
+    const choice = event.target.closest("[data-export]");
+    if (!choice) return;
+    document.getElementById("tbDownloadMenu").open = false;
+    handlers.onExport?.(choice.dataset.export);
+  });
   document.getElementById("tbAI").addEventListener("click", handlers.onCompose);
 }
 

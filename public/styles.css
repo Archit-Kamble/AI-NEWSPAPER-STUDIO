@@ -4906,6 +4906,41 @@ body.print-view .page-imprint {
    edge. It is said by the selection label outside the page now
    (block-frame.js's updateSelectionLabel), where it covers nothing. The
    outline below is what marks the state on the page itself. */
+/* The Download menu in the page toolbar. A <details>, not a bespoke popup:
+   Escape and an outside click already close it in every browser, and the
+   toolbar is the one constant on this screen - it may not grow a widget that
+   needs its own dismissal logic. */
+.toolbar-menu { position: relative; display: inline-block; }
+.toolbar-menu > summary { list-style: none; cursor: pointer; }
+.toolbar-menu > summary::-webkit-details-marker { display: none; }
+.toolbar-menu > summary::after { content: " \25be"; opacity: .55; }
+.toolbar-menu-panel {
+  position: absolute;
+  right: 0;
+  z-index: 40;
+  min-width: 268px;
+  margin-top: 6px;
+  padding: 5px;
+  border: 1px solid #dcdce4;
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(20, 20, 30, .16);
+}
+.toolbar-menu-panel button {
+  display: block;
+  width: 100%;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.toolbar-menu-panel button:hover { background: #f2f2f7; }
+.toolbar-menu-panel b { display: block; font-size: .82rem; }
+.toolbar-menu-panel small { display: block; margin-top: 1px; color: #6a6a74; font-size: .7rem; }
+
 .frame-pictures {
   z-index: 3;
 }

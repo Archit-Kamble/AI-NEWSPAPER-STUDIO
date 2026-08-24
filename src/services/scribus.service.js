@@ -36,6 +36,7 @@ const { geometryOf, pxToMm, regionForPage } = require('../layout/geometry');
 const { strip } = require('../layout/plain-text');
 const { identityFor, dateLine, devanagari } = require('../layout/identity');
 const { captionBox, PLACED_CAPTION_METRICS } = require('../../public/editor/layout/caption-geometry');
+const { smartCardLines } = require('./export/smart-card-lines');
 
 const escapeXml = (value) =>
   String(value ?? '')
@@ -324,80 +325,16 @@ function styledBodyRuns(line, marks, prefixLength, richText) {
 // suvichar as its resolved quote/attribution lines, dinvishesh as its
 // resolved entries - never a re-flattened paragraph.
 function smartCardFrames({ key, data, frame, xMm, yMm, ownPage, cardLayout, family = 'serif', weight = 400 }) {
-  const layout = cardLayout.layoutSmartCard(key, data, frame);
-  if (layout.fitState === 'EMPTY') return '';
-  const parts = [];
-  const plainRun = (text, fontPx) => [{ text, family, weight, bold: false, italic: false, underline: false, fontPx }];
-  const oneLine = (text, atXPx, atYPx, widthPx, fontPx, align = 0) => {
-    if (!text) return;
-    parts.push(lineFrame({
-      xMm: xMm + mm(atXPx), yMm: yMm + mm(atYPx), widthMm: mm(widthPx), heightMm: mm(layout.geometry?.lineHeightPx || fontPx * 1.5),
-      runs: plainRun(text, fontPx), align, ownPage,
-    }));
-  };
-
-  if (layout.subtitle?.lines?.length) {
-    layout.subtitle.lines.forEach((line, i) => oneLine(line, 0, i * layout.subtitle.lineHeightPx, frame.width, layout.subtitle.fontPx, 1));
-  }
-  const subtitleOffsetPx = layout.subtitle?.height || 0;
-
-  if (key === 'sudoku' || key === 'sudoku-solution') {
-    const { cell, top } = layout.geometry;
-    const isGrid = (value) => Array.isArray(value) && value.length === 9 && value.every((row) => Array.isArray(row) && row.length === 9);
-    const rows = isGrid(data?.grid) ? data.grid : isGrid(data?.solution) ? data.solution : [];
-    rows.forEach((row, y) => row.forEach((value, x) => {
-      const n = Number(value);
-      if (!(n > 0)) return;
-      oneLine(devanagari(n), x * cell, subtitleOffsetPx + top + y * cell, cell, layout.fontPx, 1);
-    }));
-    return parts.join('');
-  }
-
-  if (key === 'rashi') {
-    const { columns, rows, rowHeights, columnWidth, nameWidth, lineHeightPx } = layout.geometry;
-    layout.items.forEach((item, index) => {
-      const column = Math.floor(index / rows);
-      const row = index % rows;
-      const rowTop = rowHeights.slice(0, row).reduce((sum, h) => sum + h, 0);
-      const colX = column * columnWidth;
-      oneLine(item.name, colX, subtitleOffsetPx + rowTop, nameWidth, layout.fontPx);
-      const lines = [...item.readingLines, ...item.luckLines];
-      lines.forEach((line, i) => oneLine(line, colX + nameWidth, subtitleOffsetPx + rowTop + i * lineHeightPx, columnWidth - nameWidth, layout.fontPx));
-    });
-    return parts.join('');
-  }
-
-  if (key === 'panchang') {
-    const { labelWidth, valueWidth, lineHeightPx } = layout.geometry;
-    let top = subtitleOffsetPx;
-    for (const item of layout.items) {
-      oneLine(item.labelLines[0] || '', 0, top, labelWidth, layout.fontPx);
-      item.valueLines.forEach((line, i) => oneLine(line, labelWidth, top + i * lineHeightPx, valueWidth, layout.fontPx));
-      top += item.rowHeight;
-    }
-    return parts.join('');
-  }
-
-  if (key === 'suvichar') {
-    const { lineHeightPx, attributionFontPx, attributionLineHeightPx, ruleReservePx } = layout.geometry;
-    let top = subtitleOffsetPx + ruleReservePx;
-    layout.quoteLines.forEach((line, i) => oneLine(line, 0, top + i * lineHeightPx, frame.width, layout.fontPx, 1));
-    top += layout.quoteLines.length * lineHeightPx;
-    layout.attributionLines.forEach((line, i) => oneLine(line, 0, top + i * attributionLineHeightPx, frame.width, attributionFontPx, 1));
-    return parts.join('');
-  }
-
-  if (key === 'dinvishesh') {
-    const { lineHeightPx } = layout.geometry;
-    let top = subtitleOffsetPx;
-    for (const item of layout.items) {
-      item.lines.forEach((line, i) => oneLine(line, 0, top + i * lineHeightPx, frame.width, layout.fontPx));
-      top += item.height;
-    }
-    return parts.join('');
-  }
-
-  return parts.join('');
+  // The walk itself lives in export/smart-card-lines.js, because Scribus is no
+  // longer the only destination: InDesign, Word and the CMYK press PDF read the
+  // same resolved card. This places what that walk returns and decides nothing
+  // about where it goes.
+  return smartCardLines(key, data, frame, cardLayout).map((line) => lineFrame({
+    xMm: xMm + mm(line.x), yMm: yMm + mm(line.y),
+    widthMm: mm(line.width), heightMm: mm(line.height),
+    runs: [{ text: line.text, family, weight, bold: false, italic: false, underline: false, fontPx: line.fontPx }],
+    align: line.align, ownPage,
+  })).join('');
 }
 
 // ------------------------------------------------------------ one block ----

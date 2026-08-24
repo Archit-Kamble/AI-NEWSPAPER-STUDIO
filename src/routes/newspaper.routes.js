@@ -69,6 +69,11 @@ router.get('/:id/status', requireDesk, newspaperController.status);
 router.get('/:id/history', requireDesk, newspaperController.history);
 router.get('/:id/scribus', requireDesk, newspaperController.scribus);
 router.get('/:id/press-package', requireDesk, newspaperController.pressPackage);
+// The working exports: Scribus, InDesign, the CMYK press PDF and the copy in
+// Word. Desk-only like every other production route - an edition being made up
+// is not public - but NOT gated on press readiness, because a designer needs
+// the InDesign document while the page is still being made.
+router.get('/:id/export/:format', requireDesk, newspaperController.exportEdition);
 
 router.post('/:id/features', newspaperController.features);
 router.post('/:id/composition/plan', newspaperController.compositionPlan);

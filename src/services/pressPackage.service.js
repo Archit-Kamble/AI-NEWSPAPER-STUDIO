@@ -75,8 +75,12 @@ function buildZip(entries, isoDate) {
     const raw = entry.data;
     const crc = crc32(raw);
 
-    // Deflate only where it pays: the .sla is XML, the pictures are not.
-    const deflate = entry.name.endsWith('.sla');
+    // Deflate only where it pays: the .sla is XML, the pictures are not. An
+    // entry may say so itself - IDML and DOCX are zips of XML, and IDML's own
+    // `mimetype` entry must be STORED and first, the same rule ODF and EPUB
+    // carry. Left as the extension rule when nothing says otherwise, so the
+    // press package's own bytes are unchanged.
+    const deflate = entry.deflate !== undefined ? entry.deflate : entry.name.endsWith('.sla');
     const stored = deflate ? zlib.deflateRawSync(raw, { level: 6 }) : raw;
     const method = deflate ? 8 : 0;
 

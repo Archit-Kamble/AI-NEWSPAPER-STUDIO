@@ -1070,7 +1070,8 @@ function renderShell() {
     hasSelection: false,
     storyPickerOpen: false,
     handlers: { onSave: saveNow, onPublish: openPublish, onToggleStoryPicker: toggleStoryPicker, onUndo: undo, onRedo: redo,
-      onPreflight: runPreflight, onPressFile: downloadPressFile, onCompose: planComposition },
+      onPreflight: runPreflight, onPressFile: downloadPressFile, onExport: downloadExport,
+        onCompose: planComposition },
   });
 
   document.getElementById("sidebarBackdrop").addEventListener("click", () => store.setStoryPickerOpen(false));
@@ -1362,6 +1363,53 @@ async function makeItFit() {
   const pages = await fetch(`/api/newspapers/${store.getState().newspaper.id}/pages`).then((r) => r.json());
   pages.forEach((updated) => store.replacePage(updated, { structural: true }));
   showNotice(applied.message);
+}
+
+/**
+ * One edition, in one of the four formats a production desk needs.
+ *
+ * Deliberately NOT gated on press readiness, and the press package beside it
+ * still is. That one is the file that goes to the plate; these are the working
+ * exports, wanted while the page is still being made up - which is the only
+ * day they are any use.
+ */
+const EXPORT_LABEL = {
+  pdf: "CMYK print PDF",
+  indesign: "InDesign document",
+  scribus: "Scribus document",
+  word: "Word document",
+};
+
+async function downloadExport(format) {
+  const newspaper = store.getState().newspaper;
+  if (!newspaper) return;
+  const label = EXPORT_LABEL[format] || format;
+
+  showNotice(`Composing the ${label}…`);
+  const response = await fetch(`/api/newspapers/${newspaper.id}/export/${format}`);
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({}));
+    return showNotice(result.error || `The ${label} could not be generated.`);
+  }
+
+  const missing = Number(response.headers.get("X-Pictures-Missing") || 0);
+  const blob = await response.blob();
+  const name = /filename="([^"]+)"/.exec(response.headers.get("Content-Disposition") || "");
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = name ? name[1] : `sahas.${format}`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(link.href);
+
+  const size = blob.size > 1e6 ? `${(blob.size / 1e6).toFixed(1)} MB` : `${Math.round(blob.size / 1024)} KB`;
+  showNotice(
+    `${label} downloaded — ${size}.`
+    + (missing ? ` ${missing} picture file${missing === 1 ? "" : "s"} could not be found on the server.` : "")
+    + (format === "word" ? " It carries the copy, not the page — use the PDF or InDesign for the layout." : "")
+    + (format === "indesign" ? " InDesign needs the Noto Devanagari faces installed, and the photographs beside the file." : ""),
+  );
 }
 
 // The press file. Scribus opens it, the designer adjusts, and the CMYK PDF

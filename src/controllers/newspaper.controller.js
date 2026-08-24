@@ -8,6 +8,7 @@ const preflightService = require('../services/preflight.service');
 const worklistService = require('../services/worklist.service');
 const signoffService = require('../services/signoff.service');
 const scribusService = require('../services/scribus.service');
+const exportService = require('../services/export');
 const pressPackageService = require('../services/pressPackage.service');
 const editionFeaturesService = require('../services/editionFeatures.service');
 const plainTextModule = require('../layout/plain-text');
@@ -298,6 +299,49 @@ async function scribus(req, res) {
     .send(sla);
 }
 
+/**
+ * One edition, in one of the four formats a production desk actually needs.
+ *
+ * NOT gated on press readiness, deliberately, and Scribus/press-package still
+ * are. Those two are the PRESS path - the file that goes to the plate, which
+ * must not leave until the edition has been passed. These are the working
+ * exports: a designer wants the InDesign document while the page is still
+ * being made up, and a reporter wants the copy in Word before anybody has
+ * signed anything. Refusing them until sign-off would make them useless on the
+ * only day they are wanted.
+ */
+async function exportEdition(req, res) {
+  const format = String(req.params.format || '').toLowerCase();
+  if (!exportService.FORMATS[format]) {
+    return res.status(400).json({ error: 'No such export format.', formats: Object.keys(exportService.FORMATS) });
+  }
+  const loaded = await loadForOutput(req.params.id);
+  if (!loaded) return res.status(404).json({ error: 'No such edition.' });
+  const { newspaper, pages } = loaded;
+
+  let built;
+  try {
+    built = await exportService.exportEdition(format, newspaper, pages);
+  } catch (error) {
+    // The compositor refuses to work without the exact shaper, and an export
+    // measured against raw hmtx advances is not a conservative file, it is a
+    // wrong one. Say so rather than shipping it.
+    if (error.code === 'EXACT_SHAPER_NOT_READY') {
+      return res.status(503).json({ code: error.code, error: 'The publication fonts are not ready on the server yet. Try again in a moment.' });
+    }
+    throw error;
+  }
+
+  await signoffService.record(newspaper.id, req.session.user?.id,
+    `${exportService.FORMATS[format].label} exported`);
+
+  res.type(built.type)
+    .set('Content-Disposition', `attachment; filename="${built.filename}"`)
+    .set('X-Export-Warnings', String(built.warnings.length))
+    .set('X-Pictures-Missing', String(built.missingImages.length))
+    .send(built.body);
+}
+
 // The press package: the .sla plus the photographs it points at, shipped
 // together, because the .sla alone means nothing once it leaves this server.
 async function pressPackage(req, res) {
@@ -330,5 +374,5 @@ module.exports = {
   epaper, epaperHtml, selectedEpaperHtml, epaperPreviewHtml, epaperCanvasCaptureHtml, epaperList, selectEpaper,
   epaperAsset, epaperPdf, publishEpaper, publishCurrentEpaper, publishUploadedEpaperPdf, updateEpaperMap, unpublishEpaper,
   preflight, worklist, status, history, features, compositionPlan, compositionApply,
-  scribus, pressPackage,
+  scribus, pressPackage, exportEdition,
 };

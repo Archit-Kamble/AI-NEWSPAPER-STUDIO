@@ -206,6 +206,22 @@ const say = (ok, what, detail = '') => {
     say(ok, `the browser has a real @font-face for ${name}`);
   }
 
+  // ---- an information graphic, on the page --------------------------------
+  const chart = await page.evaluate(() => {
+    const node = document.querySelector('.smart-chart-bars');
+    if (!node) return null;
+    const bars = Array.from(node.querySelectorAll('.smart-chart-track > i'))
+      .map((i) => Math.round(parseFloat(i.style.width)));
+    return { bars, labels: Array.from(node.querySelectorAll('.smart-chart-label')).map((n) => n.textContent.trim()) };
+  });
+  say(Boolean(chart), 'a bar chart draws on the newspaper canvas', chart ? chart.labels.join(', ') : 'none placed');
+  if (chart) {
+    // The bars are PROPORTIONAL, which is the one thing a chart has to be.
+    const widest = Math.max(...chart.bars);
+    say(chart.bars.every((w) => w > 0 && w <= widest), 'its bars are proportional and none is empty', chart.bars.join(','));
+    await page.locator('.smart-chart-bars').screenshot({ path: `${SHOTS}/canvas-chart.png` }).catch(() => {});
+  }
+
   console.log(`\nERRORS: ${errors.length ? errors.join('\n  ') : '(none)'}`);
   say(errors.length === 0, 'no console or page errors');
   await putBack();

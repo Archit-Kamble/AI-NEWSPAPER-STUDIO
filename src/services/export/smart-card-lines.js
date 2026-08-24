@@ -17,8 +17,15 @@
 const { devanagari } = require('../../layout/identity');
 
 /**
- * @returns {Array<{text, x, y, width, fontPx, align}>} align is 0 left,
+ * @returns {Array<{kind, text, x, y, width, fontPx, align}>} align is 0 left,
  *          1 centre, 2 right - the same three a composed line can carry.
+ *
+ * `kind` is absent for an ordinary line of type, which is every entry this
+ * returned until information graphics existed. A chart also emits
+ * `{ kind: 'bar', x, y, width, height, ink }` - a rectangle, which is a thing
+ * every writer here already knows how to draw, and the reason the bar and the
+ * stat row are the two chart kinds this product has: a pie needs bezier arcs
+ * and a line chart needs a polyline, and the print model has neither.
  */
 function smartCardLines(key, data, frame, cardLayout) {
   const layout = cardLayout.layoutSmartCard(key, data, frame);
@@ -35,6 +42,37 @@ function smartCardLines(key, data, frame, cardLayout) {
       line(text, 0, i * layout.subtitle.lineHeightPx, frame.width, layout.subtitle.fontPx, 1));
   }
   const subtitleOffsetPx = layout.subtitle?.height || 0;
+
+  const bar = (x, y, width, height, ink) => out.push({ kind: 'bar', x, y, width, height, ink });
+
+  if (key === 'chart') {
+    const g = layout.geometry;
+    const ACCENT = '#c8102e';
+    let y = subtitleOffsetPx;
+    if (g.chartType === 'stat') {
+      const perBand = Math.max(1, g.columns);
+      layout.items.forEach((item, index) => {
+        const column = index % perBand;
+        const band = Math.floor(index / perBand);
+        const x = column * g.columnWidth;
+        const top = y + band * g.bandHeight;
+        line(item.valueText, x, top, g.columnWidth, g.figurePx, 1);
+        (item.captionLines || []).forEach((text, i) =>
+          line(text, x, top + g.figureLine + i * g.lineHeightPx, g.columnWidth, layout.fontPx, 1));
+      });
+      y += Math.ceil(layout.items.length / perBand) * g.bandHeight;
+    } else {
+      const barHeight = Math.max(2, g.lineHeightPx * 0.62);
+      layout.items.forEach((item) => {
+        line(item.label, 0, y, g.labelWidth, layout.fontPx, 0);
+        bar(g.labelWidth, y + (g.rowHeight - barHeight) / 2, item.barWidth, barHeight, ACCENT);
+        line(item.valueText, g.labelWidth + g.trackWidth + 2, y, g.valueWidth, layout.fontPx, 2);
+        y += g.rowHeight;
+      });
+    }
+    if (g.source) line(g.source, 0, y, frame.width, layout.fontPx * 0.85, 0);
+    return out;
+  }
 
   if (key === 'sudoku' || key === 'sudoku-solution') {
     const { cell, top } = layout.geometry;

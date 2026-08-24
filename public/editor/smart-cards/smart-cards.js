@@ -197,6 +197,39 @@ function dinvisheshMarkup(data, layout) {
     .join("")}</ul>`;
 }
 
+// -------------------------------------------------------------------- chart ---
+//
+// Drawn from layoutSmartCard()'s resolved geometry and nothing else, so the
+// bar a desk sees is the bar the press file draws. Every number is already in
+// block pixels by the time it gets here.
+
+function chartMarkup(data, layout) {
+  const g = layout.geometry;
+  if (!layout.items?.length) return "";
+  const source = g.source
+    ? `<p class="smart-chart-source" style="font-size:${layout.fontPx * 0.85}px">${escapeHtml(g.source)}</p>`
+    : "";
+
+  if (g.chartType === "stat") {
+    const cells = layout.items.map((item) => `
+      <div class="smart-chart-stat" style="width:${g.columnWidth}px;height:${g.bandHeight}px">
+        <b style="font-size:${g.figurePx}px;line-height:${g.figureLine}px">${escapeHtml(item.valueText)}</b>
+        <span style="font-size:${layout.fontPx}px;line-height:${g.lineHeightPx}px">${linesMarkup(item.captionLines)}</span>
+      </div>`).join("");
+    return `<div class="smart-chart smart-chart-stats">${cells}</div>${source}`;
+  }
+
+  const rows = layout.items.map((item) => `
+    <div class="smart-chart-row" style="height:${g.rowHeight}px;font-size:${layout.fontPx}px;line-height:${g.lineHeightPx}px">
+      <span class="smart-chart-label" style="width:${g.labelWidth}px">${escapeHtml(item.label)}</span>
+      <span class="smart-chart-track" style="width:${g.trackWidth}px">
+        <i style="width:${item.barWidth}px;height:${Math.max(2, g.lineHeightPx * 0.62)}px"></i>
+      </span>
+      <b class="smart-chart-value" style="width:${g.valueWidth}px">${escapeHtml(item.valueText)}</b>
+    </div>`).join("");
+  return `<div class="smart-chart smart-chart-bars">${rows}</div>${source}`;
+}
+
 // ------------------------------------------------------------------ router ---
 
 const RENDERERS = {
@@ -206,6 +239,7 @@ const RENDERERS = {
   rashi: rashiMarkup,
   suvichar: suvicharMarkup,
   dinvishesh: dinvisheshMarkup,
+  chart: chartMarkup,
 };
 
 /** Whether this key has a renderer at all. */
@@ -284,6 +318,19 @@ export function smartCardText(key, data) {
     const grid = isGrid(data.grid) ? data.grid : isGrid(data.solution) ? data.solution : null;
     if (!grid) return "";
     return grid.map((row) => row.map((n) => (Number(n) > 0 ? devanagari(n) : "·")).join(" ")).join("\n");
+  }
+
+  if (key === "chart") {
+    // What the card SAYS, for everything that measures a block by its copy.
+    // A rendering of the data, never its source - the bars are drawn from
+    // data.items and could not be parsed back out of these lines.
+    const rows = Array.isArray(data.items) ? data.items : [];
+    const unit = data.unit ? ` ${data.unit}` : "";
+    return rows
+      .filter((item) => item && item.label != null)
+      .map((item) => `${item.label} : ${devanagari(item.value)}${unit}`)
+      .concat(data.source ? [String(data.source)] : [])
+      .join("\n");
   }
 
   if (key === "rashi") {

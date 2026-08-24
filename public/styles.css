@@ -5656,3 +5656,39 @@ body.print-view .page-imprint {
   font-weight: 400 700;
   font-display: block;
 }
+
+/* --- information graphics ------------------------------------------------
+   Every number here comes from layoutSmartCard()'s resolved geometry, in block
+   pixels, so the bar a desk sees is the bar the press file draws. Nothing in
+   this rule set decides a size. */
+.smart-chart { display: flex; flex-direction: column; }
+.smart-chart-row { display: flex; align-items: center; gap: 2px; }
+.smart-chart-label {
+  flex: none;
+  overflow: hidden;
+  white-space: nowrap;
+  font-family: "Sahas Sans", "Noto Sans Devanagari", Arial, sans-serif;
+}
+.smart-chart-track { flex: none; display: flex; align-items: center; }
+.smart-chart-track > i { display: block; background: #c8102e; }
+.smart-chart-value {
+  flex: none;
+  text-align: right;
+  font-family: "Sahas Sans", "Noto Sans Devanagari", Arial, sans-serif;
+  font-weight: 700;
+}
+.smart-chart-stats { flex-direction: row; flex-wrap: wrap; }
+.smart-chart-stat {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  font-family: "Sahas Sans", "Noto Sans Devanagari", Arial, sans-serif;
+}
+.smart-chart-stat > b { color: #c8102e; font-weight: 700; }
+.smart-chart-source {
+  margin: 0;
+  color: #55555c;
+  font-family: "Sahas Sans", "Noto Sans Devanagari", Arial, sans-serif;
+}

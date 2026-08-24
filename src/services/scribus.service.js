@@ -329,12 +329,26 @@ function smartCardFrames({ key, data, frame, xMm, yMm, ownPage, cardLayout, fami
   // longer the only destination: InDesign, Word and the CMYK press PDF read the
   // same resolved card. This places what that walk returns and decides nothing
   // about where it goes.
-  return smartCardLines(key, data, frame, cardLayout).map((line) => lineFrame({
-    xMm: xMm + mm(line.x), yMm: yMm + mm(line.y),
-    widthMm: mm(line.width), heightMm: mm(line.height),
-    runs: [{ text: line.text, family, weight, bold: false, italic: false, underline: false, fontPx: line.fontPx }],
-    align: line.align, ownPage,
-  })).join('');
+  return smartCardLines(key, data, frame, cardLayout).map((line) => {
+    // A chart's bars are rectangles, which this file already draws for a
+    // block's ground and a reversed headline's panel. Emitted as ink rather
+    // than as an empty text frame.
+    if (line.kind === 'bar') {
+      return fillFrame({
+        xMm: xMm + mm(line.x), yMm: yMm + mm(line.y),
+        widthMm: mm(line.width), heightMm: mm(line.height),
+        // 'SahasRed' is the named accent this .sla already declares, and it
+        // is the only ink a chart uses.
+        colour: 'SahasRed', ownPage,
+      });
+    }
+    return lineFrame({
+      xMm: xMm + mm(line.x), yMm: yMm + mm(line.y),
+      widthMm: mm(line.width), heightMm: mm(line.height),
+      runs: [{ text: line.text, family, weight, bold: false, italic: false, underline: false, fontPx: line.fontPx }],
+      align: line.align, ownPage,
+    });
+  }).join('');
 }
 
 // ------------------------------------------------------------ one block ----

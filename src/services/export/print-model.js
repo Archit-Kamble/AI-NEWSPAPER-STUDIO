@@ -206,6 +206,16 @@ async function blockItems(section) {
     const originY = y0 + mm(composition.bodyTop);
     const ALIGN = ['left', 'center', 'right'];
     for (const line of smartCardLines(section.smart_card_key, section.smart_card_data, frame, smartCardLayout)) {
+      // A chart's bars are rectangles, which is a kind this model already has.
+      if (line.kind === 'bar') {
+        items.push({
+          kind: 'fill',
+          x: originX + mm(line.x), y: originY + mm(line.y),
+          width: mm(line.width), height: mm(line.height),
+          ink: line.ink || ACCENT_INK,
+        });
+        continue;
+      }
       items.push(textItem(
         { x: originX + mm(line.x), y: originY + mm(line.y), width: mm(line.width), height: mm(line.height) },
         [run(line.text, { family: 'serif', weight: 400, fontPx: line.fontPx })],

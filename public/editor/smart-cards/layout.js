@@ -178,18 +178,44 @@ const SUBTITLE_WEIGHT = 400;
  * subtitle height on top of that answer. Bounded to the same candidate list
  * as everything else in this module.
  */
+// A SUBTITLE MAY NOT EAT ITS OWN CARD.
+//
+// This chose the largest candidate size whose lines fitted the card's WIDTH
+// and never looked at its height, so a short subtitle took whatever the
+// biggest candidate was. Measured on the first card that ever carried one:
+// "जिल्हानिहाय पाऊस" solved at 32 px on a 188x200 card and took 113 px of it -
+// 57%, three times the size of the chart underneath, reading as a headline
+// rather than as the line under one.
+//
+// It had never run on real data. No stored card of any kind carries a subtitle
+// (checked across the table), so this rule has been latent since it was
+// written and the first card to use it is the one that found it.
+const MAX_SUBTITLE_SHARE = 0.28;
+
 function solveSubtitle(text, frame) {
   const clean = String(text || '').trim();
   if (!clean) return { fontPx: 0, lineHeightPx: 0, lines: [], height: 0, hardOverset: false };
 
+  const ceiling = Math.max(0, frame.innerHeight) * MAX_SUBTITLE_SHARE;
   let chosen = null;
+  let widest = null;
   for (const fontPx of CANDIDATE_FONT_PX) {
     const wrapped = wrapSmartText(clean, { width: frame.innerWidth, fontPx, family: 'serif', weight: SUBTITLE_WEIGHT });
     const lineHeightPx = lineHeightFor(fontPx, 'serif', SUBTITLE_WEIGHT);
-    chosen = { fontPx, lineHeightPx, lines: wrapped.lines.map((l) => l.text), height: wrapped.lines.length * lineHeightPx + GAP_PX, hardOverset: wrapped.hardOverset };
-    if (!wrapped.hardOverset) return chosen;
+    const candidate = {
+      fontPx, lineHeightPx, lines: wrapped.lines.map((l) => l.text),
+      height: wrapped.lines.length * lineHeightPx + GAP_PX, hardOverset: wrapped.hardOverset,
+    };
+    if (wrapped.hardOverset) { chosen = candidate; continue; }
+    // The first size that fits the width AND leaves the card most of itself.
+    if (candidate.height <= ceiling || !ceiling) return candidate;
+    // Remembered in case every size is over the share - a very tall subtitle
+    // on a very short card - so the smallest that at least fits the width is
+    // still what gets returned rather than nothing.
+    widest = candidate;
+    chosen = candidate;
   }
-  return chosen;
+  return widest || chosen;
 }
 
 // ----------------------------------------------------------------- sudoku ---
@@ -323,6 +349,118 @@ function layoutPanchang(data, frame) {
   };
 }
 
+// ------------------------------------------------------------------- chart ---
+//
+// A newspaper's information graphic, solved the same way every other card is.
+//
+// TWO KINDS, AND THE REASON THERE ARE ONLY TWO. A bar and a stat row are made
+// of RECTANGLES and type, and a rectangle is something all four export writers
+// already draw. A pie needs bezier arcs and a line chart needs a polyline, and
+// the print model has neither primitive - its four item kinds are fill, text,
+// image and rule, and rules are axis-aligned. Adding arcs to the PDF, the
+// IDML, the .sla and Word is four separate pieces of geometry work, and a
+// chart that drew on screen and vanished from the plate would be worse than
+// no chart. So these two are exact everywhere, and the other two are honestly
+// absent rather than half-present.
+//
+// The bars run ACROSS, not up. A Marathi category label is long ("छत्रपती
+// संभाजीनगर"), and a vertical bar chart has to set those labels sideways or
+// abbreviate them; a horizontal bar reads them on their own baseline at the
+// body size.
+
+const CHART_BAR_GAP_PX = 2;
+const CHART_VALUE_GAP_PX = 4;
+
+function chartRows(data) {
+  return Array.isArray(data?.items)
+    ? data.items.filter((item) => item && item.label != null && Number.isFinite(Number(item.value)))
+    : [];
+}
+
+function layoutChart(data, frame) {
+  const rows = chartRows(data);
+  if (!rows.length) return empty('chart');
+  const kind = data?.chartType === 'stat' ? 'stat' : 'bar';
+  const unit = String(data?.unit || '');
+  const source = String(data?.source || '');
+  const peak = rows.reduce((max, item) => Math.max(max, Math.abs(Number(item.value))), 0) || 1;
+  const valueText = (item) => `${devanagariDigits(item.value)}${unit ? ` ${unit}` : ''}`;
+
+  const solved = solveFont(frame.innerHeight, (fontPx) => {
+    const lineHeightPx = lineHeightFor(fontPx, 'sans', 400);
+    const sourceHeight = source ? lineHeightPx : 0;
+
+    if (kind === 'stat') {
+      // Every figure gets a column of its own, as wide as the card divides
+      // into. The number is set large over its caption, which is the shape a
+      // newspaper sets a run of statistics in.
+      const columns = Math.max(1, Math.min(rows.length, Math.floor(frame.innerWidth / (fontPx * 6)) || 1));
+      const columnWidth = frame.innerWidth / columns;
+      const figurePx = fontPx * 2.2;
+      const figureLine = lineHeightFor(figurePx, 'sans', 700);
+      let hardOverset = false;
+      const items = rows.map((item) => {
+        const caption = wrapSmartText(String(item.label), { width: columnWidth - GAP_PX, fontPx, family: 'sans', weight: 400 });
+        if (caption.hardOverset) hardOverset = true;
+        return {
+          label: String(item.label),
+          value: Number(item.value),
+          valueText: valueText(item),
+          captionLines: caption.lines.map((l) => l.text),
+          rowHeight: figureLine + Math.max(1, caption.lines.length) * lineHeightPx,
+        };
+      });
+      const bands = Math.ceil(items.length / columns);
+      const bandHeight = items.reduce((max, item) => Math.max(max, item.rowHeight), 0);
+      return {
+        height: bands * bandHeight + sourceHeight, hardOverset, items, kind,
+        columns, columnWidth, figurePx, figureLine, bandHeight, lineHeightPx, sourceHeight, source, peak,
+      };
+    }
+
+    const labelCap = frame.innerWidth * 0.42;
+    const widest = rows.reduce((max, item) => Math.max(max, measure(String(item.label), fontPx, 'sans', 400)), 0);
+    const labelWidth = Math.min(labelCap, widest + GAP_PX);
+    const valueWidth = rows.reduce((max, item) => Math.max(max, measure(valueText(item), fontPx, 'sans', 700)), 0);
+    const trackWidth = Math.max(0, frame.innerWidth - labelWidth - valueWidth - CHART_VALUE_GAP_PX);
+    let hardOverset = trackWidth <= fontPx;
+    const rowHeight = lineHeightPx + CHART_BAR_GAP_PX;
+    const items = rows.map((item) => {
+      const label = measureAtomic(String(item.label), fontPx, 'sans', 400, labelWidth);
+      if (label.hardOverset) hardOverset = true;
+      return {
+        label: label.line,
+        value: Number(item.value),
+        valueText: valueText(item),
+        barWidth: Math.max(1, (Math.abs(Number(item.value)) / peak) * trackWidth),
+        rowHeight,
+      };
+    });
+    return {
+      height: items.length * rowHeight + sourceHeight, hardOverset, items, kind,
+      labelWidth, trackWidth, valueWidth, rowHeight, lineHeightPx, sourceHeight, source, peak,
+    };
+  });
+
+  return {
+    key: 'chart',
+    fitState: solved.fitState,
+    fontPx: solved.fontPx,
+    geometry: {
+      chartType: solved.kind, rows: rows.length, peak: solved.peak,
+      labelWidth: solved.labelWidth || 0, trackWidth: solved.trackWidth || 0,
+      valueWidth: solved.valueWidth || 0, rowHeight: solved.rowHeight || 0,
+      columns: solved.columns || 0, columnWidth: solved.columnWidth || 0,
+      figurePx: solved.figurePx || 0, figureLine: solved.figureLine || 0,
+      bandHeight: solved.bandHeight || 0,
+      lineHeightPx: solved.lineHeightPx, sourceHeight: solved.sourceHeight || 0,
+      source: solved.source || '',
+    },
+    items: solved.items,
+    violations: solved.fitState === 'OVERSET' ? ['SMART_CARD_OVERSET'] : [],
+  };
+}
+
 // ---------------------------------------------------------------- suvichar ---
 
 function layoutSuvichar(data, frame) {
@@ -404,6 +542,7 @@ const LAYOUTS = {
   panchang: layoutPanchang,
   suvichar: layoutSuvichar,
   dinvishesh: layoutDinvishesh,
+  chart: layoutChart,
 };
 
 /**

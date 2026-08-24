@@ -410,6 +410,40 @@ function inkWidthPx(text, fontPx, family = 'sans', weight = 700) {
   return modules.shaper.shapeWidthPx(String(text || ''), fontPx, family, weight);
 }
 
+/**
+ * A line of furniture broken to fit its measure.
+ *
+ * The legal imprint is one long sentence naming the printer, the publisher and
+ * the address of the press, and it was emitted as a SINGLE unwrapped textItem.
+ * The browser wraps it because CSS does; a PDF text frame does not, so on page
+ * two of every edition it ran off both edges of the sheet and the first and
+ * last words were simply cut off the page. Found by rendering page two and
+ * reading it - a legal declaration that does not print in full is the one kind
+ * of overflow that actually matters.
+ *
+ * Greedy, on word boundaries, measured with the same shaper that composed the
+ * page. Furniture is short and the balancing this engine does for body copy
+ * would be over-engineering here - what matters is that every word is on the
+ * sheet.
+ */
+function wrapFurniture(text, widthPx, fontPx, family = 'sans', weight = 400) {
+  const words = String(text || '').trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  const lines = [];
+  let line = '';
+  for (const word of words) {
+    const candidate = line ? `${line} ${word}` : word;
+    if (line && inkWidthPx(candidate, fontPx, family, weight) > widthPx) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = candidate;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
 function mastheadItems(newspaper, page, geometry, identity, sections) {
   if (Number(page.page_number) !== 1) return [];
   const region = regionForPage(geometry, page.page_number);
@@ -625,13 +659,49 @@ function footerItems(newspaper, page, geometry, identity) {
   if (Number(page.page_number) === Number(identity.imprintPage || 2) && region.footer.imprintHeightPx > 0) {
     const top = mm(region.footer.imprintTop);
     const height = mm(region.footer.imprintHeightPx);
-    const declaration = height * 0.4;
-    items.push(textItem({ x: leftMm, y: top, width: widthMm, height: declaration },
-      [run(identity.imprint, { family: 'sans', weight: 400, fontPx: 9 })], 'center'));
-    items.push(textItem({ x: leftMm, y: top + declaration, width: widthMm, height: declaration },
-      [run(identity.imprintEnglish, { family: 'sans', weight: 400, fontPx: 8 })], 'center'));
-    items.push(textItem({ x: leftMm, y: top + declaration * 2, width: widthMm, height: height - declaration * 2 },
-      [run(identity.aiDisclosure, { family: 'sans', weight: 700, bold: true, fontPx: 9 })], 'center'));
+    // WRAPPED, AND SIZED TO THE BAND IT WAS GIVEN.
+    //
+    // Two faults, one after the other, both found by rendering page two and
+    // reading it. First it was emitted as a SINGLE unwrapped line per band, so
+    // the declaration ran off both edges of the sheet and its first and last
+    // words were cut off the page - a legal statement that does not print in
+    // full is the one kind of overflow that actually matters. Then, wrapped at
+    // the sizes asked for, seven lines went into a 20 mm band and overlapped
+    // each other.
+    //
+    // So the size is SOLVED against the band, exactly as the canvas does it -
+    // styles.css sets .page-imprint at 5.2px for the same reason. It steps
+    // down from the requested size until every wrapped line has its own room,
+    // and never below what a page can be read at.
+    const IMPRINT_MIN_PX = 3.6;
+    const IMPRINT_LINE = 1.45;
+    const bandHeightPx = region.footer.imprintHeightPx;
+    const parts = [
+      { text: identity.imprint, weight: 400, bold: false },
+      { text: identity.imprintEnglish, weight: 400, bold: false },
+      { text: identity.aiDisclosure, weight: 700, bold: true },
+    ].filter((part) => String(part.text || '').trim());
+
+    let fontPx = 5.2;
+    let wrapped = [];
+    for (; fontPx >= IMPRINT_MIN_PX; fontPx -= 0.2) {
+      wrapped = parts.map((part) => ({
+        ...part,
+        lines: wrapFurniture(part.text, geometry.matterWidthPx, fontPx, 'sans', part.weight),
+      }));
+      const rows = wrapped.reduce((n, part) => n + part.lines.length, 0);
+      if (rows * fontPx * IMPRINT_LINE <= bandHeightPx) break;
+    }
+
+    const rowMm = mm(fontPx * IMPRINT_LINE);
+    let y = top;
+    for (const part of wrapped) {
+      for (const text of part.lines) {
+        items.push(textItem({ x: leftMm, y, width: widthMm, height: rowMm },
+          [run(text, { family: 'sans', weight: part.weight, bold: part.bold, fontPx })], 'center'));
+        y += rowMm;
+      }
+    }
   }
 
   return items.filter(Boolean);

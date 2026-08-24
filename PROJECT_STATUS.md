@@ -6397,6 +6397,22 @@ The invariant that matters is testable without a provider and is tested:
 pressing "Suggest a picture" leaves the block with exactly as many pictures as
 it had, whether the provider answered or refused.
 
+### Two stacking faults, found by rendering a page and looking at it
+
+Neither was visible in any test. Both came from putting a chart, a panel, an
+overlay and a photograph on one real front page and reading it.
+
+5. **A panel was drawn under the picture in the export and over it on the
+   canvas.** Every export writer paints in document order and the panel was
+   emitted before the block's photographs; the canvas gives
+   `.section-inset-panel` a higher z-index than a placed picture. Two surfaces,
+   opposite stacking.
+
+6. **An overlay's caption was not part of its obstacle**, so the story set
+   straight through it. `obstaclesOf()` already says, in its own comment, that
+   counting a photograph but not its caption is how copy ends up printed
+   underneath one; this was the page-level twin of exactly that.
+
 ### Still open
 
 - **`scribus.service.js` is the one export still on its own walk**, so it alone

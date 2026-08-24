@@ -153,3 +153,50 @@ the IDML, the .sla and Word — four separate pieces of geometry work. A chart
 that drew on screen and vanished from the plate is worse than no chart, so the
 two rectangle-based kinds are exact everywhere and the other two are honestly
 absent. That is the decision to revisit if charts matter more than the rest.
+
+
+## Run 1 finished
+
+All eleven requirements addressed and committed. `npm test` 911/911 throughout.
+
+### Final verification
+
+| net | result |
+|---|---|
+| `npm test` | 911/911 |
+| `workspace.browser.js` | 223/223 |
+| `editor-controls.browser.js` | 86/86 |
+| `body-editing.browser.js` | 35/35 |
+| `visual-pass.browser.js` (new, 38 checks) | 38/38 |
+| `editor-parity.browser.js` | 70/70 |
+
+A four-page edition carrying a bar chart, an inset fact box, a cross-block
+overlay photograph, a double-boxed block and a block set in a new typeface was
+rendered to a CMYK press PDF and looked at, page by page. Screenshots are in
+`tmp-visual-pass/`; `final-front2-1.png` is the whole front page.
+
+### Two faults the FULL PAGE found that no single-feature test could
+
+Worth recording because it is the argument for rendering a real page rather
+than a fixture:
+
+- the inset panel drew **under** the picture in the export and **over** it on
+  the canvas;
+- the overlay's caption was not in its obstacle, so the story set through it.
+
+Both are fixed (`ab9e0fd`).
+
+### For a continuation run
+
+**Verify; do not continue.** Nothing here is half written.
+
+The three things genuinely left are in `PROJECT_STATUS.md` under "Still open":
+Scribus is the one export still doing its own walk (so it alone lacks the
+nameplate, folio and borders); a Smart Card does not avoid a page overlay; an
+inset panel holds text only. The AI picture generator's success path cannot be
+verified from this machine — the key has no image quota.
+
+The highest-value next thing is **more layouts**. This run drove one edition
+hard. A second run should build several disposable `2099-*` editions with
+different shapes — narrow columns, image-heavy, multi-column text — and compare
+canvas against export on each.

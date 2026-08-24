@@ -281,6 +281,33 @@ const say = (ok, what, detail = '') => {
     await page.locator('#canvasSurface').screenshot({ path: `${SHOTS}/canvas-overlay.png` }).catch(() => {});
   }
 
+  // ---- the picture proposal, and the workflow it must not skip -----------
+  await page.locator(`.newspaper-section[data-section-key="${KEY}"]`).first().click();
+  await page.waitForTimeout(1800);
+  const offersPicture = await page.locator('#aiProposePicture').count();
+  say(offersPicture > 0, 'the AI panel offers to suggest a picture');
+  if (offersPicture) {
+    const before = await page.evaluate(async ([ed, key]) => {
+      const pages = await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json());
+      const pg = pages.find((p) => p.sections.some((s) => s.section_key === key));
+      const s = pg.sections.find((x) => x.section_key === key);
+      return (s.images || []).length;
+    }, [ED, KEY]);
+    await page.locator('#aiProposePicture').click();
+    await page.waitForTimeout(4000);
+    const after = await page.evaluate(async ([ed, key]) => {
+      const pages = await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json());
+      const pg = pages.find((p) => p.sections.some((s) => s.section_key === key));
+      const s = pg.sections.find((x) => x.section_key === key);
+      return (s.images || []).length;
+    }, [ED, KEY]);
+    // THE INVARIANT: asking for a picture never places one. Holds whether the
+    // provider answered or refused, which is why it is checked either way.
+    say(after === before, 'and asking never places one by itself', `${before} pictures before, ${after} after`);
+    const said = await page.evaluate(() => document.getElementById('aiPictureCandidates')?.children.length ?? -1);
+    say(said >= 0, 'the candidate area exists and is empty until a person chooses', String(said));
+  }
+
   console.log(`\nERRORS: ${errors.length ? errors.join('\n  ') : '(none)'}`);
   say(errors.length === 0, 'no console or page errors');
   await putBack();

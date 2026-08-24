@@ -5797,3 +5797,13 @@ body.print-view .page-imprint {
 .overlay-handle-ne { right: -4px; top: -4px; cursor: nesw-resize; }
 .overlay-handle-sw { left: -4px; bottom: -4px; cursor: nesw-resize; }
 .overlay-handle-se { right: -4px; bottom: -4px; cursor: nwse-resize; }
+
+/* --- proposed pictures ---------------------------------------------------- */
+.ai-candidates:empty { display: none; }
+.ai-candidate-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.ai-candidate { margin: 0; flex: 1 1 140px; max-width: 200px; }
+.ai-candidate img {
+  display: block; width: 100%; height: auto;
+  border: 1px solid var(--line, #d0d0d6); border-radius: 3px;
+}
+.ai-candidate button { width: 100%; margin-top: 4px; }

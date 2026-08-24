@@ -1,3 +1,4 @@
+const newsImage = require('../services/newsImage.service');
 const service = require('../services/sectionImage.service');
 
 const notFound = (res) => res.status(404).json({ error: 'Not found' });
@@ -35,4 +36,23 @@ async function cutout(req, res) {
   res.json(result.images);
 }
 
-module.exports = { list, add, move, remove, cutout };
+
+/**
+ * Candidate pictures for this block. PROPOSES only - nothing is placed.
+ *
+ * The response is a list a desk looks at and then drags onto the block through
+ * the ordinary placement route, which is what keeps the human in the loop
+ * where it matters: where a picture sits decides how the copy sets around it.
+ */
+async function propose(req, res) {
+  const section = await service.sectionFor(req.params.pageId, req.params.sectionId);
+  if (!section) return res.status(404).json({ error: 'No such block.' });
+  const { candidates, warning } = await newsImage.propose(section, {
+    count: req.body?.count,
+    ownerId: req.session?.user?.id || null,
+  });
+  res.json({ candidates, warning, placed: false });
+}
+
+module.exports = {
+  propose, list, add, move, remove, cutout };

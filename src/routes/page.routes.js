@@ -37,6 +37,9 @@ router.post('/pages/:pageId/sections/:sectionId/images', sectionImageController.
 router.patch('/pages/:pageId/sections/:sectionId/images/:imageId', sectionImageController.move);
 router.delete('/pages/:pageId/sections/:sectionId/images/:imageId', sectionImageController.remove);
 router.post('/pages/:pageId/sections/:sectionId/images/:imageId/cutout', sectionImageController.cutout);
+// Candidate pictures from the AI. Desk-only, and it PROPOSES: nothing is
+// placed, sized or accepted here - a person does all three.
+router.post('/pages/:pageId/sections/:sectionId/images/propose', requireDesk, sectionImageController.propose);
 
 // Ruler guides (Stage 4) - page-level reference lines, never printed and (so
 // far) not a snap target. Same list-of-placements shape as pictures, so the

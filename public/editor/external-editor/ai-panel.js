@@ -191,6 +191,15 @@ export function aiPanelMarkup(view) {
              placeholder="जंतरमंतर आंदोलन · Jantar Mantar protest · a few words is enough"
              value="">
       <button type="button" class="btn-submit" id="aiWriteStory">Write this block</button>
+      <!-- A PICTURE IS PROPOSED, NEVER PLACED.
+           Where a photograph sits decides how the copy sets around it
+           (compose/exclusion.js), so a machine that both invents the picture
+           and decides where it goes has decided how the story reads. These
+           come back as candidates; a person picks one, drags it onto the
+           block and sizes it, and only THEN does the fill run - against the
+           geometry of the picture they actually placed. -->
+      <button type="button" class="btn-ghost" id="aiProposePicture">Suggest a picture</button>
+      <div id="aiPictureCandidates" class="ai-candidates"></div>
       <!-- A block is not always a story with a headline over it: a sidebar, a
            box-out, a second leg under a headline that is already set. Both on
            by default, so the ordinary block is unchanged - and turning one off
@@ -546,11 +555,82 @@ function confirmReplacement(view, scope = "block") {
   return window.confirm(`${what}\n\nReplace ${losing} with the AI's version?`);
 }
 
+/**
+ * Candidate pictures, offered for a person to choose from.
+ *
+ * Deliberately NOT auto-placed and deliberately NOT one: a single suggestion
+ * dropped onto the block would be the machine making the editorial decision,
+ * and a choice of one is not a choice.
+ */
+function renderCandidates(host, candidates) {
+  if (!candidates.length) {
+    host.innerHTML = "";
+    return;
+  }
+  host.innerHTML = `
+    <p class="muted">AI-generated, and not a photograph of anything that happened. Look at it, then place the one you want &mdash; the story sets around it after you have.</p>
+    <div class="ai-candidate-row">
+      ${candidates.map((asset) => `
+        <figure class="ai-candidate">
+          <img src="${escapeHtml(asset.url)}" alt="">
+          <button type="button" class="btn-ghost" data-place-candidate="${escapeHtml(asset.url)}">Place this one</button>
+        </figure>`).join("")}
+    </div>`;
+}
+
 export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, getPage, onSave) {
   const seed = document.getElementById("edAiSeed");
   const write = document.getElementById("aiWriteStory");
   const host = document.getElementById("aiStoryProposal");
   const retrievalHost = document.getElementById("aiRetrievalStatus");
+  const pictureButton = document.getElementById("aiProposePicture");
+  const pictureHost = document.getElementById("aiPictureCandidates");
+
+  pictureButton?.addEventListener("click", async () => {
+    const page = getPage?.();
+    const section = getSection?.();
+    if (!page || !section) return;
+    pictureButton.disabled = true;
+    pictureButton.textContent = "Asking...";
+    try {
+      const response = await fetch(
+        `/api/pages/${page.id}/sections/${encodeURIComponent(section.section_key)}/images/propose`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ count: 2 }) },
+      );
+      const result = await response.json().catch(() => ({}));
+      renderCandidates(pictureHost, result.candidates || []);
+      // The warning is shown even when some pictures came back: a desk that is
+      // being offered one instead of two should be told why.
+      if (result.warning) onNotify?.(result.warning);
+      else if (!(result.candidates || []).length) onNotify?.("No picture came back.");
+    } catch (error) {
+      onNotify?.("Could not reach the picture generator.");
+    } finally {
+      pictureButton.disabled = false;
+      pictureButton.textContent = "Suggest a picture";
+    }
+  });
+
+  // Placing is a separate, deliberate act, and it goes through the ORDINARY
+  // picture placement route - the same one an upload uses - so a generated
+  // picture is snapped to a legal corridor, measured and composed exactly like
+  // any other. Nothing about it is special once a person has chosen it.
+  pictureHost?.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-place-candidate]");
+    if (!button) return;
+    const page = getPage?.();
+    const section = getSection?.();
+    if (!page || !section) return;
+    button.disabled = true;
+    const response = await fetch(
+      `/api/pages/${page.id}/sections/${encodeURIComponent(section.section_key)}/images`,
+      { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: button.dataset.placeCandidate }) },
+    );
+    if (!response.ok) { button.disabled = false; return onNotify?.("Could not place the picture."); }
+    onNotify?.("Placed. Drag and size it, then fill the block.");
+    pictureHost.innerHTML = "";
+  });
 
   // The seed is deliberately NOT patched into the draft. It is a note to the
   // model, not part of the story, and putting an unknown field on the draft

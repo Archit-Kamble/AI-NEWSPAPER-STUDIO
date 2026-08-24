@@ -412,4 +412,8 @@ async function cutout(pageId, sectionKey, imageId, origin) {
   return { images: await repo.listBySection(section.id) };
 }
 
-module.exports = { list, add, move, remove, cutout };
+// Exposed so the picture-proposal controller can brief a generator with the
+// block's own headline and place of publication without a second query.
+const sectionFor = sectionRow;
+
+module.exports = { list, add, move, remove, cutout, sectionFor };

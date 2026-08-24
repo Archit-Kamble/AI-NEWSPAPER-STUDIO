@@ -42,7 +42,9 @@ function createApp() {
 
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ extended: true, limit: "50mb" }));
-  app.use(express.static(path.join(__dirname, "public")));
+  // Session comes before the e-paper image gate so a signed-in desk can
+  // preview a private release, while anonymous visitors remain limited to
+  // the single selected public issue.
   app.use(
     session({
       secret: process.env.SESSION_SECRET || "dev-secret",
@@ -51,6 +53,12 @@ function createApp() {
       cookie: { secure: false },
     }),
   );
+  // Generated e-paper assets sit under public/uploads for deployment
+  // simplicity, but they are not ordinary static uploads. This route comes
+  // first so a guessed PNG URL cannot reveal an edition before Publish or
+  // after the desk removes its public copy.
+  app.get("/uploads/epaper/:id/:filename", asyncRoute(newspaperController.epaperAsset));
+  app.use(express.static(path.join(__dirname, "public")));
 
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
@@ -109,10 +117,15 @@ function createApp() {
     res.json(ai.status());
   });
 
-  // The e-paper as a plain readable page a search engine can index. Public,
-  // like the JSON form at GET /api/newspapers/:id/epaper - not part of that
-  // router's mount path, so it stays wired directly here.
+  // The desk has a private list of released snapshots. The link given to
+  // another website is simply /epaper: it opens the one radio-selected issue
+  // and carries no id, token or write capability.
+  app.get("/api/epapers", requireDesk, asyncRoute(newspaperController.epaperList));
+  app.get("/epaper/preview/:id", requireDesk, asyncRoute(newspaperController.epaperPreviewHtml));
+  app.get("/epaper", asyncRoute(newspaperController.selectedEpaperHtml));
+  app.get("/epaper/:id/pdf", asyncRoute(newspaperController.epaperPdf));
   app.get("/epaper/:id", asyncRoute(newspaperController.epaperHtml));
+  app.get("/_internal/epaper-canvas/:token", asyncRoute(newspaperController.epaperCanvasCaptureHtml));
 
   // Page API
   app.use("/api", deskWrites, pageRoutes);

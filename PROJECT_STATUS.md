@@ -4,6 +4,217 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0zzj. E-paper app handoff and masthead identity (2026-08-20)
+
+On `codex/epaper-map-editor`, the public reader no longer shows an **All
+editions** header control. Its masthead now carries an explicit crop of the
+real SAHAS lion mark from the approved nameplate, beside the newspaper name.
+
+Story actions remain compact and brand-led. WhatsApp Send and Facebook’s share
+dialog directly open their services. Status, Instagram Story/Post and Facebook
+Story use the browser’s real file-share path when an installed mobile app is
+available; that is the only browser-safe way to hand a PNG to a specific
+installed app. Desktop fallback downloads the PNG and opens the relevant web
+service. A website cannot silently publish into a user’s Status/Story/Post or
+force the OS share sheet to choose an app; the UI now says and behaves exactly
+that way rather than falsely claiming a direct post occurred. `epaper` tests
+pass **6/6**.
+
+---
+
+## 0zzi. Released e-paper map adjustment for uploaded PDFs (2026-08-20)
+
+Implemented on the isolated, unmerged branch `codex/epaper-map-editor`. The
+saved editor geometry remains the initial map for both an exact canvas release
+and a PDF release, but an externally designed PDF can legitimately place a
+story somewhere else. The owner E-paper screen therefore now provides **Map
+blocks** for every released issue: page image plus overlay frames; drag to
+move, drag any corner to resize, or enter exact **X / Y / width / height**;
+add a missing block or delete a false one; then save.
+
+`PATCH /api/newspapers/:id/epaper/map` changes only the released manifest. It
+keeps frozen text for saved stories, permits titled manual blocks, regenerates
+only that page's branded PNG story cards from the released page raster, and
+atomically swaps the full release directory. It never updates `page_sections`
+or live newsroom copy. A revision number rejects a stale second editor rather
+than letting it silently overwrite the first editor's map. Thus both
+`editor_snapshot` and `uploaded_pdf` releases have a precise, operator-owned
+map without making the public URL writable.
+
+The PDF release chooser no longer exposes an Edition dropdown: it has date and
+search fields with selectable matching editions. Both owner-list and archive
+search normalise Devanagari digits and include English date forms, so `15 Aug
+2099` finds `शनिवार, १५ ऑगस्ट २०९९`. Reader share controls are compact,
+icon-led destination groups; double-clicking a visible news block downloads
+its branded PNG directly, while a normal tap still opens its sharing card.
+
+Verification: `node --test tests/epaper.test.js tests/epaperPublication.test.js`
+passes **9/9**, including an uploaded-PDF fixture that adds a manual rectangle,
+regenerates its `story-1-manual-*.png`, and proves live editor geometry is
+unchanged.
+
+---
+
+## 0zzh. Exact e-paper hotspot/crop alignment (2026-08-20)
+
+Implemented on the isolated, unmerged branch
+`codex/epaper-hotspot-alignment`. A review of the user’s private e-paper
+edition 13542 found that its manifest rectangles were correctly calculated
+from each saved `page_sections.x_px/y_px/width_px/height_px`, but the captured
+PNG was not at that same scale. `renderCanvas()` registers an editor
+ResizeObserver; after the e-paper capture cleared its initial Fit transform,
+that observer restored a 0.927 Fit scale (the 660 px capture viewport minus
+the editor’s 48 px Fit padding). The image was therefore shrunken while the
+red reader hotspot and PNG story crop still used true page coordinates.
+
+The capture stylesheet now pins `.newspaper-canvas` to
+`transform:none!important`, so the observer cannot reintroduce Fit scale. A
+real browser diagnostic against edition 13542 proves a 660×1060 canvas and the
+lead frame at its stored **137, 144, 229, 248** dimensions. Because the
+captured PNG is 2×, its reader rectangle/crop is exactly those dimensions ×2,
+not a separate mapping approximation. Focused e-paper tests pass **9/9**.
+
+---
+
+## 0zzg. Separate one-click web publishing from optional PDF e-paper release (2026-08-20)
+
+Implemented on the isolated, unmerged branch
+`codex/epaper-publish-workflow`. The main editor **Publish** control is now a
+single confirmation: it freezes the exact current canvas through
+`POST /api/newspapers/:id/publish-current`. It no longer presents Scribus,
+CMYK PDF, press-readiness or sign-off steps. Empty blocks are allowed, and a
+draft remains a draft; press production continues to have its own strict
+`final-files` / `publish` route for when it is actually needed.
+
+E-paper management now has the optional **Publish from a finished PDF** form.
+It lists the desk's editions, accepts a PDF, checks that its page count matches
+the edition, rasterises it into the same immutable release directory, and
+offers the original PDF from the public reader. This route is
+`POST /api/newspapers/:id/epaper/pdf`; it intentionally bypasses press
+readiness but never writes `print_pdf` or changes the paper's press status.
+Instead it stores a distinct `publication_files.file_type = 'epaper_pdf'` and
+marks the frozen manifest/row source `uploaded_pdf`. `schema.sql` migrates the
+existing check constraint, and the local database received that migration.
+
+Both current-canvas and PDF releases use the exact same saved normalized
+editorial-block rectangles from `epaper.buildEdition()` for reader click maps
+and story-image crops. There is no PDF-only remapper that could drift from the
+editor geometry. Therefore a finished PDF exported from the same saved layout
+has the precise page image the designer approved and each populated news block
+retains its own page rectangle. Adverts, Smart Cards and standing features
+remain intentionally non-clickable.
+
+Verification: focused e-paper/publication/production suites passed **17/17**,
+including a new draft PDF release proof that verifies its source, public PDF,
+unchanged draft status and equality of all frozen/live block rectangles.
+
+---
+
+## 0zzf. Current-editor e-paper publishing and single public selection (2026-08-20)
+
+Implemented on the isolated, unmerged branch
+`codex/epaper-selection-current-publish`, on top of the preceding e-paper
+branch. The press-final path remains strict: a CMYK PDF and press readiness
+are still required for `POST /api/newspapers/:id/publish`. A second explicit
+path, `POST /api/newspapers/:id/publish-current`, freezes the current editable
+page geometry through local headless Chrome and creates the same immutable
+page/story PNG release without pretending the edition is ready for press. It
+uses the source label `editor_snapshot`, does not create a PDF download, and
+does not change the newspaper's editorial/press status. `EPAPER_CHROME_BIN`
+may override the default `/usr/bin/google-chrome`.
+
+This deliberately corrected an early modelling mistake before it escaped into
+the UI: the radio-selected public e-paper cannot reuse `newspapers.status`.
+`epaper_released_at`, `epaper_selected`, and `epaper_source` now carry the web
+release state, and a partial unique index guarantees exactly one selected
+public issue. `schema.sql` contains guarded backfill for the old published
+rows; the local SAHAS database received the same non-destructive migration.
+Deleting a generated e-paper now clears only those e-paper fields and files,
+never changes a draft/finalised/press state.
+
+The owner-facing E-paper screen is now a responsive searchable list rather
+than a card gallery. Every row has a radio button, private Preview, optional
+PDF and Delete. The checked row is exposed through the one safe canonical URL,
+`/epaper`; the URL has no edition ID, login state, token or write capability.
+Owner previews and the release list remain desk-only. Public requests can read
+only the checked issue and its manifest-listed PNG/PDF assets; a signed-in desk
+can preview the other private releases. The newest newsroom publication date
+becomes the default selected issue (or the first release when no selection
+exists), so planned/test dates do not depend on the host machine clock.
+
+Verification: focused `epaper`, `epaperPublication`, and `production` suites
+passed **15/15**. The current-editor test proves a draft can release without a
+PDF and remains `draft`. A real Chrome render against the existing 4-page
+edition 13742 (`मंगळवार, १ सप्टेंबर २०९९`) produced four 1320×2120 PNGs without
+publishing or changing that edition. The temporary render was removed.
+
+Follow-up live release: the desk then requested that exact edition be
+published even with remaining empty blocks. `publishCurrentEdition(13742)`
+succeeded with **4 pages / 33 story cards**, source `editor_snapshot`, selected
+`true`, and newspaper status still `draft`. The stale Node server was restarted
+on this branch; anonymous `GET /epaper` and its selected page-one PNG both
+returned 200.
+
+Correction after visual review: the first current-editor implementation was a
+separate simplified HTML re-typeset and therefore visibly unlike the approved
+newspaper. It was replaced on child branch `codex/epaper-exact-canvas` by a
+one-use local Chrome capture of `public/editor/canvas/canvas.js` in the existing
+`print-view` mode. The generated page exactly carries the canvas masthead,
+page furniture, image transforms, flow, rules, typography and structured
+blocks; there is no second news-page renderer. Edition 13742 was republished
+with this exact four-page capture and its public page-one PNG was visually
+checked against the editor canvas.
+
+---
+
+## 0zze. Public e-paper release, mobile reader and archive (2026-08-20)
+
+Implemented on the isolated, unmerged branch `codex/epaper-public-reader` at
+the user's request. Publish is now a release boundary: it requires the shared
+press-readiness gate and final PDF, rasterises the accepted PDF at 180 DPI, and
+atomically creates an immutable public manifest, page PNGs and 1080 px branded
+story PNGs. The story image is cropped from the accepted page and carries the
+real SAHAS nameplate, so sharing no longer depends on a blurry phone
+screenshot. Adverts, features and Smart Cards are excluded; this pass touches
+editorial news blocks only.
+
+Anonymous readers can see only a newspaper explicitly marked `published`.
+Reader HTML/JSON, generated PNG assets and the whole-PDF download each repeat
+that gate; direct generated-asset URLs cannot bypass it. Republishing swaps a
+complete new snapshot into place. Removing an e-paper hides it first and
+deletes only generated derivatives, preserving the newsroom edition and final
+PDF record.
+
+The public UI is mobile-first: sticky top page numbers, previous/next controls,
+horizontal touch swipe, clickable story rectangles over the exact page image,
+a full-screen phone story dialog, visible searchable story text, and PNG/share
+actions for the system share sheet, WhatsApp Status/Send, Instagram
+Story/Post, Facebook Story/Post, X, LinkedIn and email. The whole-paper PDF is
+available from the header. The public archive is newest-publication first and
+searchable.
+
+The admin sidebar now places E-paper directly below Settings. Its management
+screen shows the public archive, search, view/PDF actions and an explicit
+“Delete public copy” action whose confirmation says the newsroom edition and
+PDF are retained. The workspace Publish dialog now presents the real three
+steps: pass pages, upload final PDF, build/release e-paper.
+
+Verification used press-ready fixture edition 37673 without changing its
+content: a temporary one-page PDF was rasterised by the real `/usr/bin/pdftoppm`
+path into 1 page and 10 story cards, the reader/archive/admin were exercised in
+Chromium at phone and desktop sizes, a synthetic second page proved button and
+touch-swipe navigation, and the opened story card reported a natural width of
+1080 px with zero console errors. Delete-public-copy returned reader and direct
+PNG requests to 404 while retaining the final-PDF database record; the fixture
+was restored to `finalised` and all temporary public files were removed.
+Screenshots are in `/tmp/sahas-epaper-verification/`.
+
+Automated verification: focused e-paper/publication/production tests **14/14
+pass**; final repository suite **870/870 pass** after the published-only PDF
+route and Smart Card exclusion.
+
+---
+
 ## 0zzd. Release gate — SAHAS original 11-problem v1 closed (2026-08-17)
 
 The original 11 problems this repair project set out to close are all PASS,

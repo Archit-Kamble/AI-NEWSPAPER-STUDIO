@@ -1,5 +1,6 @@
 import { renderWorkspace } from "./editor/workspace.js";
 import { renderEditions } from "./admin/editions.js";
+import { renderEpapers } from "./admin/epapers.js";
 import { escapeHtml } from "./editor/format.js";
 
 const app = document.getElementById("app");
@@ -269,6 +270,7 @@ async function renderAdminDashboard() {
           <button class="sidebar-btn" id="pastNewsBtn">Past News</button>
           <button class="sidebar-btn" id="reportersBtn">Reporters</button>
           <button class="sidebar-btn" id="settingsBtn">Settings</button>
+          <button class="sidebar-btn" id="epaperBtn">E-paper</button>
           <button class="sidebar-btn logout" id="logoutBtn2">Logout</button>
         </aside>
         <main class="content" id="content"></main>
@@ -304,6 +306,12 @@ async function renderAdminDashboard() {
   document
     .getElementById("settingsBtn")
     .addEventListener("click", goDashboard(showSettings));
+  document
+    .getElementById("epaperBtn")
+    .addEventListener("click", goDashboard(() => renderEpapers(
+      document.getElementById("content"),
+      { rightPanel: document.getElementById("rightPanel") },
+    )));
 
   showPastNewspapers();
 }

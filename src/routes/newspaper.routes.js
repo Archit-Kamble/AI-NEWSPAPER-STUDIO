@@ -50,7 +50,15 @@ router.post('/:id/district-editions', newspaperController.createDistrictEdition)
 router.get('/:id/district-editions', requireDesk, newspaperController.listDistrictEditions);
 router.get('/:id/printed-pages', requireDesk, newspaperController.printedPages);
 
-router.get('/:id/epaper', newspaperController.epaper);
+// The owner list/preview is desk-only. The public site has one canonical
+// selected issue at /epaper, not an enumerable id route.
+router.get('/:id/epaper', requireDesk, newspaperController.epaper);
+router.post('/:id/publish', newspaperController.publishEpaper);
+router.post('/:id/publish-current', newspaperController.publishCurrentEpaper);
+router.post('/:id/epaper/pdf', publicationUpload.single('printPdf'), newspaperController.publishUploadedEpaperPdf);
+router.patch('/:id/epaper/map', newspaperController.updateEpaperMap);
+router.post('/:id/epaper/select', newspaperController.selectEpaper);
+router.delete('/:id/epaper', newspaperController.unpublishEpaper);
 
 // GET is left open by deskWrites above (it guards writes only), so these five
 // - desk-internal production state, not the finished public edition - repeat

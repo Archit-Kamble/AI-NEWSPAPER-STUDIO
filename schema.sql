@@ -19,7 +19,13 @@ CREATE TABLE IF NOT EXISTS newspapers (
   color_mode VARCHAR(10) NOT NULL DEFAULT 'CMYK',
   created_by INTEGER REFERENCES users(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  -- E-paper publication is a separate public-web decision.  It must never
+  -- turn a draft into a press-published newspaper merely because the desk
+  -- wants to share the current editor proof.
+  epaper_released_at TIMESTAMPTZ,
+  epaper_selected BOOLEAN NOT NULL DEFAULT FALSE,
+  epaper_source VARCHAR(30)
 );
 
 ALTER TABLE newspapers ADD COLUMN IF NOT EXISTS publication_date DATE NOT NULL DEFAULT CURRENT_DATE;
@@ -29,6 +35,30 @@ ALTER TABLE newspapers ADD COLUMN IF NOT EXISTS matter_width_px INTEGER NOT NULL
 ALTER TABLE newspapers ADD COLUMN IF NOT EXISTS matter_height_px INTEGER NOT NULL DEFAULT 1020;
 ALTER TABLE newspapers ADD COLUMN IF NOT EXISTS color_mode VARCHAR(10) NOT NULL DEFAULT 'CMYK';
 ALTER TABLE newspapers ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE newspapers ADD COLUMN IF NOT EXISTS epaper_released_at TIMESTAMPTZ;
+ALTER TABLE newspapers ADD COLUMN IF NOT EXISTS epaper_selected BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE newspapers ADD COLUMN IF NOT EXISTS epaper_source VARCHAR(30);
+-- Existing press-published editions from before the e-paper fields existed
+-- remain available after the migration.  The guarded backfill never changes
+-- an edition a desk has already explicitly released.
+UPDATE newspapers
+   SET epaper_released_at = COALESCE(epaper_released_at, updated_at),
+       epaper_selected = FALSE,
+       epaper_source = COALESCE(epaper_source, 'press_pdf')
+ WHERE status = 'published' AND epaper_released_at IS NULL;
+UPDATE newspapers
+   SET epaper_selected = TRUE
+ WHERE id = (
+   SELECT id FROM newspapers
+    WHERE status = 'published' AND epaper_released_at IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM newspapers WHERE epaper_selected = TRUE)
+    ORDER BY epaper_released_at DESC, id DESC
+    LIMIT 1
+ );
+-- The public endpoint deliberately has one canonical issue.  A partial
+-- unique index makes that invariant true even for a direct SQL caller.
+CREATE UNIQUE INDEX IF NOT EXISTS newspapers_one_selected_epaper_idx
+  ON newspapers ((epaper_selected)) WHERE epaper_selected;
 
 CREATE TABLE IF NOT EXISTS news_items (
   id SERIAL PRIMARY KEY,
@@ -264,11 +294,19 @@ CREATE TABLE IF NOT EXISTS section_images (
 CREATE TABLE IF NOT EXISTS publication_files (
   id SERIAL PRIMARY KEY,
   newspaper_id INTEGER NOT NULL REFERENCES newspapers(id) ON DELETE CASCADE,
-  file_type VARCHAR(30) NOT NULL CHECK (file_type IN ('scribus_project', 'print_pdf')),
+  file_type VARCHAR(30) NOT NULL CHECK (file_type IN ('scribus_project', 'print_pdf', 'epaper_pdf')),
   storage_path VARCHAR(1000) NOT NULL,
   uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- A web PDF is deliberately a third artifact: it may be uploaded before
+-- press sign-off, so it must never be stored as the CMYK print PDF merely to
+-- make e-paper publication work. Rebuild the original named check safely for
+-- databases created before this artifact existed.
+ALTER TABLE publication_files DROP CONSTRAINT IF EXISTS publication_files_file_type_check;
+ALTER TABLE publication_files ADD CONSTRAINT publication_files_file_type_check
+  CHECK (file_type IN ('scribus_project', 'print_pdf', 'epaper_pdf'));
 
 CREATE TABLE IF NOT EXISTS edition_history (
   id SERIAL PRIMARY KEY,

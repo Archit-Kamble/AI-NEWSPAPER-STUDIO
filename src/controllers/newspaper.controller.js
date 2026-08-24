@@ -2,6 +2,8 @@ const newspaperService = require('../services/newspaper.service');
 const editionStartService = require('../services/editionStart.service');
 const districtEditionService = require('../services/districtEdition.service');
 const epaperService = require('../services/epaper.service');
+const epaperPublicationService = require('../services/epaperPublication.service');
+const epaperCanvasCapture = require('../services/epaperCanvasRender.service');
 const preflightService = require('../services/preflight.service');
 const worklistService = require('../services/worklist.service');
 const signoffService = require('../services/signoff.service');
@@ -13,6 +15,9 @@ const { ladderFor, getSupportedEditionPageCounts } = require('../layout/ladder')
 const editionResizeService = require('../services/editionResize.service');
 const compositionWorkflow = require('../services/editionCompositionWorkflow.service');
 const pressReadiness = require('../services/pressReadiness.service');
+const { currentUser, DESK_ROLES } = require('../middleware/auth');
+
+const isDesk = (req) => DESK_ROLES.includes(currentUser(req)?.role);
 
 async function create(req, res) {
   const newspaper = await newspaperService.createNewspaper(req.body, req.session.user);
@@ -95,15 +100,115 @@ async function printedPages(req, res) {
 }
 
 async function epaper(req, res) {
-  const edition = await epaperService.buildEdition(parseInt(req.params.id, 10));
-  if (!edition) return res.status(404).json({ error: 'No such edition.' });
+  const edition = await epaperService.readRelease(parseInt(req.params.id, 10));
+  if (!edition) return res.status(404).json({ error: 'No released e-paper.' });
   res.json(edition);
 }
 
 async function epaperHtml(req, res) {
-  const edition = await epaperService.buildEdition(parseInt(req.params.id, 10));
-  if (!edition) return res.status(404).type('html').send('<h1>No such edition.</h1>');
+  const edition = await epaperService.loadPublishedEdition(parseInt(req.params.id, 10));
+  if (!edition) return res.status(404).type('html').send('<h1>This edition has not been published.</h1>');
   res.type('html').send(epaperService.renderHtml(edition));
+}
+
+async function selectedEpaperHtml(req, res) {
+  const edition = await epaperService.loadSelectedEdition();
+  if (!edition) return res.status(404).type('html').send('<h1>No e-paper has been selected for public viewing.</h1>');
+  res.type('html').send(epaperService.renderHtml(edition));
+}
+
+async function epaperPreviewHtml(req, res) {
+  const edition = await epaperService.readRelease(parseInt(req.params.id, 10));
+  if (!edition) return res.status(404).type('html').send('<h1>This e-paper is unavailable.</h1>');
+  res.type('html').send(epaperService.renderHtml(edition));
+}
+
+// Chrome receives this only while producing a current-editor PNG. The random
+// payload token is one-use and expires in two minutes; it grants no session or
+// write action and cannot be used as a public e-paper URL.
+async function epaperCanvasCaptureHtml(req, res) {
+  const payload = epaperCanvasCapture.takeCanvasCapture(req.params.token);
+  if (!payload) return res.status(404).type('html').send('<h1>Capture expired.</h1>');
+  res.type('html').send(epaperCanvasCapture.canvasCaptureHtml(payload));
+}
+
+async function epaperList(req, res) {
+  res.json(await epaperService.listReleasedEditions());
+}
+
+async function selectEpaper(req, res) {
+  const edition = await epaperService.selectReleasedEdition(parseInt(req.params.id, 10));
+  if (!edition) return res.status(404).json({ error: 'No released e-paper exists for that edition.' });
+  res.json({ ok: true, id: Number(req.params.id), publicUrl: '/epaper' });
+}
+
+async function epaperAsset(req, res) {
+  const asset = await epaperService.releasedAsset(parseInt(req.params.id, 10), req.params.filename, { includePrivate: isDesk(req) });
+  if (!asset) return res.status(404).end();
+  res.set('Cache-Control', 'public, max-age=86400, immutable');
+  res.sendFile(asset);
+}
+
+async function epaperPdf(req, res) {
+  const pdf = await epaperService.releasedPdf(parseInt(req.params.id, 10), { includePrivate: isDesk(req) });
+  if (!pdf) return res.status(404).end();
+  res.download(pdf.file, pdf.name);
+}
+
+async function publishEpaper(req, res) {
+  const result = await epaperPublicationService.publishEdition(
+    parseInt(req.params.id, 10),
+    req.session.user,
+  );
+  if (result.ok) return res.json(result);
+  const status = result.code === 'EPAPER_NOT_FOUND' ? 404
+    : result.code === 'PRESS_NOT_READY' || result.code === 'EPAPER_PAGE_COUNT_MISMATCH' ? 409
+      : 400;
+  res.status(status).json(result);
+}
+
+async function publishCurrentEpaper(req, res) {
+  const result = await epaperPublicationService.publishCurrentEdition(
+    parseInt(req.params.id, 10),
+    req.session.user,
+  );
+  if (result.ok) return res.json(result);
+  const status = result.code === 'EPAPER_NOT_FOUND' ? 404 : 400;
+  res.status(status).json(result);
+}
+
+async function publishUploadedEpaperPdf(req, res) {
+  const result = await epaperPublicationService.publishUploadedPdfEdition(
+    parseInt(req.params.id, 10),
+    req.file,
+    req.session.user,
+  );
+  if (result.ok) return res.json(result);
+  const status = result.code === 'EPAPER_NOT_FOUND' ? 404
+    : result.code === 'EPAPER_PAGE_COUNT_MISMATCH' ? 409
+      : 400;
+  res.status(status).json(result);
+}
+
+// A released PDF is an image authority, while its story rectangles are a
+// desk-owned overlay. This deliberately changes only the frozen release
+// manifest and regenerated share crops, never the live newsroom page.
+async function updateEpaperMap(req, res) {
+  const result = await epaperPublicationService.updateEpaperMap(
+    parseInt(req.params.id, 10),
+    req.body || {},
+  );
+  if (result.ok) return res.json(result);
+  const status = result.code === 'EPAPER_NOT_FOUND' || result.code === 'EPAPER_PAGE_NOT_FOUND' ? 404
+    : result.code === 'EPAPER_MAP_STALE' ? 409
+      : 400;
+  res.status(status).json(result);
+}
+
+async function unpublishEpaper(req, res) {
+  const result = await epaperPublicationService.unpublishEdition(parseInt(req.params.id, 10));
+  if (!result.ok) return res.status(result.code === 'EPAPER_NOT_FOUND' ? 404 : 400).json(result);
+  res.json(result);
 }
 
 // Preflight: everything that must be true before a page reaches the plate.
@@ -222,6 +327,8 @@ async function pressPackage(req, res) {
 module.exports = {
   create, start, resize, ladder, supportedPageCounts, list, latest, getOne, update, saveFinalFiles,
   createDistrictEdition, listDistrictEditions, printedPages,
-  epaper, epaperHtml, preflight, worklist, status, history, features, compositionPlan, compositionApply,
+  epaper, epaperHtml, selectedEpaperHtml, epaperPreviewHtml, epaperCanvasCaptureHtml, epaperList, selectEpaper,
+  epaperAsset, epaperPdf, publishEpaper, publishCurrentEpaper, publishUploadedEpaperPdf, updateEpaperMap, unpublishEpaper,
+  preflight, worklist, status, history, features, compositionPlan, compositionApply,
   scribus, pressPackage,
 };

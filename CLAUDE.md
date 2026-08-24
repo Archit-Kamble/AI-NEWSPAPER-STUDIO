@@ -49,7 +49,7 @@ app.use("/api/features",   deskWrites,    src/routes/feature.routes.js)
 app.use("/api",            deskWrites,    src/routes/page.routes.js)
 ```
 
-Those go Route → Controller (`src/controllers/*.controller.js`) → Service (`src/services/*.service.js`) → Repository (`src/repositories/*.repository.js`) → PostgreSQL, which is the target shape. All still-inline `server.js` routes are stateless lookups with no database access at all — `/api/templates`, `/api/geometry`, `/api/identity`, `/api/ai/status`, `/api/health` — plus `/api/uploads/images` (multer only, no business logic) and `/epaper/:id` (delegates straight to `newspaperController.epaperHtml`, kept in `server.js` only because it sits outside the `/api/newspapers` mount path). There is no more `src/db.js` — it held only `authenticateUser`, a duplicate of `user.repository.js` plus a bcrypt check; that logic now lives in `auth.service.js` and the file was deleted rather than kept as a second copy.
+Those go Route → Controller (`src/controllers/*.controller.js`) → Service (`src/services/*.service.js`) → Repository (`src/repositories/*.repository.js`) → PostgreSQL, which is the target shape. All still-inline `server.js` routes are stateless lookups with no database access at all — `/api/templates`, `/api/geometry`, `/api/identity`, `/api/ai/status`, `/api/health` — plus `/api/uploads/images` (multer only, no business logic) and public `/epaper` routes (delegating straight to `newspaperController` because they sit outside the `/api/newspapers` mount path). There is no more `src/db.js` — it held only `authenticateUser`, a duplicate of `user.repository.js` plus a bcrypt check; that logic now lives in `auth.service.js` and the file was deleted rather than kept as a second copy.
 
 **Section production actions are addressed by `sectionKey` (e.g. `"lead"`), not a numeric id** — `write`, `fill`, `carry-over`, `reunite`, `fit` and `rate` all live in `pageSection.controller.js`/`pageSection.service.js` alongside the numeric-id section CRUD (`update`/`create`/`remove`/`move`), because `pageSection.service.js` already addressed sections by key internally (`saveSection(pageId, sectionKey, ...)`) — there was no real domain boundary to justify a separate controller. Page-level actions (`colour`, `state`) live in `page.controller.js` instead, next to `create`/`list`/`update`, matching how they're addressed (by `pageId` alone).
 
@@ -79,6 +79,128 @@ Starting an edition also:
 - **fills the standing daily features** for the edition's own date.
 
 Asking for more pages adds them at their proper rung. Asking for fewer never removes a page — there may be work on it.
+
+### Publishing the public e-paper
+
+The newsroom edition is mutable; a released web issue is not. E-paper release
+is deliberately separate from an edition's editorial/press `status`: a current
+editor proof must never make a draft look press-final. `newspapers` therefore
+carries `epaper_released_at`, `epaper_selected`, and `epaper_source`, with a
+partial unique index enforcing exactly one selected public issue.
+
+There are two release paths, both writing the same immutable manifest and
+page/story PNGs under `public/uploads/epaper/:id/` atomically:
+
+- `POST /api/newspapers/:id/publish` is **press-final**. It requires central
+  press readiness and the accepted CMYK PDF, then rasterises that PDF at 180
+  DPI. The final PDF is the visual authority and remains the whole-paper
+  download.
+- `POST /api/newspapers/:id/publish-current` is a clearly labelled **current
+  editor web proof**. It requires neither Scribus nor PDF/sign-off, renders the
+  exact current canvas in its existing print-view mode with local Chrome
+  (`EPAPER_CHROME_BIN` overrides `/usr/bin/google-chrome`), and never changes
+  the edition's press status. It must never reconstruct stories through a
+  second text-layout implementation: page furniture, typography, flow around
+  images, Smart Cards, rules and marks are all the same browser canvas the
+  desk approved.
+
+  Chrome receives a one-use random local capture URL containing one frozen
+  page payload. It expires in two minutes and carries no session or write
+  permission; it is not a public reader route. This is how the normal canvas
+  can be captured without making raw editor APIs public.
+
+The workspace **Publish** button means only the second route. It is one
+confirmation and must not show or gate on Scribus, CMYK PDF, press readiness
+or page sign-off; empty blocks are valid for a web release. The press-final
+route remains available to press production elsewhere, but it is not the
+editor's daily public-publish action.
+
+`POST /api/newspapers/:id/epaper/pdf` is the optional finished-PDF web release
+route exposed from the desk-only E-paper management screen. It needs an
+edition-matching page count but not press readiness. Its upload is stored as
+`publication_files.file_type = 'epaper_pdf'`, not `print_pdf`, so it cannot
+misrepresent an unapproved web PDF as a CMYK press artifact or change the
+edition's press status. The frozen source is `uploaded_pdf`, and the public
+download route reads that exact e-paper PDF. The old publication-files check
+constraint must include `epaper_pdf`; the guarded migration is in
+`schema.sql` and must be applied manually because the schema never runs at
+boot.
+
+Later newsroom edits cannot alter either release. Story cards are 1080 px PNG
+crops with the real masthead composed above them. Only editorial news blocks
+are clickable; adverts, features and Smart Cards are deliberately outside this
+release pass.
+
+**There is one initial e-paper mapping source, plus an explicit released-map
+adjustment.** `epaper.buildEdition()` derives every populated editorial block's
+percentage rectangle from its saved page geometry. Exact-canvas releases freeze
+that geometry unchanged. A finished PDF exported from that same layout also
+starts from it, and the page-count check prevents attaching a different edition
+by accident.
+
+An externally designed uploaded PDF can legitimately need different story
+rectangles. The desk-only **Map blocks** tool is the sole exception: it edits
+the immutable release's own manifest, not `page_sections`, by moving/resizing
+or adding/deleting overlays in page X/Y/width/height coordinates. On save,
+`PATCH /api/newspapers/:id/epaper/map` validates a complete page map,
+regenerates that page's branded story PNGs and atomically swaps the release
+directory. Existing frozen story text is retained; manual blocks must have a
+title. A `mapRevision` prevents two open map editors from silently overwriting
+one another. Never infer a second map automatically from PDF text or silently
+alter a live layout — this explicit operator adjustment is the durable boundary.
+
+For the exact current-canvas path, that rule also bans **editor Fit scale**.
+`renderCanvas()` has a ResizeObserver that can reapply its normal fit-to-dock
+transform after initial render. In the e-paper capture viewport this is 0.927
+(660 px minus Fit's 48 px padding), which creates an image/map mismatch even
+when all stored block coordinates are correct. The capture stylesheet owns
+`.newspaper-canvas { transform:none!important }`; do not weaken it. This makes
+the screenshot's 660×1060 CSS page and every `page_sections` rectangle the same
+coordinate plane (the PNG is simply 2×). `tests/epaper.test.js` protects the
+rule.
+
+The owner E-paper screen (`/api/epapers`, desk-only) is a searchable release
+list with a radio button. Its checked row is the only public release. The safe
+share link is always the canonical, ID-free `GET /epaper`; it has no session,
+token or write authority. Owner previews use `GET /epaper/preview/:id` and
+remain desk-only. A current-date release is selected by default (or the first
+release when none is selected); other releases remain private until the owner
+chooses their radio button. “Current day” follows the newsroom’s newest
+publication date, rather than trusting the host machine clock (important for
+planned/test editions).
+
+Its optional PDF publisher uses a date picker plus searchable edition results,
+not an opaque Edition dropdown. Search indexes Marathi and English dates and
+normalises Devanagari digits (`15 Aug 2099` therefore finds `१५ ऑगस्ट २०९९`).
+Every release row has **Map blocks**, including private releases, because map
+adjustment is a desk action and never exposed to the public reader.
+
+Public access is gated in three places:
+
+- `GET /epaper` loads only the frozen manifest of the selected radio issue;
+- an ID route can load a release publicly only when it is that same selected
+  issue; owner previews are separately desk-gated;
+- generated `/uploads/epaper/:id/*.png` files are intercepted before general
+  static serving and checked against the selection plus the manifest's asset
+  list (a signed-in desk may read a private release for preview);
+- the whole-paper download uses `GET /epaper/:id/pdf`, which performs the same
+  status check instead of exposing the raw upload URL in public markup.
+
+The public reader header intentionally carries the real SAHAS nameplate plus a
+cropped lion mark and does **not** carry an “All editions” navigation control.
+Sharing is constrained by the receiving platforms: WhatsApp Send and Facebook
+web share can open their own URLs directly; a website cannot post into WhatsApp
+Status, Instagram Story/Post or Facebook Story, nor select an app inside the
+OS share sheet. Those buttons must use `navigator.share()` with the generated
+PNG when available, then offer the honest desktop fallback: download the PNG
+and open the destination’s web app. Never report that a story/status was
+published merely because the handoff succeeded.
+
+`DELETE /api/newspapers/:id/epaper` means **remove the public copy**, not delete
+the newsroom edition: it hides the issue first, removes only generated
+derivatives, leaves the final-PDF record intact and leaves the editorial/press
+status untouched. Release rows come from frozen manifests and are sorted by
+their publication/republish time, newest first.
 
 ### Type sizes are derived, and fractional
 

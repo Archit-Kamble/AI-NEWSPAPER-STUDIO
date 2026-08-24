@@ -1,52 +1,50 @@
+// The toolbar's Publish action is deliberately one newsroom decision: freeze
+// what the editor can see now. Press files are a separate production concern;
+// optional PDF e-paper releases live in E-paper management.
 export async function showPublicationFiles(newspaperId) {
-  const [newspaper, status] = await Promise.all([
-    fetch(`/api/newspapers/${newspaperId}`).then((r) => r.json()),
-    fetch(`/api/newspapers/${newspaperId}/status`).then((r) => r.json()).catch(() => ({ readyForPress: false })),
-  ]);
-  const modalRoot = document.getElementById("modalRoot");
+  const newspaper = await fetch(`/api/newspapers/${newspaperId}`).then((response) => response.json());
+  const modalRoot = document.getElementById('modalRoot');
   if (!modalRoot) return;
 
-  modalRoot.classList.add("open");
+  const selectedPublic = newspaper.epaperSelected === true || newspaper.epaper_selected === true;
+  const released = Boolean(newspaper.epaperReleasedAt || newspaper.epaper_released_at);
+  modalRoot.classList.add('open');
   modalRoot.innerHTML = `
     <div class="modal-backdrop" id="publishBackdrop"></div>
-    <div class="modal-dialog">
+    <div class="modal-dialog publication-dialog publication-confirmation">
       <button class="modal-close" id="closePublish">&times;</button>
-      <h3>Scribus final touch-up</h3>
-      <p class="muted">After finishing the page in Scribus, upload the editable .sla project and the CMYK print PDF here.</p>
-      ${status.readyForPress ? '<p><strong>Ready for press.</strong></p>' : `<p><strong>Not ready for press.</strong> ${status.readiness?.counts?.needsReview || 0} blocks need review; ${status.readiness?.counts?.pagesNotPassed || 0} pages are not passed.</p>`}
-      ${newspaper.scribusFile ? `<p><a href="${newspaper.scribusFile}" download>Download saved Scribus project</a></p>` : ""}
-      ${newspaper.printPdf ? `<p><a href="${newspaper.printPdf}" target="_blank">View final CMYK PDF</a></p>` : ""}
-      <div class="form-group"><label>Scribus project (.sla)</label><input id="scribusFile" type="file" accept=".sla" /></div>
-      <div class="form-group"><label>Final print PDF (CMYK)</label><input id="printPdf" type="file" accept="application/pdf,.pdf" /></div>
-      <button class="btn-submit" id="uploadPublication" ${status.readyForPress ? '' : 'disabled'}>Save final files</button>
+      <p class="publication-kicker">E-paper</p>
+      <h3>${released ? 'Publish this updated newspaper?' : 'Publish this newspaper?'}</h3>
+      <p>This freezes the pages exactly as they look in the editor now and releases them as the public e-paper.</p>
+      <p class="muted">Empty news blocks stay empty. Publishing does not require a PDF, Scribus project, page sign-off, or a press-ready edition.</p>
+      ${selectedPublic ? '<p class="muted">This is already the public issue. Publishing replaces its frozen pages with this editor version.</p>' : ''}
+      <div class="publication-actions">
+        <button class="btn-secondary" type="button" id="cancelPublish">Cancel</button>
+        <button class="btn-submit" type="button" id="confirmPublish">${released ? 'Publish update' : 'Publish e-paper'}</button>
+      </div>
     </div>
   `;
 
   const close = () => {
-    modalRoot.classList.remove("open");
-    modalRoot.innerHTML = "";
+    modalRoot.classList.remove('open');
+    modalRoot.innerHTML = '';
   };
-  document.getElementById("publishBackdrop").addEventListener("click", close);
-  document.getElementById("closePublish").addEventListener("click", close);
+  document.getElementById('publishBackdrop')?.addEventListener('click', close);
+  document.getElementById('closePublish')?.addEventListener('click', close);
+  document.getElementById('cancelPublish')?.addEventListener('click', close);
 
-  document
-    .getElementById("uploadPublication")
-    .addEventListener("click", async () => {
-      const formData = new FormData();
-      const scribusFile = document.getElementById("scribusFile").files[0];
-      const printPdf = document.getElementById("printPdf").files[0];
-      if (scribusFile) formData.append("scribusFile", scribusFile);
-      if (printPdf) formData.append("printPdf", printPdf);
-      if (!scribusFile && !printPdf)
-        return alert("Choose a Scribus .sla file or final PDF.");
-      const response = await fetch(
-        `/api/newspapers/${newspaperId}/final-files`,
-        { method: "POST", body: formData },
-      );
-      const result = await response.json();
-      if (!response.ok)
-        return alert(result.code === 'PRESS_NOT_READY' ? 'Not ready for press. Clear review and page-signoff blockers first.' : result.error || "Could not upload final files.");
-      alert("Final files saved.");
-      showPublicationFiles(newspaperId);
-    });
+  document.getElementById('confirmPublish')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    button.textContent = 'Freezing pages…';
+    const response = await fetch(`/api/newspapers/${newspaperId}/publish-current`, { method: 'POST' });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      button.disabled = false;
+      button.textContent = released ? 'Publish update' : 'Publish e-paper';
+      return alert(result.error || 'The current editor view could not be published.');
+    }
+    alert(`Published ${result.pages} pages and mapped ${result.stories} news blocks.${result.selected ? ' It is now the public e-paper.' : ''}`);
+    close();
+  });
 }

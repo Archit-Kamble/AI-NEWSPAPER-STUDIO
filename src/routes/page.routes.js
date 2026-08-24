@@ -18,6 +18,9 @@ router.post('/newspapers/:newspaperId/pages', pageController.create);
 router.get('/newspapers/:newspaperId/pages', requireDesk, pageController.list);
 router.patch('/pages/:pageId', pageController.update);
 router.patch('/pages/:pageId/colour', pageController.colour);
+// Pictures laid on the PAGE, across block boundaries. A write, so it is
+// covered by the router's deskWrites - but the read is the page itself.
+router.patch('/pages/:pageId/overlays', pageController.overlays);
 router.patch('/pages/:pageId/state', pageController.state);
 router.post('/test-fixtures/pages/:pageId/reapply-template-geometry', pageController.reapplyFixtureGeometry);
 router.post('/pages/:pageId/repair-structural-frames', pageController.repairStructuralFrames);

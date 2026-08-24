@@ -712,3 +712,16 @@ UPDATE page_sections SET drop_cap_lines = 3 WHERE drop_cap = TRUE AND drop_cap_l
 -- reader and sanitiser; the compositor sees each one as a plain rectangle in
 -- its obstacle set, exactly as it sees a photograph.
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS inset_panels JSONB;
+
+-- A picture placed on the PAGE rather than in a story, so it can cross block
+-- boundaries. `.newspaper-section` is `overflow: hidden` and must stay so
+-- (overset copy may not spill onto the next story), which means a picture
+-- belonging to a block can never be seen outside it whatever coordinates it
+-- is given - so a photograph spanning two stories is a fact about the page,
+-- exactly as a column rule is a fact about a pair of blocks.
+--
+-- [{ id, url, x, y, width, height, z, standOffPx, fitMode, caption }] in PAGE
+-- pixels. public/editor/layout/page-overlays.js is the one reader; every block
+-- the rectangle touches gains it as an obstacle in its own coordinates, and
+-- blocks it does not touch are unaffected.
+ALTER TABLE pages ADD COLUMN IF NOT EXISTS overlay_images JSONB;

@@ -136,7 +136,19 @@ async function hydrate(page, db = pool) {
     if (!bySection.has(image.page_section_id)) bySection.set(image.page_section_id, []);
     bySection.get(image.page_section_id).push(image);
   }
-  return { ...page, sections: sections.map((s) => ({ ...s, images: bySection.get(s.id) || [] })) };
+  // The page's own overlay pictures ride on every section, because that is
+  // where the compositor asks for them: obstaclesOf() takes a section and
+  // nothing else, and a block cannot be composed correctly without knowing
+  // what is laid over it. Carried by reference, not copied.
+  const overlays = Array.isArray(page.overlay_images) ? page.overlay_images : [];
+  return {
+    ...page,
+    sections: sections.map((s) => ({
+      ...s,
+      images: bySection.get(s.id) || [],
+      page_overlays: overlays,
+    })),
+  };
 }
 
 async function updateTemplate(pageId, templateKey) {
@@ -531,7 +543,17 @@ async function saveComposedStoryBatch(pageId, items = [], { tx } = {}) {
   return findById(pageId, { tx: client });
 }
 
+/** The page's overlay pictures, replaced wholesale. */
+async function setOverlays(pageId, overlays) {
+  const { rows } = await pool.query(
+    'UPDATE pages SET overlay_images = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *',
+    [pageId, JSON.stringify(overlays || [])],
+  );
+  return rows[0] ? hydrate(rows[0]) : null;
+}
+
 module.exports = {
+  setOverlays,
   create,
   createInTransaction,
   refreshFormes,

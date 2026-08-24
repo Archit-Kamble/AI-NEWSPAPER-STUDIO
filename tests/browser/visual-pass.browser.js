@@ -248,6 +248,39 @@ const say = (ok, what, detail = '') => {
   say(await page.locator('[data-prop-panel-add] [data-panel-add="note"]').count() > 0,
     'and Properties offers a control to make one');
 
+  // ---- a picture laid across two stories ---------------------------------
+  const overlay = await page.evaluate(() => {
+    const node = document.querySelector('.page-overlay');
+    if (!node) return null;
+    const box = node.getBoundingClientRect();
+    // Which blocks does it actually cross, and is any of their type under it?
+    const blocks = Array.from(document.querySelectorAll('.newspaper-section')).map((block) => {
+      const r = block.getBoundingClientRect();
+      const crosses = r.right > box.left && r.left < box.right && r.bottom > box.top && r.top < box.bottom;
+      const under = Array.from(block.querySelectorAll('.section-body-line')).filter((line) => {
+        const l = line.getBoundingClientRect();
+        return l.right > box.left + 1 && l.left < box.right - 1 && l.bottom > box.top + 1 && l.top < box.bottom - 1;
+      }).length;
+      return { key: block.dataset.sectionKey, crosses, under };
+    });
+    return { crossed: blocks.filter((b) => b.crosses).map((b) => b.key), under: blocks.reduce((n, b) => n + b.under, 0) };
+  });
+  say(Boolean(overlay), 'a picture is laid on the page', overlay ? overlay.crossed.join(' + ') : 'none placed');
+  if (overlay) {
+    say(overlay.crossed.length >= 2, 'and it crosses more than one block', overlay.crossed.join(' + '));
+    say(overlay.under === 0, 'and no story is set underneath it', `${overlay.under} lines`);
+    // It is a real object: selectable, and it carries resize handles.
+    await page.locator('.page-overlay').first().click();
+    await page.waitForTimeout(400);
+    const armed = await page.evaluate(() => {
+      const node = document.querySelector('.page-overlay');
+      return node ? { selected: node.classList.contains('is-selected'), handles: node.querySelectorAll('.overlay-handle').length } : null;
+    });
+    say(armed && armed.selected, 'it selects on a press');
+    say(armed && armed.handles === 4, 'and carries four resize handles', armed ? String(armed.handles) : '');
+    await page.locator('#canvasSurface').screenshot({ path: `${SHOTS}/canvas-overlay.png` }).catch(() => {});
+  }
+
   console.log(`\nERRORS: ${errors.length ? errors.join('\n  ') : '(none)'}`);
   say(errors.length === 0, 'no console or page errors');
   await putBack();

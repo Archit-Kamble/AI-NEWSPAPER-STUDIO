@@ -830,6 +830,29 @@ async function moveSection(sectionKey, rect) {
   store.replacePage(await response.json(), { structural: true });
 }
 
+/**
+ * A picture laid on the page, moved or resized.
+ *
+ * The whole overlay list goes back, because an overlay has no server-side id
+ * to address - the same reason inset panels are patched whole. Structural, and
+ * it has to be: the blocks the rectangle now touches (and the ones it has just
+ * stopped touching) must set their type again.
+ */
+async function moveOverlay(id, rect) {
+  const page = store.getCurrentPage();
+  if (!page) return;
+  const overlays = (Array.isArray(page.overlay_images) ? page.overlay_images : [])
+    .map((entry) => (String(entry.id) === String(id) ? { ...entry, ...rect } : entry));
+
+  const response = await fetch(`/api/pages/${page.id}/overlays`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ overlays }),
+  });
+  if (!response.ok) return showNotice("Could not move the picture.");
+  store.replacePage(await response.json(), { structural: true });
+}
+
 async function undo() {
   const result = history.undo();
   if (!result) return;
@@ -1672,6 +1695,7 @@ function renderPageArea() {
     onContinueInto: continueInto,
     onSectionAction,
     onMoveSection: moveSection,
+    onMoveOverlay: moveOverlay,
     guides: pageGuides,
     guidesVisible,
     onCreateGuide: createGuide,

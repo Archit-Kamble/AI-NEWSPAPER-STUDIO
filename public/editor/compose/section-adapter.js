@@ -30,6 +30,8 @@ import '../layout/borders.js';
 const { isBoxed, borderThicknessPx } = globalThis.SahasBorders;
 import '../layout/inset-panels.js';
 const { panelsOf, obstacleFromPanel } = globalThis.SahasInsetPanels;
+import '../layout/page-overlays.js';
+const { overlaysOf, overlayObstaclesFor } = globalThis.SahasPageOverlays;
 
 function pick(section, view, camel, snake, fallback) {
   for (const source of [view, section]) {
@@ -206,6 +208,15 @@ export function obstaclesOf(section) {
   // changes: fillRow, viableIntervals and the balancer all already run type
   // round rectangles, because that is what a photograph is to them.
   for (const panel of panelsOf(section)) out.push(obstacleFromPanel(panel));
+  // A picture placed on the PAGE that crosses into this block. It is the page's
+  // (layout/page-overlays.js explains why it cannot be the block's), but a
+  // block it overlaps still has to set its type clear of it - a photograph laid
+  // over a column without the column moving is a photograph printed on top of
+  // the news. Blocks the rectangle does not touch get nothing, which is the
+  // condition that keeps one overlay from reaching a story it does not cover.
+  out.push(...overlayObstaclesFor(section, overlaysOf({
+    overlay_images: section.page_overlays ?? section.pageOverlays,
+  })));
   return out;
 }
 

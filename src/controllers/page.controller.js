@@ -19,6 +19,12 @@ async function update(req, res) {
 
 // Which pages print in colour. Defaulted from the press forme, overridable,
 // and used to warn when a photograph is about to print grey.
+async function overlays(req, res) {
+  const page = await pageService.setOverlays(req.params.pageId, req.body?.overlays);
+  if (!page) return res.status(404).json({ error: 'No such page.' });
+  res.json(page);
+}
+
 async function colour(req, res) {
   const page = await pageService.setColour(req.params.pageId, req.body?.printsColour);
   if (!page) return res.status(404).json({ error: 'No such page.' });
@@ -49,4 +55,5 @@ async function repairStructuralFrames(req, res) {
   res.json(result);
 }
 
-module.exports = { create, list, update, colour, state, reapplyFixtureGeometry, repairStructuralFrames };
+module.exports = {
+  overlays, create, list, update, colour, state, reapplyFixtureGeometry, repairStructuralFrames };

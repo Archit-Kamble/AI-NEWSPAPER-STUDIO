@@ -30,6 +30,7 @@ const { strip } = require('../../layout/plain-text');
 const { captionBox, PLACED_CAPTION_METRICS } = require('../../../public/editor/layout/caption-geometry');
 const { borderEdges, borderWidthPx, isDouble } = require('../../../public/editor/layout/borders');
 const { panelsOf, panelLayout } = require('../../../public/editor/layout/inset-panels');
+const { overlaysOf } = require('../../../public/editor/layout/page-overlays');
 const { smartCardLines } = require('./smart-card-lines');
 
 /** Editor pixels to millimetres. The one conversion, stated once. */
@@ -651,6 +652,29 @@ async function buildPrintModel(newspaper, pages) {
     items.push(...folioItems(newspaper, page, geometry, identity));
     for (const section of page.sections || []) {
       items.push(...await blockItems(section));
+    }
+    // The page's own pictures go down AFTER the blocks, because that is what
+    // "laid over" means and every writer here paints in document order. The
+    // blocks have already set their type clear of them, so this is paint and
+    // not layout.
+    for (const overlay of overlaysOf(page)) {
+      items.push({
+        kind: 'image',
+        x: mm(overlay.x), y: mm(overlay.y),
+        width: mm(overlay.width), height: mm(overlay.height),
+        file: String(overlay.url).replace(/^\//, ''),
+        resolved: null, rotation: 0,
+      });
+      if (overlay.caption) {
+        items.push(textItem(
+          { x: mm(overlay.x), y: mm(overlay.y + overlay.height),
+            width: mm(overlay.width), height: mm(PLACED_CAPTION_METRICS.fontPx * PLACED_CAPTION_METRICS.lineHeight + 2) },
+          [run(overlay.caption, {
+            family: PLACED_CAPTION_METRICS.family, weight: PLACED_CAPTION_METRICS.weight,
+            fontPx: PLACED_CAPTION_METRICS.fontPx,
+          })],
+        ));
+      }
     }
     items.push(...footerItems(newspaper, page, geometry, identity));
     items.push(...registrationItems(geometry));

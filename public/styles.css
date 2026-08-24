@@ -5753,3 +5753,47 @@ body.print-view .page-imprint {
   padding: 3px 5px; border: 1px solid var(--line, #d0d0d6); border-radius: 3px;
 }
 .prop-panel-geometry { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+
+/* --- a picture laid on the page, across block boundaries ------------------
+   Above the blocks and below the editor's own chrome. The blocks underneath
+   have already set their type clear of it (section-adapter.js's obstaclesOf),
+   so this layer only paints. */
+.page-overlay-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.page-overlay {
+  position: absolute;
+  margin: 0;
+  pointer-events: auto;
+  cursor: move;
+  background: #fff;
+}
+.page-overlay > img { display: block; }
+.page-overlay > figcaption {
+  position: absolute;
+  left: 0; right: 0; top: 100%;
+  padding: 1px 2px;
+  font-family: "Sahas Sans", "Noto Sans Devanagari", Arial, sans-serif;
+  font-weight: 700;
+  font-size: 5.6px;
+  line-height: 1.45;
+  color: #333;
+  background: rgba(255, 255, 255, 0.9);
+}
+.page-overlay.is-selected { outline: 1px solid #c8102e; outline-offset: 1px; }
+
+.overlay-handle {
+  position: absolute;
+  width: 8px; height: 8px;
+  background: #fff;
+  border: 1px solid #c8102e;
+  display: none;
+  z-index: 2;
+}
+.page-overlay.is-selected .overlay-handle { display: block; }
+.overlay-handle-nw { left: -4px; top: -4px; cursor: nwse-resize; }
+.overlay-handle-ne { right: -4px; top: -4px; cursor: nesw-resize; }
+.overlay-handle-sw { left: -4px; bottom: -4px; cursor: nesw-resize; }
+.overlay-handle-se { right: -4px; bottom: -4px; cursor: nwse-resize; }

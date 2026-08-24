@@ -1,4 +1,5 @@
 const pageRepository = require('../repositories/page.repository');
+const { overlayOf } = require('../../public/editor/layout/page-overlays');
 const newspaperRepository = require('../repositories/newspaper.repository');
 const reviewInvalidation = require('./reviewInvalidation.service');
 
@@ -48,4 +49,28 @@ async function repairStructuralFrames(id) {
   return { ...repair, page: await pageRepository.findById(pageId) };
 }
 
-module.exports = { createPage, listPages, updatePage, setColour, reapplyFixtureGeometry, repairStructuralFrames };
+/**
+ * The pictures laid on this page, across block boundaries.
+ *
+ * Sanitised through the ONE overlay reader before anything reaches the column,
+ * so a direct API caller cannot store a rectangle the compositor would then
+ * have to defend itself against - the same boundary the ink palette and the
+ * inset panels already hold. A `javascript:` or `data:` url is refused there,
+ * which matters because this url is interpolated into an img src.
+ *
+ * The whole list every time: an overlay has no server-side id of its own, so
+ * "change this one" can only be expressed as "here is the new list". An empty
+ * array is how the last one is taken off.
+ */
+async function setOverlays(pageId, overlays) {
+  const page = await pageRepository.findById(pageId);
+  if (!page) return null;
+  const frame = { width: Number(page.page_width_px) || 0, height: Number(page.page_height_px) || 0 };
+  const clean = (Array.isArray(overlays) ? overlays : [])
+    .map((entry) => overlayOf(entry, frame))
+    .filter(Boolean);
+  return pageRepository.setOverlays(pageId, clean);
+}
+
+module.exports = {
+  setOverlays, createPage, listPages, updatePage, setColour, reapplyFixtureGeometry, repairStructuralFrames };

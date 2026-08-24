@@ -10,11 +10,17 @@ import {
 } from "./masthead.js";
 import { columnRulesMarkup } from "./column-rules.js";
 import "../layout/borders.js";
+import "../layout/page-overlays.js";
+// The overlay layer sets a url and a caption into markup; both are
+// user-supplied, so both are escaped.
+import { escapeHtml } from "../format.js";
 import { bindSectionDrag } from "./section-drag.js";
+import { bindOverlayDrag, overlayHandlesMarkup, setSelectedOverlay } from "./overlay-drag.js";
 import { viewOfSection } from "../section-model.js";
 import { computeMetrics } from "../layout/layout-metrics.js";
 import { rulerMarkup, rebuildRulers, bindRulers } from "./ruler.js";
 const { isRuled, borderWidthPx } = globalThis.SahasBorders;
+const { overlaysOf } = globalThis.SahasPageOverlays;
 import { guideLayerMarkup, renderGuides, bindGuideInteractions, setGuidesVisible } from "./page-guides.js";
 
 let handlers = {};
@@ -119,6 +125,7 @@ export function renderCanvas(page, newspaper, selection, callbacks = {}) {
               >${sectionInnerHtml(section, view, { dirty: selected && dirty, selected })}</div>`;
           })
           .join("")}
+        ${overlayLayerMarkup(page)}
         ${guideLayerMarkup()}
       </div>
      </div>
@@ -162,6 +169,11 @@ export function renderCanvas(page, newspaper, selection, callbacks = {}) {
 
   bindContextMenu((sectionKey, action) => handlers.onSectionAction?.(sectionKey, action));
   bindSectionDrag((sectionKey, rect) => handlers.onMoveSection?.(sectionKey, rect));
+  // The page's own pictures, which move independently of the blocks under
+  // them - and deliberately do NOT snap to the column grid, because crossing
+  // that grid is the only reason a desk places one.
+  bindOverlayDrag(document.getElementById("canvasSurface"),
+    (id, rect) => handlers.onMoveOverlay?.(id, rect));
   bindViewport();
   bindSpacebarPan();
   applyTransform();
@@ -234,6 +246,33 @@ function applyBlockTint(element, view) {
  * against and the number it was drawn with were different, and no control
  * could change either. A rule is specified in points now (layout/borders.js).
  */
+/**
+ * The pictures laid ON THE PAGE, above every block.
+ *
+ * Drawn here rather than inside a section for one hard reason:
+ * `.newspaper-section` is `overflow: hidden` and must stay so - overset copy
+ * may not spill onto the next story - so a picture belonging to a block can
+ * never be seen outside it. A photograph that crosses two stories is a fact
+ * about the page, exactly as a column rule is a fact about a pair of blocks.
+ *
+ * The blocks underneath have ALREADY set their type clear of it: every block
+ * the rectangle touches took it into its own obstacle set
+ * (section-adapter.js's obstaclesOf), so this layer only paints.
+ */
+function overlayLayerMarkup(page) {
+  const overlays = overlaysOf(page);
+  if (!overlays.length) return "";
+  const items = overlays.map((overlay) => `
+    <figure class="page-overlay" data-overlay-id="${escapeHtml(overlay.id)}"
+            style="left:${overlay.x}px;top:${overlay.y}px;width:${overlay.width}px;height:${overlay.height}px;z-index:${overlay.z}">
+      <img src="${escapeHtml(overlay.url)}" alt="" draggable="false"
+           style="width:100%;height:100%;object-fit:${overlay.fitMode === "stretch" ? "fill" : escapeHtml(overlay.fitMode)}">
+      ${overlay.caption ? `<figcaption>${escapeHtml(overlay.caption)}</figcaption>` : ""}
+      ${overlayHandlesMarkup()}
+    </figure>`).join("");
+  return `<div class="page-overlay-layer" data-overlay-layer>${items}</div>`;
+}
+
 function blockRuleCss(view) {
   if (!isRuled(view.borderStyle)) return '';
   return `--block-rule:${borderWidthPx(view.borderWidthPx)}px;`;

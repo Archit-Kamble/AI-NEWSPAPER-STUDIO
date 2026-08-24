@@ -164,35 +164,6 @@ async function blockItems(section) {
     }
   }
 
-  // A PANEL SET INSIDE THE STORY. The compositor already ran the copy round
-  // it (section-adapter.js's obstaclesOf), so all that is left is to draw the
-  // rectangle the copy avoided and the type inside it - from the same solve,
-  // so the two cannot disagree about where its lines sit.
-  for (const panel of panelsOf(section)) {
-    const px = x0 + mm(panel.x);
-    const py = y0 + mm(panel.y);
-    const rule = mm(0.71);
-    items.push({ kind: 'fill', x: px, y: py, width: mm(panel.width), height: mm(panel.height), ink: '#ffffff' });
-    const edges = panel.kind === 'quote' ? ['top', 'bottom'] : ['top', 'right', 'bottom', 'left'];
-    const BOX = {
-      top: { x: px, y: py, width: mm(panel.width), height: rule },
-      bottom: { x: px, y: py + mm(panel.height) - rule, width: mm(panel.width), height: rule },
-      left: { x: px, y: py, width: rule, height: mm(panel.height) },
-      right: { x: px + mm(panel.width) - rule, y: py, width: rule, height: mm(panel.height) },
-    };
-    for (const edge of edges) items.push({ kind: 'rule', ...BOX[edge], ink: RULE_INK });
-    const solved = panelLayout(panel, Number(section.body_font_px) || 6.4);
-    for (const line of solved.lines) {
-      items.push(textItem(
-        { x: px + mm(line.x), y: py + mm(line.y), width: mm(line.width), height: mm(line.fontPx * solved.lineHeight) },
-        [run(line.text, {
-          family: panel.kind === 'quote' ? 'serif' : 'sans',
-          weight: line.bold ? 700 : 400, bold: line.bold, fontPx: line.fontPx,
-        })],
-      ));
-    }
-  }
-
   const bands = composition.bands || {};
   const headlineBand = bands.headline;
   const headlineSegments = headlineBand
@@ -301,6 +272,41 @@ async function blockItems(section) {
       items.push(textItem(
         { x: x0 + mm(caption.x), y: y0 + mm(caption.y), width: mm(caption.width), height: mm(caption.height) },
         [run(strip(image.caption), { family: PLACED_CAPTION_METRICS.family, weight: PLACED_CAPTION_METRICS.weight, fontPx: PLACED_CAPTION_METRICS.fontPx })],
+      ));
+    }
+  }
+
+  // A PANEL SET INSIDE THE STORY. The compositor already ran the copy round
+  // it (section-adapter.js's obstaclesOf), so all that is left is to draw the
+  // rectangle the copy avoided and the type inside it - from the same solve,
+  // so the two cannot disagree about where its lines sit.
+  //
+  // AFTER the pictures, and that matters. Every writer here paints in
+  // document order, so emitting the panel before them put a photograph on
+  // top of it - while the canvas gives .section-inset-panel a higher z-index
+  // than a placed picture and draws the panel over. Two surfaces, opposite
+  // stacking, found by rendering a page that had both and looking at it.
+  for (const panel of panelsOf(section)) {
+    const px = x0 + mm(panel.x);
+    const py = y0 + mm(panel.y);
+    const rule = mm(0.71);
+    items.push({ kind: 'fill', x: px, y: py, width: mm(panel.width), height: mm(panel.height), ink: '#ffffff' });
+    const edges = panel.kind === 'quote' ? ['top', 'bottom'] : ['top', 'right', 'bottom', 'left'];
+    const BOX = {
+      top: { x: px, y: py, width: mm(panel.width), height: rule },
+      bottom: { x: px, y: py + mm(panel.height) - rule, width: mm(panel.width), height: rule },
+      left: { x: px, y: py, width: rule, height: mm(panel.height) },
+      right: { x: px + mm(panel.width) - rule, y: py, width: rule, height: mm(panel.height) },
+    };
+    for (const edge of edges) items.push({ kind: 'rule', ...BOX[edge], ink: RULE_INK });
+    const solved = panelLayout(panel, Number(section.body_font_px) || 6.4);
+    for (const line of solved.lines) {
+      items.push(textItem(
+        { x: px + mm(line.x), y: py + mm(line.y), width: mm(line.width), height: mm(line.fontPx * solved.lineHeight) },
+        [run(line.text, {
+          family: panel.kind === 'quote' ? 'serif' : 'sans',
+          weight: line.bold ? 700 : 400, bold: line.bold, fontPx: line.fontPx,
+        })],
       ));
     }
   }

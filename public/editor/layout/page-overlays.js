@@ -21,6 +21,9 @@
 // between pages, and dies with the page.
 (function installPageOverlays(root) {
   const MIN_PX = 16;
+  // One line of the caption face at its own leading, plus its padding -
+  // caption-geometry.js's METRICS, which is what actually draws it.
+  const CAPTION_BAND_PX = Math.ceil(5.6 * 1.45 + 2);
   const DEFAULT_STAND_OFF_PX = 6;
 
   /** One stored overlay, sanitised. Null for anything unusable. */
@@ -81,7 +84,16 @@
     const by = Number(section.y_px) || 0;
     return (overlays || []).filter((overlay) => touches(overlay, section)).map((overlay) => ({
       x: overlay.x - bx, y: overlay.y - by,
-      width: overlay.width, height: overlay.height,
+      width: overlay.width,
+      // THE CAPTION IS PART OF THE OBSTACLE, not something drawn after it.
+      // It is set under the picture, so it occupies room the story cannot
+      // have - and counting the photograph but not its caption is exactly how
+      // copy ends up printed underneath a caption. section-adapter.js's
+      // obstaclesOf() says the same thing about a placed picture's caption in
+      // its own comment; this is the page-level twin of it, and it was found
+      // the same way: by rendering a page with one and looking at the words
+      // running through it.
+      height: overlay.height + (overlay.caption ? CAPTION_BAND_PX : 0),
       shape: 'rect', rotation: 0, standOffPx: overlay.standOffPx, mask: null,
     }));
   }

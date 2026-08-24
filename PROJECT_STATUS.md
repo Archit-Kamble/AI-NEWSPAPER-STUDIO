@@ -5792,3 +5792,108 @@ No console errors and no page errors in any run. Both scratch editions (40294,
 
 Smart Cards. The desk asked for the editor first and said not to spend anything
 on cards until it was done.
+
+---
+
+## §51 — Three from the desk: the headline that changed, the pointer that missed, and the word that touched
+
+All three reported after §50, all three reproduced by driving the app and
+photographing it, all three fixed at the cause. The desk's standing instruction
+was not to touch the fill or anything else not required, so nothing else was.
+
+### 1. "I tested सौरऊर्जा प्रकल्पाचे भूमिपूजन — after double clicking this headline in editor it changes"
+
+It did. Before / after screenshots of the same block, 229×480 on page two of
+edition 40294:
+
+| | |
+|---|---|
+| before the double click | `सौरऊर्जा प्रकल्पाचे भूमिपूजन` |
+| after | `सौरऊर्जा प्रकल्पाचे` |
+
+The last word was gone. **One number causes it.** `headline_font_px` on that
+row is 21; the block SETS at **20**, because `fitDisplayFlow()` searches for the
+size that fills the measure inside the line budget and 20 is what it settled on.
+`beginInlineTextEdit()` styled the editable frame from the *requested* 21, so
+the text ran 5% wide of the measure it had — and on a headline that already
+fills its line, 5% is one whole word pushed onto a second line, which
+`.frame-headline`'s own `overflow: hidden` then cut off. Nothing was lost from
+the copy; it simply could not be seen, which is worse.
+
+`setInlineTypography()` now takes the **size and line box** off the band's own
+resolved lines, the **measure** (the band's box is its ink extent — on a centred
+headline that is narrower than the measure, and typing into an ink-tight box
+re-wraps on the first keystroke), and the **alignment**, which was hard-coded to
+`left` so a centred headline jumped to the left edge as it opened. While the
+frame is open it may grow rather than clip; blur commits and the compositor
+re-fits it.
+
+Held by four new checks in `body-editing.browser.js`, run against the desk's own
+block: opens with every word it had, in the size the compositor resolved, with
+nothing cut off, and put back exactly as it was when the edit closes.
+
+### 2. "If I want to select one character in a word it is very difficult"
+
+`bodyOffsetAt()` mapped the pointer by **proportion**:
+`line.at + text.length × ((x − line.x) / line.measure)`. That is only correct if
+every character is the same width, and Devanagari is nothing like it — in the
+publication serif क is 711 units, म is 556, and **every vowel sign is zero**,
+because a matra carries no advance of its own.
+
+Measured on one real composed line by pointing at the centre of each akshara in
+turn:
+
+| | exact | worst miss | mean |
+|---|---|---|---|
+| proportional | **1 / 10** | 12 characters | 6.1 |
+| painted glyphs | **10 / 10** | 0 | 0 |
+
+`offsetAtPoint()` in `body-caret.js` walks the line's aksharas, measures each
+one's real box with a DOM `Range`, and returns the boundary the pointer is
+nearest — choosing the near edge *inside* a letter, which is what makes picking
+a single one possible. Verified by pressing just inside one akshara's left edge
+and releasing just inside its right: selection `"र"`, exact.
+
+**And the band is painted while the pointer is still down.** It used to be
+computed only on `pointerup`, so a desk dragging across a phrase saw nothing
+until they let go — the other half of "not smooth". Measured live: 30 → 69 →
+123 px across a line, then 2 bands and 52 characters on dragging down.
+
+### 3. "If I make one word big the other text does not wrap around it properly"
+
+The desk said this was "good already but not production level" and to leave it
+alone unless it could really be improved. Measured first, then improved.
+
+A row carrying a size run grew to `size × lineHeight` — the larger run's full
+design box, which sounds sufficient. Setting one word at 18 pt inside 9 pt copy
+and measuring the painted ink against the row: the big word's ink climbed
+**0.7 block px into the line above**, close enough on newsprint to touch its
+descenders.
+
+A row's baseline is not in the middle of the row. The line is painted as one
+span set in the **body** size with `line-height` equal to the row's height, so
+the browser centres the body's own strut in it and the baseline lands at
+`(height − strut)/2 + bodyPx × FACE_BOX_ASCENT_EM`. Growing the row lifts the
+baseline by only **half** of what was added, while the larger run needs its whole
+ascent above it. Hence the factor of two:
+
+```
+height ≥ bandHeight + 2 × FACE_BOX_ASCENT_EM × (size − bodyPx)
+```
+
+That puts the baseline at exactly `FACE_BOX_ASCENT_EM × size` — the run's own box
+ascent — and the descent is then satisfied at every size at or above the body's.
+It is exactly `bandHeight` when the run IS body size, so **a block carrying no
+size mark composes byte for byte as before**; only 4 rows in 1424 carry one at
+all, and all four are scratch. Measured after: ink overlap **3 px → 0**, with
+5 px of clearance below.
+
+### What the nets say
+
+| net | |
+|---|---|
+| `npm test` | 885 |
+| `tests/browser/workspace.browser.js` | 223/223 |
+| `tests/browser/editor-controls.browser.js` | 86/86 |
+| `tests/browser/body-editing.browser.js` | 35/35 on two blocks, one of them the desk's own |
+| `tests/browser/editor-parity.browser.js` × 5 blocks | 70, 72, 57, 70, 57 |

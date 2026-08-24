@@ -1220,6 +1220,78 @@ desk's eye on the composition. It stays where it is, quieted rather than
 removed, and its label says which of the story's two views has the caret. One
 story, two views, neither of them appearing and disappearing mid-sentence.
 
+### A pointer lands on the letter it is pointing at
+
+The desk's next report: *"just like we easily select text, that is not smooth
+at all — if I want to select one character in a word it is very difficult"*.
+
+`bodyOffsetAt()` mapped the pointer by **proportion** —
+`line.at + text.length × ((x − line.x) / line.measure)` — which is only correct
+if every character is the same width. Devanagari is nothing like it: in the
+publication serif क is 711 units, म is 556, and **every vowel sign is zero**,
+because a matra carries no advance of its own. Measured on one real composed
+line, pointing at the centre of each akshara in turn: the old mapping named the
+right one **1 time in 10**, worst miss **12 characters**, mean 6.1.
+
+`offsetAtPoint()` in `body-caret.js` asks the painted line instead — it walks
+its aksharas, measures each one's real box with a DOM `Range`, and returns the
+boundary the pointer is nearest, choosing the near edge inside a letter so the
+caret goes before or after it as the desk aimed. Same points: **10 of 10**,
+worst miss **0**. A single akshara can be picked out with a drag across it.
+
+**And the band is painted while the pointer is still down.** The selection used
+to be computed only on `pointerup`, so a desk dragging across a phrase saw
+nothing at all until they let go and then had to judge whether they had got it —
+the other half of "not smooth". Every editor paints as the pointer moves.
+
+### A display flow opens in the type the compositor RESOLVED
+
+*"I tested सौरऊर्जा प्रकल्पाचे भूमिपूजन — after double clicking this headline in
+editor it changes."* It did, and the photographs show the last word simply
+gone: `सौरऊर्जा प्रकल्पाचे`.
+
+One number. `headline_font_px` on that 229×480 block is **21**; the block
+**sets at 20**, because `fitDisplayFlow()` searches for the size that fills the
+measure inside the line budget. `beginInlineTextEdit()` styled the editable
+frame from the *requested* size, so the text ran 5% wide of its own measure —
+and on a headline that already fills its line, 5% is one whole word pushed onto
+a second line, which `.frame-headline`'s own `overflow: hidden` then cut off.
+Nothing was lost from the copy; it could not be seen, which is worse.
+
+`setInlineTypography()` takes three things from the composition instead of from
+the row: the **size and line box** off the band's own resolved lines, the
+**measure** (the band's box is its *ink* extent — on a centred headline that is
+narrower than the measure, and typing into an ink-tight box re-wraps on the
+first keystroke), and the **alignment**, which was hard-coded to `left` so a
+centred headline jumped to the left edge as it opened. While open the frame may
+grow rather than clip: a desk writing a longer headline has to see the words,
+and blur commits and re-fits it.
+
+### A larger run needs its ascent ABOVE the baseline, not just its own box
+
+A row carrying a `data-sahas-size` run grew to `size × lineHeight` — the larger
+run's full design box, which sounds sufficient. Measured by setting one word at
+18 pt inside 9 pt copy and photographing it: the big word's ink still climbed
+**0.7 block px into the line above**, close enough on newsprint to touch its
+descenders.
+
+A row's baseline is not in the middle of the row. The line is painted as one
+span set in the **body** size with `line-height` equal to the row's height, so
+the browser centres the body's own strut in it and puts the baseline at
+`(height − strut)/2 + bodyPx × FACE_BOX_ASCENT_EM`. Growing the row therefore
+lifts the baseline by only **half** of what was added, while the larger run
+needs its whole ascent above it. Hence the factor of two in `rowHeightFor()`:
+
+```
+height ≥ bandHeight + 2 × FACE_BOX_ASCENT_EM × (size − bodyPx)
+```
+
+which puts the baseline at exactly `FACE_BOX_ASCENT_EM × size` — the run's own
+box ascent — and leaves its descent satisfied at every size at or above the
+body's. It is exactly `bandHeight` when the run **is** body size, so a block
+carrying no size mark composes byte for byte as before. Measured after: ink
+overlap **3 px → 0**, with 5 px of clearance below.
+
 `tests/browser/body-editing.browser.js` is the net for all of this — it presses
 the gestures and checks the two things a screenshot would: where the caret is,
 and what is highlighted.

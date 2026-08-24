@@ -429,6 +429,10 @@ async function saveSection(pageId, sectionKey, updates) {
          -- "no tint" is a value a desk chooses. COALESCE would make clearing
          -- a tint impossible.
          background_color = $49,
+         -- Coalesced, so a save that does not mention panels leaves them
+         -- alone; the panel editor sends the whole array, and an empty array
+         -- (never null) is how the last one is taken off.
+         inset_panels = COALESCE($50, inset_panels),
          updated_at = CURRENT_TIMESTAMP
      WHERE page_id = $1 AND section_key = $2 RETURNING *`,
     [pageId, sectionKey, updates.newsItemId || null, updates.headline || null, updates.headlineFontPx || null,
@@ -469,7 +473,8 @@ async function saveSection(pageId, sectionKey, updates) {
       // not mention the headline's alignment leaves it exactly as it was.
       updates.headlineAlign || null,
       updates.subheadingAlign || null,
-      updates.backgroundColor || null]
+      updates.backgroundColor || null,
+      updates.insetPanels === undefined ? null : JSON.stringify(updates.insetPanels)]
   );
   return rows[0] || null;
 }

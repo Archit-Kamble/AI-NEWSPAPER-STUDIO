@@ -49,6 +49,8 @@ const SHAPES = [
 // server refused and the page never changed.
 import "../layout/borders.js";
 const { BORDER_STYLES, BORDER_WIDTHS, isRuled, borderWidthPx } = globalThis.SahasBorders;
+import "../layout/inset-panels.js";
+const { INSET_PANEL_KINDS, INSET_PANEL_MIN_PX, panelsOf } = globalThis.SahasInsetPanels;
 
 // The tints come from the ONE colour catalogue (layout/inks.js), the same one
 // the ink marks and the press file read. A palette written out a second time
@@ -92,6 +94,12 @@ const DROP_CAPS = [
 ];
 
 let boundHandlers = null;
+// The block the panel controls are acting on. They send the WHOLE panel list
+// on every change (a panel has no server-side id), so they need the block
+// they belong to, and refreshPropertiesPanel() rewrites its own markup - so
+// this is captured at render rather than closed over at bind time.
+let boundSection = null;
+let boundView = null;
 
 function normDeg(value) {
   return ((Math.round(Number(value) || 0) % 360) + 360) % 360;
@@ -176,6 +184,15 @@ function blockPropertiesMarkup(section, view, page) {
         </div>
       </div>` : ""}
       <p class="muted ext-note">Nothing is ruled unless you rule it. A rule is specified in points, the way a printer specifies one. A box sets the copy in a little way from its own line, the way a printed panel does, and the page draws no hairline in the gutter beside a block that already has a box. There is no corner radius on purpose - every rule on a printed page meets its neighbour square.</p>
+    </div>
+
+    <div class="prop-section">
+      <h5 class="prop-heading">Panel inside the block</h5>
+      <p class="muted ext-note">The चौकट a printed paper sets a fact box or a pull quote in. The story runs round it exactly as it runs round a photograph &mdash; it is a rectangle to the compositor and nothing more.</p>
+      <div id="propPanels">${panelsMarkup(section, view)}</div>
+      <div class="segmented" data-prop-panel-add>
+        ${INSET_PANEL_KINDS.map((kind) => `<button type="button" class="segment" data-panel-add="${kind.key}" title="${escapeHtml(kind.note)}">+ ${escapeHtml(kind.label)}</button>`).join("")}
+      </div>
     </div>
 
     <div class="prop-section">
@@ -315,6 +332,8 @@ function bodyMarkupFor(section, view, image, part, page) {
 }
 
 export function propertiesPanelMarkup(section, view, image, part = "block", page = null) {
+  boundSection = section;
+  boundView = view;
   return `
     <p class="ty-selection-label">Properties: <strong id="propSelectionLabel">${PART_LABEL[part] || "Whole block"}</strong></p>
     <div id="propBody">${bodyMarkupFor(section, view, image, part, page)}</div>
@@ -441,6 +460,82 @@ function bindLayerButtons(handlers) {
 // re-bound on every refresh for the same reason: refreshPropertiesPanel()
 // rewrites #propBody, so a listener bound to a button inside it is on a
 // detached node from the next repaint - the #edSpaceGroup trap.
+/** The panels on this block, each editable where it is listed. */
+function panelsMarkup(section, view) {
+  const panels = panelsOf({ ...section, inset_panels: view.insetPanels ?? section.inset_panels });
+  if (!panels.length) return `<p class="muted">No panel on this block.</p>`;
+  return panels.map((panel) => `
+    <div class="prop-panel" data-panel-id="${escapeHtml(panel.id)}">
+      <div class="prop-panel-head">
+        <strong>${escapeHtml(INSET_PANEL_KINDS.find((k) => k.key === panel.kind)?.label || panel.kind)}</strong>
+        <button type="button" class="btn-ghost" data-panel-remove="${escapeHtml(panel.id)}">Remove</button>
+      </div>
+      <label>Heading<input type="text" data-panel-field="title" value="${escapeHtml(panel.title)}"></label>
+      <label>Lines, one per row<textarea rows="3" data-panel-field="lines">${escapeHtml(panel.lines.join("\n"))}</textarea></label>
+      <div class="prop-panel-geometry">
+        ${["x", "y", "width", "height"].map((field) => `<label>${field}<input type="number" data-panel-field="${field}" value="${Math.round(panel[field])}"></label>`).join("")}
+      </div>
+    </div>`).join("");
+}
+
+/**
+ * Every panel on the block, as the patch carries it.
+ *
+ * The whole array goes every time, deliberately: a panel has no id the server
+ * addresses, so "change this one" can only be expressed as "here is the new
+ * list". It is also how the last panel is taken off - an empty array, never a
+ * null, because the column is written with COALESCE and null means leave it.
+ */
+function panelsFromDom(section, view) {
+  return Array.from(document.querySelectorAll("#propPanels .prop-panel")).map((node) => {
+    const field = (name) => node.querySelector(`[data-panel-field="${name}"]`)?.value ?? "";
+    const was = panelsOf({ ...section, inset_panels: view.insetPanels ?? section.inset_panels })
+      .find((p) => p.id === node.dataset.panelId);
+    return {
+      id: node.dataset.panelId,
+      kind: was?.kind || "note",
+      x: Number(field("x")), y: Number(field("y")),
+      width: Number(field("width")), height: Number(field("height")),
+      title: field("title"),
+      lines: String(field("lines")).split("\n"),
+    };
+  });
+}
+
+function bindPanelControls(handlers, section, view) {
+  const send = (panels) => handlers.onPatch?.({ insetPanels: panels }, "properties-panel");
+
+  document.querySelectorAll("[data-prop-panel-add] [data-panel-add]").forEach((button) => {
+    button.addEventListener("click", () => {
+      // Placed in the lower right of the block at a bit under half its width,
+      // which is where a printed चौकट usually sits and is never over the
+      // headline.
+      const w = Math.max(INSET_PANEL_MIN_PX, Math.round((Number(section.width_px) || 200) * 0.45));
+      const h = Math.max(INSET_PANEL_MIN_PX, Math.round((Number(section.height_px) || 200) * 0.3));
+      send([...panelsFromDom(section, view), {
+        id: `panel-${Date.now().toString(36)}`,
+        kind: button.dataset.panelAdd,
+        x: Math.max(0, (Number(section.width_px) || 200) - w - 2),
+        y: Math.round((Number(section.height_px) || 200) * 0.45),
+        width: w, height: h,
+        title: button.dataset.panelAdd === "quote" ? "" : "ठळक मुद्दे",
+        lines: ["\u2022"],
+      }]);
+    });
+  });
+
+  document.querySelectorAll("#propPanels [data-panel-remove]").forEach((button) => {
+    button.addEventListener("click", () => {
+      send(panelsFromDom(section, view).filter((panel) => panel.id !== button.dataset.panelRemove));
+    });
+  });
+
+  // On change, not on every keystroke: each of these is a save and a recompose.
+  document.querySelectorAll("#propPanels [data-panel-field]").forEach((field) => {
+    field.addEventListener("change", () => send(panelsFromDom(section, view)));
+  });
+}
+
 function bindBorderButtons(handlers) {
   document.querySelectorAll("[data-prop-border] [data-border]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -504,6 +599,7 @@ function bindImageControls() {
 function bindBlockControls() {
   if (!boundHandlers) return;
   bindBorderButtons(boundHandlers);
+  bindPanelControls(boundHandlers, boundSection, boundView);
   bindTintButtons(boundHandlers);
   bindColumnButtons(boundHandlers);
   bindDropCapButtons(boundHandlers);

@@ -13,6 +13,8 @@ import { statusOf, statusLabel, statusClass } from "../status/section-status.js"
 import { computeMetrics } from "../layout/layout-metrics.js";
 import { imageTransformCss } from "../image/image-manager.js";
 import { buildFlowMap, CELL, flowRuns, bandBox, pourIntoRuns, flowImageFromRow, datelineText, captionBox } from "../layout/text-flow.js";
+import "../layout/inset-panels.js";
+const { panelsOf, panelLayout } = globalThis.SahasInsetPanels;
 import { textWithMarks, markRun, plainText } from "../layout/rich-text.js";
 import { presentationRanges, renderPresentation } from "../layout/editorial-presentation.js";
 import { composeSection } from "../compose/section-adapter.js";
@@ -452,6 +454,7 @@ export function sectionInnerHtml(section, view, { dirty = false, selected = fals
     </div>
     ${sectionContentMarkup(section, view)}
     ${placedImagesMarkup(section)}
+    ${insetPanelsMarkup(section, view)}
     <div class="section-hover-toolbar">
       <button type="button" class="section-hover-btn" data-section-action="story" title="Attach a reporter story">Story</button>
       <button type="button" class="section-hover-btn" data-section-action="image" title="Open the image workspace">Image</button>
@@ -460,6 +463,27 @@ export function sectionInnerHtml(section, view, { dirty = false, selected = fals
     ${selected ? HANDLES.map((h) => `<span class="section-handle handle-${h}" data-handle="${h}"></span>`).join("") : ""}
     ${selected ? `<span class="section-selected-label">${escapeHtml(section.section_key)}</span>` : ""}
   `;
+}
+
+/**
+ * The panels set inside this block - the चौकट a printed paper puts a fact box
+ * in. Drawn from the ONE panel layout (layout/inset-panels.js), which is also
+ * what the compositor put in its obstacle set and what the exports place, so
+ * the rectangle the copy ran round is the rectangle the reader sees.
+ */
+export function insetPanelsMarkup(section, view) {
+  const panels = panelsOf(section);
+  if (!panels.length) return "";
+  const bodyPx = Number(view?.bodyFontPx) || 6.4;
+  return panels.map((panel) => {
+    const solved = panelLayout(panel, bodyPx);
+    const lines = solved.lines.map((line) => `<span style="left:${line.x}px;top:${line.y}px;width:${line.width}px;`
+      + `font-size:${line.fontPx}px;line-height:${solved.lineHeight};`
+      + `${line.bold ? "font-weight:700;" : ""}">${escapeHtml(line.text)}</span>`).join("");
+    return `<span class="section-inset-panel section-inset-${escapeHtml(panel.kind)}"
+                  data-panel-id="${escapeHtml(panel.id)}"
+                  style="left:${panel.x}px;top:${panel.y}px;width:${panel.width}px;height:${panel.height}px">${lines}</span>`;
+  }).join("");
 }
 
 export function sectionClassName(view, { selected = false, dirty = false, overflowing = false, atRightEdge = false, atFootEdge = false, hasImages = false } = {}) {

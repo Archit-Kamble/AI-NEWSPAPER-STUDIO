@@ -222,6 +222,32 @@ const say = (ok, what, detail = '') => {
     await page.locator('.smart-chart-bars').screenshot({ path: `${SHOTS}/canvas-chart.png` }).catch(() => {});
   }
 
+  // ---- a panel inside the block, and the copy running round it -----------
+  const panelBlock = 'anchor';
+  await page.locator(`.newspaper-section[data-section-key="${panelBlock}"]`).first().click();
+  await page.waitForTimeout(2200);
+  const drawn = await page.evaluate((key) => {
+    const block = document.querySelector(`.newspaper-section[data-section-key="${key}"]`);
+    const panel = block && block.querySelector('.section-inset-panel');
+    if (!panel) return null;
+    const box = panel.getBoundingClientRect();
+    const clash = Array.from(block.querySelectorAll('.section-body-line')).filter((line) => {
+      const r = line.getBoundingClientRect();
+      return r.right > box.left + 1 && r.left < box.right - 1 && r.bottom > box.top + 1 && r.top < box.bottom - 1;
+    });
+    return { text: panel.textContent.trim().slice(0, 40), lines: block.querySelectorAll('.section-body-line').length, clash: clash.length };
+  }, panelBlock);
+  say(Boolean(drawn), 'a panel draws inside the block', drawn ? drawn.text : 'none placed');
+  if (drawn) {
+    // The whole point: the compositor treated it as an obstacle, so no line of
+    // the story may be printed underneath it.
+    say(drawn.clash === 0, 'and no line of the story is set underneath it',
+      `${drawn.clash} of ${drawn.lines} lines overlap`);
+    await page.locator(`.newspaper-section[data-section-key="${panelBlock}"]`).screenshot({ path: `${SHOTS}/canvas-panel.png` }).catch(() => {});
+  }
+  say(await page.locator('[data-prop-panel-add] [data-panel-add="note"]').count() > 0,
+    'and Properties offers a control to make one');
+
   console.log(`\nERRORS: ${errors.length ? errors.join('\n  ') : '(none)'}`);
   say(errors.length === 0, 'no console or page errors');
   await putBack();

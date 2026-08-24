@@ -5692,3 +5692,43 @@ body.print-view .page-imprint {
   color: #55555c;
   font-family: "Sahas Sans", "Noto Sans Devanagari", Arial, sans-serif;
 }
+
+/* --- a panel set inside a story (the चौकट) -------------------------------
+   Every number is block pixels from inset-panels.js's panelLayout(), the same
+   solve the compositor's obstacle set and all four exports read. Nothing here
+   decides a size. */
+.section-inset-panel {
+  position: absolute;
+  box-sizing: border-box;
+  background: #fff;
+  border: 0.71px solid #111;
+  overflow: hidden;
+  font-family: "Sahas Sans", "Noto Sans Devanagari", Arial, sans-serif;
+  color: #111;
+  z-index: 3;
+}
+.section-inset-panel > span {
+  position: absolute;
+  display: block;
+  overflow: hidden;
+}
+.section-inset-quote {
+  border-left: none;
+  border-right: none;
+  font-family: "Sahas Serif", "Noto Serif Devanagari", Georgia, serif;
+}
+
+/* --- the panel control ---------------------------------------------------- */
+.prop-panel {
+  border: 1px solid var(--line, #d0d0d6);
+  border-radius: 3px;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+}
+.prop-panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.prop-panel label { display: block; font-size: 11px; margin-bottom: 4px; }
+.prop-panel input, .prop-panel textarea {
+  width: 100%; box-sizing: border-box; font-family: inherit; font-size: 12px;
+  padding: 3px 5px; border: 1px solid var(--line, #d0d0d6); border-radius: 3px;
+}
+.prop-panel-geometry { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }

@@ -7,6 +7,7 @@ const reviewInvalidation = require('./reviewInvalidation.service');
 // The one border catalogue, shared with the browser exactly as the character
 // grid, the block kinds, the picture style and the inks are.
 const { BORDER_KEYS, BORDER_WIDTHS } = require('../../public/editor/layout/borders');
+const { panelOf } = require('../../public/editor/layout/inset-panels');
 
 const PRINTABLE_FIELDS = ['news_item_id','kicker','headline','subheading','body','caption','image_url','smart_card_key','smart_card_data'];
 const comparable = (value) => JSON.stringify(value ?? null);
@@ -187,6 +188,13 @@ async function saveSection(pageId, sectionKey, body) {
     paragraphSpacingPx: body.paragraphSpacingPx,
     listStyle: body.listStyle,
     dropCapLines: body.dropCapLines,
+    // Sanitised through the ONE panel reader before it reaches the column, so
+    // a direct API caller cannot store a panel the compositor would then have
+    // to defend itself against - the same boundary the ink palette holds.
+    insetPanels: body.insetPanels === undefined ? undefined
+      : (Array.isArray(body.insetPanels) ? body.insetPanels : [])
+        .map((entry) => panelOf(entry, { width: body.widthPx, height: body.heightPx }))
+        .filter(Boolean),
     borderStyle: body.borderStyle,
     borderWidthPx: body.borderWidthPx,
     borderColor: body.borderColor,

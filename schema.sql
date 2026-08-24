@@ -699,3 +699,16 @@ ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS drop_cap_lines SMALLINT NOT N
 -- guarded in the ordinary way: only a row that really carries the flag gains
 -- the three lines a printed drop cap is usually set over.
 UPDATE page_sections SET drop_cap_lines = 3 WHERE drop_cap = TRUE AND drop_cap_lines = 0;
+
+-- A panel set INSIDE a news block - the चौकट a printed Marathi paper puts a
+-- fact box or a pull quote in. Stored as JSONB on the section, the way
+-- smart_card_data already is, because a panel has no life of its own: it
+-- cannot move between blocks, it is not addressable, and it dies with the
+-- block. A table would buy foreign keys nothing needs and cost a join on
+-- every read.
+--
+-- The shape is [{ id, kind, x, y, width, height, standOffPx, title, lines[] }]
+-- in the block's own pixels. public/editor/layout/inset-panels.js is the one
+-- reader and sanitiser; the compositor sees each one as a plain rectangle in
+-- its obstacle set, exactly as it sees a photograph.
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS inset_panels JSONB;

@@ -29,6 +29,7 @@ const { identityFor, dateLine, devanagari } = require('../../layout/identity');
 const { strip } = require('../../layout/plain-text');
 const { captionBox, PLACED_CAPTION_METRICS } = require('../../../public/editor/layout/caption-geometry');
 const { borderEdges, borderWidthPx } = require('../../../public/editor/layout/borders');
+const { panelsOf, panelLayout } = require('../../../public/editor/layout/inset-panels');
 const { smartCardLines } = require('./smart-card-lines');
 
 /** Editor pixels to millimetres. The one conversion, stated once. */
@@ -151,6 +152,35 @@ async function blockItems(section) {
       right: { x: x0 + w - t, y: y0, width: t, height: h },
     };
     for (const edge of edges) items.push({ kind: 'rule', ...RULES[edge], ink: RULE_INK });
+  }
+
+  // A PANEL SET INSIDE THE STORY. The compositor already ran the copy round
+  // it (section-adapter.js's obstaclesOf), so all that is left is to draw the
+  // rectangle the copy avoided and the type inside it - from the same solve,
+  // so the two cannot disagree about where its lines sit.
+  for (const panel of panelsOf(section)) {
+    const px = x0 + mm(panel.x);
+    const py = y0 + mm(panel.y);
+    const rule = mm(0.71);
+    items.push({ kind: 'fill', x: px, y: py, width: mm(panel.width), height: mm(panel.height), ink: '#ffffff' });
+    const edges = panel.kind === 'quote' ? ['top', 'bottom'] : ['top', 'right', 'bottom', 'left'];
+    const BOX = {
+      top: { x: px, y: py, width: mm(panel.width), height: rule },
+      bottom: { x: px, y: py + mm(panel.height) - rule, width: mm(panel.width), height: rule },
+      left: { x: px, y: py, width: rule, height: mm(panel.height) },
+      right: { x: px + mm(panel.width) - rule, y: py, width: rule, height: mm(panel.height) },
+    };
+    for (const edge of edges) items.push({ kind: 'rule', ...BOX[edge], ink: RULE_INK });
+    const solved = panelLayout(panel, Number(section.body_font_px) || 6.4);
+    for (const line of solved.lines) {
+      items.push(textItem(
+        { x: px + mm(line.x), y: py + mm(line.y), width: mm(line.width), height: mm(line.fontPx * solved.lineHeight) },
+        [run(line.text, {
+          family: panel.kind === 'quote' ? 'serif' : 'sans',
+          weight: line.bold ? 700 : 400, bold: line.bold, fontPx: line.fontPx,
+        })],
+      ));
+    }
   }
 
   const bands = composition.bands || {};

@@ -28,6 +28,8 @@ import '../layout/caption-geometry.js';
 const { captionBox } = globalThis.SahasCaptionGeometry;
 import '../layout/borders.js';
 const { isBoxed, borderWidthPx } = globalThis.SahasBorders;
+import '../layout/inset-panels.js';
+const { panelsOf, obstacleFromPanel } = globalThis.SahasInsetPanels;
 
 function pick(section, view, camel, snake, fallback) {
   for (const source of [view, section]) {
@@ -198,6 +200,12 @@ export function obstaclesOf(section) {
       });
     }
   }
+  // A panel set inside the story - the चौकट a printed paper puts a fact box or
+  // a pull quote in. To the compositor it is a rectangle and nothing else, so
+  // it costs exactly one more entry here and no other line of the engine
+  // changes: fillRow, viableIntervals and the balancer all already run type
+  // round rectangles, because that is what a photograph is to them.
+  for (const panel of panelsOf(section)) out.push(obstacleFromPanel(panel));
   return out;
 }
 

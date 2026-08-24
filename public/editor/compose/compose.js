@@ -1077,6 +1077,35 @@ function pourBody(bodyInput, {
   // in reading order, each queried against the real obstacle geometry only
   // once its own final height is known.
 
+  /**
+   * The height a row must be to carry a run set larger than the body.
+   *
+   * `size * lineHeight` - the larger run's own full design box - sounds
+   * sufficient and is not. Measured by making one word 18pt inside 9pt copy
+   * and photographing it: the row grew as that formula says, and the big
+   * word's ink still climbed about 0.7 block px into the line above, which on
+   * newsprint is close enough to touch its descenders.
+   *
+   * The reason is that a row's BASELINE is not in the middle of the row. The
+   * line is painted as one span set in the BODY size with `line-height` equal
+   * to the row's height, so the browser centres the body's own strut in it and
+   * puts the baseline at `(height - strut) / 2 + bodyPx * FACE_BOX_ASCENT_EM`.
+   * Growing the row therefore lifts the baseline by only HALF of what was
+   * added, while the larger run needs its whole ascent above it. Hence the
+   * factor of two:
+   *
+   *   height >= bandHeight + 2 * FACE_BOX_ASCENT_EM * (size - bodyPx)
+   *
+   * which puts the baseline at exactly `FACE_BOX_ASCENT_EM * size` - the big
+   * run's own box ascent - and leaves its descent satisfied for every size at
+   * or above the body's. It is exactly `bandHeight` when the run IS body size,
+   * so a block carrying no size mark composes byte for byte as before.
+   */
+  const rowHeightFor = (size) => Math.max(
+    size * lineHeight,
+    bandHeight + 2 * FACE_BOX_ASCENT_EM * (size - fontPx),
+  );
+
   /** The largest size mark active anywhere in [start, end), or null. */
   function maxSizeIn(start, end) {
     let found = null;
@@ -1223,7 +1252,7 @@ function pourBody(bodyInput, {
       const requiredHeight = placed.reduce((max, p) => {
         if (p.empty) return max;
         const size = maxSizeIn(p.at, p.at + p.text.length);
-        return size ? Math.max(max, size * lineHeight) : max;
+        return size ? Math.max(max, rowHeightFor(size)) : max;
       }, bandHeight);
 
       if (Math.abs(requiredHeight - height) < 0.25) {

@@ -52,17 +52,17 @@ and all four export formats share the defect because they share the walk.
 
 | # | status | files | evidence | next |
 |---|---|---|---|---|
-| 0 | NOT STARTED | | | separators/accents beyond what req 4 now gives |
-| 1 | **COMPLETE** for PDF/IDML/Word; Scribus still on its own walk | `export/print-model.js`, `export/pdf.writer.js`, `canvas/masthead.js`, `compose/compose.js` | commit `39677c3`; `tmp-visual-pass/masthead-fixed-crop.png`, `masthead-latin-detail.png`, `owner-line.png`, `bb-1.png` | move `scribus.service.js` onto the shared model so it gains the nameplate + folio |
-| 2 | **COMPLETE** | `compose/compose.js` | commit `f7ee835`; ragged 58→44 on ed. 40294, 1405→1360 across 819 blocks, geometry provably unmoved | nothing outstanding; do NOT widen the range, 0.97/0.96 measured and worthless |
-| 3 | NOT STARTED | | | needs licensed font files; check network availability first |
-| 4 | **COMPLETE** | `layout/borders.js` (new), `properties-panel.js`, `canvas/canvas.js`, `canvas/column-rules.js`, `compose/section-adapter.js`, `styles.css`, `pageSection.service.js`, `export/print-model.js` | commit `cab123e`; visual-pass 15/15; boxed block rendered to PDF and looked at (`block-box-export.png`) | scribus still draws no border either — same follow-up as req 1 |
-| 5 | **COMPLETE** | `pictures-panel.js`, `block-frame.js`, `layout/caption-geometry.js`, `styles.css`, `export/print-model.js`, `scribus.service.js` | commit `14a851e`; `tmp-visual-pass/editor-caption.png`; both surfaces verified to draw the same caption | |
-| 6 | NOT STARTED | | | engine already runs type round rect obstacles — should be small |
-| 7 | NOT STARTED | | | riskiest: `section_images` is per-block, needs a page-level placement |
-| 8 | NOT STARTED | | | smart-cards can host these |
-| 9 | NOT STARTED | | | provider image-gen support unverified |
-| 10 | PARTLY, via req 4 | as req 4 | rules above/below/box at a chosen weight are configurable per block | double rules and section markers still absent |
+| 0 | PARTLY, via req 4 | see req 4 | rules above/below/box at a chosen weight, per block | double rules; section markers; ornaments |
+| 1 | **COMPLETE** for PDF/IDML/Word; Scribus still on its own walk | `export/print-model.js`, `export/pdf.writer.js`, `canvas/masthead.js` | `39677c3`; `masthead-fixed-crop.png`, `owner-line.png`, `bb-1.png` | move `scribus.service.js` onto the shared model |
+| 2 | **COMPLETE** | `compose/compose.js` | `f7ee835`; ragged 58→44 on ed. 40294, geometry provably unmoved | do NOT widen the range — 0.97/0.96 measured, worthless |
+| 3 | **COMPLETE** | `layout/typefaces.js` (new), `font-metrics.js`, `shaper.js`, `typography-panel.js`, `pdf.writer.js`, 6 TTFs | `e18686f`; Rozha One rendered to a press PDF; visual-pass checks all six | more faces are now a one-file change |
+| 4 | **COMPLETE** | `layout/borders.js` (new) + 7 files | `cab123e`; `block-box-export.png`; visual-pass presses every button | scribus draws no border either |
+| 5 | **COMPLETE** | `pictures-panel.js`, `block-frame.js`, `caption-geometry.js`, 3 more | `14a851e`; `editor-caption.png` | |
+| 6 | **COMPLETE** | `layout/inset-panels.js` (new) + 8 files, incl. `schema.sql` | `d71770d`; `panel-export2.png`; 0 of 24 lines under the panel | panel cannot hold a picture or a card yet — `kind` is there for it |
+| 7 | NOT STARTED | | | riskiest; `section_images` is per-block |
+| 8 | **COMPLETE** for bar + stat; pie/line deliberately absent | `smart-cards/layout.js`, `smart-cards.js`, `export/smart-card-lines.js`, `print-model.js`, `scribus.service.js` | `7d38639`, `607bf20`; `chart-export3.png`; canvas and export bar widths agree to 0.5 px | pie needs bezier arcs in 4 writers |
+| 9 | NOT STARTED | | | Gemini key present; provider image-gen support unverified |
+| 10 | PARTLY, via req 4 | see req 4 | | double rules, ornaments |
 
 ## Run 1 notes
 
@@ -132,3 +132,20 @@ once before.
 validation fix appeared not to work; the running process was still on the old
 module. `pkill -f "node server.js"` kills the calling shell and the process
 shows as `MainThread`, so kill it by port.
+
+
+### The schema needs applying
+
+`schema.sql` gained `ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS
+inset_panels JSONB;` for requirement 6. It has been applied to the DEV database
+by hand. `schema.sql` is not run at boot, so **any other environment needs that
+statement run before an edition with a panel will load.**
+
+### Requirement 8 — why there is no pie chart
+
+The print model has four item kinds: fill, text, image and rule, and rules are
+axis-aligned. A pie needs bezier arcs and a line chart a polyline, in the PDF,
+the IDML, the .sla and Word — four separate pieces of geometry work. A chart
+that drew on screen and vanished from the plate is worse than no chart, so the
+two rectangle-based kinds are exact everywhere and the other two are honestly
+absent. That is the decision to revisit if charts matter more than the rest.

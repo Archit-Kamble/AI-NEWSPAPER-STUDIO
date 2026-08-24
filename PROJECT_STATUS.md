@@ -5675,3 +5675,120 @@ unchanged, so no existing mark moves.
 | `tests/browser/editor-controls.browser.js` | 86/86 |
 | `tests/browser/editor-parity.browser.js` × 5 blocks | 70, 72, 57, 57, 69 |
 | all three flows written by double click, six block sizes | 6/6 |
+
+---
+
+## §50 — The editor, driven by hand again: the caret nobody drew
+
+The desk came back with four sentences, and every one of them was true:
+
+> double click on editor the font size changing automatically
+> after double clicking on body some time it shows body copy some time not
+> body inside editor is not editable
+> i select a text and try to change the font but I can change only those option
+> sizes above, it also should have drop down
+
+None of it could be reproduced by reading code. A double click really does focus
+Quill, a drag really does call `setSelection()`, typing really does reach the
+copy, and the parity net was green on five blocks. It took driving the running
+app and **photographing the page** to find what was actually happening.
+
+### 1. There was no caret, and no selection
+
+The direct body edit collapses Quill to nothing so that the desk types on the
+composed page — and **the composed page drew neither a caret nor a highlight**.
+Measured: a drag across one composed line reported `{index: 0, length: 12}` in
+Quill, and the screenshot showed nothing marked anywhere on the page. A desk was
+being asked to mark words it could not see, and to type at a cursor that did not
+exist. That is the whole of "not editable": the copy accepted the keystrokes and
+the page never said where they were going.
+
+`public/editor/external-editor/body-caret.js` draws both, and estimates nothing:
+a composed line is a real element carrying real text, so a DOM `Range` over its
+own text nodes gives the exact painted position of any character — after
+`word-spacing` and after the `scaleX` a stretched line carries, because a client
+rect is measured after both. `render.js` emits `data-at` on every body line so
+the module reads the compositor's own source offsets rather than re-deriving
+them.
+
+The gestures a desk expects came with it: a click moves the caret, a drag
+selects (and the selection is drawn), a second double click takes the word, a
+third takes the paragraph, and **Escape** leaves the story the way it already
+left a headline. An **unwritten** block — no composed lines to measure against,
+and the commonest block there is — puts the caret at the head of the body frame.
+
+### 2. The body writing box vanished on a double click
+
+`height: 0; opacity: 0` on `#edWritingSurface`, so the one thing on screen
+labelled "Body copy" disappeared and the column jumped ~340 px. That is
+"sometimes it shows body copy sometimes not", exactly. It stays now, quieted
+rather than removed, and its label says which of the story's two views has the
+caret.
+
+### 3. "The font size changing automatically" was a control that retargets in silence
+
+`#edStorySize` is the **selected object's** size. Photographed: double-clicking
+the headline moved it from **6.4 to 24** — editor block pixels, a unit no
+printer sets in — with nothing but a `title` attribute to say the control now
+meant a different object. Every control names its object visibly now: `BLOCK`
+beside the face, `BODY`/`HEADLINE`/`SUBHEADING` beside the size, `SELECTION`
+beside the marks size.
+
+### 4. Four fixed sizes are not a size control
+
+`publication-type.js` gained `TYPE_LADDER_PT`, the one list of sizes this
+product offers — half-point steps through reading sizes, opening out as the type
+gets bigger, starting at the 6.5 pt preflight passes a page with. Both size
+controls read it, in points, and a block's own off-ladder size is folded in so
+an auto-fitted 20.5 px block can still say what it is set at.
+
+Two things had to be true for the dropdown to work at all:
+
+- **A `<select>` is not a button.** `holdSelection()`'s `preventDefault` — what
+  keeps the caret in a headline while a toolbar button is pressed — is also what
+  stops a dropdown opening. The marked range is remembered on the press (and on
+  focus, for the keyboard) and put back when the choice lands.
+- **`quill.getFormat()` with no arguments focuses the editor.** Its default
+  first argument is `getSelection(true)`. So merely *reading* the toolbar's
+  state pulled the caret into the body on every render, and returned null —
+  crashing on `.index` — whenever the hidden editor could not take it. That one
+  was caught by `workspace.browser.js`, which failed a keyboard-redo check and
+  logged the page error.
+
+`SIZE_MIN` went 6 → 4 block px alongside it: 6 px is 8.5 pt, within a hair of
+the 9 pt body, so the smallest emphasis this product could store was 0.94× the
+copy and the old toolbar's own smallest step was being silently clamped away.
+The clamp can only ever have raised a stored number, so nothing moves.
+
+### The net that damaged the edition it was testing
+
+`editor-parity.browser.js` restores the block it borrows — but only on the way
+out of a *successful* run. A run that died half way left the block carrying
+whatever it had just set, and the next run then took that as the block's own
+value and restored it faithfully. Found by reading the table: five blocks of
+edition 40294 were carrying body sizes nobody chose (7.0 and 8.0 px against the
+publication's 6.4). Reset, and the restore is reachable from the crash handler
+now.
+
+The same net also picked "the first size option that is not the current one",
+which on the new ladder is its 6.5 pt floor — that crosses `MIN_COLUMN_EM` on a
+112 px block and made Auto flip from one column to two mid-check, reported as a
+parity failure that was really the harness's own doing. It nudges one rung now.
+
+### What the nets say
+
+| net | |
+|---|---|
+| `npm test` | 885 |
+| `tests/browser/workspace.browser.js` | 223/223 |
+| `tests/browser/editor-controls.browser.js` | 86/86 |
+| `tests/browser/body-editing.browser.js` (new) | 27/27 on two blocks |
+| `tests/browser/editor-parity.browser.js` × 5 blocks | 70, 72, 57, 70, 57 |
+
+No console errors and no page errors in any run. Both scratch editions (40294,
+40939) were refilled afterwards and swept for test copy.
+
+### Still open, deliberately
+
+Smart Cards. The desk asked for the editor first and said not to spend anything
+on cards until it was done.

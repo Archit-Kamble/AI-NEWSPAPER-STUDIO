@@ -1131,16 +1131,98 @@ number of block pixels, and a block's running body is **6.4** of them (9 pt at
 a half times the leading and leaves a hole above and below — which is not
 emphasis, it is the drop cap's own fault happening in the middle of a paragraph.
 
-`refreshSizeButtons()` derives them from `state.view.bodyFontPx` as ratios of
-the block's own body — 0.85, 1.2, 1.45, 1.8 — and labels them in **points**,
-which is the unit a printer sets in. On a 9 pt block: 7.7, 10.9, 13.2, 16.3.
-The largest is 1.8× deliberately; more than that opens the row by more than the
-copy around it can absorb.
+Four derived buttons came next — 0.85, 1.2, 1.45 and 1.8 of the block's own
+body, labelled in points — and the unit was right while the *shape* was not.
+The desk's report: *"I select a text and try to change the font but I can
+change only those option sizes above; it also should have drop down."* A
+caption at 7 pt, a standfirst at 11, a pull quote at 18 are not ratios of
+anything; they are sizes, and four of them is not a size control.
+
+**`publication-type.js`'s `TYPE_LADDER_PT` is now the one list of sizes this
+product offers**, and both controls read it: half-point steps through reading
+sizes (the columns are `NUMERIC(5,1)` for the same reason), opening out as the
+type gets bigger. It starts at **6.5 pt**, the smallest type preflight passes a
+page with. `typeLadder(currentPx)` folds a block's own off-ladder size in, in
+order, so a block the auto-fit has set to 20.5 px can still say what it is set
+at rather than being rounded to a neighbour.
+
+- The **selection's** size is `#edQuillSizeSelect` in the marks toolbar; the
+  **object's** is `#edStorySize` above the page. Each carries a visible chip
+  naming what it acts on — `SELECTION`, and `BLOCK` / `BODY` / `HEADLINE` /
+  `SUBHEADING`. A tooltip is not something a person reads while working, and
+  that is precisely how a desk came to report *"double click on editor the font
+  size changing automatically"*: `#edStorySize` retargets with the selection, so
+  double-clicking a headline moved it from 6.4 to 24 — editor block pixels — and
+  nothing on screen said the control now meant a different object.
+- **A `<select>` is not a button, so `holdSelection()` cannot be used on it**:
+  the `preventDefault` that keeps the caret in place is also what stops a
+  dropdown opening. `display-marks.js` remembers the marked range on the press
+  (and on focus, for the keyboard route) and puts it back when the choice
+  lands; `restoreSelection()` falls back to the live selection inside the
+  aimed-at field when nothing was remembered.
+- **`quill.getFormat()` with no arguments must never be called.** Its default
+  first argument is `this.getSelection(true)`, and the `true` means *focus the
+  editor and then tell me* — so merely reading the toolbar's state pulled the
+  caret into the body on every render, and returned null (crashing on `.index`)
+  whenever the hidden editor could not take it. Ask for the range first.
+- **`SIZE_MIN` is 4 block px (5.7 pt), not 6.** 6 px is 8.5 pt — within a hair
+  of the 9 pt body — so the smallest emphasis this product could store was
+  0.94× the copy, and the old toolbar's own smallest step was silently clamped
+  away. What the picker *offers* still starts at 6.5 pt; this is only the bound
+  on bad data, and it can never have lowered a stored value.
 
 Storage is unchanged — still an absolute size in block pixels — so no existing
-mark moves. Only what the toolbar offers is derived, and it is derived per
-block, because emphasis inside 9 pt copy is not the same number as emphasis
-inside 12 pt.
+mark moves.
+
+### The caret and the selection are DRAWN, on the page that prints
+
+The desk's report was *"body inside editor is not editable"*, and separately
+*"I select a text … it working but not properly"*. Neither could be reproduced
+by reading code: a double click really does focus Quill, a drag really does
+call `setSelection()`, and typing really does reach the copy. It took driving
+the running app and photographing the page to see what was actually true —
+**the composed page drew no caret and no selection at all.** Measured: a drag
+across one composed line reported `{index: 0, length: 12}` in Quill, and the
+screenshot showed no highlight anywhere. A desk was being asked to mark words
+it could not see and to type at a cursor that was not there.
+
+`public/editor/external-editor/body-caret.js` draws both, and it estimates
+nothing: a composed line is a real element carrying real text, so a DOM `Range`
+over its own text nodes gives the exact painted position of any character —
+after `word-spacing` and after the `scaleX` a stretched line carries, because a
+client rect is measured after both. `render.js` emits **`data-at`** on each
+body line (the compositor's own source offset) and the caret module reads it;
+Quill's index space is the *authored* body, so the two differ by exactly the
+dateline's length — the one constant `bodyOffsetAt()` already subtracts going
+the other way, stated once and used in both directions.
+
+- The band is laid **over** the glyphs and multiplied, not painted behind
+  them: the composed layer is the page's only ink, so a solid band above would
+  hide the words being marked and one below would be behind the sheet.
+- **An unwritten block composes to no lines**, so there is nothing to measure a
+  caret against — and writing a block from nothing is the commonest job there
+  is. The caret waits at the head of the body frame instead.
+- **The gestures are the ones every editor has**: a click moves the caret, a
+  drag selects, a second double click takes the word, a third takes the
+  paragraph, and Escape leaves the story the way it already left a headline.
+
+### The writing box does not vanish
+
+`.is-canonical-body-editor` used to collapse `#edWritingSurface` to
+`height: 0; opacity: 0`, so a double click on the story made the one thing on
+screen labelled "Body copy" disappear and the column jump ~340 px. The desk's
+report was exactly that: *"after double clicking on body some time it shows
+body copy some time not"* — and, reasonably, that the body was not editable,
+because the visible editor had gone and the page drew no caret to replace it.
+
+The page draws a real caret now, so the box no longer has to hide to keep the
+desk's eye on the composition. It stays where it is, quieted rather than
+removed, and its label says which of the story's two views has the caret. One
+story, two views, neither of them appearing and disappearing mid-sentence.
+
+`tests/browser/body-editing.browser.js` is the net for all of this — it presses
+the gestures and checks the two things a screenshot would: where the caret is,
+and what is highlighted.
 
 ### A picture's landing place is SETTLED, not computed once
 
@@ -1529,7 +1611,22 @@ and the PNGs it writes are 39–47% transparent.
 ```bash
 node tests/browser/workspace.browser.js          # defaults to edition 2099
 node tests/browser/editor-controls.browser.js    # every control × every text object
+node tests/browser/body-editing.browser.js       # the caret, the selection, the gestures
 ```
+
+**A net that writes into a real block must put it back, and must do so when it
+CRASHES too.** `editor-parity.browser.js` restores the block it borrows at the
+end — but a run that died half way left the block carrying whatever it had just
+set, and the next run then took that as the block's own value and restored it
+faithfully. That is how five blocks of edition 40294 came to be carrying body
+sizes nobody chose (7.0 and 8.0 px against the publication's 6.4). The restore
+is reachable from the crash handler now.
+
+**And a net must drive a state a desk is actually in.** The same net picked
+"the first size option that is not the current one", which on the points ladder
+is its 6.5 pt floor — that crosses `MIN_COLUMN_EM` on a 112 px block and made
+Auto flip from one column to two mid-check, reported as a parity failure that
+was really the harness's own doing. It nudges one rung now.
 
 Both reset the block they drive first, so they can be run repeatedly. They need `playwright-core` and Chrome at `/usr/bin/google-chrome` (`CHROME_PATH` overrides).
 

@@ -5,9 +5,14 @@
 // in the same editable draft as typed copy, marked needs_review, and neither
 // touches the database - the desk accepts, autosave carries it.
 //
-// Everything under "More AI actions", and Optimize, are still stubs: they build
-// and display the exact request an integration would send. They are marked
-// `is-placeholder` in the markup so nothing here pretends to work.
+// A third is real and scoped: "Optimize with these details" goes to the same
+// writer and applies only the object its own select names - the whole block,
+// the headline, the subheading, or the body - so a desk that wants a better
+// headline keeps the story it already has.
+//
+// Everything under "More AI actions" is still a stub: it builds and displays
+// the exact request an integration would send, and is marked `is-placeholder`
+// in the markup so nothing there pretends to work.
 //
 // Replacing copy somebody has already written asks first (confirmReplacement).
 
@@ -210,9 +215,29 @@ export function aiPanelMarkup(view) {
     <div class="ext-editor-toolbar">
       <button type="button" class="ext-editor-btn" id="aiFillRemaining"
               title="Carry the copy on into the space this block has left, without changing a word of what is there">Fill remaining area with AI</button>
-      <button type="button" class="ext-editor-btn is-placeholder" id="aiOptimize">Optimize with these details</button>
+    </div>
+    <!-- OPTIMIZE ACTS ON ONE OBJECT, and says which before it is pressed.
+         It used to be a stub that built a request and told the desk nothing was
+         connected. It goes to the same server-side writer "Write this block"
+         uses, and this select decides which part of the answer is applied - so
+         a desk that only wants a better headline keeps the story it has. On its
+         own row because this column is 30% of the desk: side by side, the
+         select was cut off and the button wrapped under it. -->
+    <div class="ai-scope-row">
+      <label class="ai-scope" for="aiOptimizeScope">
+        <span>Optimize</span>
+        <select id="aiOptimizeScope">
+          <option value="block">Whole block</option>
+          <option value="headline">Headline only</option>
+          <option value="subheading">Subheading only</option>
+          <option value="body">Body only</option>
+        </select>
+      </label>
+      <button type="button" class="ext-editor-btn" id="aiOptimize"
+              title="Rewrite the chosen object with the details above, and check it against this block's exact composition">Optimize with these details</button>
     </div>
     <section class="ai-proposal" id="aiFillProposal" hidden></section>
+    <section class="ai-proposal" id="aiOptimizeProposal" hidden></section>
     <details class="ext-more">
       <summary>More AI actions</summary>
       <div class="ext-editor-toolbar">
@@ -381,6 +406,110 @@ export function proposalSnapshotMatches(section, view, images, proposal, expecte
   }
 }
 
+// ------------------------------------------------------------- optimize ---
+//
+// The scope decides which fields of a proposal are applied. Everything else in
+// the answer is discarded unread - the model was asked for a whole block
+// because that is the one brief this writer has, and asking for less would
+// change what the block is MEASURED as (see planningFit in CLAUDE.md).
+
+export const SCOPE_LABEL = {
+  block: "The whole block",
+  headline: "The headline",
+  subheading: "The subheading",
+  body: "The body",
+};
+
+const SCOPE_FIELDS = {
+  block: ["headline", "subheading", "body"],
+  headline: ["headline"],
+  subheading: ["subheading"],
+  body: ["body"],
+};
+
+export function scopedProposal(scope, proposal = {}) {
+  const fields = SCOPE_FIELDS[scope] || SCOPE_FIELDS.block;
+  const patch = {};
+  for (const field of fields) {
+    if (proposal[field] !== undefined) patch[field] = proposal[field];
+  }
+  return patch;
+}
+
+/** Is anything the desk has already written being thrown away by this scope? */
+export function scopeReplacesCopy(scope, view = {}) {
+  const has = (value) => Boolean(plainText(value || "").trim());
+  return (SCOPE_FIELDS[scope] || SCOPE_FIELDS.block).some((field) => has(view[field]));
+}
+
+/**
+ * Composes the block AS IT WOULD BE with only this patch applied.
+ *
+ * The server's own fit measured a whole new block - a new headline, a new deck
+ * and a new body together. A headline-only change has to be judged against the
+ * body that is STAYING, and only the exact compositor can answer that. It is
+ * the same local composition Accept already runs to check a proposal is not
+ * stale, and it costs no provider call.
+ */
+export function localFit(section, view, images, patch) {
+  try {
+    const composed = composeSection(
+      { ...section, images: images || [] },
+      { ...view, ...patch },
+    );
+    const overset = composed.overset || {};
+    const notReady = composed.fontReady === false
+      || (composed.warnings || []).some((warning) => /^(FONT|SHAPING)_NOT_READY$/.test(warning.code || ""));
+    const short = Object.entries(overset)
+      .filter(([, value]) => Number(value) > 0)
+      .map(([flow, value]) => `${flow} by ${value}`);
+    return {
+      cannotPrint: notReady || short.length > 0 || composed.fitState === "OVERSET",
+      notReady,
+      overset: short,
+      fitState: composed.fitState,
+      fillRatio: composed.whitespace?.occupancy
+        ? composed.whitespace.occupancy.occupiedEquivalentLines
+          / Math.max(1, composed.whitespace.occupancy.availableEquivalentLines)
+        : null,
+    };
+  } catch (error) {
+    return { cannotPrint: true, notReady: true, overset: [], fitState: "ERROR", fillRatio: null };
+  }
+}
+
+function optimizeProposalMarkup(result, scope, patch, fit) {
+  const line = fit.notReady
+    ? "The publication font is still loading - press Optimize again in a moment."
+    : fit.overset.length
+      ? `Does not fit as it stands: ${escapeHtml(fit.overset.join(", "))}.`
+      : fit.fillRatio !== null
+        ? `Fits. ${Math.round(fit.fillRatio * 100)}% of the block's lines are set.`
+        : "Fits.";
+  const shown = [
+    patch.headline !== undefined ? `<p class="ai-proposal-headline">${escapeHtml(patch.headline)}</p>` : "",
+    patch.subheading !== undefined ? `<p class="ai-proposal-sub">${escapeHtml(patch.subheading)}</p>` : "",
+    patch.body !== undefined
+      ? `<div class="ai-proposal-body">${escapeHtml(patch.body).replace(/\n{2,}/g, "</p><p>").replace(/\n/g, "<br>")}</div>`
+      : "",
+  ].join("");
+  return `
+    <h4>${escapeHtml(SCOPE_LABEL[scope] || "The whole block")}, rewritten by
+      ${escapeHtml(result.provider || "AI")}${result.fellBackTo ? " (fallback)" : ""}
+      <span class="muted">review before accepting</span></h4>
+    ${handoverNote(result)}
+    ${shown}
+    <p class="ai-proposal-fit${fit.cannotPrint ? " over" : ""}">${line}</p>
+    <div class="ext-editor-toolbar">
+      <button type="button" class="ext-editor-btn ext-editor-btn-primary" id="aiAcceptOptimize"${fit.cannotPrint ? " disabled" : ""}>${
+        fit.cannotPrint ? "Cannot accept — does not fit" : `Accept ${escapeHtml((SCOPE_LABEL[scope] || "").toLowerCase())}`
+      }</button>
+      <button type="button" class="ext-editor-btn" id="aiDiscardOptimize">Discard</button>
+    </div>
+    <p class="ai-proposal-warn">The desk must check every fact before this is printed. It enters the block as
+       <strong>needs review</strong>.</p>`;
+}
+
 export function proposalCannotPrint(fit = {}) {
   return Boolean(
     fit.overflowing
@@ -398,14 +527,23 @@ export function proposalCannotPrint(fit = {}) {
  * lost - so this only speaks when there is something to lose, which is what
  * keeps it worth reading when it does.
  */
-function confirmReplacement(view) {
+function confirmReplacement(view, scope = "block") {
   const has = (value) => Boolean(plainText(value || "").trim());
   if (!view || (!has(view.body) && !has(view.headline))) return true;
 
   const what = view.newsItemId
     ? "This block holds a reporter's story."
     : "This block already has copy in it.";
-  return window.confirm(`${what}\n\nReplace the headline, subheading and body with the AI's version?`);
+  // A scoped Optimize names only what it is about to overwrite. Asking about
+  // "the headline, subheading and body" when only the headline is changing
+  // trains the desk to dismiss the question without reading it.
+  const losing = {
+    block: "the headline, subheading and body",
+    headline: "the headline",
+    subheading: "the subheading",
+    body: "the body",
+  }[scope] || "the headline, subheading and body";
+  return window.confirm(`${what}\n\nReplace ${losing} with the AI's version?`);
 }
 
 export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, getPage, onSave) {
@@ -578,7 +716,83 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, g
     }
   });
 
-  document.getElementById("aiOptimize")?.addEventListener("click", () => runStub("Optimize", "optimize"));
+  // OPTIMIZE - real, and scoped to ONE object.
+  //
+  // It goes to the same server-side writer "Write this block" uses, so nothing
+  // new is briefed, billed or measured in a different way. What is new is that
+  // only the chosen part of the answer is applied, and that the result is
+  // composed HERE, through the exact compositor, against the block as it
+  // stands - because the server's own fit measured a whole new block, and a
+  // headline-only change has to be judged against the body that is staying.
+  const optimize = document.getElementById("aiOptimize");
+  const optimizeHost = document.getElementById("aiOptimizeProposal");
+  optimize?.addEventListener("click", async () => {
+    const label = optimize.textContent;
+    const scope = document.getElementById("aiOptimizeScope")?.value || "block";
+    optimize.disabled = true;
+    optimize.textContent = "Writing, then measuring…";
+    try {
+      await onSave?.();
+      const page = getPage?.();
+      const section = getSection();
+      const view = getView();
+      if (!page || !section) return onNotify("Choose a block first.");
+      const seedValue = document.getElementById("edAiSeed")?.value.trim()
+        || plainText(view?.headline || "").trim();
+      if (!seedValue) return onNotify("Say what this block is about first.");
+
+      const response = await fetch(
+        `/api/pages/${page.id}/sections/${encodeURIComponent(section.section_key)}/write`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            seed: seedValue,
+            notes: document.getElementById("edAiPrompt")?.value || "",
+            tier: getAiTier(),
+            language: view?.language,
+            // The block is measured as it really is. Turning a flow off changes
+            // what planningFit() reserves, so it is only turned off for a scope
+            // whose own answer is being thrown away anyway.
+            writeHeadline: scope !== "subheading",
+            writeSubheading: scope !== "headline",
+          }),
+        },
+      );
+      const result = await response.json().catch(() => ({ error: "The AI did not answer." }));
+      if (retrievalHost && result.retrieval) {
+        retrievalHost.hidden = false;
+        retrievalHost.innerHTML = retrievalStatusMarkup(result.retrieval);
+      }
+      if (!response.ok || result.error) {
+        return onNotify(result.error || "The AI could not optimize this block.");
+      }
+
+      const patch = scopedProposal(scope, result.proposal);
+      const fit = localFit(section, view, getImages?.() || [], patch);
+      if (!optimizeHost) return;
+      optimizeHost.hidden = false;
+      optimizeHost.innerHTML = optimizeProposalMarkup(result, scope, patch, fit);
+      document.getElementById("aiAcceptOptimize")?.addEventListener("click", () => {
+        if (fit.cannotPrint) {
+          return onNotify("That does not fit this block as it stands. Discard it and try again.");
+        }
+        // Only the chosen object is being replaced, so only that object's own
+        // copy is at risk - confirmReplacement() is asked about the block, and
+        // a scope that touches nothing written needs no question.
+        if (scopeReplacesCopy(scope, view) && !confirmReplacement(view, scope)) return;
+        onPatch({ ...patch, aiGenerated: true, status: "needs_review" }, "ai-panel");
+        optimizeHost.hidden = true;
+        onNotify(`${SCOPE_LABEL[scope]} rewritten. Check every fact before it prints.`);
+      });
+      document.getElementById("aiDiscardOptimize")?.addEventListener("click", () => {
+        optimizeHost.hidden = true;
+      });
+    } finally {
+      optimize.disabled = false;
+      optimize.textContent = label;
+    }
+  });
 
   AI_ACTIONS.forEach((action) => {
     document.getElementById(action.id)?.addEventListener("click", () => runStub(action.label, action.intent));

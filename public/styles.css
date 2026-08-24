@@ -2687,6 +2687,33 @@ body.print-view .page-guides {
   font-size: 0.74rem;
   margin: 8px 0 0;
 }
+/* Which object Optimize will act on, said before it is pressed - the same rule
+   the size and alignment controls follow. */
+.ai-scope-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+.ai-scope {
+  display: flex;
+  flex: 1 1 160px;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: #55555f;
+  font-size: .72rem;
+}
+.ai-scope select { flex: 1 1 auto; min-width: 0; }
+.ai-scope-row .ext-editor-btn { flex: 1 1 100%; }
+.ai-scope select {
+  padding: 3px 6px;
+  border: 1px solid #dcdce4;
+  border-radius: 4px;
+  background: #fff;
+  font-size: .74rem;
+}
 .ext-editor-btn.is-placeholder {
   border-style: dashed;
   color: #8a8a92;
@@ -4967,6 +4994,19 @@ body.print-view .page-imprint {
   padding: 8px;
   overflow-wrap: anywhere;
   word-break: normal;
+}
+/* A SIZE MARK IS NOT SHOWN IN THE SOURCE BOX, and the reason is that it would
+   lie about which way it went.
+   `data-sahas-size` stores an absolute number of BLOCK pixels - a 14pt mark is
+   9.9 of them against a 6.4px body, half again as large. This box is set at a
+   comfortable reading size instead (15px and up, so a desk can actually type
+   into it), and a 9.9px run inside 15px type renders SMALLER than the copy
+   around it. So making a word bigger on the page made it visibly shrink here:
+   the desk's report, exactly. The mark still travels in the Delta and still
+   prints - this box is the story's plain-text SOURCE, not a second rendering
+   of it, and the page above is where type is judged. */
+.frame-writing-surface .ql-editor [style*="font-size"] {
+  font-size: inherit !important;
 }
 
 .frame-note { margin: 0; font-size: 0.7rem; }

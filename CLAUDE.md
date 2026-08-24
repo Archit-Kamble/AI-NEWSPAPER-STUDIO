@@ -1292,6 +1292,46 @@ body's. It is exactly `bandHeight` when the run **is** body size, so a block
 carrying no size mark composes byte for byte as before. Measured after: ink
 overlap **3 px → 0**, with 5 px of clearance below.
 
+### A size mark is not painted in the plain-text source box
+
+`data-sahas-size` stores an absolute number of **block** pixels — a 14 pt mark
+is 9.9 of them against a 6.4 px body, half again as large. The Quill box below
+the page is set at a comfortable reading size instead (15 px and up, so a desk
+can type into it), and a 9.9 px run inside 15 px type renders **smaller** than
+the copy around it. So making a word bigger on the page made it visibly shrink
+in the box underneath — the desk's report, exactly.
+
+One CSS rule (`font-size: inherit` inside `.ql-editor`) takes it off. The mark
+still travels in the Delta, still stores and still prints: **that box is the
+story's plain-text source, not a second rendering of it**, and the page above
+is where type is judged.
+
+### "Optimize with these details" acts on ONE object, and says which
+
+It was a stub that built a request preview and told the desk nothing was
+connected. It goes to the same server-side writer "Write this block" uses — so
+nothing new is briefed, billed or measured differently — and a select beside it
+names what the answer is applied to: **Whole block / Headline only /
+Subheading only / Body only**.
+
+- **Only the chosen fields are applied.** `scopedProposal()` keeps them and
+  discards the rest unread. The model is still asked for a whole block, because
+  that is the one brief this writer has and asking for less changes what the
+  block is *measured* as (`planningFit`).
+- **The result is composed HERE, through the exact compositor, against the
+  block as it stands** (`localFit()`). The server's own fit measured a whole
+  new block — a new headline, deck and body together — and a headline-only
+  change has to be judged against the body that is *staying*. It costs no
+  provider call, and it is the same local composition Accept already runs to
+  reject a stale proposal.
+- **The confirmation names only what it is about to overwrite.** Asking about
+  "the headline, subheading and body" when one line is changing trains a desk
+  to dismiss the question without reading it.
+
+Verified against the real provider: scope *Headline only* on a filled block
+rewrote the headline, reported "Fits. 100% of the block's lines are set", and
+left the body byte for byte (469 → 469 characters) and the deck untouched.
+
 `tests/browser/body-editing.browser.js` is the net for all of this — it presses
 the gestures and checks the two things a screenshot would: where the caret is,
 and what is highlighted.

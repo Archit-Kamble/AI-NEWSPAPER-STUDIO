@@ -4759,13 +4759,20 @@ body.print-view .page-imprint {
   cursor: text;
   overflow: hidden;
 }
+/* THE PAPER IS NOT TINTED TO SHOW A STATE.
+   Hovering the story used to lay a pink wash over the whole of it, and opening
+   it for typing laid a stronger one - so a desk judging a page for print was
+   judging it through a colour, and every double click visibly recoloured the
+   block. That is a real part of "after double clicking on anything it is
+   changing". The page draws a caret now (body-caret.js), which is what says
+   the story is open; a hairline says which object the pointer is over. */
 .frame-body:hover {
-  background: rgba(196, 30, 58, 0.035);
+  outline: 1px dashed rgba(196, 30, 58, 0.35);
+  outline-offset: -1px;
 }
 .frame-body.is-direct-body-editing {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
-  background: rgba(196, 30, 58, 0.055);
 }
 /* The direct-edit state used to be named by a chip drawn INSIDE the frame, at
    its top right - over the copy, on a justified column whose lines reach that
@@ -4774,6 +4781,36 @@ body.print-view .page-imprint {
    outline below is what marks the state on the page itself. */
 .frame-pictures {
   z-index: 3;
+}
+
+/* THE CARET AND THE SELECTION, on the page that prints.
+   Between the type (z 0) and the hit frames (z 2), and it never takes a
+   pointer - a caret a desk could click is not a caret. The band is laid over
+   the glyphs and MULTIPLIED rather than painted behind them: the composed
+   layer is the page's only ink and a solid band above it would hide the very
+   words being marked, while a band below it would be behind the sheet.
+   See body-caret.js for why the page has to draw these at all. */
+.frame-body-selection {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+.body-selection-band {
+  position: absolute;
+  background: rgba(120, 170, 255, 0.55);
+  mix-blend-mode: multiply;
+  border-radius: 1px;
+}
+.body-caret {
+  position: absolute;
+  width: 2px;
+  background: var(--accent, #c41e3a);
+  animation: sahas-caret 1.06s steps(1, end) infinite;
+}
+@keyframes sahas-caret {
+  0%, 55% { opacity: 1; }
+  56%, 100% { opacity: 0; }
 }
 
 /* What an empty block is waiting for.
@@ -4890,18 +4927,25 @@ body.print-view .page-imprint {
   box-shadow: 0 0 0 2px rgba(196, 30, 58, 0.12);
 }
 .frame-writing-surface[hidden] { display: none; }
-/* Direct body editing keeps Quill (the one rich-text/range document) focused,
-   while the exact composed body remains the only visible story. This prevents
-   the old jump to a differently wrapped browser-flow copy below the block. */
+/* IT USED TO VANISH, AND THAT WAS THE FAULT.
+   Direct body editing collapsed this box to `height: 0; opacity: 0`, so a
+   double click on the story made the one thing on screen labelled "Body copy"
+   disappear and the whole column jump ~340px. The desk's report was exactly
+   that: "after double clicking on body some time it shows body copy some time
+   not", and, reasonably, "body inside editor is not editable" - the visible
+   editor was gone and the page drew no caret to replace it.
+
+   The page draws a real caret and a real selection now (body-caret.js), so
+   this box no longer has to hide to keep the desk's eye on the composition.
+   It stays exactly where it was, as the plain-text source of the same
+   document, quieted rather than removed: one story, two views, neither of
+   them appearing and disappearing under a desk mid-sentence. */
 .frame-writing-surface.is-canonical-body-editor {
-  height: 0;
-  min-height: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  overflow: hidden;
-  opacity: 0;
-  pointer-events: none;
+  border-style: dashed;
+  background: #fcfcfd;
+}
+.frame-writing-surface.is-canonical-body-editor .frame-writing-label {
+  color: var(--accent, #c41e3a);
 }
 .frame-writing-label {
   margin-bottom: 6px;
@@ -4940,7 +4984,14 @@ body.print-view .page-imprint {
   border-radius: 2px;
   transition: background-color 0.12s ease;
 }
-.frame-headline:hover, .frame-subheading:hover { background: rgba(196, 30, 58, 0.06); }
+/* A hairline, not a wash - the same rule as the body's (see .frame-body:hover).
+   Three text objects stacked up the block each laying a pink ground as the
+   pointer crossed them made the page flicker between colours while a desk was
+   only moving the mouse across the story it was reading. */
+.frame-headline:hover, .frame-subheading:hover {
+  outline: 1px dashed rgba(196, 30, 58, 0.35);
+  outline-offset: -1px;
+}
 /* The selection box a direct-manipulation editor shows for the object
    currently targeted. No corner drag handles here on purpose: text position
    in this block is decided by the character grid (headline/deck take whole
@@ -5027,23 +5078,30 @@ body.print-view .page-imprint {
    control. */
 .ed-quill-size-group {
   display: inline-flex;
-  gap: 2px;
+  align-items: center;
+  gap: 4px;
 }
-.ed-quill-size-btn {
-  width: 22px;
+/* Named, like every other control here: this one is the SELECTION's size, and
+   the one in the row above is the selected OBJECT's. Two size controls a
+   centimetre apart with nothing to tell them apart is how a desk comes to use
+   the wrong one. */
+.ed-quill-size-label {
+  color: #7a7a84;
+  font-size: .58rem;
+  font-weight: 750;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.ed-quill-size-select {
   height: 24px;
-  padding: 0;
-  border: 1px solid transparent;
+  padding: 0 4px;
+  border: 1px solid #dcdce4;
   border-radius: 3px;
-  background: none;
-  color: #444;
-  font-size: 10px;
+  background: #fff;
+  color: #333;
+  font-size: 11px;
   line-height: 1;
   cursor: pointer;
-}
-.ed-quill-size-btn:hover {
-  background: #f0f0f4;
-  border-color: #e4e4ea;
 }
 
 /* A picture is a frame on the page: dragged anywhere, sized by its corner. */
@@ -5175,7 +5233,23 @@ body.print-view .page-imprint {
   font-size: 0.74rem;
   cursor: pointer;
 }
-.rt-select-size { width: 76px; flex: none; }
+.rt-select-size { width: 88px; flex: none; }
+/* Which object the control beside it acts on, SAID rather than tooltipped.
+   The size select retargets with the selection (block-frame.js's ALIGN_FIELD
+   is the same map for alignment), and a number that changes by itself with no
+   label next to it is what a desk reads as the editor changing the type on
+   its own. */
+.rt-target {
+  flex: none;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: #ececf2;
+  color: #55555f;
+  font-size: .62rem;
+  font-weight: 750;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
 .rt-align { display: inline-flex; align-items: center; justify-content: center; }
 .rt-btn svg { display: block; }
 .rt-block-note { margin-left: auto; color: #a0a0a8; font-size: 0.64rem; white-space: nowrap; }

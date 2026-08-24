@@ -257,6 +257,21 @@ const BODY = 'सातारा : नगरपालिकेच्या स�
   // Bold, italic, underline and a phrase at its own size, on each object. The
   // toolbar is one strip; what it acts on is whatever is selected.
   const marksToolbar = '#edQuillToolbar';
+  // The selection's size is a dropdown in POINTS now, and its rungs are the
+  // publication's own ladder - so the net names the rung it wants and reads
+  // back the block pixels that rung stores, rather than hard-coding a number
+  // that is only right for one block.
+  const pickSize = async (rung) => {
+    const value = await page.evaluate((want) => {
+      const select = document.getElementById('edQuillSizeSelect');
+      const option = [...select.options].find((o) => o.textContent.startsWith(want));
+      return option ? option.value : null;
+    }, rung);
+    if (!value) return null;
+    await page.locator(`${marksToolbar} .ed-quill-size-select`).selectOption(value);
+    await page.waitForTimeout(700);
+    return String(parseFloat(value));
+  };
   for (const name of ['headline', 'subheading', 'body']) {
     await focusPart(name);
     await selectAllIn(name);
@@ -302,15 +317,12 @@ const BODY = 'सातारा : नगरपालिकेच्या स�
     await page.waitForTimeout(500);
     say(/<u>/i.test((await draft()).headline), 'underline marks the headline');
     await selectAllIn('headline');
-    // The largest emphasis this block offers. The sizes are derived from the
-    // block's own body (block-frame.js's refreshSizeButtons) rather than being
-    // fixed browser-CSS numbers, so the net asks the button what it stores
-    // instead of hard-coding a value that is only right for one block.
-    const biggest = await page.locator(`${marksToolbar} .ed-quill-size-btn:last-child`).getAttribute('data-size');
-    const biggestPx = String(parseFloat(biggest));
-    await page.locator(`${marksToolbar} .ed-quill-size-btn:last-child`).click();
-    await page.waitForTimeout(500);
-    say(new RegExp(`data-sahas-size="${biggestPx}"`).test((await draft()).headline),
+    // The size picker is the publication's own point ladder, so the net asks
+    // the control what a rung stores rather than hard-coding a number that is
+    // only right for one block. A <select>, not four buttons, since the desk
+    // asked for a dropdown - see block-frame.js's refreshSizeOptions().
+    const biggest = await pickSize('24 pt');
+    say(new RegExp(`data-sahas-size="${biggest}"`).test((await draft()).headline),
       'a phrase inside the headline can be set at its own size',
       `${biggest} — ${(await draft()).headline.slice(0, 70)}`);
     await selectAllIn('headline');
@@ -335,17 +347,14 @@ const BODY = 'सातारा : नगरपालिकेच्या स�
       selection.removeAllRanges();
       selection.addRange(range);
     });
-    const bodySize = await page.locator(`${marksToolbar} .ed-quill-size-btn:last-child`).getAttribute('data-size');
-    const bodySizePx = String(parseFloat(bodySize));
-    await page.locator(`${marksToolbar} .ed-quill-size-btn:last-child`).click();
-    await page.waitForTimeout(700);
-    say(new RegExp(`data-sahas-size="${bodySizePx}"`).test((await draft()).body),
+    const bodySize = await pickSize('16 pt');
+    say(new RegExp(`data-sahas-size="${bodySize}"`).test((await draft()).body),
       'a selected body word is stored at its own size', bodySize);
     say(await page.evaluate(([key, want]) => {
       const block = document.querySelector(`.newspaper-section[data-section-key="${key}"]`);
       return [...block.querySelectorAll('.section-body-line span')]
         .some((el) => Math.abs(parseFloat(getComputedStyle(el).fontSize) - parseFloat(want)) < 0.2);
-    }, [KEY, bodySize]), `and that word is visibly ${bodySize} in the exact composed preview`);
+    }, [KEY, bodySize]), `and that word is visibly ${bodySize}px in the exact composed preview`);
     say(await page.evaluate(() => document.activeElement?.classList.contains('ql-editor')),
       'the exact repaint does not take focus away from the body document');
     await selectAllIn('body');

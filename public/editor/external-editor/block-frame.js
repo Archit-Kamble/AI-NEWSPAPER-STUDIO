@@ -34,6 +34,7 @@ import { INKS, sanitiseInk } from "../layout/inks.js";
 import { escapeHtml } from "../format.js";
 import {
   markDisplayField, clearDisplayField, activeDisplayField, applyDisplayMark, holdSelection,
+  rememberSelection, restoreSelection,
   fieldHtml, fieldValue, DISPLAY_TARGET_EVENT,
 } from "./display-marks.js";
 
@@ -65,6 +66,7 @@ import { PART_LABEL } from "./typography-panel.js";
 // actually measured in either.
 import { publicationFamily } from "../compose/font-metrics.js";
 import { snapToCluster } from "../compose/graphemes.js";
+import { paintBodySelection } from "./body-caret.js";
 import "../layout/publication-type.js";
 
 let quill = null;
@@ -202,6 +204,13 @@ export function blockFrameMarkup() {
              saved. -->
         <div class="frame-placeholders" id="edFramePlaceholders" aria-hidden="true"></div>
 
+        <!-- The caret and the selection of the one body document, drawn on the
+             composed page. Chrome, like the placeholders: never composed,
+             never saved, never on the canvas. Without it a desk typed at a
+             caret that was not drawn and marked words it could not see - see
+             body-caret.js's own note. -->
+        <div class="frame-body-selection" id="edBodySelection" aria-hidden="true"></div>
+
         <!-- Interactive picture frames sit over the canonical text layer. They
              use the same persisted block-pixel geometry as the page canvas. -->
         <div class="frame-pictures" id="edFramePictures"></div>
@@ -229,7 +238,7 @@ export function blockFrameMarkup() {
            pixel-for-pixel canonical while the desk still gets a comfortable
            rich-text writing surface. -->
       <div class="frame-writing-surface" id="edWritingSurface">
-        <div class="frame-writing-label">Body copy</div>
+        <div class="frame-writing-label" id="edWritingLabel">Body copy</div>
         <div id="edQuill"></div>
       </div>
 
@@ -489,31 +498,56 @@ function renderPlaceholders(composition, parts, zoom, section, view) {
 }
 
 /**
- * The size marks this block can sensibly offer, in points.
+ * The size a marked run is set in, offered as a DROPDOWN, in points.
  *
- * The mark is stored as an absolute number of BLOCK pixels, so the sizes worth
- * offering depend entirely on the block: emphasis inside 9pt running copy is
- * not the same number as emphasis inside 12pt. These are ratios of the block's
- * own body - a step down, and three steps up - resolved to real sizes and
- * labelled in the unit a printer sets in.
+ * WHAT WAS HERE, AND WHY IT WAS NOT ENOUGH. Four fixed buttons - a step down
+ * and three steps up from the block's own body. The unit was right and the
+ * reasoning was right, but a sub-editor does not want four sizes: the desk's
+ * report was "I select a text and try to change the font but I can change only
+ * those option sizes above; it should have a drop down". A caption at 7pt, a
+ * standfirst at 11, a pull quote at 18 - none of them are ratios of anything,
+ * they are sizes, and a control that cannot express them is a control that
+ * sends the desk back to retyping the copy somewhere else.
  *
- * The largest is 1.8x deliberately. Anything more opens the row it lands on by
- * more than the copy around it can absorb, and a word standing two lines tall
- * in the middle of a paragraph is a drop cap in the wrong place.
+ * So it is the publication's own ladder (publication-type.js), the same list
+ * the object-size control beside it offers, in the same unit. The block's own
+ * body is named on its rung, because emphasis is judged against the copy it
+ * sits in - that was the true half of the ratios, and it is kept as a label
+ * rather than as the whole of what is on offer.
+ *
+ * NOT rebuilt on every render. `layoutTextFrames()` runs on every keystroke,
+ * and replacing a <select>'s options while it is open closes it under the
+ * pointer; the options depend only on the block's body size, so they are
+ * rebuilt when that changes and the VALUE is refreshed on its own.
  */
-const SIZE_STEPS = [0.85, 1.2, 1.45, 1.8];
+let sizeSelectFor = null;
 
-function refreshSizeButtons() {
+function refreshSizeOptions() {
   const host = document.getElementById("edQuillSize");
-  if (!host) return;
-  const type = globalThis.SahasPublicationType;
+  if (!host) return null;
   const bodyPx = Number(state.view?.bodyFontPx) || DEFAULT_BODY_FONT_PX;
-  host.innerHTML = SIZE_STEPS.map((step) => {
-    const px = Math.round(bodyPx * step * 10) / 10;
-    const pt = Math.round(type.editorPxToPt(px) * 10) / 10;
-    return `<button type="button" class="ed-quill-size-btn" data-size="${px}px"
-      title="${pt} pt \u2014 ${step}\u00d7 the body">${pt}</button>`;
+  let select = host.querySelector("select");
+  if (select && sizeSelectFor === bodyPx) return select;
+  sizeSelectFor = bodyPx;
+  const type = globalThis.SahasPublicationType;
+  const rungs = type.typeLadder(bodyPx).map((rung) => {
+    const body = rung.px === bodyPx ? " \u2014 body" : "";
+    return `<option value="${rung.px}px">${rung.label}${body}</option>`;
   }).join("");
+  host.innerHTML = `<span class="ed-quill-size-label">Selection</span>`
+    + `<select class="ed-quill-size-select" id="edQuillSizeSelect"`
+    + ` title="Size of the selected words, in points">`
+    // "Default" rather than "Body size": this picker also aims at a headline
+    // and a deck, and there the neutral choice means the object's own size,
+    // not the body's.
+    + `<option value="">Default</option>${rungs}</select>`;
+  select = host.querySelector("select");
+  return select;
+}
+
+/** Shows what the selected words are actually set in. */
+function refreshSizeButtons() {
+  refreshSizePicker(activeDisplayField());
 }
 
 function layoutTextFrames() {
@@ -674,6 +708,55 @@ function layoutTextFrames() {
     editor.style.textAlign = state.view.textAlign || "left";
     editor.style.fontFamily = publicationFamily(state.view.fontFamily).css;
   }
+
+  // The caret and the selection go on LAST, because they are measured off the
+  // composed lines this function has just rebuilt.
+  refreshBodyCaret();
+}
+
+/**
+ * Draws the body document's caret and selection on the composed page.
+ *
+ * One call site's worth of state - which document, where its dateline ends,
+ * and whether the desk is in the body at all - handed to the module that owns
+ * the geometry. See body-caret.js for why the page has to draw these itself.
+ */
+/**
+ * Names which of the story's two views the caret is in.
+ *
+ * The box below the page is the same document as the page, not a draft of it.
+ * While the desk is typing on the page it says so, rather than sitting there
+ * looking like a second story nobody is editing.
+ */
+function refreshWritingLabel() {
+  const label = document.getElementById("edWritingLabel");
+  if (!label) return;
+  label.textContent = canonicalBodyEdit
+    ? "Body copy — plain-text source · you are typing on the page above"
+    : "Body copy";
+}
+
+function refreshBodyCaret() {
+  const layer = document.getElementById("edBodySelection");
+  if (!layer) return;
+  // The Quill box below the page is a second way into the SAME document, so
+  // the caret follows focus there too - typing in either place must show in
+  // the place that prints.
+  const active = Boolean(quill) && (canonicalBodyEdit || quill.hasFocus());
+  paintBodySelection({
+    layer,
+    host: document.getElementById("edCanonicalContent"),
+    page: document.getElementById("edFramePage"),
+    range: active ? quill.getSelection() : null,
+    offset: datelineText(state.view || {}).length,
+    active,
+    // AN UNWRITTEN BLOCK COMPOSES TO NO LINES, so there is nothing to measure
+    // a caret against - and writing a block from nothing is the commonest job
+    // there is. The body frame's own top-left is where the first character
+    // will be set, so that is where the caret waits. The prompt beside it
+    // ("Write the story") already says the same thing in words.
+    empty: document.getElementById("edBodyFrame"),
+  });
 }
 
 // Direct headline/deck editing happens on the SAME canonical newspaper
@@ -688,6 +771,8 @@ function endCanonicalBodyEdit({ blur = false } = {}) {
   document.getElementById("edWritingSurface")?.classList.remove("is-canonical-body-editor", "is-body-target");
   document.getElementById("edBodyFrame")?.classList.remove("is-direct-body-editing");
   updateSelectionLabel();
+  refreshWritingLabel();
+  refreshBodyCaret();
   // The source document is intentionally hidden while the exact composition
   // remains on the page. Once the desk targets another object it must also
   // give up keyboard focus: otherwise Arrow/Delete and editor history keys
@@ -731,6 +816,28 @@ function bodyOffsetAt(point, bias = 0) {
   return quill ? snapToCluster(quill.getText(), offset, bias) : offset;
 }
 
+/**
+ * Selects the word or the paragraph the pointer is standing in.
+ *
+ * A word is bounded by whitespace, so no akshara can be split by it and
+ * snapToCluster is not needed; a paragraph is bounded by the newlines the
+ * reporter typed, which is the same unit paragraph-policy.js works in.
+ */
+function selectAround(point, unit) {
+  if (!quill) return;
+  const at = bodyOffsetAt(point);
+  if (at === null) return;
+  const text = quill.getText();
+  const edge = unit === "paragraph" ? /\n/ : /\s/;
+  let from = at;
+  let to = at;
+  while (from > 0 && !edge.test(text[from - 1])) from -= 1;
+  while (to < text.length && !edge.test(text[to])) to += 1;
+  quill.focus();
+  quill.setSelection(from, Math.max(0, to - from), "silent");
+  refreshBodyCaret();
+}
+
 function beginCanonicalBodyEdit(point) {
   finishInlineTextEdit();
   hooks.onSelectPart?.("body");
@@ -743,8 +850,10 @@ function beginCanonicalBodyEdit(point) {
   // but looked like ordinary read-only copy while Quill was hidden.
   document.getElementById("edBodyFrame")?.classList.add("is-direct-body-editing");
   updateSelectionLabel();
+  refreshWritingLabel();
   quill.focus();
   quill.setSelection(bodyOffsetAt(point) ?? Math.max(0, quill.getLength() - 1), 0, "silent");
+  refreshBodyCaret();
 }
 
 const INLINE_TEXT = {
@@ -1100,7 +1209,30 @@ function bindTextFrames() {
 
     event.preventDefault();
     event.stopPropagation();
+    // Already typing here: a second double click is not "open the body", it is
+    // the gesture every editor gives a word. A third takes the paragraph. Both
+    // are what a sub-editor reaches for to mark a phrase, and without them the
+    // only way to select anything was to drag across it by hand.
+    if (canonicalBodyEdit) {
+      selectAround({ x: event.clientX, y: event.clientY }, "word");
+      return;
+    }
     beginCanonicalBodyEdit({ x: event.clientX, y: event.clientY });
+  }, true);
+
+  // A THIRD click takes the paragraph. `dblclick` fires on the second press and
+  // never again, so a triple click has to be read off `detail` on the ordinary
+  // click - which arrives after the drag handler below has set its collapsed
+  // caret, and therefore wins.
+  page?.addEventListener("click", (event) => {
+    if (!canonicalBodyEdit || event.detail < 3) return;
+    if (event.target.closest(".pic-frame")) return;
+    const rect = body?.getBoundingClientRect();
+    if (!rect || event.clientX < rect.left || event.clientX > rect.right
+      || event.clientY < rect.top || event.clientY > rect.bottom) return;
+    event.preventDefault();
+    event.stopPropagation();
+    selectAround({ x: event.clientX, y: event.clientY }, "paragraph");
   }, true);
 
   // A drag across the visible composed body selects that range in Quill. The
@@ -1123,6 +1255,7 @@ function bindTextFrames() {
       const from = snapToCluster(text, Math.min(start, finish), -1);
       const to = snapToCluster(text, Math.max(start, finish), 1);
       quill?.setSelection(from, to - from, "silent");
+      refreshBodyCaret();
     }, { once: true });
   }, true);
 
@@ -1607,8 +1740,27 @@ function toolbarActionOf(target) {
   for (const [action, selector] of TOOLBAR_ACTION) {
     if (target.closest(selector)) return action;
   }
-  if (target.closest(".ed-quill-size-btn")) return "size";
+  if (target.closest(".ed-quill-size-select")) return "size";
   return target.closest(".ed-quill-ink-btn") ? "ink" : null;
+}
+
+// Escape leaves the story, the way it already leaves a headline.
+//
+// A desk that has opened the body has the caret inside a Quill document that
+// is not where the pointer is, so "click somewhere else" was the only way out
+// - and the display flows had had a keyboard way out since they were written.
+// Bound at the document because that is where the focus is: Quill's root is
+// outside the page element, so a listener on the page never sees the key.
+let bodyKeysBound = false;
+function bindBodyKeys() {
+  if (bodyKeysBound) return;
+  bodyKeysBound = true;
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || !canonicalBodyEdit) return;
+    event.preventDefault();
+    endCanonicalBodyEdit({ blur: true });
+    hooks.onSelectPart?.("block");
+  });
 }
 
 let marksToolbarBound = false;
@@ -1631,7 +1783,22 @@ function bindMarksToolbar() {
     if (!activeDisplayField()) return;
     if (!inToolbar(event.target)) return;
     if (!toolbarActionOf(event.target)) return;
+    // The size picker is a native <select>: refusing its mousedown would stop
+    // it opening. Its range is remembered and put back on "change" instead.
+    if (event.target.closest(".ed-quill-size-select")) {
+      rememberSelection();
+      return;
+    }
     holdSelection(event);
+  }, true);
+
+  // And by the keyboard, or any other route into the picker that is not a
+  // press. The focusin handler further down deliberately exempts the toolbar,
+  // so the aim is still the headline when this runs.
+  document.addEventListener("focusin", (event) => {
+    if (!(event.target instanceof Element)) return;
+    if (!event.target.closest(".ed-quill-size-select")) return;
+    if (activeDisplayField()) rememberSelection();
   }, true);
 
   document.addEventListener("click", (event) => {
@@ -1644,14 +1811,29 @@ function bindMarksToolbar() {
     event.preventDefault();
     event.stopPropagation();
 
-    const value = action === "ink"
-      ? event.target.closest(".ed-quill-ink-btn")?.dataset.ink
-      : event.target.closest(".ed-quill-size-btn")?.dataset.size;
+    const value = event.target.closest(".ed-quill-ink-btn")?.dataset.ink;
     if (applyDisplayMark(action, value)) {
       // Straight down the ordinary field path - the same "input" event a
       // keystroke in the field raises, so the draft, the counters and the
       // canvas all update through one route rather than through a second one
       // invented for the toolbar.
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    refreshMarksToolbarState();
+  }, true);
+
+  // The size picker lands as a "change", not a click, and it has to be taken
+  // before the body's own handler on #edQuillSize sees it - otherwise a size
+  // chosen for a headline would be applied to the story. When no display field
+  // is aimed at, nothing is stopped and the body's handler runs untouched.
+  document.addEventListener("change", (event) => {
+    if (!(event.target instanceof Element)) return;
+    if (!event.target.closest(".ed-quill-size-select") || !inToolbar(event.target)) return;
+    const field = restoreSelection();
+    if (!field) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (applyDisplayMark("size", event.target.value)) {
       field.dispatchEvent(new Event("input", { bubbles: true }));
     }
     refreshMarksToolbarState();
@@ -1705,6 +1887,43 @@ function refreshMarksToolbarState() {
       : part === "body" ? "Set a list in the writing surface below the page"
         : "Lists are a body form";
   });
+  refreshSizePicker(field);
+}
+
+/**
+ * What the size picker SHOWS - the mark actually on the words it is aimed at.
+ *
+ * It reads the aimed-at object rather than always reading the body, because a
+ * control that keeps showing the last thing it did is a control that reports
+ * a headline is set at a size it is not.
+ */
+function refreshSizePicker(field) {
+  const select = refreshSizeOptions();
+  if (!select || document.activeElement === select) return;
+  // NEVER `quill.getFormat()` with no arguments. Its default first argument is
+  // `this.getSelection(true)`, and the `true` there means "focus the editor and
+  // then tell me" - so merely READING the toolbar's state pulled the caret into
+  // the body on every render, and returned null (crashing on `.index`) whenever
+  // the hidden editor could not take it. The range is asked for first, and the
+  // format is only read when there is one.
+  const range = quill ? quill.getSelection() : null;
+  const marked = field ? displaySizeAt(field)
+    : (range ? quill.getFormat(range.index, range.length)?.size : null);
+  select.value = marked && [...select.options].some((option) => option.value === marked) ? marked : "";
+}
+
+/** The `data-sahas-size` a display field's caret is standing inside, if any. */
+function displaySizeAt(field) {
+  const selection = window.getSelection();
+  if (!selection?.rangeCount) return null;
+  let node = selection.getRangeAt(0).commonAncestorContainer;
+  node = node.nodeType === 1 ? node : node.parentNode;
+  while (node && node !== field) {
+    const size = node.getAttribute?.("data-sahas-size");
+    if (size) return `${size}px`;
+    node = node.parentNode;
+  }
+  return null;
 }
 
 export async function mountFrame(section, view, images, callbacks, selectedPart = "block", selectedImageIds = []) {
@@ -1773,6 +1992,9 @@ export async function mountFrame(section, view, images, callbacks, selectedPart 
     if (source !== "user") return;
     hooks.onPatch?.({ body: copyFromFrame() }, "block-frame");
   });
+  // Moving the caret changes nothing about the copy, so nothing else repaints
+  // - the caret has to follow the selection on its own.
+  quill.on("editor-change", () => refreshBodyCaret());
   // Plain buttons, not Quill's Picker (see the toolbar markup's own note
   // above for why) - one delegated click handler. `quill.getSelection(true)`
   // asks Quill to focus and hand back a range: a plain button click moves
@@ -1781,6 +2003,7 @@ export async function mountFrame(section, view, images, callbacks, selectedPart 
   // Bold working after that focus loss) is what makes this still apply to
   // the text that was actually selected.
   bindMarksToolbar();
+  bindBodyKeys();
   // The ink buttons, for the BODY - the display fields go through
   // applyDisplayMark() above. Black carries no hex and clears the format,
   // which is what `false` means to Quill.
@@ -1791,9 +2014,13 @@ export async function mountFrame(section, view, images, callbacks, selectedPart 
     if (!range) return;
     quill.format("color", sanitiseInk(button.dataset.ink) || false, "user");
   });
-  document.getElementById("edQuillSize")?.addEventListener("click", (event) => {
-    const button = event.target.closest(".ed-quill-size-btn");
-    if (!button || !quill) return;
+  // Delegated on the HOST, which survives - refreshSizeOptions() replaces only
+  // its children. `quill.getSelection(true)` asks Quill to focus and hand back
+  // a range: choosing from a <select> moves DOM focus off the editor exactly
+  // as a toolbar button's click does, and Quill's own `lastRange` tracking is
+  // what makes the size still land on the words that were selected.
+  document.getElementById("edQuillSize")?.addEventListener("change", (event) => {
+    if (!event.target.closest(".ed-quill-size-select") || !quill) return;
     const range = quill.getSelection(true);
     if (!range) return;
     // format() fires "text-change" synchronously (source "user"), which the
@@ -1801,7 +2028,9 @@ export async function mountFrame(section, view, images, callbacks, selectedPart 
     // re-patch needed now that copyFromFrame() reads the Delta directly (see
     // quillDeltaToCanonicalHtml()) rather than a DOM serialization that could
     // still be mid-restructure when a size lands on an already-bold range.
-    quill.format("size", button.dataset.size, "user");
+    // An empty value is "no size mark at all", which is what `false` means to
+    // Quill - the same shape the Black ink button uses to clear a colour.
+    quill.format("size", event.target.value || false, "user");
   });
   // A real click or keyboard focus in Quill is source "user"; refreshFrame()'s
   // own dangerouslyPasteHTML(..., "silent") sync (below) also moves Quill's
@@ -1813,6 +2042,7 @@ export async function mountFrame(section, view, images, callbacks, selectedPart 
     if (range) writing?.classList.add("is-body-target");
     else if (source === "user") writing?.classList.remove("is-body-target");
     if (source === "user" && range) hooks.onSelectPart?.("body");
+    refreshBodyCaret();
   });
 
   layoutPage();

@@ -72,6 +72,46 @@ export function holdSelection(event) {
   event.preventDefault();
 }
 
+// A <select> IS NOT A BUTTON, and holdSelection() cannot be used on one: the
+// preventDefault that keeps the caret in place is also what stops a dropdown
+// opening at all. So the marked range is remembered on the press and put back
+// when the choice lands - the same end, by the only means a native picker
+// leaves open.
+let held = null;
+
+export function rememberSelection() {
+  const field = activeDisplayField();
+  const range = field ? selectionInside(field) : null;
+  held = range && !range.collapsed ? { field, range: range.cloneRange() } : null;
+  return Boolean(held);
+}
+
+export function restoreSelection() {
+  // Nothing was remembered - a keyboard route to the picker, or a browser that
+  // left the contenteditable's range alone when the select took focus. The
+  // live selection inside the aimed-at field is then still the right answer,
+  // and falling back to it is what keeps this working by whatever route the
+  // desk reached the control.
+  if (!held) {
+    const field = activeDisplayField();
+    const range = field ? selectionInside(field) : null;
+    if (!field || !range || range.collapsed) return null;
+    held = { field, range: range.cloneRange() };
+  }
+  if (!held.field.isConnected) {
+    held = null;
+    return null;
+  }
+  const { field, range } = held;
+  held = null;
+  markDisplayField(field);
+  field.focus({ preventScroll: true });
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  return field;
+}
+
 function selectionInside(field) {
   const selection = window.getSelection();
   if (!selection || selection.rangeCount === 0) return null;
@@ -88,10 +128,13 @@ function selectionInside(field) {
  * (block-frame.js), so both surfaces store one mark and not two.
  */
 function applySize(field, px) {
-  const size = sanitiseSize(parseFloat(px));
-  if (size === null) return false;
   const range = selectionInside(field);
   if (!range || range.collapsed) return false;
+  // "Body size" - no mark at all - is a real choice, and the only way to take
+  // one back off. The same shape Black already has among the inks.
+  if (px === "" || px === null || px === undefined) return stripSize(field, range);
+  const size = sanitiseSize(parseFloat(px));
+  if (size === null) return false;
 
   const span = document.createElement("span");
   span.setAttribute("data-sahas-size", String(size));
@@ -153,6 +196,15 @@ function applyInk(field, hex) {
 // unwrapped - a partial selection inside one would need the span split, and
 // the honest simple rule ("choosing Black clears the ink on the words you
 // selected, and on the run they are part of") is one a desk can predict.
+function stripSize(field, range) {
+  const touched = [...field.querySelectorAll("[data-sahas-size]")]
+    .filter((span) => range.intersectsNode(span));
+  if (!touched.length) return false;
+  touched.forEach((span) => span.replaceWith(...span.childNodes));
+  field.normalize();
+  return true;
+}
+
 function stripInk(field, range) {
   const touched = [...field.querySelectorAll("[data-sahas-ink]")]
     .filter((span) => range.intersectsNode(span));

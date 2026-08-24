@@ -29,6 +29,11 @@ const KEY = process.argv[3] || 'anchor';
 
 let pass = 0;
 let ran = 0;
+// Reachable from the crash handler. A run that dies half way used to leave the
+// block carrying whatever it had just set - and the NEXT run then treated that
+// as the block's own value and restored it faithfully at the end. That is how
+// five blocks of a real edition came to be carrying body sizes nobody chose.
+let putBack = async () => {};
 const say = (ok, what, detail = '') => {
   ran += 1;
   if (ok) pass += 1;
@@ -92,6 +97,7 @@ const say = (ok, what, detail = '') => {
     }, [ED, KEY]);
   }
 
+  putBack = async () => giveBlockBack();
   async function giveBlockBack() {
     if (!borrowed) return;
     await page.evaluate(async ([key, kept]) => {
@@ -405,9 +411,21 @@ const say = (ok, what, detail = '') => {
   await selectAllIn('edStoryHeadline');
   await press('#edQuillInk .ed-quill-ink-btn:not(.is-none)', 'an ink colours the headline, and only the headline',
     (b, a) => a.head !== b.head && /color/i.test(a.head) && a.bodyMarks === b.bodyMarks);
+  // The size picker is a <select> in POINTS now (block-frame.js's
+  // refreshSizeOptions) - the desk asked for a dropdown, and four fixed steps
+  // could not express a 7pt caption or an 18pt pull quote.
   await selectAllIn('edStoryHeadline');
-  await press('#edQuillSize .ed-quill-size-btn:last-child', 'a size mark resizes words in the headline only',
-    (b, a) => a.head !== b.head && a.bodyMarks === b.bodyMarks);
+  {
+    const before = await snap();
+    await page.locator('#edQuillSize .ed-quill-size-select').selectOption(
+      await page.evaluate(() => [...document.getElementById('edQuillSizeSelect').options]
+        .find((o) => o.textContent.startsWith('24 pt'))?.value));
+    await settle();
+    const after = await snap();
+    say(after.head !== before.head && after.bodyMarks === before.bodyMarks,
+      'a size mark resizes words in the headline only');
+    parity(after, 'a size mark resizes words in the headline only');
+  }
 
   await quill.click();
   await page.keyboard.down('Control'); await page.keyboard.press('a'); await page.keyboard.up('Control');
@@ -419,9 +437,18 @@ const say = (ok, what, detail = '') => {
   const sizeSelect = await show('#edStorySize');
   if (sizeSelect) {
     const before = await snap();
+    // ONE RUNG UP, not "the first option that is not the current one".
+    //
+    // The ladder is in points now and it starts at 6.5pt, so "the first
+    // different value" drove a 9pt newspaper body down to the smallest type
+    // preflight will pass a page with - which on a 112px block crosses the
+    // engine's own MIN_COLUMN_EM and makes Auto flip from one column to two
+    // mid-check. A desk nudges a block's type by a rung; it does not drop it
+    // to the floor, and a net that does is testing a state nobody is in.
     const values = await page.locator('#edStorySize option').evaluateAll((os) => os.map((o) => o.value));
     const current = await page.locator('#edStorySize').inputValue();
-    const other = values.find((v) => v !== current);
+    const at = values.indexOf(current);
+    const other = values[at + 1] ?? values[Math.max(0, at - 1)] ?? values.find((v) => v !== current);
     await sizeSelect.selectOption(other);
     await settle(1600);
     const after = await snap();
@@ -557,7 +584,8 @@ const say = (ok, what, detail = '') => {
   console.log(`\n${pass}/${ran} passed`);
   await browser.close();
   process.exit(pass === ran ? 0 : 1);
-})().catch((e) => {
+})().catch(async (e) => {
   console.error(`\nCRASHED after ${pass}/${ran} checks — everything after this did not run.\n`, e);
+  await putBack().catch(() => {});
   process.exit(1);
 });

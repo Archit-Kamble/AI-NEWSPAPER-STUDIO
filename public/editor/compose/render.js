@@ -246,7 +246,14 @@ export function composedMarkup(composition, view, { datelinePrefix = '' } = {}) 
       ? `transform:scaleX(${line.glyphScaleX});transform-origin:left top;`
       : '';
     pieces.push(
+      // `data-at` is the compositor's own source offset for this line. It is
+      // emitted so the caret and the selection can be drawn where the type is
+      // actually SET (external-editor/body-caret.js) rather than estimated -
+      // the same number `bodyOffsetAt()` reads going the other way. Identical
+      // on the canvas and in the Block Editor, because this is the one
+      // renderer both use.
       `<span class="section-composed section-body-line${dateline ? ' has-dateline' : ''}"`
+      + ` data-at="${line.at || 0}"`
       + ` style="left:${line.x.toFixed(2)}px;top:${line.y.toFixed(2)}px;`
       + `width:${(line.measure + 1).toFixed(2)}px;height:${line.height.toFixed(2)}px;`
       + `font-size:${line.fontPx}px;line-height:${line.height.toFixed(2)}px;${wordSpacing}${glyphScale}${faceStyle(line)}">${html}</span>`,

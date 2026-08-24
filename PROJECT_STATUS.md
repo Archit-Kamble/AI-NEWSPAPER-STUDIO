@@ -6218,3 +6218,88 @@ backfills reported 0 rows on this database.
 
 No console errors and no page errors in any run. `main` now carries all of it
 and the eight branches are gone.
+
+---
+
+## §53 — Four ways out: InDesign, Scribus, Word, and a real CMYK press PDF
+
+The desk asked for downloads in Adobe InDesign, Scribus, Word and CMYK print
+formats. All four are in, on `GET /api/newspapers/:id/export/:format`, behind a
+**Download** menu in the page toolbar.
+
+### One composition, four writers
+
+The first decision was the whole shape of it. `scribus.service.js` walks the
+composition and emits `.sla` XML in the same breath — right while Scribus was
+the only destination, wrong for four, because four walks of the same page is
+exactly the duplicated-catalog failure this project has already been bitten by
+twice (the drifted template keys; `object-fit: cover` against `contain`).
+
+So `src/services/export/print-model.js` does the walk **once** and returns
+placed items in millimetres and points. Every writer renders that list and
+decides nothing. It is proved rather than asserted: `tests/printModel.test.js`
+checks the shared walk against the .sla that already goes to the plate — every
+text frame at the same millimetre, every run in the same order — so if the two
+ever disagree, the test says so before a designer does.
+
+The Smart Card walk moved out of `scribus.service.js` into
+`export/smart-card-lines.js` for the same reason. `scribusComposition.test.js`
+stayed 21/21, which is the proof the `.sla` is byte-identical.
+
+### The press PDF
+
+Written by hand, and the reason is not stubbornness: every general-purpose PDF
+writer in npm either cannot embed a CID-keyed font from shaped glyph ids — the
+only way Devanagari can print correctly — or drags in a font engine that would
+become a **second opinion** about glyph advances, which this codebase has spent
+a great deal of effort making sure there is exactly one of. HarfBuzz already
+says which glyphs and where; drawing them is three hundred lines nobody has to
+keep in step with `compose.js`.
+
+Four things were found by building it and looking at the result:
+
+1. **A per-glyph `/ToUnicode` cannot describe Devanagari.** Done the naive way,
+   `शेतकऱ्यांसाठी` extracted as `शेशेतकऱ्यांयांयांसायांठीठी` — every cluster repeated
+   once per glyph it produced. Shaping is many-to-many. `/ActualText` on each
+   run is the operator for exactly this, and the copy now extracts letter for
+   letter.
+2. **The publication faces carry no Latin, and no ■.** Measured against the
+   real files: both faces lack `■`, `•` and every Latin letter — and the
+   dateline opens with a ■, the imprint is English, and the RNI line prints on
+   page two of every edition. Base-14 fallbacks (no embedding, present in every
+   RIP) at the x HarfBuzz reserved, and the ■ drawn as the rectangle it is.
+3. **A PDF text block is not nestable.** Both of those draw operators a `BT`
+   block may not contain. Ghostscript said so in as many words — "BT found
+   inside a text block" — the first time this ran over a real four-page
+   edition, where the imprint's English finally exercised the path. A one-block
+   fixture never would have.
+4. **Page one had no nameplate** — a hand's width of white where the paper's
+   own name goes. `scribus.service.js` has the same gap and always has. It is
+   in the shared model now, from the same header region and identity the canvas
+   uses; Scribus will gain it when that service moves onto the model.
+
+Verified with tools that are not this codebase: **Ghostscript processes all
+four pages with no conformance warnings**, `pdfinfo` reads the metadata and the
+sheet as 935.4 × 1502.4 pt (330 × 530 mm), and `pdftotext` returns the Marathi
+copy exactly. Rendered at 100 dpi and looked at: headlines, columns, cut-outs
+with their transparency, the Rashi card, the folio and the Devanagari date all
+where the desk put them.
+
+### What each format is FOR, said plainly
+
+| | |
+|---|---|
+| **CMYK PDF** | the press artifact. Black is 100% K, not four-plate — registration on small Devanagari counters is where four-plate black fringes. Photographs are decoded and separated, so `/DeviceRGB` never appears; a cut-out's alpha becomes an `/SMask`. **No ICC profile**: this product has no colour-management pipeline and pretending otherwise in a press file is worse than being plain about it. |
+| **IDML** | a documented zip of XML every InDesign since CS4 opens — a `.indd` is undocumented and version-locked. One story per composed line, never a shared one InDesign could reflow, and zero frame inset so its default does not double the compositor's own padding. |
+| **Scribus** | unchanged. It is the tested press path and it was left alone, except that it now shares the Smart Card walk. |
+| **Word** | the **copy**, not the page, and it says so in the download notice. Word is a flow processor; a `.docx` of positioned text boxes opens as something nobody can edit, which defeats the only reason to want Word. `w:cs`/`w:szCs` on every run, without which Word applies the Latin font and size to Devanagari. |
+
+### Verified
+
+| | |
+|---|---|
+| `npm test` | **911** (896 + 7 print-model + 8 export-format) |
+| Ghostscript over the 4-page press PDF | no conformance warnings |
+| IDML | 891 XML parts, all parse; `mimetype` first and stored; 4 spreads, 882 stories |
+| DOCX | every part parses; 183 paragraphs; headline, deck and story present |
+| all four through the real UI | downloaded, correctly named, no console errors |

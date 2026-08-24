@@ -1827,7 +1827,112 @@ A full-width row counts 1, a row a silhouette halves counts 0.5, two quarter cor
 
 **`layoutWarnings()` cannot use `metrics.fillRatio` for whitespace.** That ratio counts only the gaps *beside* pictures, never the room under the last line — the whitespace a desk actually complains about. Where there is a real composition, the warnings read `bodyFill()`.
 
-## Scribus / PDF export (not yet built)
+## How this paper leaves the building — `src/services/export/`
+
+Four destinations, **one composition**. `print-model.js` walks the edition once
+and returns a list of placed items; every writer renders that list and decides
+nothing about where anything goes. A block at 42.5 mm is at 42.5 mm in all
+four, or one writer has a bug — there is no second layout engine in that folder
+to disagree with. `tests/printModel.test.js` holds it by checking the shared
+walk against the .sla that already goes to the plate, line for line and word
+for word.
+
+| `GET /api/newspapers/:id/export/:format` | | |
+|---|---|---|
+| `pdf` | `.pdf` | the **CMYK press file** — the artifact a press takes |
+| `indesign` | `.idml` | an editable InDesign document |
+| `scribus` | `.sla` | the Scribus project (`scribus.service.js`, unchanged) |
+| `word` | `.docx` | the edition's **copy**, as a manuscript |
+
+Desk-only, and deliberately **not** gated on press readiness — `/scribus` and
+`/press-package` still are. Those two are the press path; these are the working
+exports, wanted while the page is still being made up, which is the only day
+they are any use.
+
+**Units are converted once, in the model.** The editor works in pixels at
+2 px/mm; the model is millimetres from the page's top-left and points for type,
+and every writer converts from there to its own unit (PDF points, IDML points,
+Word half-points and twips). Never silently — CLAUDE.md's own rule.
+
+### The press PDF is drawn as GLYPHS, not as text
+
+Devanagari cannot be printed by handing a PDF a Unicode string and a font: the
+shaping is what turns क + ् + ष into क्ष, and **a PDF viewer does no shaping at
+all**. HarfBuzz has already done it — the compositor's own shaper, the same one
+that measured the line — so the file carries the glyph ids it produced, in a
+CID-keyed font with `/Identity-H` encoding and `/CIDToGIDMap /Identity`, which
+means the two-byte codes in the content stream **are** the shaper's glyph ids.
+That is also why the press file cannot drift from the screen: same glyphs, same
+advances.
+
+- **Positions are exact, not left to the advance widths.** The line has already
+  been justified — word spaces opened, glyphs stretched — so a PDF that
+  re-advanced by `hmtx` alone would set a line that does not reach its measure.
+  Every glyph's x comes from HarfBuzz and the `TJ` adjustment is whatever puts
+  it there.
+- **`/ActualText` on every run**, because drawing glyph ids makes a file that
+  prints perfectly and cannot be searched. A per-glyph `/ToUnicode` table
+  *cannot* describe Devanagari — shaping is many-to-many — and doing it that
+  way first produced `शेतकऱ्यांसाठी` extracting as
+  `शेशेतकऱ्यांयांयांसायांठीठी`, every cluster repeated once per glyph. `/ToUnicode`
+  now carries only the glyphs that stand for exactly one cluster, as a fallback.
+- **The publication faces carry no Latin, and no ■.** Measured: `serif/400` and
+  `sans/700` both lack `■`, `•` and every Latin letter — and the dateline opens
+  with a ■, the legal imprint is in English, and the RNI line is on page two of
+  every edition. A glyph the shaper resolves to id 0 is drawn from one of PDF's
+  **base-14** fonts instead (no embedding, present in every RIP), at the x
+  HarfBuzz reserved for it, so the line does not move. The ■ is drawn as a
+  filled rectangle, because that is what it is.
+- **A text block is not nestable.** Both of the above draw operators a PDF text
+  block may not contain; Ghostscript said so in as many words ("BT found inside
+  a text block") the first time this ran over a real four-page edition, where
+  the imprint's English finally exercised the path. The block is closed before
+  either and opened again after.
+- **Black is 100% K, not four-plate black.** Registration on small Devanagari
+  counters is exactly where four-plate black shows as a fringe. Photographs are
+  decoded and separated too — `/DeviceRGB` never appears in the file — with the
+  ordinary naive conversion and **no ICC profile**, because this product has no
+  colour-management pipeline and pretending otherwise in a press file is worse
+  than being plain about it. A cut-out's alpha becomes an `/SMask`.
+
+### The nameplate, which no export used to carry
+
+Found by rendering a real four-page edition and looking at it: page one had a
+hand's width of white where the paper's own name goes. `scribus.service.js` has
+the same gap and always has — it emits the footer and the imprint and nothing
+above the fold. It is drawn from the same two sources the canvas uses
+(`regionsFor()`'s header region and `identityFor()`), leaves the ear when the
+page has a corner block, keeps the registered artwork at its own proportions,
+and does **not** repeat the RNI as type because the artwork already carries it.
+The model has it; **Scribus still does not** — moving that service onto the
+shared model is the obvious follow-up.
+
+### Word is the COPY, deliberately, and says so
+
+Word is a flow processor: it has no concept of a frame at 42.5 mm holding type
+that runs round a photograph. A `.docx` of absolutely-positioned text boxes can
+be made and opens as something nobody can edit — which defeats the only reason
+to want Word. So it is the manuscript: every block's headline, deck, byline and
+story in page order, read through the **same** rich-text reader the compositor
+uses, so a word the desk set bold or coloured is bold and coloured there too.
+`w:cs` and `w:szCs` are on every run: without them Word applies the Latin font
+and size to Devanagari, which is what makes an Indic `.docx` open in the wrong
+face at the wrong size.
+
+The IDML and DOCX zips go through `pressPackage.service.js`'s own zip writer —
+an entry may now name its own compression, which is how IDML's `mimetype` gets
+to be stored and first, the rule it shares with ODF and EPUB.
+
+### A Smart Card is walked once
+
+`export/smart-card-lines.js` reads `layoutSmartCard()`'s resolved geometry and
+returns neutral entries. It used to live inside `scribus.service.js`, which was
+right while Scribus was the only destination; four walks of the same card is
+the duplicated-catalog failure this project has been bitten by twice. Scribus
+now places what that walk returns, and `tests/scribusComposition.test.js`
+proves the .sla is unchanged.
+
+## Scribus / PDF export (the pipeline below is the PRESS path)
 
 ```
 Workspace → Save → Generate Scribus → Editor adjusts → Export CMYK PDF → Upload PDF → Archive

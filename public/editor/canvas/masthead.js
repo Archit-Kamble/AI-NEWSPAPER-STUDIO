@@ -125,8 +125,15 @@ export function mastheadMarkup(newspaper, page, geometry, { advertWidthPx = 0 } 
              to be set here as well - the same legal statement printed twice
              on one band - and, the ear being narrow, the duplicate is what
              wrapped it onto two lines. -->
+        <!-- The RNI is NOT set here either. The registered artwork carries
+             it inside the mark itself (open sahas-nameplate.png and look: top
+             right, beside the last letter), so a line of type saying it again
+             is the same duplicate the editor's name was, one span along - and
+             the ear is the narrow column the width-bound plate can least
+             afford. Found while giving the export the full band: the export
+             had always withheld it and the canvas had always repeated it, and
+             only one of them could be right. -->
         <div class="masthead-ear masthead-ear-right">
-          <span class="masthead-rni">${escapeHtml(identity.rni || "")}</span>
           <span class="masthead-meta">${escapeHtml(identity.volumeLine || "")}</span>
           <span class="masthead-meta">${escapeHtml(identity.pageCountLabel || "")} । ${escapeHtml(identity.price || "")}</span>
           <span class="masthead-web">${escapeHtml(identity.epaper || "")}</span>

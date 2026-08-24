@@ -21,6 +21,8 @@ const assert = require('node:assert/strict');
 
 const scribus = require('../src/services/scribus.service');
 const model = require('../src/services/export/print-model');
+const { identityFor } = require('../src/layout/identity');
+const identityOf = () => identityFor(newspaper.publication_date, 3);
 
 test.before(async () => { await model.ensureComposeReady(); });
 
@@ -112,8 +114,15 @@ test('a tinted block puts its ground down first, and a reversed headline its pan
   // Page one opens with the nameplate, so the block's own items start after
   // it; what matters is the order WITHIN the block. The block sits at
   // 40x60 editor px, which is 20x30 mm.
+  // The block sits at 40x60 editor px and is 260x400 - so 20x30 mm, 130x200.
+  // Bounded at its own foot as well as its head: the page carries furniture
+  // AFTER the blocks too (the footer band at 506 mm, the press registration
+  // patches at 523 mm), and an open-ended slice counted those patches as the
+  // block's own grounds.
   const all = built.pages[0].items;
-  const items = all.slice(all.findIndex((item) => item.kind === 'fill' && Math.abs(item.x - 20) < 0.01));
+  const items = all
+    .slice(all.findIndex((item) => item.kind === 'fill' && Math.abs(item.x - 20) < 0.01))
+    .filter((item) => item.y < 250);
   const firstFill = items.findIndex((item) => item.kind === 'fill');
   const firstText = items.findIndex((item) => item.kind === 'text');
   assert.equal(firstFill, 0, 'the ground is the first thing on the block');
@@ -167,7 +176,11 @@ test('the page furniture is on every page, and the imprint on exactly one', asyn
   for (const index of [0, 1, 2]) {
     assert.ok(words(index).some((text) => text.startsWith('पृष्ठ')), `page ${index + 1} carries its folio`);
   }
-  const carries = [0, 1, 2].map((index) => words(index).some((text) => /AI|कृत्रिम/i.test(text)));
+  // Matched on the disclosure's own words, not on the letters "AI" anywhere in
+  // the page: the masthead's contact line carries sahasnews@gmail.com, and a
+  // case-insensitive /AI/ finds the "ai" in "gmail".
+  const carries = [0, 1, 2].map((index) => words(index)
+    .some((text) => text === identityOf().aiDisclosure));
   assert.deepEqual(carries, [false, true, false], 'the AI disclosure prints once, on page two');
 });
 

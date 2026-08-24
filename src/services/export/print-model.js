@@ -22,7 +22,9 @@
 // measured against raw hmtx advances is not a conservative press file, it is a
 // wrong one - a Devanagari conjunct is overstated by up to 80%.
 
-const { geometryOf, pxToMm, regionForPage } = require('../../layout/geometry');
+const { geometryOf, pxToMm, regionForPage, HEADER } = require('../../layout/geometry');
+/** The folio strip's own declared height, from the one page-region model. */
+const HEADER_FOLIO_PX = HEADER.folioHeightPx;
 const { identityFor, dateLine, devanagari } = require('../../layout/identity');
 const { strip } = require('../../layout/plain-text');
 const { captionBox, PLACED_CAPTION_METRICS } = require('../../../public/editor/layout/caption-geometry');
@@ -37,7 +39,7 @@ let modules = null;
 
 async function ensureComposeReady() {
   if (!modules) {
-    const [metrics, shaper, adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry, accent] =
+    const [metrics, shaper, adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry, accent, compose] =
       await Promise.all([
         import('../../../public/editor/compose/font-metrics.js'),
         import('../../../public/editor/compose/shaper.js'),
@@ -48,8 +50,9 @@ async function ensureComposeReady() {
         import('../../../public/editor/layout/text-flow.js'),
         import('../../../public/editor/layout/image-geometry.js'),
         import('../../../public/editor/compose/accent.js'),
+        import('../../../public/editor/compose/compose.js'),
       ]);
-    modules = { metrics, shaper, adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry, accent };
+    modules = { metrics, shaper, adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry, accent, compose };
   }
   await Promise.all([modules.metrics.ensureFontsLoaded(), modules.shaper.ensureShaperReady()]);
   modules.shaper.requireShaperReady();
@@ -232,25 +235,98 @@ async function blockItems(section) {
 // -------------------------------------------------------------- furniture ---
 
 /**
- * THE NAMEPLATE, which no export has ever carried.
+ * THE NAMEPLATE BAND, as the canvas draws it.
  *
- * Found by rendering a real four-page edition to a press PDF and looking at
- * it: page one had a hand's width of white where the paper's own name goes.
- * `scribus.service.js` has the same gap and always has - it emits the footer
- * and the imprint and nothing above the fold - so this is a hole in the press
- * path, not something the PDF introduced. A newspaper without its nameplate is
- * not a newspaper.
+ * WHY THIS IS THE WHOLE BAND AND NOT A SUMMARY. The first version of this
+ * function put the plate artwork, the strapline and a date on the page and
+ * called it the masthead. Rendered beside the browser and compared line for
+ * line, what it was missing was not decoration:
  *
- * It is drawn from the same two sources the canvas draws it from - the header
- * region `regionsFor()` reserves, and `identityFor()` - so it cannot describe
- * a different masthead from the screen. It is deliberately the PRESS
- * furniture rather than a pixel copy of the browser's: the plate artwork, the
- * date ear, the editor ear and the strapline, at the reserved geometry.
+ *   the editions line, the place of publication, the weekday, the volume and
+ *   issue number, the page count, THE COVER PRICE, the e-paper address, the
+ *   owner, the office, the telephone and the email.
+ *
+ * Those are the legal and commercial identity of the edition - identity.js
+ * says so in as many words - and a download missing them is not the paper the
+ * desk approved. The desk reported exactly that, and they were right.
+ *
+ * It is laid out from `canvas/masthead.js` and its rules in styles.css, in the
+ * same editor pixels, so the two cannot describe different furniture:
+ *
+ *     strapline ....................................... editions
+ *     -----------------------------------------------------------
+ *     place |                                          |     RNI
+ *      DAY  |          the registered plate            |  volume
+ *  weekday  |                                          | pages | price
+ *   月-year  |                                          |  epaper
+ *     -----------------------------------------------------------
+ *     owner ................................ office | phone | email
  *
  * The ear is left for the corner block when the page HAS one; a paper that
  * does not sell the corner prints its nameplate across the whole measure -
  * exactly the rule CLAUDE.md records for the canvas.
  */
+const MASTHEAD = Object.freeze({
+  padPx: 2,            // .page-masthead padding
+  stripPx: 7,          // .masthead-strip font-size
+  stripGapPx: 3,       // its padding-bottom + margin-bottom
+  earLeftPx: 64,       // .masthead-body grid-template-columns
+  earRightPx: 88,
+  gapPx: 6,
+  platePx: 80,         // .masthead-plate img max-height
+  ownerPx: 5.5,        // .masthead-owner font-size
+  ownerGapPx: 3,       // its padding-top
+  placePx: 9,          // .masthead-place
+  placePadXPx: 6,
+  dayPx: 38,           // .masthead-day, line-height 0.95
+  dayLine: 0.95,
+  weekdayPx: 12,
+  monthYearPx: 10,
+  rniPx: 6,
+  metaPx: 8,
+  linePx: 1.45,        // --devanagari-line
+});
+
+const RULE_INK = '#111111';
+const HAIRLINE_INK = '#d0d0d6';
+const OWNER_INK = '#33333a';
+const RNI_INK = '#444444';
+
+/** A hairline across [xPx, xPx+widthPx] at yPx. Editor pixels in, mm out. */
+const ruleItem = (xPx, yPx, widthPx, weightPx = 1, ink = RULE_INK) => ({
+  kind: 'rule', x: mm(xPx), y: mm(yPx), width: mm(widthPx), height: mm(weightPx), ink,
+});
+
+/**
+ * One line of standing furniture, with the baseline where the FACE puts it.
+ *
+ * The writers fall back to `y + height * 0.8` when an item carries no
+ * baseline, which is fine in the footer where every line is the same size.
+ * This band is not: a 38 px date numeral and a 5.5 px owner line share it, and
+ * at 38 px that fallback is three pixels of drift. `FACE_BOX_ASCENT_EM` is
+ * imported from the compositor rather than copied - it is the number the
+ * browser lays the face out with, and a second copy of it here is the
+ * duplicated-catalog fault this project has already been bitten by twice.
+ */
+function furnitureLine(xPx, yPx, widthPx, text, opts, align = 'left', lineFactor = MASTHEAD.linePx) {
+  if (!String(text || '').trim()) return null;
+  const size = opts.fontPx;
+  const heightPx = size * lineFactor;
+  const ascent = modules ? modules.compose.FACE_BOX_ASCENT_EM : 0.93;
+  return lineItem(
+    { x: mm(xPx), y: mm(yPx), width: mm(widthPx), height: mm(heightPx) },
+    mm(yPx + (heightPx - size) / 2 + size * ascent),
+    [run(text, opts)],
+    align,
+  );
+}
+
+/** Exactly the width this text sets at - the shaper that composed the page. */
+function inkWidthPx(text, fontPx, family = 'sans', weight = 700) {
+  if (!modules) return String(text || '').length * fontPx * 0.55;
+  return modules.shaper.shapeWidthPx(String(text || ''), fontPx, family, weight);
+}
+
 function mastheadItems(newspaper, page, geometry, identity, sections) {
   if (Number(page.page_number) !== 1) return [];
   const region = regionForPage(geometry, page.page_number);
@@ -262,45 +338,178 @@ function mastheadItems(newspaper, page, geometry, identity, sections) {
     && Number(section.y_px) < header.bottom);
   const earPx = hasCorner ? header.earWidthPx + (header.earGapPx || 0) : 0;
 
-  const leftMm = mm(geometry.marginXPx + earPx);
-  const widthMm = mm(geometry.matterWidthPx - earPx);
-  const topMm = mm(header.top);
-  const bandMm = mm(header.bottom - header.top);
+  const leftPx = geometry.marginXPx + earPx;
+  const widthPx = geometry.matterWidthPx - earPx;
+  const topPx = header.top;
+  const date = dateLine(newspaper.publication_date);
 
   const items = [];
-  // The registered artwork, at its own proportions inside the band - never
+  let y = topPx + MASTHEAD.padPx;
+
+  // ---- the hairline strip: the paper's line, and where it prints ----------
+  const stripH = MASTHEAD.stripPx * MASTHEAD.linePx;
+  const stripOpts = { family: 'sans', weight: 400, fontPx: MASTHEAD.stripPx };
+  items.push(furnitureLine(leftPx, y, widthPx * 0.4, identity.strapline, stripOpts, 'left'));
+  items.push(furnitureLine(leftPx + widthPx * 0.4, y, widthPx * 0.6, identity.editions, stripOpts, 'right'));
+  y += stripH;
+  items.push(ruleItem(leftPx, y, widthPx));
+  y += MASTHEAD.stripGapPx;
+
+  // ---- the three-part body: date ear, plate, identity ear ----------------
+  const earL = MASTHEAD.earLeftPx;
+  const earR = MASTHEAD.earRightPx;
+  const plateLeft = leftPx + earL + MASTHEAD.gapPx;
+  const plateWidth = Math.max(1, widthPx - earL - earR - MASTHEAD.gapPx * 2);
+  const earRLeft = leftPx + widthPx - earR;
+
+  const placeH = MASTHEAD.placePx * MASTHEAD.linePx + 2;
+  const dayH = MASTHEAD.dayPx * MASTHEAD.dayLine;
+  const weekdayH = MASTHEAD.weekdayPx * MASTHEAD.linePx;
+  const monthH = MASTHEAD.monthYearPx * MASTHEAD.linePx;
+  const earLeftH = placeH + dayH + weekdayH + monthH;
+  const earRightH = MASTHEAD.metaPx * 3 * MASTHEAD.linePx + 2;
+  const rowH = Math.max(MASTHEAD.platePx, earLeftH, earRightH);
+
+  // The date ear. The place badge is set in reverse on the accent, exactly as
+  // the canvas sets it, and its panel is measured with the shaper rather than
+  // estimated - a red bar the width of the whole ear is not a badge.
+  let ey = y;
+  if (identity.placeOfPublication) {
+    const badgeW = inkWidthPx(identity.placeOfPublication, MASTHEAD.placePx) + MASTHEAD.placePadXPx * 2;
+    items.push({
+      kind: 'fill', x: mm(leftPx), y: mm(ey),
+      width: mm(Math.min(badgeW, earL)), height: mm(placeH), ink: ACCENT_INK,
+    });
+    items.push(furnitureLine(leftPx + MASTHEAD.placePadXPx, ey + 1,
+      Math.min(badgeW, earL), identity.placeOfPublication,
+      { family: 'sans', weight: 700, bold: true, fontPx: MASTHEAD.placePx, ink: '#ffffff' }));
+  }
+  ey += placeH;
+  items.push(furnitureLine(leftPx, ey, earL, date.day,
+    { family: 'sans', weight: 700, bold: true, fontPx: MASTHEAD.dayPx, ink: ACCENT_INK },
+    'left', MASTHEAD.dayLine));
+  ey += dayH;
+  items.push(furnitureLine(leftPx, ey, earL, date.weekday,
+    { family: 'sans', weight: 700, bold: true, fontPx: MASTHEAD.weekdayPx }));
+  ey += weekdayH;
+  items.push(furnitureLine(leftPx, ey, earL, date.monthYear,
+    { family: 'sans', weight: 400, fontPx: MASTHEAD.monthYearPx }));
+
+  // The registered artwork, at its own proportions inside the row - never
   // stretched to fill it, because a stretched nameplate is a different
   // nameplate and this one is a registered mark.
   const aspect = Number(identity.nameplateAspect) || (1600 / 300);
-  const plateHeight = Math.min(bandMm * 0.62, widthMm / aspect);
-  const plateWidth = plateHeight * aspect;
+  const plateH = Math.min(MASTHEAD.platePx, plateWidth / aspect);
+  const plateW = plateH * aspect;
   if (identity.nameplateUrl) {
     items.push({
       kind: 'image',
-      x: leftMm + (widthMm - plateWidth) / 2, y: topMm,
-      width: plateWidth, height: plateHeight,
+      x: mm(plateLeft + (plateWidth - plateW) / 2),
+      y: mm(y + (rowH - plateH) / 2),
+      width: mm(plateW), height: mm(plateH),
       file: String(identity.nameplateUrl).replace(/^\//, ''),
       resolved: null, rotation: 0,
     });
   }
 
-  const below = topMm + plateHeight;
-  const rest = Math.max(0, bandMm - plateHeight);
-  if (rest > 0) {
-    const lineMm = rest / 2;
-    const date = dateLine(newspaper.publication_date);
-    items.push(textItem(
-      { x: leftMm, y: below, width: widthMm, height: lineMm },
-      [run(identity.strapline, { family: 'sans', weight: 400, fontPx: 11 })], 'center'));
-    // NOT the RNI: the registered artwork above already carries it, and
-    // printing it twice on the same plate is the "editor's name set twice"
-    // fault CLAUDE.md records for the browser masthead, in a new place.
-    items.push(textItem(
-      { x: leftMm, y: below + lineMm, width: widthMm, height: lineMm },
-      [run(date.day ? `${date.day} ${date.monthYear}` : '', { family: 'sans', weight: 700, fontPx: 10 })], 'right'));
-  }
+  // The identity ear.
+  //
+  // The RNI is deliberately NOT set here, and this was settled by opening the
+  // artwork and looking at it: sahas-nameplate.png carries
+  // "RNI No. MAHMUL/2015/67123" inside the registered mark itself, top right.
+  // Setting it again as type is the "editor's name set twice" fault CLAUDE.md
+  // records for this same band, in a new place - so the canvas, which DID
+  // repeat it, lost its copy rather than this gaining one. Parity by removing
+  // the duplicate from both, never by copying it.
+  let ry = y;
+  const metaOpts = { family: 'sans', weight: 400, fontPx: MASTHEAD.metaPx };
+  items.push(furnitureLine(earRLeft, ry, earR, identity.volumeLine, metaOpts, 'right'));
+  ry += MASTHEAD.metaPx * MASTHEAD.linePx + 1;
+  const priceLine = [identity.pageCountLabel, identity.price].filter(Boolean).join(' \u0964 ');
+  items.push(furnitureLine(earRLeft, ry, earR, priceLine, metaOpts, 'right'));
+  ry += MASTHEAD.metaPx * MASTHEAD.linePx + 1;
+  items.push(furnitureLine(earRLeft, ry, earR, identity.epaper,
+    { family: 'sans', weight: 400, fontPx: MASTHEAD.metaPx, ink: ACCENT_INK }, 'right'));
+
+  y += rowH;
+
+  // ---- the owner line ----------------------------------------------------
+  items.push(ruleItem(leftPx, y, widthPx, 1, HAIRLINE_INK));
+  y += MASTHEAD.ownerGapPx;
+  const ownerOpts = { family: 'sans', weight: 400, fontPx: MASTHEAD.ownerPx, ink: OWNER_INK };
+  items.push(furnitureLine(leftPx, y, widthPx * 0.45, identity.owner, ownerOpts, 'left'));
+  const contact = [identity.office, identity.phone, identity.email].filter(Boolean).join(' \u00b7 ');
+  items.push(furnitureLine(leftPx + widthPx * 0.45, y, widthPx * 0.55, contact, ownerOpts, 'right'));
+  y += MASTHEAD.ownerPx * MASTHEAD.linePx;
+
+  // The band closes on a rule, as every broadsheet does. Drawn at the bottom
+  // of the furniture actually set rather than at the region's own edge: the
+  // region is baseline-snapped and can sit a few pixels below the band.
+  items.push(ruleItem(leftPx, Math.min(y + 2, header.bottom - 1), widthPx));
 
   return items.filter(Boolean);
+}
+
+/**
+ * THE FOLIO, which no export carried either.
+ *
+ * Page one gets the nameplate; every other page gets this ruled line, and the
+ * export had no equivalent at all - so pages two and up came out of the
+ * download with a blank strip where the browser prints the paper's name, the
+ * place, the date and the page number.
+ *
+ * Verso and recto, the same rule the canvas follows: a reader holding the
+ * paper open sees the OUTER edge of each page, so the page number goes there.
+ */
+function folioItems(newspaper, page, geometry, identity) {
+  if (Number(page.page_number) === 1) return [];
+  const region = regionForPage(geometry, page.page_number);
+  const header = region.header;
+  if (!header || !(header.bottom > header.top)) return [];
+
+  const leftPx = geometry.marginXPx;
+  const widthPx = geometry.matterWidthPx;
+  const date = dateLine(newspaper.publication_date);
+  const dateText = date.day ? `${date.day} ${date.monthYear}, ${date.weekday}` : '';
+  const placeAndDate = [identity.placeOfPublication, dateText].filter(Boolean).join(' \u0964 ');
+  const pageLabel = `\u092a\u0943\u0937\u094d\u0920 ${devanagari(page.page_number)}`;
+  const verso = Number(page.page_number) % 2 === 0;
+
+  const bandPx = Math.min(HEADER_FOLIO_PX, header.bottom - header.top);
+  const thirdPx = widthPx / 3;
+  const lineY = header.top + bandPx * 0.32;
+
+  const title = furnitureLine(leftPx + (verso ? thirdPx * 2 : 0), lineY, thirdPx,
+    identity.title, { family: 'sans', weight: 700, bold: true, fontPx: 11, ink: ACCENT_INK },
+    verso ? 'right' : 'left');
+  const number = furnitureLine(leftPx + (verso ? 0 : thirdPx * 2), lineY + 2, thirdPx,
+    pageLabel, { family: 'sans', weight: 400, fontPx: 8 }, verso ? 'left' : 'right');
+  const middle = furnitureLine(leftPx + thirdPx, lineY + 2, thirdPx,
+    placeAndDate, { family: 'sans', weight: 400, fontPx: 8 }, 'center');
+
+  return [title, middle, number,
+    ruleItem(leftPx, header.top + bandPx, widthPx)].filter(Boolean);
+}
+
+/**
+ * The strip of colour patches printed along the foot so the press can check
+ * the four plates are in register. The canvas draws it (masthead.js's
+ * registrationMarkup) and its absence is one of the things CLAUDE.md records
+ * as making a page look like a web mock-up - so parity requires it.
+ */
+function registrationItems(geometry) {
+  const leftPx = geometry.marginXPx;
+  const widthPx = geometry.matterWidthPx;
+  const topPx = geometry.pageHeightPx - 14;
+  const inks = ['#00a0e3', '#e6007e', '#ffed00', '#111111'];
+  const patches = inks.concat(inks);
+  const patchW = Math.min(10, widthPx / patches.length);
+  return patches.map((ink, index) => ({
+    kind: 'fill',
+    x: mm(leftPx + index * (patchW + 2)),
+    y: mm(topPx),
+    width: mm(patchW), height: mm(6), ink,
+  }));
 }
 
 function footerItems(newspaper, page, geometry, identity) {
@@ -363,10 +572,12 @@ async function buildPrintModel(newspaper, pages) {
   for (const page of pages) {
     const items = [];
     items.push(...mastheadItems(newspaper, page, geometry, identity, page.sections));
+    items.push(...folioItems(newspaper, page, geometry, identity));
     for (const section of page.sections || []) {
       items.push(...await blockItems(section));
     }
     items.push(...footerItems(newspaper, page, geometry, identity));
+    items.push(...registrationItems(geometry));
     built.push({ number: Number(page.page_number), items });
   }
 

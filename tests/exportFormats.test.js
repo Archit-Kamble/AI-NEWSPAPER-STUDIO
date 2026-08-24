@@ -162,11 +162,31 @@ test('all four render the SAME edition - none of them is a second layout engine'
   ]);
   const idmlStories = entryNames(idml.body).filter((n) => n.startsWith('Stories/')).length;
   assert.equal(idmlStories, lines.length, 'InDesign gets exactly the composed lines, no more');
-  // The PDF draws glyphs, so its evidence is that it carries one marked-content
-  // span per run rather than per line.
+  // The PDF draws glyphs, so its evidence is marked content: every run the
+  // model produced has to be recoverable from the file.
+  //
+  // This used to assert an EXACT count of one span per run, which held only
+  // while the fixture was pure Devanagari. The publication faces carry no
+  // Latin (measured - see pdf.writer.js), so a run containing any is drawn
+  // partly from a base-14 fallback, and each fallback piece marks its own
+  // /ActualText. The masthead legitimately sets Latin - the e-paper address
+  // and the email - so the count is now a floor, and the real invariant is
+  // that nothing the model produced is missing from the file.
   const runs = lines.reduce((total, item) => total + item.runs.length, 0);
-  assert.equal((pdfContent(pdf.body).match(/\/ActualText/g) || []).length, runs,
-    'the PDF marks exactly the runs the model produced');
+  const content = pdfContent(pdf.body);
+  const marks = (content.match(/\/ActualText/g) || []).length;
+  assert.ok(marks >= runs, `the PDF marks at least every run the model produced (${marks} < ${runs})`);
+  const marked = (content.match(/\/ActualText <FEFF([0-9A-Fa-f]*)>/g) || [])
+    // /ActualText is UTF-16 BIG-endian (that is what the FEFF byte-order mark
+    // in front of it declares). Node has no utf16be decoder, so the pairs are
+    // swapped before it is read as utf16le.
+    .map((mark) => Buffer.from(mark.replace(/^.*<FEFF/, '').replace('>', ''), 'hex')
+      .swap16().toString('utf16le'))
+    .join('\u0000');
+  const missing = lines.flatMap((item) => item.runs)
+    .map((run) => run.text.trim())
+    .filter((text) => text && !marked.includes(text.slice(0, 12)));
+  assert.deepEqual(missing, [], 'every run is recoverable from the PDF');
   assert.ok(word.body.length > 0);
 });
 

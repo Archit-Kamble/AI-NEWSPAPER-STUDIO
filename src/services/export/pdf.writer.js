@@ -280,16 +280,56 @@ function drawRun(out, { glyphs, sizePt, fontName, x, baselineY, ink, advanceOf, 
     open = false;
   };
 
-  for (const glyph of glyphs) {
-    // A glyph the publication face does not have. Drawn from a base-14 font at
-    // the place HarfBuzz reserved for it - see FALLBACK_FONT's note.
+  for (let index = 0; index < glyphs.length; index += 1) {
+    const glyph = glyphs[index];
+    // A GLYPH THE PUBLICATION FACE DOES NOT HAVE, and the whole WORD of them.
+    //
+    // These used to be drawn one character at a time, each at the x HarfBuzz
+    // had reserved for it. HarfBuzz reserves the face's `.notdef` advance for
+    // a character the face cannot set - one fixed width, the same for `i` as
+    // for `m` - so a Latin word came out spaced by a number that has nothing
+    // to do with Latin. Photographed in the masthead's own contact line:
+    // `sahasnews@gmai l .com`, letters colliding and gapping in one word.
+    //
+    // A contiguous span of them is one piece of text in one font, so it is
+    // drawn as one string and laid out by THAT font's own metrics. The
+    // Devanagari after it still sits where the compositor put it; only the
+    // inside of the fallback span stops being nonsense.
     if (glyph.glyphId === 0 && fallbackName) {
+      // The span runs on across punctuation the publication face DOES have,
+      // when that punctuation is sitting inside the foreign word.
+      //
+      // `sahasnews@gmail.com` came out as `sahasnews@gmail .com`: the face has
+      // a full stop, so the span ended at `gmail`, the stop was set from the
+      // face at its own reserved x, and `com` began a second span - and
+      // because Helvetica sets `sahasnews@gmail` NARROWER than the .notdef
+      // advances reserved for it, the join opened into a space in the middle
+      // of a URL. Carrying the span across the stop sets the address as one
+      // word, which is what it is.
+      //
+      // Deliberately only ACROSS, never starting on one: an ordinary full stop
+      // in Marathi copy has no foreign glyph beside it, so no body line
+      // changes. What this catches is exactly the mixed word - a URL, an email
+      // address, `COVID-19` - where the punctuation belongs to the Latin.
+      const source = String(text || '');
+      const latin = (at) => {
+        const ch = source[at];
+        return Boolean(ch) && ch.charCodeAt(0) > 0x20 && ch.charCodeAt(0) < 0x7f;
+      };
+      let last = index;
+      while (last + 1 < glyphs.length
+        && (glyphs[last + 1].glyphId === 0
+          || (latin(glyphs[last + 1].cluster)
+            && glyphs.slice(last + 2).some((other) => other.glyphId === 0
+              && other.cluster - glyphs[last + 1].cluster <= 2)))) last += 1;
+      const after = glyphs[last + 1];
       end();
-      const next = glyphs.find((other) => other.cluster > glyph.cluster);
       drawFallback(out, {
-        text: String(text || '').slice(glyph.cluster, next ? next.cluster : undefined),
-        sizePt, x: x + glyph.x, baselineY, ink, fontName: fallbackName, width: glyph.xAdvance,
+        text: String(text || '').slice(glyph.cluster, after ? after.cluster : undefined),
+        sizePt, x: x + glyph.x, baselineY, ink, fontName: fallbackName,
+        width: (after ? after.x : glyph.x + glyph.xAdvance) - glyph.x,
       });
+      index = last;
       continue;
     }
     begin();

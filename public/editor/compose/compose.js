@@ -955,7 +955,7 @@ const SHIROREKHA_EM = 0.625;
 // `Descent`, which is what decides where a baseline lands inside a line box.
 // Deliberately separate from faceAscent()/faceDescent(): those are this
 // engine's own measured INK extremes and are not the numbers CSS uses.
-const FACE_BOX_ASCENT_EM = 0.930;
+export const FACE_BOX_ASCENT_EM = 0.930;
 const FACE_BOX_DESCENT_EM = 0.625;
 
 /**

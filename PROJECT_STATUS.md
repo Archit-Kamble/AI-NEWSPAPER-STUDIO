@@ -6137,3 +6137,84 @@ all, and all four are scratch. Measured after: ink overlap **3 px → 0**, with
 | `tests/browser/editor-controls.browser.js` | 86/86 |
 | `tests/browser/body-editing.browser.js` | 35/35 on two blocks, one of them the desk's own |
 | `tests/browser/editor-parity.browser.js` × 5 blocks | 70, 72, 57, 70, 57 |
+
+---
+
+## §52 — Every branch merged to main, and the rest deleted
+
+Eight branches stood off `main`, and `main` had not moved since 2026-08-20.
+None was behind, so every one was a clean forward merge.
+
+**The seven `codex/*` branches were three pieces of work, not seven.** Six of
+them — `epaper-public-reader`, `epaper-selection-current-publish`,
+`epaper-exact-canvas`, `epaper-publish-workflow`, `epaper-hotspot-alignment`,
+`epaper-map-editor` — are **one stack**: each is the previous plus a commit,
+and `epaper-map-editor` is its tip. `git merge-base --is-ancestor` confirms it
+for all five against the tip. Cherry-picking a stack means rebuilding it, so it
+was merged whole.
+
+| branch | commits ahead | verdict |
+|---|---|---|
+| `codex/experimental-body-editor` | 20 | the editor work — fast-forwarded into `main` |
+| `codex/epaper-map-editor` (stack tip of six) | 8 | merged whole |
+| `codex/reporter-settings` | 2 | merged whole |
+
+### The constraint, and how each was checked against it
+
+*"Take only useful code and it should not impact on our editor or fill in at
+any cost."* So each branch was diffed against the paths that matter before it
+was merged, not after:
+
+```
+git diff --name-only main...<branch> | grep -E \
+  'public/editor/|compose|external-editor|workspace|copyFit|storyWriter|fit\.service|jump|preflight|pageSection'
+```
+
+- **The e-paper stack** matches exactly twice, and both are safe.
+  `public/editor/epaper-canvas-capture.js` is **new** and is a read-only
+  consumer — it imports `renderCanvas`, `loadGeometry`, `loadIdentity`,
+  `ensureFontsLoaded`, `ensureShaperReady` and draws the page for a headless
+  capture, so the released e-paper is the same composition the desk approved
+  rather than a second layout engine. `public/editor/publication.js` is the
+  **Publish modal**, replaced. `public/styles.css` is purely additive: 101
+  lines added, none removed.
+- **`reporter-settings`** matches nothing at all.
+
+Two things were checked by hand rather than by grep, because a grep could not
+have caught them:
+
+- **The Scribus/CMYK path is not lost.** The new modal drops the `.sla`/PDF
+  upload, so `/final-files`, `newspaper.service.js` and `upload.js` were
+  checked directly: all intact, and `public/admin/epapers.js` fronts the PDF
+  upload from E-paper management. A web PDF is stored as `epaper_pdf`, a third
+  artifact, so it can never masquerade as the approved CMYK print file.
+- **The masthead does not move.** `reporter-settings` hydrates the shared
+  `identity` object from a settings row at boot. `publication_settings`
+  defaults `publication_name` to `दैनिक साहस वार्ता` — byte for byte what
+  `identity.js` already carries — and every other field to `''`, which falls
+  through to the canonical default. Verified against the running server:
+  `GET /api/identity` returns the same nameplate, title and editor as before.
+
+### Migrations
+
+Applied by hand, statement by statement, rather than by running `schema.sql`
+whole: that file carries an **unguarded** `border_style` migration whose guard
+is that no control existed when it was written, and re-running it now could
+take a rule off a block a desk has since ruled. The new statements are the
+e-paper columns on `newspapers` (plus the one-selected-issue partial unique
+index and the `epaper_pdf` check), and the reporter columns on `users`,
+`publication_settings`, and three review columns on `news_items`. Both
+backfills reported 0 rows on this database.
+
+### Verified at every step
+
+| | after the e-paper merge | after reporter-settings |
+|---|---|---|
+| `npm test` | 894 | **896** |
+| `workspace.browser.js` | 223/223 | 223/223 |
+| `editor-controls.browser.js` | 86/86 | 86/86 |
+| `body-editing.browser.js` | 35/35 | 35/35 |
+| `editor-parity.browser.js` | 70, 72, 70 | 70, 72, 70, 57, 57 |
+
+No console errors and no page errors in any run. `main` now carries all of it
+and the eight branches are gone.

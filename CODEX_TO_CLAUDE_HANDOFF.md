@@ -1,4 +1,12 @@
-# Codex handoff for Claude
+# Codex handoff for Claude — HISTORICAL
+
+> **All of the branches described below are merged and deleted.** The e-paper
+> stack (`codex/epaper-*`, six branches that were one stack) and
+> `codex/reporter-settings` went into `main` on 2026-08-24, after each was
+> checked against the one standing constraint: it must touch no editor and no
+> fill code. Neither did. This file is kept for the review reasoning it
+> records; it is not a list of work outstanding.
+
 
 This file exists so Claude can inspect Codex's work commit by commit and keep
 only the parts that are useful. Do not assume a later commit is better merely

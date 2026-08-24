@@ -27,7 +27,7 @@ import '../layout/caption-geometry.js';
 
 const { captionBox } = globalThis.SahasCaptionGeometry;
 import '../layout/borders.js';
-const { isBoxed, borderWidthPx } = globalThis.SahasBorders;
+const { isBoxed, borderThicknessPx } = globalThis.SahasBorders;
 import '../layout/inset-panels.js';
 const { panelsOf, obstacleFromPanel } = globalThis.SahasInsetPanels;
 
@@ -236,8 +236,11 @@ export function composeSection(section = {}, view = {}) {
   // composition's padding is a single number for all four - insetting the
   // other three to clear a rule they do not have would be worse.
   const border = String(pick(section, view, 'borderStyle', 'border_style', 'none') || 'none');
+  // The whole thickness, which for a double rule is two rules and the gap
+  // between them. Insetting by one rule's width puts the inner rule of a
+  // double box on the story's first line.
   const boxInset = isBoxed(border)
-    ? BOX_INSET_PX + borderWidthPx(pick(section, view, 'borderWidthPx', 'border_width_px', 1))
+    ? BOX_INSET_PX + borderThicknessPx(border, pick(section, view, 'borderWidthPx', 'border_width_px', 1))
     : 0;
   const padding = positive(pick(section, view, 'marginPx', 'margin_px', 12), 12) + boxInset;
   const bodyFontPx = positive(

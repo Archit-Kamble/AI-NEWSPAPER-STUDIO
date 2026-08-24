@@ -26,6 +26,13 @@
     { key: 'rule', label: 'Rule below', edges: ['bottom'] },
     { key: 'rule-above', label: 'Rule above', edges: ['top'] },
     { key: 'rule-both', label: 'Rules above and below', edges: ['top', 'bottom'] },
+    // A DOUBLE RULE is one rule drawn twice with a gap of its own weight
+    // between - the device every printed paper uses to say "this is a section,
+    // not another story". It is not a thicker line and must not be drawn as
+    // one: the eye reads two thin lines as a boundary and one thick line as
+    // emphasis, which are different statements.
+    { key: 'rule-double', label: 'Double rule below', edges: ['bottom'], double: true },
+    { key: 'box-double', label: 'Double box', edges: ['top', 'right', 'bottom', 'left'], double: true },
   ]);
 
   // A printer's own ladder. The hairline is what a page rules a gutter with;
@@ -45,6 +52,14 @@
   const borderEdges = (key) => byKey(key).edges;
   /** Does this style enclose the block on all four sides? */
   const isBoxed = (key) => borderEdges(key).length === 4;
+  /** Is the rule drawn twice, with a gap of its own weight between? */
+  const isDouble = (key) => Boolean(byKey(key).double);
+  /**
+   * The total ink a double rule occupies: two rules and the gap between them.
+   * A boxed block insets its type by this, not by one rule's width, or the
+   * inner rule lands on the first line.
+   */
+  const borderThicknessPx = (key, width) => borderWidthPx(width) * (isDouble(key) ? 3 : 1);
   /** Is anything ruled at all? */
   const isRuled = (key) => borderEdges(key).length > 0;
 
@@ -61,7 +76,7 @@
 
   const api = Object.freeze({
     BORDER_STYLES, BORDER_WIDTHS, BORDER_KEYS: KEYS,
-    borderEdges, isBoxed, isRuled, borderWidthPx,
+    borderEdges, isBoxed, isRuled, isDouble, borderWidthPx, borderThicknessPx,
   });
   root.SahasBorders = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

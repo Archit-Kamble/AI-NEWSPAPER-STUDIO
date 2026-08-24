@@ -3858,6 +3858,20 @@ body.print-view .section-diagnostic {
   border-top: var(--block-rule, 0.71px) solid #111;
   border-bottom: var(--block-rule, 0.71px) solid #111;
 }
+/* A double rule is two lines with a gap of the same weight between them.
+   CSS `border-style: double` divides the declared width into exactly that -
+   line, gap, line - so the declared width is three times the chosen rule,
+   which is what borderThicknessPx() also reserves. Below 3px a browser cannot
+   split it and draws one line, so the calc is floored there. A double rule is
+   NOT a thicker line and must not be drawn as one: the eye reads two thin
+   lines as a boundary and one thick line as emphasis. */
+.newspaper-section.ruled-rule-double {
+  border-bottom: max(3px, calc(var(--block-rule, 0.71px) * 3)) double #111;
+}
+.newspaper-section.ruled-box-double {
+  border: max(3px, calc(var(--block-rule, 0.71px) * 3)) double #111;
+}
+
 
 /* ===========================================================================
    Print view
@@ -3906,6 +3920,13 @@ body.print-view .newspaper-section.ruled-rule-both {
   border-top: var(--block-rule, 0.71px) solid #111;
   border-bottom: var(--block-rule, 0.71px) solid #111;
 }
+body.print-view .newspaper-section.ruled-rule-double {
+  border-bottom: max(3px, calc(var(--block-rule, 0.71px) * 3)) double #111;
+}
+body.print-view .newspaper-section.ruled-box-double {
+  border: max(3px, calc(var(--block-rule, 0.71px) * 3)) double #111;
+}
+
 body.print-view .newspaper-section:hover {
   outline: none;
 }

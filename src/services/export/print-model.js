@@ -28,7 +28,7 @@ const HEADER_FOLIO_PX = HEADER.folioHeightPx;
 const { identityFor, dateLine, devanagari } = require('../../layout/identity');
 const { strip } = require('../../layout/plain-text');
 const { captionBox, PLACED_CAPTION_METRICS } = require('../../../public/editor/layout/caption-geometry');
-const { borderEdges, borderWidthPx } = require('../../../public/editor/layout/borders');
+const { borderEdges, borderWidthPx, isDouble } = require('../../../public/editor/layout/borders');
 const { panelsOf, panelLayout } = require('../../../public/editor/layout/inset-panels');
 const { smartCardLines } = require('./smart-card-lines');
 
@@ -145,13 +145,22 @@ async function blockItems(section) {
     const w = mm(section.width_px);
     const h = mm(section.height_px);
     const t = mm(weight);
-    const RULES = {
-      top: { x: x0, y: y0, width: w, height: t },
-      bottom: { x: x0, y: y0 + h - t, width: w, height: t },
-      left: { x: x0, y: y0, width: t, height: h },
-      right: { x: x0 + w - t, y: y0, width: t, height: h },
-    };
-    for (const edge of edges) items.push({ kind: 'rule', ...RULES[edge], ink: RULE_INK });
+    // A DOUBLE RULE IS DRAWN AS TWO RULES, never as one thicker one. The eye
+    // reads two thin lines as a boundary and one thick line as emphasis, and
+    // those are different statements - which is the whole reason a printer
+    // owns the device. The inner pass is inset by twice the weight: line, gap,
+    // line, and the gap is the same weight as the lines.
+    const passes = isDouble(section.border_style) ? [0, weight * 2] : [0];
+    for (const offset of passes) {
+      const o = mm(offset);
+      const RULES = {
+        top: { x: x0 + o, y: y0 + o, width: w - o * 2, height: t },
+        bottom: { x: x0 + o, y: y0 + h - o - t, width: w - o * 2, height: t },
+        left: { x: x0 + o, y: y0 + o, width: t, height: h - o * 2 },
+        right: { x: x0 + w - o - t, y: y0 + o, width: t, height: h - o * 2 },
+      };
+      for (const edge of edges) items.push({ kind: 'rule', ...RULES[edge], ink: RULE_INK });
+    }
   }
 
   // A PANEL SET INSIDE THE STORY. The compositor already ran the copy round

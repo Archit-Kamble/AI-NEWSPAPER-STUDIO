@@ -73,7 +73,13 @@ test('an ABSENT size is not a size of zero', () => {
   assert.equal(richText.sanitiseSize(''), null);
   assert.equal(richText.sanitiseSize('   '), null);
   assert.equal(richText.sanitiseSize('20'), 20);
-  assert.equal(richText.sanitiseSize('2'), 6, 'still clamped when a real number is given');
+  // The floor is 4 block px (5.7 pt), not 6 (8.5 pt): the old floor sat within
+  // a hair of the 9 pt body itself, so the smallest emphasis this product could
+  // store was 0.94x the copy and the toolbar's own smallest step was silently
+  // clamped away. What the picker OFFERS still starts at 6.5 pt - the smallest
+  // type preflight passes a page with; this is only the bound on bad data.
+  assert.equal(richText.sanitiseSize('2'), 4, 'still clamped when a real number is given');
+  assert.equal(richText.sanitiseSize('400'), 96, 'and at the top');
 });
 
 test('one span can carry a size and an ink, and its closing tag closes both', () => {

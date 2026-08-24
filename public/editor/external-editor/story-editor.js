@@ -19,6 +19,8 @@ import {
   renderPictures, selectPictureFrame,
 } from "./block-frame.js";
 import { escapeHtml as escapeAttribute } from "../format.js";
+// The publication's type ladder, in points - shared with the marks toolbar.
+import "../layout/publication-type.js";
 
 // The editorial limits, not the storage limits. A headline over about 90
 // characters cannot be set at headline size in a column and stay a headline;
@@ -60,10 +62,11 @@ const TEXT_SIZE_LABEL = {
   block: "Body size",
 };
 
-const DISPLAY_SIZES = [
-  7, 8, 8.5, 9, 9.5, 10, 11, 12, 13, 14, 16, 18, 20, 24,
-  28, 32, 36, 40, 48, 56, 64, 72, 84, 96, 110, 120, 140,
-];
+// The sizes are the publication's one type ladder, in POINTS. They used to be
+// this list's own numbers in editor BLOCK pixels - 7, 8, ... 140 - which is
+// not a unit any printer sets in and not the unit the marks toolbar a few
+// pixels below was already using. See publication-type.js's TYPE_LADDER_PT.
+const typeScale = () => globalThis.SahasPublicationType;
 
 function textSizeField(part = selectedTextPart) {
   return TEXT_SIZE_FIELD[part] || "bodyFontPx";
@@ -75,12 +78,8 @@ function textSizeValue(view, part = selectedTextPart) {
 
 function textSizeOptions(current) {
   const value = Number(current) || 0;
-  const sizes = DISPLAY_SIZES.includes(value) || !value
-    ? DISPLAY_SIZES
-    : [...DISPLAY_SIZES, value].sort((a, b) => a - b);
-
-  return sizes
-    .map((size) => `<option value="${size}"${size === value ? " selected" : ""}>${size} px</option>`)
+  return typeScale().typeLadder(value)
+    .map((rung) => `<option value="${rung.px}"${rung.px === value ? " selected" : ""}>${rung.label}</option>`)
     .join("");
 }
 
@@ -171,9 +170,19 @@ export function storyEditorMarkup(view, { budget = null, tools = "", pictures = 
              one. -->
         <div class="story-editor-toolbar" id="edStoryToolbar" role="toolbar" aria-label="Block type">
           <div class="rt-row rt-row-type">
+            <!-- EVERY CONTROL NAMES THE OBJECT IT ACTS ON, and this row had two
+                 that did not. The face is the whole BLOCK's; the size is
+                 whichever text object is selected on the page above - so
+                 double-clicking a headline moved this number from the body's
+                 to the headline's with nothing on screen to say so, and the
+                 desk read it as "the font size is changing automatically".
+                 Only a title attribute said which object it meant, and a
+                 tooltip is not something a person reads while working. -->
+            <span class="rt-target" title="The face is set for the whole block">Block</span>
             <select class="rt-select rt-select-font" id="edStoryFont" title="Font for the whole block">
               ${options(FONT_FAMILIES, view.fontFamily || "")}
             </select>
+            <span class="rt-target" id="edStorySizeTarget">Body</span>
             <select class="rt-select rt-select-size" id="edStorySize" title="Body size for the whole block">
               ${sizeOptions(view.bodyFontPx)}
             </select>
@@ -456,6 +465,8 @@ function refreshBlockControls(view, part = selectedTextPart) {
       `${TEXT_SIZE_LABEL[selectedTextPart] || "Body size"} for selected object`,
     );
   }
+  const target = document.getElementById("edStorySizeTarget");
+  if (target) target.textContent = PART_LABEL[selectedTextPart] || "Body";
   const alignNow = alignValueOf(view, selectedTextPart);
   const alignTarget = (PART_LABEL[selectedTextPart] || "Whole block").toLowerCase();
   document.querySelectorAll("#edStoryToolbar [data-align]").forEach((control) => {

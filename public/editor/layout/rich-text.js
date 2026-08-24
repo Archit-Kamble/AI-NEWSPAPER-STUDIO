@@ -55,9 +55,15 @@ const ANY_TAG = new RegExp(`</?(${MARKS})(\\s[^>]*)?>`, 'gi');
 
 // The one attribute value this module ever trusts out of arbitrary markup -
 // everything else on a tag is dropped by sanitise() below. Bounded to what a
-// newspaper actually sets in a body: below 6px nothing prints legibly, above
-// 96px is a poster headline size, not a selected word.
-const SIZE_MIN = 6;
+// newspaper actually sets in a body: above 96px is a poster headline size, not
+// a selected word.
+// 6 px was the floor, and it is 8.5 pt - larger than a caption, and only a
+// hair under the 9 pt body itself, so the smallest emphasis this product could
+// store was 0.94x the copy. 4 px is 5.7 pt: below anything the offered ladder
+// starts at (6.5 pt, what preflight passes a page with), so it bounds bad data
+// without ruling out a real credit line. No stored value moves - the clamp can
+// only ever have raised a number to 6, and nothing in the table is under it.
+const SIZE_MIN = 4;
 const SIZE_MAX = 96;
 
 /** A finite, in-range size, or null if the attribute was not a real number. */

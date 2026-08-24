@@ -186,6 +186,26 @@ const say = (ok, what, detail = '') => {
   say(width === '2.82px', 'and the 4 pt rule is the width the block is drawn with', width);
   await page.locator('#canvasSurface').screenshot({ path: `${SHOTS}/canvas-borders.png` });
 
+  // ---- the typefaces, on the page and in the picker ----------------------
+  const offered = await page.evaluate(() => Array.from(
+    document.querySelectorAll('#tyFontFamily option')).map((o) => o.value));
+  for (const key of ['serif', 'sans', 'tiro', 'mukta', 'khand', 'rozha']) {
+    say(offered.includes(key), `the Typography picker offers ${key}`);
+  }
+  // And the browser can actually paint them - a family the compositor measures
+  // but the browser has no @font-face for would be drawn in something else.
+  const painted = await page.evaluate(async () => {
+    const out = {};
+    for (const [css, name] of [["'Tiro Devanagari Marathi'", 'tiro'], ["'Mukta'", 'mukta'],
+      ["'Khand'", 'khand'], ["'Rozha One'", 'rozha']]) {
+      out[name] = await document.fonts.load(`400 16px ${css}`).then((f) => f.length > 0).catch(() => false);
+    }
+    return out;
+  });
+  for (const [name, ok] of Object.entries(painted)) {
+    say(ok, `the browser has a real @font-face for ${name}`);
+  }
+
   console.log(`\nERRORS: ${errors.length ? errors.join('\n  ') : '(none)'}`);
   say(errors.length === 0, 'no console or page errors');
   await putBack();

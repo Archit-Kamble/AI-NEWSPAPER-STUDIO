@@ -65,17 +65,23 @@ const fill = ([c, m, y, k]) => `${c} ${m} ${y} ${k} k`;
 
 // ------------------------------------------------------------------- fonts ---
 
-const FONT_FILES = {
-  'serif/400': 'assets/fonts/NotoSerifDevanagari-Regular.ttf',
-  'serif/700': 'assets/fonts/NotoSerifDevanagari-Bold.ttf',
-  'sans/400': 'assets/fonts/NotoSansDevanagari-Regular.ttf',
-  'sans/700': 'assets/fonts/NotoSansDevanagari-Bold.ttf',
-};
+// The faces, from the ONE catalogue the compositor measures and shapes with
+// (public/editor/layout/typefaces.js). A third copy of this list lived here,
+// beside the two in font-metrics.js and shaper.js, in the one place where a
+// drift would mean the plate carrying a different face from the screen. The
+// paths are relative to public/, which is what this writer resolves against.
+const TYPEFACES = require('../../../public/editor/layout/typefaces');
+const FONT_FILES = Object.fromEntries(
+  Object.entries(TYPEFACES.FONT_FILES).map(([key, file]) => [key, file.replace(/^\//, '')]),
+);
 
-const faceKey = (family, weight) => {
-  const fam = family === 'sans' ? 'sans' : 'serif';
-  return `${fam}/${Number(weight) >= 600 ? 700 : 400}`;
-};
+// The same classification as the measurer and the shaper, from the same file.
+// This one was its own third opinion and a narrower one - it recognised only
+// the exact string 'sans', so a run carrying the Typography panel's own
+// "Arial, Helvetica, sans-serif" was embedded from the SERIF face while being
+// measured against the sans. The line still fitted (the advances came from the
+// shaper) and it printed in the wrong face.
+const { faceKey } = TYPEFACES;
 
 /**
  * One embedded CID-keyed font.

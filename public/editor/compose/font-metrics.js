@@ -158,15 +158,14 @@ export function parseFont(buffer) {
 
 // ------------------------------------------------------------- the registry ---
 
-// The four faces styles.css actually declares. Nothing else is a publication
-// font, so nothing else is measurable and asking for one is a mistake worth
-// hearing about rather than silently approximating.
-export const FONT_FILES = {
-  'serif/400': '/assets/fonts/NotoSerifDevanagari-Regular.ttf',
-  'serif/700': '/assets/fonts/NotoSerifDevanagari-Bold.ttf',
-  'sans/400': '/assets/fonts/NotoSansDevanagari-Regular.ttf',
-  'sans/700': '/assets/fonts/NotoSansDevanagari-Bold.ttf',
-};
+// The faces styles.css actually declares, from the ONE catalogue
+// (layout/typefaces.js). This list used to be written out here, again in
+// shaper.js and a third time in the press PDF writer - three copies of the
+// same thing in the one place where a drift means the plate setting a
+// different face from the screen. Nothing outside that catalogue is a
+// publication font, so nothing else is measurable.
+import '../layout/typefaces.js';
+export const { FONT_FILES } = globalThis.SahasTypefaces;
 
 const loaded = new Map();
 let loading = null;
@@ -178,14 +177,7 @@ let loading = null;
 // measured Noto SERIF Devanagari widths, not Noto Sans, for as long as this
 // function has existed. Found only once `publicationFamily()` (below) was
 // written against the SAME two entries and a test caught the two disagreeing.
-function stackOf(family) {
-  const v = String(family).toLowerCase();
-  return v.includes('sans') || v.includes('arial') || v.includes('helvetica') ? 'sans' : 'serif';
-}
-
-function faceKey(family = 'serif', weight = 400) {
-  return `${stackOf(family)}/${Number(weight) >= 600 ? 700 : 400}`;
-}
+const { faceKey } = globalThis.SahasTypefaces;
 
 // The one place "which face" is decided, for MEASUREMENT (this file,
 // shaper.js) and for PAINT (render.js, and anything else that has to draw a
@@ -202,12 +194,7 @@ function faceKey(family = 'serif', weight = 400) {
 // the actual @font-face names this project declares (styles.css) - not a
 // bare "Noto Sans Devanagari", which has no @font-face rule under that exact
 // name and would silently fall through to a browser default.
-export function publicationFamily(value = '') {
-  const key = stackOf(value);
-  return key === 'sans'
-    ? { key: 'sans', css: "'Sahas Sans', 'Noto Sans Devanagari', sans-serif" }
-    : { key: 'serif', css: "'Sahas Serif', 'Noto Serif Devanagari', serif" };
-}
+export const { publicationFamily } = globalThis.SahasTypefaces;
 
 /** Canonicalised to the only two weights a physical bundled face exists for. */
 export function publicationWeight(value) {
@@ -328,10 +315,24 @@ export function measureWidth(text, fontPx, family = 'serif', weight = 400) {
  * reports 930 up and 625 down at 1000/em: 1.555, not the 1.45 that was
  * previously hard-coded as the floor. That 0.105 em is the top of a velanti.
  */
+// The measured worst case for this script, and the floor no face may go under.
+//
+// A face's hhea is what it CLAIMS to need, and some faces claim less than
+// Devanagari actually occupies - Noto Sans Devanagari reports 1.304 and Tiro
+// Devanagari Marathi reports 1.000, both under the 1.475 em ink box that was
+// measured exhaustively across every consonant, vowel sign and virama
+// conjunct (see CLAUDE.md, and MIN_LINE_HEIGHT in text-flow.js which is this
+// same number). Trusting a tight hhea would crop matras on exactly the faces
+// a desk chose for being handsome.
+//
+// It became load-bearing when this stopped being a two-face product: with
+// only Noto Serif in play the reported 1.555 was the largest number anyway.
+const DEVANAGARI_INK_EM = 1.45;
+
 export function minLineHeightFor(family = 'serif', weight = 400) {
   const face = faceMetrics(family, weight);
-  if (!face) return 1.45;
-  return face.ascent + face.descent;
+  if (!face) return DEVANAGARI_INK_EM;
+  return Math.max(DEVANAGARI_INK_EM, face.ascent + face.descent);
 }
 
 export function faceAscent(family = 'serif', weight = 400) {

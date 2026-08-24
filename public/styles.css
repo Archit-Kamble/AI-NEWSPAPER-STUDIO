@@ -5614,3 +5614,45 @@ body.print-view .page-imprint {
   border: 1px solid var(--line, #d0d0d6);
   border-radius: 3px;
 }
+
+/* --- the publication's other typefaces ----------------------------------
+   Declared from the same catalogue the compositor measures with
+   (editor/layout/typefaces.js). A family declared here and not there would be
+   drawn in a face nothing had measured; one declared there and not here would
+   be measured in a face the browser cannot paint. All SIL OFL 1.1. */
+@font-face {
+  font-family: "Tiro Devanagari Marathi";
+  src: url("/assets/fonts/TiroDevanagariMarathi-Regular.ttf") format("truetype");
+  font-weight: 400 700;   /* one cut; 700 is the same file, never synthesised */
+  font-display: block;
+}
+@font-face {
+  font-family: "Mukta";
+  src: url("/assets/fonts/Mukta-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-display: block;
+}
+@font-face {
+  font-family: "Mukta";
+  src: url("/assets/fonts/Mukta-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-display: block;
+}
+@font-face {
+  font-family: "Khand";
+  src: url("/assets/fonts/Khand-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-display: block;
+}
+@font-face {
+  font-family: "Khand";
+  src: url("/assets/fonts/Khand-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-display: block;
+}
+@font-face {
+  font-family: "Rozha One";
+  src: url("/assets/fonts/RozhaOne-Regular.ttf") format("truetype");
+  font-weight: 400 700;
+  font-display: block;
+}

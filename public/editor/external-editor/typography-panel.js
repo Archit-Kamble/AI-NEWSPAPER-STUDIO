@@ -14,13 +14,32 @@ import { DEFAULT_DISPLAY_ALIGN } from "../compose/compose.js";
 // the template keys drifted (CLAUDE.md); these set real Scribus properties, so
 // two lists would mean a font offered on screen that the press file has never
 // heard of.
+// THE FACES THIS PAPER IS SET IN, from the one catalogue
+// (layout/typefaces.js) that the compositor measures with, the shaper shapes
+// with, the browser paints with and the press PDF embeds.
+//
+// The old list offered Georgia, Times New Roman, Arial and Helvetica Neue -
+// system fonts with no Devanagari in them at all, every one of which was
+// silently measured as either the serif or the sans publication face
+// underneath (font-metrics.js records the bug where two of them were measured
+// as the WRONG one for years). They are kept at the foot of the list because
+// rows carry those exact strings and a desk who chose one should still see
+// what they chose; the six real faces above them are the ones that mean
+// anything.
+import "../layout/typefaces.js";
+const { TYPEFACES } = globalThis.SahasTypefaces;
+
 export const FONT_FAMILIES = [
   { value: "", label: "Theme default" },
-  { value: "Georgia, 'Times New Roman', serif", label: "Georgia (serif)" },
-  { value: "'Times New Roman', Times, serif", label: "Times New Roman" },
-  { value: "'Noto Serif Devanagari', Georgia, serif", label: "Noto Serif Devanagari" },
-  { value: "Arial, Helvetica, sans-serif", label: "Arial" },
-  { value: "'Helvetica Neue', Helvetica, sans-serif", label: "Helvetica Neue" },
+  ...TYPEFACES.map((face) => ({
+    value: face.key,
+    label: face.role === 'display' ? `${face.label} — display` : face.label,
+    title: face.note,
+  })),
+  { value: "Georgia, 'Times New Roman', serif", label: "Georgia (legacy)" },
+  { value: "'Times New Roman', Times, serif", label: "Times New Roman (legacy)" },
+  { value: "Arial, Helvetica, sans-serif", label: "Arial (legacy)" },
+  { value: "'Helvetica Neue', Helvetica, sans-serif", label: "Helvetica Neue (legacy)" },
 ];
 
 const WEIGHTS = [

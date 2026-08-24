@@ -34,24 +34,12 @@
 // for Devanagari, which does not kern across the word space the way Latin
 // does.
 
-const FONT_FILES = {
-  'serif/400': '/assets/fonts/NotoSerifDevanagari-Regular.ttf',
-  'serif/700': '/assets/fonts/NotoSerifDevanagari-Bold.ttf',
-  'sans/400': '/assets/fonts/NotoSansDevanagari-Regular.ttf',
-  'sans/700': '/assets/fonts/NotoSansDevanagari-Bold.ttf',
-};
+import '../layout/typefaces.js';
+const { FONT_FILES, faceKey } = globalThis.SahasTypefaces;
 
-// Kept identical to font-metrics.js's own classification (which this
-// duplicates, same reason font-metrics.js's original hmtx path does: two
-// runtimes, one for the server's own font reader and one for this shaper).
-// "Arial"/"Helvetica Neue" - two of the Typography panel's six choices -
-// contain neither "serif" nor "sans" as a substring; a version of this that
-// checked for "sans" alone always silently measured them as serif.
-function faceKey(family = 'serif', weight = 400) {
-  const v = String(family).toLowerCase();
-  const stack = v.includes('sans') || v.includes('arial') || v.includes('helvetica') ? 'sans' : 'serif';
-  return `${stack}/${Number(weight) >= 600 ? 700 : 400}`;
-}
+// This used to be a hand-kept copy of font-metrics.js's classification, with a
+// comment saying so. Both now read layout/typefaces.js, so the measurer and
+// the shaper cannot disagree about which face a block is set in.
 
 async function readFontFile(path) {
   if (typeof process !== 'undefined' && process.versions?.node) {

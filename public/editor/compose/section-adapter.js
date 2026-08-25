@@ -351,6 +351,10 @@ export function composeSection(section = {}, view = {}) {
     subheading: textWithMarks(pick(section, view, 'subheading', 'subheading', '')),
     // The dateline is part of the flow it opens.
     body: { text: bodyText, marks: bodyMarks },
+    // How much of that flow is furniture rather than the reporter's copy. The
+    // engine needs it for one decision - a drop cap cannot be taken out of a
+    // dateline (compose.js says why) - and for nothing else.
+    datelineLength: prefix.length,
     // Whether this block is MEANT to hold copy, from the one catalog that
     // says what each block kind is for. A full-bleed advert leaves no column
     // wide enough to set type in and that is the finished advert, not a

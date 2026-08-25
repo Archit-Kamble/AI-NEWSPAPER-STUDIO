@@ -519,19 +519,36 @@ function bindPanelControls(handlers, section, view) {
 
   document.querySelectorAll("[data-prop-panel-add] [data-panel-add]").forEach((button) => {
     button.addEventListener("click", () => {
-      // Placed in the lower right of the block at a bit under half its width,
-      // which is where a printed चौकट usually sits and is never over the
-      // headline.
-      const w = Math.max(INSET_PANEL_MIN_PX, Math.round((Number(section.width_px) || 200) * 0.45));
-      const h = Math.max(INSET_PANEL_MIN_PX, Math.round((Number(section.height_px) || 200) * 0.3));
+      const kind = button.dataset.panelAdd;
+      const blockW = Number(section.width_px) || 200;
+      const blockH = Number(section.height_px) || 200;
+
+      // A CROSS-HEAD SPANS THE MEASURE and is one band deep - that is what
+      // makes it a cross-head rather than a box beside the story. Everything
+      // else is placed in the lower right at a bit under half the width, which
+      // is where a printed चौकट usually sits and is never over the headline.
+      const crosshead = kind === "crosshead";
+      const w = crosshead
+        ? Math.max(INSET_PANEL_MIN_PX, blockW - 4)
+        : Math.max(INSET_PANEL_MIN_PX, Math.round(blockW * 0.45));
+      const h = crosshead
+        ? Math.max(INSET_PANEL_MIN_PX, Math.round((Number(view?.bodyFontPx) || 6.4) * 1.45 * 2))
+        : Math.max(INSET_PANEL_MIN_PX, Math.round(blockH * 0.3));
+
       send([...panelsFromDom(section, view), {
         id: `panel-${Date.now().toString(36)}`,
-        kind: button.dataset.panelAdd,
-        x: Math.max(0, (Number(section.width_px) || 200) - w - 2),
-        y: Math.round((Number(section.height_px) || 200) * 0.45),
+        kind,
+        x: crosshead ? 2 : Math.max(0, blockW - w - 2),
+        y: Math.round(blockH * 0.45),
         width: w, height: h,
-        title: button.dataset.panelAdd === "quote" ? "" : "ठळक मुद्दे",
-        lines: ["\u2022"],
+        title: kind === "quote" ? "" : crosshead ? "पुढील टप्पा" : "ठळक मुद्दे",
+        // NOT a bullet. Measured: the publication serif and sans both lack
+        // U+2022, so every panel this button made was born holding a glyph
+        // that resolves to .notdef - a hollow box on screen and in the press
+        // file. The marker is the panel's own `marker` setting, which draws
+        // U+25AA (the mark the dateline already uses); a line's own text is
+        // just text, so it starts as a placeholder a desk types over.
+        lines: crosshead ? [] : [kind === "quote" ? "इथे अवतरण लिहा" : "इथे मजकूर लिहा"],
       }]);
     });
   });

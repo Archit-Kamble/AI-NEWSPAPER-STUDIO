@@ -2328,6 +2328,13 @@ export function composeBlock(input = {}) {
   // it used to sit in this `else`, which made it unreachable whenever the
   // font was ALSO not ready, and the two are separate failures.
   if (!result.fontReady) warnings.push({ code: 'FONT_NOT_READY', detail: 'Composed before the publication font was measurable; sizes are estimated.' });
+  if (input.datelineLength > 0 && Math.max(0, num(input.dropCapLines, 0)) >= 2) {
+    warnings.push({
+      code: 'DROP_CAP_AFTER_DATELINE',
+      detail: 'This block opens with its dateline, so there is no first letter for a drop cap to be. '
+        + 'Clear the location and reporter to set one.',
+    });
+  }
 
   // Each display object's own alignment. These are separate persisted fields
   // (schema.sql's headline_align/subheading_align) because they are separate
@@ -2562,7 +2569,18 @@ export function composeBlock(input = {}) {
     firstLineIndentPx: Math.max(0, num(input.firstLineIndentPx, 0)),
     // Off unless the block asks for it, so no stored row's composition can
     // change: 0 is "no drop cap" and is what every existing block carries.
-    dropCapLines: Math.max(0, num(input.dropCapLines, 0)),
+    //
+    // AND OFF WHEN THE DATELINE OPENS THE BODY, which is the commoner case by
+    // far. The dateline is furniture prepended to the copy (section-adapter's
+    // `prefix + withMarks.text`), so `dropCapOf()` took its clusters: the cap
+    // was the dateline's own U+25A0, which the publication faces do not have
+    // as a letter and the canvas therefore drew as a SOLID BLACK SQUARE three
+    // lines deep. Photographed on a real 268x296 anchor. Refusing is the
+    // honest answer rather than capping the place name: a drop cap is the
+    // story's first ink and on this paper the dateline already is, so the two
+    // cannot both open the block. The desk is told, because a control that
+    // silently does nothing is the fault this project has already fixed twice.
+    dropCapLines: input.datelineLength > 0 ? 0 : Math.max(0, num(input.dropCapLines, 0)),
     dropCapChars: Math.max(1, num(input.dropCapChars, 1)),
     // 'none' unless the block asks, so no stored row's composition changes.
     listStyle: String(input.listStyle || 'none'),

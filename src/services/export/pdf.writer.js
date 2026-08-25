@@ -215,27 +215,48 @@ endcmap CMapName currentdict /CMap defineresource pop end end`;
  */
 const FALLBACK_FONT = { serif: 'Times-Roman', sans: 'Helvetica' };
 
+/**
+ * THE FILLED SQUARES THIS PAPER SETS, and how big each one is as a share of
+ * the type it sits in.
+ *
+ * Neither has a WinAnsi slot, and neither is in the publication faces, so
+ * both are DRAWN as the rectangles they are rather than substituted with
+ * whatever a Latin face happens to keep at that byte.
+ *
+ * U+25A0 opens the dateline and was the only one handled. U+25AA is the
+ * marker a panel's bulleted list has used since panels were built, and now
+ * the marker a bulleted list in running copy hangs - and it printed as `?`.
+ * Photographed in a rendered press PDF: the numbered list beside it set its
+ * Devanagari numerals perfectly and the bulleted one had a question mark
+ * where every bullet should be. Reading the code would not have found it;
+ * the two characters look alike and one of them was in the list.
+ */
+const FILLED_SQUARES = { '\u25a0': 0.42, '\u25aa': 0.30 };
+const SQUARE_RE = /[\u25a0\u25aa]/g;
+
 /** WinAnsi bytes for a base-14 font, with anything outside it dropped. */
 function winAnsi(text) {
   return [...String(text)]
     .map((ch) => {
       const code = ch.codePointAt(0);
-      if (code === 0x25a0) return 0xa7;   // ■ has no WinAnsi slot; a filled marker is drawn instead
+      // Drawn as a rectangle above, never as a letter - see FILLED_SQUARES.
+      if (code === 0x25a0 || code === 0x25aa) return 0xa7;
       return code <= 0xff ? code : 0x3f;  // '?' rather than silence
     })
     .filter((code) => code !== null);
 }
 
 function drawFallback(out, { text, sizePt, x, baselineY, ink, fontName, width }) {
-  const square = text.includes('\u25a0');
-  if (square) {
-    // The dateline marker IS a filled square, so it is drawn as one rather
-    // than substituted with whatever a Latin face happens to have at that
-    // slot. Sized and sat on the type's own body, like the glyph it replaces.
-    const side = sizePt * 0.42;
+  const squares = String(text).match(SQUARE_RE);
+  if (squares) {
+    // The mark IS a filled square, so it is drawn as one rather than
+    // substituted with whatever a Latin face happens to have at that slot.
+    // Sized and sat on the type's own body, like the glyph it replaces - each
+    // at its own share, because a BLACK SMALL SQUARE is not a BLACK SQUARE.
+    const side = sizePt * FILLED_SQUARES[squares[0]];
     out.push('q', fill(ink),
       `${round(x)} ${round(baselineY + sizePt * 0.06)} ${round(side)} ${round(side)} re f`, 'Q');
-    const rest = text.replace(/\u25a0/g, '').trim();
+    const rest = String(text).replace(SQUARE_RE, '').trim();
     if (!rest) return;
     text = rest;
     x += side + sizePt * 0.18;

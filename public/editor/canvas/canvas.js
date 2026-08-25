@@ -40,12 +40,23 @@ function monoWarningMarkup(page, geometry) {
   const pictures = (page.sections || []).filter(
     (section) => section.image_url || (section.images || []).length,
   );
-  if (!pictures.length) return "";
+  // A page with no photographs still has ink on it - an accent headline, a
+  // chart, a tinted ground - and every one of those comes off the same single
+  // plate. Saying nothing on such a page was the same gap as previewing only
+  // the photographs in grey.
+  const coloured = (page.sections || []).filter(
+    (section) => section.background_color || section.headline_style === "reverse"
+      || section.headline_style === "accent" || section.smart_card_key === "chart",
+  );
+  if (!pictures.length && !coloured.length) return "";
 
   const left = geometry?.marginXPx ?? 20;
   const width = geometry?.matterWidthPx ?? 620;
   return `<div class="mono-forme-warning" style="left:${left}px;top:${(geometry?.marginYPx ?? 20) + 20}px;width:${width}px;">
-      This page prints black only — ${pictures.length} photograph${pictures.length === 1 ? "" : "s"} will come out grey.
+      This page prints black only — ${[
+        pictures.length ? `${pictures.length} photograph${pictures.length === 1 ? "" : "s"}` : "",
+        coloured.length ? `${coloured.length} block${coloured.length === 1 ? "" : "s"} carrying colour` : "",
+      ].filter(Boolean).join(" and ")} will come out grey.
     </div>`;
 }
 

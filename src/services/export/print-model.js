@@ -448,6 +448,76 @@ function pageOverlayItems(page, { mono = false } = {}) {
   return items.filter(Boolean);
 }
 
+/**
+ * A MONO FORME HAS NO COLOUR PLATES, so nothing on it may be separated to one.
+ *
+ * `pages.prints_colour` was carried on IMAGE items alone: the photographs were
+ * separated to K and everything else - a chart's accent bars, a pie's tinted
+ * slices, a reversed headline's panel, a block's tinted ground, a word a
+ * sub-editor inked - was emitted as its own CMYK. So a page with no colour
+ * plates asked the press for four, which is the same fault that was found and
+ * fixed for the pictures and left standing for the ink beside them.
+ *
+ * TWO RULES, and they are different on purpose:
+ *
+ *  - TYPE goes to 100% K. A red headline on a mono forme prints BLACK; set as
+ *    a screen of black it would be a broken dotted line on newsprint, which is
+ *    the same reason `column-rules.js` refuses to draw a grey hairline.
+ *  - A FILL, a RULE and a POLY take their own tonal value, at Rec. 709 luma.
+ *    A chart whose four slices all went solid black would not be a chart, and
+ *    a tint that went solid black would not be a tint - these are areas, and an
+ *    area is the one thing a screen can hold.
+ *
+ * Applied once, here, so the PDF, the IDML and the `.sla` cannot disagree
+ * about what a mono page looks like.
+ */
+const MONO_TEXT_INK = '#000000';
+// KNOCKOUT TYPE STAYS KNOCKED OUT. A reversed headline is WHITE type out of a
+// solid panel, and "every inked run goes to 100% K" would have set it black on
+// a dark grey panel - an invisible headline on the one block a page shouts
+// with. Anything this light is not a colour a mono forme has to lose; it is
+// the absence of ink.
+const MONO_KNOCKOUT_ABOVE = 0.8;
+
+/** Rec. 709 luma, 0-1, or -1 for anything that is not a plain hex. */
+function lumaOf(ink) {
+  const hex = String(ink || '').trim();
+  if (!/^#[0-9a-f]{6}$/i.test(hex)) return -1;
+  const value = parseInt(hex.slice(1), 16);
+  const r = ((value >> 16) & 0xff) / 255;
+  const g = ((value >> 8) & 0xff) / 255;
+  const b = (value & 0xff) / 255;
+  // The perceptual weighting - the same one the picture path uses, and right
+  // for the same reason: it answers "how dark does this print".
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function toKOnly(ink) {
+  const luma = lumaOf(ink);
+  if (luma < 0) return ink || null;
+  const grey = Math.max(0, Math.min(255, Math.round(luma * 255)));
+  const byte = grey.toString(16).padStart(2, '0');
+  return `#${byte}${byte}${byte}`;
+}
+
+/** Every item on a mono page, with its inks separated to K. */
+function separateToK(items) {
+  return items.map((item) => {
+    if (item.kind === 'text') {
+      return {
+        ...item,
+        runs: (item.runs || []).map((run) => (run.ink
+          ? { ...run, ink: lumaOf(run.ink) > MONO_KNOCKOUT_ABOVE ? run.ink : MONO_TEXT_INK }
+          : run)),
+      };
+    }
+    if (item.kind === 'fill' || item.kind === 'rule' || item.kind === 'poly') {
+      return item.ink ? { ...item, ink: toKOnly(item.ink) } : item;
+    }
+    return item;
+  });
+}
+
 // -------------------------------------------------------------- furniture ---
 
 /**
@@ -894,7 +964,9 @@ async function buildPrintModel(newspaper, pages) {
 
     items.push(...footerItems(newspaper, page, geometry, identity));
     items.push(...registrationItems(geometry));
-    built.push({ number: Number(page.page_number), items });
+    // The whole page at once, and LAST - the masthead, the folio, the rules and
+    // the registration marks are as much on this forme as the blocks are.
+    built.push({ number: Number(page.page_number), items: mono ? separateToK(items) : items });
   }
 
   return {

@@ -1960,6 +1960,39 @@ page and a mono one is two different embedded images.
 The page-level overlay obeys the same forme. Its selector was missing, so a
 mono page previewed its block pictures grey and its overlay in colour.
 
+### A mono forme has no colour plates, and nothing on it may ask for one
+
+`pages.prints_colour` was carried on IMAGE items alone. The photographs were
+separated to K and **everything else was emitted as its own CMYK** — a chart's
+accent bars, a pie's tinted slices, a reversed headline's panel, a block's
+tinted ground, a word a sub-editor inked. So a page with no colour plates asked
+the press for four. It is the same fault that was found and fixed for the
+pictures and left standing for the ink beside them, and the canvas agreed with
+neither: `mono-forme` greyed the PHOTOGRAPHS only, so a desk previewed red
+headlines on a page that prints black.
+
+`separateToK()` in `print-model.js` applies it once, per page, so the PDF, the
+IDML and the `.sla` cannot disagree. **Two rules, different on purpose:**
+
+- **Type goes to 100% K.** A red headline on a mono forme prints BLACK; set as
+  a screen it would be a broken dotted line on newsprint — the same reason
+  `column-rules.js` refuses to draw a grey hairline.
+- **A fill, a rule and a poly take their own tonal value**, at Rec. 709 luma. A
+  chart whose four slices all went solid black would not be a chart, and a tint
+  that went solid black would not be a tint. These are areas, and an area is
+  the one thing a screen can hold. Verified: a three-slice pie on the mono
+  forme prints in three distinguishable greys.
+
+**Knockout type stays knocked out** (`MONO_KNOCKOUT_ABOVE`). A reversed
+headline is WHITE type out of a solid panel, and "every inked run goes to 100%
+K" would have set it black on a dark grey panel — an invisible headline on the
+one block a page shouts with. Caught before it shipped by asking what the rule
+did to the ink it was *not* written for.
+
+The canvas greys the whole sheet in print view now, and the mono warning counts
+blocks carrying colour as well as photographs — a page with no pictures still
+has ink on it.
+
 ### The export draws the column rules
 
 `columnRulesFor()` is the one function that decides where a hairline goes — a

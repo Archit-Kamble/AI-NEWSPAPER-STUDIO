@@ -26,10 +26,16 @@
 (function installTypefaces(root) {
   const DIR = '/assets/fonts/';
 
+  // `short` is the name a BUTTON can carry - the device bar shows which face
+  // is in force and "Sahas Serif" or "Tiro Devanagari Marathi" will not fit on
+  // one. Named here rather than truncated at the button, because slicing a
+  // label to six characters produced "Tiro D" and "Rozha ", which is not a
+  // name; a face's short name is a fact about the face.
   const TYPEFACES = Object.freeze([
     {
       key: 'serif',
       label: 'Sahas Serif',
+      short: 'Serif',
       note: 'The running face. Noto Serif Devanagari.',
       role: 'text',
       css: "'Sahas Serif', 'Noto Serif Devanagari', Georgia, serif",
@@ -38,6 +44,7 @@
     {
       key: 'sans',
       label: 'Sahas Sans',
+      short: 'Sans',
       note: 'Furniture, captions and decks. Noto Sans Devanagari.',
       role: 'text',
       css: "'Sahas Sans', 'Noto Sans Devanagari', Arial, sans-serif",
@@ -46,6 +53,7 @@
     {
       key: 'tiro',
       label: 'Tiro Devanagari Marathi',
+      short: 'Tiro',
       note: 'A text serif drawn for Marathi specifically - the Marathi forms of ल, श and ऱ are the language’s own, not Hindi’s. One weight.',
       role: 'text',
       boldIsSynthetic: true,
@@ -55,6 +63,7 @@
     {
       key: 'mukta',
       label: 'Mukta',
+      short: 'Mukta',
       note: 'A humanist Devanagari sans that sets tighter than Noto - useful where a column is short of room.',
       role: 'text',
       css: "'Mukta', 'Sahas Sans', Arial, sans-serif",
@@ -63,6 +72,7 @@
     {
       key: 'khand',
       label: 'Khand',
+      short: 'Khand',
       note: 'Condensed display. What a headline is set in when it has more words than measure.',
       role: 'display',
       css: "'Khand', 'Sahas Sans', Arial, sans-serif",
@@ -71,6 +81,7 @@
     {
       key: 'rozha',
       label: 'Rozha One',
+      short: 'Rozha',
       note: 'A heavy display serif for the splash. One weight, and it is already the heavy one.',
       role: 'display',
       boldIsSynthetic: true,

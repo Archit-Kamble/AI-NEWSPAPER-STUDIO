@@ -324,8 +324,7 @@ export function refreshDeviceBar(view = {}) {
     const node = bar.querySelector(`[data-device="${id}"] span`);
     if (node) node.textContent = text;
   };
-  const faceOf = (key, fallback) => (TYPEFACES.find((f) => f.key === key)?.label || fallback)
-    .replace(/^Sahas /, "").slice(0, 6);
+  const faceOf = (key, fallback) => TYPEFACES.find((f) => f.key === key)?.short || fallback;
   label("font", faceOf(view.fontFamily, "Serif"));
   label("display", view.displayFamily ? faceOf(view.displayFamily, "Sans") : "Sans");
 }

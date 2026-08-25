@@ -315,12 +315,13 @@ function ornamentPanel(section, view) {
   };
 }
 
+/** No picture to caption: show the desk where pictures are added. */
 function notifyNoPicture() {
-  const host = document.getElementById("edPicturesPanel") || document.querySelector(".ext-write-col");
+  const host = document.querySelector(".picture-list, .ext-write-col");
   host?.scrollIntoView({ block: "center" });
 }
 
-export function bindStoryEditor({ onPatch, getBudget, getSection, getView, getImages, onPatchImage, onRemoveImage, onSelectImage, onSelectPart, onToggleImageSelection, onAddOverlay }) {
+export function bindStoryEditor({ onPatch, getBudget, getSection, getView, getImages, onPatchImage, onRemoveImage, onSelectImage, onSelectPart, onToggleImageSelection, onAddOverlay, getSelectedImageId }) {
   budgetOf = getBudget;
 
   // THE DEVICE BAR - every device this paper can set, on one row on the editor.
@@ -335,10 +336,25 @@ export function bindStoryEditor({ onPatch, getBudget, getSection, getView, getIm
     // that already exists and is already bound, so there is exactly one code
     // path per action however a desk reaches it.
     onProposePicture: () => document.getElementById("aiProposePicture")?.click(),
+    // `.picture-caption` is the real field (pictures-panel.js) - the first
+    // version of this reached for `[data-image-caption]` and `#edImageCaption`,
+    // neither of which exists anywhere in the product, so the button scrolled
+    // the column and focused nothing. Found by grepping for its own selectors
+    // and getting no file back, which is a check worth making on any handler
+    // written against a remembered id.
+    //
+    // The SELECTED picture's caption if one is selected, else the first - a
+    // desk pressing this with a picture chosen means that picture's line. The
+    // rows carry no selected CLASS, so the id is asked of the store rather
+    // than read off the DOM; a class that does not exist is how the first
+    // version of this button came to focus nothing at all.
     onFocusCaption: () => {
-      const field = document.querySelector("[data-image-caption], #edImageCaption");
-      if (field) { field.scrollIntoView({ block: "center" }); field.focus(); }
-      else notifyNoPicture();
+      const id = getSelectedImageId?.();
+      const field = (id != null && document.querySelector(`.picture-caption[data-image-id="${id}"]`))
+        || document.querySelector(".picture-caption");
+      if (!field) return notifyNoPicture();
+      field.scrollIntoView({ block: "center" });
+      field.focus();
     },
     onInsertOrnament: () => {
       const view = getView?.() || {};

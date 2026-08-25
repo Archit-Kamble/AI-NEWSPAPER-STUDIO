@@ -4095,6 +4095,18 @@ body.print-view .newspaper-canvas.mono-forme .section-image,
 body.print-view .newspaper-canvas.mono-forme .page-overlay > img {
   filter: grayscale(1);
 }
+/* AND SO DOES EVERY INK ON IT. The three selectors above grey the
+   PHOTOGRAPHS, which was the whole of it - so a mono page previewed its
+   pictures in grey and its accent headlines, chart bars, pie slices, tinted
+   grounds and inked words in full colour, while the export separated the
+   photographs to K and emitted every one of those inks as CMYK. Two surfaces,
+   both wrong, and wrong differently. A forme is a forme: the sheet comes off
+   one set of plates and nothing on it can be in a colour those plates do not
+   carry. Nesting this over the rules above costs nothing - grey of grey is
+   grey. */
+body.print-view .newspaper-canvas.mono-forme {
+  filter: grayscale(1);
+}
 .mono-forme-warning {
   position: absolute;
   z-index: 6;
@@ -5841,14 +5853,26 @@ body.print-view .page-imprint {
   border-right: none;
   font-family: "Sahas Serif", "Noto Serif Devanagari", Georgia, serif;
 }
-/* A cross-head: one rule above, no box and no ground. These three declarations
-   are the browser's half of inset-panels.js's STYLES.crosshead and must agree
-   with it - the exports read that catalogue directly. */
+/* A cross-head: one rule above, no box and no ground. A separator: a rule
+   above AND below, its mark centred between them. These are the browser's half
+   of inset-panels.js's STYLES and must agree with it - the exports read that
+   catalogue directly, so a kind with no rule HERE draws as a boxed white panel
+   on the canvas and as two hairlines on the plate. That is what the ornament
+   did until this rule existed, and it is the two-surface fault this project
+   guards hardest against. */
 .section-inset-crosshead {
   border: none;
   border-top: 0.71px solid #111;
   background: none;
 }
+.section-inset-ornament {
+  border: none;
+  border-top: 0.71px solid #111;
+  border-bottom: 0.71px solid #111;
+  background: none;
+}
+/* The mark a separator carries is centred by panelLayout()'s own `align`,
+   which the renderer writes as an inline style - so there is no rule here. */
 
 /* --- the panel control ---------------------------------------------------- */
 .prop-panel {

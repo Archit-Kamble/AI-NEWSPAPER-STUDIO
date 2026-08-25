@@ -392,7 +392,12 @@ export function sectionContentMarkup(section, view) {
     const card = smartCardMarkup(view.smartCardKey, view.smartCardData, frame);
     if (card) {
       const bands = composedMarkup(composition, view, { datelinePrefix: '' });
-      const box = `left:${composition.content.left.toFixed(2)}px;top:${composition.bodyTop.toFixed(2)}px;`
+      // `offsetX`/`offsetY` are non-zero only when something - a page overlay,
+      // a panel set inside the block - stands in the card's way and the frame
+      // was moved clear of it. A card cannot flow round anything, so it is
+      // given the clear rectangle and drawn at it.
+      const box = `left:${(composition.content.left + (frame.offsetX || 0)).toFixed(2)}px;`
+        + `top:${(composition.bodyTop + (frame.offsetY || 0)).toFixed(2)}px;`
         + `width:${frame.width.toFixed(2)}px;height:${frame.height.toFixed(2)}px;`;
       return bands + `<div class="section-feature-card" style="${box}">${card}</div>`;
     }

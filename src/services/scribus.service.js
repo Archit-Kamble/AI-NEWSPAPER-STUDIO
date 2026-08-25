@@ -460,8 +460,8 @@ async function blockFrames(section, { pageIndex = 0, pageOffsetMm = 0 } = {}) {
     const frame = smartCardLayout.smartCardFrameFromComposition(composition);
     parts.push(smartCardFrames({
       key: section.smart_card_key, data: section.smart_card_data, frame,
-      xMm: mm(section.x_px + composition.content.left),
-      yMm: mm(section.y_px + composition.bodyTop) + pageOffsetMm,
+      xMm: mm(section.x_px + composition.content.left + (frame.offsetX || 0)),
+      yMm: mm(section.y_px + composition.bodyTop + (frame.offsetY || 0)) + pageOffsetMm,
       ownPage: pageIndex, cardLayout: smartCardLayout,
     }));
     return parts.filter(Boolean).join('');

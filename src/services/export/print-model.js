@@ -214,8 +214,10 @@ async function blockItems(section, { mono = false } = {}) {
 
   if (holdsCard) {
     const frame = smartCardLayout.smartCardFrameFromComposition(composition);
-    const originX = x0 + mm(composition.content.left);
-    const originY = y0 + mm(composition.bodyTop);
+    // Moved clear of anything standing in the card's way - a card is a grid
+    // and cannot flow round an overlay the way the copy either side of it can.
+    const originX = x0 + mm(composition.content.left + (frame.offsetX || 0));
+    const originY = y0 + mm(composition.bodyTop + (frame.offsetY || 0));
     const ALIGN = ['left', 'center', 'right'];
     for (const line of smartCardLines(section.smart_card_key, section.smart_card_data, frame, smartCardLayout)) {
       // A chart's bars are rectangles, which is a kind this model already has.

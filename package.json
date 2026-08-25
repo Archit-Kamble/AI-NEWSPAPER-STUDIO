@@ -8,6 +8,7 @@
     "test": "node --test"
   },
   "dependencies": {
+    "@jimp/wasm-webp": "^1.6.1",
     "bcryptjs": "^2.4.3",
     "dotenv": "^16.4.1",
     "express": "^4.21.2",
@@ -19,5 +20,8 @@
     "onnxruntime-node": "^1.27.0",
     "pg": "^8.22.0",
     "start": "^5.1.0"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.62.1"
   }
 }

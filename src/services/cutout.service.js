@@ -17,18 +17,13 @@
 
 const path = require('path');
 const fs = require('fs/promises');
+const { getJimp } = require('../utils/jimp');
 
 // Colour distance at which a pixel still counts as "the same as the border".
 const DEFAULT_TOLERANCE = 38;
 // How far the alpha is ramped at the edge of the cut, so it does not look
 // scissored out.
 const FEATHER_PX = 2;
-
-let JimpModule = null;
-async function getJimp() {
-  if (!JimpModule) ({ Jimp: JimpModule } = await import('jimp'));
-  return JimpModule;
-}
 
 const distance = (a, b) =>
   Math.sqrt((a.r - b.r) ** 2 + (a.g - b.g) ** 2 + (a.b - b.b) ** 2);

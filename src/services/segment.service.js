@@ -18,6 +18,7 @@
 
 const path = require('path');
 const fs = require('fs');
+const { getJimp } = require('../utils/jimp');
 
 const MODEL_DIR = process.env.SEGMENT_MODEL_DIR || path.join(__dirname, '..', '..', 'models');
 // u2netp is the small U^2-Net. It is a 4.5 MB file and segments a person or an
@@ -32,12 +33,6 @@ const MEAN = [0.485, 0.456, 0.406];
 const STD = [0.229, 0.224, 0.225];
 
 let sessionPromise = null;
-let JimpModule = null;
-
-async function getJimp() {
-  if (!JimpModule) ({ Jimp: JimpModule } = await import('jimp'));
-  return JimpModule;
-}
 
 function isAvailable() {
   return fs.existsSync(MODEL_FILE);

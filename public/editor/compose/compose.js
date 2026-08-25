@@ -2195,6 +2195,14 @@ export function composeBlock(input = {}) {
     exactShaping: shaperReady,
     frame: { width, height, padding },
     content: { ...content, measure: measureAvail, room },
+    // THE RECTANGLES THE TYPE WAS SET CLEAR OF - the pictures, the panels set
+    // inside the story and any page overlay crossing this block, in the
+    // block's own pixels. Running copy needs no such list (it meets an
+    // obstacle a scanline at a time), but a Smart Card is solved as a GRID and
+    // cannot flow round anything, so it has to be given a clear rectangle to
+    // solve in. Stated here rather than re-derived, so what the card avoids is
+    // exactly what the pour avoided.
+    obstacles: images,
     bands: {},
     bodyLines: [],
     dropCap: null,

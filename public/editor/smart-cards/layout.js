@@ -637,9 +637,67 @@ export function smartCardFrameFromComposition(composition, { padding = 0 } = {})
   const right = Number(composition?.content?.right) || 0;
   const bottom = Number(composition?.content?.bottom) || 0;
   const top = Number(composition?.bodyTop ?? composition?.content?.top) || 0;
+
+  // AND CLEAR OF WHATEVER THE COPY WAS SET CLEAR OF.
+  //
+  // Running copy meets an obstacle one scanline at a time - that is what the
+  // whole engine does, and why a photograph costs it nothing but an interval.
+  // A Smart Card cannot: it is solved as a GRID, so a sudoku's nine columns
+  // or a chart's bars are placed against the frame as a whole and there is no
+  // scanline for a silhouette to narrow. A page overlay laid across a card
+  // block therefore left the card's geometry untouched and simply COVERED it,
+  // while the prose blocks either side of it set clear correctly.
+  //
+  // So the card is given the largest clear rectangle instead. Per obstacle,
+  // the four rectangles that avoid it - above, below, left, right - and the
+  // biggest of them wins; with one overlay, which is the ordinary case, that
+  // is exact. It is bounded, deterministic and cannot enlarge the frame, so a
+  // block with nothing over it composes byte for byte as before.
+  const box = clearBox({ left, top, right, bottom }, composition?.obstacles);
   return {
-    width: Math.max(0, right - left),
-    height: Math.max(0, bottom - top),
+    width: Math.max(0, box.right - box.left),
+    height: Math.max(0, box.bottom - box.top),
     padding,
+    // Where that rectangle starts, relative to the frame the card would have
+    // had. Every surface that DRAWS a card adds these to its own origin; a
+    // surface that only measures one can ignore them. Zero unless something
+    // is actually in the way.
+    offsetX: box.left - left,
+    offsetY: box.top - top,
   };
+}
+
+/** The area of a box, or 0 if it has been cut away to nothing. */
+const boxArea = (b) => Math.max(0, b.right - b.left) * Math.max(0, b.bottom - b.top);
+
+/**
+ * The largest sub-rectangle of `box` that meets none of `obstacles`.
+ *
+ * An obstacle's own stand-off is included: a card set hard against a
+ * photograph's edge is as wrong as one set hard against a column rule.
+ */
+function clearBox(box, obstacles) {
+  const list = Array.isArray(obstacles) ? obstacles : [];
+  let out = box;
+  for (const raw of list) {
+    if (!raw) continue;
+    const pad = Math.max(0, Number(raw.standOffPx) || 0);
+    const o = {
+      left: (Number(raw.x) || 0) - pad,
+      top: (Number(raw.y) || 0) - pad,
+      right: (Number(raw.x) || 0) + (Number(raw.width) || 0) + pad,
+      bottom: (Number(raw.y) || 0) + (Number(raw.height) || 0) + pad,
+    };
+    // Not in the way at all - by far the commonest case, and it must cost
+    // nothing.
+    if (o.right <= out.left || o.left >= out.right || o.bottom <= out.top || o.top >= out.bottom) continue;
+    const candidates = [
+      { ...out, bottom: Math.min(out.bottom, o.top) },
+      { ...out, top: Math.max(out.top, o.bottom) },
+      { ...out, right: Math.min(out.right, o.left) },
+      { ...out, left: Math.max(out.left, o.right) },
+    ];
+    out = candidates.reduce((best, c) => (boxArea(c) > boxArea(best) ? c : best), candidates[0]);
+  }
+  return out;
 }

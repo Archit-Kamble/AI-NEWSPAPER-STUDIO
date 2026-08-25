@@ -79,7 +79,19 @@ export function imageInput(row = {}) {
     sourceWidth,
     sourceHeight,
     crop: sanitiseCrop(row, sourceWidth, sourceHeight),
-    fitMode: normaliseFitMode(row.fit_mode ?? row.fitMode),
+    // A cut-out is already trimmed tight to the subject - cover or stretch
+    // crops INTO that subject the moment the frame's aspect ratio drifts
+    // even slightly from the trimmed PNG's own (the frame is only an
+    // integer-rounded approximation of it, see backgroundRemoval.service.js's
+    // own trim math), which is what "the picture is losing its head/feet"
+    // and "resizing it zooms" both were: cover's crop recomputes on every
+    // resize, and any rounding drift crops a sliver more each time. The
+    // whole point of a cut-out is showing the exact silhouette, never a
+    // rectangle cropped out of it, so its own fit_mode choice (whatever a
+    // desk set before running "Remove background", or left at the default)
+    // is overridden here rather than respected - the one shared resolver
+    // both canvas and editor read, so neither can disagree with the other.
+    fitMode: row.shape === 'cutout' ? 'contain' : normaliseFitMode(row.fit_mode ?? row.fitMode),
     rotation: normaliseRotation(row.rotation),
     flipH: Boolean(row.flip_h ?? row.flipH),
     flipV: Boolean(row.flip_v ?? row.flipV),

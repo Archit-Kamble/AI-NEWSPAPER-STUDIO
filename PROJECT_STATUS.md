@@ -6437,3 +6437,94 @@ overlay and a photograph on one real front page and reading it.
 | `editor-parity.browser.js` | 70/70 |
 | `visual-pass.browser.js` (new) | 38/38 |
 | press PDF | Ghostscript clean; masthead, folio, borders, chart, panel and overlay all rendered and looked at |
+
+---
+
+## Run 2 of the professional-quality pass — verify, and multi-layout QA
+
+Run 1's state was verified before anything was changed: every module present,
+both schema columns applied, `npm test` 911/911, all five nets green.
+
+Run 1 drove one edition. Run 2 built **edition 44929** — six pages, one per
+template this product has (`front`, `local`, `dense`, `photo`, `opinion`,
+`features`) — filled it, and put every feature of the pass on it: double rules,
+a box, rules above and below, a tinted fact box with a numbered list, a pull
+quote, a bar chart, a stat row, a photograph crossing two blocks, four
+captioned pictures and three of the new typefaces.
+
+Each page was then compared **website against export**, using the product's own
+exact-canvas capture (`publish-current`, which writes the real page PNGs) beside
+the real HTTP export route. `tmp-visual-pass/web-vs-export-1..6.png`.
+
+### Seven defects, every one found by reading a rendered page
+
+| | what was wrong | why it mattered |
+|---|---|---|
+| 1 | **Auto columns fell back to a 97 em measure.** The overset fallback walks the count down and had no floor. | A 310 mm line — the exact fault the file's own header condemns at 134 mm. |
+| 2 | **The display faces could not reach a headline.** `DISPLAY_TYPOGRAPHY` hard-codes the sans. | A condensed cut exists so a splash with too many words can be set; it was offered for body copy only. |
+| 3 | **A card entry got the card's body line box whatever size it was.** | A stat row's 26.4 px figures printed through the captions below them. |
+| 4 | **A subtitle was the largest type on the card it labels.** | A label outranking its own content. |
+| 5 | **No export drew the column rules.** | Every download had its stories separated by white space — the thing that makes a page read as a web layout. |
+| 6 | **A chart printed in a different ink from the one on screen.** | Accent-red figures came out black, bold labels regular. |
+| 7 | **A mono page's photographs printed in colour.** `pages.prints_colour` is the press forme and the export ignored it. | A colour separation on a forme that has none, on a page the desk approved in grey. The press PDF dropped from 3.33 MB to 2.82 MB when fixed. |
+
+### Two devices added, both from the reference
+
+The real Lokmat block was fetched and read (`tmp-visual-pass/reference-lokmat.png`),
+not recalled. Device for device SAHAS already matched it on typography,
+justification, paragraphing, the lead-in, the byline, column rules, ruled
+sub-heads and panels inside a story. Two things it could not reproduce:
+
+- **a tinted ground on a panel** — the reference sets two of its sub-panels on
+  cream. Added, through the same palette a block ground uses.
+- **a numbered list** — added to the panel, in Devanagari numerals.
+
+### The question the brief asks, answered on the screenshots
+
+> **Can SAHAS now reasonably create pages matching the visual standard and
+> layout flexibility expected from leading Marathi newspapers?**
+
+**For a PAGE — yes.** Pages one to five of the six-page edition are, as whole
+pages, at that standard: nameplate band, column rules, justified Marathi
+reaching both edges with ragged closes only, correct conjuncts and matras,
+headline hierarchy, captioned pictures, charts, panels and a legal imprint that
+prints in full. The dense inside page in particular is not distinguishable in
+kind from a real Marathi daily's.
+
+**For a single BLOCK of the reference's complexity — not yet, and the gap is
+inside the block.** SAHAS composes one headline, one deck, one body and one
+panel. The Lokmat block carries, in one story: a headline, a two-line strap
+under it in a contrasting weight, a byline, a ruled sub-head, a numbered list,
+two headed and tinted boxes, and a closing sub-head. SAHAS can now do the boxes
+and the numbered list; it cannot put a ruled sub-head or a strap **in the middle
+of running copy**, because a block's display flows are a fixed kicker,
+headline and deck at the top.
+
+### Why that last gap was not closed
+
+Both remaining devices are the same change: a mid-block flow. A ruled sub-head
+between paragraphs, and a numbered list in running copy, both need `pourBody()`
+to carry a second kind of paragraph — markers in a hanging indent, per-item
+numbering, a band interrupting the pour. That is a composition-engine change,
+and the brief for this pass is explicit that a large composition-engine redesign
+is where to stop rather than risk what works. `page_sections.list_style` is
+already a column the compositor has never read; it is the natural place to
+start if this is wanted.
+
+### Verified
+
+| | |
+|---|---|
+| `npm test` | **911**, green |
+| `workspace.browser.js` | 223/223 |
+| `editor-controls.browser.js` | 86/86 |
+| `body-editing.browser.js` | 35/35 |
+| `visual-pass.browser.js` | 40/40 |
+| `editor-parity.browser.js` | 70/70, 72/72 |
+| six-page press PDF | Ghostscript clean; every page read beside the website's own render |
+
+### One more schema statement
+
+```sql
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS display_family VARCHAR(40);
+```

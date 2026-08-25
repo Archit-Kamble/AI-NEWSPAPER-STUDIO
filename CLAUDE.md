@@ -1806,6 +1806,99 @@ returns 429 (no image quota on the free tier) and Imagen 404s on the project.
 The refusal path is exercised end to end and the editor carries on. Enable
 billing before an edition depends on it.
 
+### Auto columns have a floor as well as a ceiling
+
+`measureColumns()` picks the count nearest `TARGET_COLUMN_PX`, and when that
+count oversets the copy `composeSection()` walks it DOWN until every word
+prints. That walk had nowhere to stop: on a 620 px banner whose copy oversets
+at 2, 3, 4 and 5 columns it went to **one**, and set a 310 mm line — the exact
+fault `section-adapter.js`'s own header condemns on the 268 px anchor ("no
+newspaper prints a 134 mm measure"), arriving by the back door.
+
+**`MAX_COLUMN_EM` (30) is the floor, and it is in EMS** for the same reason
+`MIN_COLUMN_EM` is: that is the unit legibility is in. Written in pixels first,
+it broke `copyFit.test.js`'s cut-out fixture — a 268 px block set in **12 px**
+type, which is 22 em and a perfectly printable measure that legitimately falls
+back to one column around its silhouette. The 620 px banner is 97 em in one
+column because its type is 6.4 px. Same pixel width, opposite verdicts needed.
+
+30 is pinned from both sides by numbers already in that file: the printed
+target is 18.75 em at the running body size, and the condemned 134 mm measure
+is 41.5 em.
+
+**What was tried and reverted:** also returning the least-overset arrangement
+when nothing in range prints every word. It lets copy LENGTH change the block's
+design — the mirror image of the rule the fallback already holds ("copy that
+merely ends short never makes the columns jump around"). The block keeps its
+preferred count and reports the overset, which the desk trims.
+
+### The display face is a second field, never the body's
+
+`DISPLAY_TYPOGRAPHY` hard-codes the paper's sans for kicker, headline and deck,
+and the comment above it says why: composing a headline in whatever family the
+BODY was reserved room in reserves room for the wrong glyphs. That stands.
+
+But it meant the two faces the catalogue marks `role: 'display'` — Khand, a
+condensed cut, and Rozha One — could only ever be applied to body copy, which
+is the one thing neither is for. **`page_sections.display_family`** is the
+explicit second field the display flows read. NULL is the paper's own sans, so
+nothing composes differently until a desk chooses. The weights stay the
+stylesheet's.
+
+### A page that does not print in colour does not print in colour
+
+`pages.prints_colour` is the press forme. The canvas greys a photograph on a
+mono page (`filter: grayscale(1)`) so a desk sees what the press will do; **the
+export ignored the column entirely.** A colour separation on a forme that has
+none.
+
+The picture is separated to K alone on a mono page, at **Rec. 709 luma** rather
+than the naive `max()` the colour path uses — that weighting is right when
+converting a picture and wrong when separating an ink. The embedded-image cache
+is keyed on the forme as well as the filename: the same photograph on a colour
+page and a mono one is two different embedded images.
+
+The page-level overlay obeys the same forme. Its selector was missing, so a
+mono page previewed its block pictures grey and its overlay in colour.
+
+### The export draws the column rules
+
+`columnRulesFor()` is the one function that decides where a hairline goes — a
+rule belongs halfway between the two stories it separates and exists because
+two blocks MEET. **No export drew them**; `columnRules` appeared nowhere in the
+export folder, so every download had its stories separated by white space.
+`print-model.js` reads that same function rather than deciding again.
+
+### What a Smart Card entry carries
+
+`smartCardLines()` gave every entry the card's own body line height, which was
+invisible while every card set all its entries at one size. A stat row does not
+— its figures are 2.2× its captions — so a 26.4 px numeral in an 18.8 px box
+printed through the row below. The box is the entry's own size × the card's
+leading ratio, so an entry at the card's body size is unchanged.
+
+Entries carry **`ink` and `bold`** too. Without them a chart printed in a
+different ink from the one on screen: accent-red figures came out black.
+
+**A subtitle may not outrank the card it labels** (`MAX_SUBTITLE_OF_BODY`,
+1.5). The height share alone does not settle it — a one-line subtitle at 28 px
+is well inside 28% of a 275 px card whose figures resolved to 26.4 px. The
+card's own size is not known until its body is solved, so it is one bounded
+second pass.
+
+### An inset panel is a printed चौकट
+
+It carries a **tint** (the palette's, checked at the service because the module
+is a plain script in the browser and cannot import the ESM ink catalogue) and a
+**marker** — plain, bulleted or numbered in Devanagari numerals. Both are
+devices the Lokmat reference block uses.
+
+**The marker is set INTO the line, not hung beside it**, and that is the honest
+limit: a hanging indent needs every line after the first broken against a
+narrower measure. `page_sections.list_style` remains a column the compositor
+has never read; a numbered list in RUNNING COPY is a change to `pourBody()`,
+not a layout one, and is deliberately not done.
+
 ### Two schema changes that need applying
 
 `schema.sql` is not run at boot. These were applied to the dev database by hand
@@ -1814,6 +1907,7 @@ and any other environment needs them:
 ```sql
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS inset_panels JSONB;
 ALTER TABLE pages ADD COLUMN IF NOT EXISTS overlay_images JSONB;
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS display_family VARCHAR(40);
 ```
 
 ### `tests/browser/visual-pass.browser.js`

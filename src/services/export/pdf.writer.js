@@ -62,6 +62,9 @@ function cmykOf(ink) {
 }
 
 const fill = ([c, m, y, k]) => `${c} ${m} ${y} ${k} k`;
+// The same four numbers as a STROKE. PDF spells the two operators in the same
+// letters, lower case for fill and upper case for stroke.
+const strokeInk = ([c, m, y, k]) => `${c} ${m} ${y} ${k} K`;
 
 // ------------------------------------------------------------------- fonts ---
 
@@ -569,6 +572,25 @@ async function buildPdf(model, deps) {
         out.push('q', fill(cmykOf(item.ink)),
           `${round(mmToPt(item.x))} ${round(heightPt - mmToPt(item.y + item.height))} `
           + `${round(mmToPt(item.width))} ${round(mmToPt(item.height))} re f`, 'Q');
+        continue;
+      }
+
+      // A POLYGON - the one primitive a pie slice, a line chart and a dot all
+      // reduce to. Arcs are approximated by segments in the MODEL, once, so
+      // every writer draws the same straight lines and no writer needs bezier
+      // geometry of its own. At 300 dpi a 32-segment quarter turn is under a
+      // third of a pixel from the true arc.
+      if (item.kind === 'poly') {
+        const pts = (item.points || []).map(([x, y]) => [mmToPt(x), heightPt - mmToPt(y)]);
+        if (pts.length < 2) continue;
+        const width = Number(item.strokeWidth) || 0;
+        out.push('q');
+        out.push(width > 0 ? strokeInk(cmykOf(item.ink)) : fill(cmykOf(item.ink)));
+        if (width > 0) out.push(`${round(mmToPt(width))} w`, '1 J', '1 j');
+        out.push(`${round(pts[0][0])} ${round(pts[0][1])} m`);
+        for (const [x, y] of pts.slice(1)) out.push(`${round(x)} ${round(y)} l`);
+        if (item.close) out.push('h');
+        out.push(width > 0 ? 'S' : 'f', 'Q');
         continue;
       }
 

@@ -359,23 +359,73 @@ function layoutPanchang(data, frame) {
 //
 // A newspaper's information graphic, solved the same way every other card is.
 //
-// TWO KINDS, AND THE REASON THERE ARE ONLY TWO. A bar and a stat row are made
-// of RECTANGLES and type, and a rectangle is something all four export writers
-// already draw. A pie needs bezier arcs and a line chart needs a polyline, and
-// the print model has neither primitive - its four item kinds are fill, text,
-// image and rule, and rules are axis-aligned. Adding arcs to the PDF, the
-// IDML, the .sla and Word is four separate pieces of geometry work, and a
-// chart that drew on screen and vanished from the plate would be worse than
-// no chart. So these two are exact everywhere, and the other two are honestly
-// absent rather than half-present.
+// FIVE KINDS, AND ONE PRIMITIVE UNDERNEATH THEM.
 //
-// The bars run ACROSS, not up. A Marathi category label is long ("छत्रपती
-// संभाजीनगर"), and a vertical bar chart has to set those labels sideways or
-// abbreviate them; a horizontal bar reads them on their own baseline at the
-// body size.
+// A bar and a stat row are rectangles and type, which every writer already
+// drew. A pie, a line and a dot plot are the ones this used to say could not
+// be done, on the reasoning that a pie needs bezier arcs and a line needs a
+// polyline, and that adding those to the PDF, the IDML and the .sla was three
+// separate pieces of geometry work.
+//
+// The premise was wrong, and pleasantly so: an arc turned into SEGMENTS is a
+// polygon, and so is a line chart, and so is a dot. So there is one new
+// neutral item - `poly`, a point list with an ink and an optional stroke - and
+// each writer gained one small branch that draws straight lines. The
+// segmentation happens HERE, once, so every surface draws the identical
+// polygon and no writer can round an arc differently from another. At 300 dpi
+// a 32-segment quarter turn sits under a third of a pixel from the true arc,
+// which is finer than a press can hold registration.
+//
+// The bars still run ACROSS, not up.
+//
+// A Marathi category label is long ("छत्रपती संभाजीनगर"), and a vertical bar
+// chart has to set those labels sideways or abbreviate them; a horizontal bar
+// reads them on their own baseline at the body size.
 
 const CHART_BAR_GAP_PX = 2;
 const CHART_VALUE_GAP_PX = 4;
+// How many straight segments one whole turn of an arc is drawn with. 64 puts a
+// quarter turn inside a third of a press pixel at 300 dpi.
+const ARC_SEGMENTS = 64;
+const CHART_KINDS = new Set(['bar', 'stat', 'pie', 'line', 'dots']);
+
+// THE PAPER'S ACCENT, AND THE TINTS A PIE'S SLICES ARE PRINTED IN.
+//
+// A newspaper prints a pie in tints of ONE ink, not in a rainbow - it has four
+// plates and a colour a desk mixed in a browser is an ink no press can lay
+// down. Eight steps, so a chart with more slices than a reader can tell apart
+// repeats rather than inventing one.
+//
+// Here, and only here, because three surfaces ask: the canvas, the export walk
+// and (through the export walk) all three writers. Two copies of a colour
+// table is the drift this codebase has been bitten by twice.
+export const CHART_ACCENT = '#c8102e';
+const SLICE_SHADES = [1, 0.72, 0.48, 0.3, 0.86, 0.6, 0.4, 0.22];
+
+/** The ink slice `index` is printed in - a real hex, so every writer draws it. */
+export function sliceInk(index) {
+  const shade = SLICE_SHADES[index % SLICE_SHADES.length];
+  const value = parseInt(CHART_ACCENT.slice(1), 16);
+  const mix = (channel) => Math.round(255 - (255 - channel) * shade);
+  const r = mix((value >> 16) & 0xff);
+  const g = mix((value >> 8) & 0xff);
+  const b = mix(value & 0xff);
+  return `#${[r, g, b].map((c) => c.toString(16).padStart(2, '0')).join('')}`;
+}
+
+/** A circle, or the slice of one, as a closed point list. */
+export function arcPoints(cx, cy, radius, fromTurn, toTurn, { centre = true } = {}) {
+  const steps = Math.max(2, Math.ceil(Math.abs(toTurn - fromTurn) * ARC_SEGMENTS));
+  const points = centre ? [[cx, cy]] : [];
+  for (let i = 0; i <= steps; i += 1) {
+    // Clockwise from twelve o'clock, which is where a reader expects a pie to
+    // start and the direction they expect it to run.
+    const turn = fromTurn + ((toTurn - fromTurn) * i) / steps;
+    const angle = turn * Math.PI * 2 - Math.PI / 2;
+    points.push([cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius]);
+  }
+  return points;
+}
 
 function chartRows(data) {
   return Array.isArray(data?.items)
@@ -386,7 +436,7 @@ function chartRows(data) {
 function layoutChart(data, frame) {
   const rows = chartRows(data);
   if (!rows.length) return empty('chart');
-  const kind = data?.chartType === 'stat' ? 'stat' : 'bar';
+  const kind = CHART_KINDS.has(data?.chartType) ? data.chartType : 'bar';
   const unit = String(data?.unit || '');
   const source = String(data?.source || '');
   const peak = rows.reduce((max, item) => Math.max(max, Math.abs(Number(item.value))), 0) || 1;
@@ -421,6 +471,89 @@ function layoutChart(data, frame) {
       return {
         height: bands * bandHeight + sourceHeight, hardOverset, items, kind,
         columns, columnWidth, figurePx, figureLine, bandHeight, lineHeightPx, sourceHeight, source, peak,
+      };
+    }
+
+    // A PIE. Every slice is a share of one turn, and the legend is beside it -
+    // a Marathi label will not fit inside a slice and setting it at an angle
+    // is not something a newspaper does.
+    if (kind === 'pie') {
+      const total = rows.reduce((sum, item) => sum + Math.abs(Number(item.value)), 0) || 1;
+      // The legend reads "label — value", so it is MEASURED as that. Measured
+      // on the label alone it was a third too narrow and every entry was
+      // clipped mid-figure: "सातारा — ८४" for 842.
+      const legendNeeded = rows.reduce((max, item) => Math.max(max,
+        measure(`${item.label} — ${valueText(item)}`, fontPx, 'sans', 400)), 0) + fontPx * 1.4;
+      // Half the card at most - past that the wheel stops being the thing a
+      // reader looks at. When the entries need more than that the TYPE comes
+      // down until they fit, which is what solveFont() is for and what every
+      // other card here already does; capping the box and setting the text
+      // into it anyway is how the legend came to read "सातारा — ८४२ ि".
+      const legendCap = frame.innerWidth * 0.5;
+      const legendWidth = Math.min(legendCap, legendNeeded);
+      const diameter = Math.max(0, Math.min(frame.innerWidth - legendWidth - GAP_PX,
+        frame.innerHeight - sourceHeight));
+      const radius = diameter / 2;
+      let turn = 0;
+      const items = rows.map((item, index) => {
+        const share = Math.abs(Number(item.value)) / total;
+        const slice = { label: String(item.label), value: Number(item.value), valueText: valueText(item),
+          share, from: turn, to: turn + share, swatch: index };
+        turn += share;
+        return slice;
+      });
+      const legendLine = lineHeightPx;
+      return {
+        height: Math.max(diameter, items.length * legendLine) + sourceHeight,
+        hardOverset: radius <= fontPx || legendNeeded > legendCap, items, kind,
+        radius, diameter, legendWidth, legendLine, lineHeightPx, sourceHeight, source, peak, total,
+      };
+    }
+
+    // A LINE, and DOTS - the same plot, drawn two ways. The value axis is the
+    // height of the plot and the categories are spaced evenly across it; the
+    // labels sit under it on their own baseline.
+    if (kind === 'line' || kind === 'dots') {
+      const labelBand = lineHeightPx;
+      const valueBand = lineHeightPx;
+      const plotHeight = Math.max(0, frame.innerHeight - labelBand - valueBand - sourceHeight);
+      // THE PLOT IS INSET BY HALF A LABEL AT EACH END. The first reading sits
+      // at x=0 and the last at the full width, and each carries a label
+      // CENTRED on it - so both ran off the edge of the block and were clipped.
+      // Photographed: "गारा" for सातारा at the left and "पु" for पुणे at the
+      // right, on a chart whose middle two labels were perfect.
+      const widestLabel = rows.reduce((max, item) => Math.max(max,
+        measure(String(item.label), fontPx, 'sans', 400),
+        measure(valueText(item), fontPx, 'sans', 700)), 0);
+      const inset = Math.min(widestLabel / 2, frame.innerWidth * 0.25);
+      const plotWidth = Math.max(0, frame.innerWidth - inset * 2);
+      const step = rows.length > 1 ? plotWidth / (rows.length - 1) : 0;
+      const low = rows.reduce((min, item) => Math.min(min, Number(item.value)), Infinity);
+      const high = rows.reduce((max, item) => Math.max(max, Number(item.value)), -Infinity);
+      const span = high - low || 1;
+      const items = rows.map((item, index) => {
+        const value = Number(item.value);
+        return {
+          label: String(item.label), value, valueText: valueText(item),
+          x: inset + (rows.length > 1 ? index * step : plotWidth / 2),
+          // Down the page from the plot's own top, which is where the highest
+          // value sits.
+          y: valueBand + plotHeight - ((value - low) / span) * plotHeight,
+        };
+      });
+      return {
+        height: valueBand + plotHeight + labelBand + sourceHeight,
+        // AND TWO LABELS MAY NOT TOUCH. solveFont() was maximising the type
+        // against the plot's HEIGHT alone, so four Marathi categories in a
+        // 268 px block set at a size where the labels ran into one another -
+        // photographed as "सातारकोल्हापूसांगली पुणे", which is four place
+        // names a reader cannot separate. Width is a fit condition too, and
+        // the type comes down until it holds.
+        hardOverset: plotHeight <= fontPx || plotWidth <= fontPx
+          || (rows.length > 1 && widestLabel > step), items, kind,
+        plotHeight, valueBand, labelBand, step, low, high, span, inset, plotWidth,
+        dotRadius: Math.max(1, fontPx * 0.22), lineWidth: Math.max(0.5, fontPx * 0.09),
+        lineHeightPx, sourceHeight, source, peak,
       };
     }
 
@@ -461,6 +594,18 @@ function layoutChart(data, frame) {
       bandHeight: solved.bandHeight || 0,
       lineHeightPx: solved.lineHeightPx, sourceHeight: solved.sourceHeight || 0,
       source: solved.source || '',
+      // The pie, and the line/dot plot. Published beside the bar's numbers
+      // rather than in a shape of their own, because every reader of this
+      // geometry - the canvas, the Block Editor, the export walk and preflight
+      // - reads one object and switches on `chartType`.
+      radius: solved.radius || 0, diameter: solved.diameter || 0,
+      legendWidth: solved.legendWidth || 0, legendLine: solved.legendLine || 0,
+      total: solved.total || 0,
+      plotHeight: solved.plotHeight || 0, valueBand: solved.valueBand || 0,
+      labelBand: solved.labelBand || 0, step: solved.step || 0,
+      low: solved.low ?? 0, high: solved.high ?? 0, span: solved.span || 1,
+      dotRadius: solved.dotRadius || 0, lineWidth: solved.lineWidth || 0,
+      inset: solved.inset || 0, plotWidth: solved.plotWidth || 0,
     },
     items: solved.items,
     violations: solved.fitState === 'OVERSET' ? ['SMART_CARD_OVERSET'] : [],

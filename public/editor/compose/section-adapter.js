@@ -233,7 +233,7 @@ export function obstacleFromImage(row) {
  * photograph but not its caption is how copy ends up printed underneath a
  * caption.
  */
-export function obstaclesOf(section) {
+export function obstaclesOf(section, view = {}) {
   const out = [];
   for (const row of section?.images || []) {
     out.push(obstacleFromImage(row));
@@ -250,7 +250,14 @@ export function obstaclesOf(section) {
   // it costs exactly one more entry here and no other line of the engine
   // changes: fillRow, viableIntervals and the balancer all already run type
   // round rectangles, because that is what a photograph is to them.
-  for (const panel of panelsOf(section)) out.push(obstacleFromPanel(panel));
+  // The draft's panels when there is a draft, exactly as every other field is
+  // resolved. Reading the row alone meant the copy did not run round a panel
+  // the desk had just placed until the edition was reloaded - so the block on
+  // screen and the block that would print were two different blocks for as
+  // long as the desk was looking at it.
+  for (const panel of panelsOf({ ...section, inset_panels: view?.insetPanels ?? section?.inset_panels })) {
+    out.push(obstacleFromPanel(panel));
+  }
   // A picture placed on the PAGE that crosses into this block. It is the page's
   // (layout/page-overlays.js explains why it cannot be the block's), but a
   // block it overlaps still has to set its type clear of it - a photograph laid
@@ -427,7 +434,7 @@ export function composeSection(section = {}, view = {}) {
     columnCount: preferredColumns,
     headlineLocked: Boolean(pick(section, view, 'headlineLocked', 'headline_locked', false)),
     subheadingLocked: Boolean(pick(section, view, 'subheadingLocked', 'subheading_locked', false)),
-    images: obstaclesOf(section),
+    images: obstaclesOf(section, view),
   };
 
   const preferred = composeBlock(input);

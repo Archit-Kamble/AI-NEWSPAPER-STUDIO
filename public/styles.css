@@ -5729,6 +5729,94 @@ body.print-view .page-imprint {
   font-family: "Sahas Sans", "Noto Sans Devanagari", Arial, sans-serif;
 }
 
+/* --- a pie, and a line/dot plot ----------------------------------------
+   Every number comes from layoutSmartCard()'s resolved geometry; these rules
+   place the two boxes beside each other and decide nothing else. */
+/* `.smart-chart` above sets flex-direction: column, and both rules are one
+   class deep - so the direction has to be stated here or the legend stacks
+   UNDER the wheel and is clipped away. Photographed exactly that way. */
+.smart-chart-pie { display: flex; flex-direction: row; align-items: flex-start; gap: 4px; }
+.smart-chart-pie svg { flex: 0 0 auto; }
+.smart-chart-legend { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; }
+.smart-chart-legend-row { display: flex; align-items: center; gap: 4px; white-space: nowrap; overflow: hidden; }
+.smart-chart-legend-row i { flex: 0 0 auto; display: inline-block; }
+.smart-chart-plot svg { display: block; }
+
+/* --- the device bar: every device on one row, on the editor -------------
+   Small, like the bold/italic/underline beside it, because that is what a
+   desk already knows how to read. Nothing here decides typography - every
+   button ends in the same onPatch() the settings rail calls. */
+.device-bar {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  border: 1px solid var(--line, #d0d0d6);
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  background: var(--surface, #fafafa);
+}
+.dev-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 6px;
+  margin-right: 4px;
+  border-right: 1px solid var(--line, #e2e2e8);
+}
+.dev-group:last-of-type { border-right: none; }
+.dev-btn {
+  min-width: 26px;
+  height: 30px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: none;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  color: #333;
+}
+.dev-btn b { font-size: 13px; font-weight: 400; line-height: 1; }
+.dev-btn span { font-size: 11px; line-height: 1; white-space: nowrap; }
+.dev-btn.is-wide b { display: none; }
+.dev-btn.is-wide span { font-weight: 600; }
+.dev-btn:hover { background: #ececf1; }
+.dev-btn.is-on { background: #111; color: #fff; border-color: #111; }
+.dev-menu {
+  position: absolute;
+  top: calc(100% - 1px);
+  z-index: 40;
+  min-width: 150px;
+  padding: 4px;
+  border: 1px solid var(--line, #d0d0d6);
+  border-radius: 0 4px 4px 4px;
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+}
+.dev-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+.dev-menu-item:hover { background: #f0f0f5; }
+.dev-menu-item.is-on { background: #111; color: #fff; }
+.dev-menu-item i { width: 12px; height: 12px; border: 1px solid #bbb; border-radius: 2px; display: inline-block; }
+
 /* --- a panel set inside a story (the चौकट) -------------------------------
    Every number is block pixels from inset-panels.js's panelLayout(), the same
    solve the compositor's obstacle set and all four exports read. Nothing here

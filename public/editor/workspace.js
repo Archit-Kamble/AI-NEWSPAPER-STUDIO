@@ -838,6 +838,67 @@ async function moveSection(sectionKey, rect) {
  * it has to be: the blocks the rectangle now touches (and the ones it has just
  * stopped touching) must set their type again.
  */
+/**
+ * A PICTURE LAID ACROSS TWO STORIES - placed, not just moved.
+ *
+ * `moveOverlay()` below has existed since overlays did, and nothing in the
+ * product could ever CREATE one: the only overlays on any page were put there
+ * by a fixture. So the device was real, the compositor set every block clear of
+ * it, all four exports drew it - and a desk had no way to make one. That is the
+ * "I have not seen the things you modified" report, in its sharpest form.
+ *
+ * It is placed straddling the selected block's own bottom edge, because that is
+ * what an overlay is FOR: crossing the boundary between two stories. A desk
+ * drags it from there.
+ */
+async function addOverlay(file) {
+  const page = store.getCurrentPage();
+  if (!page) return;
+
+  const form = new FormData();
+  form.append("images", await readableImage(file));
+  const uploadResponse = await fetch("/api/uploads/images", { method: "POST", body: form });
+  const uploaded = uploadResponse.ok ? await uploadResponse.json().catch(() => null) : null;
+  const url = uploaded?.imageUrls?.[0];
+  if (!url) return showNotice("The picture could not be uploaded.");
+
+  const source = await naturalImageSize(url);
+  const section = store.getSelectedSection();
+  // Half the block's width, at the picture's own proportions, sitting on the
+  // block's bottom edge so it reaches the story below. It does NOT snap to the
+  // column grid - crossing that grid is the entire reason a desk places one
+  // (layout/page-overlays.js).
+  const width = Math.max(40, Math.round((Number(section?.width_px) || 200) * 0.5));
+  const height = Math.max(30, Math.round(width / (source?.ratio || 1.5)));
+  const x = Math.round(Number(section?.x_px || 0) + ((Number(section?.width_px) || 200) - width) / 2);
+  const y = Math.round(Number(section?.y_px || 0) + (Number(section?.height_px) || 200) - height / 2);
+
+  const overlays = [
+    ...(Array.isArray(page.overlay_images) ? page.overlay_images : []),
+    { id: `overlay-${Date.now().toString(36)}`, url, x, y, width, height, caption: "" },
+  ];
+  const response = await fetch(`/api/pages/${page.id}/overlays`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ overlays }),
+  });
+  if (!response.ok) return showNotice("Could not lay the picture on the page.");
+  store.replacePage(await response.json(), { structural: true });
+  showNotice("Picture laid across the page — drag it where it belongs.");
+}
+
+/** The file picker the button opens. One input, made once, reused. */
+function pickImage(onChosen) {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/*";
+  input.addEventListener("change", () => {
+    const file = input.files && input.files[0];
+    if (file) onChosen(file);
+  }, { once: true });
+  input.click();
+}
+
 async function moveOverlay(id, rect) {
   const page = store.getCurrentPage();
   if (!page) return;
@@ -1717,6 +1778,10 @@ function renderSidePanels() {
 
   renderExternalEditor(section, view, story, store.getState().reporterNews, {
     onPatch: patchDraft,
+    // The button opens a file picker and lays the picture across the selected
+    // block's bottom edge - see addOverlay(). Nothing in the product could
+    // create one of these before.
+    onAddOverlay: () => pickImage(addOverlay),
     onChooseStory: chooseStory,
     onSave: saveNow,
     onReturnToPage: saveAndReturn,

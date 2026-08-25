@@ -61,6 +61,13 @@ export const DRAFT_FIELDS = [
   // nothing but a CSS class on the panel's own PREVIEW paragraph - the block
   // itself never set a drop cap at all. 0 is off.
   "dropCapLines",
+  // The panels set inside the story - the चौकट, the pull quote, the cross-head
+  // and the separator. They travel with the draft for the same reason the
+  // border does: a block whose panels were not in the draft had them wiped by
+  // the first save that did not mention them, and - the fault actually
+  // photographed - a panel a desk had just added did not appear on the page at
+  // all until the edition was reloaded, because every surface read the ROW.
+  "insetPanels",
   // Block decoration. These persist on the row, so they have to travel with the
   // draft as well - a template that boxes the advert slot would otherwise have
   // its box wiped by the first save of that block.
@@ -151,6 +158,7 @@ export function draftFromSection(section) {
     paragraphSpacingPx: Number.isFinite(Number(section.paragraph_spacing_px)) ? Number(section.paragraph_spacing_px) : 8,
     listStyle: section.list_style || "none",
     dropCapLines: Math.max(0, Number(section.drop_cap_lines) || 0),
+    insetPanels: Array.isArray(section.inset_panels) ? section.inset_panels : [],
     borderStyle: section.border_style || "none",
     borderWidthPx: Number(section.border_width_px) || 1,
     borderColor: section.border_color || "#111111",

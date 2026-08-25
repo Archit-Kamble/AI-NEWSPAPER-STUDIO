@@ -117,6 +117,8 @@ function loadQuill() {
   return quillLoading;
 }
 
+import { deviceBarMarkup, refreshDeviceBar } from "./device-bar.js";
+
 // ----------------------------------------------------------------- markup ---
 
 export function blockFrameMarkup() {
@@ -126,6 +128,7 @@ export function blockFrameMarkup() {
            inside it. Rendered inside the body frame it was part of the block,
            which meant a picture dragged over the top of the copy covered the
            bold button. The page holds only what prints. -->
+      ${deviceBarMarkup()}
       <div class="frame-toolbar" id="edQuillToolbar">
         <span class="ql-formats">
           <button class="ql-bold" type="button"></button>
@@ -703,6 +706,9 @@ function layoutTextFrames() {
   // Quill is deliberately comfortable editing chrome, outside the newspaper
   // page. The canonical preview above remains the authority for actual fit.
   refreshSizeButtons();
+  // The device bar is drawn from the same live view, so the bar and the
+  // settings rail can never disagree about what is on.
+  refreshDeviceBar(state.view);
 
   const editor = document.querySelector("#edWritingSurface .ql-editor");
   if (editor) {

@@ -90,9 +90,15 @@ function storyXml(storyId, item) {
 
 // ----------------------------------------------------------------- spreads ---
 
-function pathGeometry(halfW, halfH) {
-  const corners = [[-halfW, -halfH], [-halfW, halfH], [halfW, halfH], [halfW, -halfH]];
-  return '<Properties><PathGeometry><GeometryPathType PathOpen="false"><PathPointArray>'
+/**
+ * A frame's outline. Four corners for a rectangle - and an arbitrary point
+ * list for a `poly`, which is how a pie slice, a line chart and a dot all
+ * reach this file. The arc was already turned into segments in the print
+ * model, once, so nothing here needs bezier geometry.
+ */
+function pathGeometry(halfW, halfH, points = null, open = false) {
+  const corners = points || [[-halfW, -halfH], [-halfW, halfH], [halfW, halfH], [halfW, -halfH]];
+  return `<Properties><PathGeometry><GeometryPathType PathOpen="${open ? 'true' : 'false'}"><PathPointArray>`
     + corners.map(([x, y]) =>
       `<PathPointType Anchor="${x} ${y}" LeftDirection="${x} ${y}" RightDirection="${x} ${y}"/>`).join('')
     + '</PathPointArray></GeometryPathType></PathGeometry></Properties>';
@@ -115,6 +121,19 @@ function frameXml(item, storyId, model) {
       + '<TextFramePreference TextColumnCount="1" FirstBaselineOffset="AscentOffset"'
       + ' AutoSizingType="Off" VerticalJustification="TopAlign" InsetSpacing="0 0 0 0"/>'
       + bounds + '</TextFrame>';
+  }
+
+  if (item.kind === 'poly') {
+    // Points arrive in absolute page millimetres; InDesign wants them relative
+    // to the frame's own centre, which is the same transform the rectangle
+    // above already uses.
+    const local = (item.points || []).map(([x, y]) => [pt(x) - pt(item.x + item.width / 2), pt(y) - pt(item.y + item.height / 2)]);
+    const width = Number(item.strokeWidth) || 0;
+    return `<Polygon Self="${id('poly')}" ItemTransform="1 0 0 1 ${cx} ${cy}"`
+      + ` ContentType="Unassigned" StrokeWeight="${width > 0 ? pt(width) : 0}"`
+      + ` StrokeColor="Color/${colourName(item.ink)}"`
+      + ` FillColor="${width > 0 ? 'Swatch/None' : `Color/${colourName(item.ink)}`}">`
+      + pathGeometry(halfW, halfH, local, !item.close) + '</Polygon>';
   }
 
   if (item.kind === 'image') {

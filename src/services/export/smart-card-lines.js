@@ -25,10 +25,13 @@ const ACCENT = '#c8102e';
  *
  * `kind` is absent for an ordinary line of type, which is every entry this
  * returned until information graphics existed. A chart also emits
- * `{ kind: 'bar', x, y, width, height, ink }` - a rectangle, which is a thing
- * every writer here already knows how to draw, and the reason the bar and the
- * stat row are the two chart kinds this product has: a pie needs bezier arcs
- * and a line chart needs a polyline, and the print model has neither.
+ * `{ kind: 'bar', x, y, width, height, ink }` - a rectangle - and
+ * `{ kind: 'poly', points, ink, close, strokeWidth }` - a point list, which is
+ * what a pie slice, a line chart's line and a dot all reduce to once the arc
+ * has been turned into segments by the SOLVER. That is why there are five
+ * chart kinds now and not two: no writer needs bezier geometry, and because
+ * the segmentation happens in one place none of them can round an arc
+ * differently from another.
  */
 function smartCardLines(key, data, frame, cardLayout) {
   const layout = cardLayout.layoutSmartCard(key, data, frame);
@@ -74,6 +77,12 @@ function smartCardLines(key, data, frame, cardLayout) {
   const subtitleOffsetPx = layout.subtitle?.height || 0;
 
   const bar = (x, y, width, height, ink) => out.push({ kind: 'bar', x, y, width, height, ink });
+  const poly = (points, ink, { close = true, strokeWidth = 0 } = {}) =>
+    out.push({ kind: 'poly', points, ink, close, strokeWidth });
+
+  // The gap between the wheel and its legend - the card's own body size, which
+  // is the only measure on a card that means anything.
+  const GAP = layout.fontPx * 0.5;
 
   if (key === 'chart') {
     const g = layout.geometry;
@@ -90,6 +99,41 @@ function smartCardLines(key, data, frame, cardLayout) {
           line(text, x, top + g.figureLine + i * g.lineHeightPx, g.columnWidth, layout.fontPx, 1));
       });
       y += Math.ceil(layout.items.length / perBand) * g.bandHeight;
+    } else if (g.chartType === 'pie') {
+      // The wheel on the left, the legend on the right. Marathi labels do not
+      // fit inside a slice and a newspaper does not set them at an angle.
+      const cx = g.radius;
+      const cy = y + g.radius;
+      layout.items.forEach((item, index) => {
+        // EACH SLICE IN A TINT OF THE ONE INK, resolved to a real hex here.
+        // A newspaper prints a pie in tints of a single ink, not in a rainbow -
+        // and a "shade" would have been a new concept every writer had to
+        // learn, when a lighter hex is something all three already draw.
+        const ink = cardLayout.sliceInk(index);
+        poly(cardLayout.arcPoints(cx, cy, g.radius, item.from, item.to), ink, { close: true });
+        const top = y + index * g.legendLine;
+        bar(g.diameter + GAP, top + g.legendLine * 0.25, g.legendLine * 0.5, g.legendLine * 0.5, ink);
+        line(`${item.label} — ${item.valueText}`,
+          g.diameter + GAP + g.legendLine * 0.7, top,
+          Math.max(0, g.legendWidth - g.legendLine * 0.7 - GAP), layout.fontPx, 0);
+      });
+      y += Math.max(g.diameter, layout.items.length * g.legendLine);
+    } else if (g.chartType === 'line' || g.chartType === 'dots') {
+      const points = layout.items.map((item) => [item.x, y + item.y]);
+      if (g.chartType === 'line' && points.length > 1) {
+        poly(points, ACCENT, { close: false, strokeWidth: g.lineWidth });
+      }
+      layout.items.forEach((item, index) => {
+        // Every point carries its own dot - on a line chart too, because a
+        // reader follows a line by its readings and a printed line chart marks
+        // them.
+        poly(cardLayout.arcPoints(item.x, y + item.y, g.dotRadius, 0, 1, { centre: false }), ACCENT, { close: true });
+        line(item.valueText, item.x - g.step / 2, y + item.y - g.valueBand,
+          g.step || frame.width, layout.fontPx, 1, null, { bold: true });
+        line(item.label, item.x - g.step / 2, y + g.valueBand + g.plotHeight,
+          g.step || frame.width, layout.fontPx, 1);
+      });
+      y += g.valueBand + g.plotHeight + g.labelBand;
     } else {
       const barHeight = Math.max(2, g.lineHeightPx * 0.62);
       layout.items.forEach((item) => {

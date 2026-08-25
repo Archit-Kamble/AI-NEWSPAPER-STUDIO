@@ -320,6 +320,7 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
     onSelectImage: (id) => { selectPicture(id); selectPictureFrame(id); },
     onSelectPart: callbacks.onSelectPart,
     onToggleImageSelection: callbacks.onToggleImageSelection,
+    onAddOverlay: callbacks.onAddOverlay,
   });
   bindAiPanel(
     callbacks.getView, callbacks.getSection, callbacks.onPatch, notify,

@@ -39,6 +39,10 @@
     // grid below it, which is what a cross-head IS. The engine gains nothing
     // and learns nothing.
     { key: 'crosshead', label: 'Cross-head', note: 'A ruled sub-head across the measure, between two parts of the story.' },
+    // A DECORATIVE SEPARATOR - the ornamented rule a printed Marathi paper
+    // sets between two parts of a page. Same argument as the cross-head: it is
+    // a rectangle in the obstacle set and nothing in the engine changes.
+    { key: 'ornament', label: 'Separator', note: 'A decorative rule across the measure.' },
   ]);
 
   /**
@@ -64,6 +68,9 @@
     // says "a new part of this story starts here"; a box would say "this is a
     // different story", which is the opposite.
     crosshead: { edges: ['top'], family: 'sans', ground: false },
+    // Ruled above AND below with the mark centred between them - which is what
+    // makes it read as an ornament rather than as another cross-head.
+    ornament: { edges: ['top', 'bottom'], family: 'serif', ground: false },
   });
   const panelStyle = (kind) => STYLES[kind] || STYLES.note;
 
@@ -173,7 +180,7 @@
     // A cross-head's type sits ON the measure, not inside a box, so it takes
     // only the hair of air that keeps it off its own rule - the same 0.5 mm
     // the block's own inset is, and for the same reason.
-    const inset = panel.kind === 'crosshead' ? 1 : 3;
+    const inset = panel.kind === 'crosshead' || panel.kind === 'ornament' ? 1 : 3;
     const titlePx = Math.max(5, bodyFontPx * (panel.kind === 'quote' ? 1.5 : panel.kind === 'crosshead' ? 1.3 : 1.15));
     const linePx = Math.max(4.5, bodyFontPx * (panel.kind === 'quote' ? 1.5 : 0.95));
     const lineHeight = 1.45;
@@ -191,7 +198,12 @@
       // running copy and what a panel deliberately does not have.
       const mark = markerText(panel.marker, index);
       const marked = mark ? `${mark} ${text}` : text;
-      out.push({ text: marked, x: inset, y, width: panel.width - inset * 2, fontPx: linePx, bold: false });
+      out.push({
+        text: marked, x: inset, y, width: panel.width - inset * 2, fontPx: linePx, bold: false,
+        // An ornament's mark sits on the centre line of its own rule; every
+        // other kind sets flush left, as copy does.
+        align: panel.kind === 'ornament' ? 1 : 0,
+      });
       y += linePx * lineHeight;
     });
     return { inset, titlePx, linePx, lineHeight, lines: out, usedHeight: y + inset };

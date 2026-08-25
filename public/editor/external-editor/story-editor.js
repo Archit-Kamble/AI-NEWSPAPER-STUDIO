@@ -14,6 +14,7 @@ import { markDisplayField, fieldHtml, fieldValue } from "./display-marks.js";
 import {
   FONT_FAMILIES, ALIGNMENTS, PART_LABEL, alignFieldFor, alignValueOf,
 } from "./typography-panel.js";
+import { bindDeviceBar } from "./device-bar.js";
 import {
   blockFrameMarkup, mountFrame, refreshFrame, copyFromFrame,
   renderPictures, selectPictureFrame,
@@ -288,8 +289,64 @@ export function refreshStoryCount() {
   readout.classList.toggle("over", used > (Number(budget?.max) || Infinity));
 }
 
-export function bindStoryEditor({ onPatch, getBudget, getSection, getView, getImages, onPatchImage, onRemoveImage, onSelectImage, onSelectPart, onToggleImageSelection }) {
+/**
+ * A SEPARATOR SET ACROSS THE STORY - the ornament a printed Marathi paper puts
+ * between two parts of a page.
+ *
+ * It is an inset panel of the `ornament` kind, which means it costs the engine
+ * exactly one more rectangle in the obstacle set and nothing else changes -
+ * the same argument the fact box, the pull quote and the cross-head already
+ * rest on. A separator that needed its own code in the compositor would be a
+ * separator that could disagree with the copy running round it.
+ */
+function ornamentPanel(section, view) {
+  const blockW = Number(section?.width_px) || 200;
+  const blockH = Number(section?.height_px) || 200;
+  const body = Number(view?.bodyFontPx) || 6.4;
+  return {
+    id: `panel-${Date.now().toString(36)}`,
+    kind: "ornament",
+    x: 2,
+    y: Math.round(blockH * 0.5),
+    width: Math.max(24, blockW - 4),
+    height: Math.max(8, Math.round(body * 1.8)),
+    title: "",
+    lines: ["\u25c6"],
+  };
+}
+
+function notifyNoPicture() {
+  const host = document.getElementById("edPicturesPanel") || document.querySelector(".ext-write-col");
+  host?.scrollIntoView({ block: "center" });
+}
+
+export function bindStoryEditor({ onPatch, getBudget, getSection, getView, getImages, onPatchImage, onRemoveImage, onSelectImage, onSelectPart, onToggleImageSelection, onAddOverlay }) {
   budgetOf = getBudget;
+
+  // THE DEVICE BAR - every device this paper can set, on one row on the editor.
+  // Bound here because this is where the frame is bound, and bound ONCE: it
+  // listens at the document, so the bar being rewritten on every block change
+  // cannot leave it on a detached node.
+  bindDeviceBar({
+    getView, getSection,
+    onPatch,
+    onAddOverlay,
+    // These three do not get a second implementation. Each presses the control
+    // that already exists and is already bound, so there is exactly one code
+    // path per action however a desk reaches it.
+    onProposePicture: () => document.getElementById("aiProposePicture")?.click(),
+    onFocusCaption: () => {
+      const field = document.querySelector("[data-image-caption], #edImageCaption");
+      if (field) { field.scrollIntoView({ block: "center" }); field.focus(); }
+      else notifyNoPicture();
+    },
+    onInsertOrnament: () => {
+      const view = getView?.() || {};
+      const section = getSection?.() || {};
+      onPatch?.({ insetPanels: [...(Array.isArray(view.insetPanels) ? view.insetPanels : []),
+        ornamentPanel(section, view)] }, "device-bar");
+    },
+  });
 
   const headline = document.getElementById("edStoryHeadline");
   const subheading = document.getElementById("edStorySubheading");

@@ -33,7 +33,7 @@
 // a different size.
 
 import { escapeHtml } from "../format.js";
-import { layoutSmartCard } from "./layout.js";
+import { layoutSmartCard, arcPoints, sliceInk, CHART_ACCENT } from "./layout.js";
 
 const DIGITS = ["०", "१", "२", "३", "४", "५", "६", "७", "८", "९"];
 
@@ -217,6 +217,48 @@ function chartMarkup(data, layout) {
         <span style="font-size:${layout.fontPx}px;line-height:${g.lineHeightPx}px">${linesMarkup(item.captionLines)}</span>
       </div>`).join("");
     return `<div class="smart-chart smart-chart-stats">${cells}</div>${source}`;
+  }
+
+  // A PIE AND A LINE PLOT ARE DRAWN AS SVG, from the SAME point lists the
+  // export walk turns into `poly` items - `arcPoints()` in layout.js is the
+  // one segmentation, so the wheel on screen and the wheel on the plate are
+  // the same polygon rather than two roundings of the same arc.
+  if (g.chartType === "pie") {
+    const cx = g.radius;
+    const cy = g.radius;
+    const slices = layout.items.map((item, index) => {
+      const points = arcPoints(cx, cy, g.radius, item.from, item.to)
+        .map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ");
+      return `<polygon points="${points}" fill="${sliceInk(index)}"/>`;
+    }).join("");
+    const legend = layout.items.map((item, index) => `
+      <div class="smart-chart-legend-row" style="height:${g.legendLine}px;font-size:${layout.fontPx}px;line-height:${g.legendLine}px">
+        <i style="background:${sliceInk(index)};width:${g.legendLine * 0.5}px;height:${g.legendLine * 0.5}px"></i>
+        <span>${escapeHtml(item.label)} — ${escapeHtml(item.valueText)}</span>
+      </div>`).join("");
+    return `<div class="smart-chart smart-chart-pie">
+      <svg width="${g.diameter}" height="${g.diameter}" viewBox="0 0 ${g.diameter} ${g.diameter}">${slices}</svg>
+      <div class="smart-chart-legend" style="width:${g.legendWidth}px">${legend}</div>
+    </div>${source}`;
+  }
+
+  if (g.chartType === "line" || g.chartType === "dots") {
+    const height = g.valueBand + g.plotHeight + g.labelBand;
+    const width = g.inset * 2 + g.plotWidth;
+    const path = layout.items.map((item) => `${item.x.toFixed(2)},${item.y.toFixed(2)}`).join(" ");
+    const line = g.chartType === "line" && layout.items.length > 1
+      ? `<polyline points="${path}" fill="none" stroke="${CHART_ACCENT}" stroke-width="${g.lineWidth}" stroke-linejoin="round" stroke-linecap="round"/>`
+      : "";
+    const dots = layout.items.map((item) =>
+      `<circle cx="${item.x.toFixed(2)}" cy="${item.y.toFixed(2)}" r="${g.dotRadius}" fill="${CHART_ACCENT}"/>`).join("");
+    const labels = layout.items.map((item) => `
+      <text x="${item.x.toFixed(2)}" y="${(item.y - g.valueBand * 0.35).toFixed(2)}" text-anchor="middle"
+            font-size="${layout.fontPx}" font-weight="700" fill="${CHART_ACCENT}">${escapeHtml(item.valueText)}</text>
+      <text x="${item.x.toFixed(2)}" y="${(g.valueBand + g.plotHeight + g.labelBand * 0.75).toFixed(2)}" text-anchor="middle"
+            font-size="${layout.fontPx}" fill="#111">${escapeHtml(item.label)}</text>`).join("");
+    return `<div class="smart-chart smart-chart-plot">
+      <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${line}${dots}${labels}</svg>
+    </div>${source}`;
   }
 
   const rows = layout.items.map((item) => `

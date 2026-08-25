@@ -70,6 +70,50 @@ const pxToPt = (px) => Number(((Number(px) / 2) * 72 / 25.4).toFixed(2));
 // The paper's inks, as separations rather than as screen colours. A newspaper
 // is printed from four plates; naming the spot colours here is what lets the
 // press see the red of the masthead as one ink and not as a rich black mess.
+/**
+ * COLOURS THIS DOCUMENT NEEDS THAT THE FIXED TABLE BELOW DOES NOT NAME.
+ *
+ * A `.sla` names every colour in a table at the top and refers to them by
+ * name, so a fixed table can only draw the inks it was written with. That was
+ * true and sufficient until a pie arrived: a newspaper prints one in TINTS of
+ * a single ink, and each tint is a real colour the plate has to be told about.
+ * Mapped through the same `ink === accent ? 'SahasRed' : 'Black'` rule the
+ * furniture uses, every slice of a four-slice pie came out solid black.
+ *
+ * So an ink the table does not name registers itself here and the table gains
+ * it - the same thing idml.writer.js's `colourName()` already does, for the
+ * same reason. Reset per document, because the names are document-scoped.
+ */
+let documentColours = new Map();
+
+function colourFor(hex, fallback = 'Black') {
+  if (!hex) return fallback;
+  const key = String(hex).toLowerCase();
+  const named = { '#c8102e': 'SahasRed' }[key];
+  if (named) return named;
+  if (!documentColours.has(key)) {
+    const value = parseInt(key.replace('#', ''), 16);
+    if (!Number.isFinite(value)) return fallback;
+    const r = ((value >> 16) & 0xff) / 255;
+    const g = ((value >> 8) & 0xff) / 255;
+    const b = (value & 0xff) / 255;
+    // The same naive separation the PDF writer uses, and deliberately so: this
+    // product has no colour-management pipeline and pretending otherwise in a
+    // press file is worse than being plain about it.
+    const k = 1 - Math.max(r, g, b);
+    const channel = (c) => (k >= 1 ? 0 : Math.round(((1 - c - k) / (1 - k)) * 255));
+    const byte = (n) => Math.max(0, Math.min(255, n)).toString(16).padStart(2, '0');
+    documentColours.set(key, {
+      name: `SahasAuto${documentColours.size}`,
+      cmyk: `#${byte(channel(r))}${byte(channel(g))}${byte(channel(b))}${byte(Math.round(k * 255))}`,
+    });
+  }
+  return documentColours.get(key).name;
+}
+
+const extraColourTable = () => [...documentColours.values()]
+  .map((entry) => `\n  <COLOR NAME="${entry.name}" CMYK="${entry.cmyk}" Spot="0" Register="0"/>`).join('');
+
 const COLOURS = `
   <COLOR NAME="Black" CMYK="#00000000" Spot="0" Register="0"/>
   <COLOR NAME="Registration" CMYK="#ffffffff" Spot="0" Register="1"/>
@@ -328,6 +372,39 @@ function styledBodyRuns(line, marks, prefixLength, richText) {
 // resolved reading/lucky lines, panchang as its resolved label/value rows, a
 // suvichar as its resolved quote/attribution lines, dinvishesh as its
 // resolved entries - never a re-flattened paragraph.
+/**
+ * A POLYGON - a pie slice, a line chart's line, a dot.
+ *
+ * Scribus stores a shape as a `path` in the item's OWN coordinate space, so
+ * the points are made relative to the frame's top-left corner here. The arc
+ * was turned into segments by the SOLVER, once, so this is straight lines only
+ * and there is no bezier geometry in this file - and because the segmentation
+ * happens in one place, the wheel in the .sla and the wheel in the PDF are the
+ * same polygon rather than two roundings of one arc.
+ *
+ * Same caveat as the image frame, and stated for the same reason: there is no
+ * Scribus binary in this environment to render and compare against, so the
+ * ATTRIBUTE FORM follows Scribus 1.5 documentation and has not been visually
+ * verified. The geometry itself - where each point is, in millimetres - is
+ * exact and shared with the PDF and the IDML.
+ */
+function polyFrame({ points, x, y, yMm, width, height, ink, close = true, strokeWidth = 0, ownPage = 0 }) {
+  const list = (points || []).map(([px, py]) => [px - x, py - y]);
+  if (list.length < 2) return '';
+  const d = `M${mmRound(list[0][0])} ${mmRound(list[0][1])} `
+    + list.slice(1).map(([px, py]) => `L${mmRound(px)} ${mmRound(py)}`).join(' ')
+    + (close ? ' Z' : '');
+  const stroke = Number(strokeWidth) || 0;
+  const colour = colourFor(ink);
+  return `
+  <PAGEOBJECT XPOS="${mmRound(x)}" YPOS="${mmRound(yMm)}"
+              WIDTH="${mmRound(width)}" HEIGHT="${mmRound(height)}"
+              OwnPage="${ownPage}" ItemID="${nextId()}" PTYPE="6" FRTYPE="3"
+              PWIDTH="${mmRound(stroke)}" PCOLOR="${stroke > 0 ? 'None' : colour}"
+              PCOLOR2="${stroke > 0 ? colour : 'None'}" SHADE="100" SHADE2="100"
+              TEXTFLOWMODE="0" path="${escapeXml(d)}"/>`;
+}
+
 function smartCardFrames({ key, data, frame, xMm, yMm, ownPage, cardLayout, family = 'serif', weight = 400 }) {
   // The walk itself lives in export/smart-card-lines.js, because Scribus is no
   // longer the only destination: InDesign, Word and the CMYK press PDF read the
@@ -341,9 +418,26 @@ function smartCardFrames({ key, data, frame, xMm, yMm, ownPage, cardLayout, fami
       return fillFrame({
         xMm: xMm + mm(line.x), yMm: yMm + mm(line.y),
         widthMm: mm(line.width), heightMm: mm(line.height),
-        // 'SahasRed' is the named accent this .sla already declares, and it
-        // is the only ink a chart uses.
-        colour: 'SahasRed', ownPage,
+        // THE ENTRY'S OWN INK, not a hard-coded accent. That was true while a
+        // chart used one colour; a pie's legend swatches are TINTS of it, and
+        // named 'SahasRed' every one of them printed at full strength - four
+        // identical swatches beside four different slices.
+        colour: colourFor(line.ink, 'SahasRed'), ownPage,
+      });
+    }
+    // A pie slice, a line chart's line, a dot.
+    if (line.kind === 'poly') {
+      const points = (line.points || []).map(([px, py]) => [xMm + mm(px), yMm + mm(py)]);
+      if (points.length < 2) return '';
+      const xs = points.map((point) => point[0]);
+      const ys = points.map((point) => point[1]);
+      return polyFrame({
+        points,
+        x: Math.min(...xs), y: Math.min(...ys), yMm: Math.min(...ys),
+        width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys),
+        ink: line.ink, close: line.close !== false,
+        strokeWidth: line.strokeWidth ? mm(line.strokeWidth) : 0,
+        ownPage,
       });
     }
     return lineFrame({
@@ -379,9 +473,13 @@ function furnitureFrames(items, { pageOffsetMm, ownPage, family = 'sans', weight
     if (item.kind === 'fill' || item.kind === 'rule') {
       return fillFrame({
         xMm: item.x, yMm: pageOffsetMm + item.y, widthMm: item.width, heightMm: item.height,
-        colour: item.ink === ACCENT_HEX ? 'SahasRed' : 'Black', ownPage,
+        colour: colourFor(item.ink), ownPage,
       });
     }
+    if (item.kind === 'poly') {
+      return polyFrame({ ...item, yMm: pageOffsetMm + item.y, ownPage });
+    }
+
     if (item.kind === 'image') {
       // A FURNITURE picture, not a placed one. The nameplate has no crop, no
       // rotation and no fit mode - it is artwork at a reserved rectangle - and
@@ -658,6 +756,9 @@ function footerFrames(newspaper, page, geometry, identity, { pageOffsetMm, ownPa
  * is what they already know.
  */
 async function buildDocument(newspaper, pages) {
+  // Document-scoped, so two builds in one process cannot leak names into
+  // each other's colour tables.
+  documentColours = new Map();
   await ensureComposeReady();
   frameId = 1;
   const g = geometryOf(newspaper);
@@ -712,7 +813,7 @@ async function buildDocument(newspaper, pages) {
           KEYWORDS="${escapeXml(identity.volumeLine)}"
           COMMENTS="Generated by SAHAS. Colour space CMYK; ${g.printDpi} dpi target."
           BLEEDTOP="${g.bleedMm}" BLEEDLEFT="${g.bleedMm}" BLEEDRIGHT="${g.bleedMm}" BLEEDBOTTOM="${g.bleedMm}">
-${COLOURS}
+${COLOURS}${extraColourTable()}
 ${pageElements}
 ${objectParts.join('')}
 </DOCUMENT>

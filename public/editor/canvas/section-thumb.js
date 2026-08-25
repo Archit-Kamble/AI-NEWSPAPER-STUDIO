@@ -477,13 +477,21 @@ export function sectionInnerHtml(section, view, { dirty = false, selected = fals
  * the rectangle the copy ran round is the rectangle the reader sees.
  */
 export function insetPanelsMarkup(section, view) {
-  const panels = panelsOf(section);
+  // THE DRAFT FIRST, like every other field. This read the ROW alone, so a
+  // panel a desk had just added drew nothing until the edition was reloaded -
+  // the same shape of fault as the dateline that was read from the view alone,
+  // in the other direction.
+  const panels = panelsOf({ ...section, inset_panels: view?.insetPanels ?? section?.inset_panels });
   if (!panels.length) return "";
   const bodyPx = Number(view?.bodyFontPx) || 6.4;
   return panels.map((panel) => {
     const solved = panelLayout(panel, bodyPx);
     const lines = solved.lines.map((line) => `<span style="left:${line.x}px;top:${line.y}px;width:${line.width}px;`
       + `font-size:${line.fontPx}px;line-height:${solved.lineHeight};`
+      // An ornament's mark is centred on its own rule; everything else sets
+      // flush left, as copy does. The one solve decides it, so the canvas and
+      // all four exports cannot disagree.
+      + `${line.align === 1 ? "text-align:center;" : ""}`
       + `${line.bold ? "font-weight:700;" : ""}">${escapeHtml(line.text)}</span>`).join("");
     return `<span class="section-inset-panel section-inset-${escapeHtml(panel.kind)}"
                   data-panel-id="${escapeHtml(panel.id)}"

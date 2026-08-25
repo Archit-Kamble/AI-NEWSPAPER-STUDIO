@@ -230,6 +230,27 @@ async function blockItems(section, { mono = false } = {}) {
         });
         continue;
       }
+      // A pie slice, a line chart's line and a dot are all POINT LISTS - the
+      // arc was turned into segments by the solver, once, so every writer here
+      // draws the identical polygon and none of them needs bezier geometry.
+      if (line.kind === 'poly') {
+        const points = (line.points || []).map(([x, y]) => [originX + mm(x), originY + mm(y)]);
+        if (points.length < 2) continue;
+        const xs = points.map((point) => point[0]);
+        const ys = points.map((point) => point[1]);
+        items.push({
+          kind: 'poly',
+          points,
+          // The bounding box, which IDML needs for its centre-based transform
+          // and which costs the other two writers nothing.
+          x: Math.min(...xs), y: Math.min(...ys),
+          width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys),
+          ink: line.ink || ACCENT_INK,
+          close: line.close !== false,
+          strokeWidth: line.strokeWidth ? mm(line.strokeWidth) : 0,
+        });
+        continue;
+      }
       items.push(textItem(
         { x: originX + mm(line.x), y: originY + mm(line.y), width: mm(line.width), height: mm(line.height) },
         [run(line.text, {
@@ -387,6 +408,7 @@ function blockDecorations(section, composition) {
           family: panelFace,
           weight: line.bold ? 700 : 400, bold: line.bold, fontPx: line.fontPx,
         })],
+        line.align === 1 ? 'center' : 'left',
       ));
     }
   }

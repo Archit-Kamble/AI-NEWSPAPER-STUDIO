@@ -1891,6 +1891,14 @@ function pourBody(bodyInput, {
       lineBoxPx: cap.lineBoxPx,
       fontPx: cap.fontPx,
       lines: cap.lines,
+      // WHERE THE CAP SITS ON THE PAGE, stated once and by the only thing that
+      // knows. The browser never needed it - `lineBoxPx` is a CSS line-height
+      // and the browser works the half-leading out itself - so it was never
+      // said, and every export therefore had to re-derive it or, as all four
+      // of them did, simply not draw the cap at all. It resolves to the
+      // baseline of the LAST body line the cap spans, which is the rule
+      // dropCapOf() sizes it by.
+      baseline: top + cap.offsetY + cap.fontPx * SHIROREKHA_EM,
       family,
       weight,
     } : null,

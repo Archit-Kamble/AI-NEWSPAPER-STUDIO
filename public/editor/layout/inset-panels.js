@@ -25,7 +25,47 @@
   const KINDS = Object.freeze([
     { key: 'note', label: 'Fact box', note: 'A ruled panel with a heading and a few lines.' },
     { key: 'quote', label: 'Pull quote', note: 'A sentence lifted out of the story, set large.' },
+    // A CROSS-HEAD - the ruled sub-head a printed paper sets between two
+    // stretches of a long story, and the one device the Lokmat reference block
+    // had that this product could not make.
+    //
+    // It is a panel and not a second kind of paragraph ON PURPOSE. A real
+    // mid-flow cross-head means pourBody() carrying a paragraph set in a
+    // different face at a different size, which reaches fillRow(), maxSizeIn(),
+    // rowHeightFor(), the balancer and justifyLine() - a composition-engine
+    // redesign, and this project's own rule is to stop before one. A panel is
+    // already a rectangle the copy runs round; made the full measure and a
+    // whole number of bands deep, the copy closes above it and resumes on the
+    // grid below it, which is what a cross-head IS. The engine gains nothing
+    // and learns nothing.
+    { key: 'crosshead', label: 'Cross-head', note: 'A ruled sub-head across the measure, between two parts of the story.' },
   ]);
+
+  /**
+   * HOW A KIND IS DRAWN - which edges carry a rule, and which face its type is
+   * set in. One catalogue, because four writers ask: the canvas (through the
+   * matching `.section-inset-*` rules in styles.css, which must agree with
+   * this and are commented to say so), the PDF, the IDML and the `.sla`.
+   * print-model.js used to hold its own copy of both decisions inline, which
+   * is the duplicated-catalogue failure this project has already been bitten
+   * by twice.
+   */
+  //
+  // `ground` is whether the kind knocks out what is behind it. A fact box and
+  // a pull quote do - they are objects laid ON the page. A cross-head does
+  // not: it is a line of type in the column, and a white rectangle behind it
+  // would punch a hole in any page overlay it happened to sit over.
+  const STYLES = Object.freeze({
+    note: { edges: ['top', 'right', 'bottom', 'left'], family: 'sans', ground: true },
+    // A pull quote is ruled above and below and open at the sides, so it reads
+    // as lifted OUT of the column rather than boxed beside it.
+    quote: { edges: ['top', 'bottom'], family: 'serif', ground: true },
+    // A cross-head carries one rule, above it, and no ground. The rule is what
+    // says "a new part of this story starts here"; a box would say "this is a
+    // different story", which is the opposite.
+    crosshead: { edges: ['top'], family: 'sans', ground: false },
+  });
+  const panelStyle = (kind) => STYLES[kind] || STYLES.note;
 
   // How a panel's lines are marked. The numbered form is the device the Lokmat
   // reference block uses for its two undertakings, and a fact box is where a
@@ -108,8 +148,11 @@
    * same lines - the caption's lesson, one file earlier.
    */
   function panelLayout(panel, bodyFontPx = 6.4) {
-    const inset = 3;
-    const titlePx = Math.max(5, bodyFontPx * (panel.kind === 'quote' ? 1.5 : 1.15));
+    // A cross-head's type sits ON the measure, not inside a box, so it takes
+    // only the hair of air that keeps it off its own rule - the same 0.5 mm
+    // the block's own inset is, and for the same reason.
+    const inset = panel.kind === 'crosshead' ? 1 : 3;
+    const titlePx = Math.max(5, bodyFontPx * (panel.kind === 'quote' ? 1.5 : panel.kind === 'crosshead' ? 1.3 : 1.15));
     const linePx = Math.max(4.5, bodyFontPx * (panel.kind === 'quote' ? 1.5 : 0.95));
     const lineHeight = 1.45;
     const out = [];
@@ -135,7 +178,8 @@
 
   const api = Object.freeze({
     INSET_PANEL_KINDS: KINDS, INSET_PANEL_MARKERS: MARKERS, INSET_PANEL_MIN_PX: MIN_PX,
-    panelOf, panelsOf, obstacleFromPanel, panelLayout,
+    INSET_PANEL_STYLES: STYLES,
+    panelOf, panelsOf, obstacleFromPanel, panelLayout, panelStyle,
   });
   root.SahasInsetPanels = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

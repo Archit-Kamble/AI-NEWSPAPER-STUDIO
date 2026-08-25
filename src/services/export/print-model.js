@@ -29,7 +29,7 @@ const { identityFor, dateLine, devanagari } = require('../../layout/identity');
 const { strip } = require('../../layout/plain-text');
 const { captionBox, PLACED_CAPTION_METRICS } = require('../../../public/editor/layout/caption-geometry');
 const { borderEdges, borderWidthPx, isDouble } = require('../../../public/editor/layout/borders');
-const { panelsOf, panelLayout } = require('../../../public/editor/layout/inset-panels');
+const { panelsOf, panelLayout, panelStyle } = require('../../../public/editor/layout/inset-panels');
 const { overlaysOf } = require('../../../public/editor/layout/page-overlays');
 const { smartCardLines } = require('./smart-card-lines');
 
@@ -290,10 +290,56 @@ async function blockItems(section, { mono = false } = {}) {
     }
   }
 
+  items.push(...blockDecorations(section, composition));
+
+  return items.filter(Boolean);
+}
+
+
+/**
+ * WHAT A BLOCK DRAWS BESIDE ITS TYPE - the initial letter and the panels set
+ * inside the story. Both are things the compositor has ALREADY made room for
+ * (compose.js's dropCapOf, section-adapter.js's obstaclesOf), so all that is
+ * left here is ink; nothing in this function may decide geometry.
+ *
+ * It is a function of its own, and exported, because Scribus keeps its own
+ * block walk (the tested path scribusComposition.test.js pins line for line)
+ * and was therefore drawing NEITHER. A `.sla` with a drop cap reserved and no
+ * cap in it prints the story with its opening akshara missing; one with a
+ * panel reserved and no panel in it prints a white hole where the fact box
+ * goes. Four writers, one decision - the rule this project already holds for
+ * the column rules and the nameplate.
+ */
+function blockDecorations(section, composition) {
+  const items = [];
+  const x0 = mm(section.x_px);
+  const y0 = mm(section.y_px);
+
+  // THE INITIAL LETTER, which no export drew at all.
+  //
+  // The pour skips the cap's own clusters (they are set separately, so that
+  // `line.at` - and every mark a sub-editor made - stays valid to the
+  // character), which means `bodyLines` genuinely does not contain them. A
+  // writer that renders only `bodyLines` therefore prints the story starting
+  // one akshara in: composed live, a block whose copy opens "शहरातील" set its
+  // cap to "श" and its first body line to "हरातील". On screen that is a drop
+  // cap; on the plate it was a typo.
+  const cap = composition?.dropCap;
+  if (cap && cap.text) {
+    items.push(lineItem(
+      { x: x0 + mm(cap.x), y: y0 + mm(cap.y), width: mm(cap.width) + 1, height: mm(cap.height) },
+      // The compositor's own baseline - the last body line the cap spans. The
+      // browser never needed it said out loud because CSS derives it from
+      // `line-height`; a PDF has to be told.
+      y0 + mm(cap.baseline),
+      [run(cap.text, { family: cap.family || 'serif', weight: cap.weight || 400, fontPx: cap.fontPx })],
+    ));
+  }
+
   // A PANEL SET INSIDE THE STORY. The compositor already ran the copy round
-  // it (section-adapter.js's obstaclesOf), so all that is left is to draw the
-  // rectangle the copy avoided and the type inside it - from the same solve,
-  // so the two cannot disagree about where its lines sit.
+  // it, so all that is left is to draw the rectangle the copy avoided and the
+  // type inside it - from the same solve, so the two cannot disagree about
+  // where its lines sit.
   //
   // AFTER the pictures, and that matters. Every writer here paints in
   // document order, so emitting the panel before them put a photograph on
@@ -304,13 +350,15 @@ async function blockItems(section, { mono = false } = {}) {
     const px = x0 + mm(panel.x);
     const py = y0 + mm(panel.y);
     const rule = mm(0.71);
+    const { edges, family: panelFace, ground } = panelStyle(panel.kind);
     // The ground first, then the rule, then the type - the order a printer
     // lays them down, and the same order a tinted BLOCK already uses.
-    items.push({
-      kind: 'fill', x: px, y: py, width: mm(panel.width), height: mm(panel.height),
-      ink: panel.tint || '#ffffff',
-    });
-    const edges = panel.kind === 'quote' ? ['top', 'bottom'] : ['top', 'right', 'bottom', 'left'];
+    if (ground || panel.tint) {
+      items.push({
+        kind: 'fill', x: px, y: py, width: mm(panel.width), height: mm(panel.height),
+        ink: panel.tint || '#ffffff',
+      });
+    }
     const BOX = {
       top: { x: px, y: py, width: mm(panel.width), height: rule },
       bottom: { x: px, y: py + mm(panel.height) - rule, width: mm(panel.width), height: rule },
@@ -323,16 +371,47 @@ async function blockItems(section, { mono = false } = {}) {
       items.push(textItem(
         { x: px + mm(line.x), y: py + mm(line.y), width: mm(line.width), height: mm(line.fontPx * solved.lineHeight) },
         [run(line.text, {
-          family: panel.kind === 'quote' ? 'serif' : 'sans',
+          family: panelFace,
           weight: line.bold ? 700 : 400, bold: line.bold, fontPx: line.fontPx,
         })],
       ));
     }
   }
-
   return items.filter(Boolean);
 }
 
+/**
+ * THE PAGE'S OWN PICTURES - laid over the blocks, never belonging to one.
+ *
+ * Extracted for the same reason as blockDecorations(): the `.sla` had no
+ * `overlay` in it anywhere, so a photograph a desk ran across two stories was
+ * on the canvas, in the PDF and in the IDML, and simply absent from the file
+ * that reaches a plate - with the two blocks underneath still set clear of it,
+ * so the page printed with a hole in it.
+ */
+function pageOverlayItems(page, { mono = false } = {}) {
+  const items = [];
+  for (const overlay of overlaysOf(page)) {
+    items.push({
+      kind: 'image',
+      x: mm(overlay.x), y: mm(overlay.y),
+      width: mm(overlay.width), height: mm(overlay.height),
+      file: String(overlay.url).replace(/^\//, ''),
+      resolved: null, rotation: 0, mono,
+    });
+    if (overlay.caption) {
+      items.push(textItem(
+        { x: mm(overlay.x), y: mm(overlay.y + overlay.height),
+          width: mm(overlay.width), height: mm(PLACED_CAPTION_METRICS.fontPx * PLACED_CAPTION_METRICS.lineHeight + 2) },
+        [run(overlay.caption, {
+          family: PLACED_CAPTION_METRICS.family, weight: PLACED_CAPTION_METRICS.weight,
+          fontPx: PLACED_CAPTION_METRICS.fontPx,
+        })],
+      ));
+    }
+  }
+  return items.filter(Boolean);
+}
 
 // -------------------------------------------------------------- furniture ---
 
@@ -776,25 +855,8 @@ async function buildPrintModel(newspaper, pages) {
     // "laid over" means and every writer here paints in document order. The
     // blocks have already set their type clear of them, so this is paint and
     // not layout.
-    for (const overlay of overlaysOf(page)) {
-      items.push({
-        kind: 'image',
-        x: mm(overlay.x), y: mm(overlay.y),
-        width: mm(overlay.width), height: mm(overlay.height),
-        file: String(overlay.url).replace(/^\//, ''),
-        resolved: null, rotation: 0, mono,
-      });
-      if (overlay.caption) {
-        items.push(textItem(
-          { x: mm(overlay.x), y: mm(overlay.y + overlay.height),
-            width: mm(overlay.width), height: mm(PLACED_CAPTION_METRICS.fontPx * PLACED_CAPTION_METRICS.lineHeight + 2) },
-          [run(overlay.caption, {
-            family: PLACED_CAPTION_METRICS.family, weight: PLACED_CAPTION_METRICS.weight,
-            fontPx: PLACED_CAPTION_METRICS.fontPx,
-          })],
-        ));
-      }
-    }
+    items.push(...pageOverlayItems(page, { mono }));
+
     items.push(...footerItems(newspaper, page, geometry, identity));
     items.push(...registrationItems(geometry));
     built.push({ number: Number(page.page_number), items });
@@ -857,4 +919,8 @@ function blockRules(section) {
   return out;
 }
 
-module.exports = { buildPrintModel, ensureComposeReady, pageFurniture, blockRules, mm, pt };
+module.exports = {
+  buildPrintModel, ensureComposeReady,
+  pageFurniture, blockRules, blockDecorations, pageOverlayItems,
+  mm, pt,
+};

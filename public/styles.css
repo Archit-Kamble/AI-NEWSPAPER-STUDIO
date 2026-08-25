@@ -5744,6 +5744,14 @@ body.print-view .page-imprint {
   border-right: none;
   font-family: "Sahas Serif", "Noto Serif Devanagari", Georgia, serif;
 }
+/* A cross-head: one rule above, no box and no ground. These three declarations
+   are the browser's half of inset-panels.js's STYLES.crosshead and must agree
+   with it - the exports read that catalogue directly. */
+.section-inset-crosshead {
+  border: none;
+  border-top: 0.71px solid #111;
+  background: none;
+}
 
 /* --- the panel control ---------------------------------------------------- */
 .prop-panel {

@@ -38,7 +38,7 @@ const { identityFor, dateLine, devanagari } = require('../layout/identity');
 const { captionBox, PLACED_CAPTION_METRICS } = require('../../public/editor/layout/caption-geometry');
 // The furniture the shared print model already describes - the nameplate, the
 // folio, the column rules and a block's own border. See furnitureFrames().
-const { pageFurniture, blockRules } = require('./export/print-model');
+const { pageFurniture, blockRules, blockDecorations, pageOverlayItems } = require('./export/print-model');
 const ACCENT_HEX = '#c8102e';
 const { smartCardLines } = require('./export/smart-card-lines');
 
@@ -503,6 +503,17 @@ async function blockFrames(section, { pageIndex = 0, pageOffsetMm = 0 } = {}) {
     }
   }
 
+  // THE INITIAL LETTER AND THE PANELS SET INSIDE THE STORY, from the one walk
+  // print-model.js already does for the PDF and the IDML. This block walk is
+  // deliberately its own (scribusComposition.test.js pins it line for line),
+  // and that is exactly how it came to draw NEITHER: a `.sla` with a drop cap
+  // reserved and no cap in it prints the story one akshara short, and one with
+  // a fact box reserved and no box in it prints a white hole. After the
+  // pictures, because a .sla paints in document order and the canvas stacks a
+  // panel over a placed picture.
+  parts.push(furnitureFrames(blockDecorations(section, composition),
+    { pageOffsetMm, ownPage: pageIndex, family: 'sans' }));
+
   return parts.filter(Boolean).join('');
 }
 
@@ -683,6 +694,10 @@ async function buildDocument(newspaper, pages) {
       // eslint-disable-next-line no-await-in-loop
       objectParts.push(await blockFrames(section, { pageIndex: index, pageOffsetMm }));
     }
+    // The page's own pictures go down AFTER the blocks, because that is what
+    // "laid over" means - the same order print-model.js uses, and the blocks
+    // have already set their type clear of them, so this is paint, not layout.
+    objectParts.push(furnitureFrames(pageOverlayItems(page), { pageOffsetMm, ownPage: index }));
     objectParts.push(footerFrames(newspaper, page, g, identity, { pageOffsetMm, ownPage: index }));
   }
 

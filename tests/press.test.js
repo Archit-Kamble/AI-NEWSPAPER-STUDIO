@@ -298,7 +298,13 @@ test('the press package is a real zip that carries the pictures with it', async 
 
     const response = await desk(`/api/newspapers/${newspaper.id}/press-package`);
     assert.equal(response.status, 200, response.status === 200 ? undefined : await response.clone().text());
-    assert.equal(response.headers.get('x-pictures-included'), '1');
+    // Two now, not one: the story's photograph AND the paper's nameplate
+    // artwork, which the .sla places above the fold on page one. A count is a
+    // weak assertion anyway - what matters is the loop below, that every path
+    // the document references resolves after unzipping - so this asserts the
+    // floor and that nothing is missing.
+    assert.ok(Number(response.headers.get('x-pictures-included')) >= 2,
+      `expected the picture and the nameplate, got ${response.headers.get('x-pictures-included')}`);
     assert.equal(response.headers.get('x-pictures-missing'), '0');
 
     const zipFile = path.join(work, 'press.zip');
@@ -310,6 +316,8 @@ test('the press package is a real zip that carries the pictures with it', async 
     const sla = await fs.readFile(path.join(work, `sahas-${'2026-08-04'}.sla`), 'utf8');
     const pfiles = [...sla.matchAll(/PFILE="([^"]+)"/g)].map((m) => m[1]);
     assert.ok(pfiles.length >= 1, 'the document should reference its picture');
+    assert.ok(pfiles.some((f) => /nameplate/.test(f)),
+      'and the nameplate, which no press file carried until the furniture was shared');
 
     // The whole point: after unzipping, every path the document uses resolves.
     for (const reference of pfiles) {

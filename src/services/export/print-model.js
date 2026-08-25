@@ -812,4 +812,49 @@ async function buildPrintModel(newspaper, pages) {
   };
 }
 
-module.exports = { buildPrintModel, ensureComposeReady, mm, pt };
+/**
+ * The PAGE FURNITURE as neutral items, for a writer that does its own block
+ * walk. Scribus is the one - it is the tested press path and moving its whole
+ * walk onto this model at the end of a pass is the rewrite that should not be
+ * done - but there is no reason for it to describe the nameplate, the folio or
+ * the column rules a second time. It renders these.
+ */
+async function pageFurniture(newspaper, page, geometry, identity) {
+  const { columnRules } = await ensureComposeReady();
+  const items = [
+    ...mastheadItems(newspaper, page, geometry, identity, page.sections),
+    ...folioItems(newspaper, page, geometry, identity),
+  ];
+  for (const rule of columnRules.columnRulesFor(page, geometry)) {
+    items.push(rule.axis === 'v'
+      ? { kind: 'rule', x: mm(rule.at - 0.25), y: mm(rule.from), width: mm(0.5), height: mm(rule.to - rule.from), ink: RULE_INK }
+      : { kind: 'rule', x: mm(rule.from), y: mm(rule.at - 0.25), width: mm(rule.to - rule.from), height: mm(0.5), ink: RULE_INK });
+  }
+  return items.filter(Boolean);
+}
+
+/** A block's own rules, in the same neutral kinds. */
+function blockRules(section) {
+  const edges = borderEdges(section.border_style);
+  if (!edges.length) return [];
+  const weight = borderWidthPx(section.border_width_px);
+  const x0 = mm(section.x_px);
+  const y0 = mm(section.y_px);
+  const w = mm(section.width_px);
+  const h = mm(section.height_px);
+  const t = mm(weight);
+  const out = [];
+  for (const offset of isDouble(section.border_style) ? [0, weight * 2] : [0]) {
+    const o = mm(offset);
+    const RULES = {
+      top: { x: x0 + o, y: y0 + o, width: w - o * 2, height: t },
+      bottom: { x: x0 + o, y: y0 + h - o - t, width: w - o * 2, height: t },
+      left: { x: x0 + o, y: y0 + o, width: t, height: h - o * 2 },
+      right: { x: x0 + w - o - t, y: y0 + o, width: t, height: h - o * 2 },
+    };
+    for (const edge of edges) out.push({ kind: 'rule', ...RULES[edge], ink: RULE_INK });
+  }
+  return out;
+}
+
+module.exports = { buildPrintModel, ensureComposeReady, pageFurniture, blockRules, mm, pt };

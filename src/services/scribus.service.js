@@ -36,6 +36,10 @@ const { geometryOf, pxToMm, regionForPage } = require('../layout/geometry');
 const { strip } = require('../layout/plain-text');
 const { identityFor, dateLine, devanagari } = require('../layout/identity');
 const { captionBox, PLACED_CAPTION_METRICS } = require('../../public/editor/layout/caption-geometry');
+// The furniture the shared print model already describes - the nameplate, the
+// folio, the column rules and a block's own border. See furnitureFrames().
+const { pageFurniture, blockRules } = require('./export/print-model');
+const ACCENT_HEX = '#c8102e';
 const { smartCardLines } = require('./export/smart-card-lines');
 
 const escapeXml = (value) =>
@@ -354,6 +358,67 @@ function smartCardFrames({ key, data, frame, xMm, yMm, ownPage, cardLayout, fami
   }).join('');
 }
 
+/**
+ * The shared page furniture, as .sla frames.
+ *
+ * WHY THIS EXISTS RATHER THAN A SECOND WALK. This file did its own walk for
+ * everything, which was right while Scribus was the only destination. It has
+ * not been right for four, and it showed: the nameplate, the column rules and
+ * a block's own border are all drawn by the canvas and by print-model.js, and
+ * were drawn HERE by nothing at all - so the press file, the one artifact that
+ * actually reaches a plate, came out with no paper name above the fold and its
+ * stories separated by white space.
+ *
+ * The block walk below is untouched: it is the tested path and moving it is a
+ * rewrite, not a fix. What this does is render the neutral items the shared
+ * model already produces for the furniture, so there is no second opinion
+ * about where a nameplate sits or which pair of blocks earns a rule.
+ */
+function furnitureFrames(items, { pageOffsetMm, ownPage, family = 'sans', weight = 400 }) {
+  return items.map((item) => {
+    if (item.kind === 'fill' || item.kind === 'rule') {
+      return fillFrame({
+        xMm: item.x, yMm: pageOffsetMm + item.y, widthMm: item.width, heightMm: item.height,
+        colour: item.ink === ACCENT_HEX ? 'SahasRed' : 'Black', ownPage,
+      });
+    }
+    if (item.kind === 'image') {
+      // A FURNITURE picture, not a placed one. The nameplate has no crop, no
+      // rotation and no fit mode - it is artwork at a reserved rectangle - and
+      // its geometry is already in MILLIMETRES, so it cannot go through
+      // imageFrame(), which takes a resolvePlacedImage() transform and converts
+      // from editor pixels.
+      //
+      // SCALETYPE="1" is Scribus's documented "scale image to frame" and
+      // RATIO="1" keeps the aspect, which is exactly the rule the canvas and
+      // the print model already hold for this artwork: it is a registered mark
+      // and may be sized but never stretched. Using the attribute rather than
+      // computing LOCALSCX/Y avoids inventing a second, unverifiable scale -
+      // this file's own caveat about not having a Scribus binary to render
+      // against applies here too.
+      return `
+  <PAGEOBJECT XPOS="${mmRound(item.x)}" YPOS="${mmRound(pageOffsetMm + item.y)}"
+              WIDTH="${mmRound(item.width)}" HEIGHT="${mmRound(item.height)}"
+              ROT="0" OwnPage="${ownPage}" ItemID="${nextId()}" PTYPE="2" FRTYPE="0"
+              PWIDTH="0" PCOLOR="None" PCOLOR2="None"
+              PFILE="${escapeXml(item.file)}" SCALETYPE="1" RATIO="1" TEXTFLOWMODE="0"/>`;
+    }
+    if (item.kind === 'text') {
+      return lineFrame({
+        xMm: item.x, yMm: pageOffsetMm + item.y, widthMm: item.width, heightMm: item.height,
+        runs: item.runs.map((run) => ({
+          text: run.text, family: run.family || family, weight: run.weight || weight,
+          bold: Boolean(run.bold), italic: false, underline: false,
+          fontPx: (run.sizePt / 72) * 25.4 * 2, ink: run.ink || null,
+        })),
+        align: item.align === 'center' ? 1 : item.align === 'right' ? 2 : 0,
+        ownPage,
+      });
+    }
+    return '';
+  }).join('');
+}
+
 // ------------------------------------------------------------ one block ----
 
 /**
@@ -608,7 +673,13 @@ async function buildDocument(newspaper, pages) {
   for (let index = 0; index < pages.length; index += 1) {
     const page = pages[index];
     const pageOffsetMm = index * pageStepMm;
+    // The furniture goes down FIRST - a .sla paints in document order, so the
+    // nameplate and the rules must not land on top of the stories.
+    // eslint-disable-next-line no-await-in-loop
+    objectParts.push(furnitureFrames(await pageFurniture(newspaper, page, g, identity),
+      { pageOffsetMm, ownPage: index }));
     for (const section of page.sections || []) {
+      objectParts.push(furnitureFrames(blockRules(section), { pageOffsetMm, ownPage: index }));
       // eslint-disable-next-line no-await-in-loop
       objectParts.push(await blockFrames(section, { pageIndex: index, pageOffsetMm }));
     }

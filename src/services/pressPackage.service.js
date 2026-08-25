@@ -22,6 +22,8 @@
 const fs = require('fs/promises');
 const path = require('path');
 const zlib = require('zlib');
+// The paper's own standing artwork, which the .sla places above the fold.
+const { identity } = require('../layout/identity');
 
 const PUBLIC_DIR = path.join(__dirname, '..', '..', 'public');
 
@@ -141,6 +143,15 @@ async function picturesFor(pages) {
     for (const section of page.sections || []) {
       for (const image of section.images || []) if (image.url) wanted.add(image.url);
       if (section.image_url) wanted.add(section.image_url);
+    }
+    // The PAGE's own pictures too: the nameplate artwork the .sla now places
+    // above the fold, and any photograph laid across block boundaries. Both
+    // are referenced by the press file, and a referenced file that is not in
+    // the package is a frame that opens EMPTY in Scribus - which is exactly
+    // what tests/press.test.js caught the moment the nameplate was added.
+    if (identity.nameplateUrl) wanted.add(identity.nameplateUrl);
+    for (const overlay of Array.isArray(page.overlay_images) ? page.overlay_images : []) {
+      if (overlay && overlay.url) wanted.add(overlay.url);
     }
   }
 

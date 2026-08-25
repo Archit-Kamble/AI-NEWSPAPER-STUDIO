@@ -41,6 +41,15 @@
     if (!(width > 0 && height > 0)) return null;
     const maxX = Math.max(0, (Number(frame.width) || width) - width);
     const maxY = Math.max(0, (Number(frame.height) || height) - height);
+    // A LIGHT GROUND, like the two cream boxes a printed Marathi paper sets a
+    // fact box on (the Lokmat reference block has two). Shape only here - this
+    // module is loaded as a plain script in the browser and as CommonJS on the
+    // server, so it cannot import inks.js, which is ESM. The PALETTE check is
+    // at the service boundary, where the ink catalogue is already awaited for
+    // exactly this reason (pageSection.service.js). A hex that is the right
+    // shape but not one of the paper's tints is refused there and never
+    // reaches a renderer.
+    const tint = /^#[0-9a-f]{6}$/i.test(String(raw.tint || '')) ? String(raw.tint).toLowerCase() : null;
     const title = clean(raw.title);
     const lines = (Array.isArray(raw.lines) ? raw.lines : String(raw.lines || '').split('\n'))
       .map(clean).filter(Boolean);
@@ -52,7 +61,7 @@
       y: Math.min(Math.max(0, Number(raw.y) || 0), maxY),
       width, height,
       standOffPx: Math.max(0, Number(raw.standOffPx ?? DEFAULT_STAND_OFF_PX)),
-      title, lines,
+      tint, title, lines,
     };
   }
 

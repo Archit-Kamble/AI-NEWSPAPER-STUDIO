@@ -199,7 +199,12 @@ async function saveSection(pageId, sectionKey, body) {
     insetPanels: body.insetPanels === undefined ? undefined
       : (Array.isArray(body.insetPanels) ? body.insetPanels : [])
         .map((entry) => panelOf(entry, { width: body.widthPx, height: body.heightPx }))
-        .filter(Boolean),
+        .filter(Boolean)
+        // A panel's ground goes through the SAME palette check a block's does.
+        // inset-panels.js can only check the shape of a hex - it is loaded as a
+        // plain script in the browser - so this is where a colour that is not
+        // one of the paper's tints is refused.
+        .map((panel) => ({ ...panel, tint: panel.tint ? palette.sanitiseTint(panel.tint) : null })),
     // The display face, validated against the one typeface catalogue so a
     // foreign family can never reach a renderer.
     displayFamily: body.displayFamily,

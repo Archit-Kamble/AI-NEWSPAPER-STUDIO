@@ -482,7 +482,8 @@ export function insetPanelsMarkup(section, view) {
       + `${line.bold ? "font-weight:700;" : ""}">${escapeHtml(line.text)}</span>`).join("");
     return `<span class="section-inset-panel section-inset-${escapeHtml(panel.kind)}"
                   data-panel-id="${escapeHtml(panel.id)}"
-                  style="left:${panel.x}px;top:${panel.y}px;width:${panel.width}px;height:${panel.height}px">${lines}</span>`;
+                  style="left:${panel.x}px;top:${panel.y}px;width:${panel.width}px;height:${panel.height}px${
+                    panel.tint ? `;background:${escapeHtml(panel.tint)}` : ""}">${lines}</span>`;
   }).join("");
 }
 

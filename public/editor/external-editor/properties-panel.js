@@ -475,6 +475,11 @@ function panelsMarkup(section, view) {
       <div class="prop-panel-geometry">
         ${["x", "y", "width", "height"].map((field) => `<label>${field}<input type="number" data-panel-field="${field}" value="${Math.round(panel[field])}"></label>`).join("")}
       </div>
+      <label>Ground
+        <select data-panel-field="tint">
+          ${TINTS.map((tint) => `<option value="${tint.hex || ""}"${(panel.tint || "") === (tint.hex || "") ? " selected" : ""}>${escapeHtml(tint.label)}</option>`).join("")}
+        </select>
+      </label>
     </div>`).join("");
 }
 
@@ -497,6 +502,7 @@ function panelsFromDom(section, view) {
       x: Number(field("x")), y: Number(field("y")),
       width: Number(field("width")), height: Number(field("height")),
       title: field("title"),
+      tint: field("tint") || null,
       lines: String(field("lines")).split("\n"),
     };
   });

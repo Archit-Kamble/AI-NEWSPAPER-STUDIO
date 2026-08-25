@@ -304,7 +304,12 @@ async function blockItems(section, { mono = false } = {}) {
     const px = x0 + mm(panel.x);
     const py = y0 + mm(panel.y);
     const rule = mm(0.71);
-    items.push({ kind: 'fill', x: px, y: py, width: mm(panel.width), height: mm(panel.height), ink: '#ffffff' });
+    // The ground first, then the rule, then the type - the order a printer
+    // lays them down, and the same order a tinted BLOCK already uses.
+    items.push({
+      kind: 'fill', x: px, y: py, width: mm(panel.width), height: mm(panel.height),
+      ink: panel.tint || '#ffffff',
+    });
     const edges = panel.kind === 'quote' ? ['top', 'bottom'] : ['top', 'right', 'bottom', 'left'];
     const BOX = {
       top: { x: px, y: py, width: mm(panel.width), height: rule },

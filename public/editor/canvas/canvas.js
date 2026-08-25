@@ -30,6 +30,10 @@ let handlers = {};
 // answers for all of them. Kept here rather than re-derived from the DOM: the
 // band is a fact about the page, not about what happens to be on screen.
 let renderedPage = null;
+// Whether THIS edition rules its gutters. Held here because refreshColumnRules()
+// is called from a drag with only a section in hand and must not silently draw
+// a different page from the one renderCanvas() drew.
+let rulesEnabled = false;
 
 // A page that prints black only is not a design choice, it is what the press
 // will do. Saying so on the page - and previewing the photographs in grey, which
@@ -80,6 +84,7 @@ export function renderCanvas(page, newspaper, selection, callbacks = {}) {
   }
 
   renderedPage = page;
+  rulesEnabled = Boolean(newspaper?.column_rules);
   const geometry = getGeometry() || { marginXPx: 20, marginYPx: 20, matterWidthPx: 620, pageHeightPx: 1060 };
   const matterRight = geometry.marginXPx + geometry.matterWidthPx;
   const contentBottom = contentRegion(geometry, page).bottom;
@@ -114,7 +119,7 @@ export function renderCanvas(page, newspaper, selection, callbacks = {}) {
         ${registrationMarkup(geometry)}
         <!-- Under the blocks, because a rule is what the page shows BETWEEN
              two stories - anything a block draws sits on top of it. -->
-        ${columnRulesMarkup(page, geometry)}
+        ${columnRulesMarkup(page, geometry, rulesEnabled)}
         ${page.sections
           .map((section) => {
             const view = viewOfSection(section, draft, selectedSectionKey);
@@ -234,7 +239,7 @@ export function refreshColumnRules(section = null, view = null, syncedPage = nul
           : row),
     }
     : renderedPage;
-  const markup = columnRulesMarkup(page, geometry);
+  const markup = columnRulesMarkup(page, geometry, rulesEnabled);
   canvas.querySelector('.page-rules')?.remove();
   if (!markup) return;
   const firstBlock = canvas.querySelector('.newspaper-section');

@@ -68,6 +68,11 @@ export const DRAFT_FIELDS = [
   // photographed - a panel a desk had just added did not appear on the page at
   // all until the edition was reloaded, because every surface read the ROW.
   "insetPanels",
+  // Does this block open with "■ सातारा, प्रतिनिधी :"? A standing feature, a
+  // results panel and a picture box all carry a location without wanting one
+  // printed, and the only way to say no was to clear the location itself -
+  // which also loses it from the story's own record.
+  "showDateline",
   // Block decoration. These persist on the row, so they have to travel with the
   // draft as well - a template that boxes the advert slot would otherwise have
   // its box wiped by the first save of that block.
@@ -159,6 +164,9 @@ export function draftFromSection(section) {
     listStyle: section.list_style || "none",
     dropCapLines: Math.max(0, Number(section.drop_cap_lines) || 0),
     insetPanels: Array.isArray(section.inset_panels) ? section.inset_panels : [],
+    // TRUE for every row that predates the column, which is what they all do
+    // today - so nothing composes differently until a desk turns one off.
+    showDateline: section.show_dateline !== false,
     borderStyle: section.border_style || "none",
     borderWidthPx: Number(section.border_width_px) || 1,
     borderColor: section.border_color || "#111111",
@@ -260,6 +268,19 @@ export function payloadFromDraft(draft) {
     paragraphSpacingPx: draft.paragraphSpacingPx,
     listStyle: draft.listStyle,
     dropCapLines: Math.max(0, Number(draft.dropCapLines) || 0),
+    // THE PANELS, which this payload did not send.
+    //
+    // `insetPanels` was in DRAFT_FIELDS and in draftFromSection(); the service
+    // accepts it and the repository has a column and a placeholder for it. The
+    // one link missing was this line, so every fact box, pull quote,
+    // cross-head and separator a desk added lived only until the next reload -
+    // it drew on the page, it displaced the copy, autosave reported success,
+    // and it was never in the request at all. Found by reading this function
+    // against DRAFT_FIELDS rather than by anything failing, because nothing
+    // did fail: a COALESCE update that is not told about a column leaves it
+    // exactly as it was.
+    insetPanels: Array.isArray(draft.insetPanels) ? draft.insetPanels : [],
+    showDateline: draft.showDateline !== false,
     borderStyle: draft.borderStyle,
     borderWidthPx: draft.borderWidthPx,
     borderColor: draft.borderColor,

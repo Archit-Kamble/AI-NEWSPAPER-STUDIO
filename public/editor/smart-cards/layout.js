@@ -38,6 +38,8 @@
 import { measureWidth as hmtxWidth, minLineHeightFor } from '../compose/font-metrics.js';
 import { shapeWidthPx, isShaperReady } from '../compose/shaper.js';
 import { breakPieces, trimEndClusters } from '../compose/graphemes.js';
+// The paper's own inks. A chart may be printed in any of them - see chartInk().
+import { INKS, sanitiseInk } from '../layout/inks.js';
 
 // Devanagari numerals - how this paper prints a number. Duplicated from
 // smart-cards.js's own DIGITS/devanagari() (not imported - smart-cards.js
@@ -402,10 +404,40 @@ const CHART_KINDS = new Set(['bar', 'stat', 'pie', 'line', 'dots']);
 export const CHART_ACCENT = '#c8102e';
 const SLICE_SHADES = [1, 0.72, 0.48, 0.3, 0.86, 0.6, 0.4, 0.22];
 
+/**
+ * WHICH ink this chart is printed in - one of the paper's four, never a
+ * colour a desk mixed in a browser.
+ *
+ * The desk asked to be able to "add different color to graph to look it
+ * beautiful", and that is a fair thing to want; what it must not become is a
+ * colour wheel. SAHAS prints from four plates, so a chart gets to choose which
+ * PLATE it prints from - red, blue, green or plain black - and its slices are
+ * then tints of that one ink, which is what a printed chart actually is and
+ * what keeps a five-slice pie legible on newsprint. Black charts print with no
+ * fourth plate at all, which is what a mono page needs.
+ *
+ * Anything unrecognised falls back to the paper's red, so an old card and a
+ * hand-edited payload both still draw.
+ */
+export function chartInk(data) {
+  const chosen = sanitiseInk(data?.ink);
+  if (chosen) return chosen;
+  // 'black' is a real choice and carries no hex (inks.js: black is the absence
+  // of a mark), so it cannot come back from sanitiseInk and is asked for by
+  // key. A chart set in black is drawn in tints of black.
+  if (String(data?.ink || '').toLowerCase() === 'black' || data?.ink === '#111111') return '#111111';
+  return CHART_ACCENT;
+}
+
+/** The four a chart may be set in, for a control to offer. */
+export const CHART_INKS = Object.freeze(
+  INKS.map((entry) => ({ key: entry.key, label: entry.label, hex: entry.hex || '#111111' })),
+);
+
 /** The ink slice `index` is printed in - a real hex, so every writer draws it. */
-export function sliceInk(index) {
+export function sliceInk(index, base = CHART_ACCENT) {
   const shade = SLICE_SHADES[index % SLICE_SHADES.length];
-  const value = parseInt(CHART_ACCENT.slice(1), 16);
+  const value = parseInt(String(base || CHART_ACCENT).slice(1), 16);
   const mix = (channel) => Math.round(255 - (255 - channel) * shade);
   const r = mix((value >> 16) & 0xff);
   const g = mix((value >> 8) & 0xff);
@@ -441,6 +473,11 @@ function layoutChart(data, frame) {
   const source = String(data?.source || '');
   const peak = rows.reduce((max, item) => Math.max(max, Math.abs(Number(item.value))), 0) || 1;
   const valueText = (item) => `${devanagariDigits(item.value)}${unit ? ` ${unit}` : ''}`;
+  // Resolved ONCE, here, and carried out in the geometry below - so the canvas,
+  // the Block Editor and all three export writers read the chart's ink off the
+  // one solve instead of each importing the constant and each being free to
+  // disagree with the others about what colour the chart is.
+  const ink = chartInk(data);
 
   const solved = solveFont(frame.innerHeight, (fontPx) => {
     const lineHeightPx = lineHeightFor(fontPx, 'sans', 400);
@@ -498,7 +535,7 @@ function layoutChart(data, frame) {
       const items = rows.map((item, index) => {
         const share = Math.abs(Number(item.value)) / total;
         const slice = { label: String(item.label), value: Number(item.value), valueText: valueText(item),
-          share, from: turn, to: turn + share, swatch: index };
+          share, from: turn, to: turn + share, swatch: index, ink: sliceInk(index, ink) };
         turn += share;
         return slice;
       });
@@ -586,7 +623,7 @@ function layoutChart(data, frame) {
     fitState: solved.fitState,
     fontPx: solved.fontPx,
     geometry: {
-      chartType: solved.kind, rows: rows.length, peak: solved.peak,
+      chartType: solved.kind, rows: rows.length, peak: solved.peak, ink,
       labelWidth: solved.labelWidth || 0, trackWidth: solved.trackWidth || 0,
       valueWidth: solved.valueWidth || 0, rowHeight: solved.rowHeight || 0,
       columns: solved.columns || 0, columnWidth: solved.columnWidth || 0,

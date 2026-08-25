@@ -55,7 +55,7 @@ import { smartCardMarkup } from "../smart-cards/smart-cards.js";
 // the SAME logical width/height/padding solve the page canvas passes a
 // Smart Card - reused rather than re-derived, so "does this card fit" can
 // never disagree between the two.
-import { sectionContentMarkup, sectionComposition, smartCardFrame } from "../canvas/section-thumb.js";
+import { sectionContentMarkup, sectionComposition, smartCardFrame, insetPanelsMarkup } from "../canvas/section-thumb.js";
 // The same six words the Typography panel's "Editing: X" label uses - one
 // catalog for what a selected object is called, not two that could drift.
 import { PART_LABEL, ALIGN_FIELD, ALIGNMENTS } from "./typography-panel.js";
@@ -118,6 +118,7 @@ function loadQuill() {
 }
 
 import { deviceBarMarkup, refreshDeviceBar } from "./device-bar.js";
+import { chartDialogHostMarkup } from "./chart-dialog.js";
 
 // ----------------------------------------------------------------- markup ---
 
@@ -129,6 +130,7 @@ export function blockFrameMarkup() {
            which meant a picture dragged over the top of the copy covered the
            bold button. The page holds only what prints. -->
       ${deviceBarMarkup()}
+      ${chartDialogHostMarkup()}
       <div class="frame-toolbar" id="edQuillToolbar">
         <span class="ql-formats">
           <button class="ql-bold" type="button"></button>
@@ -652,7 +654,21 @@ function layoutTextFrames() {
   canonical.style.width = `${Number(state.section.width_px)}px`;
   canonical.style.height = `${Number(state.section.height_px)}px`;
   canonical.style.transform = `scale(${zoom})`;
-  canonical.innerHTML = sectionContentMarkup(renderSection, state.view);
+  // THE PANELS TOO, and this is the whole of the desk's report "editor not
+  // showing as it things as layout news block for some things like seprator".
+  //
+  // The page canvas draws a block through sectionInnerHtml(), which calls
+  // sectionContentMarkup() AND insetPanelsMarkup(). The Block Editor called
+  // only the first. So a fact box, a pull quote, a cross-head or a separator
+  // displaced the copy here exactly as it does on the page - the compositor
+  // had it in its obstacle set either way - and then was not DRAWN, leaving a
+  // rectangular hole in the type with nothing in it. The device appeared to do
+  // nothing but damage, on the one surface a desk actually writes in.
+  //
+  // The same markup as the page's, from the same one panel layout, so the two
+  // surfaces cannot disagree about where the panel is or what is in it.
+  canonical.innerHTML = sectionContentMarkup(renderSection, state.view)
+    + insetPanelsMarkup(renderSection, state.view);
 
   // The canonical lines for a flow that is being typed into stay hidden. They
   // were hidden once, when the edit opened - and any refresh at all (an

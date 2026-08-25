@@ -6631,3 +6631,83 @@ in its tints in the press PDF.
 that job with real runaround, so a picture inside a panel would be a second way
 to do one thing); and the AI picture generator's success path is unverified
 because this newsroom's Gemini key has no image quota.
+
+
+## The eleven-corrections pass — the desk pressed the buttons and reported back
+
+The device-bar pass put the controls where a desk could find them. This pass is
+what happened when a desk actually used them, and it is a much better class of
+report than the last one: every item is about behaviour, not about discovery.
+
+| # | the report | what it was, and what it is now |
+|---|---|---|
+| 1 | "everytime we are able to add we should able to remove" | True of four devices. A panel, a separator and a chart could each be put on a block and not taken off. Every menu now carries an explicit **Remove**, disabled rather than hidden when there is nothing to remove. |
+| 2 | "if we are adding border it should not make impact on inside text but it is making" | `BOX_INSET_PX` was **added** to the block's margin, so ruling a block narrowed its measure by 11 px and rebroke every line. It is a **floor** now: the default 12 px margin already exceeds what a printed box wants, so ruling an ordinary block changes nothing. |
+| 3 | "editor not showing … some things like seprator" | The Block Editor drew `sectionContentMarkup()` only; the page canvas draws that **and** `insetPanelsMarkup()`. So a panel displaced the copy here and was then not drawn — a rectangular hole with nothing in it, on the one surface a desk writes in. |
+| 4 | "chart … should first ask us to take space … then ask for input … only same graph … also different color" | Four faults, one cause: the button wrote a seed card. `chart-dialog.js` asks which chart, how much room, and what is in it — with the readings typed or pasted, and one of the paper's four inks. |
+| 5 | "choose font family of whole newspaper" | `PATCH /api/newspapers/:id/house-style`, on a new **Paper** row above the page. Writes the face onto blocks that have not chosen one themselves. |
+| 6 | "massive upgrade: Insert, Separator, Chart, Caption" | Chart as above. Separator was one fixed ◆ and is now seven real separators, one to a block, replaced rather than stacked. Insert lost the chart kind (it needs three answers) and gained its removal. |
+| 7 | "in between block … default lines are showing … only when we apply" | Column rules drew on every page of every edition. Now `newspapers.column_rules`, off for everything that exists. Measured on the plate: 3/15/1/1/1/1 rule items off, 23/19/30/6/6/11 on. |
+| 8 | "cannot able to edit headling and subheading font size" | The controls existed — in a panel in the settings rail, which was the whole problem. Three steppers on the bar, with the number the block is actually set in beside each. |
+| 9 | "drop cap … velanti, ukaar … does not work for many news blocks" | Both halves real. It **refused** on any block with a dateline, which is most of them; and a vowel sign above or below the cap fell outside its reserved rectangle. |
+| 10 | "add location and reporter name … in some blocks it is not needed" | `page_sections.show_dateline`, asked inside `datelineText()` so the renderers, the capacity count, the compositor and all four exports agree. |
+| 11 | "align justify … every line touching line start and line end" | The compositor has justified since it was written; the only control was an Alignment segment in a rail. It is a button. |
+
+### Four bugs found while doing it, none of them reported
+
+- **Inset panels were never saved.** `insetPanels` was in `DRAFT_FIELDS` and in
+  `draftFromSection()`; the service accepts it and the repository has a column
+  and a placeholder for it. `payloadFromDraft()` did not send it. So every fact
+  box, pull quote, cross-head and separator lived until the next reload —
+  autosave reported success, and a `COALESCE` update that is not told about a
+  column leaves it exactly as it was. Found by reading that function against
+  `DRAFT_FIELDS`, because nothing failed.
+- **`panelsFromDom()` would have wiped a chart panel.** It rebuilds every panel
+  from its form inputs; a chart has no title or lines to rebuild from, so
+  editing any *other* panel on the block would have dropped the chart.
+- **`smart-card-lines.js` had the paper's red hard-coded at four sites.** A
+  chart set in blue would have drawn blue and printed red. Fixed by carrying
+  the ink out in the solved geometry, which is where the pie's per-slice tints
+  already came from.
+- **A third toolbar row pushed the writing surface below the fold.** The
+  Paper controls were given a row of their own; at 1512x950 that put a picture
+  handle at y=1015, outside the viewport, where it stopped being clickable at
+  all. It surfaced as a *broken undo stack* — the drag recorded nothing, so
+  Ctrl+Z had nothing to step back to — three layers from its cause, and only
+  the workspace net could have found it. The controls now sit on the existing
+  first row. CLAUDE.md already stated this rule.
+- **The device bar wrapped, so its height moved while a desk worked.** The two
+  face buttons say which face is in force, so a longer name could push a group
+  onto a second row and shift the whole editor. It scrolls now.
+- **My own extraction broke the export path.** Lifting the card walk out of
+  `blockItems()` left `cardItems()` referencing a module reference it no longer
+  had. The browser never touches that path; found by modelling a real page.
+
+### Verified
+
+`npm test` 920/920. Device bar 44/44 — every device pressed and the canvas
+checked for *which thing moved*, including the chart dialog driven end to end,
+a chart in a panel printing in a chosen blue, the three steppers, justify, the
+dateline and the separator vocabulary. Visual-pass 46/46.
+
+On the plate, by modelling a real six-page edition: a chart panel emits three
+polygons in three tints of `#17458f`; the drop cap sets at 54.2 pt under its
+dateline; the column-rules switch moves the rule count as quoted above.
+
+### What is still open
+
+- **A drop cap's descent reservation is the face's claim, not the glyph's ink.**
+  This engine has no glyph-extent path, so a below-sign reserves what hhea says
+  a below-sign can need. It is never too little; it can be a band too much.
+- **The dateline's row count is measured, not poured.** `ceil(width / measure)`
+  is exact for a one-line dateline, which is the ordinary case. A dateline whose
+  word breaks force an extra line would start the cap one row high — cosmetic,
+  and the copy still runs round the cap correctly because the obstacle and the
+  cap are the same rectangle.
+- The IDML `<Polygon>` and the Scribus `path=` follow the documented forms but
+  there is no InDesign or Scribus here to render them against. The geometry is
+  shared with the PDF, which was rendered and read.
+- An inset panel still holds text or a chart — not a picture. A placed picture
+  already does that job with real runaround.
+- The AI picture generator's success path is still unverified: this newsroom's
+  Gemini key has no image quota.

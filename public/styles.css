@@ -1641,6 +1641,18 @@ body.print-view .canvas-view-controls {
   cursor: pointer;
 }
 .layout-picker-select:hover { border-color: #c2c2cc; }
+/* The paper's two faces, on the toolbar's own first row. Sized like the
+   buttons beside them so the row's height is theirs and not the select's -
+   a taller row here is height taken straight off the page below it. */
+.toolbar-select {
+  height: 24px;
+  max-width: 132px;
+  padding: 0 4px;
+  border: 1px solid var(--line, #d0d0d6);
+  border-radius: 3px;
+  background: #fff;
+  font-size: 11px;
+}
 .canvas-toolbar-divider {
   width: 1px;
   align-self: stretch;
@@ -5718,7 +5730,11 @@ body.print-view .page-imprint {
   font-family: "Sahas Sans", "Noto Sans Devanagari", Arial, sans-serif;
 }
 .smart-chart-track { flex: none; display: flex; align-items: center; }
-.smart-chart-track > i { display: block; background: #c8102e; }
+/* The chart's own ink, published by the renderer as --chart-ink from
+   layoutSmartCard()'s one solve - so a chart set in blue has blue bars here
+   and blue bars on the plate. The literal is the fallback for a card drawn
+   before the ink was a choice. */
+.smart-chart-track > i { display: block; background: var(--chart-ink, #c8102e); }
 .smart-chart-value {
   flex: none;
   text-align: right;
@@ -5734,7 +5750,7 @@ body.print-view .page-imprint {
   text-align: center;
   font-family: "Sahas Sans", "Noto Sans Devanagari", Arial, sans-serif;
 }
-.smart-chart-stat > b { color: #c8102e; font-weight: 700; }
+.smart-chart-stat > b { color: var(--chart-ink, #c8102e); font-weight: 700; }
 .smart-chart-source {
   margin: 0;
   color: #55555c;
@@ -5761,7 +5777,21 @@ body.print-view .page-imprint {
 .device-bar {
   position: relative;
   display: flex;
-  flex-wrap: wrap;
+  /* IT SCROLLS, IT DOES NOT WRAP - and this is not a taste decision.
+     Wrapping made the bar's HEIGHT depend on its own contents, and its
+     contents change as a desk works: the two face buttons say which face is in
+     force, so "Serif" becoming "Mukta" can push the last group onto a second
+     row and move the entire editor below it down by thirty pixels, under the
+     cursor. Measured exactly that way - a picture drag begun on a handle
+     landed somewhere else because the frame had moved between the press and
+     the release, and the resize committed twice.
+     showMenu() already subtracted `bar.scrollLeft` when placing a menu, which
+     only means anything on a bar that scrolls; the bar simply had few enough
+     buttons to never reach the edge. */
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
   align-items: center;
   gap: 2px;
   padding: 4px 6px;
@@ -5774,12 +5804,15 @@ body.print-view .page-imprint {
   display: inline-flex;
   align-items: center;
   gap: 2px;
+  /* A group may not be squeezed: the bar scrolls instead. */
+  flex: 0 0 auto;
   padding-right: 6px;
   margin-right: 4px;
   border-right: 1px solid var(--line, #e2e2e8);
 }
 .dev-group:last-of-type { border-right: none; }
 .dev-btn {
+  flex: 0 0 auto;
   min-width: 26px;
   height: 30px;
   padding: 0 6px;
@@ -5828,6 +5861,187 @@ body.print-view .page-imprint {
 .dev-menu-item:hover { background: #f0f0f5; }
 .dev-menu-item.is-on { background: #111; color: #fff; }
 .dev-menu-item i { width: 12px; height: 12px; border: 1px solid #bbb; border-radius: 2px; display: inline-block; }
+/* A remove is offered even when there is nothing to remove, disabled rather
+   than hidden - so the way out of a device is visible before it is needed. */
+.dev-menu-item.is-danger { color: #b3261e; }
+.dev-menu-item[disabled] { opacity: 0.4; cursor: default; }
+.dev-menu-item[disabled]:hover { background: none; }
+
+/* --- the three type sizes, on the bar ------------------------------------
+   A stepper with a read-out: the number a block is actually set in, and two
+   presses that move it. The read-out is what makes it a control rather than a
+   guess. */
+.dev-sizes { gap: 4px; flex: 0 0 auto; }
+.dev-size {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  height: 26px;
+  padding: 0 3px;
+  border: 1px solid var(--line, #d0d0d6);
+  border-radius: 3px;
+  background: #fff;
+}
+.dev-size > b {
+  font-size: 10px;
+  font-weight: 700;
+  color: #55555c;
+  padding: 0 2px;
+}
+.dev-size output {
+  min-width: 24px;
+  text-align: center;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.dev-size-step {
+  width: 17px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: #f0f0f5;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+}
+.dev-size-step:hover { background: #e0e0e8; }
+
+/* --- the chart dialog -----------------------------------------------------
+   Three steps in the order the desk asked for them: which chart, how much room
+   it takes, what is in it. It is a real modal because step 2 changes the
+   block's layout and step 3 is data entry - neither is a thing to do from a
+   menu that closes on the first press. */
+.chart-dialog-host { position: static; }
+.chart-dialog-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(17, 17, 20, 0.45);
+}
+.chart-dialog {
+  position: fixed;
+  z-index: 91;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(680px, calc(100vw - 32px));
+  /* The one place in this product a viewport-tall scroller is right: it is a
+     modal over the document, not a panel inside it, so there is no second
+     scrollbar for a desk to lose track of. CLAUDE.md's rule is about the
+     workspace's own columns. */
+  max-height: min(88vh, 900px);
+  overflow-y: auto;
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.3);
+}
+.chart-dialog-head {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line, #d0d0d6);
+  background: #fff;
+}
+.chart-dialog-head h3 { margin: 0; font-size: 15px; }
+.chart-dialog-x {
+  border: 0;
+  background: none;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  color: #55555c;
+}
+.chart-step { padding: 14px 16px; border-bottom: 1px solid #eeeef2; }
+.chart-step h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #55555c;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.chart-step h4 b {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #111;
+  color: #fff;
+  font-size: 11px;
+}
+.chart-choices { display: flex; flex-wrap: wrap; gap: 6px; }
+.chart-choice {
+  flex: 1 1 190px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--line, #d0d0d6);
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+}
+.chart-choice strong { font-size: 12px; }
+.chart-choice span { font-size: 11px; color: #55555c; line-height: 1.35; }
+.chart-choice:hover { background: #f6f6fa; }
+.chart-choice.is-on { border-color: #111; background: #111; color: #fff; }
+.chart-choice.is-on span { color: #d8d8de; }
+
+.chart-rows { display: flex; flex-direction: column; gap: 4px; }
+.chart-row { display: flex; gap: 6px; }
+.chart-row input { flex: 1 1 auto; min-width: 0; padding: 5px 7px; border: 1px solid var(--line, #d0d0d6); border-radius: 3px; font-size: 12px; }
+.chart-row .chart-row-value { flex: 0 0 96px; text-align: right; font-variant-numeric: tabular-nums; }
+.chart-row-x {
+  flex: none;
+  width: 26px;
+  border: 1px solid var(--line, #d0d0d6);
+  border-radius: 3px;
+  background: #fff;
+  cursor: pointer;
+  color: #b3261e;
+}
+.chart-row-tools { display: flex; gap: 6px; margin-top: 8px; }
+.chart-fields { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.chart-fields label { flex: 1 1 180px; display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: #55555c; }
+.chart-fields input { padding: 5px 7px; border: 1px solid var(--line, #d0d0d6); border-radius: 3px; font-size: 12px; }
+.chart-inks { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 12px; font-size: 11px; color: #55555c; }
+.chart-ink {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border: 1px solid var(--line, #d0d0d6);
+  border-radius: 3px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 11px;
+}
+.chart-ink i { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
+.chart-ink.is-on { border-color: #111; background: #111; color: #fff; }
+.chart-note { margin: 8px 0 0; font-size: 11px; line-height: 1.4; }
+.chart-dialog-foot {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line, #d0d0d6);
+  background: #fff;
+}
+.chart-dialog-spacer { flex: 1 1 auto; }
+.layout-btn.primary { background: #111; color: #fff; border-color: #111; }
 
 /* --- a panel set inside a story (the चौकट) -------------------------------
    Every number is block pixels from inset-panels.js's panelLayout(), the same
@@ -5863,6 +6077,13 @@ body.print-view .page-imprint {
 .section-inset-crosshead {
   border: none;
   border-top: 0.71px solid #111;
+  background: none;
+}
+/* A chart panel is a frame for a card, so it carries no rule and no ground of
+   its own - inset-panels.js's STYLES.chart says the same, and these two have
+   to agree (see the comment above). */
+.section-inset-chart {
+  border: none;
   background: none;
 }
 .section-inset-ornament {

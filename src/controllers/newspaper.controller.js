@@ -68,6 +68,13 @@ async function update(req, res) {
   res.json(newspaper);
 }
 
+async function houseStyle(req, res) {
+  const result = await newspaperService.setHouseStyle(req.params.id, req.body || {});
+  if (result.notFound) return res.status(404).json({ error: 'Not found' });
+  if (result.error) return res.status(400).json({ error: result.error });
+  res.json(result);
+}
+
 async function saveFinalFiles(req, res) {
   const result = await newspaperService.saveFinalFiles(
     req.params.id,
@@ -369,6 +376,7 @@ async function pressPackage(req, res) {
 }
 
 module.exports = {
+  houseStyle,
   create, start, resize, ladder, supportedPageCounts, list, latest, getOne, update, saveFinalFiles,
   createDistrictEdition, listDistrictEditions, printedPages,
   epaper, epaperHtml, selectedEpaperHtml, epaperPreviewHtml, epaperCanvasCaptureHtml, epaperList, selectEpaper,

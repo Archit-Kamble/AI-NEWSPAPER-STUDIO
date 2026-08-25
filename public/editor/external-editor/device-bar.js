@@ -31,7 +31,7 @@ import { TINTS } from "../layout/inks.js";
 
 const { BORDER_STYLES } = globalThis.SahasBorders;
 const { TYPEFACES } = globalThis.SahasTypefaces;
-const { INSET_PANEL_KINDS, INSET_PANEL_MIN_PX } = globalThis.SahasInsetPanels;
+const { INSET_PANEL_KINDS, INSET_PANEL_MIN_PX, INSET_PANEL_ORNAMENTS } = globalThis.SahasInsetPanels;
 
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => (
   { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -55,6 +55,17 @@ const CHARTS = Object.freeze([
 // list - a desk pressing a button twice should not have to remember where in a
 // sequence it left off, which is what made the old number-input columns
 // control unusable.
+// EVERY DEVICE THAT CAN BE ADDED CAN BE TAKEN OFF, and the way off is in the
+// same menu as the way on. The desk's first report was exactly this - "every
+// time we are able to add we should able to remove" - and it was true of four
+// of them: a panel, a separator and a chart could each be put on a block and
+// then only be got rid of by hunting for the right rail, or not at all.
+//
+// Border/Tint/Columns/Drop cap already had their off switch, because their
+// "off" is a value in their own list (None, White, Auto, None). The four below
+// have no such value - a panel is a thing that exists or does not - so each
+// menu carries an explicit remove, and it is disabled rather than hidden when
+// there is nothing to remove, so the desk can see that the way out exists.
 const MENUS = {
   border: () => BORDER_STYLES.map((s) => ({ value: s.key, label: s.label })),
   ground: () => [{ value: "", label: "White (paper)" },
@@ -67,12 +78,57 @@ const MENUS = {
     ...TEXT_FACES.map((f) => ({ value: f.key, label: f.label }))],
   dropcap: () => [{ value: "0", label: "None" }, { value: "2", label: "2 lines" },
     { value: "3", label: "3 lines" }, { value: "4", label: "4 lines" }],
-  chart: () => CHARTS.map((c) => ({ value: c.key, label: c.label })),
-  insert: () => [
-    ...INSET_PANEL_KINDS.map((k) => ({ value: `panel:${k.key}`, label: k.label })),
+  chart: (view) => [
+    ...CHARTS.map((c) => ({ value: c.key, label: c.label })),
+    { value: "remove", label: "Remove the chart", danger: true, disabled: !hasChart(view) },
+  ],
+  // The Separator was one fixed ornament and one press. A printed paper has a
+  // small vocabulary of them and uses different ones for different jobs, so
+  // this offers that vocabulary - and, since it is a menu now, the way to take
+  // one off is in it, which is what the desk asked for.
+  rule: (view) => [
+    ...INSET_PANEL_ORNAMENTS.map((o) => ({ value: `orn:${o.key}`, label: `${o.mark || '\u2500\u2500'}   ${o.label}` })),
+    { value: "orn:remove", label: "Remove the separator", danger: true, disabled: !hasOrnament(view) },
+  ],
+  insert: (view) => [
+    // The chart kind is deliberately NOT offered here. It needs its data, its
+    // room and its ink before it can draw anything, and that is three
+    // questions - so it is the Chart button's dialog, and this menu would be a
+    // second, worse way in that produced an empty rectangle.
+    ...INSET_PANEL_KINDS.filter((k) => k.key !== "chart" && k.key !== "ornament")
+      .map((k) => ({ value: `panel:${k.key}`, label: k.label })),
     { value: "overlay", label: "Picture across blocks" },
+    { value: "drop-panel", label: "Remove the last panel", danger: true, disabled: !panelCount(view) },
   ],
 };
+
+/** Is there a chart on this block at all - in the block itself, or in a panel? */
+const hasChart = (view) => view?.smartCardKey === "chart"
+  || (Array.isArray(view?.insetPanels) && view.insetPanels.some((p) => p?.kind === "chart"));
+
+const panelCount = (view) => (Array.isArray(view?.insetPanels) ? view.insetPanels.length : 0);
+
+/** Is a separator set on this block? The one thing the Separator button toggles. */
+const hasOrnament = (view) => Array.isArray(view?.insetPanels)
+  && view.insetPanels.some((p) => p?.kind === "ornament");
+
+// THE THREE TYPE SIZES, ON THE BAR.
+//
+// The desk's report: "we cannot able to edit headling and subheading font size
+// in editor". The controls existed - Typography has a number input for each -
+// and that was the whole problem: they were in a panel in the settings rail,
+// which is precisely the findability fault this bar was built for, and the two
+// display sizes are the commonest change a sub-editor makes to a block.
+//
+// A stepper rather than a number box, because a headline is chosen by looking
+// at it. Half a point at a time on the body (the columns are NUMERIC(5,1) - a
+// printer sets type in half points) and a whole point on display type, which
+// is the granularity each is actually set in.
+const SIZE_FIELDS = Object.freeze([
+  { field: "headlineFontPx", label: "Headline", short: "H", step: 1, min: 8, max: 140 },
+  { field: "subheadingFontPx", label: "Deck", short: "D", step: 1, min: 8, max: 90 },
+  { field: "bodyFontPx", label: "Body", short: "B", step: 0.5, min: 6, max: 48 },
+]);
 
 /**
  * One small button: a mark, and the word for it.
@@ -96,12 +152,24 @@ export function deviceBarMarkup() {
         ${button("ground", "▤", "Tint", "A light ground behind the whole block, from the paper's own palette")}
         ${button("columns", "▥", "Columns", "How many columns the copy is set in — Auto works it out from the width")}
       </span>
+      <!-- THE THREE TYPE SIZES. On the bar rather than in a panel, because a
+           desk changing a headline is looking at the headline. -->
+      <span class="dev-group dev-sizes">
+        ${SIZE_FIELDS.map((f) => `<span class="dev-size" data-size-field="${f.field}">
+          <b title="${escapeHtml(f.label)} size">${f.short}</b>
+          <button type="button" class="dev-size-step" data-size-step="down" aria-label="${escapeHtml(f.label)} smaller">−</button>
+          <output data-size-out="${f.field}">—</output>
+          <button type="button" class="dev-size-step" data-size-step="up" aria-label="${escapeHtml(f.label)} bigger">+</button>
+        </span>`).join("")}
+      </span>
       <span class="dev-group">
         ${button("font", "Aa", "Body", "The face the story is set in", { wide: true })}
         ${button("display", "A", "Head", "The face the headline, kicker and deck are set in", { wide: true })}
         ${button("dropcap", "D", "Drop cap", "A large opening letter, two to four lines deep")}
         ${button("list-bullet", "▪", "Bullets", "Set the whole story as a bulleted list, markers hung in their own column")}
         ${button("list-number", "१", "Numbers", "Set the whole story as a numbered list, markers hung in their own column")}
+        ${button("justify", "▤", "Justify", "Set the copy flush to BOTH edges of the column — the way a printed newspaper sets its body")}
+        ${button("dateline", "■", "Dateline", "Open the story with ■ location, reporter — or don't")}
       </span>
       <span class="dev-group">
         ${button("insert", "❏", "Insert", "A fact box, pull quote, cross-head, separator — or a picture laid across two blocks")}
@@ -126,13 +194,14 @@ function closeMenu() {
   openMenu = null;
 }
 
-function showMenu(device, anchor, current) {
+function showMenu(device, anchor, current, view) {
   const host = document.getElementById("edDeviceMenu");
   if (!host || !MENUS[device]) return;
   if (openMenu === device) return closeMenu();
-  const items = MENUS[device]();
+  const items = MENUS[device](view);
   host.innerHTML = items.map((item) => `<button type="button" class="dev-menu-item${
-    String(item.value) === String(current ?? "") ? " is-on" : ""}" data-device-choice="${escapeHtml(item.value)}">${
+    String(item.value) === String(current ?? "") ? " is-on" : ""}${item.danger ? " is-danger" : ""}"${
+    item.disabled ? " disabled" : ""} data-device-choice="${escapeHtml(item.value)}">${
     item.swatch ? `<i style="background:${escapeHtml(item.swatch)}"></i>` : ""}${escapeHtml(item.label)}</button>`).join("");
   host.hidden = false;
   // Positioned against the BAR, not the page: the bar is re-rendered on every
@@ -171,19 +240,6 @@ function panelFor(kind, section, view) {
   };
 }
 
-/** A starting chart, so the button produces something a desk can SEE and edit. */
-const SEED_CHART = {
-  chartType: "bar",
-  subtitle: "जिल्हानिहाय आकडेवारी",
-  unit: "",
-  source: "स्रोत : साहस वार्ता",
-  items: [
-    { label: "सातारा", value: 842 },
-    { label: "कोल्हापूर", value: 1290 },
-    { label: "सांगली", value: 603 },
-    { label: "पुणे", value: 770 },
-  ],
-};
 
 // ------------------------------------------------------------------- bind ---
 
@@ -225,6 +281,27 @@ export function bindDeviceBar(handlers) {
       return;
     }
 
+    // A SIZE STEPPER. Not a menu and not a toggle - it is pressed repeatedly,
+    // so it must not close and reopen anything, and the read-out beside it has
+    // to move on every press or the desk cannot tell it worked.
+    const step = target.closest("[data-size-step]");
+    if (step) {
+      const field = step.closest("[data-size-field]")?.dataset.sizeField;
+      const spec = SIZE_FIELDS.find((f) => f.field === field);
+      if (!spec) return;
+      const view = live?.getView?.() || {};
+      const now = Number(view[field]);
+      const base = Number.isFinite(now) && now > 0 ? now : spec.min;
+      const next = step.dataset.sizeStep === "up" ? base + spec.step : base - spec.step;
+      // The columns are NUMERIC(5,1) and arrive over the wire as strings; a
+      // float that has drifted through a few halvings would store as 12.30000001
+      // and read back as something a desk never chose.
+      const clamped = Math.round(Math.min(spec.max, Math.max(spec.min, next)) * 10) / 10;
+      if (clamped === base) return;
+      patch({ [field]: clamped });
+      return;
+    }
+
     const pressed = target.closest("[data-device]");
     if (!pressed) { closeMenu(); return; }
 
@@ -232,7 +309,7 @@ export function bindDeviceBar(handlers) {
     const device = pressed.dataset.device;
 
     if (MENUS[device]) {
-      showMenu(device, pressed, currentOf(device, view));
+      showMenu(device, pressed, currentOf(device, view), view);
       return;
     }
     closeMenu();
@@ -247,7 +324,21 @@ export function bindDeviceBar(handlers) {
       patch({ listStyle: view.listStyle === want ? "none" : want });
       return;
     }
-    if (device === "rule") { live?.onInsertOrnament?.(); return; }
+    // THE COPY SET FLUSH TO BOTH EDGES - what the desk asked for by pointing at
+    // a Lokmat block: "every word start with touching left side of news block
+    // and line end is touching right side". That is justification, the
+    // compositor has done it since it was written (compose.js's justifyLine),
+    // and the only control for it was an Alignment segment in a panel in the
+    // rail. It is the single most characteristic thing about printed body copy,
+    // so it is a button.
+    if (device === "justify") {
+      patch({ textAlign: view.textAlign === "justify" ? "left" : "justify" });
+      return;
+    }
+    if (device === "dateline") {
+      patch({ showDateline: view.showDateline === false });
+      return;
+    }
     if (device === "caption") { live?.onFocusCaption?.(); return; }
     if (device === "ai-picture") { live?.onProposePicture?.(); return; }
   });
@@ -266,6 +357,12 @@ function currentOf(device, view) {
     case "display": return view.displayFamily || "";
     case "dropcap": return String(Number(view.dropCapLines) || 0);
     case "chart": return view.smartCardKey === "chart" ? (view.smartCardData?.chartType || "bar") : "";
+    case "rule": {
+      const set = (view.insetPanels || []).find((p) => p?.kind === "ornament");
+      if (!set) return "";
+      const mark = (set.lines || []).join(" ");
+      return `orn:${INSET_PANEL_ORNAMENTS.find((o) => o.mark === mark)?.key || "plain"}`;
+    }
     default: return "";
   }
 }
@@ -280,14 +377,43 @@ function applyChoice(device, value, handlers, patch) {
     case "font": return patch({ fontFamily: value });
     case "display": return patch({ displayFamily: value });
     case "dropcap": return patch({ dropCapLines: Number(value) });
+    // A CHART IS NOT A ONE-PRESS DEVICE ANY MORE. Pressing a type used to write
+    // a seed card - the same four districts, always, filling the whole block,
+    // always red - which is why the report was that the button "showing only
+    // same graph and pie charts which is useless". It was: it could only ever
+    // produce its own example.
+    //
+    // So the type chosen here OPENS the dialog on that type, and the dialog
+    // asks the two questions the seed answered by guessing: how much room, and
+    // what is in it.
     case "chart": {
-      const data = view.smartCardKey === "chart" && view.smartCardData
-        ? { ...view.smartCardData, chartType: value }
-        : { ...SEED_CHART, chartType: value };
-      return patch({ smartCardKey: "chart", smartCardData: data });
+      if (value === "remove") {
+        const panels = (Array.isArray(view.insetPanels) ? view.insetPanels : [])
+          .filter((p) => p?.kind !== "chart");
+        return patch({
+          insetPanels: panels,
+          ...(view.smartCardKey === "chart" ? { smartCardKey: null, smartCardData: null } : {}),
+        });
+      }
+      return handlers.onChart?.(value);
+    }
+    // A SEPARATOR, of a chosen kind - or none. It only ever added before, so
+    // pressing it twice put two on the block and nothing took either off.
+    case "rule": {
+      const without = (Array.isArray(view.insetPanels) ? view.insetPanels : [])
+        .filter((p) => p?.kind !== "ornament");
+      if (value === "orn:remove") return patch({ insetPanels: without });
+      const mark = INSET_PANEL_ORNAMENTS.find((o) => o.key === String(value).slice("orn:".length))?.mark ?? "";
+      // One separator to a block: choosing a different one REPLACES it rather
+      // than laying a second across the same measure.
+      return handlers.onInsertOrnament?.(mark, without);
     }
     case "insert": {
       if (value === "overlay") return handlers.onAddOverlay?.();
+      if (value === "drop-panel") {
+        const existing = Array.isArray(view.insetPanels) ? view.insetPanels : [];
+        return patch({ insetPanels: existing.slice(0, -1) });
+      }
       const kind = String(value).slice("panel:".length);
       const existing = Array.isArray(view.insetPanels) ? view.insetPanels : [];
       return patch({ insetPanels: [...existing, panelFor(kind, section, view)] });
@@ -312,7 +438,15 @@ export function refreshDeviceBar(view = {}) {
     dropcap: Number(view.dropCapLines) > 0,
     "list-bullet": view.listStyle === "bullet",
     "list-number": view.listStyle === "number",
-    chart: view.smartCardKey === "chart",
+    // Lit for a chart in a PANEL as well as one filling the block - a desk
+    // looking at the bar is asking "is there a chart here", not "which of the
+    // two places is it stored in".
+    chart: hasChart(view),
+    rule: hasOrnament(view),
+    justify: view.textAlign === "justify",
+    // Lit means the dateline IS printed, which is the ordinary state - so this
+    // is the one button on the bar that starts on.
+    dateline: view.showDateline !== false,
     display: Boolean(view.displayFamily),
   };
   bar.querySelectorAll("[data-device]").forEach((element) => {
@@ -327,4 +461,17 @@ export function refreshDeviceBar(view = {}) {
   const faceOf = (key, fallback) => TYPEFACES.find((f) => f.key === key)?.short || fallback;
   label("font", faceOf(view.fontFamily, "Serif"));
   label("display", view.displayFamily ? faceOf(view.displayFamily, "Sans") : "Sans");
+
+  // The three type sizes, as they actually are. A stepper with no read-out is
+  // a control a desk presses hopefully; these say the number the block is set
+  // in, and the columns are NUMERIC(5,1), so half points show as half points
+  // and whole ones do not show a trailing zero.
+  for (const spec of SIZE_FIELDS) {
+    const out = bar.querySelector(`[data-size-out="${spec.field}"]`);
+    if (!out) continue;
+    const value = Number(view[spec.field]);
+    out.textContent = Number.isFinite(value) && value > 0
+      ? String(Math.round(value * 10) / 10)
+      : "—";
+  }
 }

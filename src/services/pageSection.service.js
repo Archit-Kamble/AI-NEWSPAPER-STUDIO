@@ -208,6 +208,9 @@ async function saveSection(pageId, sectionKey, body) {
     // The display face, validated against the one typeface catalogue so a
     // foreign family can never reach a renderer.
     displayFamily: body.displayFamily,
+    // A real boolean or nothing at all - `undefined` leaves the column alone,
+    // which is what a payload that never mentions the dateline should do.
+    showDateline: typeof body.showDateline === 'boolean' ? body.showDateline : undefined,
     borderStyle: body.borderStyle,
     borderWidthPx: body.borderWidthPx,
     borderColor: body.borderColor,

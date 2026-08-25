@@ -88,8 +88,27 @@ function merge(rules) {
   return out;
 }
 
-/** Every rule this page's layout asks for, in page pixels. */
-export function columnRulesFor(page, geometry) {
+/**
+ * Every rule this page's layout asks for, in page pixels.
+ *
+ * ASKED FOR, NOT ASSUMED. These were drawn on every page of every edition the
+ * moment two blocks were near each other, and the desk's report was exactly
+ * that: "in between block even without adding default lines are showing ...
+ * only when we apply then it should show it."
+ *
+ * That is the right instinct and it is worth being precise about why. A column
+ * rule IS what a printed paper does - but "what most papers do" is a default a
+ * DESK chooses, not a fact the software gets to decide on its behalf, and the
+ * furniture a desk cannot remove is furniture the desk is fighting. So it is
+ * one switch on the edition (`newspapers.column_rules`), off for everything
+ * that already exists, and this function draws nothing until it is on.
+ *
+ * The gate is here rather than at the two callers so that the canvas and the
+ * press model cannot disagree about whether a page is ruled - the same reason
+ * the geometry itself lives in one function.
+ */
+export function columnRulesFor(page, geometry, enabled = false) {
+  if (!enabled) return [];
   const sections = (page?.sections || []).filter(rulable);
   const gutterX = (geometry?.gutterPx ?? 6) + SLACK_PX;
   const gutterY = (geometry?.baselinePx ?? 8) + SLACK_PX;
@@ -137,8 +156,8 @@ export function columnRulesFor(page, geometry) {
  * `border`, so a sub-pixel line stays sub-pixel instead of being rounded up to
  * a whole one and rebalancing the box it is on.
  */
-export function columnRulesMarkup(page, geometry) {
-  const rules = columnRulesFor(page, geometry);
+export function columnRulesMarkup(page, geometry, enabled = false) {
+  const rules = columnRulesFor(page, geometry, enabled);
   if (!rules.length) return '';
   const spans = rules.map((rule) => (rule.axis === 'v'
     ? `<i style="left:${(rule.at - 0.25).toFixed(2)}px;top:${rule.from.toFixed(2)}px;width:0.5px;height:${(rule.to - rule.from).toFixed(2)}px"></i>`

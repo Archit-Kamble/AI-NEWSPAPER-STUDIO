@@ -191,7 +191,8 @@ function blockPropertiesMarkup(section, view, page) {
       <p class="muted ext-note">The चौकट a printed paper sets a fact box or a pull quote in. The story runs round it exactly as it runs round a photograph &mdash; it is a rectangle to the compositor and nothing more.</p>
       <div id="propPanels">${panelsMarkup(section, view)}</div>
       <div class="segmented" data-prop-panel-add>
-        ${INSET_PANEL_KINDS.map((kind) => `<button type="button" class="segment" data-panel-add="${kind.key}" title="${escapeHtml(kind.note)}">+ ${escapeHtml(kind.label)}</button>`).join("")}
+        ${INSET_PANEL_KINDS.filter((kind) => kind.key !== "chart")
+          .map((kind) => `<button type="button" class="segment" data-panel-add="${kind.key}" title="${escapeHtml(kind.note)}">+ ${escapeHtml(kind.label)}</button>`).join("")}
       </div>
     </div>
 
@@ -470,8 +471,13 @@ function panelsMarkup(section, view) {
         <strong>${escapeHtml(INSET_PANEL_KINDS.find((k) => k.key === panel.kind)?.label || panel.kind)}</strong>
         <button type="button" class="btn-ghost" data-panel-remove="${escapeHtml(panel.id)}">Remove</button>
       </div>
-      <label>Heading<input type="text" data-panel-field="title" value="${escapeHtml(panel.title)}"></label>
-      <label>Lines, one per row<textarea rows="3" data-panel-field="lines">${escapeHtml(panel.lines.join("\n"))}</textarea></label>
+      ${panel.kind === "chart"
+        ? `<p class="muted ext-note">${escapeHtml(`${panel.card?.items?.length || 0} readings, set as ${panel.card?.chartType || "bars"}.`)}
+             Its data and its ink are edited with the Chart button on the editor; its size and position are below.</p>
+           <input type="hidden" data-panel-field="title" value="">
+           <input type="hidden" data-panel-field="lines" value="">`
+        : `<label>Heading<input type="text" data-panel-field="title" value="${escapeHtml(panel.title)}"></label>
+           <label>Lines, one per row<textarea rows="3" data-panel-field="lines">${escapeHtml(panel.lines.join("\n"))}</textarea></label>`}
       <div class="prop-panel-geometry">
         ${["x", "y", "width", "height"].map((field) => `<label>${field}<input type="number" data-panel-field="${field}" value="${Math.round(panel[field])}"></label>`).join("")}
       </div>
@@ -510,6 +516,12 @@ function panelsFromDom(section, view) {
       tint: field("tint") || null,
       marker: field("marker") || "none",
       lines: String(field("lines")).split("\n"),
+      // A CHART PANEL'S DATA IS NOT ON THE FORM, so it has to be carried
+      // across. This function rebuilds every panel from its inputs and sends
+      // the whole list; a chart panel has no title or lines to rebuild from,
+      // so without this line panelOf() would reject it as empty and the chart
+      // would vanish the moment a desk touched any OTHER panel on the block.
+      card: was?.card || null,
     };
   });
 }

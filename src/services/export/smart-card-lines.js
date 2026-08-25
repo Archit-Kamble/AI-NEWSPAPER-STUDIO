@@ -17,7 +17,7 @@
 const { devanagari } = require('../../layout/identity');
 
 // The paper's accent, the one a chart's bars and figures are set in.
-const ACCENT = '#c8102e';
+const CHART_ACCENT = '#c8102e';
 
 /**
  * @returns {Array<{kind, text, x, y, width, fontPx, align}>} align is 0 left,
@@ -86,6 +86,13 @@ function smartCardLines(key, data, frame, cardLayout) {
 
   if (key === 'chart') {
     const g = layout.geometry;
+    // THE CHART'S OWN INK, off the one solve. `ACCENT` is the paper's red and
+    // was hard-coded at all four of the sites below, so a chart a desk set in
+    // blue drew blue on screen and printed red - the two-surface fault this
+    // codebase guards hardest against, and one this file would have shipped
+    // the moment the ink became a choice. The fallback is for a geometry
+    // solved before `ink` was published.
+    const ACCENT = g.ink || CHART_ACCENT;
     let y = subtitleOffsetPx;
     if (g.chartType === 'stat') {
       const perBand = Math.max(1, g.columns);
@@ -109,7 +116,7 @@ function smartCardLines(key, data, frame, cardLayout) {
         // A newspaper prints a pie in tints of a single ink, not in a rainbow -
         // and a "shade" would have been a new concept every writer had to
         // learn, when a lighter hex is something all three already draw.
-        const ink = cardLayout.sliceInk(index);
+        const ink = cardLayout.sliceInk(index, ACCENT);
         poly(cardLayout.arcPoints(cx, cy, g.radius, item.from, item.to), ink, { close: true });
         const top = y + index * g.legendLine;
         bar(g.diameter + GAP, top + g.legendLine * 0.25, g.legendLine * 0.5, g.legendLine * 0.5, ink);

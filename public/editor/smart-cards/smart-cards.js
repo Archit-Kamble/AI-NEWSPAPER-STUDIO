@@ -33,7 +33,7 @@
 // a different size.
 
 import { escapeHtml } from "../format.js";
-import { layoutSmartCard, arcPoints, sliceInk, CHART_ACCENT } from "./layout.js";
+import { layoutSmartCard, arcPoints } from "./layout.js";
 
 const DIGITS = ["०", "१", "२", "३", "४", "५", "६", "७", "८", "९"];
 
@@ -216,7 +216,7 @@ function chartMarkup(data, layout) {
         <b style="font-size:${g.figurePx}px;line-height:${g.figureLine}px">${escapeHtml(item.valueText)}</b>
         <span style="font-size:${layout.fontPx}px;line-height:${g.lineHeightPx}px">${linesMarkup(item.captionLines)}</span>
       </div>`).join("");
-    return `<div class="smart-chart smart-chart-stats">${cells}</div>${source}`;
+    return `<div class="smart-chart smart-chart-stats" style="--chart-ink:${g.ink}">${cells}</div>${source}`;
   }
 
   // A PIE AND A LINE PLOT ARE DRAWN AS SVG, from the SAME point lists the
@@ -226,14 +226,14 @@ function chartMarkup(data, layout) {
   if (g.chartType === "pie") {
     const cx = g.radius;
     const cy = g.radius;
-    const slices = layout.items.map((item, index) => {
+    const slices = layout.items.map((item) => {
       const points = arcPoints(cx, cy, g.radius, item.from, item.to)
         .map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ");
-      return `<polygon points="${points}" fill="${sliceInk(index)}"/>`;
+      return `<polygon points="${points}" fill="${item.ink}"/>`;
     }).join("");
-    const legend = layout.items.map((item, index) => `
+    const legend = layout.items.map((item) => `
       <div class="smart-chart-legend-row" style="height:${g.legendLine}px;font-size:${layout.fontPx}px;line-height:${g.legendLine}px">
-        <i style="background:${sliceInk(index)};width:${g.legendLine * 0.5}px;height:${g.legendLine * 0.5}px"></i>
+        <i style="background:${item.ink};width:${g.legendLine * 0.5}px;height:${g.legendLine * 0.5}px"></i>
         <span>${escapeHtml(item.label)} — ${escapeHtml(item.valueText)}</span>
       </div>`).join("");
     return `<div class="smart-chart smart-chart-pie">
@@ -247,13 +247,13 @@ function chartMarkup(data, layout) {
     const width = g.inset * 2 + g.plotWidth;
     const path = layout.items.map((item) => `${item.x.toFixed(2)},${item.y.toFixed(2)}`).join(" ");
     const line = g.chartType === "line" && layout.items.length > 1
-      ? `<polyline points="${path}" fill="none" stroke="${CHART_ACCENT}" stroke-width="${g.lineWidth}" stroke-linejoin="round" stroke-linecap="round"/>`
+      ? `<polyline points="${path}" fill="none" stroke="${g.ink}" stroke-width="${g.lineWidth}" stroke-linejoin="round" stroke-linecap="round"/>`
       : "";
     const dots = layout.items.map((item) =>
-      `<circle cx="${item.x.toFixed(2)}" cy="${item.y.toFixed(2)}" r="${g.dotRadius}" fill="${CHART_ACCENT}"/>`).join("");
+      `<circle cx="${item.x.toFixed(2)}" cy="${item.y.toFixed(2)}" r="${g.dotRadius}" fill="${g.ink}"/>`).join("");
     const labels = layout.items.map((item) => `
       <text x="${item.x.toFixed(2)}" y="${(item.y - g.valueBand * 0.35).toFixed(2)}" text-anchor="middle"
-            font-size="${layout.fontPx}" font-weight="700" fill="${CHART_ACCENT}">${escapeHtml(item.valueText)}</text>
+            font-size="${layout.fontPx}" font-weight="700" fill="${g.ink}">${escapeHtml(item.valueText)}</text>
       <text x="${item.x.toFixed(2)}" y="${(g.valueBand + g.plotHeight + g.labelBand * 0.75).toFixed(2)}" text-anchor="middle"
             font-size="${layout.fontPx}" fill="#111">${escapeHtml(item.label)}</text>`).join("");
     return `<div class="smart-chart smart-chart-plot">
@@ -269,7 +269,7 @@ function chartMarkup(data, layout) {
       </span>
       <b class="smart-chart-value" style="width:${g.valueWidth}px">${escapeHtml(item.valueText)}</b>
     </div>`).join("");
-  return `<div class="smart-chart smart-chart-bars">${rows}</div>${source}`;
+  return `<div class="smart-chart smart-chart-bars" style="--chart-ink:${g.ink}">${rows}</div>${source}`;
 }
 
 // ------------------------------------------------------------------ router ---

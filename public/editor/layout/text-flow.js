@@ -68,6 +68,20 @@ export const DEFAULT_BYLINE = 'साहस वार्ता';
 // Printed by both normal and flowed story renderers. This is SAHAS furniture,
 // not AI-authored copy, so it has its own capacity accounting.
 export function datelineText(view = {}) {
+  // THE BLOCK MAY DECLINE ONE. A standing feature, a table of results, a
+  // picture box and an advert all routinely carry a location without wanting
+  // it printed as a dateline, and until this existed the only way to say no
+  // was to clear the location itself - which also loses it from the story's
+  // own record and from anything that files by place.
+  //
+  // Asked HERE rather than at the eight callers on purpose. This one function
+  // is what the canvas, the Block Editor, the character grid's capacity count,
+  // the compositor, the `.sla` and the press model all ask, so a block that
+  // has turned its dateline off is a block none of them sets one for - and,
+  // just as important, one that all of them agree has those characters back.
+  // A flag honoured by the renderers but not by the capacity count would say a
+  // block was full while showing it short.
+  if (view.showDateline === false || view.show_dateline === false) return '';
   const parts = [view.location, view.author ?? view.reporterName ?? view.reporter_name]
     .map((part) => String(part || '').trim()).filter(Boolean);
   return parts.length ? `■ ${parts.join(', ')} ` : '';
@@ -97,6 +111,9 @@ export function flowViewFromSection(section = {}, overrides = {}) {
     kicker: flowValue(section, overrides, "kicker", "kicker", ""),
     location: flowValue(section, overrides, "location", "location", ""),
     author: flowValue(section, overrides, "author", "reporter_name", ""),
+    // Carried, or every capacity number this grid quotes for a block with no
+    // dateline is one dateline's worth of characters short of the truth.
+    showDateline: flowValue(section, overrides, "showDateline", "show_dateline", true) !== false,
     marginPx: numeric(flowValue(section, overrides, "marginPx", "margin_px", 12), 12),
     columnCount: numeric(flowValue(section, overrides, "columnCount", "column_count", 1), 1),
     lineHeight: Math.max(MIN_LINE_HEIGHT, numeric(flowValue(section, overrides, "lineHeight", "line_height", MIN_LINE_HEIGHT), MIN_LINE_HEIGHT)),

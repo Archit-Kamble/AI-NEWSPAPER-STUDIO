@@ -43,6 +43,20 @@
     // sets between two parts of a page. Same argument as the cross-head: it is
     // a rectangle in the obstacle set and nothing in the engine changes.
     { key: 'ornament', label: 'Separator', note: 'A decorative rule across the measure.' },
+    // A CHART SET INSIDE THE STORY, taking a rectangle the desk chooses.
+    //
+    // The desk's report: a chart "after choose should first ask us to take
+    // space in news block". A Smart Card takes the WHOLE of a block's body -
+    // that is what a card is - so the only way to run a chart beside copy was
+    // to give the chart its own block. A panel is already a rectangle the copy
+    // flows round, and it already has a size the desk sets, so the chart that
+    // goes in one is the same chart drawn in a smaller frame.
+    //
+    // This is also the "block inside block" the desk asked for, and it costs
+    // the compositor nothing: it is one more rectangle in the obstacle set,
+    // exactly as a photograph is. `card` holds the payload; `title` and
+    // `lines` are unused for this kind.
+    { key: 'chart', label: 'Chart', note: 'A chart set inside the story, with the copy running round it.' },
   ]);
 
   /**
@@ -71,6 +85,10 @@
     // Ruled above AND below with the mark centred between them - which is what
     // makes it read as an ornament rather than as another cross-head.
     ornament: { edges: ['top', 'bottom'], family: 'serif', ground: false },
+    // A chart brings its own ink and its own structure, so it is given no
+    // rules and no ground - a box round it would be a second frame inside the
+    // one the block already is.
+    chart: { edges: [], family: 'sans', ground: false },
   });
   const panelStyle = (kind) => STYLES[kind] || STYLES.note;
 
@@ -114,10 +132,67 @@
     return '';
   }
 
+  /**
+   * THE SEPARATORS A PRINTED PAPER ACTUALLY SETS.
+   *
+   * The Separator button produced exactly one thing - a ◆ between two
+   * hairlines - which is one separator, not the device. A printed Marathi
+   * paper has a small vocabulary of them and uses different ones for different
+   * jobs: a plain rule between two parts of a story, a heavier one under a
+   * section, an ornament where a feature ends.
+   *
+   * The MARK is what varies; the rules above and below are the kind's own
+   * style (STYLES.ornament) and stay put, so nothing here changes how a
+   * separator is drawn - only what stands in the middle of it. A mark of ''
+   * is the plain double rule, which is the commonest of them and was the one
+   * choice the desk did not have.
+   *
+   * Only marks the publication faces actually carry. U+2022 is absent from
+   * both (measured - see BULLET above), so a bullet-style separator uses the
+   * squares the dateline and the list already draw.
+   */
+  const ORNAMENTS = Object.freeze([
+    { key: 'plain', label: 'Plain rules', mark: '' },
+    { key: 'diamond', label: 'Diamond', mark: '\u25c6' },
+    { key: 'diamond-open', label: 'Open diamond', mark: '\u25c7' },
+    { key: 'squares', label: 'Three squares', mark: '\u25aa \u25aa \u25aa' },
+    { key: 'square', label: 'Square', mark: '\u25a0' },
+    { key: 'star', label: 'Star', mark: '\u2605' },
+    { key: 'asterisks', label: 'Three stars', mark: '\u2605 \u2605 \u2605' },
+  ]);
+
   const MIN_PX = 24;             // below this nothing legible fits
   const DEFAULT_STAND_OFF_PX = 4;
 
   const clean = (value) => String(value == null ? '' : value).replace(/<[^>]*>/g, '').trim();
+
+  /**
+   * The chart payload a chart panel carries - the SAME shape a whole-block
+   * Smart Card stores in `smart_card_data`, so one renderer draws both and a
+   * desk can move a chart between the two without it changing.
+   *
+   * Shape only, like the tint above: this module is loaded as a plain script
+   * in the browser and as CommonJS on the server, so it cannot import the ink
+   * palette. Which inks are legal is decided where the palette is already
+   * awaited - pageSection.service.js - and chartInk() in smart-cards/layout.js
+   * falls back to the paper's red for anything it does not recognise, so an
+   * unknown value can never reach a plate as an unknown colour.
+   */
+  function cardOf(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const items = (Array.isArray(raw.items) ? raw.items : [])
+      .map((entry) => ({ label: clean(entry?.label), value: Number(entry?.value) }))
+      .filter((entry) => entry.label && Number.isFinite(entry.value));
+    if (!items.length) return null;
+    return {
+      chartType: clean(raw.chartType) || 'bar',
+      subtitle: clean(raw.subtitle),
+      unit: clean(raw.unit),
+      source: clean(raw.source),
+      ink: clean(raw.ink),
+      items,
+    };
+  }
 
   /** One stored panel, sanitised. Returns null for anything unusable. */
   function panelOf(raw, frame = {}) {
@@ -141,7 +216,14 @@
     const title = clean(raw.title);
     const lines = (Array.isArray(raw.lines) ? raw.lines : String(raw.lines || '').split('\n'))
       .map(clean).filter(Boolean);
-    if (!title && !lines.length) return null;
+    // A CHART PANEL IS FULL WHEN IT HAS READINGS, not when it has prose. The
+    // emptiness test below is what stops a panel with nothing in it from
+    // occupying layout space and drawing as a blank rectangle; for a chart the
+    // thing that would be missing is its data, so that is what is asked for.
+    const card = cardOf(raw.card);
+    if (kind === 'chart') {
+      if (!card) return null;
+    } else if (!title && !lines.length) return null;
     return {
       id: String(raw.id || `panel-${Math.random().toString(36).slice(2, 9)}`),
       kind,
@@ -149,7 +231,7 @@
       y: Math.min(Math.max(0, Number(raw.y) || 0), maxY),
       width, height,
       standOffPx: Math.max(0, Number(raw.standOffPx ?? DEFAULT_STAND_OFF_PX)),
-      tint, marker, title, lines,
+      tint, marker, title, lines, card,
     };
   }
 
@@ -177,6 +259,11 @@
    * same lines - the caption's lesson, one file earlier.
    */
   function panelLayout(panel, bodyFontPx = 6.4) {
+    // A chart panel has no lines of its own - the card fills the rectangle and
+    // solves its own type against it, exactly as it does in a whole block.
+    if (panel.kind === 'chart') {
+      return { inset: 0, titlePx: 0, linePx: 0, lineHeight: 1, lines: [], usedHeight: panel.height };
+    }
     // A cross-head's type sits ON the measure, not inside a box, so it takes
     // only the hair of air that keeps it off its own rule - the same 0.5 mm
     // the block's own inset is, and for the same reason.
@@ -213,6 +300,7 @@
     INSET_PANEL_KINDS: KINDS, INSET_PANEL_MARKERS: MARKERS, INSET_PANEL_MIN_PX: MIN_PX,
     INSET_PANEL_STYLES: STYLES,
     INSET_PANEL_BULLET: BULLET,
+    INSET_PANEL_ORNAMENTS: ORNAMENTS,
     panelOf, panelsOf, obstacleFromPanel, panelLayout, panelStyle, markerText,
   });
   root.SahasInsetPanels = api;

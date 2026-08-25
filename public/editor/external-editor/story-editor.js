@@ -15,6 +15,7 @@ import {
   FONT_FAMILIES, ALIGNMENTS, PART_LABEL, alignFieldFor, alignValueOf,
 } from "./typography-panel.js";
 import { bindDeviceBar } from "./device-bar.js";
+import { bindChartDialog, openChartDialog } from "./chart-dialog.js";
 import {
   blockFrameMarkup, mountFrame, refreshFrame, copyFromFrame,
   renderPictures, selectPictureFrame,
@@ -299,7 +300,7 @@ export function refreshStoryCount() {
  * rest on. A separator that needed its own code in the compositor would be a
  * separator that could disagree with the copy running round it.
  */
-function ornamentPanel(section, view) {
+function ornamentPanel(section, view, mark = "\u25c6") {
   const blockW = Number(section?.width_px) || 200;
   const blockH = Number(section?.height_px) || 200;
   const body = Number(view?.bodyFontPx) || 6.4;
@@ -311,7 +312,11 @@ function ornamentPanel(section, view) {
     width: Math.max(24, blockW - 4),
     height: Math.max(8, Math.round(body * 1.8)),
     title: "",
-    lines: ["\u25c6"],
+    // A PLAIN separator is two rules and nothing between them, so it carries
+    // no line at all - and panelOf() rejects a panel with neither a title nor
+    // a line as empty, which is right for a fact box and wrong for this. One
+    // space is a line: it makes the panel real without printing a mark.
+    lines: [mark || " "],
   };
 }
 
@@ -356,13 +361,26 @@ export function bindStoryEditor({ onPatch, getBudget, getSection, getView, getIm
       field.scrollIntoView({ block: "center" });
       field.focus();
     },
-    onInsertOrnament: () => {
+    // `keep` is the panel list with any existing separator already taken out,
+    // so choosing a different separator replaces the one that is there rather
+    // than laying a second across the same measure.
+    onInsertOrnament: (mark, keep) => {
       const view = getView?.() || {};
       const section = getSection?.() || {};
-      onPatch?.({ insetPanels: [...(Array.isArray(view.insetPanels) ? view.insetPanels : []),
-        ornamentPanel(section, view)] }, "device-bar");
+      const existing = Array.isArray(keep) ? keep
+        : (Array.isArray(view.insetPanels) ? view.insetPanels : []);
+      onPatch?.({ insetPanels: [...existing, ornamentPanel(section, view, mark)] }, "device-bar");
     },
+    // A chart asks three questions before it can draw anything, so it opens a
+    // dialog rather than writing a guess into the block. See chart-dialog.js.
+    onChart: (chartType) => openChartDialog({
+      chartType,
+      view: getView?.() || {},
+      section: getSection?.() || {},
+      onPatch,
+    }),
   });
+  bindChartDialog();
 
   const headline = document.getElementById("edStoryHeadline");
   const subheading = document.getElementById("edStorySubheading");

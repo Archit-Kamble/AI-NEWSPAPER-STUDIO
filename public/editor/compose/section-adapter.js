@@ -300,10 +300,26 @@ export function composeSection(section = {}, view = {}) {
   // The whole thickness, which for a double rule is two rules and the gap
   // between them. Insetting by one rule's width puts the inner rule of a
   // double box on the story's first line.
+  //
+  // AND IT IS A FLOOR, NOT AN ADDITION. Added to the block's own margin, which
+  // is what this did, ruling a block RE-SET ITS COPY: the desk's report was
+  // "if we are adding border it should not make impact on inside text but it
+  // is making". It was right, and the arithmetic says why. The default margin
+  // is 12 px - 6 mm - and a box needs its type about 3 mm inside the rule, so
+  // the room a printer wants was ALREADY THERE twice over; adding 5.5 more
+  // narrowed the measure by 11 px, rebroke every line and could push a block
+  // that fitted into overset for no typographic reason at all.
+  //
+  // So the box asks for a MINIMUM and the margin usually already meets it.
+  // A block set tight - margin 1 or 2, which the control allows - still gets
+  // its type pushed clear of the rule, because there the box's need really is
+  // the larger number. Ruling a block now changes its composition only when
+  // leaving it alone would print type on ink.
+  const margin = positive(pick(section, view, 'marginPx', 'margin_px', 12), 12);
   const boxInset = isBoxed(border)
     ? BOX_INSET_PX + borderThicknessPx(border, pick(section, view, 'borderWidthPx', 'border_width_px', 1))
     : 0;
-  const padding = positive(pick(section, view, 'marginPx', 'margin_px', 12), 12) + boxInset;
+  const padding = Math.max(margin, boxInset);
   const bodyFontPx = positive(
     pick(section, view, 'bodyFontPx', 'body_font_px', DEFAULT_BODY_FONT_PX),
     DEFAULT_BODY_FONT_PX,
@@ -323,6 +339,10 @@ export function composeSection(section = {}, view = {}) {
   const prefix = datelineText({
     location: pick(section, view, 'location', 'location', ''),
     author: pick(section, view, 'author', 'reporter_name', ''),
+    // Read the same way every other field is - the view first, then the row -
+    // and it has to be carried into this literal, because datelineText() can
+    // only decline a dateline for an object that tells it it may.
+    showDateline: pick(section, view, 'showDateline', 'show_dateline', true) !== false,
   });
 
   // Bold/italic/underline runs, not flattened away before composition sees

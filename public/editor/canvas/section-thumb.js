@@ -485,6 +485,17 @@ export function insetPanelsMarkup(section, view) {
   if (!panels.length) return "";
   const bodyPx = Number(view?.bodyFontPx) || 6.4;
   return panels.map((panel) => {
+    // A CHART PANEL DRAWS A CARD, not lines of type. The same renderer and the
+    // same solve a whole-block chart uses, given the panel's own rectangle as
+    // its frame - so moving a chart between a block and a panel changes its
+    // size and nothing else about it.
+    if (panel.kind === 'chart') {
+      const card = smartCardMarkup('chart', panel.card, { width: panel.width, height: panel.height, padding: 0 });
+      return `<span class="section-inset-panel section-inset-chart"
+                    data-panel-id="${escapeHtml(panel.id)}"
+                    style="left:${panel.x}px;top:${panel.y}px;width:${panel.width}px;height:${panel.height}px${
+                      panel.tint ? `;background:${escapeHtml(panel.tint)}` : ""}">${card || ""}</span>`;
+    }
     const solved = panelLayout(panel, bodyPx);
     const lines = solved.lines.map((line) => `<span style="left:${line.x}px;top:${line.y}px;width:${line.width}px;`
       + `font-size:${line.fontPx}px;line-height:${solved.lineHeight};`

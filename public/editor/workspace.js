@@ -61,6 +61,11 @@ import { computeAlignment } from "./external-editor/align.js";
 import { escapeHtml, closeOnEscape } from "./format.js";
 import { isContentEdit, isExplicit } from "./status/section-status.js";
 import { buildFlowMap, flowImageFromRow } from "./layout/text-flow.js";
+// A side-effect module (CJS + globalThis, so the server can read it too), the
+// same way the device bar and Scribus reach it.
+import "./layout/typefaces.js";
+
+const { TYPEFACES } = globalThis.SahasTypefaces;
 
 async function fetchJson(url, options) {
   const response = await fetch(url, options);
@@ -1084,6 +1089,24 @@ function renderShell() {
               <div id="layouts" class="layout-switcher"></div>
               <button type="button" class="layout-btn" id="addBlockBtn" title="Add a block to this page">+ Block</button>
               <button type="button" class="layout-btn danger" id="removeBlockBtn" title="Remove the selected block">− Block</button>
+              <!-- THE PAPER'S OWN DECISIONS, not this page's and not this
+                   block's: the house faces and whether the gutters are ruled.
+                   A desk had to open every block on every page to change a
+                   face, and the rules drew whether anybody had asked or not.
+                   ON THE EXISTING ROW, not a third one. A third row cost the
+                   page 34 px of chrome and pushed the writing surface below
+                   the fold - measured by the workspace net at a 1512x950
+                   window, where a picture handle landed at y=1015 and stopped
+                   being clickable at all. CLAUDE.md states that rule and this
+                   broke it. -->
+              <div class="canvas-toolbar-divider"></div>
+              <span class="canvas-toolbar-label">Paper</span>
+              <select id="paperBodyFace" class="toolbar-select"
+                      title="The face every story in this edition is set in — blocks that have chosen their own keep it"></select>
+              <select id="paperDisplayFace" class="toolbar-select"
+                      title="The face every headline, kicker and deck in this edition is set in"></select>
+              <button type="button" class="layout-btn" id="columnRulesBtn"
+                      title="The hairlines between neighbouring stories. Off unless this edition asks for them.">Rules</button>
             </div>
             <!-- Five buttons in a row read as five unrelated buttons. Three of
                  them are the three moves a sub-editor has when copy does not
@@ -1178,6 +1201,8 @@ function renderShell() {
     event.currentTarget.textContent = on ? "Editing view" : "Print view";
   });
 
+  bindPaperControls();
+
   // Guides ON/OFF. A view toggle, not a data operation - hiding never
   // deletes a guide or touches its stored position (setGuidesVisible only
   // ever toggles a CSS class), and turning it back on shows the exact same
@@ -1190,7 +1215,80 @@ function renderShell() {
     setGuidesVisible(guidesVisible);
   });
 
-  // The day's standing features. One press fills every block the layout marked
+  
+/**
+ * THE PAPER'S OWN TYPE, AND ITS COLUMN RULES.
+ *
+ * One decision for the edition. The two faces are written DOWN onto the
+ * edition's blocks, and only onto the blocks that have not chosen a face for
+ * themselves - so a sub-editor who deliberately set one splash in Khand keeps
+ * it. That is a house style, not an override; silently replacing somebody's
+ * explicit choice is the same fault as the AI overwriting reporter copy.
+ *
+ * Written down rather than cascaded at read time because a fallback resolved
+ * at composition would have to be threaded through the thirty-odd services
+ * that compose a stored row, and any one of them that forgot would measure a
+ * block in one face and print it in another.
+ */
+function bindPaperControls() {
+  const bodySelect = document.getElementById("paperBodyFace");
+  const displaySelect = document.getElementById("paperDisplayFace");
+  const rulesBtn = document.getElementById("columnRulesBtn");
+  if (!bodySelect || !displaySelect || !rulesBtn) return;
+
+  const paper = store.getState().newspaper || {};
+  // The ONE typeface catalogue, exactly as the block's own face controls read
+  // it. A second list here is the drift this codebase has been bitten by.
+  const option = (face, current) => `<option value="${face.key}"${
+    face.key === current ? " selected" : ""}>${escapeHtml(face.label)}</option>`;
+  const blank = (label, current) => `<option value=""${current ? "" : " selected"}>${escapeHtml(label)}</option>`;
+
+  bodySelect.innerHTML = blank("Story face", paper.body_family)
+    + TYPEFACES.filter((f) => f.role === "text").map((f) => option(f, paper.body_family)).join("");
+  displaySelect.innerHTML = blank("Headline face", paper.display_family)
+    + TYPEFACES.map((f) => option(f, paper.display_family)).join("");
+  rulesBtn.classList.toggle("active", Boolean(paper.column_rules));
+
+  const send = async (patch) => {
+    const state = store.getState();
+    if (!state.newspaper) return;
+    try {
+      const result = await fetchJson(`/api/newspapers/${state.newspaper.id}/house-style`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      state.newspaper = result.newspaper;
+      rulesBtn.classList.toggle("active", Boolean(result.newspaper.column_rules));
+      // The blocks themselves changed under the editor, so the edition is
+      // re-read rather than patched here - a face written onto forty blocks by
+      // one SQL statement is not something this client can reconstruct, and
+      // guessing would put the canvas and the database out of step.
+      if (result.restyled) {
+        showNotice(`Set in ${result.restyled} block${result.restyled === 1 ? "" : "s"}. Reloading the edition…`);
+        await renderWorkspace(state.newspaper.id);
+      } else {
+        renderPageArea();
+      }
+    } catch (error) {
+      showNotice("The paper's style could not be saved.");
+    }
+  };
+
+  bodySelect.addEventListener("change", (event) => {
+    if (!event.target.value) return;
+    send({ bodyFamily: event.target.value });
+  });
+  displaySelect.addEventListener("change", (event) => {
+    if (!event.target.value) return;
+    send({ displayFamily: event.target.value });
+  });
+  rulesBtn.addEventListener("click", () => {
+    send({ columnRules: !(store.getState().newspaper?.column_rules) });
+  });
+}
+
+// The day's standing features. One press fills every block the layout marked
   // as one - the horoscope, the almanac box, दिनविशेष, the thought for the day -
   // for this edition's own date. What lands in them is ordinary copy the desk
   // can rewrite (VISION.md: AI assists, never owns).

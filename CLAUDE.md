@@ -2133,7 +2133,7 @@ Three things measurement caught that reading would not have:
 `MIN_COLUMN_EM` is: "१००." hung on a narrow column would take a fifth of it
 away from the words. `tests/runningList.test.js` holds all of it.
 
-### Two schema changes that need applying
+### Schema changes that need applying
 
 `schema.sql` is not run at boot. These were applied to the dev database by hand
 and any other environment needs them:
@@ -2142,7 +2142,124 @@ and any other environment needs them:
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS inset_panels JSONB;
 ALTER TABLE pages ADD COLUMN IF NOT EXISTS overlay_images JSONB;
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS display_family VARCHAR(40);
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS show_dateline BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE newspapers    ADD COLUMN IF NOT EXISTS body_family VARCHAR(40);
+ALTER TABLE newspapers    ADD COLUMN IF NOT EXISTS display_family VARCHAR(40);
+ALTER TABLE newspapers    ADD COLUMN IF NOT EXISTS column_rules BOOLEAN NOT NULL DEFAULT FALSE;
 ```
+
+### A device must be removable, and the way out lives beside the way in
+
+Every device on the bar can be taken off, and its removal is in its own menu.
+Border/Tint/Columns/Drop cap always could — their "off" is a value in their own
+list (None, White, Auto, None). Four could not: a panel, a separator and a chart
+are things that exist or do not, so each menu carries an explicit **Remove**,
+and it is *disabled rather than hidden* when there is nothing to remove — so a
+desk can see the way out before needing it.
+
+This is worth stating as a rule because the failure is silent: a control that
+only ever adds looks like it works.
+
+### A chart asks three questions before it draws
+
+Pressing a chart type used to write a seed card — the same four districts, the
+whole block, always red. `chart-dialog.js` is the fix and the order is the one a
+desk works in:
+
+1. **which chart** — bars, pie, line, dots, figures
+2. **how much room** — the whole block, or a panel of a chosen share inside it
+3. **what is in it** — readings typed or pasted, plus the ink
+
+Step 2 is what did not exist: a Smart Card takes the *whole* of a block's body,
+so a chart beside copy was impossible. A chart panel (`inset_panels` with
+`kind: 'chart'` and a `card` payload) is the same card solved against a smaller
+rectangle, and it costs the compositor exactly one more obstacle — the argument
+the fact box, the pull quote and the cross-head already rest on.
+
+**A chart's ink is one of the paper's four**, resolved once by `chartInk()` and
+carried out in the solved geometry (`geometry.ink`, and `item.ink` per pie
+slice). Every renderer reads it from there rather than importing the constant —
+`smart-card-lines.js` had `ACCENT` hard-coded at four sites, which would have
+printed a blue chart red the moment the ink became a choice. Slices are tints of
+that one ink, never a rainbow: a press has four plates.
+
+### `panelsFromDom()` must carry what is not on the form
+
+Properties rebuilds every panel from its inputs and sends the whole list. A
+chart panel has no title and no lines to rebuild from, so without an explicit
+`card: was?.card` the chart is dropped and `panelOf()` then rejects the panel as
+empty — the chart vanishes when a desk edits a *different* panel on the block.
+
+### A drop cap works on a block that has a dateline
+
+It used to refuse: the dateline is prepended to the copy, so `dropCapOf()` took
+its U+25A0 and drew a solid black square three lines deep. Refusing was honest
+but meant the control did nothing on every block where a desk had filled in the
+story's place — which is most of them.
+
+A printed Marathi paper does not choose between the two. It sets the dateline on
+its own line and opens the story under it with the initial letter, and that is
+what `pourBody()` does now: one extra paragraph start at `datelineLength`, and
+the cap is taken from — and set under — the story that follows.
+
+**Vowel signs change the size of the cap, and this was measured.** A sign above
+the head stroke (ी, े, ौ, ं) rises above where the cap was placed and lands
+outside the copy area; a sign below the baseline (ु, ू, ृ, ्) hangs into the line
+under the cap. So an above-sign shrinks the cap (its baseline may not move — it
+is the baseline of the last line it spans), and a below-sign extends the
+obstacle, rounded up to a whole band so the copy stays on the grid. An ordinary
+consonant reserves exactly what it always did, so no stored block recomposes.
+
+### Ruling a block may not re-set its copy
+
+`BOX_INSET_PX` is a **floor**, not an addition. Added to the block's own margin —
+which is what it did — ruling a block narrowed the measure by 11 px, rebroke
+every line, and could push a fitting block into overset for no typographic
+reason. The default margin is 12 px (6 mm) and a box wants its type about 3 mm
+inside the rule, so the room was already there twice over. A block set tight
+(margin 1–2) still gets pushed clear, because there the box's need really is the
+larger number.
+
+### A toolbar row costs the page 34 px, and the page has none to give
+
+The paper's faces and the column-rules switch were put on a **third**
+`.canvas-toolbar-row`. That pushed the writing surface below the fold at a
+1512x950 window — the workspace net measured a picture handle at y=1015, past
+the viewport, where `elementFromPoint` returns null and the handle simply
+stopped being clickable. Undo then had nothing to undo, which is how the fault
+presented: as a broken history stack, three layers away from its cause.
+
+CLAUDE.md already stated the rule ("Nothing may push the writing surface below
+the fold") and this broke it anyway, because a toolbar row does not *look* like
+it is taking anything. **New edition-level controls go on an existing row.**
+
+**And the device bar scrolls, it does not wrap.** Wrapping made its height a
+function of its own contents, and its contents change while a desk works — the
+two face buttons say which face is in force, so "Serif" becoming "Mukta" can
+push a group onto a second row and move the whole editor under the cursor.
+`showMenu()` was already subtracting `bar.scrollLeft`, which only means
+anything on a bar that scrolls; it had simply never had enough buttons to
+reach the edge.
+
+### Column rules are asked for, not assumed
+
+`columnRulesFor()` draws nothing unless `newspapers.column_rules` is on, and it
+is off for every existing edition. The gate is inside that one function so the
+canvas and the press model cannot disagree about whether a page is ruled.
+
+A column rule *is* what a printed paper does — but "what most papers do" is a
+default a **desk** chooses, and furniture a desk cannot remove is furniture the
+desk is fighting.
+
+### The paper's own type is written down, not cascaded
+
+`PATCH /api/newspapers/:id/house-style` sets `body_family`/`display_family` and
+writes them onto the edition's blocks — **only** where the block has not chosen a
+face itself (`font_family IS NULL`), so a deliberate per-block choice survives.
+
+Written down rather than resolved at read time because a fallback would have to
+be threaded through the thirty-odd services that compose a stored row, and any
+one that forgot would measure a block in one face and print it in another.
 
 ### `tests/browser/visual-pass.browser.js`
 

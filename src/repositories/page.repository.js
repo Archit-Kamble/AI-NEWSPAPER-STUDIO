@@ -446,6 +446,10 @@ async function saveSection(pageId, sectionKey, updates) {
          -- (never null) is how the last one is taken off.
          inset_panels = COALESCE($50, inset_panels),
          display_family = COALESCE($51, display_family),
+         -- Coalesced like every other presentational column: a payload that
+         -- does not mention the dateline leaves it exactly as it was. The
+         -- editor sends a real boolean whenever it sends anything at all.
+         show_dateline = COALESCE($52, show_dateline),
          updated_at = CURRENT_TIMESTAMP
      WHERE page_id = $1 AND section_key = $2 RETURNING *`,
     [pageId, sectionKey, updates.newsItemId || null, updates.headline || null, updates.headlineFontPx || null,
@@ -488,7 +492,8 @@ async function saveSection(pageId, sectionKey, updates) {
       updates.subheadingAlign || null,
       updates.backgroundColor || null,
       updates.insetPanels === undefined ? null : JSON.stringify(updates.insetPanels),
-      updates.displayFamily || null]
+      updates.displayFamily || null,
+      typeof updates.showDateline === 'boolean' ? updates.showDateline : null]
   );
   return rows[0] || null;
 }

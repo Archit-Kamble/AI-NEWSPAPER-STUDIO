@@ -512,19 +512,31 @@ const say = (ok, what, detail = '') => {
     (b, a) => Boolean(a.head !== undefined));
   const capAfter = await capOf();
   say(Boolean(capAfter.cap) && !capBefore.cap, 'a drop cap is set', capAfter.cap);
-  // The lines beside it move aside, and the ones that do are a PREFIX - a cap
-  // that narrowed a line halfway down the column would be an obstacle in the
-  // wrong place. How many there are depends on how much copy this block holds,
-  // so the shape is what is asserted, not a count.
+  // The lines beside it move aside, and the ones that do are a CONTIGUOUS RUN
+  // starting where the cap starts - a cap that narrowed a line halfway down
+  // the column would be an obstacle in the wrong place. How many there are
+  // depends on how much copy this block holds, so the shape is asserted, not
+  // a count.
+  //
+  // A RUN, not a prefix, and the difference is the dateline. A block that
+  // opens "■ सातारा, प्रतिनिधी :" sets that on its own line and starts the
+  // story - and its initial letter - underneath, which is what a printed
+  // Marathi paper does and what makes a drop cap possible on such a block at
+  // all (it used to be refused outright). So the run may begin at line 0 or at
+  // line 1; what it may never do is begin in the middle of the column or have
+  // a hole in it.
   // The block's own left edge, taken BEFORE the cap - not the minimum of the
   // narrowed lines, which on a short story is every line it has.
   const left = Math.min(...capBefore.xs);
   const aside = capAfter.xs.map((x) => x > left);
-  const prefix = aside.indexOf(false) === -1 ? aside.length : aside.indexOf(false);
-  say(prefix > 0 && !aside.slice(prefix).includes(true),
-    'the lines beside the cap move aside, and they are the first ones',
-    `${capAfter.xs.join(',')} — ${prefix} aside`);
-  say(prefix <= 3, 'and never more than the three lines it was asked for', String(prefix));
+  const from = aside.indexOf(true);
+  const runEnd = from === -1 ? -1
+    : (aside.slice(from).indexOf(false) === -1 ? aside.length : from + aside.slice(from).indexOf(false));
+  const run = from === -1 ? 0 : runEnd - from;
+  say(run > 0 && from <= 1 && !aside.slice(runEnd).includes(true),
+    'the lines beside the cap move aside, in one run, from the top of the story',
+    `${capAfter.xs.join(',')} — ${run} aside from line ${from}`);
+  say(run <= 3, 'and never more than the three lines it was asked for', String(run));
   await press('[data-prop-drop-cap] [data-drop-cap="0"]', 'Drop cap → None', () => true);
   say(!(await capOf()).cap, 'and it comes off again');
 

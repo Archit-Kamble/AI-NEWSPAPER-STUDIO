@@ -736,3 +736,36 @@ ALTER TABLE pages ADD COLUMN IF NOT EXISTS overlay_images JSONB;
 --
 -- Validated against public/editor/layout/typefaces.js, the one catalogue.
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS display_family VARCHAR(40);
+
+-- THE PAPER'S OWN TYPE, and the paper's own column rules.
+--
+-- Both are decisions about the EDITION, not about any one block, and both were
+-- previously unmakeable for that reason: a desk who wanted the whole paper set
+-- in Mukta had to open every block on every page and set it there.
+--
+-- NULL means "whatever the block itself says", which is what every existing
+-- edition means - so nothing composes differently until a desk chooses. A
+-- block that has set its own face still wins; this is the paper's default, not
+-- an override, and a house style that silently overwrote a sub-editor's
+-- deliberate choice would be the AI-overwrites-copy fault in another costume.
+ALTER TABLE newspapers ADD COLUMN IF NOT EXISTS body_family VARCHAR(40);
+ALTER TABLE newspapers ADD COLUMN IF NOT EXISTS display_family VARCHAR(40);
+
+-- The hairlines between neighbouring blocks (public/editor/canvas/column-rules.js).
+--
+-- Drawn on every page automatically until now, which is the commonest thing a
+-- printed paper does and NOT something a desk had asked for: the report was
+-- "in between block even without adding default lines are showing ... only
+-- when we apply then it should show it". A rule the desk did not ask for is
+-- furniture the desk cannot remove, so it is opt-in, per edition, and off for
+-- everything that already exists.
+ALTER TABLE newspapers ADD COLUMN IF NOT EXISTS column_rules BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Does this block open with "■ सातारा, प्रतिनिधी :"?
+--
+-- Not every block wants one. A standing feature, a panel of results, a picture
+-- box with a caption and an advert all carry a dateline today because the
+-- block happens to have a location on it, and the desk had no way to say no
+-- short of clearing the location itself - which also loses it from the story's
+-- own record. TRUE is what every existing row already does.
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS show_dateline BOOLEAN NOT NULL DEFAULT TRUE;

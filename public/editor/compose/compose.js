@@ -1116,11 +1116,40 @@ const FACE_BOX_DESCENT_EM = 0.625;
  * Aligned as a compositor aligns one: the cap's head stroke on the FIRST
  * line's head stroke, and its baseline on the LAST line it spans.
  */
-function dropCapOf(text, { lines, chars, bandHeight, fontPx, family, weight }) {
+// WHAT A DEVANAGARI VOWEL SIGN DOES TO THE SIZE OF AN INITIAL LETTER.
+//
+// The desk's report: the drop cap "is not overlapping with other letters when
+// it has velanti, ukaar like complex things". It was right, and it is two
+// different faults with two different fixes, because the two kinds of sign go
+// in two different directions.
+//
+// A sign ABOVE the head stroke (ी, े, ै, ो, ौ, ं, ँ) rises above where the cap
+// was placed - the cap's head stroke is set level with the body's first line,
+// so anything above it lands OUTSIDE the block's copy area, over the deck.
+// A sign BELOW the baseline (ु, ू, ृ, ॄ, ्, ़) hangs past the last line the cap
+// was reserved room for, and straight into the line under it - which is the
+// collision that was photographed.
+//
+// The face's own numbers say how far: hhea reports 930 up and 625 down at
+// 1000/em for the publication serif (font-metrics.js), and the head stroke is
+// at 625 up. So an above-sign can occupy 0.305 em over the head stroke, and a
+// below-sign 0.625 em under the baseline. Those are the face's claims about
+// its own worst case, which is exactly what a reservation should use - the
+// alternative is measuring the ink of one particular glyph, and this engine
+// has no glyph-extent path.
+const CAP_MARK_ABOVE = /[\u0900-\u0902\u093A\u0940\u0945-\u094C\u0951\u0953\u0954]/;
+const CAP_MARK_BELOW = /[\u093B\u093C\u0941-\u0944\u094D\u0952\u0962\u0963]/;
+
+function dropCapOf(text, { lines, chars, bandHeight, fontPx, family, weight, skip = 0 }) {
   const count = Math.round(Number(lines) || 0);
   if (!(count >= 2) || !text) return null;
   const wanted = Math.max(1, Math.round(Number(chars) || 1));
-  const capText = clusters(text).slice(0, wanted).join('');
+  // FROM AFTER THE DATELINE, when there is one. The dateline is prepended to
+  // the body by the adapter, so `text` opens with "■ सातारा, प्रतिनिधी : " and
+  // the cap's first cluster used to be that U+25A0 - a mark the publication
+  // faces have no letter for, drawn three lines deep as a solid black square.
+  const from = Math.max(0, Math.round(Number(skip) || 0));
+  const capText = clusters(text.slice(from)).slice(0, wanted).join('');
   if (!capText.trim()) return null;
 
   const deep = Math.min(count, DROP_CAP_MAX_LINES);
@@ -1130,7 +1159,15 @@ function dropCapOf(text, { lines, chars, bandHeight, fontPx, family, weight }) {
   // The cap's body has to reach from that head stroke down to the baseline of
   // the last line it spans, which is (deep - 1) rows lower.
   const capBody = (deep - 1) * bandHeight + fontPx * SHIROREKHA_EM;
-  const capFontPx = capBody / SHIROREKHA_EM;
+  // A cluster carrying a sign above the head stroke has less room for its
+  // BODY, because the sign has to fit between the block's top and the head
+  // stroke. The baseline does not move - it is the baseline of the last line
+  // the cap spans, and moving it would take the cap off the grid - so the cap
+  // is set smaller instead, which is what a compositor does with a ी.
+  const aboveEm = CAP_MARK_ABOVE.test(capText) ? FACE_BOX_ASCENT_EM - SHIROREKHA_EM : 0;
+  const capFontPx = aboveEm > 0
+    ? Math.min(capBody / SHIROREKHA_EM, (bodyBaseline + (deep - 1) * bandHeight) / (SHIROREKHA_EM + aboveEm))
+    : capBody / SHIROREKHA_EM;
   // A glyph is centred in its line box by half-leading, so the line box that
   // puts the head stroke exactly on the box top is the one where that leading
   // cancels the difference between the face's box ascent and its head stroke.
@@ -1142,10 +1179,16 @@ function dropCapOf(text, { lines, chars, bandHeight, fontPx, family, weight }) {
     lines: deep,
     fontPx: capFontPx,
     lineBoxPx,
-    // Down from the body's top by the same hair the first line's own head
-    // stroke sits below it - so the two start on one line.
-    offsetY: headStroke,
+    // Down from the body's top by whatever keeps the cap's BASELINE on the
+    // last line it spans. With no sign above the head stroke that is exactly
+    // the body's own head stroke, as it always was; with one, the cap is
+    // smaller and therefore starts lower.
+    offsetY: bodyBaseline + (deep - 1) * bandHeight - capFontPx * SHIROREKHA_EM,
     width: measure(capText, capFontPx, family, weight),
+    // How far this cap's ink hangs BELOW its baseline. Zero for an ordinary
+    // consonant, which is why an ordinary drop cap reserves exactly what it
+    // always did and no composition changes.
+    descentPx: CAP_MARK_BELOW.test(capText) ? capFontPx * faceDescent(family, weight) : 0,
     gutter: fontPx * DROP_CAP_GUTTER_EM,
   };
 }
@@ -1155,7 +1198,7 @@ function pourBody(bodyInput, {
   paragraphSpacingPx = 0, letterSpacingPx = 0,
   italic = false, underline = false, firstLineIndentPx = 0,
   paragraphStarts = null, dropCapLines = 0, dropCapChars = 1,
-  listStyle = 'none',
+  listStyle = 'none', datelineLength = 0,
 }) {
   let align = requestedAlign;
   const text = typeof bodyInput === 'object' && bodyInput ? String(bodyInput.text || '') : String(bodyInput || '');
@@ -1180,10 +1223,44 @@ function pourBody(bodyInput, {
   // The initial letter, and the rectangle it keeps type out of. It stands in
   // the FIRST column only - a drop cap belongs to the opening of the story,
   // and one at the top of every column would read as three stories.
+  //
+  // AND IT MAY OPEN THE STORY RATHER THAN THE BLOCK. A block carrying a
+  // location or a reporter opens with "■ सातारा, प्रतिनिधी : " - the adapter
+  // prepends it, so it is the body's own first characters - and a drop cap was
+  // therefore REFUSED on every such block. That is most of them: measured on
+  // this newsroom's own editions, a drop cap silently did nothing wherever a
+  // desk had filled in the story's place, which is the whole reason the report
+  // was "it does not work for many news blocks".
+  //
+  // A printed Marathi paper sets the dateline on its own line and starts the
+  // story under it with the initial letter, so that is what this does: the
+  // dateline becomes its own paragraph (see `starts` below) and the cap is
+  // taken from the story that follows it and placed on the first row under it.
+  const capSkip = datelineLength > 0 ? datelineLength : 0;
   const cap = dropCapOf(text, {
-    lines: dropCapLines, chars: dropCapChars, bandHeight, fontPx, family, weight,
+    lines: dropCapLines, chars: dropCapChars, bandHeight, fontPx, family, weight, skip: capSkip,
   });
-  const capBottom = cap ? top + cap.lines * bandHeight : 0;
+  // HOW MANY ROWS THE DATELINE ITSELF TAKES, so the cap starts under it rather
+  // than beside it. Measured against the first column's own measure with the
+  // same measure() the breaker uses; a dateline is one short run of words and
+  // in the ordinary case this is exactly one row.
+  //
+  // Read by the capacity calibration AND by the real pour, from this one
+  // value, so the two cannot disagree about where the cap is - which is the
+  // invariant holesAt() exists to hold.
+  const firstMeasure = columns.length ? columns[0].end - columns[0].start : 0;
+  const datelineRows = cap && capSkip > 0 && firstMeasure > 0
+    ? Math.max(1, Math.ceil(measure(text.slice(0, capSkip), fontPx, family, weight) / firstMeasure))
+    : 0;
+  const capTop = top + datelineRows * bandHeight;
+  // The rectangle the copy keeps out of - the cap's reserved lines, plus
+  // whatever its own ink hangs below them, rounded UP to a whole band so the
+  // copy under it stays on the grid. `descentPx` is zero for a cluster with no
+  // sign below the baseline, so an ordinary cap reserves exactly what it did.
+  const capBottom = cap
+    ? capTop + cap.lines * bandHeight
+      + (cap.descentPx > 0 ? Math.ceil(cap.descentPx / bandHeight) * bandHeight : 0)
+    : 0;
   const capRight = cap && columns.length ? columns[0].start + cap.width + cap.gutter : 0;
 
   // WILL THIS BLOCK ACTUALLY BE JUSTIFIED? Resolved here, before the pour,
@@ -1209,7 +1286,12 @@ function pourBody(bodyInput, {
   // lines' worth of measure.
   const holesAt = (columnIndex, y0, y1) => {
     const holes = bandObstacles(images, y0, y1, fontPx);
-    if (cap && columnIndex === 0 && y0 < capBottom - 0.5) holes.push({ start: columns[0].start, end: capRight });
+    // Between the cap's own top and bottom - not simply "above the bottom".
+    // With a dateline the cap starts a row down, and the dateline's own row
+    // has the full measure to set in.
+    if (cap && columnIndex === 0 && y0 >= capTop - 0.5 && y0 < capBottom - 0.5) {
+      holes.push({ start: columns[0].start, end: capRight });
+    }
     return holes;
   };
 
@@ -1702,7 +1784,20 @@ function pourBody(bodyInput, {
   const starts = Array.isArray(paragraphStarts) && paragraphStarts.length
     ? paragraphStarts.slice().sort((a, b) => a - b)
     : authoredParagraphStarts(text);
-  const paragraphs = paragraphsFrom(text, starts);
+  // THE DATELINE, ON ITS OWN LINE, when this block sets an initial letter.
+  //
+  // One extra paragraph start, and nothing else in the engine learns anything:
+  // a forced break already lands on a fresh row, which is exactly what puts
+  // the story - and its cap - under the dateline rather than beside it.
+  const capStarts = cap && capSkip > 0 && !starts.includes(capSkip)
+    ? starts.concat(capSkip).sort((a, b) => a - b)
+    : starts;
+  const paragraphs = paragraphsFrom(text, capStarts);
+  // Which paragraph the cap's letter was taken out of - the story's first,
+  // which is the second paragraph when a dateline precedes it.
+  const capParagraphIndex = cap
+    ? Math.max(0, paragraphs.findIndex((paragraph) => paragraph.offset === capSkip))
+    : -1;
 
   // ------------------------------------------------ a list in running copy ---
   //
@@ -1775,7 +1870,7 @@ function pourBody(bodyInput, {
     // loses its opening clusters and the paragraph's offset gains exactly the
     // same number: `at` for every remaining piece is unchanged, to the
     // character.
-    const capHere = cap && paragraphIndex === 0 ? cap.length : 0;
+    const capHere = cap && paragraphIndex === capParagraphIndex ? cap.length : 0;
     const paragraphOffset = paragraph.offset + capHere;
     const pieces = breakPieces(capHere ? paragraph.text.slice(capHere) : paragraph.text);
     const paragraphSlots = [];
@@ -1975,7 +2070,7 @@ function pourBody(bodyInput, {
       text: cap.text,
       at: 0,
       x: columns[0].start,
-      y: top + cap.offsetY,
+      y: capTop + cap.offsetY,
       width: cap.width,
       height: cap.lines * bandHeight,
       lineBoxPx: cap.lineBoxPx,
@@ -1988,7 +2083,7 @@ function pourBody(bodyInput, {
       // of them did, simply not draw the cap at all. It resolves to the
       // baseline of the LAST body line the cap spans, which is the rule
       // dropCapOf() sizes it by.
-      baseline: top + cap.offsetY + cap.fontPx * SHIROREKHA_EM,
+      baseline: capTop + cap.offsetY + cap.fontPx * SHIROREKHA_EM,
       family,
       weight,
     } : null,
@@ -2328,13 +2423,6 @@ export function composeBlock(input = {}) {
   // it used to sit in this `else`, which made it unreachable whenever the
   // font was ALSO not ready, and the two are separate failures.
   if (!result.fontReady) warnings.push({ code: 'FONT_NOT_READY', detail: 'Composed before the publication font was measurable; sizes are estimated.' });
-  if (input.datelineLength > 0 && Math.max(0, num(input.dropCapLines, 0)) >= 2) {
-    warnings.push({
-      code: 'DROP_CAP_AFTER_DATELINE',
-      detail: 'This block opens with its dateline, so there is no first letter for a drop cap to be. '
-        + 'Clear the location and reporter to set one.',
-    });
-  }
 
   // Each display object's own alignment. These are separate persisted fields
   // (schema.sql's headline_align/subheading_align) because they are separate
@@ -2570,17 +2658,26 @@ export function composeBlock(input = {}) {
     // Off unless the block asks for it, so no stored row's composition can
     // change: 0 is "no drop cap" and is what every existing block carries.
     //
-    // AND OFF WHEN THE DATELINE OPENS THE BODY, which is the commoner case by
-    // far. The dateline is furniture prepended to the copy (section-adapter's
-    // `prefix + withMarks.text`), so `dropCapOf()` took its clusters: the cap
-    // was the dateline's own U+25A0, which the publication faces do not have
-    // as a letter and the canvas therefore drew as a SOLID BLACK SQUARE three
-    // lines deep. Photographed on a real 268x296 anchor. Refusing is the
-    // honest answer rather than capping the place name: a drop cap is the
-    // story's first ink and on this paper the dateline already is, so the two
-    // cannot both open the block. The desk is told, because a control that
-    // silently does nothing is the fault this project has already fixed twice.
-    dropCapLines: input.datelineLength > 0 ? 0 : Math.max(0, num(input.dropCapLines, 0)),
+    // AND IT NOW WORKS ON A BLOCK THAT HAS A DATELINE, which is most of them.
+    //
+    // The dateline is furniture prepended to the copy (section-adapter's
+    // `prefix + withMarks.text`), so dropCapOf() took ITS clusters: the cap was
+    // the dateline's own U+25A0, which the publication faces have no letter for
+    // and the canvas drew as a solid black square three lines deep -
+    // photographed on a real 268x296 anchor. The answer then was to refuse, and
+    // to say so; measured afterwards, that meant the control did nothing on
+    // every block where a desk had filled in the story's place, which is what
+    // "it does not work for many news blocks" was reporting.
+    //
+    // A printed Marathi paper does not choose between the two: it sets the
+    // dateline on its own line and opens the story under it with the initial
+    // letter. pourBody() does that now - the dateline becomes its own
+    // paragraph and the cap is taken from, and set under, the story that
+    // follows.
+    dropCapLines: Math.max(0, num(input.dropCapLines, 0)),
+    // The pour needs to know where the dateline ends: it is what the cap is
+    // taken from AFTER, and what the cap is set UNDER.
+    datelineLength: Math.max(0, num(input.datelineLength, 0)),
     dropCapChars: Math.max(1, num(input.dropCapChars, 1)),
     // 'none' unless the block asks, so no stored row's composition changes.
     listStyle: String(input.listStyle || 'none'),

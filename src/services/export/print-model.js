@@ -216,50 +216,11 @@ async function blockItems(section, { mono = false } = {}) {
     const frame = smartCardLayout.smartCardFrameFromComposition(composition);
     // Moved clear of anything standing in the card's way - a card is a grid
     // and cannot flow round an overlay the way the copy either side of it can.
-    const originX = x0 + mm(composition.content.left + (frame.offsetX || 0));
-    const originY = y0 + mm(composition.bodyTop + (frame.offsetY || 0));
-    const ALIGN = ['left', 'center', 'right'];
-    for (const line of smartCardLines(section.smart_card_key, section.smart_card_data, frame, smartCardLayout)) {
-      // A chart's bars are rectangles, which is a kind this model already has.
-      if (line.kind === 'bar') {
-        items.push({
-          kind: 'fill',
-          x: originX + mm(line.x), y: originY + mm(line.y),
-          width: mm(line.width), height: mm(line.height),
-          ink: line.ink || ACCENT_INK,
-        });
-        continue;
-      }
-      // A pie slice, a line chart's line and a dot are all POINT LISTS - the
-      // arc was turned into segments by the solver, once, so every writer here
-      // draws the identical polygon and none of them needs bezier geometry.
-      if (line.kind === 'poly') {
-        const points = (line.points || []).map(([x, y]) => [originX + mm(x), originY + mm(y)]);
-        if (points.length < 2) continue;
-        const xs = points.map((point) => point[0]);
-        const ys = points.map((point) => point[1]);
-        items.push({
-          kind: 'poly',
-          points,
-          // The bounding box, which IDML needs for its centre-based transform
-          // and which costs the other two writers nothing.
-          x: Math.min(...xs), y: Math.min(...ys),
-          width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys),
-          ink: line.ink || ACCENT_INK,
-          close: line.close !== false,
-          strokeWidth: line.strokeWidth ? mm(line.strokeWidth) : 0,
-        });
-        continue;
-      }
-      items.push(textItem(
-        { x: originX + mm(line.x), y: originY + mm(line.y), width: mm(line.width), height: mm(line.height) },
-        [run(line.text, {
-          family: 'serif', weight: line.bold ? 700 : 400, bold: Boolean(line.bold),
-          fontPx: line.fontPx, ink: line.ink || null,
-        })],
-        ALIGN[line.align] || 'left',
-      ));
-    }
+    items.push(...cardItems(
+      section.smart_card_key, section.smart_card_data, frame,
+      x0 + mm(composition.content.left + (frame.offsetX || 0)),
+      y0 + mm(composition.bodyTop + (frame.offsetY || 0)),
+    ));
     return items.filter(Boolean);
   }
 
@@ -318,6 +279,69 @@ async function blockItems(section, { mono = false } = {}) {
   return items.filter(Boolean);
 }
 
+
+/**
+ * ONE SMART CARD, as neutral items, at a given origin.
+ *
+ * Lifted out of blockItems() because a chart is no longer only ever a whole
+ * block: a chart PANEL (layout/inset-panels.js's `chart` kind) is the same
+ * card solved against a smaller rectangle, set inside a story with the copy
+ * running round it - which is how a desk asks a chart to "take space in news
+ * block" rather than taking the block. Two call sites, one walk, so a chart in
+ * a panel and a chart in a block cannot print differently.
+ */
+function cardItems(key, data, frame, originX, originY) {
+  const items = [];
+  const ALIGN = ['left', 'center', 'right'];
+  // From the module cache rather than a parameter: blockItems() destructures
+  // the loaded modules and blockDecorations() does not, and threading one
+  // through two call chains to hand this function a reference it can already
+  // reach is how the second caller came to be written without it. Nothing can
+  // reach here before ensureComposeReady() has run - both callers await it.
+  const { smartCardLayout } = modules;
+  for (const line of smartCardLines(key, data, frame, smartCardLayout)) {
+    // A chart's bars are rectangles, which is a kind this model already has.
+    if (line.kind === 'bar') {
+      items.push({
+        kind: 'fill',
+        x: originX + mm(line.x), y: originY + mm(line.y),
+        width: mm(line.width), height: mm(line.height),
+        ink: line.ink || ACCENT_INK,
+      });
+      continue;
+    }
+    // A pie slice, a line chart's line and a dot are all POINT LISTS - the
+    // arc was turned into segments by the solver, once, so every writer here
+    // draws the identical polygon and none of them needs bezier geometry.
+    if (line.kind === 'poly') {
+      const points = (line.points || []).map(([x, y]) => [originX + mm(x), originY + mm(y)]);
+      if (points.length < 2) continue;
+      const xs = points.map((point) => point[0]);
+      const ys = points.map((point) => point[1]);
+      items.push({
+        kind: 'poly',
+        points,
+        // The bounding box, which IDML needs for its centre-based transform
+        // and which costs the other two writers nothing.
+        x: Math.min(...xs), y: Math.min(...ys),
+        width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys),
+        ink: line.ink || ACCENT_INK,
+        close: line.close !== false,
+        strokeWidth: line.strokeWidth ? mm(line.strokeWidth) : 0,
+      });
+      continue;
+    }
+    items.push(textItem(
+      { x: originX + mm(line.x), y: originY + mm(line.y), width: mm(line.width), height: mm(line.height) },
+      [run(line.text, {
+        family: 'serif', weight: line.bold ? 700 : 400, bold: Boolean(line.bold),
+        fontPx: line.fontPx, ink: line.ink || null,
+      })],
+      ALIGN[line.align] || 'left',
+    ));
+  }
+  return items;
+}
 
 /**
  * WHAT A BLOCK DRAWS BESIDE ITS TYPE - the initial letter and the panels set
@@ -385,6 +409,17 @@ function blockDecorations(section, composition) {
     const py = y0 + mm(panel.y);
     const rule = mm(0.71);
     const { edges, family: panelFace, ground } = panelStyle(panel.kind);
+    // A CHART PANEL DRAWS A CARD. The same walk a whole-block chart goes
+    // through, given the panel's own rectangle - so a chart in a panel and a
+    // chart in a block reach the plate as the same polygons in the same ink.
+    if (panel.kind === 'chart') {
+      if (panel.tint) {
+        items.push({ kind: 'fill', x: px, y: py, width: mm(panel.width), height: mm(panel.height), ink: panel.tint });
+      }
+      items.push(...cardItems('chart', panel.card,
+        { width: panel.width, height: panel.height, padding: 0 }, px, py));
+      continue;
+    }
     // The ground first, then the rule, then the type - the order a printer
     // lays them down, and the same order a tinted BLOCK already uses.
     if (ground || panel.tint) {
@@ -950,7 +985,7 @@ async function buildPrintModel(newspaper, pages) {
     // Half a pixel wide, which at 2 px/mm is the 0.25 mm hairline a newspaper
     // actually sets - the same number the canvas draws.
     const { columnRules } = await ensureComposeReady();
-    for (const rule of columnRules.columnRulesFor(page, geometry)) {
+    for (const rule of columnRules.columnRulesFor(page, geometry, Boolean(newspaper.column_rules))) {
       items.push(rule.axis === 'v'
         ? { kind: 'rule', x: mm(rule.at - 0.25), y: mm(rule.from), width: mm(0.5), height: mm(rule.to - rule.from), ink: RULE_INK }
         : { kind: 'rule', x: mm(rule.from), y: mm(rule.at - 0.25), width: mm(rule.to - rule.from), height: mm(0.5), ink: RULE_INK });
@@ -994,7 +1029,7 @@ async function pageFurniture(newspaper, page, geometry, identity) {
     ...mastheadItems(newspaper, page, geometry, identity, page.sections),
     ...folioItems(newspaper, page, geometry, identity),
   ];
-  for (const rule of columnRules.columnRulesFor(page, geometry)) {
+  for (const rule of columnRules.columnRulesFor(page, geometry, Boolean(newspaper.column_rules))) {
     items.push(rule.axis === 'v'
       ? { kind: 'rule', x: mm(rule.at - 0.25), y: mm(rule.from), width: mm(0.5), height: mm(rule.to - rule.from), ink: RULE_INK }
       : { kind: 'rule', x: mm(rule.from), y: mm(rule.at - 0.25), width: mm(rule.to - rule.from), height: mm(0.5), ink: RULE_INK });

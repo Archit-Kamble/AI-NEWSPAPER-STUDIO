@@ -30,6 +30,9 @@ router.get('/', requireDesk, newspaperController.list);
 router.get('/latest', requireDesk, newspaperController.latest);
 router.get('/:id', requireDesk, newspaperController.getOne);
 router.patch('/:id', newspaperController.update);
+// The paper's own type and its column rules - one decision for the edition,
+// not one per block. A write, so deskWrites already guards it.
+router.patch('/:id/house-style', newspaperController.houseStyle);
 router.post(
   '/:id/final-files',
   asyncRoute(async (req, res, next) => {

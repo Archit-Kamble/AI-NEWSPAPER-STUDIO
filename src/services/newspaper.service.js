@@ -1,6 +1,7 @@
 const newspaperRepository = require('../repositories/newspaper.repository');
 const publicationRepository = require('../repositories/publication.repository');
 const { identity } = require('../layout/identity');
+const { TYPEFACES } = require('../../public/editor/layout/typefaces');
 const pressReadiness = require('./pressReadiness.service');
 
 function withPublicationFiles(newspaper, files) {
@@ -103,7 +104,40 @@ async function saveFinalFiles(id, files, sessionUser) {
   return { item: response };
 }
 
+/**
+ * Set the paper's own type and whether it rules its gutters.
+ *
+ * The two faces are checked against the ONE typeface catalogue, the same way a
+ * block's are - a family that is not in typefaces.js has no metrics file, so
+ * the compositor would measure it as the serif and the press writer could not
+ * embed it at all.
+ */
+async function setHouseStyle(id, body = {}) {
+  const known = (value) => TYPEFACES.some((face) => face.key === value);
+  const named = (key) => {
+    const value = body[key];
+    if (value === undefined || value === null || String(value).trim() === '') return null;
+    return String(value);
+  };
+  const bodyFamily = named('bodyFamily');
+  const displayFamily = named('displayFamily');
+  const bad = [bodyFamily, displayFamily].find((value) => value && !known(value));
+  if (bad) return { error: `The face must be one of ${TYPEFACES.map((f) => f.key).join(', ')}.` };
+  // A text face for the story and a display face for the headline are separate
+  // decisions (schema.sql, and compose.js's DISPLAY_TYPOGRAPHY), but either
+  // slot may legally hold either face - a paper set entirely in one family is
+  // a real house style, so this checks that the face EXISTS, not what it is
+  // nominally for.
+  const result = await newspaperRepository.setHouseStyle(parseInt(id, 10), {
+    bodyFamily, displayFamily,
+    columnRules: typeof body.columnRules === 'boolean' ? body.columnRules : undefined,
+  });
+  if (!result) return { notFound: true };
+  return result;
+}
+
 module.exports = {
+  setHouseStyle,
   createNewspaper,
   listNewspapers,
   getLatestNewspaper,

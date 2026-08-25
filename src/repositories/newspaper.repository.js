@@ -187,4 +187,55 @@ async function update(id, updates) {
   return rows[0] || null;
 }
 
-module.exports = { create, findAll, findEpaperReleases, findPublicEpaper, selectPublicEpaper, recordEpaperRelease, clearEpaperRelease, findById, findByDate, findAllByDate, findPrevious, update };
+/**
+ * The paper's own house style: the two faces and whether it rules its gutters.
+ *
+ * A DEFAULT, NOT AN OVERRIDE. A face is written down onto the edition's blocks
+ * only where the block has not chosen one itself (`font_family IS NULL`), so a
+ * sub-editor who deliberately set one block in Khand keeps it when the paper
+ * is set in Mukta. Silently overwriting a person's explicit decision is the
+ * same fault as the AI overwriting reporter copy, in different clothes.
+ *
+ * Written down rather than cascaded at read time on purpose. The alternative -
+ * a fallback resolved wherever a block is composed - would have to be threaded
+ * through every one of the thirty-odd services that compose a stored row, and
+ * any one of them that forgot would measure the block in one face and print it
+ * in another. One value per block, on the block, is what the rest of this
+ * system already relies on.
+ */
+async function setHouseStyle(id, { bodyFamily, displayFamily, columnRules }) {
+  const { rows } = await pool.query(
+    `UPDATE newspapers
+        SET body_family = COALESCE($2, body_family),
+            display_family = COALESCE($3, display_family),
+            column_rules = COALESCE($4, column_rules),
+            updated_at = CURRENT_TIMESTAMP
+      WHERE id = $1 RETURNING *`,
+    [id, bodyFamily ?? null, displayFamily ?? null,
+      typeof columnRules === 'boolean' ? columnRules : null],
+  );
+  if (!rows[0]) return null;
+
+  let restyled = 0;
+  if (bodyFamily) {
+    const { rowCount } = await pool.query(
+      `UPDATE page_sections SET font_family = $2, updated_at = CURRENT_TIMESTAMP
+        WHERE font_family IS NULL
+          AND page_id IN (SELECT id FROM pages WHERE newspaper_id = $1)`,
+      [id, bodyFamily],
+    );
+    restyled += rowCount;
+  }
+  if (displayFamily) {
+    const { rowCount } = await pool.query(
+      `UPDATE page_sections SET display_family = $2, updated_at = CURRENT_TIMESTAMP
+        WHERE display_family IS NULL
+          AND page_id IN (SELECT id FROM pages WHERE newspaper_id = $1)`,
+      [id, displayFamily],
+    );
+    restyled += rowCount;
+  }
+  return { newspaper: rows[0], restyled };
+}
+
+module.exports = { create, findAll, setHouseStyle, findEpaperReleases, findPublicEpaper, selectPublicEpaper, recordEpaperRelease, clearEpaperRelease, findById, findByDate, findAllByDate, findPrevious, update };

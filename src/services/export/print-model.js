@@ -42,7 +42,7 @@ let modules = null;
 
 async function ensureComposeReady() {
   if (!modules) {
-    const [metrics, shaper, adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry, accent, compose] =
+    const [metrics, shaper, adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry, accent, compose, columnRules] =
       await Promise.all([
         import('../../../public/editor/compose/font-metrics.js'),
         import('../../../public/editor/compose/shaper.js'),
@@ -54,8 +54,9 @@ async function ensureComposeReady() {
         import('../../../public/editor/layout/image-geometry.js'),
         import('../../../public/editor/compose/accent.js'),
         import('../../../public/editor/compose/compose.js'),
+        import('../../../public/editor/canvas/column-rules.js'),
       ]);
-    modules = { metrics, shaper, adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry, accent, compose };
+    modules = { metrics, shaper, adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry, accent, compose, columnRules };
   }
   await Promise.all([modules.metrics.ensureFontsLoaded(), modules.shaper.ensureShaperReady()]);
   modules.shaper.requireShaperReady();
@@ -229,7 +230,10 @@ async function blockItems(section) {
       }
       items.push(textItem(
         { x: originX + mm(line.x), y: originY + mm(line.y), width: mm(line.width), height: mm(line.height) },
-        [run(line.text, { family: 'serif', weight: 400, fontPx: line.fontPx })],
+        [run(line.text, {
+          family: 'serif', weight: line.bold ? 700 : 400, bold: Boolean(line.bold),
+          fontPx: line.fontPx, ink: line.ink || null,
+        })],
         ALIGN[line.align] || 'left',
       ));
     }
@@ -729,6 +733,29 @@ async function buildPrintModel(newspaper, pages) {
     for (const section of page.sections || []) {
       items.push(...await blockItems(section));
     }
+    // THE COLUMN RULES - the hairlines between one story and the next.
+    //
+    // CLAUDE.md calls these "the single most recognisable thing about a
+    // printed newspaper page", and no export drew them. The canvas has since
+    // it was written; grepping this file and scribus.service.js for
+    // `columnRules` returned nothing. Found by rendering a six-page edition
+    // and reading the website's own page beside the PDF's.
+    //
+    // They come from `columnRulesFor()`, the one function that decides where a
+    // rule goes - a rule belongs exactly halfway between the two stories it
+    // separates, and it exists because two blocks MEET, which is a fact about
+    // the pair and not about either one. A second implementation here would be
+    // free to disagree about that, so there is not one.
+    //
+    // Half a pixel wide, which at 2 px/mm is the 0.25 mm hairline a newspaper
+    // actually sets - the same number the canvas draws.
+    const { columnRules } = await ensureComposeReady();
+    for (const rule of columnRules.columnRulesFor(page, geometry)) {
+      items.push(rule.axis === 'v'
+        ? { kind: 'rule', x: mm(rule.at - 0.25), y: mm(rule.from), width: mm(0.5), height: mm(rule.to - rule.from), ink: RULE_INK }
+        : { kind: 'rule', x: mm(rule.from), y: mm(rule.at - 0.25), width: mm(rule.to - rule.from), height: mm(0.5), ink: RULE_INK });
+    }
+
     // The page's own pictures go down AFTER the blocks, because that is what
     // "laid over" means and every writer here paints in document order. The
     // blocks have already set their type clear of them, so this is paint and

@@ -16,6 +16,9 @@
 
 const { devanagari } = require('../../layout/identity');
 
+// The paper's accent, the one a chart's bars and figures are set in.
+const ACCENT = '#c8102e';
+
 /**
  * @returns {Array<{kind, text, x, y, width, fontPx, align}>} align is 0 left,
  *          1 centre, 2 right - the same three a composed line can carry.
@@ -50,9 +53,17 @@ function smartCardLines(key, data, frame, cardLayout) {
   const ratio = layout.fontPx > 0
     ? (layout.geometry?.lineHeightPx || layout.fontPx * 1.45) / layout.fontPx
     : 1.45;
-  const line = (text, x, y, width, fontPx, align = 0, height = null) => {
+  // `ink` and `bold` travel with the entry, because the canvas paints them and
+  // an export that dropped them printed the same card in a different ink.
+  // Photographed side by side: a stat row's figures are the paper's accent red
+  // on the website and were plain black in the PDF, and a bar chart's value
+  // labels are bold on the website and were regular.
+  const line = (text, x, y, width, fontPx, align = 0, height = null, style = {}) => {
     if (!text) return;
-    out.push({ text, x, y, width, fontPx, align, height: height || fontPx * ratio });
+    out.push({
+      text, x, y, width, fontPx, align, height: height || fontPx * ratio,
+      ink: style.ink || null, bold: Boolean(style.bold),
+    });
   };
 
   if (layout.subtitle?.lines?.length) {
@@ -66,7 +77,6 @@ function smartCardLines(key, data, frame, cardLayout) {
 
   if (key === 'chart') {
     const g = layout.geometry;
-    const ACCENT = '#c8102e';
     let y = subtitleOffsetPx;
     if (g.chartType === 'stat') {
       const perBand = Math.max(1, g.columns);
@@ -75,7 +85,7 @@ function smartCardLines(key, data, frame, cardLayout) {
         const band = Math.floor(index / perBand);
         const x = column * g.columnWidth;
         const top = y + band * g.bandHeight;
-        line(item.valueText, x, top, g.columnWidth, g.figurePx, 1, g.figureLine);
+        line(item.valueText, x, top, g.columnWidth, g.figurePx, 1, g.figureLine, { ink: ACCENT, bold: true });
         (item.captionLines || []).forEach((text, i) =>
           line(text, x, top + g.figureLine + i * g.lineHeightPx, g.columnWidth, layout.fontPx, 1));
       });
@@ -85,7 +95,7 @@ function smartCardLines(key, data, frame, cardLayout) {
       layout.items.forEach((item) => {
         line(item.label, 0, y, g.labelWidth, layout.fontPx, 0);
         bar(g.labelWidth, y + (g.rowHeight - barHeight) / 2, item.barWidth, barHeight, ACCENT);
-        line(item.valueText, g.labelWidth + g.trackWidth + 2, y, g.valueWidth, layout.fontPx, 2);
+        line(item.valueText, g.labelWidth + g.trackWidth + 2, y, g.valueWidth, layout.fontPx, 2, null, { bold: true });
         y += g.rowHeight;
       });
     }

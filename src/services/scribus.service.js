@@ -345,7 +345,10 @@ function smartCardFrames({ key, data, frame, xMm, yMm, ownPage, cardLayout, fami
     return lineFrame({
       xMm: xMm + mm(line.x), yMm: yMm + mm(line.y),
       widthMm: mm(line.width), heightMm: mm(line.height),
-      runs: [{ text: line.text, family, weight, bold: false, italic: false, underline: false, fontPx: line.fontPx }],
+      runs: [{
+        text: line.text, family, weight: line.bold ? 700 : weight, bold: Boolean(line.bold),
+        italic: false, underline: false, fontPx: line.fontPx, ink: line.ink || null,
+      }],
       align: line.align, ownPage,
     });
   }).join('');

@@ -4086,7 +4086,13 @@ body.print-view .newspaper-section.block-photo {
    that is how the press will lay them down - showing them in colour would be
    showing the desk something that is not going to happen. */
 body.print-view .newspaper-canvas.mono-forme .section-placed-image,
-body.print-view .newspaper-canvas.mono-forme .section-image {
+body.print-view .newspaper-canvas.mono-forme .section-image,
+/* A picture laid ON the page crosses blocks, but it does not cross formes:
+   the whole sheet comes off one set of plates. This selector was missing when
+   the overlay layer was added, so on a mono page the block pictures previewed
+   in grey and an overlay previewed in colour - two answers on one sheet, and
+   the export (which separates the whole page to K) agreed with neither. */
+body.print-view .newspaper-canvas.mono-forme .page-overlay > img {
   filter: grayscale(1);
 }
 .mono-forme-warning {

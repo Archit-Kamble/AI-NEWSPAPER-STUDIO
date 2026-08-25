@@ -5588,6 +5588,15 @@ body.print-view .page-imprint {
   overflow: visible;
   white-space: nowrap;
 }
+/* A list item's marker, hung in its own column beside the copy. Every number
+   here is composed - compose.js places it and states its own line box - so
+   this rule may set no size, no leading and no position. */
+.section-list-marker {
+  display: block;
+  text-align: left;
+  overflow: visible;
+  white-space: nowrap;
+}
 /* ------------------------------------------------ Reporter management ---- */
 .reporter-admin-heading, .settings-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--s4); margin-bottom: var(--s4); }
 .reporter-admin-heading h2, .reporter-admin-heading h3, .reporter-admin-heading p, .settings-heading h2, .settings-heading p { margin: 0; }

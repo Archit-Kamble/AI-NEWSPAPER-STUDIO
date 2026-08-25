@@ -338,6 +338,17 @@ function blockDecorations(section, composition) {
     ));
   }
 
+  // A LIST'S MARKERS, hung beside the copy. Furniture, exactly like the cap
+  // above: never in `bodyLines`, so a writer that draws only those printed a
+  // list with its numbers missing - which is a list that is not a list.
+  for (const marker of composition?.listMarkers || []) {
+    items.push(lineItem(
+      { x: x0 + mm(marker.x), y: y0 + mm(marker.y), width: mm(marker.width) + 1, height: mm(marker.height) },
+      y0 + mm(marker.baseline),
+      [run(marker.text, { family: marker.family || 'serif', weight: marker.weight || 400, fontPx: marker.fontPx })],
+    ));
+  }
+
   // A PANEL SET INSIDE THE STORY. The compositor already ran the copy round
   // it, so all that is left is to draw the rectangle the copy avoided and the
   // type inside it - from the same solve, so the two cannot disagree about

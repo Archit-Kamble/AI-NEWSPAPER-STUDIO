@@ -404,6 +404,11 @@ export function composeSection(section = {}, view = {}) {
     // what every existing row carries - is no drop cap, so no stored block's
     // composition changes by this existing at all.
     dropCapLines: Math.max(0, Number(pick(section, view, 'dropCapLines', 'drop_cap_lines', 0)) || 0),
+    // A numbered or bulleted list in RUNNING COPY. Read from the row like
+    // every other field - it is the desk's own setting and 'none' is what
+    // every existing block carries, so nothing recomposes on the strength of
+    // this existing.
+    listStyle: pick(section, view, 'listStyle', 'list_style', 'none') || 'none',
     // How many lines the display type may take. Left at the engine's own
     // defaults unless a caller states them - `headline-reserve.js` does, so
     // that the reservation and the real block are measured the same way.

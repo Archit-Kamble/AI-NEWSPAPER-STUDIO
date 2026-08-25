@@ -85,6 +85,28 @@
   const DEVANAGARI_DIGITS = ['०', '१', '२', '३', '४', '५', '६', '७', '८', '९'];
   const devanagari = (n) => String(n).replace(/\d/g, (d) => DEVANAGARI_DIGITS[Number(d)]);
 
+  // A BULLET THE PUBLICATION FACES ACTUALLY HAVE. Measured: serif/400 and
+  // sans/700 both lack U+2022, so a real bullet resolves to glyph 0 and the
+  // press writer draws it as its .notdef box. U+25AA is the same mark the
+  // dateline already opens with and the PDF writer already draws as the filled
+  // rectangle it is.
+  const BULLET = '\u25aa';
+
+  /**
+   * What marker number `index` (0-based) carries, or '' for none.
+   *
+   * ONE vocabulary for both places a list is set: inside a panel, where the
+   * marker goes into the line, and in RUNNING COPY, where compose.js hangs it
+   * in its own column beside the measure. `page_sections.list_style` and a
+   * panel's `marker` are the same three choices and must not become two
+   * catalogues that drift.
+   */
+  function markerText(marker, index) {
+    if (marker === 'number') return `${devanagari(Number(index) + 1)}.`;
+    if (marker === 'bullet') return BULLET;
+    return '';
+  }
+
   const MIN_PX = 24;             // below this nothing legible fits
   const DEFAULT_STAND_OFF_PX = 4;
 
@@ -167,9 +189,8 @@
       // A hanging indent needs the line broken against a narrower measure for
       // every line after the first, which is what the compositor does for
       // running copy and what a panel deliberately does not have.
-      const marked = panel.marker === 'number' ? `${devanagari(index + 1)}. ${text}`
-        : panel.marker === 'bullet' ? `\u25aa ${text}`
-          : text;
+      const mark = markerText(panel.marker, index);
+      const marked = mark ? `${mark} ${text}` : text;
       out.push({ text: marked, x: inset, y, width: panel.width - inset * 2, fontPx: linePx, bold: false });
       y += linePx * lineHeight;
     });
@@ -179,7 +200,8 @@
   const api = Object.freeze({
     INSET_PANEL_KINDS: KINDS, INSET_PANEL_MARKERS: MARKERS, INSET_PANEL_MIN_PX: MIN_PX,
     INSET_PANEL_STYLES: STYLES,
-    panelOf, panelsOf, obstacleFromPanel, panelLayout, panelStyle,
+    INSET_PANEL_BULLET: BULLET,
+    panelOf, panelsOf, obstacleFromPanel, panelLayout, panelStyle, markerText,
   });
   root.SahasInsetPanels = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

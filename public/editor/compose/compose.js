@@ -34,8 +34,14 @@ import {
 import { subtract, viableIntervals, MIN_CORRIDOR_EM } from './intervals.js';
 import { bandObstacles, imageFingerprint } from './exclusion.js';
 import '../layout/publication-type.js';
+// The marker vocabulary, shared with the panel that sets a list inside a box -
+// `page_sections.list_style` and a panel's `marker` are the same three choices
+// and must not become two catalogues that drift. Reached the same way the
+// character grid and the type catalogue already are.
+import '../layout/inset-panels.js';
 
 const DEFAULT_BODY_FONT_PX = globalThis.SahasPublicationType.DEFAULT_BODY_FONT_PX;
+const { markerText } = globalThis.SahasInsetPanels;
 
 export const ENGINE_VERSION = 'sahas-compose/2';
 
@@ -1082,6 +1088,17 @@ const DROP_CAP_GUTTER_EM = 0.5;
 // its own hole; that is the same fault the size button already had, only
 // tidier.
 const SHIROREKHA_EM = 0.625;
+
+// A LIST IN RUNNING COPY. The marker's own column is the widest marker plus
+// this gutter - half a body em, the same gap the drop cap leaves, and for the
+// same reason: it is the COPY that has to clear the mark, so the space reads
+// the same whether the marker is a bullet or "१२.".
+const LIST_GUTTER_EM = 0.5;
+// And a hard ceiling on it, in ems for the reason MIN_COLUMN_EM is: a list a
+// hundred items long would otherwise hang "१००." and take a fifth of a narrow
+// column away from the words. Past this the markers simply stop aligning,
+// which is a far smaller fault than a measure nothing can be set in.
+const LIST_MAX_HANG_EM = 3;
 // And what the BROWSER lays the face out with - `fontBoundingBoxAscent` /
 // `Descent`, which is what decides where a baseline lands inside a line box.
 // Deliberately separate from faceAscent()/faceDescent(): those are this
@@ -1138,6 +1155,7 @@ function pourBody(bodyInput, {
   paragraphSpacingPx = 0, letterSpacingPx = 0,
   italic = false, underline = false, firstLineIndentPx = 0,
   paragraphStarts = null, dropCapLines = 0, dropCapChars = 1,
+  listStyle = 'none',
 }) {
   let align = requestedAlign;
   const text = typeof bodyInput === 'object' && bodyInput ? String(bodyInput.text || '') : String(bodyInput || '');
@@ -1328,7 +1346,7 @@ function pourBody(bodyInput, {
    * top of the next column, or - if there is no next column - let it fall
    * through to ordinary overset accounting.
    */
-  function fillRow(cursor, pieces, index, paraCharOffset, paragraphOffset, indentFirstGap = false) {
+  function fillRow(cursor, pieces, index, paraCharOffset, paragraphOffset, leadPx = 0) {
     let height = bandHeight;
 
     for (let pass = 0; pass < 2; pass += 1) {
@@ -1348,10 +1366,18 @@ function pourBody(bodyInput, {
           break;
         }
         const gap = row.gaps[gapIndex];
-        // The paragraph's own first line starts inset. The gap it is set in
-        // is unchanged - the row is still fully used - only the text starts
-        // further in, exactly as a printed paragraph does.
-        const indent = indentFirstGap && gapIndex === 0 ? Math.min(indentPx, (gap.end - gap.start) * 0.5) : 0;
+        // The room kept clear at the START of this row's leftmost gap, and the
+        // two things that ask for it are the same gesture measured differently:
+        //
+        //  - a paragraph's own FIRST line starts inset (`indentPx`), the way a
+        //    printed paragraph opens;
+        //  - a list item HANGS (`hangingPx`), so every one of its lines starts
+        //    inset and the marker stands in the column that leaves.
+        //
+        // The gap it is set in is unchanged either way - the row is still fully
+        // used - only the text starts further in. Never more than half the gap:
+        // below that there is no measure left to set in.
+        const indent = gapIndex === 0 ? Math.min(leadPx, (gap.end - gap.start) * 0.5) : 0;
         const measureWidthPx = gap.end - gap.start - indent;
         let line = '';
         let width = 0;
@@ -1391,6 +1417,9 @@ function pourBody(bodyInput, {
         placed.push({
           text: trimmed, at: lineStartOffset, x: gap.start + indent, width: drawn,
           measure: measureWidthPx, hardOverset, pieceEnd: cursorIndex,
+          // How far in this line actually starts, so a list marker can be hung
+          // at the gap's own left edge without re-deriving the clamp above.
+          lead: indent,
           // The row is occupied whatever the indent did to the text's start -
           // an indented first line is a set line, not a partly empty one.
           occupies: gap.end - gap.start,
@@ -1674,6 +1703,42 @@ function pourBody(bodyInput, {
     ? paragraphStarts.slice().sort((a, b) => a - b)
     : authoredParagraphStarts(text);
   const paragraphs = paragraphsFrom(text, starts);
+
+  // ------------------------------------------------ a list in running copy ---
+  //
+  // `page_sections.list_style` has been a column since the schema was written
+  // and the compositor had never read it: the Typography control set it, it
+  // persisted, and the only thing it reached was a CSS class on that panel's
+  // own PREVIEW paragraph. The composed block set no list at all - the same
+  // shape of fault the `drop_cap` BOOLEAN had before it became `drop_cap_lines`.
+  //
+  // A list item is one authored PARAGRAPH, and it HANGS: the marker stands in
+  // its own column and every line of the item - not just the first - is set
+  // inset past it, which is what makes the markers line up down the page and
+  // the copy line up with them. That is the whole difference from a panel's
+  // list, where the marker goes into the line because a panel has no second
+  // measure to break against.
+  //
+  // The engine learns nothing new to do it. The hanging indent is the FIRST
+  // LINE INDENT this pour has always applied, asked for on every row instead
+  // of one, and the marker is drawn beside the copy exactly as the drop cap
+  // is - its own box, its own baseline, no place in `lines` and therefore no
+  // effect on `line.at`, on a sub-editor's marks, or on anything that reads
+  // them. Not one character of the stored copy is touched: a marker is
+  // furniture, and it is never in the text.
+  const listMode = listStyle === 'bullet' || listStyle === 'number' ? listStyle : 'none';
+  const markerTexts = listMode === 'none' ? [] : paragraphs.map((_, i) => markerText(listMode, i));
+  // The column the markers stand in is as wide as the WIDEST of them plus the
+  // gutter, so "९." and "१०." align on their own left edge and the copy beside
+  // them is flush down the whole list. Sized once for the block: a per-item
+  // width would make the copy's left edge step in and out.
+  const markerColumnPx = markerTexts.reduce(
+    (widest, mark) => Math.max(widest, measure(mark, fontPx, family, weight)), 0,
+  );
+  const hangingPx = listMode === 'none' ? 0
+    : Math.min(markerColumnPx + fontPx * LIST_GUTTER_EM, fontPx * LIST_MAX_HANG_EM);
+  const listMarkers = [];
+
   // How deep each paragraph actually set, in EQUIVALENT lines - the unit the
   // occupancy record uses, and the only one the policy can be stated in. A
   // fragment count would say a row a photograph splits in two is two lines.
@@ -1735,8 +1800,14 @@ function pourBody(bodyInput, {
       if (colIndex >= cursors.length) break;
 
       const cursor = cursors[colIndex];
-      const result = fillRow(cursor, pieces, index, paraCharOffset, paragraphOffset,
-        indentPx > 0 && firstLineOfParagraph && paragraph.forcedBreak);
+      // A list item hangs on EVERY row; an ordinary paragraph indents its own
+      // first line only. The two are exclusive - an item that both hung and
+      // indented would start its first line twice as far in as the rest of
+      // itself, which is a fault a compositor would never set.
+      const leadPx = hangingPx > 0
+        ? hangingPx
+        : (indentPx > 0 && firstLineOfParagraph && paragraph.forcedBreak ? indentPx : 0);
+      const result = fillRow(cursor, pieces, index, paraCharOffset, paragraphOffset, leadPx);
       // Either no room at the ordinary height at all, or a run on this row
       // needs more height than this column has left (BUG 1) - either way,
       // nothing was consumed, so the same text is retried at the next
@@ -1782,6 +1853,21 @@ function pourBody(bodyInput, {
           underline,
           paragraphBreak: firstLineOfParagraph && paragraph.forcedBreak,
         });
+        // The item's marker, hung at the left edge of the gap this first line
+        // was set in - which is where the copy would have started had it not
+        // been asked to hang. On the same baseline as that line, because a
+        // marker beside a line of type sits on it.
+        if (firstLineOfParagraph && hangingPx > 0 && markerTexts[paragraphIndex]) {
+          listMarkers.push({
+            text: markerTexts[paragraphIndex],
+            x: p.x - (p.lead || 0),
+            y: result.row.y,
+            width: markerColumnPx,
+            height: result.height,
+            baseline: result.row.y + fontPx * faceAscent(family, weight),
+            fontPx, family, weight,
+          });
+        }
         firstLineOfParagraph = false;
         usedWidth += p.width;
         if (p.hardOverset) {
@@ -1878,6 +1964,10 @@ function pourBody(bodyInput, {
     lines,
     overset,
     violations,
+    // Where each item's marker is hung. Drawn like the drop cap - beside the
+    // copy, never inside it - so nothing here can move a line or shift an
+    // offset.
+    listMarkers,
     // Where the initial letter goes and how big it is. Drawn by render.js
     // rather than composed as a line: it is one glyph in its own box, not a
     // flow, and nothing follows it that needs a baseline from it.
@@ -2206,6 +2296,7 @@ export function composeBlock(input = {}) {
     bands: {},
     bodyLines: [],
     dropCap: null,
+    listMarkers: [],
     columns: [],
     typography: { bodyPx, lineHeight, family: bodyFamily, weight: bodyWeight, italic: bodyItalic, underline: bodyUnderline },
     violations,
@@ -2473,7 +2564,10 @@ export function composeBlock(input = {}) {
     // change: 0 is "no drop cap" and is what every existing block carries.
     dropCapLines: Math.max(0, num(input.dropCapLines, 0)),
     dropCapChars: Math.max(1, num(input.dropCapChars, 1)),
+    // 'none' unless the block asks, so no stored row's composition changes.
+    listStyle: String(input.listStyle || 'none'),
   };
+  const setsList = pourOptions.listStyle === 'bullet' || pourOptions.listStyle === 'number';
 
   // ------------------------------------------------ the paragraph policy ---
   //
@@ -2496,7 +2590,15 @@ export function composeBlock(input = {}) {
   let body = pourBody(bodyInput, pourOptions);
   const bodyPlainText = typeof bodyInput === 'object' ? bodyInput.text : bodyInput;
   let paragraphPlan = null;
-  if (mayNeedPolicy(bodyPlainText, body.paragraphStarts, body.paragraphDepths)) {
+  // A LIST IS NOT PROSE, so the paragraph policy stands down for one.
+  //
+  // The policy merges a paragraph too shallow to stand alone and splits one
+  // that runs away, and both are right for running copy - a one-line paragraph
+  // is a caption with an indent in front of it. An item of a list is a
+  // one-line paragraph ON PURPOSE, and it is numbered: merging two items would
+  // silently print three undertakings as two, and splitting one would print
+  // four where the reporter wrote three. The desk's own breaks are the list.
+  if (!setsList && mayNeedPolicy(bodyPlainText, body.paragraphStarts, body.paragraphDepths)) {
     paragraphPlan = planParagraphs({
       text: bodyPlainText,
       starts: body.paragraphStarts,
@@ -2545,6 +2647,7 @@ export function composeBlock(input = {}) {
 
   result.bodyLines = body.lines;
   result.dropCap = body.dropCap || null;
+  result.listMarkers = body.listMarkers || [];
   // What the compositor did with the author's breaks. Authored is what the
   // reporter typed; set is what this block's own measure can carry.
   result.typography.paragraphs = {
@@ -2609,6 +2712,18 @@ export function composeBlock(input = {}) {
         const shift = shiftOf.get(Number(line.y.toFixed(3))) || 0;
         line.y += shift;
         line.baseline += shift;
+      }
+      // AND EVERYTHING HUNG BESIDE A LINE MOVES WITH IT. A list marker sits on
+      // its item's first line and is not IN `body.lines`, so opening the
+      // leading left the copy stepping down the column while the markers
+      // stayed where they were poured - measured on a three-item list, item
+      // two's number ended 2.4 px above its own first line and item three's
+      // 4.8 px above. Found by printing the two sets of y values side by side,
+      // which is the only way a drift this small shows up.
+      for (const marker of body.listMarkers || []) {
+        const shift = shiftOf.get(Number(marker.y.toFixed(3))) || 0;
+        marker.y += shift;
+        marker.baseline += shift;
       }
     }
   }

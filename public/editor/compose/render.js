@@ -225,6 +225,19 @@ export function composedMarkup(composition, view, { datelinePrefix = '' } = {}) 
     );
   }
 
+  // A list's markers, hung beside the copy. Emitted with the drop cap and for
+  // the same reason: each is one short piece of furniture in its own box, not
+  // a flow, and neither is in the body text - so neither can move a line or
+  // shift a `line.at` a sub-editor's marks are held against.
+  for (const marker of composition.listMarkers || []) {
+    pieces.push(
+      `<span class="section-composed section-list-marker" style="left:${marker.x.toFixed(2)}px;`
+      + `top:${marker.y.toFixed(2)}px;width:${marker.width.toFixed(2)}px;`
+      + `height:${marker.height.toFixed(2)}px;font-size:${marker.fontPx}px;`
+      + `line-height:${marker.height.toFixed(2)}px;${faceStyle(marker)}">${escapeHtml(marker.text)}</span>`,
+    );
+  }
+
   for (const line of composition.bodyLines) {
     const html = lineHtml(line, { marks, semantic, offset: datelinePrefix.length });
     // The dateline opens the body rather than sitting apart from it, so it is

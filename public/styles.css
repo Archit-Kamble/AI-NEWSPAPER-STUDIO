@@ -5788,17 +5788,34 @@ body.print-view .page-imprint {
      showMenu() already subtracted `bar.scrollLeft` when placing a menu, which
      only means anything on a bar that scrolls; the bar simply had few enough
      buttons to never reach the edge. */
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: thin;
+  /* AND THE SCROLLING HAPPENS ON THE RAIL INSIDE IT, NOT HERE.
+     Putting `overflow-x: auto` on the bar itself clipped `#edDeviceMenu`,
+     which is a child of the bar and opens DOWNWARDS out of it - so every
+     menu device (Border, Tint, Columns, the two faces, Drop cap, Insert,
+     Separator, Chart) drew its menu into a hidden region and read, to a desk,
+     as a dead button. That is precisely the fault this bar was built to
+     remove, reintroduced by the fix for a different one.
+     The net did not catch it because it counted `[data-device-choice]`
+     elements, which exist whether or not anything is visible. It measures the
+     menu's rectangle now. */
   align-items: center;
-  gap: 2px;
   padding: 4px 6px;
   border: 1px solid var(--line, #d0d0d6);
   border-bottom: none;
   border-radius: 4px 4px 0 0;
   background: var(--surface, #fafafa);
+}
+/* The buttons, and the only thing that scrolls. */
+.device-bar-rail {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
 }
 .dev-group {
   display: inline-flex;
@@ -5895,6 +5912,20 @@ body.print-view .page-imprint {
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
+/* The letter beside a display size: lit when the desk's number is being
+   honoured exactly, unlit when the compositor is fitting the band. */
+.dev-size-lock {
+  border: 0;
+  background: none;
+  padding: 0 3px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #9a9aa2;
+  cursor: pointer;
+  line-height: 1;
+}
+.dev-size-lock.is-on { color: #111; }
+.dev-size output.is-fitted { color: #77777e; font-style: italic; }
 .dev-size-step {
   width: 17px;
   height: 20px;

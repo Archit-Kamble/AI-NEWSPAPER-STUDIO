@@ -73,6 +73,11 @@ export const DRAFT_FIELDS = [
   // printed, and the only way to say no was to clear the location itself -
   // which also loses it from the story's own record.
   "showDateline",
+  // Does the desk's chosen headline / deck size WIN over the compositor's own
+  // fit? See schema.sql: the fit is what makes a page look composed, and it is
+  // also why a size a desk typed could appear to do nothing.
+  "headlineLocked",
+  "subheadingLocked",
   // Block decoration. These persist on the row, so they have to travel with the
   // draft as well - a template that boxes the advert slot would otherwise have
   // its box wiped by the first save of that block.
@@ -167,6 +172,8 @@ export function draftFromSection(section) {
     // TRUE for every row that predates the column, which is what they all do
     // today - so nothing composes differently until a desk turns one off.
     showDateline: section.show_dateline !== false,
+    headlineLocked: section.headline_locked === true,
+    subheadingLocked: section.subheading_locked === true,
     borderStyle: section.border_style || "none",
     borderWidthPx: Number(section.border_width_px) || 1,
     borderColor: section.border_color || "#111111",
@@ -281,6 +288,8 @@ export function payloadFromDraft(draft) {
     // exactly as it was.
     insetPanels: Array.isArray(draft.insetPanels) ? draft.insetPanels : [],
     showDateline: draft.showDateline !== false,
+    headlineLocked: draft.headlineLocked === true,
+    subheadingLocked: draft.subheadingLocked === true,
     borderStyle: draft.borderStyle,
     borderWidthPx: draft.borderWidthPx,
     borderColor: draft.borderColor,

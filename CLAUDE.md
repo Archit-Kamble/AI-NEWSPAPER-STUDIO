@@ -2241,6 +2241,71 @@ push a group onto a second row and move the whole editor under the cursor.
 anything on a bar that scrolls; it had simply never had enough buttons to
 reach the edge.
 
+### Justification is TWO NUMBERS ON THE LINE, and every writer must read them
+
+`compose.js` justifies with two levers (`justifyLine`): extra space at each
+word gap, and up to 3% of horizontal glyph stretch for the remainder. They come
+out on the composed line as `wordSpacingPx` and `glyphScaleX`.
+
+**`render.js` applied both and nothing else did.** So the canvas was justified
+and the press PDF, the IDML and Scribus all set the same copy flush left.
+Measured on one real block: 4 px of variation in the right edge on screen,
+**111 px** on the plate. That is the two-surface fault this codebase guards
+hardest against, sitting on the single most visible property of newspaper body
+copy, and it survived a `46/46` browser net because the net never rendered a
+plate.
+
+- **In the PDF the word space is a POSITION, not `Tw`.** PDF's word-spacing
+  operator applies only to single-byte code 32, and these fonts are CID-keyed
+  `/Identity-H`, where it does nothing at all. `drawRun()` already places every
+  glyph at its own x, so the space is folded into that x.
+- **The stretch is `Tz`**, which scales the glyph's outline as well as its
+  advance — the right lever for Devanagari, where the shirorekha must stretch
+  *with* the letter. A `TJ` displacement is itself scaled by `Tz`, so the number
+  written has to be divided by it, and `Tz` must be set back to 100 at the end
+  of the block because the text state survives `ET`.
+- **Negative is legal.** A line the breaker set TIGHT carries a negative word
+  space and a scale below 1. A writer that handles only the expanding case
+  draws those lines overhanging their column.
+- **In IDML it is `Justification="FullyJustified"`**, not our numbers: one
+  composed line is one story in one frame whose width *is* the measure, so
+  InDesign reaches the same result with rules a designer can still adjust.
+  `FullyJustified` and not `LeftJustified` because every line here is the last
+  line of its own one-line paragraph.
+
+### A line's badness includes how hard it has to be stretched
+
+`slackCost()` charged for slack against the *measure*, which says how much
+space there is to absorb and nothing about whether absorbing it will look like
+anything. 17 px across eight word gaps is invisible; the same 17 px across two
+opens both gaps to three times a normal word space.
+
+Measured across 1751 justified lines of two real editions: **28.2% were at the
+0.55 em word-space cap while 18.2% needed no extra space at all.** The solver
+had no reason to even that out — both are closable, and `(slack/measure)^3` for
+a closable line is on the order of 0.002.
+
+`STRAIN_WEIGHT` (0.12) charges cubed for the fraction of a line's own closing
+budget it spends. The sweep is in the code beside the constant; 0.12 is the
+knee, and the count of *visibly* short lines (more than 4% short) is 130 at
+every weight tried, so it costs a reader nothing.
+
+### A display size is a REQUEST until the desk locks it
+
+`fitDisplayFlow()` shrinks a headline that will not set in its band and grows
+one that leaves its measure short. So `headline_font_px` is what was asked for,
+not what prints — and a desk that typed 34 and saw 27 had a control that
+appeared to do nothing.
+
+`headline_locked` / `subheading_locked` make the desk's number win.
+`section-adapter.js` had always read those two columns and `fitDisplayFlow()`
+had always had the `locked` branch; **the columns did not exist**, so the
+branch was unreachable and the lock was a mechanism nobody could switch on.
+
+The bar's read-out shows the size the page is **set in** — light and italic
+when the compositor is fitting, bold when the desk's number is held — and
+stepping locks, because a desk reaching for the size is asking for that size.
+
 ### Column rules are asked for, not assumed
 
 `columnRulesFor()` draws nothing unless `newspapers.column_rules` is on, and it

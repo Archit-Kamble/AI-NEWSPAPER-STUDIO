@@ -88,6 +88,21 @@ const say = (ok, name, detail = '') => {
     await press('border');
     say(await page.locator('#edDeviceMenu [data-device-choice]').count() > 0,
       'a menu opens on the first press - not on the second', '');
+
+    // AND IT CAN BE SEEN. Counting the choices was all this used to do, and a
+    // menu's buttons exist whether or not anything is visible: putting
+    // `overflow-x: auto` on the bar - to stop it wrapping - clipped the menu,
+    // which is a child of the bar and opens downwards out of it. Every menu
+    // device drew into a hidden region and read as a dead button, and this net
+    // reported 46/46. A rectangle is the question worth asking.
+    const menuBox = await page.locator('#edDeviceMenu').boundingBox();
+    const barBox = await page.locator('#edDeviceBar').boundingBox();
+    say(Boolean(menuBox) && menuBox.height > 8 && menuBox.width > 8,
+      'and it is actually on screen, not clipped away by the bar it hangs from',
+      menuBox ? `${Math.round(menuBox.width)}x${Math.round(menuBox.height)}` : 'no box');
+    say(Boolean(menuBox) && Boolean(barBox) && menuBox.y + menuBox.height > barBox.y + barBox.height,
+      'and it hangs BELOW the bar, where a dropdown belongs',
+      menuBox && barBox ? `menu ends ${Math.round(menuBox.y + menuBox.height)}, bar ends ${Math.round(barBox.y + barBox.height)}` : '-');
     await choose('box');
     say(await isOn('border'), 'Border → Box turns the button on');
     say(await page.evaluate((k) => {
@@ -227,6 +242,32 @@ const say = (ok, name, detail = '') => {
       say(await sizeOf(field) === before, `and back down again`, String(before));
     }
 
+    // A DISPLAY SIZE IS A REQUEST UNTIL IT IS LOCKED, and the read-out says
+    // which. The desk's report was "if we increase/decrease headline size it
+    // is not reflecting in editor" - true, because the compositor fits display
+    // type and the stored number is what was ASKED for.
+    const headlineDrawnPx = async () => page.evaluate((k) => {
+      const b = document.querySelector(`.newspaper-section[data-section-key="${k}"]`);
+      const line = b && b.querySelector('.section-headline-line, .section-display-line, [class*="headline"]');
+      return line ? Math.round(parseFloat(getComputedStyle(line).fontSize)) : null;
+    }, KEY);
+    const before = await headlineDrawnPx();
+    // Three steps up, each of which locks - so the last one is honoured exactly.
+    for (let i = 0; i < 3; i += 1) {
+      await page.locator('#edDeviceBar [data-size-field="headlineFontPx"] [data-size-step="up"]').click();
+      await page.waitForTimeout(1400);
+    }
+    const after = await headlineDrawnPx();
+    say(before === null || after === null || after > before,
+      'stepping the headline size changes the type ON THE PAGE, not just the number',
+      `${before} → ${after}`);
+    say(await page.locator('#edDeviceBar [data-size-lock="headlineLocked"].is-on').count() === 1,
+      'and the size is held, because a desk reaching for it is asking for it');
+    await page.locator('#edDeviceBar [data-size-lock="headlineLocked"]').click();
+    await page.waitForTimeout(1600);
+    say(await page.locator('#edDeviceBar [data-size-lock="headlineLocked"].is-on').count() === 0,
+      'pressing the letter hands the size back to the compositor');
+
     // ---- justify, and the dateline ------------------------------------------
     // These two repaint the whole page rather than one attribute, so they are
     // given the same settling time the menu choices are - measured at 400ms the
@@ -301,6 +342,7 @@ const say = (ok, name, detail = '') => {
             // is how a later run of this very net came to start from a
             // justified block and read its own toggle backwards.
             textAlign: row.text_align, showDateline: row.show_dateline !== false,
+            headlineLocked: row.headline_locked === true, subheadingLocked: row.subheading_locked === true,
             location: row.location || '', reporterName: row.reporter_name || '',
             headlineFontPx: row.headline_font_px, subheadingFontPx: row.subheading_font_px,
             bodyFontPx: row.body_font_px,

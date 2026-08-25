@@ -272,8 +272,46 @@ function drawFallback(out, { text, sizePt, x, baselineY, ink, fontName, width })
     `<${Buffer.from(bytes).toString('hex')}> Tj`, 'ET', 'EMC');
 }
 
-function drawRun(out, { glyphs, sizePt, fontName, x, baselineY, ink, advanceOf, text, fallbackName }) {
+/**
+ * `scaleX` and `wordSpacePt` are how a JUSTIFIED line reaches its measure.
+ *
+ * compose.js justifies with two levers and this writer read neither, so every
+ * page it produced set its body copy flush left while the canvas - which does
+ * read them - set it justified. Measured on one real block: 4 px of variation
+ * across nine lines on screen, 111 px on the plate.
+ *
+ * The word space is added to the POSITION of every glyph after each space, not
+ * with `Tw`: PDF's word-spacing operator applies only to single-byte code 32,
+ * and these fonts are CID-keyed /Identity-H, where it does nothing at all.
+ * Positioning is what this function already does for every glyph, so the space
+ * simply becomes part of the x it was going to compute anyway.
+ *
+ * The glyph stretch is `Tz`, which scales the glyph's own outline as well as
+ * its advance - the right lever for Devanagari, where the shirorekha has to
+ * stretch WITH the letter. Letter-spacing, which a Latin compositor would
+ * reach for next, pulls the head stroke apart and is why compose.js does not
+ * use it either.
+ */
+function drawRun(out, { glyphs, sizePt, fontName, x, baselineY, ink, advanceOf, text, fallbackName,
+  scaleX = 1, wordSpacePt = 0, spacesBefore = 0 }) {
   if (!glyphs.length) return;
+  const stretched = Number.isFinite(scaleX) && Math.abs(scaleX - 1) > 0.0005 ? scaleX : 1;
+  const space = Number.isFinite(wordSpacePt) ? wordSpacePt : 0;
+  // How many word gaps stand before each character of this run - counted once,
+  // because a glyph is looked up by its cluster and clusters do not run in
+  // order for Devanagari.
+  const source = String(text || '');
+  const gapsAt = new Array(source.length + 1).fill(0);
+  if (space) {
+    let seen = spacesBefore;
+    for (let i = 0; i < source.length; i += 1) {
+      gapsAt[i] = seen;
+      if (/\s/.test(source[i])) seen += 1;
+    }
+    gapsAt[source.length] = seen;
+  }
+  const placeOf = (glyph) => x + glyph.x * stretched
+    + (space ? gapsAt[Math.min(glyph.cluster, source.length)] * space : 0);
   // WHAT THIS RUN ACTUALLY SAYS. The glyphs below print correctly and cannot
   // be read back - Devanagari shaping is many-to-many, so no per-glyph table
   // can undo it. /ActualText is the operator for exactly this: it tells a
@@ -295,6 +333,10 @@ function drawRun(out, { glyphs, sizePt, fontName, x, baselineY, ink, advanceOf, 
   const begin = () => {
     if (open) return;
     out.push('BT', fill(ink), `/${fontName} ${round(sizePt)} Tf`);
+    // Horizontal scaling is a text-state parameter, so it is set once per
+    // block and restored when the block closes (ET resets nothing, so it is
+    // set back explicitly below).
+    if (stretched !== 1) out.push(`${round(stretched * 100)} Tz`);
     open = true;
     pen = null;
   };
@@ -306,6 +348,9 @@ function drawRun(out, { glyphs, sizePt, fontName, x, baselineY, ink, advanceOf, 
   const end = () => {
     if (!open) return;
     flush();
+    // Back to 100%, or every later run on the page inherits this line's
+    // stretch - the text state survives ET.
+    if (stretched !== 1) out.push('100 Tz');
     out.push('ET');
     open = false;
   };
@@ -356,14 +401,14 @@ function drawRun(out, { glyphs, sizePt, fontName, x, baselineY, ink, advanceOf, 
       end();
       drawFallback(out, {
         text: String(text || '').slice(glyph.cluster, after ? after.cluster : undefined),
-        sizePt, x: x + glyph.x, baselineY, ink, fontName: fallbackName,
-        width: (after ? after.x : glyph.x + glyph.xAdvance) - glyph.x,
+        sizePt, x: placeOf(glyph), baselineY, ink, fontName: fallbackName,
+        width: ((after ? after.x : glyph.x + glyph.xAdvance) - glyph.x) * stretched,
       });
       index = last;
       continue;
     }
     begin();
-    const wantX = x + glyph.x;
+    const wantX = placeOf(glyph);
     const wantY = baselineY + (glyph.yOffset || 0);
     if (pen === null || penY !== wantY) {
       flush();
@@ -373,11 +418,13 @@ function drawRun(out, { glyphs, sizePt, fontName, x, baselineY, ink, advanceOf, 
     } else if (Math.abs(wantX - pen) > 0.001) {
       // TJ moves the pen backwards for a POSITIVE number, in thousandths of
       // the type size - the one place in PDF where the sign is inverted.
-      pending.push(round(((pen - wantX) / sizePt) * 1000));
+      // A TJ displacement is itself scaled by the horizontal scaling in force,
+      // so the number written has to be divided by it to land where intended.
+      pending.push(round(((pen - wantX) / (sizePt * stretched)) * 1000));
       pen = wantX;
     }
     pending.push(`<${glyph.glyphId.toString(16).padStart(4, '0')}>`);
-    pen += (advanceOf(glyph.glyphId) / 1000) * sizePt;
+    pen += (advanceOf(glyph.glyphId) / 1000) * sizePt * stretched;
   }
   end();
   if (text) out.push('EMC');
@@ -496,6 +543,7 @@ async function buildPdf(model, deps) {
       if (item.kind !== 'text') { items.push(item); continue; }
       const runs = [];
       let cursor = 0;
+      let gaps = 0;
       const widths = item.runs.map((run) => {
         const key = faceKey(run.family, run.weight);
         const result = shapeRun(run.text, { family: run.family, weight: run.weight, fontPx: run.sizePt });
@@ -517,7 +565,14 @@ async function buildPdf(model, deps) {
           const text = run.text.slice(glyph.cluster, next ? next.cluster : undefined);
           if (text) face.toUnicode.set(glyph.glyphId, text);
         }
-        runs.push({ run, key, glyphs: result.glyphs, width: result.width, offset: cursor });
+        runs.push({
+          run, key, glyphs: result.glyphs, width: result.width, offset: cursor,
+          // Word gaps are counted across the whole LINE, not the run: a
+          // justified line adds its space at every gap in it, and a run is
+          // only a stretch of one style within that line.
+          spacesBefore: gaps,
+        });
+        gaps += (String(run.text || '').match(/\s/gu) || []).length;
         cursor += result.width;
         return result.width;
       });
@@ -623,23 +678,36 @@ async function buildPdf(model, deps) {
       const slack = mmToPt(item.width) - item.textWidth;
       const shift = item.align === 'center' ? slack / 2 : item.align === 'right' ? slack : 0;
       const baselineY = heightPt - mmToPt(item.baseline ?? (item.y + item.height * 0.8));
+      // How this line was justified, if it was. Both are the compositor's own
+      // numbers - nothing here decides how much a line stretches.
+      const scaleX = Number(item.glyphScaleX) || 1;
+      const wordSpacePt = item.wordSpacingMm ? mmToPt(item.wordSpacingMm) : 0;
       for (const piece of item.shapedRuns || []) {
         drawRun(out, {
           glyphs: piece.glyphs,
           sizePt: piece.run.sizePt,
           fontName: `F${fontIds.get(piece.key)}`,
-          x: mmToPt(item.x) + shift + piece.offset,
+          // A run's own offset within the line is stretched too, or the second
+          // run of a justified line starts where the first one used to end.
+          x: mmToPt(item.x) + shift + piece.offset * scaleX
+            + (wordSpacePt ? piece.spacesBefore * wordSpacePt : 0),
           baselineY,
           ink: cmykOf(piece.run.ink),
           advanceOf: advanceOf(piece.key),
           text: piece.run.text,
           fallbackName: `L${fallbackIds[piece.key.startsWith('sans') ? 'sans' : 'serif']}`,
+          scaleX,
+          wordSpacePt,
+          spacesBefore: piece.spacesBefore,
         });
         if (piece.run.underline && piece.width > 0) {
           const y = baselineY - piece.run.sizePt * 0.12;
+          const spaces = (String(piece.run.text || '').match(/\s/gu) || []).length;
           out.push('q', fill(cmykOf(piece.run.ink)),
-            `${round(mmToPt(item.x) + shift + piece.offset)} ${round(y)} `
-            + `${round(piece.width)} ${round(Math.max(0.4, piece.run.sizePt * 0.05))} re f`, 'Q');
+            `${round(mmToPt(item.x) + shift + piece.offset * scaleX
+              + (wordSpacePt ? piece.spacesBefore * wordSpacePt : 0))} ${round(y)} `
+            + `${round(piece.width * scaleX + spaces * wordSpacePt)} `
+            + `${round(Math.max(0.4, piece.run.sizePt * 0.05))} re f`, 'Q');
         }
       }
     }

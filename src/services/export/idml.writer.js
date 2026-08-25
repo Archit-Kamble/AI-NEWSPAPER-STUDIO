@@ -64,6 +64,27 @@ const id = (prefix) => `${prefix}${(uid += 1)}`;
 // points at it. ONE STORY PER COMPOSED LINE: the lines are already broken, and
 // a shared story is precisely what would let InDesign reflow them.
 
+/**
+ * HOW THIS LINE IS SET BETWEEN ITS MARGINS.
+ *
+ * A line the compositor justified carries the levers it used
+ * (`wordSpacingMm` / `glyphScaleX`, print-model.js). It is not those numbers
+ * that go into the IDML, though: one composed line is one story in one frame
+ * whose width IS the measure, so InDesign's own justification reaches the
+ * identical result and reaches it with the spacing rules a designer can then
+ * adjust. Writing our word spacing in as tracking would freeze it.
+ *
+ * `FullyJustified` and not `LeftJustified`, because every line here is the
+ * last line of its own one-line paragraph and `LeftJustified` leaves a last
+ * line flush left - which is exactly the ragged edge this is fixing. A line
+ * the compositor did NOT justify (a paragraph's real closing line) carries no
+ * levers and stays left, so the shape of the paragraph survives.
+ */
+function justificationOf(item) {
+  if (item.wordSpacingMm || item.glyphScaleX) return 'FullyJustified';
+  return ALIGN[item.align] || 'LeftAlign';
+}
+
 function storyXml(storyId, item) {
   const runs = item.runs.map((run) => {
     const [family, style] = FACE[faceKey(run.family, run.weight)];
@@ -83,7 +104,7 @@ function storyXml(storyId, item) {
     <StoryPreference OpticalMarginAlignment="false" OpticalMarginSize="12" FrameType="TextFrameType"
       StoryOrientation="Horizontal" StoryDirection="LeftToRightDirection"/>
     <ParagraphStyleRange AppliedParagraphStyle="ParagraphStyle/$ID/[No paragraph style]"
-      Justification="${ALIGN[item.align] || 'LeftAlign'}">${runs}</ParagraphStyleRange>
+      Justification="${justificationOf(item)}">${runs}</ParagraphStyleRange>
   </Story>
 </idPkg:Story>`;
 }

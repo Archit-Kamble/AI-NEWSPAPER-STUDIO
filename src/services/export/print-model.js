@@ -87,10 +87,33 @@ const textItem = (box, runs, align = 'left') => (runs.some((run) => run.text)
   ? { kind: 'text', ...box, align, runs: runs.filter((run) => run.text) }
   : null);
 
-/** The same box, carrying the compositor's own baseline for the line in it. */
-const lineItem = (box, baselineMm, runs, align = 'left') => {
+/**
+ * The same box, carrying the compositor's own baseline for the line in it -
+ * and, for a justified line, HOW IT WAS JUSTIFIED.
+ *
+ * THIS IS THE FIELD THE EXPORTS DID NOT CARRY, and it is the most visible
+ * property of newspaper body copy. compose.js justifies a line by two levers
+ * (justifyLine): extra space at each word gap, and up to 3% of horizontal
+ * glyph stretch for the remainder. `render.js` applies both, so the CANVAS was
+ * justified - measured, 4 px of variation across nine lines. Nothing else read
+ * them, so the press PDF, the IDML and Scribus all set the same copy FLUSH
+ * LEFT: on the same block, 111 px of ragged right edge on a 510 px measure.
+ *
+ * Two surfaces, opposite renderings, on the one thing a reader notices first.
+ *
+ * In MILLIMETRES like every other geometry in this model, so a writer never
+ * has to know what an editor pixel is.
+ */
+const lineItem = (box, baselineMm, runs, align = 'left', justify = null) => {
   const item = textItem(box, runs, align);
-  if (item) item.baseline = baselineMm;
+  if (!item) return item;
+  item.baseline = baselineMm;
+  // Only when there is something to say. A flush-left line carries neither
+  // field, so nothing about an unjustified block's output changes.
+  if (justify) {
+    if (justify.wordSpacingPx) item.wordSpacingMm = mm(justify.wordSpacingPx);
+    if (justify.glyphScaleX && justify.glyphScaleX !== 1) item.glyphScaleX = justify.glyphScaleX;
+  }
   return item;
 };
 
@@ -208,7 +231,7 @@ async function blockItems(section, { mono = false } = {}) {
         // actually drawn there. A one-word headline wider than the measure is
         // set anyway and spills, so the frame must be at least as wide.
         width: mm(Math.max(line.width || 0, line.measure)), height: mm(line.height),
-      }, y0 + mm(line.baseline), runs));
+      }, y0 + mm(line.baseline), runs, 'left', line));
     });
   }
 
@@ -242,7 +265,7 @@ async function blockItems(section, { mono = false } = {}) {
       items.push(lineItem({
         x: x0 + mm(line.x), y: y0 + mm(line.y),
         width: mm(Math.max(line.width || 0, line.measure) + 1), height: mm(line.height),
-      }, y0 + mm(line.baseline), runs));
+      }, y0 + mm(line.baseline), runs, 'left', line));
     }
   }
 

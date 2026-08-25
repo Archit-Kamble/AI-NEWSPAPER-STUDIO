@@ -769,3 +769,21 @@ ALTER TABLE newspapers ADD COLUMN IF NOT EXISTS column_rules BOOLEAN NOT NULL DE
 -- short of clearing the location itself - which also loses it from the story's
 -- own record. TRUE is what every existing row already does.
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS show_dateline BOOLEAN NOT NULL DEFAULT TRUE;
+
+-- DOES THE DESK'S CHOSEN DISPLAY SIZE WIN?
+--
+-- compose.js fits display type: it shrinks a headline that will not set in its
+-- band and grows one that leaves its measure short, which is what makes a page
+-- look composed rather than typed. The consequence is that `headline_font_px`
+-- is a REQUEST, and a desk that set 34 and saw 27 on the page had a control
+-- that appeared to do nothing - the report was "if we increase/decrease
+-- headline size it is not reflecting in editor".
+--
+-- fitDisplayFlow() has always had a `locked` branch that honours the requested
+-- size exactly, and section-adapter.js has always read these two columns for
+-- it. The columns did not exist, so the branch was unreachable and the lock
+-- was a mechanism nobody could switch on.
+--
+-- FALSE for every existing row, so no stored block composes differently.
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS headline_locked BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS subheading_locked BOOLEAN NOT NULL DEFAULT FALSE;

@@ -724,7 +724,9 @@ function layoutTextFrames() {
   refreshSizeButtons();
   // The device bar is drawn from the same live view, so the bar and the
   // settings rail can never disagree about what is on.
-  refreshDeviceBar(state.view);
+  // The COMPOSITION as well as the view: the two display sizes on the bar
+  // report what the page is set in, which is not always what was asked for.
+  refreshDeviceBar(state.view, composition);
 
   const editor = document.querySelector("#edWritingSurface .ql-editor");
   if (editor) {

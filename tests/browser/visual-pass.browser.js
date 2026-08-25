@@ -270,7 +270,32 @@ const say = (ok, what, detail = '') => {
   }
 
   // ---- a panel inside the block, and the copy running round it -----------
+  //
+  // PLACED BY THIS NET, for the same reason the chart above is. It used to
+  // read whatever panel happened to be on the block, which meant it passed
+  // only while some earlier run had left one there - and reported "none
+  // placed" the moment the edition was tidied. That is the ambient-state
+  // dependency this file's own comment forty lines up warns about, repeated
+  // here.
   const panelBlock = 'anchor';
+  await page.evaluate(async ([ed, key]) => {
+    const pages = await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json());
+    const pg = pages.find((p) => p.sections.some((s) => s.section_key === key));
+    const s = pg.sections.find((x) => x.section_key === key);
+    await fetch(`/api/pages/${pg.id}/sections/${key}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        headline: s.headline || '', subheading: s.subheading || '', body: s.body || '',
+        insetPanels: [{
+          id: 'visual-pass-panel', kind: 'note',
+          x: Math.round(Number(s.width_px) * 0.5), y: Math.round(Number(s.height_px) * 0.35),
+          width: Math.round(Number(s.width_px) * 0.45), height: Math.round(Number(s.height_px) * 0.22),
+          title: 'ठळक मुद्दे', lines: ['पाणीपुरवठा ९२% पूर्ण', 'मंजूर निधी ४.२ कोटी'],
+        }],
+      }),
+    });
+  }, [ED, panelBlock]).catch(() => {});
+  await openEdition();
   await page.locator(`.newspaper-section[data-section-key="${panelBlock}"]`).first().click();
   await page.waitForTimeout(2200);
   const drawn = await page.evaluate((key) => {

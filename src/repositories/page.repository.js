@@ -450,6 +450,8 @@ async function saveSection(pageId, sectionKey, updates) {
          -- does not mention the dateline leaves it exactly as it was. The
          -- editor sends a real boolean whenever it sends anything at all.
          show_dateline = COALESCE($52, show_dateline),
+         headline_locked = COALESCE($53, headline_locked),
+         subheading_locked = COALESCE($54, subheading_locked),
          updated_at = CURRENT_TIMESTAMP
      WHERE page_id = $1 AND section_key = $2 RETURNING *`,
     [pageId, sectionKey, updates.newsItemId || null, updates.headline || null, updates.headlineFontPx || null,
@@ -493,7 +495,9 @@ async function saveSection(pageId, sectionKey, updates) {
       updates.backgroundColor || null,
       updates.insetPanels === undefined ? null : JSON.stringify(updates.insetPanels),
       updates.displayFamily || null,
-      typeof updates.showDateline === 'boolean' ? updates.showDateline : null]
+      typeof updates.showDateline === 'boolean' ? updates.showDateline : null,
+      typeof updates.headlineLocked === 'boolean' ? updates.headlineLocked : null,
+      typeof updates.subheadingLocked === 'boolean' ? updates.subheadingLocked : null]
   );
   return rows[0] || null;
 }

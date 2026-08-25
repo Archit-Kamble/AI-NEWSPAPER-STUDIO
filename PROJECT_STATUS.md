@@ -6711,3 +6711,84 @@ dateline; the column-rules switch moves the rule count as quoted above.
   already does that job with real runaround.
 - The AI picture generator's success path is still unverified: this newsroom's
   Gemini key has no image quota.
+
+
+## The four corrections after the eleven — and one of them was mine
+
+The desk pressed the buttons again. One of these was a fault I introduced in
+the previous pass; two were faults the previous pass could not have found
+because no net renders a plate; one is a typographic tuning question that
+turned out to be measurable.
+
+### 3 · "Border, Tint, Columns, Serif, Sans, Drop cap, Insert, Separator, Chart … which was working earlier is not working now" — mine
+
+Fixing the device bar's *wrapping* (which moved the editor under a desk's
+cursor) meant giving it `overflow-x: auto`. `#edDeviceMenu` is a **child of the
+bar** and opens downwards out of it, so every menu drew into a clipped region.
+Nine devices read as dead buttons.
+
+That is precisely the fault the bar was built to remove, reintroduced by the
+fix for a different one. The buttons now live in an inner rail that scrolls;
+the menu is a sibling of the rail, so it can open out of the bar.
+
+**The net reported 46/46 while this was broken**, because it counted
+`[data-device-choice]` elements — which exist whether or not anything is
+visible. It measures the menu's rectangle now, and that it hangs below the bar.
+
+### 1 · Justification never reached the plate
+
+`compose.js` justifies with two levers and `render.js` was the only reader.
+Measured on the block the desk named: the canvas set nine lines with **4 px** of
+variation in the right edge; the press PDF set the same nine with **111 px**.
+Screen justified, plate flush left.
+
+Both levers now travel on the line (`wordSpacingMm`, `glyphScaleX`) and all
+three writers read them. Re-measured after the fix: **15 px**, and the one line
+still short is the one the compositor itself records as 3 px short with both
+levers at their caps.
+
+### 4 · "If we increase only one character/word in body whole line's margin get impacted"
+
+Real, and measurable. Across 1751 justified lines of two real editions,
+**28.2% were at the 0.55 em word-space cap while 18.2% needed no extra space at
+all** — so editing one word could move a line between those extremes.
+
+`slackCost()` charged for slack against the measure, which says nothing about
+how hard the line has to be stretched to close it. A strain term fixes that:
+
+| STRAIN_WEIGHT | at the cap | needing none | visibly short (>4%) |
+|---|---|---|---|
+| 0 | 28.2% | 18.2% | 7.4% |
+| 0.05 | 22.7% | 22.0% | 7.4% |
+| **0.12** | **20.3%** | **23.6%** | **7.4%** |
+| 0.25 | 20.0% | 25.4% | 7.4% |
+
+0.12 is the knee. The important column is the last one: the extra "short" lines
+a higher weight produces are all **under 1% short**, which on a 130 px measure
+is a rounding error and not a notch — 130, 129, 130, 130 lines across the sweep.
+
+This does not make the spacing uniform, and it cannot: the balancer reassigns
+pieces across a **fixed** slot count and may not add a line. Evening it out
+further needs the breaker to be able to change how deep a paragraph sets, which
+is a larger change than this.
+
+### 2 · "If we increase/decrease headline size it is not reflecting"
+
+`fitDisplayFlow()` fits display type — it shrinks a headline that will not set
+and grows one that leaves its measure short. So the stored size is a request.
+
+The fix was already three-quarters built: `fitDisplayFlow()` has always had a
+`locked` branch, and `section-adapter.js` has always read `headline_locked` /
+`subheading_locked`. **The columns did not exist**, so the branch was
+unreachable. They exist now, the bar's read-out shows the size the page is
+actually set in, and stepping locks.
+
+### Verified
+
+`npm test` 934/934, including four new regressions: the levers reach the model,
+a flush-left block still carries none, a locked size is the size that is set,
+and no line exceeds the word-space cap.
+
+Measured on the plate by rasterising the press PDF and reading the ink extents
+of every line, which is the only check that could have caught the justification
+fault at all.

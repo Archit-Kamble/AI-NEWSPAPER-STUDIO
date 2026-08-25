@@ -124,9 +124,27 @@ const hasOrnament = (view) => Array.isArray(view?.insetPanels)
 // at it. Half a point at a time on the body (the columns are NUMERIC(5,1) - a
 // printer sets type in half points) and a whole point on display type, which
 // is the granularity each is actually set in.
+//
+// AND THE TWO DISPLAY SIZES ARE A REQUEST UNTIL A DESK LOCKS THEM.
+//
+// compose.js FITS display type - it shrinks a headline that will not set in
+// its band and grows one that leaves its measure short, which is most of what
+// makes a page look composed. So a desk that typed 34 and saw 27 on the page
+// had a control that appeared to do nothing: the report was "if we
+// increase/decrease headline size it is not reflecting in editor".
+//
+// Both readings are right, so the control says which is in force. The read-out
+// shows what the page IS SET IN, not what was asked for - an auto-fitted size
+// in light type, a locked one in bold - and pressing a step locks it, because
+// a desk reaching for the size is asking for that size. The letter beside it
+// unlocks again and hands the decision back to the compositor.
 const SIZE_FIELDS = Object.freeze([
-  { field: "headlineFontPx", label: "Headline", short: "H", step: 1, min: 8, max: 140 },
-  { field: "subheadingFontPx", label: "Deck", short: "D", step: 1, min: 8, max: 90 },
+  { field: "headlineFontPx", label: "Headline", short: "H", step: 1, min: 8, max: 140,
+    lock: "headlineLocked", band: "headline" },
+  { field: "subheadingFontPx", label: "Deck", short: "D", step: 1, min: 8, max: 90,
+    lock: "subheadingLocked", band: "deck" },
+  // The body is never auto-fitted - it is the measure everything else is
+  // reserved against - so it has nothing to lock.
   { field: "bodyFontPx", label: "Body", short: "B", step: 0.5, min: 6, max: 48 },
 ]);
 
@@ -147,6 +165,10 @@ const button = (id, icon, label, title, { wide = false } = {}) => `<button type=
 export function deviceBarMarkup() {
   return `
     <div class="device-bar" id="edDeviceBar" role="toolbar" aria-label="Newspaper devices">
+      <!-- The buttons live in a RAIL that scrolls; the menu below is a sibling
+           of the rail, not a child of it, so it can open out of the bar. A
+           menu inside the scroller is a menu nobody can see. -->
+      <span class="device-bar-rail" id="edDeviceRail">
       <span class="dev-group">
         ${button("border", "▣", "Border", "How this block is ruled — none, a box, a rule above or below")}
         ${button("ground", "▤", "Tint", "A light ground behind the whole block, from the paper's own palette")}
@@ -156,7 +178,10 @@ export function deviceBarMarkup() {
            desk changing a headline is looking at the headline. -->
       <span class="dev-group dev-sizes">
         ${SIZE_FIELDS.map((f) => `<span class="dev-size" data-size-field="${f.field}">
-          <b title="${escapeHtml(f.label)} size">${f.short}</b>
+          ${f.lock
+            ? `<button type="button" class="dev-size-lock" data-size-lock="${f.lock}"
+                 title="${escapeHtml(f.label)} size — press to hand the size back to the compositor, or to hold the one you chose">${f.short}</button>`
+            : `<b title="${escapeHtml(f.label)} size">${f.short}</b>`}
           <button type="button" class="dev-size-step" data-size-step="down" aria-label="${escapeHtml(f.label)} smaller">−</button>
           <output data-size-out="${f.field}">—</output>
           <button type="button" class="dev-size-step" data-size-step="up" aria-label="${escapeHtml(f.label)} bigger">+</button>
@@ -179,6 +204,7 @@ export function deviceBarMarkup() {
       <span class="dev-group">
         ${button("caption", "❝", "Caption", "Write the line under the picture")}
         ${button("ai-picture", "✦", "AI picture", "Ask the AI for a picture — it proposes, you place it")}
+      </span>
       </span>
       <span class="dev-menu" id="edDeviceMenu" hidden></span>
     </div>`;
@@ -207,8 +233,10 @@ function showMenu(device, anchor, current, view) {
   // Positioned against the BAR, not the page: the bar is re-rendered on every
   // block change and an absolutely-positioned menu measured off the document
   // would be left behind by the next repaint.
-  const bar = anchor.closest(".device-bar");
-  host.style.left = `${anchor.offsetLeft - (bar ? bar.scrollLeft : 0)}px`;
+  // The RAIL is what scrolls now, so it is the rail's scroll position that
+  // decides where a button actually is on screen.
+  const rail = anchor.closest(".device-bar-rail");
+  host.style.left = `${anchor.offsetLeft - (rail ? rail.scrollLeft : 0)}px`;
   openMenu = device;
 }
 
@@ -284,21 +312,37 @@ export function bindDeviceBar(handlers) {
     // A SIZE STEPPER. Not a menu and not a toggle - it is pressed repeatedly,
     // so it must not close and reopen anything, and the read-out beside it has
     // to move on every press or the desk cannot tell it worked.
+    const lockBtn = target.closest("[data-size-lock]");
+    if (lockBtn) {
+      const view = live?.getView?.() || {};
+      const key = lockBtn.dataset.sizeLock;
+      patch({ [key]: !view[key] });
+      return;
+    }
+
     const step = target.closest("[data-size-step]");
     if (step) {
       const field = step.closest("[data-size-field]")?.dataset.sizeField;
       const spec = SIZE_FIELDS.find((f) => f.field === field);
       if (!spec) return;
       const view = live?.getView?.() || {};
-      const now = Number(view[field]);
+      // WHAT THE PAGE IS ACTUALLY SET IN is what a step moves from. Stepping
+      // up from the stored 34 on a block the compositor is setting at 27 would
+      // ask for 35 and change nothing a desk could see - twice.
+      const from = spec.lock && !view[spec.lock] ? resolvedOf(spec) : null;
+      const now = Number.isFinite(from) && from > 0 ? from : Number(view[field]);
       const base = Number.isFinite(now) && now > 0 ? now : spec.min;
       const next = step.dataset.sizeStep === "up" ? base + spec.step : base - spec.step;
       // The columns are NUMERIC(5,1) and arrive over the wire as strings; a
       // float that has drifted through a few halvings would store as 12.30000001
       // and read back as something a desk never chose.
       const clamped = Math.round(Math.min(spec.max, Math.max(spec.min, next)) * 10) / 10;
-      if (clamped === base) return;
-      patch({ [field]: clamped });
+      if (clamped === base && (!spec.lock || view[spec.lock])) return;
+      // A step is a decision, so it holds. The compositor still refuses a size
+      // that genuinely cannot be set - it reports the block overset rather
+      // than silently resizing - which is the honest answer to "I asked for
+      // type this size and it does not fit".
+      patch(spec.lock ? { [field]: clamped, [spec.lock]: true } : { [field]: clamped });
       return;
     }
 
@@ -428,9 +472,19 @@ function applyChoice(device, value, handlers, patch) {
  * Read from the live view, so the bar and the rail cannot disagree - pressing
  * either moves both, because both are drawn from the one draft.
  */
-export function refreshDeviceBar(view = {}) {
+// What the compositor actually resolved for each display band on the block now
+// showing. Held here so a stepper can move from the size on the PAGE rather
+// than from the size in the row - see the step handler.
+let resolved = {};
+const resolvedOf = (spec) => (spec.band ? Number(resolved[spec.band]) : NaN);
+
+export function refreshDeviceBar(view = {}, composition = null) {
   const bar = document.getElementById("edDeviceBar");
   if (!bar) return;
+  resolved = {
+    headline: composition?.bands?.headline?.resolvedPx,
+    deck: composition?.bands?.deck?.resolvedPx,
+  };
   const on = {
     border: (view.borderStyle || "none") !== "none",
     ground: Boolean(view.backgroundColor),
@@ -469,9 +523,20 @@ export function refreshDeviceBar(view = {}) {
   for (const spec of SIZE_FIELDS) {
     const out = bar.querySelector(`[data-size-out="${spec.field}"]`);
     if (!out) continue;
-    const value = Number(view[spec.field]);
-    out.textContent = Number.isFinite(value) && value > 0
-      ? String(Math.round(value * 10) / 10)
+    const locked = spec.lock ? Boolean(view[spec.lock]) : true;
+    // The size the PAGE is set in. A desk looking at a headline wants the
+    // number under it to be that headline's, not a request the compositor
+    // overruled - that mismatch is the whole of "it is not reflecting".
+    const shown = !locked && Number.isFinite(resolvedOf(spec)) && resolvedOf(spec) > 0
+      ? resolvedOf(spec)
+      : Number(view[spec.field]);
+    out.textContent = Number.isFinite(shown) && shown > 0
+      ? String(Math.round(shown * 10) / 10)
       : "—";
+    // Bold means the desk's number is being honoured exactly; light means the
+    // compositor is fitting the band and this is what it chose.
+    out.classList.toggle("is-fitted", spec.lock ? !locked : false);
+    const lockButton = bar.querySelector(`[data-size-lock="${spec.lock}"]`);
+    if (lockButton) lockButton.classList.toggle("is-on", locked);
   }
 }

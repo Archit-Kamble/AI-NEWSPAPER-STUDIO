@@ -211,6 +211,8 @@ async function saveSection(pageId, sectionKey, body) {
     // A real boolean or nothing at all - `undefined` leaves the column alone,
     // which is what a payload that never mentions the dateline should do.
     showDateline: typeof body.showDateline === 'boolean' ? body.showDateline : undefined,
+    headlineLocked: typeof body.headlineLocked === 'boolean' ? body.headlineLocked : undefined,
+    subheadingLocked: typeof body.subheadingLocked === 'boolean' ? body.subheadingLocked : undefined,
     borderStyle: body.borderStyle,
     borderWidthPx: body.borderWidthPx,
     borderColor: body.borderColor,

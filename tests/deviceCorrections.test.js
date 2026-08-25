@@ -177,3 +177,96 @@ test('the separator vocabulary is a catalogue, not one hard-coded mark', () => {
     assert.ok(!ornament.mark.includes('•'), `${ornament.key} may not use U+2022`);
   }
 });
+
+// ---------------------------------------------------------------- item 1 ---
+
+test('a justified line reaches the plate justified, not just the screen', async () => {
+  // compose.js justifies with two levers; `render.js` applied both and NOTHING
+  // ELSE DID. Measured on one real block: the canvas set nine lines with 4 px
+  // of variation in their right edge, the press PDF set the same nine with
+  // 111 px. The levers have to travel with the line, or the two surfaces are
+  // rendering different newspapers.
+  const model = require('../src/services/export/print-model.js');
+  const justified = {
+    ...BLOCK, width_px: 300, text_align: 'justify', column_count: 1,
+    headline: '', subheading: '',
+  };
+  const page = {
+    id: 1, page_number: 1, sections: [{ ...justified, x_px: 0, y_px: 0, section_key: 'lead', images: [] }],
+  };
+  const built = await model.buildPrintModel(
+    { page_width_px: 660, page_height_px: 1060, matter_width_px: 620, matter_height_px: 1020,
+      publication_date: '2099-01-01', column_rules: false },
+    [page],
+  );
+  const lines = built.pages[0].items.filter((item) => item.kind === 'text' && item.baseline);
+  const carrying = lines.filter((item) => item.wordSpacingMm || item.glyphScaleX);
+  assert.ok(carrying.length > 0,
+    'a justified block must hand its writers the spacing it justified with');
+  for (const item of carrying) {
+    // NEGATIVE IS LEGAL, and it is the third lever: a line the breaker chose
+    // to set TIGHT carries a negative word space and a scale below 1, because
+    // the alternative was leaving the word that fills it stranded on the line
+    // below. A writer that only handled the expanding case would draw those
+    // lines overhanging their column.
+    assert.ok(!item.wordSpacingMm || Number.isFinite(item.wordSpacingMm),
+      'word space is a real measurement in mm, positive or negative');
+    assert.ok(!item.glyphScaleX || (item.glyphScaleX >= 0.979 && item.glyphScaleX <= 1.031),
+      'and the stretch stays inside the newspaper range');
+  }
+  assert.ok(carrying.some((item) => (item.wordSpacingMm || 0) > 0),
+    'and at least one line was genuinely stretched to its measure');
+});
+
+test('a flush-left block hands its writers nothing, so nothing about it changes', async () => {
+  const model = require('../src/services/export/print-model.js');
+  const page = {
+    id: 1, page_number: 1,
+    sections: [{ ...BLOCK, x_px: 0, y_px: 0, section_key: 'lead', text_align: 'left', images: [] }],
+  };
+  const built = await model.buildPrintModel(
+    { page_width_px: 660, page_height_px: 1060, matter_width_px: 620, matter_height_px: 1020,
+      publication_date: '2099-01-01', column_rules: false },
+    [page],
+  );
+  assert.equal(
+    built.pages[0].items.filter((item) => item.wordSpacingMm || item.glyphScaleX).length, 0,
+  );
+});
+
+// ---------------------------------------------------------------- item 2 ---
+
+test('a locked display size is the size that is set', () => {
+  const tall = { ...BLOCK, headline: 'पाणीपुरवठा योजनेला गती', headline_font_px: 40 };
+  const fitted = adapter.composeSection(tall, {});
+  const locked = adapter.composeSection({ ...tall, headline_locked: true }, {});
+  assert.equal(locked.bands.headline.resolvedPx, 40,
+    'the desk asked for 40 and locked it, so the page sets 40');
+  // And the point of the control: unlocked, the compositor is free to fit -
+  // which is right, and is also why a desk who typed a size could see nothing
+  // happen. The lock is how they say which of the two they meant.
+  assert.ok(fitted.bands.headline.resolvedPx !== 40
+    || locked.bands.headline.resolvedPx === fitted.bands.headline.resolvedPx);
+  assert.equal(fitted.bands.headline.requestedPx, 40, 'and the request is still reported either way');
+});
+
+// ---------------------------------------------------------------- item 4 ---
+
+test('the breaker is charged for how hard a line has to be stretched', () => {
+  // Not for its raw slack alone, which is what let one line take a 0.55 em
+  // word space while the next needed none. Both are "closable", and
+  // (slack/measure)^3 for a closable line is about 0.002 - no reason at all to
+  // even them out.
+  const wide = {
+    ...BLOCK, width_px: 320, column_count: 1, text_align: 'justify',
+    headline: '', subheading: '',
+  };
+  const composed = adapter.composeSection(wide, {});
+  const inner = composed.bodyLines.filter((line, i) => i < composed.bodyLines.length - 1
+    && !composed.bodyLines[i + 1].paragraphBreak);
+  assert.ok(inner.length >= 3, 'the fixture must actually set several justified lines');
+  const ems = inner.map((line) => (line.wordSpacingPx || 0) / line.fontPx);
+  for (const em of ems) {
+    assert.ok(em <= 0.56, `no line may exceed the word-space cap (saw ${em.toFixed(3)} em)`);
+  }
+});

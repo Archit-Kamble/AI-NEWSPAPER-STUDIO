@@ -817,6 +817,10 @@ const JUSTIFY_MIN_EM = 13;
 // one that works, which is the best argument a constant can have.
 const MIN_GLYPH_SCALE = 0.98;
 const MAX_SQUEEZE_WORD_SPACE_EM = 0.10;
+// How much a line is charged for spending its whole stretching budget - see
+// slackCost(). Chosen by measurement, not by taste: see PROJECT_STATUS.md for
+// the sweep across 1751 justified lines of two real editions.
+const STRAIN_WEIGHT = 0.12;
 
 /**
  * How much wider than its measure a line may be set and still be closed by
@@ -1595,9 +1599,30 @@ function pourBody(bodyInput, {
     if (slack === 0) return 0;
     const closable = spaces * MAX_EXTRA_WORD_SPACE_EM * fontPx + width * (MAX_GLYPH_STRETCH - 1);
     const residual = Math.max(0, slack - closable);
+    // AND HOW HARD THE LINE HAS TO BE STRETCHED TO CLOSE IT.
+    //
+    // Slack measured against the MEASURE says how much space there is to
+    // absorb; it says nothing about whether absorbing it will look like
+    // anything. A narrow line with eight word gaps closes 17 px without
+    // comment; the same 17 px across two gaps opens both of them to three
+    // times a normal word space, and that is what a reader sees.
+    //
+    // The desk's report was "if we increase only one character/word in body
+    // whole line's margin get impacted", and the measurement behind this is
+    // 1751 justified lines across two real editions: 28.2% of them were at the
+    // 0.55 em word-space cap while 18% needed no extra space at all. The
+    // solver had no reason to even that out - both are closable, and
+    // `(slack/measure)^3` for a closable line is on the order of 0.002.
+    //
+    // So the cost is on the fraction of the line's OWN closing budget it
+    // spends. Cubed, like everything else here, so a line at a fifth of its
+    // budget is nearly free and one at the cap is not - which is what makes
+    // the solver move a word rather than open eight gaps.
+    const strain = closable > 0 ? Math.min(1, slack / closable) : 1;
     // The residual dominates by two orders of magnitude, so the solver will
-    // trade a lot of ordinary slack to avoid one notch.
-    return (slack / measure) ** 3 + 100 * (residual / measure) ** 3;
+    // trade a lot of ordinary slack to avoid one notch. Strain sits between
+    // the two: worth moving a word for, never worth a notch for.
+    return (slack / measure) ** 3 + STRAIN_WEIGHT * strain ** 3 + 100 * (residual / measure) ** 3;
   }
 
   /** What a paragraph's closing line costs: free unless it is a stub. */

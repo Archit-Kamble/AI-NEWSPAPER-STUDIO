@@ -384,7 +384,7 @@ const round = (value) => {
 // A cut-out's alpha becomes an /SMask, so the silhouette the desk cut still
 // prints as a silhouette rather than as a white box.
 
-async function embedImage(builder, absolutePath) {
+async function embedImage(builder, absolutePath, { mono = false } = {}) {
   const { Jimp } = require('jimp');
   const image = await Jimp.read(absolutePath);
   const { width, height } = image.bitmap;
@@ -397,6 +397,21 @@ async function embedImage(builder, absolutePath) {
     const r = pixels[i] / 255;
     const g = pixels[i + 1] / 255;
     const b = pixels[i + 2] / 255;
+    // ON A MONO FORME EVERY PIXEL IS K AND NOTHING ELSE.
+    //
+    // Rec. 709 luma rather than the naive max() the colour path uses: a
+    // photograph reduced by max(r,g,b) comes out flat and pale, because it
+    // throws away the fact that the eye reads green as far brighter than blue.
+    // This is the one place in this writer where a perceptual weighting is
+    // right - it is converting a picture, not separating an ink.
+    if (mono) {
+      const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      cmyk[p] = 0; cmyk[p + 1] = 0; cmyk[p + 2] = 0;
+      cmyk[p + 3] = Math.round((1 - luma) * 255);
+      alpha[a] = pixels[i + 3];
+      if (pixels[i + 3] < 255) transparent = true;
+      continue;
+    }
     const k = 1 - Math.max(r, g, b);
     if (k >= 1) { cmyk[p] = 0; cmyk[p + 1] = 0; cmyk[p + 2] = 0; cmyk[p + 3] = 255; }
     else {
@@ -538,11 +553,17 @@ async function buildPdf(model, deps) {
 
       if (item.kind === 'image') {
         const absolute = path.join(PUBLIC_DIR, item.file);
-        if (!imageIds.has(item.file)) {
-          if (!fs.existsSync(absolute)) { missingImages.push(item.file); imageIds.set(item.file, null); }
-          else imageIds.set(item.file, await embedImage(builder, absolute));
+        // KEYED ON THE FORME AS WELL AS THE FILE. The same photograph can be
+        // placed on a colour page and on a mono one in the same edition, and
+        // those are two different embedded images - one separated to four
+        // plates, one to K alone. Keyed on the filename alone, whichever page
+        // was walked first decided how it printed on every other.
+        const key = `${item.file}|${item.mono ? 'k' : 'cmyk'}`;
+        if (!imageIds.has(key)) {
+          if (!fs.existsSync(absolute)) { missingImages.push(item.file); imageIds.set(key, null); }
+          else imageIds.set(key, await embedImage(builder, absolute, { mono: Boolean(item.mono) }));
         }
-        const id = imageIds.get(item.file);
+        const id = imageIds.get(key);
         if (!id) continue;
         const label = `Im${id}`;
         xobjects[label] = `${id} 0 R`;

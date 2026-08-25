@@ -46,6 +46,22 @@ async function compositorDeps() {
  * @returns {{ body: Buffer, filename: string, type: string, warnings: string[],
  *             missingImages: string[] }}
  */
+/**
+ * THE CALLER MUST HAVE HYDRATED THE PUBLICATION IDENTITY.
+ *
+ * `identityFor()` reads a module-level object that server.js mutates at boot
+ * through `hydratePublicationIdentity()` - the desk's own publication name,
+ * address, telephone, e-paper address. A process that has NOT done that gets
+ * the built-in defaults and exports a paper carrying the wrong contact
+ * details, silently and with no warning anywhere.
+ *
+ * Every route into this is inside the server, so this holds today. It is
+ * written down because it will not be obvious to whoever first calls this from
+ * a script or a cron job - it was not obvious here: a render script used
+ * during the visual pass printed `esahas.com/epaper` where the website printed
+ * `www.esahas.com/epaper`, and the difference was the script's, not the
+ * product's.
+ */
 async function exportEdition(format, newspaper, pages) {
   const spec = FORMATS[format];
   if (!spec) {

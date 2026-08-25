@@ -104,7 +104,7 @@ const run = (text, { family = 'sans', weight = 400, bold = false, italic = false
 const ACCENT_INK = '#c8102e';
 const REVERSE_BLEED_PX = 2;
 
-async function blockItems(section) {
+async function blockItems(section, { mono = false } = {}) {
   const { adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry, accent } = await ensureComposeReady();
   const items = [];
   const x0 = mm(section.x_px);
@@ -270,6 +270,16 @@ async function blockItems(section) {
       file: String(image.url || '').replace(/^\//, ''),
       resolved: imageGeometry.resolvePlacedImage(image),
       rotation: Number(image.rotation) || 0,
+      // A PAGE THAT DOES NOT PRINT IN COLOUR PRINTS THIS IN BLACK.
+      // `pages.prints_colour` is the press forme, and the canvas has always
+      // greyed a photograph on a mono page (styles.css's `filter:
+      // grayscale(1)`) precisely so a desk can see what the press will do.
+      // The export ignored it, so the website showed grey and the CMYK press
+      // file carried three more separations - which is a colour plate on a
+      // forme that has none. Found by placing photographs on the `photo`
+      // template, which the ladder puts on a mono page, and reading the two
+      // renders side by side.
+      mono,
     });
     const caption = captionBox(image);
     if (caption && image.caption) {
@@ -730,8 +740,9 @@ async function buildPrintModel(newspaper, pages) {
     const items = [];
     items.push(...mastheadItems(newspaper, page, geometry, identity, page.sections));
     items.push(...folioItems(newspaper, page, geometry, identity));
+    const mono = page.prints_colour === false;
     for (const section of page.sections || []) {
-      items.push(...await blockItems(section));
+      items.push(...await blockItems(section, { mono }));
     }
     // THE COLUMN RULES - the hairlines between one story and the next.
     //
@@ -766,7 +777,7 @@ async function buildPrintModel(newspaper, pages) {
         x: mm(overlay.x), y: mm(overlay.y),
         width: mm(overlay.width), height: mm(overlay.height),
         file: String(overlay.url).replace(/^\//, ''),
-        resolved: null, rotation: 0,
+        resolved: null, rotation: 0, mono,
       });
       if (overlay.caption) {
         items.push(textItem(

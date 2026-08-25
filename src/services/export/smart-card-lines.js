@@ -32,14 +32,33 @@ function smartCardLines(key, data, frame, cardLayout) {
   if (layout.fitState === 'EMPTY') return [];
 
   const out = [];
-  const line = (text, x, y, width, fontPx, align = 0) => {
+
+  // AN ENTRY'S BOX IS ITS OWN TYPE'S, not the card's body line.
+  //
+  // This handed every entry `layout.geometry.lineHeightPx` - the card's body
+  // leading - which was invisible for as long as every card set all its
+  // entries at one size. A stat row does not: its figures are 2.2x its
+  // captions. So a 26.4 px numeral was given an 18.8 px box, and since the
+  // writers put a baseline at 80% of the box when an entry carries none, its
+  // glyphs printed straight through the row underneath. Photographed on page
+  // six of a six-page edition: the captions crashing into the figures below
+  // them.
+  //
+  // The ratio is the card's own (lineHeightPx / fontPx), so an entry set at
+  // the card's body size gets exactly the number it got before and no
+  // existing card moves.
+  const ratio = layout.fontPx > 0
+    ? (layout.geometry?.lineHeightPx || layout.fontPx * 1.45) / layout.fontPx
+    : 1.45;
+  const line = (text, x, y, width, fontPx, align = 0, height = null) => {
     if (!text) return;
-    out.push({ text, x, y, width, fontPx, align, height: layout.geometry?.lineHeightPx || fontPx * 1.5 });
+    out.push({ text, x, y, width, fontPx, align, height: height || fontPx * ratio });
   };
 
   if (layout.subtitle?.lines?.length) {
     layout.subtitle.lines.forEach((text, i) =>
-      line(text, 0, i * layout.subtitle.lineHeightPx, frame.width, layout.subtitle.fontPx, 1));
+      line(text, 0, i * layout.subtitle.lineHeightPx, frame.width, layout.subtitle.fontPx, 1,
+        layout.subtitle.lineHeightPx));
   }
   const subtitleOffsetPx = layout.subtitle?.height || 0;
 
@@ -56,7 +75,7 @@ function smartCardLines(key, data, frame, cardLayout) {
         const band = Math.floor(index / perBand);
         const x = column * g.columnWidth;
         const top = y + band * g.bandHeight;
-        line(item.valueText, x, top, g.columnWidth, g.figurePx, 1);
+        line(item.valueText, x, top, g.columnWidth, g.figurePx, 1, g.figureLine);
         (item.captionLines || []).forEach((text, i) =>
           line(text, x, top + g.figureLine + i * g.lineHeightPx, g.columnWidth, layout.fontPx, 1));
       });

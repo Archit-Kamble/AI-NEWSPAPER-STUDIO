@@ -191,14 +191,18 @@ const SUBTITLE_WEIGHT = 400;
 // (checked across the table), so this rule has been latent since it was
 // written and the first card to use it is the one that found it.
 const MAX_SUBTITLE_SHARE = 0.28;
+// A subtitle introduces the card; it is not the card. Half again as large as
+// what it labels is the most a label can be and still read as one.
+const MAX_SUBTITLE_OF_BODY = 1.5;
 
-function solveSubtitle(text, frame) {
+function solveSubtitle(text, frame, maxFontPx = Infinity) {
   const clean = String(text || '').trim();
   if (!clean) return { fontPx: 0, lineHeightPx: 0, lines: [], height: 0, hardOverset: false };
 
   const ceiling = Math.max(0, frame.innerHeight) * MAX_SUBTITLE_SHARE;
   let chosen = null;
   for (const fontPx of CANDIDATE_FONT_PX) {
+    if (fontPx > maxFontPx) continue;
     const wrapped = wrapSmartText(clean, { width: frame.innerWidth, fontPx, family: 'serif', weight: SUBTITLE_WEIGHT });
     const lineHeightPx = lineHeightFor(fontPx, 'serif', SUBTITLE_WEIGHT);
     const candidate = {
@@ -567,11 +571,32 @@ export function layoutSmartCard(key, data, frame) {
   if (!fn) return empty(String(key || ''));
 
   const clamped = clampFrame(frame);
-  const subtitle = solveSubtitle(data?.subtitle, clamped);
-  const bodyFrame = { ...clamped, innerHeight: Math.max(0, clamped.innerHeight - subtitle.height) };
+  let subtitle = solveSubtitle(data?.subtitle, clamped);
+  let bodyFrame = { ...clamped, innerHeight: Math.max(0, clamped.innerHeight - subtitle.height) };
 
-  const result = fn(data, bodyFrame);
+  let result = fn(data, bodyFrame);
   if (result.fitState === 'EMPTY') return result;
+
+  // A SUBTITLE MAY NOT OUTRANK THE CARD IT LABELS.
+  //
+  // The height share alone does not settle this: on a 149x275 stat card a
+  // one-line subtitle at 28 px is well inside 28% of the frame, and the
+  // figures it introduces resolved to 26.4 px - so the label was the largest
+  // type on the card and the statistics were the second largest. Photographed
+  // on page six of a six-page edition.
+  //
+  // The card's own resolved size is not known until its body has been solved,
+  // which is why this is a second pass rather than a bound handed to
+  // solveSubtitle() up front. Exactly one extra pass, and only when the
+  // subtitle is actually too big: capping it frees room, so the body can only
+  // get larger and never oversets on the strength of this.
+  const cap = result.fontPx * MAX_SUBTITLE_OF_BODY;
+  if (subtitle.fontPx > cap) {
+    subtitle = solveSubtitle(data?.subtitle, clamped, cap);
+    bodyFrame = { ...clamped, innerHeight: Math.max(0, clamped.innerHeight - subtitle.height) };
+    const restated = fn(data, bodyFrame);
+    if (restated.fitState !== 'EMPTY') result = restated;
+  }
 
   const fitState = subtitle.hardOverset || result.fitState === 'OVERSET' ? 'OVERSET' : 'FITS';
   return {

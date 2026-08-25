@@ -77,6 +77,33 @@ const DISPLAY_TYPOGRAPHY = {
   deck: { family: 'sans', weight: 400 },
 };
 
+/**
+ * The face the display flows are set in.
+ *
+ * The paper's own sans by default - everything above this stays exactly true,
+ * and every block that has not asked for anything else composes byte for byte
+ * as it did. What is new is that a block CAN ask, through its own field.
+ *
+ * It is a separate field from the body's `fontFamily` and must stay one. The
+ * comment above records what happens when the two are the same control:
+ * composing a headline in whatever family the body happened to be reserved
+ * room in reserves room for the wrong glyphs. This does not reopen that - it
+ * is an explicit display choice that the display flows read and the body never
+ * touches, which is how a newspaper's type system actually works. A sub-editor
+ * does not pick the headline face per story; the paper picks it, and a
+ * condensed cut exists precisely so a splash with too many words in it can be
+ * set without shrinking.
+ *
+ * The WEIGHTS are deliberately not overridable. They are the stylesheet's
+ * (.section-headline is 700, .section-subheading is 400) and a face with only
+ * one cut maps both to the same file anyway (layout/typefaces.js).
+ */
+function displayTypography(key, displayFamily) {
+  const base = DISPLAY_TYPOGRAPHY[key];
+  const family = String(displayFamily || '').trim();
+  return family ? { ...base, family } : base;
+}
+
 // Space between one editorial flow and the next, BASELINE TO BASELINE, in the
 // line of the flow BELOW.
 //
@@ -2220,9 +2247,9 @@ export function composeBlock(input = {}) {
     : { text: String(value || ''), marks: null });
 
   const flows = [
-    { key: 'kicker', ...flowOf(input.kicker), px: Math.round(bodyPx * 1.05), min: MIN_LEGIBLE_PX, maxLines: 2, locked: true, align: headlineAlign, ...DISPLAY_TYPOGRAPHY.kicker },
-    { key: 'headline', ...flowOf(input.headline), px: num(input.headlineFontPx, 34), min: Math.max(MIN_LEGIBLE_PX, bodyPx * 1.1), maxLines: num(input.headlineMaxLines, 4), preferLines: HEADLINE_MAX_LINES, locked: Boolean(input.headlineLocked), align: headlineAlign, ...DISPLAY_TYPOGRAPHY.headline },
-    { key: 'deck', ...flowOf(input.subheading), px: num(input.subheadingFontPx, 20), min: Math.max(MIN_LEGIBLE_PX, bodyPx), maxLines: num(input.deckMaxLines, 3), preferLines: 1, locked: Boolean(input.subheadingLocked), align: deckAlign, ...DISPLAY_TYPOGRAPHY.deck },
+    { key: 'kicker', ...flowOf(input.kicker), px: Math.round(bodyPx * 1.05), min: MIN_LEGIBLE_PX, maxLines: 2, locked: true, align: headlineAlign, ...displayTypography('kicker', input.displayFamily) },
+    { key: 'headline', ...flowOf(input.headline), px: num(input.headlineFontPx, 34), min: Math.max(MIN_LEGIBLE_PX, bodyPx * 1.1), maxLines: num(input.headlineMaxLines, 4), preferLines: HEADLINE_MAX_LINES, locked: Boolean(input.headlineLocked), align: headlineAlign, ...displayTypography('headline', input.displayFamily) },
+    { key: 'deck', ...flowOf(input.subheading), px: num(input.subheadingFontPx, 20), min: Math.max(MIN_LEGIBLE_PX, bodyPx), maxLines: num(input.deckMaxLines, 3), preferLines: 1, locked: Boolean(input.subheadingLocked), align: deckAlign, ...displayTypography('deck', input.displayFamily) },
   ].filter((flow) => flow.text.trim());
 
   let y = content.top;

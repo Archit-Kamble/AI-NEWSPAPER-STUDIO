@@ -725,3 +725,14 @@ ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS inset_panels JSONB;
 -- the rectangle touches gains it as an obstacle in its own coordinates, and
 -- blocks it does not touch are unaffected.
 ALTER TABLE pages ADD COLUMN IF NOT EXISTS overlay_images JSONB;
+
+-- The face a block's DISPLAY type is set in - headline, kicker and deck.
+--
+-- Separate from `font_family`, which is the body's, and it must stay separate:
+-- composing a headline in whatever family the body happened to be reserved
+-- room in reserves room for the wrong glyphs (compose.js's DISPLAY_TYPOGRAPHY
+-- records that fault). NULL means the paper's own sans, which is what every
+-- existing row means, so nothing composes differently until a desk chooses.
+--
+-- Validated against public/editor/layout/typefaces.js, the one catalogue.
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS display_family VARCHAR(40);

@@ -361,6 +361,10 @@ export function composeSection(section = {}, view = {}) {
     bodyFontPx,
     lineHeight: Number(pick(section, view, 'lineHeight', 'line_height', 0)) || 0,
     fontFamily: pick(section, view, 'fontFamily', 'font_family', 'serif'),
+    // The DISPLAY face, which is a separate decision from the body's and
+    // reads a separate column. Empty/absent means the paper's own sans, so
+    // every existing row composes exactly as it did.
+    displayFamily: pick(section, view, 'displayFamily', 'display_family', ''),
     // Body-only, matching fontFamily above: these map onto `.section-body` in
     // the real stylesheet, never the headline/subheading (compose.js's
     // DISPLAY_TYPOGRAPHY keeps those at the paper's own fixed weights). Real,

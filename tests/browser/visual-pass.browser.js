@@ -217,6 +217,17 @@ const say = (ok, what, detail = '') => {
     say(ok, `the browser has a real @font-face for ${name}`);
   }
 
+  // A DISPLAY face is a separate decision from the body's. The two faces
+  // marked role:'display' in the catalogue could not reach a headline at all
+  // until there was a field for it - compose.js hard-coded the paper's sans -
+  // so a condensed cut, whose whole purpose is a splash with too many words,
+  // was only ever offered for body copy.
+  const displayPicker = await page.evaluate(() => Array.from(
+    document.querySelectorAll('#tyDisplayFamily option')).map((o) => o.value));
+  say(displayPicker.includes('khand') && displayPicker.includes('rozha'),
+    'Typography offers a separate headline face, including the display cuts', displayPicker.join(','));
+  say(displayPicker[0] === '', 'and its default is the paper\'s own, not a block choice');
+
   // ---- an information graphic, on the page --------------------------------
   //
   // Placed by this net rather than assumed to be there. It used to assert a

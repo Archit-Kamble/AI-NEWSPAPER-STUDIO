@@ -8,6 +8,7 @@ const reviewInvalidation = require('./reviewInvalidation.service');
 // grid, the block kinds, the picture style and the inks are.
 const { BORDER_KEYS, BORDER_WIDTHS } = require('../../public/editor/layout/borders');
 const { panelOf } = require('../../public/editor/layout/inset-panels');
+const { TYPEFACES } = require('../../public/editor/layout/typefaces');
 
 const PRINTABLE_FIELDS = ['news_item_id','kicker','headline','subheading','body','caption','image_url','smart_card_key','smart_card_data'];
 const comparable = (value) => JSON.stringify(value ?? null);
@@ -128,6 +129,10 @@ async function saveSection(pageId, sectionKey, body) {
   // pressing it sent a payload the server refused with a 400 and nothing
   // happened on the page. A control that cannot act, found by reading the
   // whitelist against the buttons.
+  if (supplied(body.displayFamily) && String(body.displayFamily).trim()
+      && !TYPEFACES.some((face) => face.key === body.displayFamily)) {
+    return { error: `The headline face must be one of ${TYPEFACES.map((f) => f.key).join(', ')}.` };
+  }
   if (supplied(body.borderStyle) && !BORDER_KEYS.includes(body.borderStyle)) {
     return { error: `The border style must be one of ${BORDER_KEYS.join(', ')}.` };
   }
@@ -195,6 +200,9 @@ async function saveSection(pageId, sectionKey, body) {
       : (Array.isArray(body.insetPanels) ? body.insetPanels : [])
         .map((entry) => panelOf(entry, { width: body.widthPx, height: body.heightPx }))
         .filter(Boolean),
+    // The display face, validated against the one typeface catalogue so a
+    // foreign family can never reach a renderer.
+    displayFamily: body.displayFamily,
     borderStyle: body.borderStyle,
     borderWidthPx: body.borderWidthPx,
     borderColor: body.borderColor,

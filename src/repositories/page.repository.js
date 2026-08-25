@@ -445,6 +445,7 @@ async function saveSection(pageId, sectionKey, updates) {
          -- alone; the panel editor sends the whole array, and an empty array
          -- (never null) is how the last one is taken off.
          inset_panels = COALESCE($50, inset_panels),
+         display_family = COALESCE($51, display_family),
          updated_at = CURRENT_TIMESTAMP
      WHERE page_id = $1 AND section_key = $2 RETURNING *`,
     [pageId, sectionKey, updates.newsItemId || null, updates.headline || null, updates.headlineFontPx || null,
@@ -486,7 +487,8 @@ async function saveSection(pageId, sectionKey, updates) {
       updates.headlineAlign || null,
       updates.subheadingAlign || null,
       updates.backgroundColor || null,
-      updates.insetPanels === undefined ? null : JSON.stringify(updates.insetPanels)]
+      updates.insetPanels === undefined ? null : JSON.stringify(updates.insetPanels),
+      updates.displayFamily || null]
   );
   return rows[0] || null;
 }

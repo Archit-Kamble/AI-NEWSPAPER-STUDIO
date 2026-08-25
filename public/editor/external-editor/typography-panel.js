@@ -42,6 +42,20 @@ export const FONT_FAMILIES = [
   { value: "'Helvetica Neue', Helvetica, sans-serif", label: "Helvetica Neue (legacy)" },
 ];
 
+// The DISPLAY faces, for the headline, kicker and deck. Only the real
+// publication faces - a system font with no Devanagari in it was always a
+// fiction for the body and would be a worse one for a headline, which is the
+// biggest type on the page. "" is the paper's own sans, which is what every
+// block means until a desk says otherwise.
+export const DISPLAY_FAMILIES = [
+  { value: "", label: "Paper default (Sahas Sans)" },
+  ...TYPEFACES.map((face) => ({
+    value: face.key,
+    label: face.role === 'display' ? `${face.label} — display` : face.label,
+    title: face.note,
+  })),
+];
+
 const WEIGHTS = [
   { value: "300", label: "Light" },
   { value: "normal", label: "Regular" },
@@ -191,6 +205,11 @@ export function typographyPanelMarkup(view, part = "block") {
           <label>Font family</label>
           <select id="tyFontFamily">${select("tyFontFamily", FONT_FAMILIES, view.fontFamily)}</select>
         </div>
+      <div class="form-group">
+        <label for="tyDisplayFamily">Headline face</label>
+        <select id="tyDisplayFamily">${select("tyDisplayFamily", DISPLAY_FAMILIES, view.displayFamily || "")}</select>
+        <p class="muted ext-note">The face the headline, kicker and deck are set in &mdash; a separate decision from the story's, the way a newspaper's own type system works. A condensed cut exists so a splash with too many words can be set without shrinking.</p>
+      </div>
         <div class="form-group">
           <label>Weight</label>
           <select id="tyFontWeight">${select("tyFontWeight", WEIGHTS, view.fontWeight)}</select>
@@ -279,6 +298,7 @@ export function bindTypographyPanel(getView, onPatch) {
   const patch = (updates) => onPatch(updates, "typography-panel");
 
   document.getElementById("tyFontFamily")?.addEventListener("change", (e) => patch({ fontFamily: e.target.value }));
+  document.getElementById("tyDisplayFamily")?.addEventListener("change", (e) => patch({ displayFamily: e.target.value }));
   document.getElementById("tyFontWeight")?.addEventListener("change", (e) => patch({ fontWeight: e.target.value }));
 
   NUMBER_FIELDS.forEach((f) => {
@@ -351,6 +371,8 @@ export function refreshTypographyPanel(view, source, part = "block") {
   });
   const family = document.getElementById("tyFontFamily");
   if (family) family.value = view.fontFamily || "";
+  const displayFamily = document.getElementById("tyDisplayFamily");
+  if (displayFamily) displayFamily.value = view.displayFamily || "";
   const weight = document.getElementById("tyFontWeight");
   if (weight) weight.value = view.fontWeight;
 }

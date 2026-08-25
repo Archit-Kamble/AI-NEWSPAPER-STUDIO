@@ -27,6 +27,24 @@
     { key: 'quote', label: 'Pull quote', note: 'A sentence lifted out of the story, set large.' },
   ]);
 
+  // How a panel's lines are marked. The numbered form is the device the Lokmat
+  // reference block uses for its two undertakings, and a fact box is where a
+  // printed paper puts a short numbered list.
+  //
+  // Deliberately HERE and not in the body copy. `page_sections.list_style` is a
+  // column the compositor has never read - a numbered list in running copy
+  // means markers in a hanging indent, per-item numbering and a second kind of
+  // paragraph, all inside pourBody(), and that is a composition-engine change
+  // rather than a layout one. The panel is where the device is actually wanted
+  // and where it costs nothing but a prefix.
+  const MARKERS = Object.freeze([
+    { key: 'none', label: 'Plain' },
+    { key: 'bullet', label: 'Bulleted' },
+    { key: 'number', label: 'Numbered' },
+  ]);
+  const DEVANAGARI_DIGITS = ['०', '१', '२', '३', '४', '५', '६', '७', '८', '९'];
+  const devanagari = (n) => String(n).replace(/\d/g, (d) => DEVANAGARI_DIGITS[Number(d)]);
+
   const MIN_PX = 24;             // below this nothing legible fits
   const DEFAULT_STAND_OFF_PX = 4;
 
@@ -50,6 +68,7 @@
     // shape but not one of the paper's tints is refused there and never
     // reaches a renderer.
     const tint = /^#[0-9a-f]{6}$/i.test(String(raw.tint || '')) ? String(raw.tint).toLowerCase() : null;
+    const marker = MARKERS.some((m) => m.key === raw.marker) ? raw.marker : 'none';
     const title = clean(raw.title);
     const lines = (Array.isArray(raw.lines) ? raw.lines : String(raw.lines || '').split('\n'))
       .map(clean).filter(Boolean);
@@ -61,7 +80,7 @@
       y: Math.min(Math.max(0, Number(raw.y) || 0), maxY),
       width, height,
       standOffPx: Math.max(0, Number(raw.standOffPx ?? DEFAULT_STAND_OFF_PX)),
-      tint, title, lines,
+      tint, marker, title, lines,
     };
   }
 
@@ -99,16 +118,23 @@
       out.push({ text: panel.title, x: inset, y, width: panel.width - inset * 2, fontPx: titlePx, bold: true });
       y += titlePx * lineHeight;
     }
-    for (const text of panel.lines) {
-      if (y + linePx * lineHeight > panel.height - inset) break;
-      out.push({ text, x: inset, y, width: panel.width - inset * 2, fontPx: linePx, bold: false });
+    panel.lines.forEach((text, index) => {
+      if (y + linePx * lineHeight > panel.height - inset) return;
+      // The marker is set into the line rather than hung in its own column.
+      // A hanging indent needs the line broken against a narrower measure for
+      // every line after the first, which is what the compositor does for
+      // running copy and what a panel deliberately does not have.
+      const marked = panel.marker === 'number' ? `${devanagari(index + 1)}. ${text}`
+        : panel.marker === 'bullet' ? `\u25aa ${text}`
+          : text;
+      out.push({ text: marked, x: inset, y, width: panel.width - inset * 2, fontPx: linePx, bold: false });
       y += linePx * lineHeight;
-    }
+    });
     return { inset, titlePx, linePx, lineHeight, lines: out, usedHeight: y + inset };
   }
 
   const api = Object.freeze({
-    INSET_PANEL_KINDS: KINDS, INSET_PANEL_MIN_PX: MIN_PX,
+    INSET_PANEL_KINDS: KINDS, INSET_PANEL_MARKERS: MARKERS, INSET_PANEL_MIN_PX: MIN_PX,
     panelOf, panelsOf, obstacleFromPanel, panelLayout,
   });
   root.SahasInsetPanels = api;

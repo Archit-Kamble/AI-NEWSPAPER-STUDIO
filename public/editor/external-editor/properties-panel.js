@@ -50,7 +50,7 @@ const SHAPES = [
 import "../layout/borders.js";
 const { BORDER_STYLES, BORDER_WIDTHS, isRuled, borderWidthPx } = globalThis.SahasBorders;
 import "../layout/inset-panels.js";
-const { INSET_PANEL_KINDS, INSET_PANEL_MIN_PX, panelsOf } = globalThis.SahasInsetPanels;
+const { INSET_PANEL_KINDS, INSET_PANEL_MARKERS, INSET_PANEL_MIN_PX, panelsOf } = globalThis.SahasInsetPanels;
 
 // The tints come from the ONE colour catalogue (layout/inks.js), the same one
 // the ink marks and the press file read. A palette written out a second time
@@ -475,6 +475,11 @@ function panelsMarkup(section, view) {
       <div class="prop-panel-geometry">
         ${["x", "y", "width", "height"].map((field) => `<label>${field}<input type="number" data-panel-field="${field}" value="${Math.round(panel[field])}"></label>`).join("")}
       </div>
+      <label>Lines
+        <select data-panel-field="marker">
+          ${INSET_PANEL_MARKERS.map((m) => `<option value="${m.key}"${(panel.marker || "none") === m.key ? " selected" : ""}>${escapeHtml(m.label)}</option>`).join("")}
+        </select>
+      </label>
       <label>Ground
         <select data-panel-field="tint">
           ${TINTS.map((tint) => `<option value="${tint.hex || ""}"${(panel.tint || "") === (tint.hex || "") ? " selected" : ""}>${escapeHtml(tint.label)}</option>`).join("")}
@@ -503,6 +508,7 @@ function panelsFromDom(section, view) {
       width: Number(field("width")), height: Number(field("height")),
       title: field("title"),
       tint: field("tint") || null,
+      marker: field("marker") || "none",
       lines: String(field("lines")).split("\n"),
     };
   });

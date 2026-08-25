@@ -6593,3 +6593,41 @@ IDML 1.18 MB, DOCX 8 KB) and the rendered press PDF was read by eye: the drop
 cap, the cross-head, the hung numerals and the filled-square bullets are all on
 the plate. Editions 40294 and 44929 are intact and carry no leftover fixture.
 
+
+## The device-bar pass — "I have not seen the buttons"
+
+The report that drove it: every device built in the previous two passes was
+reachable and none of them was findable. The answer is one labelled row on the
+editor (`device-bar.js`, thirteen buttons), plus the three chart kinds the docs
+had said were impossible.
+
+| requirement | where a desk presses it now |
+|---|---|
+| 0 · small details, lines and shapes | **Separator** (an ornament across the measure) and **Insert → Cross-head** |
+| 1 · download identical to the website | verified by rendering: the press PDF and the `.sla` carry the strapline, editions line, place badge, date, weekday, month/year, volume, issue, page count, price, e-paper address, owner line, office, telephone and email — the same elements as the canvas |
+| 2 · Marathi justification | already exact; unchanged this pass |
+| 3 · multiple Marathi font families | **Body** and **Head** menus, six faces |
+| 4 · border on a news block | **Border**, seven styles |
+| 5 · info below an image | **Caption** |
+| 6 · a block inside a block | **Insert → Fact box / Pull quote** (a rectangle in the obstacle set) |
+| 7 · a picture overlapping blocks | **Insert → Picture across blocks** — this could not be done at all before |
+| 8 · pie, line, dots | **Chart** — five kinds, all reaching the plate |
+| 9 · AI picture generation | **AI picture** (proposes; a person places it) |
+| 10 · lines/shapes between blocks | column rules already draw them; the in-story ornament is the **Separator** |
+
+Seven defects found doing it, five of them pre-existing: the bar bound a
+listener per render (an even count made every menu dead); nothing could place a
+page overlay; panels were read from the row and so did not appear until a
+reload; every new panel was born holding U+2022; Scribus named every chart
+colour `SahasRed`; a pie's legend stacked under its wheel and was clipped; and
+a line chart's labels ran off the edges and collided.
+
+Verified: `npm test` 919/919, workspace 223, controls 86, body-editing 35,
+visual-pass 46, parity 70, device-bar 21. The pie was rendered into all three
+layout exports — 4 polygons in the `.sla`, 4 in the IDML, and the wheel printed
+in its tints in the press PDF.
+
+**Still open:** an inset panel holds text only (a placed picture already does
+that job with real runaround, so a picture inside a panel would be a second way
+to do one thing); and the AI picture generator's success path is unverified
+because this newsroom's Gemini key has no image quota.

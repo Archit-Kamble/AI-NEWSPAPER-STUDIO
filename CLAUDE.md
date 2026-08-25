@@ -766,6 +766,59 @@ A compositor opens the leading a point or two and lets the copy fill the column.
 
 `scripts/fill-edition-copy.js` was rewritten to match: it used to assemble copy against `bodyCharRange.min` (the guaranteed-safe *floor*) and stop one sentence before even that, leaving 41 of 43 blocks under 95% — so every screenshot taken to judge the layout was judging a page nobody had filled. It now composes after every sentence and keeps the last one that fits.
 
+### Every device is on ONE ROW, on the editor
+
+The desk's report, and it was true: *"I have not seen buttons or things you
+modified — make sure to add every functionality a button which is small and on
+editor like bold, italic, underline."* Every device this product had built was
+reachable, and every one of them only by scrolling a narrow settings rail or
+opening a tab. **A control a desk cannot FIND is a control that does not
+exist** — the same finding as "a control that cannot act is not offered", one
+step earlier.
+
+`public/editor/external-editor/device-bar.js` is that row, beside the
+bold/italic/underline a desk already knows: Border, Tint, Columns, Body face,
+Head face, Drop cap, Bullets, Numbers, Insert, Separator, Chart, Caption, AI
+picture.
+
+- **Labelled, not iconographic.** Bold and italic can be marks because every
+  desk knows them; `▣ ▤ ▥` for border/ground/columns are three things a person
+  has to learn, and a tooltip is not something anybody reads while working —
+  this codebase has already been bitten by exactly that (`#edStorySize`
+  retargeting silently).
+- **It is NOT a second implementation of anything.** Every button ends in the
+  same `onPatch(patch, source)` the panels call, and everything it offers comes
+  from the shared catalogues, so the bar and the settings rail are two views of
+  one decision and pressing either moves the other.
+- **Bound ONCE, at the document.** `renderExternalEditor()` runs on every
+  repaint, so binding per render added a listener each time — and because
+  pressing an open menu TOGGLES it, an even number of listeners opened and
+  closed it in the same click. It drew perfectly and did nothing, which is the
+  exact fault the bar exists to remove. The handlers are refreshed on every
+  render; the listener is added once.
+
+`tests/browser/device-bar.browser.js` presses all thirteen and checks which
+thing moved.
+
+### A picture laid across two stories can now be PLACED
+
+`moveOverlay()` has existed since overlays did, and nothing in the product
+could ever CREATE one: every overlay on every page had been put there by a
+fixture. So the device was real, the compositor set each block clear of it, all
+four exports drew it — and a desk had no way to make one. Insert → *Picture
+across blocks* opens a file picker and lays it straddling the selected block's
+own bottom edge, which is what an overlay is FOR.
+
+### A panel is read from the DRAFT, like every other field
+
+`insetPanelsMarkup()` and `obstaclesOf()` read the ROW alone. A panel a desk
+had just added therefore drew nothing and displaced no copy until the edition
+was reloaded — so the block on screen and the block that would print were two
+different blocks for as long as the desk was looking at it. This hit the
+existing Properties control as much as the new button. Both resolve
+`view.insetPanels ?? section.inset_panels` now, and `insetPanels` travels with
+the draft. It is the dateline lesson in the other direction.
+
 ### Terminology — there is no external editor
 
 The SAHAS Layout Desk is one editor with two views of the same block:
@@ -1762,14 +1815,34 @@ disagreeing. And the size was backwards — 7.5px against a 6.4px body is 10.5pt
 under 9pt copy, so the caption was the largest small type on the block. It is
 **8 pt in the sans face**, which is what a printed daily sets.
 
-### Information graphics, and why there are only two kinds
+### Information graphics — five kinds, and one primitive underneath
 
-A bar chart and a stat row are rectangles and type, and a rectangle is
-something all four export writers already draw — the print model's four item
-kinds are `fill`, `text`, `image` and `rule`, and rules are axis-aligned. **A
-pie needs bezier arcs and a line chart a polyline**, in the PDF, the IDML, the
-`.sla` and Word: four separate pieces of geometry work. A chart that drew on
-screen and vanished from the plate is worse than no chart.
+This used to say there could only ever be two, because "a pie needs bezier arcs
+and a line chart a polyline" and adding those to the PDF, the IDML and the
+`.sla` was three separate pieces of geometry work. **The premise was wrong, and
+pleasantly so: an arc turned into SEGMENTS is a polygon**, and so is a line
+chart, and so is a dot.
+
+So there is one new neutral item — **`poly`**, a point list with an ink and an
+optional stroke — and each writer gained one small branch that draws straight
+lines. `arcPoints()` in `smart-cards/layout.js` does the segmentation **once**,
+so the wheel on screen and the wheel on the plate are the same polygon rather
+than two roundings of one arc; at 300 dpi a 32-segment quarter turn is under a
+third of a pixel from the true arc. **A pie is printed in TINTS of the one
+accent** (`sliceInk()`, also in the solver) because a newspaper has four plates
+and a colour a desk mixed in a browser is an ink no press can lay down.
+
+Three faults found by rendering the charts and looking at them, none visible in
+the code: the legend stacked UNDER the wheel and was clipped (`.smart-chart`
+sets `flex-direction: column` and both rules are one class deep); the legend
+was measured on its label alone and read `सातारा — ८४२ ि`; and a line chart's
+end labels ran off both edges while its middle ones collided, because
+`solveFont()` fitted the plot's HEIGHT and never asked whether two labels touch.
+Width is a fit condition too, and the type comes down until it holds.
+
+Scribus named every chart colour `SahasRed`, so a pie's four tinted legend
+swatches all printed at full strength. It registers the colours a document
+actually uses now (`colourFor()`), the way `idml.writer.js` already did.
 
 The bars run ACROSS. A Marathi category label is long — छत्रपती संभाजीनगर — and
 a vertical bar chart has to set those sideways or abbreviate them.

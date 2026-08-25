@@ -220,10 +220,20 @@
     // emptiness test below is what stops a panel with nothing in it from
     // occupying layout space and drawing as a blank rectangle; for a chart the
     // thing that would be missing is its data, so that is what is asked for.
+    //
+    // AND AN ORNAMENT IS ITS OWN RULES, so it is never empty either. The
+    // vocabulary's first and commonest entry is `plain` - two rules and
+    // nothing between them, which is what a printed paper sets most often -
+    // and it carries no mark at all. It was therefore dropped here on every
+    // surface: the draft stored it, the menu lit its "Remove the separator"
+    // item, and the page, the Block Editor, the obstacle set and all four
+    // exports drew nothing. The panel that added it tried to dodge this with
+    // a single space for a line, and `clean()` trims, so the space died on
+    // the way in. The kind decides, as it already does for a chart.
     const card = cardOf(raw.card);
     if (kind === 'chart') {
       if (!card) return null;
-    } else if (!title && !lines.length) return null;
+    } else if (kind !== 'ornament' && !title && !lines.length) return null;
     return {
       id: String(raw.id || `panel-${Math.random().toString(36).slice(2, 9)}`),
       kind,

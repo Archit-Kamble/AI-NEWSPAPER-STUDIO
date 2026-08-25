@@ -270,3 +270,114 @@ test('the breaker is charged for how hard a line has to be stretched', () => {
     assert.ok(em <= 0.56, `no line may exceed the word-space cap (saw ${em.toFixed(3)} em)`);
   }
 });
+
+// -------------------------------------------- the separator that was silent ---
+
+test('a PLAIN separator is a panel, not an empty one', () => {
+  // The Separator vocabulary's first and commonest entry is `plain` - two
+  // rules and nothing between them, which is what a printed paper sets most
+  // often. It carries no mark, and panelOf() judged a panel with neither a
+  // title nor a line empty and threw it away. So the draft stored it, the
+  // menu lit its "Remove the separator" item, and the page, the Block Editor,
+  // the compositor's obstacle set and all four exports drew NOTHING. An
+  // ornament is its own rules; the kind decides, exactly as it already did
+  // for a chart.
+  require('../public/editor/layout/inset-panels.js');
+  const { panelOf, panelsOf, panelLayout } = globalThis.SahasInsetPanels;
+  const frame = { width: 190, height: 264 };
+  const plain = { id: 'p1', kind: 'ornament', x: 2, y: 120, width: 186, height: 12, title: '', lines: [] };
+
+  const kept = panelOf(plain, frame);
+  assert.ok(kept, 'a plain separator survives');
+  assert.equal(kept.kind, 'ornament');
+  assert.deepEqual(kept.lines, [], 'and it carries no line, because it has no mark');
+  assert.equal(panelLayout(kept, 6.4).lines.length, 0, 'so it sets no type - its rules are its ink');
+
+  // A marked one is unchanged, and so is the emptiness rule everywhere else.
+  const diamond = panelOf({ ...plain, id: 'p2', lines: ['◆'] }, frame);
+  assert.equal(diamond.lines.length, 1);
+  assert.equal(panelOf({ id: 'p3', kind: 'note', x: 2, y: 10, width: 100, height: 40, title: '', lines: [] }, frame), null,
+    'a fact box with nothing in it is still refused - that is what the test is FOR');
+
+  // And it reaches a real section's panel list.
+  assert.equal(panelsOf({ width_px: 190, height_px: 264, inset_panels: [plain] }).length, 1);
+});
+
+test('a block reports the status every other surface reports', async () => {
+  // properties-panel.js read `view.status` raw. That column is NULL until a
+  // desk explicitly sets one, so a block with a headline, a story and a
+  // photograph in it read "empty" in the Properties panel while the canvas
+  // badge beside it said "editing" - one derived answer, one second copy, and
+  // the second copy was the one under the desk's eye.
+  const { statusOf } = await import('../public/editor/status/section-status.js');
+  assert.equal(statusOf({ headline: '', body: '' }, false), 'empty');
+  assert.equal(statusOf({ headline: 'पाणीपुरवठा', body: 'copy' }, false), 'editing',
+    'a written block is never empty');
+  assert.equal(statusOf({ headline: '', body: '' }, true), 'editing',
+    'nor is one carrying only a photograph');
+  assert.equal(statusOf({ headline: 'x', body: 'y', status: 'ready' }, false), 'ready',
+    'and an explicit decision still wins');
+});
+
+test('the block is not offered a tracking control the page will not set', async () => {
+  // letter_spacing_px was measured by compose.js and drawn by NOBODY - not
+  // render.js, not the PDF, the IDML, the .docx or the .sla. The only thing
+  // that ever showed it was the Typography panel's own preview paragraph,
+  // which is exactly how drop_cap BOOLEAN and list_style presented. A block
+  // measured tracked and set untracked falls short of its own measure on
+  // every line.
+  const fs = require('node:fs');
+  const panel = fs.readFileSync('public/editor/external-editor/typography-panel.js', 'utf8');
+  const code = panel.split('\n').filter((line) => !line.trim().startsWith('//')).join('\n');
+  assert.ok(!/letterSpacingPx/.test(code),
+    'the panel neither offers tracking nor previews it');
+
+  // The column, the model and the compositor keep their support, so nothing
+  // stored changes and this is one line to put back.
+  const model = fs.readFileSync('public/editor/section-model.js', 'utf8');
+  assert.ok(/letterSpacingPx/.test(model), 'the stored field is untouched');
+});
+
+test('an empty story is empty, not the story that was there before', async () => {
+  // pick() treats '' as "the desk has not said" - right for a font family,
+  // wrong for the words. Measured in the running app: a sub-editor puts the
+  // caret in the body, presses Ctrl+A and Delete, the draft goes 490
+  // characters to 0 and SAVES, the canvas sets the dateline alone - and the
+  // Block Editor's own page went on setting all thirteen lines of the copy
+  // that had just been deleted, because '' fell through to the row it still
+  // held. Taking a reporter's story that carries no body does the same.
+  const adapter = await import('../public/editor/compose/section-adapter.js');
+  const row = {
+    ...BLOCK, headline: 'पाणीपुरवठा योजनेला गती', subheading: '', kicker: '',
+    body: 'सातारा जिल्ह्यातील ग्रामीण भागात पाणीपुरवठा योजनेचे काम अंतिम टप्प्यात आले आहे. '
+      + 'महापालिकेने शहरातील रस्त्यांच्या दुरुस्तीसाठी स्वतंत्र निधी मंजूर केला आहे.',
+  };
+  const asStored = adapter.composeSection(row, {});
+  assert.ok(asStored.bodyLines.length > 1, 'the fixture must actually set several lines');
+
+  // A DRAFT THAT SAYS EMPTY IS OBEYED.
+  const cleared = adapter.composeSection(row, { ...row, body: '' });
+  const datelineOnly = cleared.bodyLines.filter((line) => !line.dateline).length;
+  assert.equal(datelineOnly, 0, 'a cleared story sets no copy');
+
+  // AND AN ABSENT KEY STILL READS THE ROW - every server-side caller composes
+  // a stored row with an empty view (preflight, worklist, copyFit).
+  assert.equal(adapter.composeSection(row, {}).bodyLines.length, asStored.bodyLines.length);
+  assert.equal(adapter.composeSection(row, { headline: '' }).bands.headline?.lines.length ?? 0, 0,
+    'a headline cleared to empty sets no headline');
+  assert.ok(adapter.composeSection(row, {}).bands.headline.lines.length > 0,
+    'while a view that never mentions the headline still reads the row');
+
+  // THE DATELINE'S FIELDS ARE COPY TOO, and this is one field further on:
+  // after the body was fixed, taking a story with no location left the canvas
+  // setting "■ reporter" and the Block Editor "■ पाटण, reporter" - a different
+  // dateline, a different measure and a different number of lines.
+  const dated = { ...row, body: '', location: 'पाटण', reporter_name: 'सुजॉय' };
+  const line = (c) => c.bodyLines.map((l) => l.text).join(' | ');
+  assert.match(line(adapter.composeSection(dated, {})), /पाटण/,
+    'an empty view still reads the row - preflight, worklist and copyFit rely on it');
+  assert.doesNotMatch(line(adapter.composeSection(dated, { location: '', author: 'सुजॉय', body: '' })), /पाटण/,
+    'a cleared location is obeyed');
+  assert.match(line(adapter.composeSection(dated, { author: 'सुजॉय', body: '' })), /पाटण/,
+    'and a view that never mentions the location still reads the row');
+});

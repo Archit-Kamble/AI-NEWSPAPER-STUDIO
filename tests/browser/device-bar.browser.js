@@ -142,8 +142,16 @@ const say = (ok, name, detail = '') => {
     await press('rule');
     await choose('orn:diamond');
     const afterOrnament = await block().locator('.section-inset-panel').count();
-    say(afterOrnament > panelsBefore, 'Separator sets an ornament across the measure',
-      `${panelsBefore} → ${afterOrnament}`);
+    // ONE ORNAMENT, NOT "one more panel than before". Choosing a separator
+    // REPLACES any separator already on the block (that is what makes the
+    // vocabulary a vocabulary rather than a stack), so a block that arrives
+    // carrying one legitimately ends with the same panel count. Asserting the
+    // count grew made this check depend on ambient fixture state - the trap
+    // this file's own restore exists to avoid, and the one visual-pass was
+    // caught by earlier.
+    say(await block().locator('.section-inset-ornament').count() === 1,
+      'Separator sets an ornament across the measure',
+      `${panelsBefore} → ${afterOrnament} panels, 1 ornament`);
     // A VOCABULARY, not one fixed mark. The button produced exactly one thing
     // before - ◆ between two hairlines - which is one separator, not a device.
     const markOf = async () => (await block().locator('.section-inset-ornament span').first()
@@ -153,6 +161,32 @@ const say = (ok, name, detail = '') => {
     await choose('orn:squares');
     say(await markOf() === '\u25aa \u25aa \u25aa', 'a different separator REPLACES it, never stacks',
       `${await markOf()} · ${await block().locator('.section-inset-ornament').count()} on the block`);
+
+    // EVERY ORNAMENT IN THE VOCABULARY, because the one that was broken was
+    // the one nothing had pressed. `plain` is two rules and nothing between
+    // them - the first entry and the one a printed paper sets most often - so
+    // it carries no mark, and panelOf() judged a panel with neither a title
+    // nor a line empty and threw it away. The draft stored it, the menu lit
+    // its own "Remove the separator", and the page, the Block Editor, the
+    // obstacle set and all four exports drew NOTHING. Two checks would not
+    // have caught it; pressing all seven does.
+    await press('rule');
+    const vocabulary = await page.evaluate(() => [...document.querySelectorAll('#edDeviceMenu [data-device-choice]')]
+      .map((b) => b.dataset.deviceChoice).filter((v) => v.startsWith('orn:') && v !== 'orn:remove'));
+    await page.keyboard.press('Escape');
+    say(vocabulary.length >= 5, 'the Separator offers a vocabulary', vocabulary.join(' '));
+    for (const orn of vocabulary) {
+      await press('rule');
+      await choose(orn);
+      const drawn = await block().locator('.section-inset-ornament').count();
+      const inEditor = await page.locator('#edFramePage .section-inset-ornament').count();
+      say(drawn === 1 && inEditor === 1, `${orn} is DRAWN, on both surfaces`,
+        `canvas ${drawn}, Block Editor ${inEditor}`);
+    }
+    // And leave the block as this section found it, so the checks below (and
+    // the next run) start where they expect to.
+    await press('rule');
+    await choose('orn:diamond');
 
     await press('insert');
     await choose('panel:note');

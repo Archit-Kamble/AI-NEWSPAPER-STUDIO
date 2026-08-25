@@ -313,10 +313,12 @@ function ornamentPanel(section, view, mark = "\u25c6") {
     height: Math.max(8, Math.round(body * 1.8)),
     title: "",
     // A PLAIN separator is two rules and nothing between them, so it carries
-    // no line at all - and panelOf() rejects a panel with neither a title nor
-    // a line as empty, which is right for a fact box and wrong for this. One
-    // space is a line: it makes the panel real without printing a mark.
-    lines: [mark || " "],
+    // no line at all. It does not need one: panelOf() knows an ornament is its
+    // own rules and never judges it empty (inset-panels.js). The single space
+    // that used to stand in for the missing mark was trimmed away by clean()
+    // on the way in, so the panel was dropped and the plain separator - the
+    // commonest one there is - added nothing to the page.
+    lines: mark ? [mark] : [],
   };
 }
 

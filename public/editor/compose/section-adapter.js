@@ -42,6 +42,34 @@ function pick(section, view, camel, snake, fallback) {
   return fallback;
 }
 
+/**
+ * THE SAME LOOKUP FOR COPY, where an empty string is a VALUE and not a silence.
+ *
+ * pick() treats '' as "the desk has not said", which is right for a font
+ * family or an alignment and wrong for the words. Measured on a real block:
+ * a sub-editor puts the caret in the story, presses Ctrl+A and Delete, and
+ * the draft's body goes 490 characters to 0 and saves - and the Block Editor's
+ * own page went on setting all thirteen lines of the deleted copy, because ''
+ * fell through to the row it still held. The canvas was right only by luck:
+ * it composes against the store's row, which autosave had already replaced.
+ *
+ * Taking a reporter's story that carries no body does it too, and that is how
+ * this was found - the canvas set the dateline alone while the Block Editor
+ * set the previous story underneath it.
+ *
+ * So: absent means absent, and empty means empty. A view that does not carry
+ * the key at all still reads the row, which is what every server-side caller
+ * relies on (composeSection(row, {}) in preflight, worklist and copyFit).
+ */
+function pickText(section, view, camel, snake, fallback) {
+  for (const source of [view, section]) {
+    if (!source) continue;
+    if (source[camel] !== undefined && source[camel] !== null) return source[camel];
+    if (source[snake] !== undefined && source[snake] !== null) return source[snake];
+  }
+  return fallback;
+}
+
 function positive(value, fallback) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
@@ -337,8 +365,19 @@ export function composeSection(section = {}, view = {}) {
   // 150x176 blocks: 11 lines against 12, and a block the settle loop called
   // 100% set really sets 90%.
   const prefix = datelineText({
-    location: pick(section, view, 'location', 'location', ''),
-    author: pick(section, view, 'author', 'reporter_name', ''),
+    // THE DATELINE'S OWN FIELDS ARE COPY TOO, and go through pickText for the
+    // same reason the story does: a block whose location has been cleared -
+    // or a reporter's story that carries none - must set the dateline it
+    // actually has, not the one the row used to hold. Found the same way,
+    // one field further on: after the body was fixed, taking a story with no
+    // location left the canvas setting "■ reporter" and the Block Editor
+    // "■ पाटण, reporter", which is a different dateline, a different measure
+    // and a different number of lines on the two surfaces.
+    //
+    // `author` reads a different key on each side (the view's `author`, the
+    // row's `reporter_name`), so it needs both names.
+    location: pickText(section, view, 'location', 'location', ''),
+    author: pickText(section, view, 'author', 'reporter_name', ''),
     // Read the same way every other field is - the view first, then the row -
     // and it has to be carried into this literal, because datelineText() can
     // only decline a dateline for an object that tells it it may.
@@ -352,7 +391,7 @@ export function composeSection(section = {}, view = {}) {
   // produced - only marks are additionally carried. The dateline prefix has
   // no marks of its own, so every mark's offset shifts forward by exactly
   // its length.
-  const withMarks = textWithMarks(pick(section, view, 'body', 'body', ''));
+  const withMarks = textWithMarks(pickText(section, view, 'body', 'body', ''));
   const bodyText = prefix + withMarks.text;
   const bodyMarks = withMarks.marks.map((mark) => ({
     ...mark,
@@ -373,9 +412,9 @@ export function composeSection(section = {}, view = {}) {
     // ghost. These went through plainText() before, which threw the marks
     // away, so the one place a desk could emphasise a word - the story - was
     // also the only place it printed.
-    kicker: textWithMarks(pick(section, view, 'kicker', 'kicker', '')),
-    headline: textWithMarks(pick(section, view, 'headline', 'headline', '')),
-    subheading: textWithMarks(pick(section, view, 'subheading', 'subheading', '')),
+    kicker: textWithMarks(pickText(section, view, 'kicker', 'kicker', '')),
+    headline: textWithMarks(pickText(section, view, 'headline', 'headline', '')),
+    subheading: textWithMarks(pickText(section, view, 'subheading', 'subheading', '')),
     // The dateline is part of the flow it opens.
     body: { text: bodyText, marks: bodyMarks },
     // How much of that flow is furniture rather than the reporter's copy. The

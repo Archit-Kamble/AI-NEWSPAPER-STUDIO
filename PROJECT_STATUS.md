@@ -6792,3 +6792,121 @@ and no line exceeds the word-space cap.
 Measured on the plate by rasterising the press PDF and reading the ink extents
 of every line, which is the only check that could have caught the justification
 fault at all.
+
+## The editor, driven end to end — 25 Aug 2026
+
+The instruction was to test the editor, not to build in it: press everything on
+blocks that already exist, look at what came back, and fix only what was
+actually broken. Four sweeps of the running app, 166 checks, eleven screenshots.
+
+The headline result is that most of it works. Every device on the bar opens,
+acts, and can be taken off again; the chart dialog asks its three questions in
+order; the three type steppers move the page and the locks hold; the marks land
+on the object that is selected; the rail, the page map, the toolbar, print view
+and the column-rules switch all do what they say. **Four things did not, and every
+one of them is the same fault in different clothes: a second answer to a
+question something else had already answered.**
+
+### 1 · The plain separator added nothing
+
+`Separator → Plain rules` is two rules and nothing between them — the first
+entry in the vocabulary and the one a printed paper sets most often. It carries
+no mark, and `panelOf()` judges a panel with neither a title nor a line empty
+and throws it away. So the draft stored it, the menu lit its own "Remove the
+separator", and the page, the Block Editor, the compositor's obstacle set and
+all four exports drew **nothing**.
+
+The panel that adds one had already seen this coming and tried to stand a
+single space in for the missing mark; `clean()` trims, so the space died on the
+way in. An ornament is its own rules, so the **kind** decides — exactly as it
+already did for a chart, two lines above in the same function.
+
+Measured by pressing both: `orn:plain` drew 0 panels, `orn:diamond` drew 1.
+Now both draw 1.
+
+### 2 · Properties said "empty" about a block with a story in it
+
+`properties-panel.js` printed `view.status` raw. That column is NULL until a
+desk explicitly sets one, so **every block nobody had statused by hand read
+"empty"** — including the filled front-page lead sitting directly under the
+readout, whose canvas badge said "Editing" at the same moment. The badge, the
+Block Editor's chip and the worklist all go through `statusOf()`; this was the
+one place that answered a second way, and so the one place that could disagree.
+
+### 3 · Letter spacing was measured and never drawn
+
+The worst of the three, because it was half-wired rather than unwired.
+`compose.js` composes **with** the tracking — on a 190 px block, three lines
+become four at 1 px — and `render.js`, the PDF, the IDML, the `.docx` and the
+`.sla` all set the type **untracked**. The block is broken against a measure
+the ink never reaches: every line falls `(clusters − 1) × spacing` short, 29% of
+the measure at 2 px. The only thing that ever showed the tracking was the
+Typography panel's own preview paragraph — the same tell `drop_cap` BOOLEAN and
+`list_style` had.
+
+The control is gone rather than plumbed through, and the reason is substantive
+rather than economical: CSS `letter-spacing` adds a gap after *every* cluster,
+including the last and across word gaps, while `measurePieceWidth()` adds it
+only *between* the clusters of a word — so emitting the number would replace
+one disagreement with another. And tracking is wrong for this script anyway,
+which `compose.js` already states where it refuses letter-spacing as a
+justification lever. The column, the model and the compositor keep their
+support; nothing stored changes, and it is one line to put back. Swept: **0 of
+2527 rows** carry a non-zero value.
+
+### 4 · Deleting a story left it on the page you are writing in
+
+The most serious of the four, and a thing a desk does daily. Caret in the body,
+Ctrl+A, Delete: the draft goes 490 characters to 0 and **saves**, the canvas
+correctly sets the dateline alone, and the Block Editor's own page goes on
+setting all thirteen lines of the deleted copy. It never self-corrects.
+
+`pick()` treats `''` as "the desk has not said" and falls through to the stored
+row — right for a font family, wrong for the words. The canvas escaped only by
+luck: it composes against the store's row, which autosave had already replaced,
+while the Block Editor holds its own copy of the row and that copy goes stale.
+
+`pickText()` is the same lookup with one rule changed — absent means absent,
+empty means empty — for `body`, `kicker`, `headline`, `subheading` and the
+dateline's `location` and `author`. A view that never mentions the key still
+reads the row, so every server-side caller is untouched.
+
+Found by driving **Take from Reporter**, which no net covered: a story carrying
+no body set the dateline alone on the canvas and the previous story in the
+editor. The dateline half had to be found separately, one field on, after the
+body was fixed.
+
+### What was checked and found sound
+
+Border, Tint, Columns, both faces, Drop cap, Bullets, Numbers, Justify,
+Dateline, Insert (every panel kind), Separator (every ornament), Chart (all
+five, and its dialog's rooms and inks), Caption, AI picture; the three type
+steppers and both locks; the marks toolbar on the body with the caret and the
+band painted on the composed page; the Typography and Properties rails and
+their alignment scoping; Story details; the page map and block-to-block
+selection; the toolbar's thirteen controls; print view; the column-rules
+switch; and canvas/Block-Editor parity throughout.
+
+### Two things looked at and deliberately left
+
+A picture standing mid-column splits each row it crosses into two corridors and
+the copy sets in both — visually loud, and exactly what `corridor-snap.js`
+documents itself as *not* repairing, because it only moves a placement that
+makes the block unprintable and must not fight a desk over a legal one.
+
+An advert block is still offered Drop cap, Dateline and the lists. Adverts do
+carry type here, so the controls are not inert; narrowing them would be a
+product decision rather than a fix.
+
+### Verified
+
+`npm test` **938/938**, including four new regressions: a plain separator
+survives `panelOf()` while an empty fact box is still refused, a written block
+reports the status every other surface reports, the panel neither offers
+tracking nor previews it, and a cleared story (and a cleared location) is
+obeyed while an absent key still reads the row.
+
+All six browser nets green, and `device-bar.browser.js` gained eight checks —
+it now presses **every** ornament in the vocabulary and asserts each is drawn
+on both surfaces, because the one that was broken was the one nothing had ever
+pressed.

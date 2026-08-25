@@ -127,7 +127,29 @@ const NUMBER_FIELDS = [
   // this input offers has to match what section-model.js actually stores, or
   // a desk could type 1.0 here and watch it render at 1.45 anyway.
   { id: "tyLineHeight", field: "lineHeight", label: "Line spacing", min: MIN_LINE_HEIGHT, max: 3, step: 0.05 },
-  { id: "tyLetterSpacing", field: "letterSpacingPx", label: "Letter spacing (px)", min: -2, max: 10, step: 0.1 },
+  // LETTER SPACING IS NOT OFFERED, and this is the third instance of the fault
+  // that took drop_cap BOOLEAN and list_style: a control that persisted, that
+  // this panel's own PREVIEW paragraph drew, and that no renderer of the real
+  // block read. Measured on a 190 px block: the compositor genuinely composes
+  // with the tracking (three lines become four at 1 px), and then render.js,
+  // the PDF, the IDML, the .docx and the .sla all set the type untracked - so
+  // every line falls (clusters - 1) x spacing short of the measure it was
+  // broken against. At 2 px that is 29% of the measure, on screen and on the
+  // plate alike.
+  //
+  // Painting it is not the fix either, and that is the substantive reason it
+  // is gone rather than plumbed through: CSS letter-spacing adds a gap after
+  // EVERY cluster, including the last and across word gaps, while
+  // measurePieceWidth() adds it only BETWEEN the clusters of a word - so
+  // emitting the number would replace one disagreement with another. And
+  // tracking is wrong for this script in the first place, which compose.js
+  // already says in as many words where it refuses letter-spacing as a
+  // justification lever: it pulls a Devanagari word's shirorekha apart.
+  //
+  // The column, section-model.js and the compositor's own support all stay -
+  // nothing stored changes, no migration - so this is one line to put back if
+  // a desk ever needs tracking for a Latin advert. No row in the database
+  // carries a non-zero value today (swept: 0 of 2527).
   { id: "tyParagraphSpacing", field: "paragraphSpacingPx", label: "Paragraph spacing (px)", min: 0, max: 60, step: 1 },
 ];
 
@@ -259,7 +281,6 @@ export function previewMarkup(view) {
     view.fontUnderline ? "text-decoration:underline" : "",
     `text-align:${view.textAlign}`,
     `line-height:${view.lineHeight}`,
-    `letter-spacing:${view.letterSpacingPx}px`,
     `padding:${view.marginPx}px`,
   ]
     .filter(Boolean)

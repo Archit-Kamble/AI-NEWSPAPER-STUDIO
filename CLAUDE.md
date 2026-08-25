@@ -467,6 +467,43 @@ Quill's, and Quill owns exactly one document — the body.
 this class of bug can be caught: press each control with each object selected
 and check WHICH field moved.
 
+### A readout says what every other surface says
+
+`properties-panel.js` printed `view.status` raw. That column is NULL until a
+desk explicitly sets one, so the Properties panel reported **"empty" on a block
+with a headline, a story and a photograph in it** — while the badge on the
+canvas beside it, the chip in the Block Editor and the worklist all said
+`editing`, because those three go through `statusOf()`. One derived answer, one
+second copy of it, and the second copy was the one directly under the desk's
+eye. It reads `statusOf(view, hasImages)` now. A readout is not a lesser thing
+than a control: it is what a desk checks the control against.
+
+### The paper does not track Devanagari, so it does not offer to
+
+`letter_spacing_px` is the third instance of the fault that took `drop_cap`
+BOOLEAN and `list_style`, and the worst of the three, because this one was
+half-wired rather than unwired. `compose.js` **measures** with it — on a 190 px
+block three lines become four at 1 px of tracking — and `render.js`, the PDF,
+the IDML, the `.docx` and the `.sla` all set the type **untracked**. So the
+block was broken against a measure the ink never reached: every line falls
+`(clusters − 1) × spacing` short, 29% of the measure at 2 px, on screen and on
+the plate alike. The only surface that ever drew it was the Typography panel's
+own **preview paragraph** — the exact tell the other two had.
+
+**Painting it is not the fix, and that is why the control is gone rather than
+plumbed through.** CSS `letter-spacing` adds a gap after *every* cluster,
+including the last and across word gaps; `measurePieceWidth()` adds it only
+*between* the clusters of a word. Emitting the number would replace one
+disagreement with another. And tracking is wrong for this script in the first
+place — `compose.js` already says so where it refuses letter-spacing as a
+justification lever: it pulls a Devanagari word's shirorekha apart, which is
+why glyph scaling is the second lever there instead.
+
+The column, `section-model.js` and the compositor's own support all stay, so
+nothing stored changes and there is no migration; it is one line to put back if
+a desk ever needs tracking for a Latin advert. No row carries a non-zero value
+today — swept: **0 of 2527**.
+
 ### The page is RULED, and the space is specified baseline to baseline
 
 Two things a printed newspaper has that a page of white gaps does not.
@@ -664,6 +701,35 @@ view**, and measured a block **one whole body line shorter than the one that
 prints**: 11 lines against 12 on a 150×176, and a block the settle loop called
 100% set really setting 90%. Anything that composes a persisted section must get
 the same answer the canvas does; `tests/pictureBlocks.test.js` holds it.
+
+### An empty story is empty, not the story that was there before
+
+`pick()` walks the view then the row and treats `''` as *"the desk has not
+said"*. That is right for a font family or an alignment. **It is wrong for the
+words**, and the difference is not academic: a sub-editor puts the caret in the
+story, presses Ctrl+A and Delete, and the draft's body goes 490 characters to 0
+and saves — while the Block Editor's own page goes on setting all thirteen
+lines of the copy that has just been deleted, permanently. The canvas was right
+only by luck: it composes against the store's row, which autosave had already
+replaced, whereas the Block Editor holds its own copy of the row and that copy
+goes stale.
+
+`pickText()` is the same lookup with one rule changed — **absent means absent,
+empty means empty** — and it is used for `body`, `kicker`, `headline`,
+`subheading`, and for the dateline's `location` and `author`. A view that does
+not carry the key at all still reads the row, which is what every server-side
+caller relies on (`composeSection(row, {})` in preflight, worklist and
+copyFit), so nothing that composes a stored row changes.
+
+The dateline was one field further on and had to be found separately: with the
+body fixed, taking a reporter's story that carries no location left the canvas
+setting `■ reporter` and the Block Editor `■ पाटण, reporter` — a different
+dateline, a different measure, and a different number of lines on the two
+surfaces.
+
+Found by driving **Take from Reporter**, which no net covered. A story with no
+body set the dateline alone on the canvas and the *previous* story in the
+editor.
 
 ### The engine's own findings must be rendered, and only the real ones
 
@@ -2088,6 +2154,17 @@ hole in any page overlay it sat over. `INSET_PANEL_STYLES` is the one table of
 edges/face/ground, and the `.section-inset-*` rules in `styles.css` are the
 browser's half of it.
 
+**An ornament is its own rules, so it is never EMPTY.** `panelOf()` refuses a
+panel carrying neither a title nor a line — right for a fact box, and it threw
+away every **plain** separator, which is the vocabulary's first entry and the
+one a printed paper sets most often: two rules and nothing between them. The
+draft stored it, the menu lit its own "Remove the separator", and the page, the
+Block Editor, the compositor's obstacle set and all four exports drew nothing.
+The panel that adds one had tried to dodge this by standing a single space in
+for the missing mark, and `clean()` trims, so the space died on the way in. The
+**kind** decides, exactly as it already did for a chart two lines above. Found
+by pressing the button and looking: `orn:plain` drew 0, `orn:diamond` drew 1.
+
 ### A list in running copy
 
 `page_sections.list_style` had been a column since the schema was written, the
@@ -2677,7 +2754,13 @@ and the PNGs it writes are 39–47% transparent.
 node tests/browser/workspace.browser.js          # defaults to edition 2099
 node tests/browser/editor-controls.browser.js    # every control × every text object
 node tests/browser/body-editing.browser.js       # the caret, the selection, the gestures
+node tests/browser/story-picker.browser.js       # Take from Reporter, and clearing a story
 ```
+
+`story-picker.browser.js` covers the path an editor uses most and no net drove:
+taking a reporter's filing into a block. It found the `pickText()` fault above,
+and it ends by clearing the story with Ctrl+A and Delete — the version of that
+fault a desk meets daily — checking both surfaces agree each time.
 
 **A net that writes into a real block must put it back, and must do so when it
 CRASHES too.** `editor-parity.browser.js` restores the block it borrows at the

@@ -17,6 +17,7 @@ import { escapeHtml } from "../format.js";
 import { TINTS } from "../layout/inks.js";
 import { composeSection, measureColumns, maxLegibleColumns } from "../compose/section-adapter.js";
 import { PART_LABEL } from "./typography-panel.js";
+import { statusOf, statusLabel } from "../status/section-status.js";
 // The Layer control reuses the EXACT arithmetic the Story panel's "Bring
 // forward"/"Send back" buttons already use - not a second copy of
 // "z-index plus or minus one, floored at zero".
@@ -159,7 +160,15 @@ function blockPropertiesMarkup(section, view, page) {
   return `
     <div class="field-grid">
       <div class="form-group"><label>Block type</label><p class="prop-readout">${escapeHtml(section.block_type || "article")}</p></div>
-      <div class="form-group"><label>Status</label><p class="prop-readout">${escapeHtml(view.status || "empty")}</p></div>
+      <!-- DERIVED, like every other surface that says this. view.status is
+           the stored column and it is NULL until a desk explicitly sets one,
+           so reading it raw reported "empty" on every block nobody had
+           statused by hand - including a block with a headline, a story and a
+           photograph in it, sitting directly under this readout. The canvas
+           badge, the Block Editor's own chip and the worklist all went through
+           statusOf(); this was the one place that answered the question a
+           second way, and so the one place that could disagree. -->
+      <div class="form-group"><label>Status</label><p class="prop-readout">${escapeHtml(statusLabel(statusOf(view, Boolean((section.images || []).length))))}</p></div>
       <div class="form-group"><label>Size</label><p class="prop-readout">${section.width_px} × ${section.height_px} px</p></div>
       ${page?.template_key ? `<div class="form-group"><label>Layout</label><p class="prop-readout">${escapeHtml(page.template_key)}</p></div>` : ""}
     </div>

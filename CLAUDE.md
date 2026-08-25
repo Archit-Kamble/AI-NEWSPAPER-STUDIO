@@ -1869,6 +1869,30 @@ two blocks MEET. **No export drew them**; `columnRules` appeared nowhere in the
 export folder, so every download had its stories separated by white space.
 `print-model.js` reads that same function rather than deciding again.
 
+### Scribus shares the FURNITURE, not the block walk
+
+The `.sla` is the artifact that reaches a plate and it was the last export with
+no nameplate, no column rules and no block borders. `print-model.js` exports
+`pageFurniture()` and `blockRules()` as its neutral items and
+`scribus.service.js`'s `furnitureFrames()` renders those four kinds.
+
+**The block walk is deliberately untouched.** It is the tested path,
+`scribusComposition.test.js` pins it line for line, and moving it is a rewrite
+rather than a fix.
+
+Two things that only showed up when it was tried:
+
+- A furniture picture **cannot go through `imageFrame()`** — that takes a
+  `resolvePlacedImage()` transform and converts from editor pixels, while the
+  nameplate has no crop and is already in millimetres. It gets a plain frame
+  with `SCALETYPE="1" RATIO="1"`, Scribus's documented scale-to-frame keeping
+  the aspect, which is the rule this artwork already has everywhere else: it
+  may be sized and never stretched. Computing `LOCALSCX/Y` instead would invent
+  a second scale this environment cannot render and check.
+- **The press PACKAGE has to carry what the document references.** It did not,
+  so Scribus would have opened with an empty frame — `tests/press.test.js` says
+  so in those words. It carries the nameplate and any page-level overlay now.
+
 ### What a Smart Card entry carries
 
 `smartCardLines()` gave every entry the card's own body line height, which was

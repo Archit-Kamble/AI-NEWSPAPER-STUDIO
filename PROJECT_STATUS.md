@@ -6528,3 +6528,38 @@ start if this is wanted.
 ```sql
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS display_family VARCHAR(40);
 ```
+
+
+### Scribus, the last export without the furniture — closed
+
+The `.sla` is the one artifact that actually reaches a plate and it was the last
+export with no nameplate above the fold, no column rules between the stories
+and no block borders.
+
+It now renders the **same neutral furniture items** the print model produces —
+`pageFurniture()` and `blockRules()` — through a small `furnitureFrames()`. Its
+BLOCK walk is deliberately untouched: that is the tested path,
+`scribusComposition.test.js` pins it line for line, and moving it is a rewrite
+rather than a fix. Verified on the six-page edition: 1731 objects, well-formed
+XML, the nameplate frame, 95 rule polygons, and the strapline, cover price and
+owner line all present.
+
+Two faults the tests caught while doing it, both real: a furniture picture
+cannot go through `imageFrame()` (that takes a placed-image transform and
+editor pixels; the nameplate has neither), and the press PACKAGE must carry
+what the document references or Scribus opens with an empty frame.
+
+### What is still open after run 2
+
+- **A mid-block flow.** A ruled sub-head between paragraphs, and a numbered
+  list in running copy. Both need `pourBody()` to carry a second kind of
+  paragraph. `page_sections.list_style` is already a column the compositor has
+  never read and is the place to start. Deliberately not attempted: the brief
+  for this pass says a composition-engine redesign is where to stop.
+- **A Smart Card does not avoid a page overlay.** A card is solved against the
+  block's frame rather than through the obstacle set, so a chart under an
+  overlay keeps its geometry and is covered. Prose blocks avoid it correctly.
+- **An inset panel holds text only** — no picture, no card, no nested panel.
+  `kind` exists so a richer one needs no migration.
+- **The AI picture generator's success path is still unverified**: this
+  newsroom's Gemini key has no image quota. The refusal path is exercised.

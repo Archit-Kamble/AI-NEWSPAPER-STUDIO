@@ -256,3 +256,47 @@ during this pass printed `esahas.com/epaper` where the website printed
   clips, and `renderCanvas()`'s ResizeObserver puts the transform back. Use the
   product's own `publish-current` capture instead — it is what the e-paper path
   already trusts.
+
+
+## Run 2 finished
+
+Eight defects found and fixed, all by reading a rendered page rather than by a
+test. Two devices added from the real Lokmat reference. The last export without
+page furniture closed.
+
+| | | commit |
+|---|---|---|
+| 1 | Auto columns fell back to a 97 em measure | `98e0b76` |
+| 2 | The display faces could not reach a headline | `1a359b0` |
+| 3 | A card entry got the card's body line box whatever size it was | `6f9ba6e` |
+| 4 | A subtitle outranked the card it labels | `6f9ba6e` |
+| 5 | No export drew the column rules | `6882b84` |
+| 6 | A chart printed in a different ink from the one on screen | `6882b84` |
+| 7 | A mono page's photographs printed in colour | `b0e5c1a` |
+| 8 | An overlay ignored the forme the rest of the page obeyed | (with 7) |
+| + | A panel can be tinted, and can carry a numbered list | `b349fd5`, `973e68b` |
+| + | Scribus gets the nameplate, folio, rules and borders | `d5df42c` |
+
+### The brief's question, answered on the screenshots
+
+**For a PAGE — yes.** `tmp-visual-pass/web-vs-export-1..6.png` are the six pages
+website-against-export. The front page and the dense inside page are not
+distinguishable in kind from a real Marathi daily's.
+
+**For a single BLOCK of the Lokmat reference's complexity — not yet**, and the
+gap is inside the block: SAHAS composes one headline, one deck, one body and
+one panel. The reference block carries a strap under its headline, a ruled
+sub-head mid-story and a numbered list in running copy. All three need a
+mid-block flow in `pourBody()`, which is the composition-engine change the
+brief says to stop before.
+
+### For a later run
+
+The three items under "What is still open after run 2" in `PROJECT_STATUS.md`.
+The mid-block flow is the highest-value and the riskiest; `list_style` is the
+column to start from.
+
+**Do not restart the dev server while a browser net is running.** Three net
+runs in this pass were lost that way and each looked like a product crash
+(`Cannot read properties of undefined (reading 'sections')`, or a timeout
+waiting for `.edition-row`). Both are the net finding no server.

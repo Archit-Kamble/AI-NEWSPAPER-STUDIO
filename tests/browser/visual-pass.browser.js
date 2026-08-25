@@ -37,21 +37,27 @@ const say = (ok, what, detail = '') => {
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message.slice(0, 180)}`));
   page.on('console', (m) => m.type() === 'error' && errors.push(`console: ${m.text().slice(0, 180)}`));
 
-  await page.goto(BASE);
-  await page.waitForTimeout(900);
-  if (await page.locator('#email').count()) {
-    await page.fill('#email', 'admin@esahas.com');
-    await page.fill('#password', 'admin123');
-    await page.click('#loginBtn');
+  // Opening the edition is done more than once - a change made through the API
+  // is only on the canvas after the workspace has fetched the page again, and
+  // page.reload() lands on the EDITION LIST rather than back in the workspace.
+  async function openEdition() {
+    await page.goto(BASE);
+    await page.waitForTimeout(900);
+    if (await page.locator('#email').count()) {
+      await page.fill('#email', 'admin@esahas.com');
+      await page.fill('#password', 'admin123');
+      await page.click('#loginBtn');
+    }
+    await page.waitForSelector('.edition-row', { timeout: 20000 });
+    const when = await page.evaluate((ed) => fetch(`/api/newspapers/${ed}`).then((r) => r.json())
+      .then((n) => String(n.publication_date).slice(0, 10)), ED);
+    await page.fill('#editionSearch', when);
+    await page.waitForTimeout(700);
+    await page.locator(`.edition-row[data-edition-id="${ED}"] button`).click();
+    await page.waitForSelector('#canvasSurface', { timeout: 25000 });
+    await page.waitForTimeout(2600);
   }
-  await page.waitForSelector('.edition-row', { timeout: 20000 });
-  const when = await page.evaluate((ed) => fetch(`/api/newspapers/${ed}`).then((r) => r.json())
-    .then((n) => String(n.publication_date).slice(0, 10)), ED);
-  await page.fill('#editionSearch', when);
-  await page.waitForTimeout(700);
-  await page.locator(`.edition-row[data-edition-id="${ED}"] button`).click();
-  await page.waitForSelector('#canvasSurface', { timeout: 25000 });
-  await page.waitForTimeout(2600);
+  await openEdition();
 
   // ---- the page as a whole, which is what a desk judges ------------------
   await page.locator('#canvasSurface').screenshot({ path: `${SHOTS}/canvas-page-1.png` });
@@ -158,6 +164,11 @@ const say = (ok, what, detail = '') => {
         borderStyle: was.border_style || 'none', borderWidthPx: Number(was.border_width_px) || 1,
         backgroundColor: was.background_color, headlineStyle: was.headline_style || 'plain',
         dropCapLines: was.drop_cap_lines || 0,
+        // The card too. Omitting these CLEARED a Smart Card the block was
+        // carrying, because this PUT is a full replace - the same trap the
+        // whole-block restore exists for, one field family further on.
+        smartCardKey: was.smart_card_key || null,
+        smartCardData: was.smart_card_data || null,
       };
       await fetch(`/api/pages/${pg.id}/sections/${key}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -207,6 +218,31 @@ const say = (ok, what, detail = '') => {
   }
 
   // ---- an information graphic, on the page --------------------------------
+  //
+  // Placed by this net rather than assumed to be there. It used to assert a
+  // chart that a previous run had left on the edition, and this net's own
+  // restore then cleared it - so the check passed once and failed for ever
+  // after. A net that depends on ambient state is a net that reports the last
+  // run rather than this one.
+  await page.evaluate(async ([ed, key]) => {
+    const pages = await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json());
+    const pg = pages.find((p) => p.sections.some((s) => s.section_key === key));
+    const s = pg.sections.find((x) => x.section_key === key);
+    await fetch(`/api/pages/${pg.id}/sections/${key}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        headline: s.headline || '', subheading: s.subheading || '', body: s.body || '',
+        smartCardKey: 'chart',
+        smartCardData: {
+          chartType: 'bar', subtitle: 'जिल्हानिहाय पाऊस', unit: 'मिमी', source: 'स्रोत : हवामान विभाग',
+          items: [{ label: 'सातारा', value: 842 }, { label: 'कोल्हापूर', value: 1290 },
+            { label: 'सांगली', value: 603 }, { label: 'पुणे', value: 770 }],
+        },
+      }),
+    });
+  }, [ED, KEY]).catch(() => {});
+  await openEdition();
+
   const chart = await page.evaluate(() => {
     const node = document.querySelector('.smart-chart-bars');
     if (!node) return null;

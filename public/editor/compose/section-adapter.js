@@ -105,6 +105,49 @@ const TARGET_COLUMN_PX = 120;
 // is a printed column; 5.4 em sets none.
 const MIN_COLUMN_EM = 10;
 
+// ...and the CEILING, which is what the overset fallback below is held to.
+//
+// The fallback walks the count down until the copy stops oversetting, and it
+// had no floor at all - so on a 620 px banner whose copy oversets at 2, 3, 4
+// and 5 columns it went all the way to ONE, and set a 310 mm line. That is the
+// exact fault this file's own header calls out for the 268 px anchor ("no
+// newspaper prints a 134 mm measure"), arriving by the back door: not from a
+// stored count, but from a fallback with nowhere to stop.
+//
+// Twice the printed target is a broadsheet's widest defensible measure. Beyond
+// it the eye loses the line's start on the way back from its end, which is the
+// thing column rules exist to prevent.
+//
+// The trade this makes is deliberate and it is the honest one. Overset is a
+// COPY problem: the desk trims it, or the fit action sets it tighter, and both
+// of those are ordinary work that the block reports for. A 310 mm measure is a
+// DESIGN failure that no amount of editing fixes - the words are all on the
+// page and the page is still wrong. So the fallback is allowed to give up on
+// avoiding overset, and is not allowed to give up on the measure.
+//
+// IN EMS, exactly like MIN_COLUMN_EM above and for exactly the same reason:
+// that is the unit legibility is in, and a pixel bound cannot tell the two
+// cases apart. Written in pixels first (2 x TARGET_COLUMN_PX), it broke the
+// cut-out fixture in copyFit.test.js, which is a 268 px block set in 12 px
+// type - 22 em, a perfectly printable measure that legitimately falls back to
+// ONE column around its silhouette. The 620 px banner is 97 em in one column
+// because its type is 6.4 px. Same pixel width bound, opposite verdicts
+// needed; only the em bound gets both right.
+//
+// 30 em, and the number is pinned from both sides by things already written
+// down here. TARGET_COLUMN_PX is 120 px, which at the 6.4 px running body is
+// 18.75 em - a normal column, and the bound must sit well above it. And this
+// file's own header condemns the 268 px anchor at "134 mm... 48 characters to
+// the line", which is 41.5 em - so the bound must sit below THAT, or the
+// fallback is still allowed to produce the exact measure the header calls
+// unprintable. 30 em is between them: about 75 characters of Marathi, the top
+// of the comfortable range.
+//
+// Measured across 141 wide Auto blocks carrying copy: 4 were setting at 48-97
+// em, and the other 137 are untouched because the fallback never reaches the
+// floor on them.
+const MAX_COLUMN_EM = 30;
+
 /**
  * The most columns this block could be set in and still hold a word.
  *
@@ -389,7 +432,12 @@ export function composeSection(section = {}, view = {}) {
   // that prints every word. This is deliberately a fallback, not a fill
   // trick: copy that merely ends short never makes the columns jump around.
   if (explicitColumns === null && preferredColumns > 1 && expectsCopy && bodyText.trim() && bodyOverset(preferred)) {
-    for (let count = preferredColumns - 1; count >= 1; count -= 1) {
+    // Never below the count that keeps the measure printable - see
+    // MAX_COLUMN_EM. `ceil`, not `round`: the floor is a hard bound on how wide
+    // a column may get, and rounding down would step past it.
+    const usable = Math.max(0, width - 2 * padding);
+    const floorCount = Math.max(1, Math.ceil(usable / (MAX_COLUMN_EM * bodyFontPx)));
+    for (let count = preferredColumns - 1; count >= floorCount; count -= 1) {
       const candidate = composeBlock({ ...input, columnCount: count });
       if (bodyOverset(candidate)) continue;
       candidate.columnDecision = {
@@ -402,6 +450,14 @@ export function composeSection(section = {}, view = {}) {
       });
       return candidate;
     }
+    // Nothing in the legal range printed every word. The block keeps its
+    // PREFERRED count and reports the overset, which is the honest answer: the
+    // copy is too long and the desk trims it or sets it tighter, both of which
+    // are ordinary work. Returning a wider arrangement instead would let copy
+    // LENGTH change the block's design - the mirror image of the rule this
+    // fallback already holds in the other direction ("copy that merely ends
+    // short never makes the columns jump around"), and the reason the two
+    // halves are stated together.
   }
 
   return preferred;

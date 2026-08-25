@@ -200,3 +200,59 @@ The highest-value next thing is **more layouts**. This run drove one edition
 hard. A second run should build several disposable `2099-*` editions with
 different shapes — narrow columns, image-heavy, multi-column text — and compare
 canvas against export on each.
+
+
+---
+
+# Run 2 — verify, and multi-layout visual QA
+
+Started 2026-08-25 05:29 IST. Autonomous. Run 1's state verified first: all
+modules present, both schema columns applied, `npm test` 911/911, all five nets
+green (visual-pass was 36/37 — its own restore had cleared the chart fixture it
+then asserted; fixed, see below).
+
+## The gap run 1 named, closed
+
+Run 1 drove ONE edition. Run 2 built **edition 44929** — six pages, one per
+template this product has (`front`, `local`, `dense`, `photo`, `opinion`,
+`features`), filled with `scripts/fill-edition-copy.js`, and carrying every
+feature the pass added: double rules, a box, rules above/below, an inset fact
+box, a pull quote, a bar chart, a stat row, a cross-block overlay photograph,
+four captioned pictures and three of the new typefaces.
+
+Each page was then compared **website against export**, using the product's own
+exact-canvas capture (`POST /api/newspapers/:id/publish-current`, which writes
+`public/uploads/epaper/44929/page-N.png`) beside the real HTTP export route.
+Comparisons are `tmp-visual-pass/web-vs-export-1..6.png`.
+
+## Six defects found this run, all by looking at a rendered page
+
+| | what | commit |
+|---|---|---|
+| 1 | **Auto columns fell back to a 97 em measure.** The overset fallback walks the count down and had no floor, so a 620 px banner whose copy oversets at 2–5 columns went to ONE — a 310 mm line. `MAX_COLUMN_EM` (30) is the floor, in ems because that is the unit legibility is in. | `98e0b76` |
+| 2 | **The display faces could not reach a headline.** `DISPLAY_TYPOGRAPHY` hard-codes the paper's sans, so Khand and Rozha One — the two cuts marked `role: 'display'` — were only ever applicable to body copy. New `page_sections.display_family`. | `1a359b0` |
+| 3 | **A card entry got the card's body line box whatever size it was**, so a stat row's 26.4 px figures printed through the captions below them. And a subtitle was the largest type on the card it labels. | `6f9ba6e` |
+| 4 | **No export drew the column rules.** The canvas has since it was written; `columnRules` appeared nowhere in the export folder. Every download had its stories separated by white space. | `6882b84` |
+| 5 | **A chart printed in a different ink from the one on screen** — accent-red figures came out black, bold value labels regular. The card walk carried neither `ink` nor `bold`. | `6882b84` |
+| 6 | **A mono page's photographs printed in colour.** `pages.prints_colour` is the press forme and the canvas greys a picture on one; the export ignored the column. A colour separation on a forme that has none. | `b0e5c1a` |
+
+## Not a defect, but worth knowing
+
+`identityFor()` reads a module object that `server.js` hydrates at boot from
+the publication settings. A process that has not done that — a render script, a
+cron job — exports a paper with the built-in contact details. A script used
+during this pass printed `esahas.com/epaper` where the website printed
+`www.esahas.com/epaper`, and the difference was the script's. Recorded in
+`src/services/export/index.js`.
+
+## Two harness faults
+
+- the visual net's whole-block restore omitted the Smart Card fields, so it
+  CLEARED a card the block was carrying — the full-replace trap one field
+  family on. It also asserted a chart that its own restore had wiped, so it
+  passed once and failed for ever after; it places its own now.
+- capturing the canvas by CSS override does not work: `#canvasSurface` carries
+  the transform, `#canvasSizer` the scaled footprint and `#canvasViewport`
+  clips, and `renderCanvas()`'s ResizeObserver puts the transform back. Use the
+  product's own `publish-current` capture instead — it is what the e-paper path
+  already trusts.

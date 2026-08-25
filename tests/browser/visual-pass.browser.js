@@ -295,6 +295,63 @@ const say = (ok, what, detail = '') => {
   say(await page.locator('[data-prop-panel-add] [data-panel-add="note"]').count() > 0,
     'and Properties offers a control to make one');
 
+  // ---- a cross-head, and the LIST the compositor never used to set --------
+  //
+  // Both were closed together because they are the same gap: a mid-block flow.
+  // The cross-head is a panel kind - a full-measure rectangle a whole band
+  // deep, so the copy closes above it and resumes on the grid below - which is
+  // what lets it exist without pourBody() carrying a second kind of paragraph.
+  say(await page.locator('[data-prop-panel-add] [data-panel-add="crosshead"]').count() > 0,
+    'Properties offers a cross-head');
+
+  // `page_sections.list_style` persisted for months and no renderer read it:
+  // a sub-editor could choose Numbering, watch it save, reload, and find plain
+  // prose. This presses the control and counts what appears ON THE PAGE, which
+  // is the only check that could have caught it.
+  // NOT `KEY` - the chart check above put a Smart Card on it, so it carries no
+  // prose and a list has nothing to mark. `panelBlock` is the one this net has
+  // already proved is setting real body lines, which is exactly what a list
+  // needs; it also means the list and the panel are exercised on one block.
+  const listBlock = panelBlock;
+  await page.locator(`.newspaper-section[data-section-key="${listBlock}"]`).first().click();
+  await page.waitForTimeout(1800);
+  const typoTab = page.locator('[data-ext-tab="typography"], [data-tab="typography"]').first();
+  if (await typoTab.count()) { await typoTab.click(); await page.waitForTimeout(500); }
+  const listChoices = await page.locator('[data-segmented="listStyle"] .segment').evaluateAll(
+    (els) => els.map((e) => e.dataset.value));
+  say(listChoices.length === 3, 'Typography offers None / Bullets / Numbering', listChoices.join(' '));
+
+  if (listChoices.includes('number')) {
+    const markersNow = () => page.locator(`.newspaper-section[data-section-key="${listBlock}"] .section-list-marker`).count();
+    const wasSet = await page.locator('[data-segmented="listStyle"] .segment.active').getAttribute('data-value');
+    const before = await markersNow();
+    await page.locator('[data-segmented="listStyle"] .segment[data-value="number"]').click();
+    await page.waitForTimeout(2400);
+    const after = await markersNow();
+    say(after > before, 'pressing Numbering hangs real markers on the page', `${before} -> ${after}`);
+
+    const hung = await page.evaluate((key) => {
+      const block = document.querySelector(`.newspaper-section[data-section-key="${key}"]`);
+      const marker = block && block.querySelector('.section-list-marker');
+      const lines = block ? Array.from(block.querySelectorAll('.section-body-line')) : [];
+      if (!marker || !lines.length) return null;
+      const m = marker.getBoundingClientRect();
+      // EVERY line of the item is set past the marker, not just the first -
+      // that is what a hanging indent is, and what makes the markers line up.
+      const inside = lines.filter((l) => l.getBoundingClientRect().left < m.right - 1).length;
+      return { text: marker.textContent.trim(), inside, lines: lines.length };
+    }, listBlock);
+    say(hung && /^[०-९]+\.$/.test(hung.text), 'and they are Devanagari numerals', hung ? hung.text : 'none');
+    say(hung && hung.inside === 0, 'and every line of the item is set past the marker column',
+      hung ? `${hung.inside} of ${hung.lines} lines start inside it` : '');
+    await page.locator(`.newspaper-section[data-section-key="${listBlock}"]`).screenshot({ path: `${SHOTS}/canvas-list.png` }).catch(() => {});
+
+    // Put the block back the way it was found, whatever that was.
+    await page.locator(`[data-segmented="listStyle"] .segment[data-value="${wasSet || 'none'}"]`).click();
+    await page.waitForTimeout(2200);
+    say(await markersNow() === before, 'and the block is put back as it was found');
+  }
+
   // ---- a picture laid across two stories ---------------------------------
   const overlay = await page.evaluate(() => {
     const node = document.querySelector('.page-overlay');

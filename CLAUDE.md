@@ -1244,6 +1244,20 @@ or the balancer changes at all**.
   sub-editor set — is unchanged to the character.
 - The gutter is half a **body** em: it is the copy that has to clear the
   letter, so the gap reads the same whether the cap is two lines deep or four.
+- **A cap may not be taken out of the DATELINE, so a block that carries one is
+  refused a cap.** The dateline is furniture prepended to the copy
+  (`section-adapter`'s `prefix + withMarks.text`), so `dropCapOf()` took ITS
+  clusters: the cap was the dateline's own U+25A0, three lines deep, drawn as a
+  **solid black box** where the story's first letter should be. Photographed on
+  a real 268×296 anchor, and true since drop caps were built — most article
+  blocks carry a location and a byline, so most blocks a desk gave a drop cap
+  printed a black box. Setting the cap on the first letter AFTER the dateline
+  is worse: the cap would show a letter belonging to a word that begins further
+  down the line, met by the reader before the dateline it follows. A drop cap
+  is the story's first ink and on this paper the dateline already is; the two
+  cannot both open the block. The desk is told (`DROP_CAP_AFTER_DATELINE`) —
+  a control that silently does nothing is the fault this project has already
+  fixed twice.
 
 It replaces a `drop_cap` BOOLEAN that persisted, had a Typography checkbox, and
 reached nothing but a CSS class on that panel's own **preview** paragraph — the
@@ -1660,9 +1674,10 @@ used to emit the plate artwork, the strapline and a date; the canvas draws the
 editions line, the place, the weekday, the volume, the page count, the cover
 price, the e-paper address, the owner, the office, the telephone and the email.
 Inside pages had no folio at all. All four formats gained it together because
-they share the walk. **`scribus.service.js` still does its own walk and so
-still has neither** — moving it onto the shared model is the outstanding
-follow-up.
+they share the walk. `scribus.service.js` keeps its own block walk (see
+"Scribus shares the FURNITURE" below) but now renders the shared neutral items
+for the nameplate, the folio, the rules, the block borders, the initial letter,
+the inset panels and the page overlays.
 
 **The RNI is set once, and the artwork is what sets it.** Open
 `public/assets/masthead/sahas-nameplate.png` and look at the top right: the
@@ -1786,9 +1801,20 @@ not touch get nothing.
 page reads as a page when its columns line up; crossing that grid is the entire
 reason a desk places one of these.
 
-**Known and left:** a Smart Card block does not set its own contents clear of
-an overlay — a card is solved against the block's frame rather than through the
-obstacle set. Prose blocks avoid it correctly.
+**A Smart Card is given a CLEAR RECTANGLE, because it cannot flow round one.**
+Running copy meets an obstacle a scanline at a time; a card is solved as a
+GRID, so a sudoku's nine columns and a chart's bars are placed against the
+frame as a whole and there is no scanline for anything to narrow. An overlay
+laid across a card block therefore left the card's geometry untouched and
+simply COVERED it, while the prose either side set clear correctly. The
+composition now states the rectangles it set the type clear of
+(`composition.obstacles`) and `smartCardFrameFromComposition()` takes the
+largest sub-rectangle meeting none of them — per obstacle, the four boxes that
+avoid it, biggest wins, which with one overlay is exact. It can only ever
+SHRINK the frame, so a block with nothing over it composes byte for byte as
+before and `offsetX`/`offsetY` are zero. Every surface that DRAWS a card adds
+those two; a surface that only measures one ignores them. An inset panel inside
+a card block is fixed by the same change, because it is in the same list.
 
 ### A generated picture is proposed, never placed
 
@@ -1880,6 +1906,25 @@ no nameplate, no column rules and no block borders. `print-model.js` exports
 `scribusComposition.test.js` pins it line for line, and moving it is a rewrite
 rather than a fix.
 
+**And that is exactly how it came to draw neither the inset panel nor the page
+overlay** — a fact box reserved and not drawn is a white hole, and an overlay
+absent from the `.sla` leaves the two blocks under it set clear of a photograph
+that is not there. Both come from `print-model.js` now, as
+`blockDecorations(section, composition)` and `pageOverlayItems(page)`, through
+the `furnitureFrames()` that was already there. Neither is a second walk.
+
+**`composition.dropCap` was drawn by NOBODY.** The pour deliberately skips the
+cap's own clusters — they are set separately so `line.at`, and every mark a
+sub-editor made, stays valid to the character — so `bodyLines` genuinely does
+not contain them, and every export renders only `bodyLines`. Composed live, a
+block opening `शहरातील` set its cap to `श` and its first body line to
+`हरातील`: on screen a drop cap, **on the plate a story missing its opening
+letter**. The compositor now states the cap's own `baseline` (the last body
+line it spans); the browser never needed it said out loud because CSS derives
+it from `line-height`, which is why it never was. Found by listing which
+`composition.*` fields each renderer reads — `render.js` reads eight, the two
+export walks read four.
+
 Two things that only showed up when it was tried:
 
 - A furniture picture **cannot go through `imageFrame()`** — that takes a
@@ -1917,11 +1962,70 @@ is a plain script in the browser and cannot import the ESM ink catalogue) and a
 **marker** — plain, bulleted or numbered in Devanagari numerals. Both are
 devices the Lokmat reference block uses.
 
-**The marker is set INTO the line, not hung beside it**, and that is the honest
-limit: a hanging indent needs every line after the first broken against a
-narrower measure. `page_sections.list_style` remains a column the compositor
-has never read; a numbered list in RUNNING COPY is a change to `pourBody()`,
-not a layout one, and is deliberately not done.
+**Inside a panel the marker is set INTO the line**, because a panel has no
+second measure to break against. In RUNNING COPY it hangs - see "A list in
+running copy" below. Both read one vocabulary (`markerText()` in
+`inset-panels.js`): `page_sections.list_style` and a panel's `marker` are the
+same three choices and must not drift into two catalogues.
+
+**The panel has a third kind: `crosshead`** - the ruled sub-head between two
+parts of a long story, and the one device the Lokmat reference block had that
+this product could not make. It is a panel and NOT a second kind of paragraph
+on purpose: a real mid-flow cross-head means `pourBody()` carrying a paragraph
+set in a different face at a different size, which reaches `fillRow()`,
+`maxSizeIn()`, `rowHeightFor()`, the balancer and `justifyLine()` - the
+composition-engine redesign this project's own rule says to stop before. A
+full-measure panel a whole number of bands deep already closes the copy above
+it and resumes it on the grid below, which is what a cross-head IS. It carries
+one rule, above, and **no ground**: a white rectangle behind it would punch a
+hole in any page overlay it sat over. `INSET_PANEL_STYLES` is the one table of
+edges/face/ground, and the `.section-inset-*` rules in `styles.css` are the
+browser's half of it.
+
+### A list in running copy
+
+`page_sections.list_style` had been a column since the schema was written, the
+Typography control had always set it, and **no renderer read it once** - a
+sub-editor could choose Numbering, watch it persist, reload the edition and
+find plain prose. The only thing it reached was a CSS class on that panel's own
+*preview* paragraph. It is the fault `drop_cap` BOOLEAN had before it became
+`drop_cap_lines`, and it was found the same way: by grepping for the column and
+seeing nothing read it. **`list_style` was the only such column left** - the
+whole of `page_sections` was swept afterwards.
+
+An item is one authored **paragraph**, and it **HANGS**: the marker stands in
+its own column and EVERY line of the item is set past it, which is what makes
+the markers line up down the page and the copy line up with them.
+
+The engine learns nothing new. The hanging indent is the first-line indent the
+pour has always applied, asked for on every row instead of one (`fillRow`'s
+`leadPx`), and the marker is drawn beside the copy exactly as the drop cap is -
+its own box, its own baseline, **no place in `lines`**, and therefore no effect
+on `line.at`, on a sub-editor's marks, or on the caret that reads them. Not one
+character of the stored copy is touched.
+
+Three things measurement caught that reading would not have:
+
+- **The markers did not move when the leading was opened.** Vertical
+  justification shifts every line down by a growing amount and a marker is not
+  in `bodyLines`, so item two's number stood 2.4 px above its own first line
+  and item three's 4.8 px above. Anything hung beside a line must be in that
+  pass.
+- **The paragraph policy had to stand down** (`setsList`). Three short items in
+  an 11 em column is exactly the shape it merges as prose, and it is right to
+  for prose - but merging two ITEMS prints three undertakings as two, which
+  changes what the paper says.
+- **The bullet is U+25AA, never U+2022.** Measured: `serif/400` and `sans/700`
+  both lack a real bullet, so it reaches the press file as a `.notdef` box. And
+  the press writer's filled-square rule was hard-coded to U+25A0 (the
+  dateline's), so U+25AA came out as `?` - photographed in a rendered press
+  PDF, with the numbered list beside it setting its numerals perfectly.
+  `FILLED_SQUARES` in `pdf.writer.js` draws both, each at its own share of the
+  type.
+
+`LIST_MAX_HANG_EM` (3) bounds the marker column in ems for the reason
+`MIN_COLUMN_EM` is: "१००." hung on a narrow column would take a fifth of it
+away from the words. `tests/runningList.test.js` holds all of it.
 
 ### Two schema changes that need applying
 

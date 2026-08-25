@@ -6551,15 +6551,45 @@ what the document references or Scribus opens with an empty frame.
 
 ### What is still open after run 2
 
-- **A mid-block flow.** A ruled sub-head between paragraphs, and a numbered
-  list in running copy. Both need `pourBody()` to carry a second kind of
-  paragraph. `page_sections.list_style` is already a column the compositor has
-  never read and is the place to start. Deliberately not attempted: the brief
-  for this pass says a composition-engine redesign is where to stop.
-- **A Smart Card does not avoid a page overlay.** A card is solved against the
-  block's frame rather than through the obstacle set, so a chart under an
-  overlay keeps its geometry and is covered. Prose blocks avoid it correctly.
-- **An inset panel holds text only** — no picture, no card, no nested panel.
-  `kind` exists so a richer one needs no migration.
+*(Closed in the follow-up pass below, except where noted.)*
+
+- ~~A mid-block flow~~ — **closed both ways.** A numbered/bulleted list in
+  running copy is now set by the compositor (`list_style`, a hanging indent and
+  hung markers); a ruled sub-head is the panel's new `crosshead` kind. Neither
+  needed the composition-engine redesign the brief said to stop before.
+- ~~A Smart Card does not avoid a page overlay~~ — **closed.** The card is
+  given the largest clear rectangle instead.
+- **An inset panel still holds text only** — no picture, no card, no nested
+  panel. Deliberately left: a block can already carry a placed picture with
+  real runaround and corridor snap, so a picture *inside* a panel would be a
+  second way to do a job the product already does, which is the duplication
+  this codebase has twice been bitten by. `kind` exists so a richer one needs
+  no migration.
 - **The AI picture generator's success path is still unverified**: this
-  newsroom's Gemini key has no image quota. The refusal path is exercised.
+  newsroom's Gemini key has no image quota (429) and Imagen 404s on the
+  project. The refusal path is exercised end to end and the editor carries on.
+  Nothing in this pass could change that — it needs billing enabled.
+
+## The follow-up pass — "fix everything you find"
+
+Seven defects, every one found by rendering something and looking at it. Five
+were pre-existing and none had a test or a screenshot that could have caught
+them.
+
+| # | what was wrong | how it was found |
+|---|---|---|
+| 1 | `composition.dropCap` was drawn by **no export at all** — the press file printed the story missing its opening akshara | listing which `composition.*` fields each renderer reads |
+| 2 | Scribus drew **neither the inset panel nor the page overlay** — a white hole in the `.sla`, and two blocks set clear of a photograph that was not there | the same list |
+| 3 | A **drop cap on any block with a byline was a solid black box** — the cap was taken from the dateline's own U+25A0 | photographing a real 268×296 anchor |
+| 4 | A **Smart Card under an overlay was simply covered** | composing a panchang block with an overlay across it |
+| 5 | `page_sections.list_style` was **read by nothing** — the control saved and the page never changed | grepping the schema for columns with no reader |
+| 6 | A **bulleted list printed as `?`** in the press PDF — the filled-square rule was hard-coded to U+25A0 | rendering the PDF and looking at it beside the numbered list |
+| 7 | Every new inset panel was **born holding U+2022**, a glyph measured to be absent from both publication faces | the same measurement that produced #6 |
+
+Verified after: `npm test` **919/919**; workspace 223/223, controls 86/86,
+body-editing 35/35, visual-pass **46/46** (three new checks), parity 70/70.
+All four exports build over the real HTTP route (PDF 2.82 MB, `.sla` 936 KB,
+IDML 1.18 MB, DOCX 8 KB) and the rendered press PDF was read by eye: the drop
+cap, the cross-head, the hung numerals and the filled-square bullets are all on
+the plate. Editions 40294 and 44929 are intact and carry no leftover fixture.
+

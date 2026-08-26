@@ -37,7 +37,15 @@ const isReadable = (section) =>
 
 function editionDirectory(newspaperId) {
   const id = Number(newspaperId);
-  if (!Number.isInteger(id) || id <= 0) throw new Error('Invalid e-paper id');
+  if (!Number.isInteger(id) || id <= 0) {
+    // A malformed id in a public /epaper/:id URL is the CALLER's mistake, not
+    // this server's, and it says so - server.js's handler now answers an
+    // unmarked throw with 500 and a generic sentence, which would be a lie
+    // here. `status` is how a service says "this one really is a 400".
+    const error = new Error('Invalid e-paper id');
+    error.status = 400;
+    throw error;
+  }
   return path.join(EPAPER_DIR, String(id));
 }
 

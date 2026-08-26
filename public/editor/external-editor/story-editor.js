@@ -344,7 +344,40 @@ function ornamentPanel(section, view, mark = "\u25c6") {
 /** No picture to caption: show the desk where pictures are added. */
 function notifyNoPicture() {
   const host = document.querySelector(".picture-list, .ext-write-col");
-  host?.scrollIntoView({ block: "center" });
+  // `nearest`, like focusGroup: bring it into view if it is not, and leave the
+  // desk exactly where they are if it already is.
+  host?.scrollIntoView({ block: "nearest" });
+}
+
+/**
+ * A PANEL JUST ADDED, WITH THE CARET IN ITS HEADING.
+ *
+ * Properties lists every panel on the block and every one of its fields, but
+ * only while the whole block is the selected object - and Insert is pressed
+ * with the story or the headline selected, so the panel arrived on the page
+ * with its editor not merely elsewhere but not rendered at all. Selecting the
+ * block is what makes the fields exist; the rest is putting the caret in the
+ * one a desk types into first.
+ *
+ * It scrolls the RAIL, never the window. The settings rail is capped to the
+ * page's height and scrolls inside itself (CLAUDE.md), so `block: "nearest"`
+ * inside it moves that column and nothing else - which is the whole point,
+ * given that a control throwing the viewport around is the fault next door.
+ */
+function focusAddedPanel(panelId, onSelectPart) {
+  onSelectPart?.("block");
+  // Properties is rewritten by the selection, so the field does not exist yet.
+  // Two frames rather than one: the first lets the selection travel out to the
+  // workspace, the second lets the panel come back rendered.
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const panel = document.querySelector(`#propPanels .prop-panel[data-panel-id="${CSS.escape(String(panelId))}"]`);
+    const field = panel?.querySelector('[data-panel-field="title"]:not([type="hidden"])')
+      || panel?.querySelector("[data-panel-field]");
+    if (!field) return;
+    field.scrollIntoView({ block: "nearest" });
+    field.focus();
+    if (typeof field.select === "function") field.select();
+  }));
 }
 
 export function bindStoryEditor({ onPatch, getBudget, getSection, getView, getImages, onPatchImage, onRemoveImage, onSelectImage, onSelectPart, onToggleImageSelection, onAddOverlay, getSelectedImageId }) {
@@ -392,6 +425,10 @@ export function bindStoryEditor({ onPatch, getBudget, getSection, getView, getIm
         : (Array.isArray(view.insetPanels) ? view.insetPanels : []);
       onPatch?.({ insetPanels: [...existing, ornamentPanel(section, view, mark)] }, "device-bar");
     },
+    // Insert has just put a panel on the block: take the desk to the fields
+    // that write into it, which Properties only renders once the whole block
+    // is the selected object.
+    onPanelAdded: (panelId) => focusAddedPanel(panelId, onSelectPart),
     // A chart asks three questions before it can draw anything, so it opens a
     // dialog rather than writing a guess into the block. See chart-dialog.js.
     onChart: (chartType) => openChartDialog({

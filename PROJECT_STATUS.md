@@ -4,6 +4,78 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 1a. Eight faults found by driving a brand-new edition (2026-08-26)
+
+A fresh 4-page fixture edition (**49291**, 2099-07-04) was started, filled with
+`scripts/fill-edition-copy.js` (36 blocks, every one FITS at 100%), and driven
+in a real browser. Everything below was **measured in the running app**, not
+read out of the code.
+
+**1. The software's answer was invisible.** `#edNotice` measured **width 0** at
+1512×950 — it is the last child of the Block Editor header's flex row with
+`margin-left: auto` and `overflow: hidden` — and sits ~600 px below the toolbar.
+"Set tighter — body 6.4px to 5.9px — and it fits.", "There is no empty block on
+a later page to carry this into.", "Block added…", "Deleted block-2." were all
+said correctly into nothing. **This is the whole of "many things not working
+good": the buttons worked.** Fixed with a viewport-anchored `#deskNotice` whose
+dwell scales with the sentence.
+
+**2. A block added after the house style was in the wrong face.** `+ Block` and
+the three template paths never inherited `newspapers.body_family` /
+`display_family`, so a new block on a Mukta/Khand paper set its story in Sahas
+Serif and its headline in the sans. Fixed as a sub-select inside the INSERT, so
+all four creation paths get it and none can forget. Verified: new block
+`font=mukta display=rozha` against `paper=mukta/rozha`.
+
+**3. The block's own key printed over the story it names.** `.section-chrome`
+draws on every block; on a written one it lies on top of the headline. Label,
+kind icon and status pill now fade on `.filled` and return on hover/selection.
+`.section-flags` deliberately stays — a warning that hides itself is no warning.
+
+**4. Three controls appeared under the pointer.** `.section-hover-toolbar`
+(Story / Image / Clear) drew on plain `:hover` at a block's bottom-right.
+Measured: Image scrolled the window **1014 px**; Clear wiped headline, deck,
+story and picture with no question. Now drawn on the selected block only;
+`focusGroup()` scrolls `nearest` rather than `center`; Image says where it is
+going; Clear asks and then reports.
+
+**5. Insert added a panel the desk could not reach.** Properties renders panel
+fields only while the whole block is selected, and Insert is pressed with the
+story selected. Now selects the block and puts the caret in the new panel's
+Heading, scrolling the **rail** rather than the window.
+
+**6. The sold corner of page one had a server and no door.**
+`POST /api/pages/:id/repair-structural-frames` existed and nothing called it, so
+a desk who removed `masthead-advert` could never get it back. `#mastheadEarBtn`
+on page one toggles it.
+
+**7. Every server failure was a 400, unlogged, with its internals leaked.**
+Now: Multer and `status`-carrying errors keep their 400 and their message;
+everything else is 500 with a sentence a person can act on and the real one in
+the log — one line per failure, 400s included.
+
+**8. Five unchecked page re-reads.** Make it fit, Carry over, Continue into,
+Fill features and the composition apply each did `fetch(...).then(r => r.json())`
+then `pages.forEach`, unchecked. A failure resolved to `{ error }` and threw a
+TypeError inside an async handler — nothing on screen, canvas out of step with
+the database, and the action itself had usually succeeded. One checked
+`reloadPages()`.
+
+**Consistency, verified rather than assumed** (the second ask): 40 written
+blocks composed through the exact engine and matched against `print-model.js`'s
+walk — **0 headline mismatches**; 3 body mismatches, all Smart Cards, which are
+drawn as cards rather than prose by design. Export run families: serif 981,
+khand 62, sans 39. The e-paper's **36 hotspots match `page_sections` geometry,
+0 off by more than 0.05%** of the page.
+
+**Not reproduced:** the first ask as literally stated — the paper's headline
+face *does* reach the headline and the deck (measured Rozha One / Rozha One /
+Mukta on the canvas). The real fault behind that report was #2.
+
+`npm test` 942/942.
+
+---
+
 ## 0zzj. E-paper app handoff and masthead identity (2026-08-20)
 
 On `codex/epaper-map-editor`, the public reader no longer shows an **All

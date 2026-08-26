@@ -8,12 +8,36 @@ const { printsColourByDefault } = require('../layout/formes');
 // values are written once. A template decides the block's kind and its rule
 // treatment as well as its rectangle: an advert slot is not an article, and a
 // boxed brief is boxed from the moment the page exists.
+//
+// A NEW BLOCK IS SET IN THE PAPER'S OWN FACES, and this is not a nicety.
+// `newspapers.body_family`/`display_family` are written ONTO the blocks when a
+// desk sets the house style (newspaper.repository.js's setHouseStyle says why:
+// resolving a fallback at read time would have to be threaded through the
+// thirty-odd services that compose a stored row, and any one that forgot would
+// measure a block in one face and print it in another). That write can only
+// reach the blocks that EXIST when it runs - so every block added afterwards
+// was born carrying NULL, which the compositor answers with its own serif/sans
+// default. Measured on a real edition set in Mukta/Khand: press "+ Block" and
+// the new block sets its story in Sahas Serif and its headline in the sans,
+// on a page where nothing else does. This is the other half of the desk's
+// report that changing the paper's face "works sometime, sometime not".
+//
+// Read as a sub-select on the page rather than passed in, so all four insert
+// paths (a new page, a layout change, a template repair, and a hand-drawn
+// block) get it without a second round trip and without any of them being able
+// to forget. NULL stays NULL when the paper has chosen nothing, which is
+// exactly the behaviour every existing row already has.
+const HOUSE_FACE_SQL = (column) => `(SELECT n.${column} FROM pages p
+     JOIN newspapers n ON n.id = p.newspaper_id WHERE p.id = $1)`;
+
 const insertSectionSql = `
   INSERT INTO page_sections (page_id, section_key, x_px, y_px, width_px, height_px, z_index,
                              headline_font_px, subheading_font_px, body_font_px,
                              block_type, story_type, editorial_priority,
-                             border_style, headline_style, feature_key)
-  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`;
+                             border_style, headline_style, feature_key,
+                             font_family, display_family)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+          ${HOUSE_FACE_SQL('body_family')}, ${HOUSE_FACE_SQL('display_family')})`;
 
 function insertSectionValues(pageId, section, index) {
   const type = typeScaleFor(section.width, section.height);
@@ -356,8 +380,10 @@ async function createSection(pageId, geometry) {
   const type = typeScaleFor(geometry.width, geometry.height);
   const { rows } = await pool.query(
     `INSERT INTO page_sections (page_id, section_key, x_px, y_px, width_px, height_px, z_index, is_custom,
-                                headline_font_px, subheading_font_px, body_font_px)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, $8, $9, $10) RETURNING *`,
+                                headline_font_px, subheading_font_px, body_font_px,
+                                font_family, display_family)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, $8, $9, $10,
+             ${HOUSE_FACE_SQL('body_family')}, ${HOUSE_FACE_SQL('display_family')}) RETURNING *`,
     [pageId, sectionKey, geometry.x, geometry.y, geometry.width, geometry.height, zRows[0].z,
      type.headlineFontPx, type.subheadingFontPx, type.bodyFontPx],
   );

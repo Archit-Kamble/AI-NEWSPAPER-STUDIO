@@ -345,20 +345,77 @@ function bindDockToggle(callbacks) {
   document.getElementById("edToggleDock")?.addEventListener("click", callbacks.onToggleDock);
 }
 
-function showNotice(message) {
-  const notice = document.getElementById("edNotice");
-  if (!notice) return;
-  notice.textContent = message;
-  clearTimeout(notifyTimer);
-  notifyTimer = setTimeout(() => {
-    if (notice.textContent === message) notice.textContent = "";
-  }, 4000);
+/**
+ * WHAT THE SOFTWARE JUST SAID, WHERE THE DESK IS LOOKING.
+ *
+ * This wrote into `#edNotice` alone, and that strip is measurably unreadable:
+ * it is the last child of the Block Editor's header flex row, after the kind
+ * chip, the block size and the status badge, carrying `margin-left: auto`,
+ * `white-space: nowrap` and `overflow: hidden`. Measured in the running app on
+ * a 1512x950 window: **width 0**. Every message this product produces was
+ * being written into a zero-pixel box - and that box is in the Block EDITOR
+ * header, roughly 600px below a toolbar the desk is pressing.
+ *
+ * So "Set tighter - body 6.4px to 5.9px - and it fits." and "There is no empty
+ * block on a later page to carry this into." and "Block added." and
+ * "Deleted foot-right." were all said, correctly, into nothing. That is the
+ * whole of the desk's report that the toolbar buttons "are not working good":
+ * they worked, and the software's answer was invisible.
+ *
+ * The answer therefore goes somewhere anchored to the VIEWPORT, so it is next
+ * to the desk's eye whichever part of the one long page they are on. The
+ * Block Editor's own strip is still written too - it is that header's status
+ * line and belongs there - but nothing depends on it being legible any more.
+ */
+function noticeHost() {
+  let host = document.getElementById("deskNotice");
+  if (!host) {
+    host = document.createElement("div");
+    host.id = "deskNotice";
+    host.className = "desk-notice";
+    host.setAttribute("role", "status");
+    host.setAttribute("aria-live", "polite");
+    document.body.appendChild(host);
+  }
+  return host;
 }
 
-// Brings one step of the lifecycle into view. Replaces the old tab switch - the
-// group is always rendered, so this only scrolls, and nothing is hidden.
+function showNotice(message) {
+  const text = String(message ?? "");
+  // The Block Editor's own header line, unchanged.
+  const strip = document.getElementById("edNotice");
+  if (strip) strip.textContent = text;
+
+  const host = noticeHost();
+  host.textContent = text;
+  host.classList.toggle("is-shown", Boolean(text));
+  clearTimeout(notifyTimer);
+  if (!text) return;
+  // A long sentence is a sentence a desk has to read - it gets longer on
+  // screen. Four seconds is fine for "Saved"; "There is no empty block on a
+  // later page to carry this into." is not read in four seconds.
+  const ms = Math.min(12000, 3500 + text.length * 45);
+  notifyTimer = setTimeout(() => {
+    if (host.textContent !== text) return;
+    host.classList.remove("is-shown");
+    if (strip && strip.textContent === text) strip.textContent = "";
+  }, ms);
+}
+
+/**
+ * Brings one step of the lifecycle into view. Replaces the old tab switch - the
+ * group is always rendered, so this only scrolls, and nothing is hidden.
+ *
+ * `block: "center"` moves the viewport even when the target is ALREADY on
+ * screen, which is how pressing a block's "Image" button threw the page a
+ * thousand pixels: the desk was looking at the canvas, the picture panel was
+ * off-screen below, and the answer was to take them there rather than to bring
+ * it to them. `"nearest"` scrolls the least that puts the group in view and
+ * does nothing at all when it is already there - so a desk who can see the
+ * panel keeps their place, and one who cannot is moved the minimum.
+ */
 export function focusGroup(groupKey) {
-  document.getElementById(`edGroup-${groupKey}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  document.getElementById(`edGroup-${groupKey}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 // Live sync. Panels update themselves in place - nothing is rebuilt, so scroll

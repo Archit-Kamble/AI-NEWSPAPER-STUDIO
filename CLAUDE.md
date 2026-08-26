@@ -2471,6 +2471,176 @@ Written down rather than resolved at read time because a fallback would have to
 be threaded through the thirty-odd services that compose a stored row, and any
 one that forgot would measure a block in one face and print it in another.
 
+### What the software says, a desk can read
+
+`showNotice()` wrote into `#edNotice` and nothing else. That strip is the last
+child of the Block Editor header's flex row — after the kind chip, the block
+size and the status badge — carrying `margin-left: auto`, `white-space: nowrap`
+and `overflow: hidden`. Measured in the running app at 1512×950: **width 0**.
+And it sits ~600 px below the toolbar whose buttons produce most of these
+messages.
+
+So every answer this product gives was said into nothing:
+
+| pressed | said | seen |
+|---|---|---|
+| Make it fit | "Set tighter — body 6.4px to 5.9px — and it fits." | — |
+| Carry over | "There is no empty block on a later page to carry this into." | — |
+| + Block | "Block added, but this page has no free space…" | — |
+| − Block | "Deleted block-2." | — |
+
+That is the whole of the desk's report that the toolbar buttons "are not
+working good": **they worked, and the software's answer was invisible.** Not one
+of those four is a failure; three are the software refusing or qualifying for a
+good reason, which is exactly the class of message that must be read.
+
+`#deskNotice` is a viewport-anchored box created on demand by `showNotice()`.
+The Block Editor's own strip is still written — it is that header's status line
+— but nothing depends on it being legible any more. The dwell is proportional
+to the sentence (`3500 + 45 ms per character`, capped at 12 s): four seconds is
+fine for "Saved" and is not long enough to read a refusal.
+
+### The block names itself once it carries copy
+
+`.section-chrome` is the block's kind icon, its key (`LEAD`, `MASTHEAD-ADVERT`)
+and its status pill. On an **empty** block that is the only thing saying what
+the frame is waiting for and it has to be there. On a **written** block it is a
+second title laid over the real one — the composed layer is absolutely
+positioned, so the chrome sits on top of the headline the desk just set.
+
+`.filled` (section-thumb.js) is the block's own answer to "is there anything in
+this" — headline, body, an image url or a placed picture — so this needs no
+second definition of the same question. The label, the kind icon and the status
+pill fade on a filled block and return on hover or while it is selected.
+
+**`.section-flags` is deliberately not in that list.** The reporter, AI,
+overflow and unsaved marks are not a label — they are the block saying that
+something is wrong with it or that it is not what it looks like, and a warning
+that hides itself once there is copy to warn about is no warning.
+
+### Three controls may not appear under the pointer
+
+`.section-hover-toolbar` — Story, Image, Clear — is absolutely positioned at a
+block's bottom-right and appeared on plain `:hover`. So three controls
+materialised **under the pointer of a desk moving it onto a block to select
+it.** Measured in the running app: pressing Image scrolled the window 1014 px
+to the picture panel; Clear wiped the block's headline, deck, story and picture
+with no question asked.
+
+That is the report *"some time clicking on editor redirecting to other places in
+webpage … it ruin the user exprience"*, and it is not a scroll bug — it is a
+button nobody meant to press.
+
+- **Selection is the gate.** The toolbar draws on `.newspaper-section.active`
+  only. The buttons are in exactly the same place, one click later, and cannot
+  be hit by accident. (The class is `active`, not `selected` —
+  `sectionClassName()` in `section-thumb.js`.)
+- **`focusGroup()` scrolls `block: "nearest"`, not `"center"`.** Centre moves
+  the viewport even when the target is already on screen.
+- **Image says where it is taking them.** It is the one control on the canvas
+  whose whole effect is to move the desk somewhere else; unexplained, that reads
+  as the software losing their place.
+- **Clear asks, and then says so.** `deleteBlock` has asked the same question
+  about the same content since it was written; there was no reason for the two
+  to differ except that nobody had pressed this one by accident yet. Undo still
+  has it either way — this is about the desk knowing it happened, which is the
+  half undo cannot supply.
+
+### A new block is set in the paper's own faces
+
+`setHouseStyle()` writes `body_family`/`display_family` **onto the blocks**, and
+the file records why: resolving a fallback at read time would have to be
+threaded through the thirty-odd services that compose a stored row, and any one
+that forgot would measure a block in one face and print it in another. That
+write can only reach the blocks that **exist when it runs** — so every block
+added afterwards was born carrying NULL, which the compositor answers with its
+own serif/sans default.
+
+Measured on a real edition set in Mukta/Khand: press **+ Block** and the new
+block sets its story in Sahas Serif and its headline in the sans, on a page
+where nothing else does. This is the other half of *"changing whole paper font
+family works sometime, sometime not"* — the first half was the once-per-edition
+`WHERE font_family IS NULL`, fixed earlier; this is the same fault arriving from
+the other direction.
+
+`HOUSE_FACE_SQL` reads it as a sub-select on the page inside the INSERT, so all
+four creation paths — a new page, a layout change, a template repair and a
+hand-drawn block — get it with no extra round trip and none of them able to
+forget. NULL stays NULL when the paper has chosen nothing, so no existing row
+changes.
+
+**The house faces reach every surface.** Verified rather than assumed: 40
+written blocks composed and matched against `print-model.js`'s own walk —
+**0 headline mismatches**, 3 body mismatches and all three are Smart Cards
+(rashi, panchang, suvichar), which are drawn as cards rather than prose and are
+meant to be. Export run families on that edition: serif 981 (body), khand 62
+(display), sans 39 (furniture). The e-paper's 36 hotspots match `page_sections`
+geometry to **0 off by more than 0.05%** of the page.
+
+### Insert leaves the desk able to write in what it added
+
+Insert put a fact box on the page reading `इथे मजकूर लिहा` and stopped. The
+panel's own fields have always existed — Properties lists every panel on the
+block with a heading, its lines, its marker, its ground and its rectangle — but
+`bodyMarkupFor()` only draws them while the **whole block** is the selected
+object, and Insert is pressed with the story or the headline selected. So the
+desk got a panel they could see and could not reach: *"Insert button in ediotor
+is use less as it add a block which we cannot edit"*.
+
+`focusAddedPanel()` selects the block (which is what makes the fields exist at
+all) and puts the caret in the new panel's Heading. **It scrolls the RAIL, never
+the window** — the settings rail is capped to the page's height and scrolls
+inside itself, so `block: "nearest"` there moves that column and nothing else,
+which matters given that a control throwing the viewport around is the fault
+next door.
+
+### The sold corner of page one had a server and no door
+
+`masthead-advert` is the advert ear beside the nameplate, and the paper's own
+title is set for **both** answers: while the ear frame is on the page the
+nameplate leaves room for it, and with no frame it takes the whole measure —
+247×46 px to 426×80 px, measured on a real front page.
+
+Deleting the frame has been allowed since the `STRUCTURAL_FRAME_PROTECTED` 409
+was retired, and `POST /api/pages/:id/repair-structural-frames` has existed to
+put it back ever since — **reachable from nothing.** So a desk who did not sell
+the corner one day could never have it again.
+
+`#mastheadEarBtn` is that door. It shows on page one only, reads *Ad ear* /
+*No ad ear* for the state it is in, and takes the ear off through `deleteBlock`
+so a corner carrying artwork still asks before it goes. An action with a server
+and no door is the same fault as a control that cannot act, one step further
+along.
+
+### A failure is recorded, and only the caller's failures are blamed on them
+
+`server.js`'s catch-all answered **every** error with `400 Bad Request` and the
+error's own `message`, and logged nothing at all. Three things wrong, all of
+which cost a newsroom time on the one day it matters:
+
+- a bug here, a dropped database connection or a missing font file was reported
+  to the desk as *"you sent something wrong"*. A desk told that retypes the
+  request, which cannot help.
+- the raw internal message went to the browser. `relation "page_sections" does
+  not exist` is not a sentence for a sub-editor and is not one for the public.
+- **nothing was logged.** A failure left no trace anywhere.
+
+Multer's errors are genuinely the caller's and keep their message and their
+400. An error a service raises deliberately can say so with `status`. Everything
+else is 500, a sentence a person can act on, and the real one in the log — one
+line per failure including the 400s, so a run of malformed requests is visible
+too.
+
+**And the five unchecked page re-reads.** Make it fit, Carry over, Continue
+into, Fill features and the composition apply all ended with
+`fetch(...).then((r) => r.json())` followed by `pages.forEach`, and none looked
+at the response. A 500 or a dropped session resolved to `{ error: "..." }` and
+`.forEach` threw a TypeError inside an async click handler: nothing on screen,
+nothing said, and the canvas left showing state that no longer matched the
+database. The action had usually **succeeded** — only the re-read failed —
+which is the worst version. `reloadPages()` is the one checked re-read and says
+so when it cannot.
+
 ### `tests/browser/visual-pass.browser.js`
 
 The net for all of the above: it drives the running app, presses the controls
@@ -2823,6 +2993,7 @@ node tests/browser/workspace.browser.js          # defaults to edition 2099
 node tests/browser/editor-controls.browser.js    # every control × every text object
 node tests/browser/body-editing.browser.js       # the caret, the selection, the gestures
 node tests/browser/story-picker.browser.js       # Take from Reporter, and clearing a story
+node tests/browser/desk-actions.browser.js       # the toolbar's own actions, and what each SAID
 ```
 
 `story-picker.browser.js` covers the path an editor uses most and no net drove:

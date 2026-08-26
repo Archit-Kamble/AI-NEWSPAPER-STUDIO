@@ -808,6 +808,39 @@ body {
   flex-shrink: 0;
   min-width: 0;
 }
+/* THE BLOCK NAMES ITSELF ONCE IT CARRIES COPY.
+   `.section-chrome` is the block's kind icon, its key ("MASTER-ADVERT",
+   "LEAD") and its status pill, and on an EMPTY block that is the only thing
+   saying what the frame is waiting for - it has to be there. On a block that
+   has been written it is a second title laid over the real one: the composed
+   layer is absolutely positioned, so the chrome sits on top of the headline
+   the desk just set. That is the report "block name like master advert should
+   not show if any data put into it".
+   `.filled` is the block's own answer to "is there anything in this" -
+   headline, body, an image url or a placed picture (section-thumb.js) - so
+   this needs no second definition of the same question. Opacity rather than
+   `display: none`: the row keeps its box, so nothing under it moves when the
+   chrome comes back, and it comes back on hover and while the block is
+   selected, which is when a desk is asking what the block IS. */
+.newspaper-section.filled .section-type-icon,
+.newspaper-section.filled .section-label,
+.newspaper-section.filled .section-status-badge {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.newspaper-section.filled:hover .section-type-icon,
+.newspaper-section.filled:hover .section-label,
+.newspaper-section.filled:hover .section-status-badge,
+.newspaper-section.filled.active .section-type-icon,
+.newspaper-section.filled.active .section-label,
+.newspaper-section.filled.active .section-status-badge {
+  opacity: 1;
+}
+/* `.section-flags` is deliberately NOT in that list. The reporter/AI/overflow/
+   unsaved marks are not a label - they are the block telling the desk that
+   something is wrong with it or that it is not what it looks like, and a
+   warning that hides itself once there is copy to warn about is no warning.
+   They are small marks at the block's top right, clear of the headline. */
 .section-type-icon {
   display: inline-flex;
   color: #9a9aa2;
@@ -3045,7 +3078,21 @@ body.print-view .page-guides {
   gap: 3px;
   z-index: 6;
 }
-.newspaper-section:hover .section-hover-toolbar {
+/* ONLY ON THE BLOCK THE DESK HAS CHOSEN.
+   These three buttons are absolutely positioned at the block's bottom-right
+   and used to appear on plain `:hover` - so three controls materialised UNDER
+   the pointer of a desk who was moving it onto a block to select it. One of
+   them ("Image") scrolled the window ~1000px to the picture panel, measured in
+   the running app; another ("Clear") wiped the block's story. That is the
+   report "some time clicking on editor redirecting to other places in webpage
+   ... it ruin the user exprience", and it is not a scroll bug - it is a button
+   nobody meant to press.
+   Selection is the honest gate: a desk acts on the block they have picked, and
+   picking it is the click they were already making. The buttons are in exactly
+   the same place, one click later, and cannot be hit by accident. */
+.newspaper-section.active:hover .section-hover-toolbar,
+.newspaper-section.active .section-hover-toolbar:hover,
+.newspaper-section.active:focus-within .section-hover-toolbar {
   display: flex;
 }
 .flag-overflow {
@@ -3053,6 +3100,47 @@ body.print-view .page-guides {
 }
 .newspaper-section.overflowing {
   box-shadow: inset 0 0 0 2px rgba(196, 30, 58, 0.28);
+}
+
+/* WHAT THE SOFTWARE JUST SAID, ANCHORED TO THE VIEWPORT.
+   `.ext-editor-notice` is the Block Editor header's own status line and it is
+   measurably unreadable as a general answer: last in a flex row after the kind
+   chip, the size and the status badge, with `margin-left: auto` and
+   `overflow: hidden`, it measured **0px wide** in the running app - and it sits
+   ~600px below the toolbar whose buttons produce most of these messages. This
+   product's one page scrolls (CLAUDE.md), so the only place a message is
+   certain to be seen is against the viewport. */
+.desk-notice {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translate(-50%, 12px);
+  z-index: 2000;
+  max-width: min(720px, calc(100vw - 48px));
+  padding: 10px 18px;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  font-weight: 600;
+  color: #fff;
+  background: #23232a;
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+  /* Not `display: none` - a message that arrives while the last one is still
+     fading must not restart the box, only its text. */
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 140ms ease, transform 140ms ease, visibility 140ms;
+}
+.desk-notice.is-shown {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+}
+@media (max-width: 1023px) {
+  .desk-notice {
+    bottom: 12px;
+  }
 }
 
 .context-menu {

@@ -720,16 +720,33 @@ async function placeStoryImages(story) {
   );
 }
 
+/**
+ * Empty a block.
+ *
+ * It ASKS first when there is something to lose, and it says what it did.
+ * This sat on the block's own hover toolbar with neither: a desk who caught
+ * "Clear" instead of the block underneath it lost the headline, the deck, the
+ * story and the picture with no question and nothing on screen afterwards -
+ * the notice this used not to write went to a strip measured at zero pixels
+ * wide (external-editor.js's showNotice records that). `deleteBlock` has asked
+ * the same question about the same content since it was written; there was no
+ * reason for the two to differ except that nobody had pressed this one by
+ * accident yet. Undo still has it either way - this is about the desk knowing
+ * it happened, which is the half undo cannot supply.
+ */
 function clearSection(sectionKey) {
   if (store.getState().selectedSectionKey !== sectionKey) selectSection(sectionKey);
   const draft = store.getDraft();
   if (!draft) return;
+  const carries = draft.headline || draft.subheading || draft.body || draft.imageUrl || draft.newsItemId;
+  if (carries && !window.confirm(`Clear "${sectionKey}"? Its headline, story and picture go with it.`)) return;
   store.replaceDraft(
     { ...draft, newsItemId: null, headline: "", subheading: "", body: "", caption: "", imageUrl: "", aiGenerated: false, status: "empty" },
     "canvas",
   );
   history.record(store.getDraft(), { coalesce: false, label: "Cleared section", kind: "clear", images: sectionImages });
   autosave.schedule();
+  showNotice(`Cleared ${sectionKey}. Undo puts it back.`);
 }
 
 function setSectionStatus(statusKey) {
@@ -747,7 +764,17 @@ function onSectionAction(sectionKey, action) {
   // Pictures are part of the writing surface, so "Add a picture" from the
   // page's own menu goes to the story panel - there is no separate picture
   // group to send it to any more.
-  if (action === "image") return focusGroup("story");
+  //
+  // AND IT SAYS SO, because this is the one control on the canvas whose whole
+  // effect is to move the desk somewhere else. Unexplained, that reads as the
+  // software losing their place - which is exactly how it was reported. The
+  // press itself is no longer reachable by accident (the block's hover
+  // toolbar is drawn only on the block a desk has selected), so the movement
+  // is now something they asked for; naming it is what makes it feel that way.
+  if (action === "image") {
+    showNotice(`Pictures for “${sectionKey}” are in the writing panel below.`);
+    return focusGroup("story");
+  }
   if (action === "mark-ready") return setSectionStatus("ready");
   if (action === "mark-review") return setSectionStatus("needs_review");
 }
@@ -1089,6 +1116,22 @@ function renderShell() {
               <div id="layouts" class="layout-switcher"></div>
               <button type="button" class="layout-btn" id="addBlockBtn" title="Add a block to this page">+ Block</button>
               <button type="button" class="layout-btn danger" id="removeBlockBtn" title="Remove the selected block">− Block</button>
+              <!-- THE SOLD CORNER OF PAGE ONE, which had a server and no door.
+                   masthead-advert is the advert ear beside the nameplate, and
+                   the paper's own title is set for BOTH answers: while the ear
+                   frame is on the page the nameplate leaves room for it, and
+                   with no frame it takes the whole measure - 247x46 px to
+                   426x80 px, measured on a real front page. Deleting the frame
+                   has been allowed since the STRUCTURAL_FRAME_PROTECTED 409 was
+                   retired, and POST /api/pages/:id/repair-structural-frames
+                   has existed to put it back ever since - reachable from
+                   nothing. So a desk who did not sell the corner one day could
+                   never have it again, which is the report that the master
+                   advert needs a way in and a way out "as it affects on
+                   newspaper heading". It is page one's decision, so the button
+                   is only on page one. -->
+              <button type="button" class="layout-btn" id="mastheadEarBtn"
+                      title="The advert ear beside the nameplate. Off, the paper's own title is set across the whole measure.">Ad ear</button>
               <!-- THE PAPER'S OWN DECISIONS, not this page's and not this
                    block's: the house faces and whether the gutters are ruled.
                    A desk had to open every block on every page to change a
@@ -1185,6 +1228,7 @@ function renderShell() {
   document.getElementById("sidebarDrawerClose").addEventListener("click", () => store.setStoryPickerOpen(false));
 
   document.getElementById("addBlockBtn").addEventListener("click", addBlock);
+  document.getElementById("mastheadEarBtn").addEventListener("click", toggleMastheadEar);
   document.getElementById("removeBlockBtn").addEventListener("click", () => {
     const key = store.getState().selectedSectionKey;
     if (!key) return showNotice("Select a block on the page first.");
@@ -1386,8 +1430,9 @@ async function runPreflight() {
   if (!newspaper) return;
 
   showNotice("Checking the edition…");
-  const report = await fetch(`/api/newspapers/${newspaper.id}/preflight`).then((r) => r.json());
-  if (report.error) return showNotice(report.error);
+  const report = await fetch(`/api/newspapers/${newspaper.id}/preflight`)
+    .then((r) => r.json()).catch(() => ({ error: "The edition could not be checked. Try again." }));
+  if (!report || report.error) return showNotice(report?.error || "The edition could not be checked.");
 
   renderPreflight(report);
   showNotice(
@@ -1506,8 +1551,9 @@ async function showWorklist() {
   // looking at as empty.
   if (store.getState().dirty) await autosave.flush();
 
-  const list = await fetch(`/api/newspapers/${newspaper.id}/worklist`).then((r) => r.json());
-  if (list.error) return showNotice(list.error);
+  const list = await fetch(`/api/newspapers/${newspaper.id}/worklist`)
+    .then((r) => r.json()).catch(() => ({ error: "What is left could not be read. Try again." }));
+  if (!list || list.error) return showNotice(list?.error || "What is left could not be read.");
 
   renderWorklist(list, {
     onGoTo: (pageNumber, sectionKey) => {
@@ -1542,8 +1588,7 @@ async function makeItFit() {
   const applied = await fetch(path, { method: "POST" }).then((r) => r.json()).catch(() => ({}));
   if (applied.error) return showNotice(applied.error);
 
-  const pages = await fetch(`/api/newspapers/${store.getState().newspaper.id}/pages`).then((r) => r.json());
-  pages.forEach((updated) => store.replacePage(updated, { structural: true }));
+  await reloadPages();
   showNotice(applied.message);
 }
 
@@ -1654,12 +1699,45 @@ async function continueInto(targetKey) {
   const result = await response.json().catch(() => ({}));
   if (!response.ok) return showNotice(result.error || "This story could not be continued into that block.");
 
-  const pages = await fetch(`/api/newspapers/${store.getState().newspaper.id}/pages`).then((r) => r.json());
-  pages.forEach((updated) => store.replacePage(updated, { structural: true }));
+  await reloadPages();
   showNotice(
     `The story continues into "${result.to.sectionKey}" — ${result.to.chars} characters. `
     + "No jump line: the two legs are on the same page, so a reader simply carries on.",
   );
+}
+
+/**
+ * THE EDITION'S PAGES, RE-READ - CHECKED, ONCE, IN ONE PLACE.
+ *
+ * Five actions end by pulling the whole edition back: Make it fit, Carry over,
+ * Continue into, Fill features and the composition apply. All five wrote the
+ * same line - `fetch(...).then((r) => r.json())` followed by `pages.forEach` -
+ * and none of them looked at the response. A 500, a dropped session or a
+ * network stall therefore resolved to an object like `{ error: "..." }`, and
+ * `.forEach` on it threw a TypeError inside an async click handler: nothing on
+ * screen, nothing said, the workspace left showing pre-action state that no
+ * longer matched the database, and the only trace a console line no desk is
+ * looking at. The action had usually SUCCEEDED - it is only the re-read that
+ * failed - which is the worst version, because the desk is then told nothing
+ * about work that really happened.
+ *
+ * Returns true when the canvas now matches the database, false when it does
+ * not and the desk has been told so.
+ */
+async function reloadPages(newspaperId) {
+  const id = newspaperId || store.getState().newspaper?.id;
+  if (!id) return false;
+  try {
+    const response = await fetch(`/api/newspapers/${id}/pages`);
+    if (!response.ok) throw new Error(String(response.status));
+    const pages = await response.json();
+    if (!Array.isArray(pages)) throw new Error("not a page list");
+    pages.forEach((page) => store.replacePage(page, { structural: true }));
+    return true;
+  } catch (error) {
+    showNotice("The edition changed, but this screen could not re-read it. Reload the page to see it.");
+    return false;
+  }
 }
 
 async function carryOver() {
@@ -1676,8 +1754,7 @@ async function carryOver() {
   const result = await response.json().catch(() => ({}));
   if (!response.ok) return showNotice(result.error || "This story could not be carried over.");
 
-  const pages = await fetch(`/api/newspapers/${store.getState().newspaper.id}/pages`).then((r) => r.json());
-  pages.forEach((updated) => store.replacePage(updated, { structural: true }));
+  await reloadPages();
   showNotice(`Carried on to page ${result.to.pageNumber}, block "${result.to.sectionKey}". ${result.carryLine}`);
 }
 
@@ -1699,8 +1776,7 @@ async function fillFeatures() {
   // Reload the pages so the filled blocks appear, then say plainly what did and
   // did not run. A box that could not be filled is reported, never left looking
   // finished.
-  const pages = await fetch(`/api/newspapers/${newspaper.id}/pages`).then((r) => r.json());
-  pages.forEach((page) => store.replacePage(page, { structural: true }));
+  await reloadPages(newspaper.id);
 
   const filled = result.filled?.length || 0;
   const blocked = result.notes?.length || 0;
@@ -1846,6 +1922,55 @@ function syncRemoveBlockButton() {
   if (button) button.disabled = !store.getState().selectedSectionKey;
 }
 
+/** Is the advert ear on this page, and may this page have one at all? */
+const MASTHEAD_EAR_KEY = "masthead-advert";
+
+function syncMastheadEarButton() {
+  const button = document.getElementById("mastheadEarBtn");
+  if (!button) return;
+  const page = store.getCurrentPage();
+  // Only page one has a nameplate, so only page one has a corner to sell.
+  const onFront = Number(page?.page_number) === 1;
+  button.hidden = !onFront;
+  if (!onFront) return;
+  const present = (page.sections || []).some((s) => s.section_key === MASTHEAD_EAR_KEY);
+  button.classList.toggle("active", present);
+  button.textContent = present ? "Ad ear" : "No ad ear";
+  button.title = present
+    ? "The advert ear is beside the nameplate. Press to take it off — the paper's own title is then set across the whole measure."
+    : "The nameplate is set across the whole measure. Press to put the advert ear back beside it.";
+}
+
+/**
+ * Sell the corner of page one, or do not.
+ *
+ * Both answers have always been real - `mastheadMarkup` reserves the ear only
+ * while the frame exists, so removing it gives the paper's own title the whole
+ * measure (measured: 247x46 px to 426x80 px) - and only one of them could be
+ * reached. Deleting the frame was possible from "− Block"; putting it back was
+ * possible only from an endpoint nothing called. An action with a server and no
+ * door is the same fault as a control that cannot act, one step further along.
+ *
+ * Taking it off goes through `deleteBlock`, so a corner that has artwork in it
+ * still asks before it goes.
+ */
+async function toggleMastheadEar() {
+  const page = store.getCurrentPage();
+  if (!page || Number(page.page_number) !== 1) return showNotice("The nameplate, and its ear, are page one's.");
+
+  const present = (page.sections || []).some((s) => s.section_key === MASTHEAD_EAR_KEY);
+  if (present) return deleteBlock(MASTHEAD_EAR_KEY);
+
+  const response = await fetch(`/api/pages/${page.id}/repair-structural-frames`, { method: "POST" });
+  if (!response.ok) return showNotice("The advert ear could not be put back.");
+  const result = await response.json();
+  store.replacePage(result.page, { structural: true });
+  renderPageArea();
+  showNotice(result.created?.length
+    ? "The advert ear is back beside the nameplate."
+    : "The advert ear is already there.");
+}
+
 function renderPageArea() {
   const state = store.getState();
   const page = store.getCurrentPage();
@@ -1867,6 +1992,7 @@ function renderPageArea() {
   if (indicator) indicator.innerHTML = pageIndicatorMarkup(page, state.pages);
   syncZoomControl();
   syncRemoveBlockButton();
+  syncMastheadEarButton();
 }
 
 function renderSidePanels() {

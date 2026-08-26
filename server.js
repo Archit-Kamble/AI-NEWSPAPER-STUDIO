@@ -139,14 +139,46 @@ function createApp() {
   // Page API
   app.use("/api", deskWrites, pageRoutes);
 
+  // EVERY FAILURE THAT REACHES HERE IS RECORDED, AND ONLY THE ONES THE CALLER
+  // CAUSED ARE BLAMED ON THE CALLER.
+  //
+  // This used to answer every error with `400 Bad Request` and the error's own
+  // `message`, and log nothing at all. Three things were wrong with that, and
+  // all three cost a newsroom time on the one day it matters:
+  //
+  //   - a bug in this software, a dropped database connection or a missing
+  //     font file was reported to the desk as "you sent something wrong". A
+  //     desk told that will retype the request, which cannot help.
+  //   - the raw internal message went to the browser. `relation
+  //     "page_sections" does not exist` is not a sentence for a sub-editor and
+  //     is not a sentence for the public either.
+  //   - NOTHING WAS LOGGED. A failure left no trace anywhere, so the only
+  //     record of it was whatever the desk remembered.
+  //
+  // Multer's own errors are genuinely the caller's (a file too large, an
+  // unexpected field) and keep their message and their 400. An error a service
+  // raised deliberately can say so by carrying `status`. Everything else is
+  // ours: 500, a sentence a person can act on, and the real one in the log.
   app.use((error, req, res, next) => {
-    if (error instanceof multer.MulterError) {
-      return res.status(400).json({ error: error.message });
-    }
-    if (error) {
-      return res.status(400).json({ error: error.message || "Upload failed" });
-    }
-    next();
+    if (!error) return next();
+
+    const status = error instanceof multer.MulterError
+      ? 400
+      : Number(error.status || error.statusCode) || 500;
+
+    // One line per failure, always - including the ones answered as 400, so a
+    // run of malformed requests is visible too.
+    console.error(
+      `[${new Date().toISOString()}] ${status} ${req.method} ${req.originalUrl}`,
+      status >= 500 ? (error.stack || error.message) : (error.message || error),
+    );
+
+    if (res.headersSent) return next(error);
+    return res.status(status).json({
+      error: status >= 500
+        ? "Something went wrong on the server. The edition is unchanged; try again, and tell the desk if it keeps happening."
+        : (error.message || "That request could not be accepted."),
+    });
   });
 
   app.get("*", (req, res) => {

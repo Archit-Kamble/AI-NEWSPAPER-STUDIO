@@ -463,7 +463,19 @@ function applyChoice(device, value, handlers, patch) {
       }
       const kind = String(value).slice("panel:".length);
       const existing = Array.isArray(view.insetPanels) ? view.insetPanels : [];
-      return patch({ insetPanels: [...existing, panelFor(kind, section, view)] });
+      const added = panelFor(kind, section, view);
+      patch({ insetPanels: [...existing, added] });
+      // AND THE WAY TO WRITE IN IT, because otherwise this button adds a box
+      // reading "इथे मजकूर लिहा" and stops. The panel's own fields have always
+      // existed - Properties lists every panel on the block with a heading, its
+      // lines, its marker, its ground and its rectangle - but Properties only
+      // draws them while the WHOLE BLOCK is the selected object
+      // (properties-panel.js's bodyMarkupFor), and Insert is pressed with the
+      // story or the headline selected. So the desk got a panel they could see
+      // and could not reach, which is the report "Insert button in ediotor is
+      // use less as it add a block which we cannot edit". The way out lives
+      // beside the way in.
+      return handlers.onPanelAdded?.(added.id);
     }
     default:
   }

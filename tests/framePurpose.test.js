@@ -18,9 +18,9 @@ function standardPages() {
 
 test('every standard four-page frame has one explicit canonical owner', () => {
   const manifest = buildEditionContentManifest(standardPages());
-  assert.equal(manifest.physicalFrameCount, 45);
+  assert.equal(manifest.physicalFrameCount, 44);
   assert.deepEqual(manifest.framePurposeCounts, {
-    EDITORIAL_STORY: 34, IMAGE_COMPANION: 2, STANDING_FEATURE: 4,
+    EDITORIAL_STORY: 33, IMAGE_COMPANION: 2, STANDING_FEATURE: 4,
     ADVERT: 4, FIXED_FURNITURE: 0, UTILITY: 1, OPTIONAL_RESERVED: 0,
   });
   assert.equal(manifest.unknownPurposeCount, 0);
@@ -31,9 +31,9 @@ test('every standard four-page frame has one explicit canonical owner', () => {
 test('editorial demand derives from ownership and includes a DATA article without consuming auxiliaries', () => {
   const pages = standardPages();
   const demand = pages.flatMap((page) => eligibleEditorialFrames(page).map((frame) => `${page.page_number}:${frame.section_key}`));
-  assert.equal(demand.length, 34);
+  assert.equal(demand.length, 33);
   assert.ok(demand.includes('3:feature-three'), 'DATA is an occupant recommendation, not a non-editorial purpose');
-  for (const excluded of ['1:lead-pictures','1:lead-side','2:footer','3:rashi','3:panchang','3:dinvishesh','3:suvichar','1:top-advert']) assert.equal(demand.includes(excluded), false, excluded);
+  for (const excluded of ['1:lead-pictures','1:lead-side','1:suvichar','1:dinvishesh','1:panchang','2:rashi','3:sudoku','1:top-advert']) assert.equal(demand.includes(excluded), false, excluded);
 });
 
 test('purpose is invariant to source IDs and DB order', () => {
@@ -62,7 +62,7 @@ test('standing features, utility and adverts keep distinct content truth', () =>
   for (const key of ['rashi','panchang','dinvishesh','suvichar']) {
     const section = byKey.get(key); section.headline = key; section.body = 'मजकूर'; section.smart_card_key = key; section.smart_card_data = { items: [] }; section.status = 'ready';
   }
-  const sudoku = byKey.get('footer'); sudoku.smart_card_key = 'sudoku'; sudoku.smart_card_data = { grid: Array.from({ length: 9 }, () => Array(9).fill(0)) }; sudoku.status = 'ready';
+  const sudoku = byKey.get('sudoku'); sudoku.smart_card_key = 'sudoku'; sudoku.smart_card_data = { grid: Array.from({ length: 9 }, () => Array(9).fill(0)) }; sudoku.status = 'ready';
   for (const page of pages) for (const section of page.sections) if (section.block_type === 'advert') section.headline = 'जाहिरात';
   const manifest = buildEditionContentManifest(pages);
   assert.equal(manifest.frames.filter((frame) => frame.purpose === PURPOSE.STANDING_FEATURE && frame.contentState === 'FEATURE_READY').length, 4);

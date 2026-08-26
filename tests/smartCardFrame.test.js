@@ -1,19 +1,7 @@
-// The last #8 truth mismatch: the Smart Card's own body/fit solver
-// (layout.js) already reads real shaped Marathi widths, but the SPACE it was
-// handed above the card - "how much room does the kicker/headline/deck
-// already claim" - was still text-flow.js's old approximate row-count
-// estimate (buildFlowMap()). A headline that auto-fit to a smaller size
-// changes its real line count; the row estimate never tracked that, so the
-// card could be measured against a frame that was already wrong, even
-// though the card's OWN geometry was by then exact.
-//
-// smartCardFrame() (section-thumb.js) and preflight's smart-card check now
-// both read the SAME exact composition (composeSection() with an empty body
-// and no images) that composedMarkup() renders the kicker/headline/deck
-// bands from. This file proves that frame is exact, that Layout and
-// preflight agree on it, and that a headline's own auto-fit changes it
-// correctly - using real conjunct-heavy Marathi (क्ष, ज्ञान, श्री, कर्म,
-// ज्ञानेश्वर, शेतकऱ्यांसाठी), not ASCII stand-ins.
+// A Smart Card owns its printable frame. Ordinary article headline and
+// subheading fields are deliberately excluded because the cards will acquire
+// their own display treatment later. Canvas, preflight and press output must
+// all make that same decision.
 
 require('dotenv').config();
 const test = require('node:test');
@@ -87,13 +75,13 @@ function viewOf(section) {
   };
 }
 
-test('the Smart Card frame begins EXACTLY where the exact composition says the body would - not text-flow.js\'s row estimate', () => {
+test('the Smart Card frame is the exact composition with article display bands removed', () => {
   const section = conjunctHeavySection();
   const view = viewOf(section);
 
   const composition = sectionAdapter.composeSection(
-    { ...section, images: [], body: '' },
-    { ...view, body: '' },
+    { ...section, images: [], headline: '', subheading: '', body: '' },
+    { ...view, headline: '', subheading: '', body: '' },
   );
   const frame = smartCardLayout.smartCardFrameFromComposition(composition);
 
@@ -108,7 +96,7 @@ test('the Smart Card frame begins EXACTLY where the exact composition says the b
   assert.deepEqual(viaHelper, frame, 'smartCardFrame() must be exactly smartCardFrameFromComposition(the same composition)');
 });
 
-test('a real conjunct-heavy headline that wraps to more than one line leaves LESS room for the card - the frame tracks it, not a fixed row guess', () => {
+test('changing an old stored headline does not take space away from a Smart Card', () => {
   const oneLineHeadline = conjunctHeavySection({ headline: 'ज्ञानेश्वर' });
   const multiLineHeadline = conjunctHeavySection(); // the long conjunct-heavy headline from above
 
@@ -117,24 +105,20 @@ test('a real conjunct-heavy headline that wraps to more than one line leaves LES
   const short = frameFor(oneLineHeadline);
   const long = frameFor(multiLineHeadline);
 
-  assert.ok(long.height < short.height, `a longer real headline must leave the card less room: short=${short.height} long=${long.height}`);
+  assert.deepEqual(long, short, 'article headline text is not part of Smart Card geometry');
 });
 
-test('shrinking the headline\'s auto-fit size (headlineLocked=false, too tall to fit at its requested size) changes the card\'s frame correctly', () => {
-  // A headline size far too large for a narrow block auto-fits smaller
-  // (compose.js's fitDisplayFlow) - the real line count and therefore the
-  // real bodyTop changes as a result. The card frame must track THAT, not
-  // the naive row count `Math.ceil(headlineHeight / requestedFontPx)` would
-  // have implied at the ORIGINAL requested size.
+test('a Smart Card composition contains no headline or subheading bands', () => {
   const section = conjunctHeavySection({ headline_font_px: 40, width_px: 140 });
   const view = viewOf(section);
 
-  const composition = sectionAdapter.composeSection({ ...section, images: [], body: '' }, { ...view, body: '' });
-  assert.ok(composition.bands.headline.shrunk, 'the headline must actually have auto-fit smaller for this test to mean anything');
-
-  const frame = smartCardLayout.smartCardFrameFromComposition(composition);
-  assert.ok(Math.abs(frame.height - (composition.content.bottom - composition.bodyTop)) < 1e-6,
-    'the frame height must reflect the REAL, auto-fitted headline height, not the originally requested one');
+  const composition = sectionAdapter.composeSection(
+    { ...section, images: [], headline: '', subheading: '', body: '' },
+    { ...view, headline: '', subheading: '', body: '' },
+  );
+  assert.equal(composition.bands.headline, undefined);
+  assert.equal(composition.bands.subheading, undefined);
+  assert.equal(composition.bodyTop, composition.content.top);
 });
 
 test('a Smart Card block\'s frame is measured with an EMPTY body, never through the flattened smartCardText() fallback stored in the row', () => {
@@ -164,7 +148,10 @@ test('Layout and preflight compute the identical Smart Card frame from the ident
   // up a full page/newspaper/DB fixture, since the frame arithmetic itself
   // is what is under test, and it is a pure function of section+view either
   // way.
-  const preflightComposition = sectionAdapter.composeSection({ ...section, images: [], body: '' }, { ...view, body: '' });
+  const preflightComposition = sectionAdapter.composeSection(
+    { ...section, images: [], headline: '', subheading: '', body: '' },
+    { ...view, headline: '', subheading: '', body: '' },
+  );
   const preflightFrame = smartCardLayout.smartCardFrameFromComposition(preflightComposition);
 
   assert.deepEqual(layoutFrame, preflightFrame, 'Layout and preflight must solve the SAME frame for the same block');

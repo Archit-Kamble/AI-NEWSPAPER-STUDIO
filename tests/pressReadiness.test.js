@@ -24,6 +24,10 @@ test('FULLY_COMPOSED editorial state is distinct from press approval, and edits 
     await pool.query(`UPDATE page_sections SET headline=CASE WHEN block_type='advert' THEN 'जाहिरात' ELSE 'तपासलेली बातमी' END,
       body=CASE WHEN block_type IN ('article','briefs') THEN 'विश्वसनीय मजकूर' ELSE body END, status='ready'
       WHERE page_id=$1 AND id<>$2`, [page.id, lead.id]);
+    await pool.query(`UPDATE page_sections
+      SET headline=feature_key, body='तपासलेली माहिती', smart_card_key=feature_key,
+          smart_card_data='{}'::jsonb, status='ready', ai_generated=FALSE
+      WHERE page_id=$1 AND feature_key IS NOT NULL`, [page.id]);
     await pool.query(`UPDATE page_sections SET image_url='/uploads/test-image.png' WHERE page_id=$1 AND block_type='photo'`, [page.id]);
     let report = await readiness.assessPage(page.id, { requirePassed: false });
     assert.equal(report.readyForPress, false);

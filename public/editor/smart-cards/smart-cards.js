@@ -180,11 +180,10 @@ function rashiMarkup(data, layout) {
 function suvicharMarkup(data, layout) {
   if (!data?.text || !layout.geometry) return null;
   const attribution = layout.attributionLines?.length
-    ? `<cite style="font-size:${layout.geometry.attributionFontPx}px">— ${linesMarkup(layout.attributionLines)}</cite>`
+    ? `<cite> — ${escapeHtml(layout.attributionLines[0])}</cite>`
     : "";
   return `<blockquote class="smart-card-quote" style="font-size:${layout.fontPx}px">
-    <p>${linesMarkup(layout.quoteLines)}</p>
-    ${attribution}
+    <p>${escapeHtml(layout.quoteLines[0])}${attribution}</p>
   </blockquote>`;
 }
 

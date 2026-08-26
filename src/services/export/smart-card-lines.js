@@ -194,12 +194,8 @@ function smartCardLines(key, data, frame, cardLayout) {
   }
 
   if (key === 'suvichar') {
-    const { lineHeightPx, attributionFontPx, attributionLineHeightPx, ruleReservePx } = layout.geometry;
-    let top = subtitleOffsetPx + ruleReservePx;
-    layout.quoteLines.forEach((text, i) => line(text, 0, top + i * lineHeightPx, frame.width, layout.fontPx, 1));
-    top += layout.quoteLines.length * lineHeightPx;
-    layout.attributionLines.forEach((text, i) =>
-      line(text, 0, top + i * attributionLineHeightPx, frame.width, attributionFontPx, 1));
+    line(layout.displayLine, 0, subtitleOffsetPx, frame.width, layout.fontPx, 1,
+      layout.geometry.lineHeightPx);
     return out;
   }
 

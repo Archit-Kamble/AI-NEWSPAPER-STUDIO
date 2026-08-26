@@ -135,7 +135,12 @@ async function fillEdition(newspaperId, { tier } = {}) {
       });
       continue;
     }
-    const budget = await bodyBudgetFor(block, result.title || '', result.subtitle || '');
+    const hasSmartCard = Boolean(result.card);
+    const budget = await bodyBudgetFor(
+      block,
+      hasSmartCard ? '' : (result.title || ''),
+      hasSmartCard ? '' : (result.subtitle || ''),
+    );
     const copy = toCopy(result, budget);
     if (copy.entriesDropped) {
       trimNotes.push(
@@ -172,7 +177,7 @@ async function fillEdition(newspaperId, { tier } = {}) {
               status = $7, ai_generated = TRUE, language = 'Marathi',
               updated_at = CURRENT_TIMESTAMP
         WHERE id = $1`,
-      [block.id, copy.headline, copy.subheading, copy.body,
+      [block.id, hasSmartCard ? '' : copy.headline, hasSmartCard ? '' : copy.subheading, copy.body,
         result.card ? block.feature_key : null, result.card ? JSON.stringify(result.card) : null, reviewStatus],
     );
     await reviewInvalidation.invalidatePage(block.page_id);

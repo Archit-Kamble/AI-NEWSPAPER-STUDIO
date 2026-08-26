@@ -254,7 +254,11 @@ async function checkPage(page, newspaper, totalPages) {
       const { smartCardFitState } = await smartCards();
       const { smartCardFrameFromComposition } = await smartCardLayout();
       const view = flowViewFromSection(section);
-      const composition = adapter.composeSection({ ...section, images: [], body: '' }, { ...view, body: '' });
+      const emptyCardDisplay = { headline: '', subheading: '', body: '' };
+      const composition = adapter.composeSection(
+        { ...section, images: [], ...emptyCardDisplay },
+        { ...view, ...emptyCardDisplay },
+      );
       const frame = smartCardFrameFromComposition(composition);
       if (smartCardFitState(section.smart_card_key, section.smart_card_data, frame) === 'OVERSET') {
         findings.push({

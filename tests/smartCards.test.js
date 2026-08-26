@@ -204,17 +204,15 @@ test('panchang: a tiny frame returns OVERSET', () => {
 // ---------------------------------------------------------------- suvichar ---
 
 test('suvichar: the quote and its attribution are both present', () => {
-  // A quote this short, in a frame this roomy, now solves at a large enough
-  // font (CANDIDATE_FONT_PX's raised ceiling - the whole point of a "fill
-  // the card" fix) that it legitimately wraps onto more than one
-  // smart-card-line span, exactly like any other Smart Card text - so this
-  // strips markup and compares words, rather than asserting the quote
-  // survives as one unbroken string.
   const data = { text: 'प्रयत्ने वाळूचे कण रगडिता तेलही गळे.', attribution: 'समर्थ रामदास' };
+  const resolved = layout.layoutSmartCard('suvichar', data, FRAME);
   const html = cards.smartCardMarkup('suvichar', data, FRAME);
   const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
   assert.ok(text.includes('प्रयत्ने वाळूचे कण रगडिता तेलही गळे.'), `quote words missing or reordered: ${text}`);
   assert.ok(html.includes('समर्थ रामदास'));
+  assert.equal(resolved.geometry.singleLine, true);
+  assert.equal(resolved.displayLine, 'प्रयत्ने वाळूचे कण रगडिता तेलही गळे. — समर्थ रामदास');
+  assert.doesNotMatch(html, /smart-card-line/, 'Suvichar is emitted as one unbroken printable line');
 });
 
 test('suvichar: fit state is explicit, both ways', () => {

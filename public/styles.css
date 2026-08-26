@@ -3499,9 +3499,9 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 .smart-card-rashi-sign .rashi-name { grid-row: 1 / span 2; font-weight: 700; white-space: nowrap; }
 .smart-card-rashi-sign .rashi-luck { color: #6a6a72; font-size: 0.85em; }
 
-.smart-card-quote { margin: 0; display: grid; gap: 0.3em; place-content: center; height: 100%; text-align: center; }
-.smart-card-quote p { margin: 0; font-style: italic; line-height: var(--devanagari-line); }
-.smart-card-quote cite { font-style: normal; font-weight: 600; color: #5c5c66; font-size: 0.9em; }
+.smart-card-quote { margin: 0; display: flex; align-items: center; justify-content: center; height: 100%; text-align: center; }
+.smart-card-quote p { margin: 0; font-style: italic; line-height: var(--devanagari-line); white-space: nowrap; }
+.smart-card-quote cite { font-style: normal; font-weight: 600; color: #5c5c66; }
 
 .smart-card-list { margin: 0; padding-left: 1em; display: grid; gap: 0.2em; line-height: var(--devanagari-line); }
 

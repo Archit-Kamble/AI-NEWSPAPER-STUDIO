@@ -194,8 +194,8 @@ function contentMarkup(section, view) {
 
 /**
  * The exact composition a Smart Card's own frame is read from - the block's
- * real kicker/headline/deck, poured exactly as they would be for prose, but
- * with an EMPTY body and no images: a Smart Card is never prose, so it must
+ * real kicker, but with EMPTY headline, subheading and body fields and no
+ * images: a Smart Card is never prose, so it must
  * not be measured through the body-pouring/whitespace logic that exists for
  * continuous copy. `body` is cleared on both the persisted row and the draft
  * view - composeSection()'s field picker falls through an empty-string
@@ -204,7 +204,11 @@ function contentMarkup(section, view) {
  * measure against that leftover text.
  */
 function smartCardComposition(section, view) {
-  return composeSection({ ...section, images: [], body: '' }, { ...view, body: '' });
+  const emptyDisplay = { headline: '', subheading: '', body: '' };
+  return composeSection(
+    { ...section, images: [], ...emptyDisplay },
+    { ...view, ...emptyDisplay },
+  );
 }
 
 /**

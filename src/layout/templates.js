@@ -224,48 +224,54 @@ const templates = {
   front: {
     key: 'front',
     name: 'Front Page',
-    description: 'Nameplate band, a lead package with its picture strip, a display advert and eleven reports.',
+    description: 'Nameplate band, a lead package, the daily service strip, adverts and reports.',
     sections: (() => {
-      // The right-hand column runs from the top of band two to the foot of the
-      // page, carrying the anchor over a display advert - so it ends level with
-      // the four bands of news beside it rather than stopping short.
-      const [anchor, advert] = split(FRONT[1].y, FRONT[3].end, 2);
+      // These stacks reproduce the desk-approved page exactly. Because every
+      // next row is derived from the previous row's foot, all vertical spaces
+      // remain the same one-baseline gap used by the column grid.
+      const [suvicharRow, dinvisheshRow, panchangRow] = rows(FRONT[0].y, [32, 64, 136]);
+      const [storyRow, reportRow, footRow] = rows(FRONT[1].y, [264, 176, 152]);
+      const [anchorRow, topAdvertRow, displayAdvertRow] = rows(FRONT[1].y, [296, 144, 152]);
       return [
         // The sold corner of page one, beside the nameplate.
         block('masthead-advert', MASTHEAD_ADVERT.col, MASTHEAD_ADVERT.span,
           MASTHEAD_ADVERT.y, MASTHEAD_ADVERT.height,
           { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
 
-        // Band one - the day's lead, flanked by pictures, with an advert ear.
-        block('lead-pictures', 0, 2, FRONT[0].y, FRONT[0].height,
+        // Band one - the approved lead and daily-service arrangement.
+        block('lead-pictures', 0, 4, FRONT[0].y, FRONT[0].height,
           { type: 'photo', story: 'PHOTO_FEATURE', priority: 4, purpose: 'IMAGE_COMPANION', requirement: 'REQUIRED_CONTENT', packageOwner: 'lead' }),
-        block('lead', 2, 7, FRONT[0].y, FRONT[0].height,
+        block('lead', 4, 4, dinvisheshRow.y, FRONT[0].end - dinvisheshRow.y,
           { story: 'LEAD', priority: 5, headline: 'accent' }),
-        block('lead-side', 9, 2, FRONT[0].y, FRONT[0].height,
+        block('suvichar', 4, 12, suvicharRow.y, suvicharRow.height,
+          { type: 'feature', story: 'SMART_CARD', priority: 2, feature: 'suvichar', purpose: 'STANDING_FEATURE', requirement: 'REQUIRED_CONTENT' }),
+        block('dinvishesh', 13, 3, dinvisheshRow.y, dinvisheshRow.height,
+          { type: 'feature', story: 'SMART_CARD', priority: 2, feature: 'dinvishesh', purpose: 'STANDING_FEATURE', requirement: 'REQUIRED_CONTENT' }),
+        block('lead-side', 8, 5, dinvisheshRow.y, FRONT[0].end - dinvisheshRow.y,
           { type: 'photo', story: 'PHOTO_FEATURE', priority: 3, purpose: 'IMAGE_COMPANION', requirement: 'REQUIRED_CONTENT', packageOwner: 'lead' }),
-        block('top-advert', 11, 5, FRONT[0].y, FRONT[0].height,
-          { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
+        block('panchang', 13, 3, panchangRow.y, panchangRow.height,
+          { type: 'feature', story: 'SMART_CARD', priority: 2, feature: 'panchang', purpose: 'STANDING_FEATURE', requirement: 'REQUIRED_CONTENT' }),
 
         // Band two - two heavy stories.
-        block('second-lead', 0, 5, FRONT[1].y, FRONT[1].height,
+        block('second-lead', 0, 5, storyRow.y, storyRow.height,
           { story: 'SECONDARY', priority: 4, headline: 'accent' }),
-        block('third-lead', 5, 4, FRONT[1].y, FRONT[1].height,
+        block('third-lead', 5, 4, storyRow.y, storyRow.height,
           { story: 'SECONDARY', priority: 4 }),
-        block('anchor', 9, 7, anchor.y, anchor.height,
+        block('anchor', 9, 7, anchorRow.y, anchorRow.height,
           { story: 'SECONDARY', priority: 4 }),
-        block('display-advert', 9, 7, advert.y, advert.height,
+        block('top-advert', 9, 7, topAdvertRow.y, topAdvertRow.height,
+          { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
+        block('display-advert', 10, 6, displayAdvertRow.y, displayAdvertRow.height,
           { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
 
         // Band three - the day's reports.
-        block('report-one', 0, 3, FRONT[2].y, FRONT[2].height, { story: 'STANDARD', priority: 3 }),
-        block('report-two', 3, 3, FRONT[2].y, FRONT[2].height, { story: 'STANDARD', priority: 3 }),
-        block('report-three', 6, 3, FRONT[2].y, FRONT[2].height, { story: 'STANDARD', priority: 3 }),
+        block('report-one', 0, 3, reportRow.y, reportRow.height, { story: 'STANDARD', priority: 3 }),
+        block('report-two', 3, 3, reportRow.y, reportRow.height, { story: 'STANDARD', priority: 3 }),
+        block('report-three', 6, 3, reportRow.y, reportRow.height, { story: 'STANDARD', priority: 3 }),
 
         // Band four - short items along the foot.
-        block('brief-one', 0, 3, FRONT[3].y, FRONT[3].height, { story: 'BRIEF', priority: 2 }),
-        block('brief-two', 3, 3, FRONT[3].y, FRONT[3].height, { story: 'BRIEF', priority: 2 }),
-        block('short-news', 6, 3, FRONT[3].y, FRONT[3].height,
-          { type: 'briefs', story: 'BRIEF', priority: 2 }),
+        block('brief-one', 0, 5, footRow.y, footRow.height, { story: 'BRIEF', priority: 2 }),
+        block('brief-two', 5, 5, footRow.y, footRow.height, { story: 'BRIEF', priority: 2 }),
       ];
     })(),
   },
@@ -273,25 +279,26 @@ const templates = {
   local: {
     key: 'local',
     name: 'Local News',
-    description: 'Full-width banner over three news columns and a footer strip.',
+    description: 'Full-width banner over a half-page horoscope and four city-news blocks.',
     sections: (() => {
       // The banner is a story, not a strapline: a wide headline over an intro
       // that carries the top of the page. At 170px it was too shallow to hold
       // both - the headline consumed it and the block's character budget came
       // out at zero.
-      const band = rows(INSIDE_TOP, [225, 480]);
-      const footer = band[1].end + GAP;
-      // The right-hand pair fills the same depth as the columns beside it, so
-      // all three end level.
-      const [top, bottom] = split(band[1].y, band[1].end, 2);
+      const band = rows(INSIDE_TOP, [225]);
+      const lowerTop = band[0].end + GAP;
+      const [top, middle, bottom] = split(lowerTop, INSIDE_BOTTOM, 3);
+      const [rashiRow, rashiFooterRow] = rows(lowerTop, [632, INSIDE_BOTTOM - (lowerTop + 632 + GAP)]);
       return [
         block('banner', 0, 16, band[0].y, band[0].height, { story: 'LEAD', priority: 5 }),
-        block('left-column', 0, 6, band[1].y, band[1].height, { story: 'ANALYSIS', priority: 4 }),
-        block('centre-column', 6, 6, band[1].y, band[1].height, { story: 'STANDARD', priority: 3 }),
-        block('right-top', 12, 4, top.y, top.height, { story: 'BRIEF', priority: 2 }),
-        block('right-bottom', 12, 4, bottom.y, bottom.height, { story: 'STANDARD', priority: 3 }),
-        block('footer', 0, 16, footer, INSIDE_BOTTOM - footer,
-          { type: 'feature', story: 'SMART_CARD', priority: 2, purpose: 'UTILITY', requirement: 'REQUIRED_CONTENT', utility: 'sudoku' }),
+        block('rashi', 0, 8, rashiRow.y, rashiRow.height,
+          { type: 'feature', story: 'SMART_CARD', priority: 3, feature: 'rashi', purpose: 'STANDING_FEATURE', requirement: 'REQUIRED_CONTENT' }),
+        block('rashi-footer', 0, 8, rashiFooterRow.y, rashiFooterRow.height,
+          { story: 'BRIEF', priority: 2 }),
+        block('right-top', 8, 8, top.y, top.height, { story: 'ANALYSIS', priority: 4 }),
+        block('right-middle-left', 8, 4, middle.y, middle.height, { story: 'BRIEF', priority: 2 }),
+        block('right-middle-right', 12, 4, middle.y, middle.height, { story: 'BRIEF', priority: 2 }),
+        block('right-bottom', 8, 8, bottom.y, bottom.height, { story: 'STANDARD', priority: 3 }),
       ];
     })(),
   },
@@ -335,8 +342,8 @@ const templates = {
   },
 
   // A real inside page carries far more than six items. This is the dense
-  // layout an editor starts from when the day's file is many short reports -
-  // sixteen blocks, all on the grid, all individually fillable.
+  // layout an editor starts from when the day's file is many short reports,
+  // all on the grid and individually fillable.
   dense: {
     key: 'dense',
     name: 'Dense Inside Page',
@@ -357,10 +364,7 @@ const templates = {
         block('col-one-b', 0, 4, band[2].y, band[2].height, { story: 'BRIEF', priority: 2 }),
         block('col-two-a', 4, 4, band[1].y, band[1].height, { story: 'BRIEF', priority: 2 }),
         block('col-two-b', 4, 4, band[2].y, band[2].height, { story: 'BRIEF', priority: 2 }),
-        block('col-three-a', 8, 4, band[1].y, band[1].height, { story: 'BRIEF', priority: 2 }),
-        block('col-three-b', 8, 4, band[2].y, band[2].height, { story: 'BRIEF', priority: 2 }),
-        block('col-four-a', 12, 4, band[1].y, band[1].height, { story: 'BRIEF', priority: 2 }),
-        block('col-four-b', 12, 4, band[2].y, band[2].height, { story: 'BRIEF', priority: 2 }),
+        block('col-three-b', 8, 8, band[1].y, band[2].end - band[1].y, { story: 'BRIEF', priority: 2 }),
 
         block('strip-left', 0, 6, band[3].y, band[3].height, { story: 'SIDEBAR', priority: 2 }),
         block('strip-centre', 6, 6, band[3].y, band[3].height, { story: 'SIDEBAR', priority: 2 }),
@@ -372,35 +376,30 @@ const templates = {
     })(),
   },
 
-  // The features page. Every Marathi daily runs one: राशिभविष्य, the almanac
-  // box, दिनविशेष, a thought for the day, and whatever short copy fills round
-  // them. Not one word of it needs a reporter - which is the point. The blocks
-  // marked with a feature are filled for the edition's date by
-  // src/features/, and remain fully editable afterwards.
+  // The feature and puzzle page. The four-page ladder distributes the compact
+  // daily service cards across pages one and two; this page keeps the large,
+  // near-square Sudoku in the middle-right frame where it can print at a
+  // useful solving size. The remaining frames stay ordinary editorial space.
   features: {
     key: 'features',
-    name: 'Daily Features',
-    description: 'राशिभविष्य, the almanac box, दिनविशेष and a thought for the day.',
+    name: 'Feature & Puzzle Page',
+    description: 'Feature stories around a large middle-right Sudoku.',
     sections: (() => {
-      const right = rows(INSIDE_TOP, [200, 120, 296]);
-      const bottom = right[2].end + GAP;
-      // The horoscope runs the full depth of the three boxes beside it.
-      const rashiDepth = bottom - GAP - INSIDE_TOP;
+      const [briefRow, sudokuRow, supportRow, advertRow] = rows(INSIDE_TOP, [176, 336, 160, 248]);
+      const lowerLeftTop = advertRow.y - 56;
       return [
-        block('rashi', 0, 8, INSIDE_TOP, rashiDepth,
-          { type: 'feature', story: 'SMART_CARD', priority: 3, feature: 'rashi', purpose: 'STANDING_FEATURE', requirement: 'REQUIRED_CONTENT' }),
-        block('panchang', 8, 4, right[0].y, right[0].height,
-          { type: 'feature', story: 'SMART_CARD', priority: 2, feature: 'panchang', purpose: 'STANDING_FEATURE', requirement: 'REQUIRED_CONTENT' }),
-        block('dinvishesh', 12, 4, right[0].y, right[0].height,
-          { type: 'feature', story: 'SMART_CARD', priority: 2, feature: 'dinvishesh', purpose: 'STANDING_FEATURE', requirement: 'REQUIRED_CONTENT' }),
-        block('suvichar', 8, 8, right[1].y, right[1].height,
-          { type: 'feature', story: 'QUOTE', priority: 2, feature: 'suvichar', purpose: 'STANDING_FEATURE', requirement: 'REQUIRED_CONTENT' }),
-        block('feature-one', 8, 8, right[2].y, right[2].height,
+        block('feature-lead', 0, 8, INSIDE_TOP, 632,
           { story: 'PHOTO_FEATURE', priority: 4, headline: 'accent' }),
+        block('brief-one', 8, 8, briefRow.y, briefRow.height,
+          { story: 'BRIEF', priority: 2 }),
+        block('sudoku', 8, 8, sudokuRow.y, sudokuRow.height,
+          { type: 'feature', story: 'SMART_CARD', priority: 2, feature: 'sudoku', purpose: 'UTILITY', requirement: 'REQUIRED_CONTENT', utility: 'sudoku' }),
+        block('sudoku-support', 8, 8, supportRow.y, supportRow.height,
+          { story: 'SIDEBAR', priority: 2 }),
 
-        block('feature-two', 0, 4, bottom, INSIDE_BOTTOM - bottom, { story: 'OPINION', priority: 3 }),
-        block('feature-three', 4, 4, bottom, INSIDE_BOTTOM - bottom, { story: 'DATA', priority: 3 }),
-        block('feature-advert', 8, 8, bottom, INSIDE_BOTTOM - bottom,
+        block('feature-two', 0, 4, lowerLeftTop, INSIDE_BOTTOM - lowerLeftTop, { story: 'OPINION', priority: 3 }),
+        block('feature-three', 4, 4, lowerLeftTop, INSIDE_BOTTOM - lowerLeftTop, { story: 'DATA', priority: 3 }),
+        block('feature-advert', 8, 8, advertRow.y, advertRow.height,
           { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
       ];
     })(),

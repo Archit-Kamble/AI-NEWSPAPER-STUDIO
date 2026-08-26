@@ -654,37 +654,29 @@ function layoutChart(data, frame) {
 function layoutSuvichar(data, frame) {
   if (!data?.text) return empty('suvichar');
 
-  const RULE_RESERVE_PX = 10;
-  const ATTRIBUTION_RATIO = 0.85;
+  const quoteText = String(data.text || '').trim();
+  const attributionText = String(data.attribution || '').trim();
+  const displayLine = attributionText ? `${quoteText} — ${attributionText}` : quoteText;
 
   const solved = solveFont(frame.innerHeight, (fontPx) => {
     const lineHeightPx = lineHeightFor(fontPx, 'serif', 400);
-    const quote = wrapSmartText(data.text, { width: frame.innerWidth, fontPx, family: 'serif', weight: 400 });
-    const quoteLines = quote.lines.map((l) => l.text);
-    let hardOverset = quote.hardOverset;
-
-    let attributionLines = [];
-    let attributionFontPx = 0;
-    let attributionLineHeightPx = 0;
-    let attributionHeight = 0;
-    if (data.attribution) {
-      attributionFontPx = Math.max(MIN_CARD_FONT_PX, fontPx * ATTRIBUTION_RATIO);
-      attributionLineHeightPx = lineHeightFor(attributionFontPx, 'serif', 400);
-      const attribution = wrapSmartText(data.attribution, { width: frame.innerWidth, fontPx: attributionFontPx, family: 'serif', weight: 400 });
-      attributionLines = attribution.lines.map((l) => l.text);
-      hardOverset = hardOverset || attribution.hardOverset;
-      attributionHeight = attributionLines.length * attributionLineHeightPx + GAP_PX;
-    }
-
-    const height = RULE_RESERVE_PX + quoteLines.length * lineHeightPx + attributionHeight;
-    return { height, hardOverset, quoteLines, attributionLines, lineHeightPx, attributionFontPx, attributionLineHeightPx, ruleReservePx: RULE_RESERVE_PX };
+    const measured = measureAtomic(displayLine, fontPx, 'serif', 400, frame.innerWidth);
+    return {
+      height: lineHeightPx,
+      hardOverset: measured.hardOverset,
+      displayLine,
+      quoteLines: [quoteText],
+      attributionLines: attributionText ? [attributionText] : [],
+      lineHeightPx,
+    };
   });
 
   return {
     key: 'suvichar',
     fitState: solved.fitState,
     fontPx: solved.fontPx,
-    geometry: { lineHeightPx: solved.lineHeightPx, attributionFontPx: solved.attributionFontPx, attributionLineHeightPx: solved.attributionLineHeightPx, ruleReservePx: solved.ruleReservePx },
+    geometry: { lineHeightPx: solved.lineHeightPx, singleLine: true },
+    displayLine: solved.displayLine,
     quoteLines: solved.quoteLines,
     attributionLines: solved.attributionLines,
     violations: solved.fitState === 'OVERSET' ? ['SMART_CARD_OVERSET'] : [],

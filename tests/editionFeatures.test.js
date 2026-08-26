@@ -135,11 +135,24 @@ async function withFeaturesPage(run) {
       method: 'POST',
       body: JSON.stringify({ name: 'editionFeatures test', publicationDate: '2026-01-15' }),
     });
+    // The default four-page paper deliberately distributes its standing cards:
+    // compact services on the front, horoscope on page two and Sudoku on page
+    // three. Build those three real template pages so fillEdition() is tested
+    // against the production arrangement rather than the retired all-in-one
+    // feature page.
     const page = await desk.json(`/api/newspapers/${newspaper.id}/pages`, {
       method: 'POST',
-      body: JSON.stringify({ pageNumber: 1, templateKey: 'features' }),
+      body: JSON.stringify({ pageNumber: 1, templateKey: 'front' }),
     });
-    await run({ desk, newspaper, page });
+    const localPage = await desk.json(`/api/newspapers/${newspaper.id}/pages`, {
+      method: 'POST',
+      body: JSON.stringify({ pageNumber: 2, templateKey: 'local' }),
+    });
+    const puzzlePage = await desk.json(`/api/newspapers/${newspaper.id}/pages`, {
+      method: 'POST',
+      body: JSON.stringify({ pageNumber: 3, templateKey: 'features' }),
+    });
+    await run({ desk, newspaper, page, pages: { front: page, local: localPage, puzzle: puzzlePage } });
   } finally {
     await removeEdition(newspaper?.id);
     server.close();
@@ -169,7 +182,8 @@ test('filling an edition writes the panchang block\'s structured card, not just 
     // The flattened body still exists too - everything that measures a block
     // (character grid, worklist, preflight, fit) reads body text.
     assert.ok(block.body && block.body.length > 0, 'flattened copy must still be written');
-    assert.equal(block.headline, 'सूर्योदय - सूर्यास्त');
+    assert.equal(block.headline, '', 'a Smart Card does not inherit an article headline band');
+    assert.equal(block.subheading, '', 'a Smart Card does not inherit an article subheading band');
   });
 });
 
@@ -216,7 +230,12 @@ test('model-written standing features need review while computed and curated fea
     // would catch a regression back to a call-per-feature.
     assert.equal(calls.count, 1, 'exactly one model-written bundle call for the whole edition, not one per feature');
 
-    const { rows } = await pool.query(`SELECT feature_key,status FROM page_sections WHERE page_id=$1 AND feature_key IS NOT NULL`, [page.id]);
+    const { rows } = await pool.query(
+      `SELECT ps.feature_key, ps.status
+         FROM page_sections ps JOIN pages p ON p.id = ps.page_id
+        WHERE p.newspaper_id = $1 AND ps.feature_key IS NOT NULL`,
+      [newspaper.id],
+    );
     assert.equal(rows.find((item) => item.feature_key === 'rashi').status, 'needs_review');
     assert.equal(rows.find((item) => item.feature_key === 'suvichar').status, 'needs_review');
     assert.equal(rows.find((item) => item.feature_key === 'panchang').status, 'ready');
@@ -248,8 +267,10 @@ test('with no AI provider configured, computed/curated features still fill and n
     assert.match(rashiSkip.reason, /AI/i, 'the skip reason must tell a desk why, not just that it happened');
 
     const { rows } = await pool.query(
-      `SELECT feature_key, body, smart_card_data FROM page_sections WHERE page_id = $1 AND feature_key IS NOT NULL`,
-      [page.id],
+      `SELECT ps.feature_key, ps.body, ps.smart_card_data
+         FROM page_sections ps JOIN pages p ON p.id = ps.page_id
+        WHERE p.newspaper_id = $1 AND ps.feature_key IS NOT NULL`,
+      [newspaper.id],
     );
     const rashiRow = rows.find((item) => item.feature_key === 'rashi');
     assert.ok(!rashiRow.body, 'the rashi block must not be written to with invented copy');
@@ -313,12 +334,13 @@ test('filling an edition never persists a body longer than the block\'s own real
   // a real account; it does not need to be re-drawn from a paid API on every
   // suite run to stay covered.
   installAiStub(t);
-  await withFeaturesPage(async ({ newspaper, page }) => {
+  await withFeaturesPage(async ({ newspaper }) => {
     const { buildFlowMap } = await import('../public/editor/layout/text-flow.js');
     await fillEdition(newspaper.id, {});
     const { rows } = await pool.query(
-      `SELECT * FROM page_sections WHERE page_id = $1 AND feature_key IS NOT NULL`,
-      [page.id],
+      `SELECT ps.* FROM page_sections ps JOIN pages p ON p.id = ps.page_id
+        WHERE p.newspaper_id = $1 AND ps.feature_key IS NOT NULL`,
+      [newspaper.id],
     );
     for (const block of rows) {
       if (!block.body) continue;

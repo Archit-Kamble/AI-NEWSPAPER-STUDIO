@@ -148,6 +148,8 @@ export function bindSmartCard(requestCard, onPatch, onNotify) {
         // card is what the page and the editor both draw.
         onPatch({
           ...result.proposal,
+          headline: "",
+          subheading: "",
           smartCardKey: result.smartCardKey || null,
           smartCardData: result.smartCardData || null,
           aiGenerated: result.source === "written",

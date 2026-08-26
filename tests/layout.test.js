@@ -12,6 +12,7 @@ const pool = require('../src/config/db');
 const { signIn } = require('./helpers/desk');
 const { geometryOf } = require('../src/layout/geometry');
 const { templates } = require('../src/layout/templates');
+const { ladderFor } = require('../src/layout/ladder');
 
 const G = geometryOf({});
 
@@ -68,8 +69,47 @@ test('every template block covers whole columns and stays inside the matter box'
   }
 });
 
-test('a dense page carries far more blocks than a template of six', () => {
-  assert.ok(templates.dense.sections.length >= 15, 'dense layout should hold a real inside page');
+test('the desk-approved dense page still carries a full inside-page news file', () => {
+  assert.ok(templates.dense.sections.length >= 12, 'dense layout should hold a real inside page');
+});
+
+test('the default four-page paper fixes each daily Smart Card to its production page', () => {
+  const defaultPages = ladderFor(4).map((rung) => ({
+    pageNumber: rung.pageNumber,
+    sections: templates[rung.templateKey].sections,
+  }));
+  const cards = defaultPages.flatMap((page) => page.sections
+    .filter((section) => section.featureKey)
+    .map((section) => ({ page: page.pageNumber, key: section.featureKey, section })));
+
+  assert.deepEqual(cards.map(({ page, key }) => ({ page, key })), [
+    { page: 1, key: 'suvichar' },
+    { page: 1, key: 'dinvishesh' },
+    { page: 1, key: 'panchang' },
+    { page: 2, key: 'rashi' },
+    { page: 3, key: 'sudoku' },
+  ]);
+
+  const front = templates.front.sections;
+  const suvichar = front.find((section) => section.key === 'suvichar');
+  const dinvishesh = front.find((section) => section.key === 'dinvishesh');
+  const panchang = front.find((section) => section.key === 'panchang');
+  assert.equal(suvichar.height, G.baselinePx * 4, 'Suvichar is a compact one-line strip');
+  assert.equal(suvichar.width > dinvishesh.width, true, 'Suvichar takes the larger share of the row');
+  assert.equal(dinvishesh.y, suvichar.y + suvichar.height + G.baselinePx, 'Dinvishesh starts one baseline below Suvichar');
+  assert.equal(panchang.y, dinvishesh.y + dinvishesh.height + G.baselinePx, 'Panchang starts one baseline below Dinvishesh');
+  assert.equal(panchang.x + panchang.width, G.marginXPx + G.matterWidthPx, 'Panchang is fixed to the right edge');
+
+  const rashi = templates.local.sections.find((section) => section.key === 'rashi');
+  assert.equal(rashi.x, G.marginXPx, 'Rashi-bhavishya is fixed to the left half of page two');
+  assert.equal(rashi.width, templates.features.sections.find((section) => section.key === 'feature-lead').width,
+    'the horoscope has a readable half-page measure');
+
+  const sudoku = templates.features.sections.find((section) => section.key === 'sudoku');
+  assert.ok(sudoku.x >= G.marginXPx + G.matterWidthPx / 2, 'Sudoku is in the right half of page three');
+  assert.equal(sudoku.width, templates.features.sections.find((section) => section.key === 'brief-one').width,
+    'Sudoku fills the approved right-hand measure');
+  assert.equal(sudoku.height, 336, 'Sudoku keeps the approved large solving depth');
 });
 
 test('a block can be added to a page, moved, and deleted', async () => {

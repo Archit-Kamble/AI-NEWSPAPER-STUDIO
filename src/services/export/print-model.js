@@ -136,11 +136,11 @@ async function blockItems(section, { mono = false } = {}) {
   const holdsCard = Boolean(section.smart_card_key) && Boolean(section.smart_card_data)
     && smartCards.canRenderSmartCard(section.smart_card_key);
 
-  // Exactly the composition scribus.service.js takes: a Smart Card is never
-  // prose, so it composes with an empty body and no images and its bands stay
-  // exact.
+  // Exactly the composition scribus.service.js takes: the card owns the full
+  // frame, without ordinary article headline or subheading bands.
+  const emptyCardDisplay = { headline: '', subheading: '', body: '' };
   const composition = holdsCard
-    ? adapter.composeSection({ ...section, images: [], body: '' }, { ...section, body: '' })
+    ? adapter.composeSection({ ...section, images: [], ...emptyCardDisplay }, { ...section, ...emptyCardDisplay })
     : adapter.composeSection(section, section);
 
   // The block's ground goes down FIRST, because every writer here paints in

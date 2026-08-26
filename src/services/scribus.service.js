@@ -534,12 +534,12 @@ async function blockFrames(section, { pageIndex = 0, pageOffsetMm = 0 } = {}) {
   const holdsCard = Boolean(section.smart_card_key) && Boolean(section.smart_card_data)
     && smartCards.canRenderSmartCard(section.smart_card_key);
 
-  // A Smart Card is never prose: composed with an empty body and no images
-  // (smartCardFrame()'s own rule, section-thumb.js), so its kicker/headline/
-  // deck bands are exact and the card takes over from exactly where the
-  // body would otherwise have started.
+  // A Smart Card owns the full printable frame. Headline and subheading are
+  // deliberately empty here, matching the canvas; card titles will be handled
+  // by the card design itself rather than ordinary article display bands.
+  const emptyCardDisplay = { headline: '', subheading: '', body: '' };
   const composition = holdsCard
-    ? adapter.composeSection({ ...section, images: [], body: '' }, { ...section, body: '' })
+    ? adapter.composeSection({ ...section, images: [], ...emptyCardDisplay }, { ...section, ...emptyCardDisplay })
     : adapter.composeSection(section, section);
 
   // The block's own ground, first, because a .sla paints in document order and

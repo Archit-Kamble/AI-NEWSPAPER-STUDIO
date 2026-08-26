@@ -105,8 +105,27 @@ function sizeOptions(current) {
  * "flush left", so left and right came out as the same mark and the desk had
  * two identical buttons to guess between.
  */
+// A ROW PER ALIGNMENT, and this map has to carry every value ALIGNMENTS does.
+// It is a second list of the same keys and that is exactly how adding
+// `justify-all` broke it: `widths` came back undefined and the whole writing
+// toolbar threw on render. Unknown values fall back to left rather than
+// throwing, so a catalogue that grows again degrades to a wrong icon instead
+// of an empty toolbar.
+//
+// The last bar is the last LINE, so the two justifications differ where they
+// actually differ: `justify` leaves a paragraph's last line short, which is
+// ordinary typesetting; `justify-all` fills every line but that one, so its
+// icon is square on all four.
+const ALIGN_BARS = {
+  left: [13, 8, 11, 6],
+  center: [13, 9, 11, 7],
+  right: [13, 8, 11, 6],
+  justify: [13, 13, 13, 8],
+  "justify-all": [13, 13, 13, 13],
+};
+
 function alignIcon(align) {
-  const widths = { left: [13, 8, 11, 6], center: [13, 9, 11, 7], right: [13, 8, 11, 6], justify: [13, 13, 13, 13] }[align];
+  const widths = ALIGN_BARS[align] || ALIGN_BARS.left;
   const bars = widths.map((width, row) => {
     const x = align === "right" ? 14 - width : align === "center" ? (14 - width) / 2 : 1;
     return `<rect x="${x}" y="${2 + row * 3}" width="${width}" height="1.6" rx="0.6"/>`;

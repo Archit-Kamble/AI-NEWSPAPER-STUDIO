@@ -6910,3 +6910,97 @@ All six browser nets green, and `device-bar.browser.js` gained eight checks —
 it now presses **every** ornament in the vocabulary and asserts each is drawn
 on both surfaces, because the one that was broken was the one nothing had ever
 pressed.
+
+## Three more from the desk — 26 Aug 2026
+
+### 1 · "Changing whole paper font family works sometime, sometime not"
+
+It works **exactly once per edition**, and then never again. `setHouseStyle()`
+wrote the new face `WHERE font_family IS NULL`; the first change finds every
+block still NULL and writes all of them, and that same write leaves nothing
+NULL, so the second change matches no rows at all. The paper's own column then
+says one face while every block is still set in the previous one. Measured on
+edition 40294: **45 blocks restyled, then 0**.
+
+The intent — "only where the block has not chosen a face itself" — was right;
+the implementation could not tell a house-style face from a desk's own, because
+both land in the same column. A block still carrying the paper's **previous**
+house face never chose it, so it moves with the paper; a block carrying neither
+NULL nor the old house face was set by hand and is left alone. That is the
+guarded backfill `schema.sql` already uses for a changed default. Verified:
+45 → 44 (one hand-set block keeps `khand`) → 44, and re-choosing the face
+already in force is a no-op rather than a rewrite of every row.
+
+### 2 · A headline changed face on a double click
+
+`setInlineTypography()` took the size, the leading, the measure and the
+alignment from the composition and **not the face**, so a display flow opened
+for editing in whatever the page's CSS gave it. Display flows are set in the
+paper's sans unless the block names its own `display_family`, which the frame
+cannot reconstruct from `view` alone and does not have to: the composed line
+already carries `family` and `weight`, exactly as `render.js` reads them.
+Verified in the running app — composed Khand, editing Khand.
+
+### 3 · Justify, and JUSTIFY ALL LINES
+
+The report was that justify still does not work, with a Lokmat block as the
+reference: every line touching both edges, gaps differing line to line.
+
+Measured on an 80 px column — 12.5 em, which is where **55% of this paper's
+columns sit**:
+
+| | ragged interior lines | worst |
+|---|---|---|
+| flush left | 11 of 11 | 71.2% |
+| `justify` | **11 of 11** | **71.2%** |
+| `justify-all` | **0 of 11** | **100%**, spaces 0.21–1.34 em |
+
+`justify` is identical to flush left there, to the pixel, because
+`JUSTIFY_MIN_EM` stands it down below 13 em. That rule is right for `justify` —
+it exists to refuse rivers — and it is why the desk kept reporting the control
+does nothing on most of the paper.
+
+So `justify-all` is a fourth alignment rather than a change to the third: a
+per-block choice, and no existing block moves. It raises the word-space ceiling
+to 3 em (a real ceiling — wider than three aksharas a gap reads as a column
+break; the widest slack any of 1751 real justified lines had to close was
+2.1 em per space), leaves glyph scaling at the newspaper range, and ignores
+`JUSTIFY_MIN_EM`. Two exceptions survive and both are physical: a paragraph's
+last line is never stretched, and a line with no word space in it — a one-word
+corridor beside a picture — cannot be justified by anybody.
+
+On a real front-page lead: **0 of 24 interior lines short, worst 97.4%, gaps
+−0.1 to 1.21 em.** Swept across 400 real article blocks — 1641 interior lines,
+excluding paragraph-final and gapless ones:
+
+| | ragged lines | worst | overflowing |
+|---|---|---|---|
+| `justify` | 108 (6.6%) | 62.7% | 0 |
+| `justify-all` | **1 (0.1%)** | **92.8%** | **0** |
+
+Nothing overflows either way, and it cannot: `bySpace = min(slack, …)`, so a
+filled line reaches its measure exactly. The one line still ragged had too few
+word gaps to absorb its slack inside the 3 em ceiling, which is what the
+ceiling is for.
+
+`text_align`, `headline_align` and `subheading_align` were `VARCHAR(10)` and
+`justify-all` is eleven characters; the widening migration is in `schema.sql`
+and has been applied here. Alignment is now checked against a closed set at the
+service, for the reason the palette already is.
+
+**A measurement trap worth recording**, hit twice: a line the balancer set
+TIGHT carries a *negative* word space and `compose.js` has already folded that
+squeeze into `line.width`, while an expanded line's `width` deliberately
+understates by the spacing it gained. Adding a negative spacing to an
+already-squeezed width subtracts it twice and reports a flush line as 3% short.
+Both nets compute the drawn width with that asymmetry now.
+
+**One bug found writing it:** `ALIGN_BARS` in `story-editor.js` is a second
+list of `ALIGNMENTS`' own keys, so the new value made it return `undefined` and
+throw — taking out the entire writing toolbar, not one icon. It falls back to
+left now, and the two justification icons differ where the settings do.
+
+### Verified
+
+`npm test` **942/942** with four new regressions. All seven browser nets green.
+Item 3 measured both in Node and by driving the running app.

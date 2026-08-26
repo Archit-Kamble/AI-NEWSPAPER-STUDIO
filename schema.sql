@@ -787,3 +787,20 @@ ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS show_dateline BOOLEAN NOT NUL
 -- FALSE for every existing row, so no stored block composes differently.
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS headline_locked BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS subheading_locked BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- ---------------------------------------------------------------------------
+-- JUSTIFY ALL LINES - the setting a printed Marathi daily actually uses.
+--
+-- `justify` closes a line with two bounded levers (compose.js: word spaces to
+-- 0.55 em, then glyph scaling to 1.03) and accepts whatever slack is left, and
+-- it stands down entirely on a column under JUSTIFY_MIN_EM. That is the right
+-- default and it is not what the Lokmat reference block does: there EVERY line
+-- but a paragraph's last reaches both edges exactly, and the word gaps
+-- visibly differ from line to line to make it so.
+--
+-- So it is a fourth alignment rather than a change to the third - a desk
+-- chooses it per block, and no existing block moves. 'justify-all' is eleven
+-- characters and these columns held ten.
+ALTER TABLE page_sections ALTER COLUMN text_align       TYPE VARCHAR(16);
+ALTER TABLE page_sections ALTER COLUMN headline_align   TYPE VARCHAR(16);
+ALTER TABLE page_sections ALTER COLUMN subheading_align TYPE VARCHAR(16);

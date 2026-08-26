@@ -525,7 +525,9 @@ function setDisplayFlow(text, {
       const slack = Math.max(0, line.measure - line.width);
       if (align === 'right') line.x += slack;
       else if (align === 'center') line.x += slack / 2;
-      else if (align === 'justify' && i < lines.length - 1) justifyLine(line, slack);
+      else if (justifies(align) && i < lines.length - 1) {
+        justifyLine(line, slack, wordSpaceCeilingEm(align));
+      }
     }
   }
 
@@ -751,6 +753,41 @@ function fitDisplayFlow(text, options, { locked, minPx, maxPx = 0, fillTarget = 
 const MAX_EXTRA_WORD_SPACE_EM = 0.55;
 const MAX_GLYPH_STRETCH = 1.03;
 
+// JUSTIFY ALL LINES - what a printed Marathi daily actually does.
+//
+// The caps above are a house style: close the line if it can be closed
+// decently, and accept a slightly short one rather than open a river. The
+// Lokmat reference block the desk supplied does not make that trade. Every
+// line but a paragraph's last reaches BOTH edges exactly, and the word gaps
+// differ visibly from line to line - wide on one, tight on the next - because
+// reaching the edge is worth more to that page than an even grey.
+//
+// So `justify-all` raises the word-space ceiling far enough that the line can
+// always be closed, and takes the two rules that make `justify` stand down:
+// JUSTIFY_MIN_EM (a narrow column is set flush left) and the residual the
+// breaker is otherwise charged 100x for.
+//
+// 3 em is the ceiling and it is a real one, not "no limit". A gap wider than
+// three aksharas stops reading as a word space and starts reading as a column
+// break - and at that point the line is one word short of being setnable at
+// all, which is the breaker's business, not the justifier's. Measured across
+// 1751 justified lines of two real editions, the widest slack any line had to
+// close was 2.1 em per space.
+//
+// GLYPH SCALING IS NOT RAISED. Word spaces are invisible until they are very
+// wide; condensed or expanded Devanagari is visible immediately, and 1.03 is
+// already InDesign's newspaper range. The Lokmat block's own lines vary in
+// their SPACES, not in their letterforms.
+const FORCE_MAX_EXTRA_WORD_SPACE_EM = 3;
+const JUSTIFY_ALL = 'justify-all';
+
+/** Is this alignment one of the two that fills the measure? */
+const justifies = (align) => align === 'justify' || align === JUSTIFY_ALL;
+
+/** How far one word space may open, for the alignment in force. */
+const wordSpaceCeilingEm = (align) => (align === JUSTIFY_ALL
+  ? FORCE_MAX_EXTRA_WORD_SPACE_EM : MAX_EXTRA_WORD_SPACE_EM);
+
 // The narrowest column that can be justified at all.
 //
 // A Latin column needs about 40 characters before justification stops
@@ -842,7 +879,7 @@ function compressibleBy(width, spaces = 0, fontPx = 0) {
   return spaces * MAX_SQUEEZE_WORD_SPACE_EM * fontPx + width * (1 - MIN_GLYPH_SCALE);
 }
 
-function justifyLine(line, slack) {
+function justifyLine(line, slack, ceilingEm = MAX_EXTRA_WORD_SPACE_EM) {
   const spaceCount = (line.text.match(/\s/gu) || []).length;
 
   // The line is set TIGHT: it carries a word the measure cannot quite hold,
@@ -882,7 +919,7 @@ function justifyLine(line, slack) {
   if (slack <= 0.5) return;
   if (!spaceCount) return;
 
-  const bySpace = Math.min(slack, spaceCount * MAX_EXTRA_WORD_SPACE_EM * line.fontPx);
+  const bySpace = Math.min(slack, spaceCount * ceilingEm * line.fontPx);
   line.wordSpacingPx = Number((bySpace / spaceCount).toFixed(2));
 
   const left = slack - bySpace;
@@ -1281,8 +1318,11 @@ function pourBody(bodyInput, {
   // It is the same pair of conditions the alignment resolves with further
   // down, computed once here and read there rather than worked out twice.
   const columnEm = columns.length ? (columns[0].end - columns[0].start) / fontPx : 0;
+  // JUSTIFY_MIN_EM is `justify`'s rule and deliberately not `justify-all`'s:
+  // a desk that asks for every line to reach both edges has already made the
+  // trade that rule exists to refuse.
   const tooNarrowToJustify = align === 'justify' && columnEm > 0 && columnEm < JUSTIFY_MIN_EM;
-  const willJustify = align === 'justify' && !tooNarrowToJustify;
+  const willJustify = justifies(align) && !tooNarrowToJustify;
   // Every obstacle at a given band: the pictures, and the cap. One function so
   // the calibration grid and the real pour cannot disagree about it - the
   // capacity a desk is quoted has to be the capacity the copy actually pours
@@ -1597,7 +1637,7 @@ function pourBody(bodyInput, {
       return 4 * (over / measure) ** 3 + 100 * (residual / measure) ** 3;
     }
     if (slack === 0) return 0;
-    const closable = spaces * MAX_EXTRA_WORD_SPACE_EM * fontPx + width * (MAX_GLYPH_STRETCH - 1);
+    const closable = spaces * wordSpaceCeilingEm(align) * fontPx + width * (MAX_GLYPH_STRETCH - 1);
     const residual = Math.max(0, slack - closable);
     // AND HOW HARD THE LINE HAS TO BE STRETCHED TO CLOSE IT.
     //
@@ -2074,7 +2114,9 @@ function pourBody(bodyInput, {
       const positive = Math.max(0, slack);
       if (align === 'right') line.x = line.x + positive;
       else if (align === 'center') line.x = line.x + positive / 2;
-      else if (align === 'justify' && !isLastOfParagraph) justifyLine(line, slack);
+      else if (justifies(align) && !isLastOfParagraph) {
+        justifyLine(line, slack, wordSpaceCeilingEm(align));
+      }
     }
   }
 

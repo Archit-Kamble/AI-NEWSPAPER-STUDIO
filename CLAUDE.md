@@ -1521,9 +1521,12 @@ and on a headline that already fills its line, 5% is one whole word pushed onto
 a second line, which `.frame-headline`'s own `overflow: hidden` then cut off.
 Nothing was lost from the copy; it could not be seen, which is worse.
 
-`setInlineTypography()` takes three things from the composition instead of from
-the row: the **size and line box** off the band's own resolved lines, the
-**measure** (the band's box is its *ink* extent — on a centred headline that is
+`setInlineTypography()` takes four things from the composition instead of from
+the row: the **face** (`line.family` and `line.weight`, exactly what
+`render.js` paints — it was the one thing the frame did not take, so a headline
+or a deck opened for editing in whatever the page CSS gave it and the desk
+reported that the two change face on a double click), the **size and line box**
+off the band's own resolved lines, the **measure** (the band's box is its *ink* extent — on a centred headline that is
 narrower than the measure, and typing into an ink-tight box re-wraps on the
 first keystroke), and the **alignment**, which was hard-coded to `left` so a
 centred headline jumped to the left edge as it opened. While open the frame may
@@ -2216,6 +2219,9 @@ away from the words. `tests/runningList.test.js` holds all of it.
 and any other environment needs them:
 
 ```sql
+ALTER TABLE page_sections ALTER COLUMN text_align       TYPE VARCHAR(16);
+ALTER TABLE page_sections ALTER COLUMN headline_align   TYPE VARCHAR(16);
+ALTER TABLE page_sections ALTER COLUMN subheading_align TYPE VARCHAR(16);
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS inset_panels JSONB;
 ALTER TABLE pages ADD COLUMN IF NOT EXISTS overlay_images JSONB;
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS display_family VARCHAR(40);
@@ -2382,6 +2388,68 @@ branch was unreachable and the lock was a mechanism nobody could switch on.
 The bar's read-out shows the size the page is **set in** — light and italic
 when the compositor is fitting, bold when the desk's number is held — and
 stepping locks, because a desk reaching for the size is asking for that size.
+
+### Justify, and JUSTIFY ALL LINES
+
+`justify` closes a line with two bounded levers — word spaces to
+`MAX_EXTRA_WORD_SPACE_EM` (0.55), then glyph scaling to `MAX_GLYPH_STRETCH`
+(1.03) — and accepts whatever slack is left rather than opening a river. It
+also stands down entirely below `JUSTIFY_MIN_EM` (13 em). That is the right
+default, and on **55% of this paper's blocks it is indistinguishable from flush
+left**, because that is where the column measures cluster. Measured on an 80 px
+column: `justify` leaves **11 of 11** interior lines ragged, worst 71.2% — the
+same numbers as `left`, to the pixel. That is the desk's "justify still not
+working".
+
+`justify-all` is the fourth alignment and does what a printed Marathi daily
+does: **every line but a paragraph's last reaches both edges**, and the word
+gaps differ visibly from line to line to make it so. Same column: **0 of 11**
+short, spaces 0.21–1.34 em.
+
+- **`FORCE_MAX_EXTRA_WORD_SPACE_EM` is 3 em, and it is a real ceiling.** Wider
+  than three aksharas a gap stops reading as a word space and starts reading as
+  a column break. Across 1751 justified lines of two real editions the widest
+  slack any line had to close was 2.1 em per space.
+- **Glyph scaling is NOT raised.** Word spaces are invisible until they are very
+  wide; condensed or expanded Devanagari is visible immediately, and 1.03 is
+  already InDesign's newspaper range. The reference block's lines vary in their
+  spaces, not in their letterforms.
+- **`JUSTIFY_MIN_EM` is `justify`'s rule and deliberately not this one's.** A
+  desk asking for every line to reach both edges has already made the trade
+  that rule exists to refuse.
+- **Two exceptions, both physical.** A paragraph's last line is never
+  stretched. And a line with no word space in it — a one-word corridor beside a
+  picture — cannot be justified by anybody: there is nothing to distribute, and
+  stretching one word to the measure is distortion, not justification.
+
+`text_align`, `headline_align` and `subheading_align` were `VARCHAR(10)`;
+`justify-all` is eleven characters, so the migration widening them to
+`VARCHAR(16)` is in `schema.sql` and must be run. Alignment is now checked
+against a closed set at the service, for the reason the palette is: it is
+interpolated into a style attribute by the Typography panel's preview.
+
+**`ALIGN_BARS` in `story-editor.js` must carry every value `ALIGNMENTS` does.**
+It is a second list of the same keys, and adding the fourth value made it
+return `undefined` and throw — taking out the whole writing toolbar, not one
+icon. It falls back to left now. The two justification icons differ where the
+settings differ: `justify` shows a short last bar, `justify-all` a square one.
+
+### The paper's own face is written down, and it changes MORE THAN ONCE
+
+`setHouseStyle()` wrote the new face `WHERE font_family IS NULL`. That restyles
+every block the first time and **nothing ever after**, because that same write
+leaves no row NULL — so the paper's own column said one face while every block
+was still set in the previous one. Measured on edition 40294: **45 blocks, then
+0**. That is "changing the whole paper's font family works sometime, sometime
+not": it works exactly once per edition.
+
+A block still carrying the paper's **previous** house face never chose it —
+this function put it there — so it moves with the paper. A block a sub-editor
+deliberately set to something else carries neither NULL nor the old house face
+and is left alone. That is the guarded backfill `schema.sql` already uses for a
+changed column default: move only the rows still carrying the exact old value.
+Verified: 45 → 44 (one block set by hand keeps its face) → 44, and choosing the
+face already in force is a no-op rather than a rewrite of every row.
 
 ### Column rules are asked for, not assumed
 

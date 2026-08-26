@@ -313,6 +313,44 @@ const say = (ok, name, detail = '') => {
     await toggle('justify');
     say(!(await isOn('justify')), 'and takes it off again');
 
+    // JUSTIFY ALL LINES - and that it really fills the measure, not just that
+    // the button lights. `justify` stands down below JUSTIFY_MIN_EM, which is
+    // 55% of this paper's columns, so "the setting is stored" proves nothing
+    // about what the page does; the composition is asked instead.
+    await toggle('justify-all');
+    say(await isOn('justify-all'), 'Justify lines sets the block');
+    say(!(await isOn('justify')), 'and the two settings of one field never light together');
+    const filled = await page.evaluate(async (k) => {
+      const st = await import('/editor/store.js');
+      const a = await import('/editor/compose/section-adapter.js');
+      const c = a.composeSection(st.getSection(k), st.getDraft());
+      const lines = c.bodyLines.filter((l) => !l.dateline);
+      const gaps = (l) => (String(l.text).trim().match(/\s+/g) || []).length;
+      // THE TWO PATHS REPORT WIDTH DIFFERENTLY, on purpose (compose.js says so
+      // where it does it): a line the balancer set TIGHT carries a negative
+      // word space and has already had the squeeze folded into `width`, while
+      // an expanded line's `width` deliberately understates by the spacing it
+      // gained. Adding a negative spacing to an already-squeezed width
+      // subtracts it twice and reports a flush line as 3% short.
+      const drawn = (l) => (l.wordSpacingPx > 0 ? l.width + l.wordSpacingPx * gaps(l) : l.width);
+      // A paragraph's LAST line is meant to be short, and a line with no word
+      // space in it cannot be justified by anybody - there is nothing to
+      // distribute. Both are the reference block's own exceptions.
+      const interior = lines.filter((l, i) => i < lines.length - 1
+        && !(lines[i + 1] || {}).paragraphBreak && gaps(l) > 0);
+      const fills = interior.map((l) => drawn(l) / l.measure);
+      const ems = interior.map((l) => Number(((l.wordSpacingPx || 0) / l.fontPx).toFixed(2)));
+      return { n: interior.length, short: fills.filter((f) => f < 0.97).length,
+        worst: fills.length ? Math.min(...fills) : 1, spread: new Set(ems).size };
+    }, KEY);
+    say(filled.n >= 3, 'the block sets enough interior lines to judge', `${filled.n}`);
+    say(filled.short === 0, 'every interior line reaches its measure',
+      `${filled.short} of ${filled.n} short, worst ${(filled.worst * 100).toFixed(1)}%`);
+    say(filled.spread > 1, 'and the word gaps differ line to line, as the reference does',
+      `${filled.spread} distinct gaps`);
+    await toggle('justify-all');
+    say(!(await isOn('justify-all')), 'and it comes off again');
+
     // THE FIXTURE BLOCK HAS NO LOCATION, so there was no dateline for this to
     // turn off and the check read false both times - a test passing on the
     // absence of the thing it is testing. One is set first, and the restore

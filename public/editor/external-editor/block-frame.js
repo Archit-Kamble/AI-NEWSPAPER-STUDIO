@@ -918,6 +918,8 @@ function finishInlineTextEdit({ cancel = false } = {}) {
     element.style.minHeight = "";
     element.style.overflow = "";
     element.style.textAlign = "";
+    element.style.fontFamily = "";
+    element.style.fontWeight = "";
   }
   clearDisplayField(element);
 
@@ -1038,6 +1040,20 @@ function setInlineTypography(frame, part, scale) {
   const requested = Number(state.view[`${part}FontPx`]) || 16;
   const px = Number(line?.fontPx) || requested;
   frame.style.fontSize = `${px / scale}px`;
+
+  // AND THE FACE, from the same resolved line the size comes from.
+  //
+  // This was the one thing the frame did not take from the composition, so a
+  // headline or a deck opened for editing was set in whatever the page's CSS
+  // happened to give it - the desk's report was that the two changed face on
+  // a double click. Display flows are set in the paper's sans unless the block
+  // names its own `display_family` (DISPLAY_TYPOGRAPHY in compose.js), which
+  // is a decision the frame cannot reconstruct from `view` alone and does not
+  // have to: the composed line already carries the family and the weight it
+  // was measured and painted in, exactly as render.js reads them.
+  const face = publicationFamily(line?.family || state.view.displayFamily || "sans");
+  frame.style.fontFamily = face.css;
+  frame.style.fontWeight = String(line?.weight || 700);
   frame.style.lineHeight = Number(line?.height)
     ? `${line.height / scale}px`
     : String(Math.max(1.1, (Number(state.view.lineHeight) || 1.25) - 0.15));

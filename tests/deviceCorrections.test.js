@@ -381,3 +381,108 @@ test('an empty story is empty, not the story that was there before', async () =>
   assert.match(line(adapter.composeSection(dated, { author: 'सुजॉय', body: '' })), /पाटण/,
     'and a view that never mentions the location still reads the row');
 });
+
+// ------------------------------------------- the desk's next three reports ---
+
+test('changing the paper\'s face works more than once', async () => {
+  // `WHERE font_family IS NULL` restyles every block the first time and NOTHING
+  // ever after, because that same write leaves nothing NULL - so the paper's
+  // own column said one face while all forty-five blocks were still set in the
+  // previous one. Measured on edition 40294: 45 blocks, then 0. That is the
+  // desk's "works sometime, sometime not" exactly: it works once per edition.
+  const fs = require('node:fs');
+  const repo = fs.readFileSync('src/repositories/newspaper.repository.js', 'utf8');
+  const body = repo.slice(repo.indexOf('async function setHouseStyle'));
+  assert.match(body, /font_family IS NOT DISTINCT FROM/,
+    'a block still carrying the paper\'s PREVIOUS house face moves with the paper');
+  assert.match(body, /display_family IS NOT DISTINCT FROM/);
+  assert.match(body, /font_family IS DISTINCT FROM \$2/,
+    'and choosing the face already in force is a no-op, not a rewrite of every row');
+  // The guard that makes it safe: a block a desk set by hand carries neither
+  // NULL nor the old house face, so neither branch matches it.
+  assert.match(body, /previous\.rows\[0\]\.body_family|wasBody/,
+    'the previous face has to be read before the paper is updated');
+});
+
+test('justify-all fills every line that has a gap to open', async () => {
+  const adapter = await import('../public/editor/compose/section-adapter.js');
+  // A NARROW column - 12.5 em, under JUSTIFY_MIN_EM, which is where `justify`
+  // stands down and becomes indistinguishable from flush left. CLAUDE.md's own
+  // sweep puts 55% of this paper's columns at 11 em, so this is the ordinary
+  // case and not an edge one.
+  const row = {
+    ...BLOCK, width_px: 80, height_px: 600, column_count: 1, headline: '', subheading: '',
+    body: 'सातारा जिल्ह्यातील ग्रामीण भागात पाणीपुरवठा योजनेचे काम अंतिम टप्प्यात आले आहे. '
+      + 'महापालिकेने शहरातील रस्त्यांच्या दुरुस्तीसाठी स्वतंत्र निधी मंजूर केला आहे. '
+      + 'शिक्षण विभागाने विद्यार्थ्यांसाठी मोफत पुस्तक वाटपाचा कार्यक्रम जाहीर केला.',
+  };
+  // A line set TIGHT carries a negative word space and compose.js has already
+  // folded that squeeze into `width`; an EXPANDED line's `width` deliberately
+  // understates by the spacing it gained. Adding a negative to an already
+  // squeezed width subtracts it twice and reports a flush line as short.
+  const drawnWidth = (line) => (line.wordSpacingPx > 0
+    ? line.width + line.wordSpacingPx * ((String(line.text).trim().match(/\s+/g) || []).length)
+    : line.width);
+  const interior = (composed) => {
+    const lines = composed.bodyLines.filter((l) => !l.dateline);
+    return lines.filter((l, i) => i < lines.length - 1
+      && !(lines[i + 1] || {}).paragraphBreak
+      && (String(l.text).trim().match(/\s+/g) || []).length > 0);
+  };
+
+  const plain = adapter.composeSection({ ...row, text_align: 'justify' }, {});
+  const forced = adapter.composeSection({ ...row, text_align: 'justify-all' }, {});
+
+  const plainShort = interior(plain).filter((l) => drawnWidth(l) / l.measure < 0.97).length;
+  assert.ok(plainShort > 0,
+    'the fixture must be a column `justify` really does give up on - that is the point');
+
+  const forcedFills = interior(forced).map((l) => drawnWidth(l) / l.measure);
+  assert.ok(forcedFills.length >= 5, 'and it must set several interior lines');
+  for (const fill of forcedFills) {
+    assert.ok(fill >= 0.97, `every interior line reaches its measure (saw ${(fill * 100).toFixed(1)}%)`);
+  }
+
+  // The gaps DIFFER line to line - that is what filling every measure costs and
+  // what the Lokmat reference block visibly shows.
+  const gaps = new Set(interior(forced).map((l) => Number(((l.wordSpacingPx || 0) / l.fontPx).toFixed(2))));
+  assert.ok(gaps.size > 1, 'the word gaps are not uniform');
+
+  // AND A PARAGRAPH'S LAST LINE IS STILL SHORT. Stretching it would be the one
+  // thing that reads as software rather than as a compositor.
+  const all = forced.bodyLines.filter((l) => !l.dateline);
+  const last = all[all.length - 1];
+  assert.ok(!last.wordSpacingPx, 'the closing line is never stretched');
+
+  // Nothing about `justify` itself moved.
+  const again = adapter.composeSection({ ...row, text_align: 'justify' }, {});
+  assert.deepEqual(again.bodyLines.map((l) => l.text), plain.bodyLines.map((l) => l.text));
+});
+
+test('a display flow opens in the face the compositor resolved', () => {
+  // setInlineTypography() took the size, the leading, the measure and the
+  // alignment from the composition and NOT the face, so a headline or a deck
+  // opened for editing was set in whatever the page CSS gave it - the desk's
+  // report was that the two change face on a double click.
+  const fs = require('node:fs');
+  const frame = fs.readFileSync('public/editor/external-editor/block-frame.js', 'utf8');
+  const fn = frame.slice(frame.indexOf('function setInlineTypography'));
+  const body = fn.slice(0, fn.indexOf('\nfunction '));
+  assert.match(body, /frame\.style\.fontFamily/, 'the frame takes its face from the composed line');
+  assert.match(body, /line\?\.family/, 'from the LINE, which is what render.js paints');
+});
+
+test('the alignment icons carry every alignment there is', async () => {
+  // ALIGN_BARS is a second list of ALIGNMENTS' own keys, and adding
+  // `justify-all` to the catalogue made it return undefined and throw - which
+  // took out the whole writing toolbar, not just one icon.
+  const { ALIGNMENTS } = await import('../public/editor/external-editor/typography-panel.js');
+  const fs = require('node:fs');
+  const src = fs.readFileSync('public/editor/external-editor/story-editor.js', 'utf8');
+  for (const option of ALIGNMENTS) {
+    assert.ok(src.includes(`${option.value}:`) || src.includes(`"${option.value}":`),
+      `${option.value} has an icon`);
+  }
+  assert.match(src, /ALIGN_BARS\[align\] \|\| ALIGN_BARS\.left/,
+    'and an unknown value degrades to a wrong icon rather than an empty toolbar');
+});

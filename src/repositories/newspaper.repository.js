@@ -204,6 +204,30 @@ async function update(id, updates) {
  * system already relies on.
  */
 async function setHouseStyle(id, { bodyFamily, displayFamily, columnRules }) {
+  // THE FACE THE PAPER WAS SET IN BEFORE THIS CHANGE, read first because it is
+  // what tells a house-style face apart from a desk's own choice.
+  //
+  // `WHERE font_family IS NULL` alone is why the desk reported that changing
+  // the paper's face "works sometime, sometime not": it works EXACTLY ONCE per
+  // edition. The first change finds every block still NULL and writes all of
+  // them; that same write leaves nothing NULL, so the second change matches no
+  // rows at all and the paper's own column says one face while all forty-five
+  // blocks are still set in the previous one. Measured on edition 40294:
+  // 45 blocks restyled, then 0.
+  //
+  // A block still carrying the paper's PREVIOUS house face never chose it -
+  // this function put it there - so it moves with the paper. A block a
+  // sub-editor deliberately set to something else is carrying neither NULL nor
+  // the old house face, and is left exactly as it is. That is the guarded
+  // backfill this codebase already uses for a changed column default in
+  // schema.sql: move only the rows still carrying the exact old value.
+  const previous = await pool.query(
+    'SELECT body_family, display_family FROM newspapers WHERE id = $1', [id],
+  );
+  if (!previous.rows[0]) return null;
+  const wasBody = previous.rows[0].body_family;
+  const wasDisplay = previous.rows[0].display_family;
+
   const { rows } = await pool.query(
     `UPDATE newspapers
         SET body_family = COALESCE($2, body_family),
@@ -220,18 +244,20 @@ async function setHouseStyle(id, { bodyFamily, displayFamily, columnRules }) {
   if (bodyFamily) {
     const { rowCount } = await pool.query(
       `UPDATE page_sections SET font_family = $2, updated_at = CURRENT_TIMESTAMP
-        WHERE font_family IS NULL
+        WHERE (font_family IS NULL OR font_family IS NOT DISTINCT FROM $3)
+          AND font_family IS DISTINCT FROM $2
           AND page_id IN (SELECT id FROM pages WHERE newspaper_id = $1)`,
-      [id, bodyFamily],
+      [id, bodyFamily, wasBody],
     );
     restyled += rowCount;
   }
   if (displayFamily) {
     const { rowCount } = await pool.query(
       `UPDATE page_sections SET display_family = $2, updated_at = CURRENT_TIMESTAMP
-        WHERE display_family IS NULL
+        WHERE (display_family IS NULL OR display_family IS NOT DISTINCT FROM $3)
+          AND display_family IS DISTINCT FROM $2
           AND page_id IN (SELECT id FROM pages WHERE newspaper_id = $1)`,
-      [id, displayFamily],
+      [id, displayFamily, wasDisplay],
     );
     restyled += rowCount;
   }

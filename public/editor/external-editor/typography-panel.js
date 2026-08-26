@@ -69,6 +69,16 @@ export const ALIGNMENTS = [
   { value: "center", label: "Center" },
   { value: "right", label: "Right" },
   { value: "justify", label: "Justify" },
+  // JUSTIFY ALL LINES. `justify` closes a line with two bounded levers and
+  // accepts what is left, and it stands down entirely on a column under
+  // JUSTIFY_MIN_EM - which is 55% of this paper's blocks, so on most of them
+  // it is indistinguishable from flush left. That is the right default and it
+  // is not what the Lokmat reference block does: there every line but a
+  // paragraph's last reaches BOTH edges exactly, with the word gaps visibly
+  // differing from line to line to make it so. Measured on an 80 px column:
+  // justify leaves 11 of 11 interior lines ragged (worst 71%), justify-all
+  // leaves none (word spaces 0.21-1.34 em). See compose.js's JUSTIFY_ALL.
+  { value: "justify-all", label: "Justify lines" },
 ];
 
 // WHICH object's alignment a control is setting.

@@ -193,7 +193,8 @@ export function deviceBarMarkup() {
         ${button("dropcap", "D", "Drop cap", "A large opening letter, two to four lines deep")}
         ${button("list-bullet", "▪", "Bullets", "Set the whole story as a bulleted list, markers hung in their own column")}
         ${button("list-number", "१", "Numbers", "Set the whole story as a numbered list, markers hung in their own column")}
-        ${button("justify", "▤", "Justify", "Set the copy flush to BOTH edges of the column — the way a printed newspaper sets its body")}
+        ${button("justify", "▤", "Justify", "Set the copy flush to BOTH edges of the column, closing each line as far as is decent")}
+        ${button("justify-all", "▥", "Justify lines", "Force EVERY line but a paragraph's last to reach both edges — wider word gaps where it takes them", { wide: true })}
         ${button("dateline", "■", "Dateline", "Open the story with ■ location, reporter — or don't")}
       </span>
       <span class="dev-group">
@@ -375,8 +376,10 @@ export function bindDeviceBar(handlers) {
     // and the only control for it was an Alignment segment in a panel in the
     // rail. It is the single most characteristic thing about printed body copy,
     // so it is a button.
-    if (device === "justify") {
-      patch({ textAlign: view.textAlign === "justify" ? "left" : "justify" });
+    if (device === "justify" || device === "justify-all") {
+      // Two settings of one field, so each button turns the other off rather
+      // than the two lighting at once and the block quietly obeying one.
+      patch({ textAlign: view.textAlign === device ? "left" : device });
       return;
     }
     if (device === "dateline") {
@@ -498,6 +501,7 @@ export function refreshDeviceBar(view = {}, composition = null) {
     chart: hasChart(view),
     rule: hasOrnament(view),
     justify: view.textAlign === "justify",
+    "justify-all": view.textAlign === "justify-all",
     // Lit means the dateline IS printed, which is the ordinary state - so this
     // is the one button on the bar that starts on.
     dateline: view.showDateline !== false,

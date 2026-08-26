@@ -104,6 +104,11 @@ async function moveSection(pageId, sectionKey, body) {
   return pageRepository.findById(id);
 }
 
+// How a flow may be set. `justify-all` forces every line but a paragraph's
+// last to reach both edges - see compose.js's JUSTIFY_ALL and the Lokmat
+// reference block behind it.
+const ALIGNMENTS = Object.freeze(['left', 'center', 'right', 'justify', 'justify-all']);
+
 async function saveSection(pageId, sectionKey, body) {
   const id = parseInt(pageId, 10);
   const beforePage = await pageRepository.findById(id);
@@ -122,6 +127,18 @@ async function saveSection(pageId, sectionKey, body) {
   }
   if (supplied(body.accentColor) && accentColor === null) {
     return { error: 'The headline accent must be one of the newspaper palette inks.' };
+  }
+  // ALIGNMENT IS A CLOSED SET, checked here for the reason the palette is:
+  // `text_align` is interpolated into a style attribute by the Typography
+  // panel's preview, so arbitrary stored text may not reach a renderer. It had
+  // never been checked; adding a fourth legal value is the moment to state
+  // what the legal values are.
+  for (const field of ['textAlign', 'headlineAlign', 'subheadingAlign']) {
+    const value = body[field];
+    if (value === undefined || value === null || value === '') continue;
+    if (!ALIGNMENTS.includes(value)) {
+      return { error: `${field} must be one of ${ALIGNMENTS.join(', ')}.` };
+    }
   }
   // The one border catalogue, read by the canvas, the Block Editor and both
   // press paths. This used to be the pair ['none', 'box'] while the Properties

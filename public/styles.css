@@ -3601,6 +3601,13 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 .smart-card-rashi .smart-card-content {
   box-shadow: inset 0 0 0 0.6px #8a1428, inset 0 0 0 2.2px #fff, inset 0 0 0 2.8px #8a1428;
 }
+/* दिनविशेष is a BOX: one rule round the whole card, its nameplate on a single
+   line at the head, and the day's entries as centred bullets under it. The
+   ring is a single hairline rather than the almanac's double band - a standing
+   list is not an almanac, and two rules on a 190px box is all rule. */
+.smart-card-dinvishesh .smart-card-content {
+  box-shadow: inset 0 0 0 0.6px #8a1428;
+}
 .smart-card-panchang .smart-card-table th,
 .smart-card-panchang .smart-card-table td {
   vertical-align: middle;
@@ -3611,8 +3618,19 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 }
 .smart-card-panchang .smart-card-table td {
   border-left: 0.5px solid #dec8cc;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
+  /* NO `font-weight`. layoutPanchang() measures this cell at 400; 600 renders
+     out of the 700 face and is 7.6% wider, which wrapped राहुकाळ onto a second
+     line the solver had not reserved. A weight the measurement authority did
+     not measure is a second geometry - the same argument that keeps
+     letter-spacing out of this product. */
+  /* NO `font-variant-numeric: tabular-nums`. layoutPanchang() measures this
+     cell with the shaper, which does not apply `tnum` - so the browser drew
+     figures at an advance the solver had never measured. Photographed on a
+     148x232 almanac box: the solver set राहुकाळ "१४:०३ ते १५:२६" on one line,
+     the browser wrapped it onto two, and the card reported FITS while running
+     15px past its own block. Same class as the letter-spacing this project
+     refused: a rendering feature the measurement authority cannot see is a
+     second geometry. */
 }
 .smart-card-panchang .smart-card-table tr:nth-child(even) td { background: #fcf8f3; }
 .smart-card-panchang .smart-card-table tr:last-child th,
@@ -3655,8 +3673,9 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 .smart-card-quote-credit {
   display: block;
   font-style: normal;
-  font-weight: 600;
-  letter-spacing: 0.01em;
+  /* Measured at 400 by layoutSuvichar(), and NOT tracked: on the one-line
+     strip the credit is placed from the solver's own measured width, so a
+     hundredth of an em per cluster puts it past the measure. */
   color: #6a5559;
 }
 
@@ -3677,7 +3696,7 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   align-content: center;
   list-style: none;
   line-height: var(--devanagari-line);
-  font-weight: 600;
+  /* Measured at 400 by layoutDinvishesh(). See the almanac's value cell. */
   color: #201b1c;
 }
 .smart-card-list::before {
@@ -3689,6 +3708,19 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   width: 0.6px;
   background: #d5a9b0;
 }
+/* Centred bullets. The symbol stops hanging in a margin of its own and sets
+   inline before the words, which is the only way a centred line can carry one
+   - a hanging mark on a centred entry points at nothing. The spine rule goes
+   with it: it existed to align the hanging marks. */
+.smart-card-list.is-centred { text-align: center; }
+.smart-card-list.is-centred::before { content: none; }
+.smart-card-list.is-centred li { padding-left: 0 !important; }
+.smart-card-list.is-centred .dinvishesh-symbol {
+  position: static;
+  display: inline;
+  margin-inline-end: 0.4em;
+}
+.smart-card-list.is-centred .smart-card-line { display: inline; white-space: normal; }
 .smart-card-list li { position: relative; box-sizing: border-box; }
 .smart-card-list li::before {
   content: none;
@@ -6793,3 +6825,45 @@ body.print-view .page-imprint {
   border: 1px solid var(--line, #d0d0d6); border-radius: 3px;
 }
 .ai-candidate button { width: 100%; margin-top: 4px; }
+
+/* THE MARKET PANEL'S MONTH LINE.
+   The <svg> is sized in the solver's own plot box and stretched by
+   preserveAspectRatio="none", so the points the browser draws are exactly the
+   points the export walk emits as a `poly`. Nothing here may set its own
+   width: a second sizing rule is a second geometry. */
+.smart-card-market-trend {
+  display: block;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+.smart-card-market-trend figcaption {
+  display: block;
+  font-family: var(--font-sans, inherit);
+  font-weight: 700;
+  color: #8a1428;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.smart-card-market-trend svg {
+  display: block;
+  width: 100%;
+  border-bottom: 0.4px solid #ddcbd0;
+}
+.smart-card-market-trend small {
+  display: block;
+  font-family: var(--font-sans, inherit);
+  color: #7a6266;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* सुविचार as a STRIP: quote and credit on one baseline, centred together. */
+.smart-card-quote.is-strip {
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: center;
+  flex-wrap: nowrap;
+}
+.smart-card-quote.is-strip .smart-card-quote-text { flex: 0 1 auto; }
+.smart-card-quote.is-strip .smart-card-quote-credit { flex: 0 0 auto; white-space: nowrap; }

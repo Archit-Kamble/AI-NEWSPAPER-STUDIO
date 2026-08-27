@@ -183,7 +183,17 @@ const FIXTURES = {
       await Promise.all([ensureFontsLoaded(), ensureShaperReady()]);
 
       const host = document.createElement('div');
-      host.style.cssText = 'position:fixed;left:-9999px;top:0;background:#fff';
+      // THE HOST MUST CARRY THE PAGE'S OWN FACE.
+      //
+      // A bare div appended to <body> inherits the admin chrome's Arial, and
+      // every card this net drew was therefore measured in a font the paper
+      // does not print in - measured on the almanac's राहुकाळ value, 86.8px in
+      // Arial against 80.7px in the publication serif, which is enough to wrap
+      // a line the solver set flush and to report an overflow the real page
+      // does not have. `.newspaper-canvas` is where styles.css sets the
+      // publication face, so the host wears that class.
+      host.className = 'newspaper-canvas';
+      host.style.cssText = 'position:fixed;left:-9999px;top:0;background:#fff;border:0';
       document.body.appendChild(host);
 
       const out = [];

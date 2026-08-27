@@ -257,11 +257,17 @@ function smartCardLines(key, data, frame, cardLayout) {
   if (key === 'rashi') {
     const {
       rows, rowHeights, columnWidth, columnGap, iconSize, itemPadding, lineHeightPx,
+      bandHeight, bandAfterRow,
     } = layout.geometry;
+    // The nameplate's band, taken out of the card's middle. Every row below it
+    // is pushed down by exactly its depth - the same offset the canvas applies
+    // as an extra grid track.
+    const banded = bandHeight > 0 && bandAfterRow >= 0;
+    const bandOffset = (row) => (banded && row >= bandAfterRow ? bandHeight : 0);
     layout.items.forEach((item, index) => {
       const column = Math.floor(index / rows);
       const row = index % rows;
-      const rowTop = rowHeights.slice(0, row).reduce((sum, h) => sum + h, 0);
+      const rowTop = rowHeights.slice(0, row).reduce((sum, h) => sum + h, 0) + bandOffset(row);
       const colX = column * (columnWidth + columnGap);
       const top = subtitleOffsetPx + rowTop + itemPadding;
       if (item.imageFile) image(item.imageFile, colX + itemPadding, top, iconSize, iconSize);
@@ -283,12 +289,23 @@ function smartCardLines(key, data, frame, cardLayout) {
         line(text, textX, top + (i + 1) * lineHeightPx, textWidth, layout.fontPx));
     });
     rowHeights.forEach((height, row) => {
-      const y = subtitleOffsetPx + rowHeights.slice(0, row + 1).reduce((sum, value) => sum + value, 0) - 0.5;
+      const y = subtitleOffsetPx
+        + rowHeights.slice(0, row + 1).reduce((sum, value) => sum + value, 0)
+        + bandOffset(row) - 0.5;
       bar(0, y, contentWidth, 0.5, '#d5c7c9');
     });
     if (layout.geometry.columns > 1) {
-      bar(columnWidth + columnGap / 2 - 0.25, subtitleOffsetPx, 0.5,
-        rowHeights.reduce((sum, height) => sum + height, 0), '#d5c7c9');
+      // Two runs where a band splits the column, so the rule does not cross
+      // the nameplate.
+      const total = rowHeights.reduce((sum, height) => sum + height, 0);
+      const x = columnWidth + columnGap / 2 - 0.25;
+      if (banded) {
+        const above = rowHeights.slice(0, bandAfterRow).reduce((sum, h) => sum + h, 0);
+        bar(x, subtitleOffsetPx, 0.5, above, '#d5c7c9');
+        bar(x, subtitleOffsetPx + above + bandHeight, 0.5, total - above, '#d5c7c9');
+      } else {
+        bar(x, subtitleOffsetPx, 0.5, total, '#d5c7c9');
+      }
     }
     return out;
   }
@@ -332,6 +349,23 @@ function smartCardLines(key, data, frame, cardLayout) {
     // several lines with the credit under its own rule, so the two agree.
     const quoteLines = layout.quoteLines || [];
     const creditLines = layout.attributionLines || [];
+
+    // ONE LINE, CREDIT RUNNING ON. The strip's quote and its credit share a
+    // row, so they are two runs at one baseline, placed from the SOLVER's own
+    // measured quote width - never re-measured here, which is the rule this
+    // file's header states.
+    if (g.inlineCredit) {
+      const boxH = (Number(layout.contentBox?.height) || Number(frame.height) || 0) - subtitleOffsetPx;
+      const top = subtitleOffsetPx + Math.max(0, (boxH - g.lineHeightPx) / 2);
+      const runWidth = g.quoteInlineWidth + g.creditGap + g.creditInlineWidth;
+      const left = g.sideInset + Math.max(0, (g.measureWidth - runWidth) / 2);
+      line(quoteLines[0] || '', left, top, g.quoteInlineWidth, layout.fontPx, 0,
+        g.lineHeightPx, { bold: true });
+      line(g.creditText, left + g.quoteInlineWidth + g.creditGap, top,
+        g.creditInlineWidth, g.creditFontPx, 0, g.lineHeightPx, { ink: '#6a5559' });
+      return out;
+    }
+
     const quoteHeight = Math.max(1, quoteLines.length) * g.lineHeightPx;
     const creditHeight = creditLines.length * g.creditLineHeightPx;
     const blockHeight = quoteHeight + (creditHeight ? g.ruleGap * 2 + creditHeight : 0);
@@ -355,11 +389,39 @@ function smartCardLines(key, data, frame, cardLayout) {
   }
 
   if (key === 'dinvishesh') {
-    const { lineHeightPx, textInset, rowGap } = layout.geometry;
+    const { lineHeightPx, textInset, rowGap, centred, boxed } = layout.geometry;
+    const stackHeight = Math.max(0, layout.items.reduce((sum, item) => sum + item.height, 0)
+      + Math.max(0, layout.items.length - 1) * rowGap);
+
+    // दिनविशेष IS A BOX. One hairline round the whole card - not the almanac's
+    // double band, which on a 190px box is all rule - drawn here as well as in
+    // the stylesheet, or the plate prints the same card unruled.
+    if (boxed) {
+      const w = Number(layout.contentBox?.width) || contentWidth;
+      const h = Number(layout.contentBox?.height) || Number(frame.height) || 0;
+      bar(0, 0, w, 0.6, '#8a1428');
+      bar(0, h - 0.6, w, 0.6, '#8a1428');
+      bar(0, 0, 0.6, h, '#8a1428');
+      bar(w - 0.6, 0, 0.6, h, '#8a1428');
+    }
+
+    // The entries CENTRED, with the mark set into the line rather than hanging
+    // beside it - a hanging mark on a centred entry points at nothing, which is
+    // why the spine rule goes with it. The alignment flag is the solver's, read
+    // by both surfaces, so the canvas and the plate cannot centre differently.
     let top = subtitleOffsetPx;
-    bar(1.45, top, 0.6, Math.max(0, layout.items.reduce((sum, item) => sum + item.height, 0)
-      + Math.max(0, layout.items.length - 1) * rowGap), '#d5a9b0');
+    if (!centred) {
+      bar(1.45, top, 0.6, stackHeight, '#d5a9b0');
+    }
     for (const item of layout.items) {
+      if (centred) {
+        item.lines.forEach((text, i) => line(
+          `${item.symbol === 'flag' ? '\u25c6' : item.symbol} ${text}`,
+          0, top + i * lineHeightPx, contentWidth, layout.fontPx, 1, lineHeightPx,
+        ));
+        top += item.height + rowGap;
+        continue;
+      }
       if (item.symbol === 'flag') {
         const stemX = 1;
         const stemY = top + lineHeightPx * 0.2;
@@ -448,7 +510,9 @@ function smartCardLines(key, data, frame, cardLayout) {
     const g = layout.geometry;
     const MARK = { up: '\u25B2', down: '\u25BC', flat: '\u2013' };
     const INK = { up: '#237548', down: '#a51d34', flat: '#6b6264' };
-    let y = subtitleOffsetPx;
+    // The air the panel is centred in - the solver's number, the same one the
+    // canvas writes as its padding-top.
+    let y = subtitleOffsetPx + (g.topOffset || 0);
     layout.titleLines.forEach((text, index) => line(
       text, 0, y + index * g.titleLineHeightPx, contentWidth, g.titleFontPx, 1,
       g.titleLineHeightPx, { bold: true, ink: '#8a1428' },
@@ -504,6 +568,30 @@ function smartCardLines(key, data, frame, cardLayout) {
     bar(contentWidth - 0.6, rowsTop, 0.6, g.rowsHeight, '#cdaeb4');
     bar(g.labelWidth - 0.2, rowsTop, 0.4, g.rowsHeight, '#ddcbd0');
     bar(g.labelWidth + g.valueWidth - 0.2, rowsTop, 0.4, g.rowsHeight, '#ddcbd0');
+
+    // The month's line, from the solver's own normalised points - the same
+    // list the browser's <svg> draws, emitted as the `poly` every other chart
+    // in this product uses. Two roundings of one curve is the drift this file
+    // exists to prevent.
+    if (layout.trend) {
+      y += GAP;
+      line(layout.trend.headLine, 0, y, contentWidth, g.trendLabelFontPx, 0,
+        g.trendLabelLineHeightPx, { bold: true, ink: '#8a1428' });
+      const plotTop = y + g.trendLabelLineHeightPx + 2;
+      const shift = (points) => points.map((pt) => ({ x: pt.x, y: plotTop + pt.y }));
+      out.push({
+        kind: 'poly', points: shift(layout.trend.area), ink: layout.trend.ink,
+        close: true, opacity: 0.12,
+      });
+      out.push({
+        kind: 'poly', points: shift(layout.trend.points), ink: layout.trend.ink,
+        close: false, strokeWidth: 1.1,
+      });
+      bar(0, plotTop + layout.trend.plotHeight, contentWidth, 0.4, '#ddcbd0');
+      line(layout.trend.footLine, 0, plotTop + layout.trend.plotHeight + 2, contentWidth,
+        g.trendFootFontPx, 0, g.trendFootLineHeightPx, { ink: '#7a6266' });
+      y += g.trendHeight;
+    }
 
     if (layout.briefLines?.length) {
       y += GAP;

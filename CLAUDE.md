@@ -2256,6 +2256,87 @@ band over the card, and the card's top is the composition's own content top.
 at a real block size and screenshot the **canvas**, not the card. The isolated
 net measures overflow; only the page shows type that fits and is still wrong.
 
+### Each card is the SHAPE a printed paper gives it
+
+The catalogue's block sizes were a guess made card by card; laid out as a real
+features spread they were wrong as a set. Every one below is what a Marathi
+daily actually gives that box, and each one changed the card as well as its
+frame.
+
+| | block | and the card |
+|---|---|---|
+| सुविचार | **307×72** strip | ONE line, credit running on at the end |
+| दिनविशेष | **190×150** box | one-line nameplate over centred bullets, ruled |
+| पंचांग | **148×232** | unchanged; it was only ever too tall |
+| हवामान | **148×210** | unchanged |
+| राशिभविष्य | **307×620** leg | twelve boxes, nameplate across the waist |
+| शेअर / सोने | **307×620** leg | the month's line under the rate table |
+
+**राशिभविष्य's nameplate sits in the MIDDLE.** `cardArtworkFor()` gained a
+third placement beside `top` and `inline`: `middle` hands the card its whole
+frame *and* the band's rectangle, and the card leaves the gap itself — only the
+card knows where its rows fall. `layoutRashi` takes the band out before it
+measures, puts it on a row boundary halfway down, and states
+`bandHeight`/`bandAfterRow` in its geometry. Both surfaces read those two
+numbers: the canvas splices an extra grid track, the export walk offsets every
+row below it. **The signs are placed EXPLICITLY** — `grid-auto-flow: column`
+would have poured the seventh sign into the band.
+
+**The market panel draws the month.** A rate table says whether today moved; it
+cannot say whether the month did, and a printed panel always carries both.
+`market.js` widened its window to 45 calendar days (a trading month is about
+22 sessions, and weekends are not sessions) and carries the benchmark's closes
+on the card. The solver normalises them into its own plot box and emits a
+**`poly`** — the same neutral item a pie already uses — so the browser's
+`<svg>` and the plate draw one point list rather than two roundings of a curve.
+One line, not four: an index and a metal do not share an axis.
+
+**The chart takes the room that is left, and only so much of it.** `solveFont()`
+stops at the largest type that fits, which on a whole leg finished the panel at
+55% of its own depth. A printed panel does not answer that by inflating its
+rate table; it draws a bigger chart. Given the *whole* residual the plot went
+past twice its own width and turned a 0.9% month into a mountain range, so
+`MAX_TREND_PLOT_OF_WIDTH` (0.55) bounds it and what is left over becomes air
+above and below the panel (`topOffset`), never a hole at its foot.
+
+**A सुविचार is a strip, and a strip carries its credit on the line.** Stacked
+under a centred rule the credit costs the whole second band — measured, that
+held a 620×72 strip's quote down to 12 px. The credit is measured *into* the
+line now and the rule goes; the quote's own drawn width is stated so the plate
+sets the credit after it without re-measuring. The side inset is bounded by the
+type rather than being a flat 6% of the block (37 px each side on a wide strip,
+which cost a whole size step). And **a strip is only a strip while it can be
+read**: below `STRIP_MIN_FONT_PX` (9 px) the wrapped pull quote takes over,
+because one line at 5.5 px is not a strip, it is an accident.
+
+### A weight the solver did not measure is a second geometry
+
+Three selectors carried `font-weight: 600` — the almanac's value cell, the
+सुविचार credit, the दिनविशेष list — and `layout.js` measures all three at 400.
+The browser renders 600 out of the 700 face: measured on the almanac's राहुकाळ
+value, **86.8 px drawn against 80.7 px measured**, 7.6% and exactly enough to
+wrap a line the solver had set flush. The credit also carried
+`letter-spacing: 0.01em`, which is the tracking this product refuses everywhere
+else and which on a strip pushes the credit past a measure placed from the
+solver's own number. All three are gone, and the cell's own 0.5 px rule is
+charged for like its padding.
+
+**And the browser net had been measuring every card in Arial.**
+`smart-cards.browser.js` draws each card in a detached host appended to
+`<body>`, which inherits the admin chrome's font — not `.newspaper-canvas`,
+where `styles.css` sets the publication face. So its overflow numbers were
+never the page's, in either direction: it failed पंचांग for an overflow the
+real page did not have. The host wears `.newspaper-canvas` now. This is the
+same lesson as the section above it, one layer out: a card measured outside the
+page is measured in the wrong font.
+
+### Sixty minutes is not a time a newspaper prints
+
+`panchang.js` floored the hours and rounded the remainder independently, so a
+day of 10 h 59.6 m printed **"१० तास ६० मिनिटे"**. The total is rounded once
+now and then split, and a whole number of hours drops the minutes entirely —
+"११ तास", which is how an almanac says it.
+
 ### A Smart Card brings its own block
 
 `layout.js`'s **`SMART_CARD_BLOCK_SIZE`** states the frame a printed paper gives

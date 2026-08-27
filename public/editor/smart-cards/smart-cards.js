@@ -172,11 +172,21 @@ function labelledMarkup(layout) {
 function rashiMarkup(data, layout) {
   if (!layout.items || !layout.items.length || !layout.geometry) return null;
   const {
-    columns, rowHeights, columnGap, iconSize, itemPadding, lineHeightPx,
+    columns, rows, rowHeights, columnGap, iconSize, itemPadding, lineHeightPx,
+    bandHeight, bandAfterRow,
   } = layout.geometry;
 
+  // THE SIGNS ARE PLACED EXPLICITLY, NOT AUTO-FLOWED.
+  //
+  // With the nameplate's band taking a track out of the middle, `grid-auto-flow:
+  // column` would pour the seventh sign INTO the band. Each sign therefore
+  // names its own row and column - the same arithmetic the export walk does,
+  // so the two cannot put a sign in different places.
+  const banded = bandHeight > 0 && bandAfterRow >= 0;
+  const gridRowFor = (row) => (banded && row >= bandAfterRow ? row + 2 : row + 1);
+
   const items = layout.items
-    .map((item, index) => `<li class="smart-card-rashi-sign" style="height:${rowHeights[index % rowHeights.length]}px;padding:${itemPadding}px">
+    .map((item, index) => `<li class="smart-card-rashi-sign" style="grid-column:${Math.floor(index / rows) + 1};grid-row:${gridRowFor(index % rows)};height:${rowHeights[index % rowHeights.length]}px;padding:${itemPadding}px">
         <span class="rashi-emblem" style="width:${iconSize}px">
           ${item.imageFile
     ? `<img class="rashi-art" src="/${escapeHtml(item.imageFile)}" alt="${escapeHtml(item.name)}" style="width:${iconSize}px;height:${iconSize}px">`
@@ -192,8 +202,10 @@ function rashiMarkup(data, layout) {
       </li>`)
     .join("");
 
+  const tracks = rowHeights.map((h) => `${h}px`);
+  if (banded) tracks.splice(bandAfterRow, 0, `${bandHeight}px`);
   const gridStyle = `font-size:${layout.fontPx}px;grid-template-columns:repeat(${columns},1fr);`
-    + `column-gap:${columnGap}px;grid-auto-flow:column;grid-template-rows:${rowHeights.map((h) => `${h}px`).join(" ")}`;
+    + `column-gap:${columnGap}px;grid-template-rows:${tracks.join(" ")}`;
   return `<ul class="smart-card-rashi" style="${gridStyle}">${items}</ul>`;
 }
 
@@ -208,6 +220,15 @@ function rashiMarkup(data, layout) {
 function suvicharMarkup(data, layout) {
   if (!data?.text || !layout.geometry) return null;
   const g = layout.geometry;
+  // One line: the credit runs on at the end of it, which is how a printed
+  // thought-for-the-day strip sets. Wrapped: the credit drops under a short
+  // centred rule, as a pull quote's does.
+  if (g.inlineCredit) {
+    return `<blockquote class="smart-card-quote is-strip" style="font-size:${layout.fontPx}px;line-height:${g.lineHeightPx}px;padding:0 ${g.sideInset}px">
+      <p class="smart-card-quote-text">${linesMarkup(layout.quoteLines)}</p>
+      <cite class="smart-card-quote-credit" style="font-size:${g.creditFontPx}px;line-height:${g.lineHeightPx}px;margin-inline-start:${g.creditGap}px">${escapeHtml(g.creditText)}</cite>
+    </blockquote>`;
+  }
   const credit = layout.attributionLines?.length
     ? `<span class="smart-card-quote-rule" style="width:${g.ruleWidth}px;margin:${g.ruleGap}px auto"></span>
        <cite class="smart-card-quote-credit" style="font-size:${g.creditFontPx}px;line-height:${g.creditLineHeightPx}px">${linesMarkup(layout.attributionLines)}</cite>`
@@ -222,7 +243,8 @@ function suvicharMarkup(data, layout) {
 
 function dinvisheshMarkup(data, layout) {
   if (!layout.items || !layout.items.length || !layout.geometry) return null;
-  return `<ul class="smart-card-list" style="font-size:${layout.fontPx}px;gap:${layout.geometry.rowGap}px">${layout.items
+  const centred = layout.geometry.centred ? " is-centred" : "";
+  return `<ul class="smart-card-list${centred}" style="font-size:${layout.fontPx}px;gap:${layout.geometry.rowGap}px">${layout.items
     .map((item) => `<li style="min-height:${item.height}px;padding-left:${layout.geometry.textInset}px"><b class="dinvishesh-symbol${item.symbol === "flag" ? " is-flag" : ""}" aria-hidden="true">${item.symbol === "flag" ? "" : escapeHtml(item.symbol)}</b>${linesMarkup(item.lines)}</li>`)
     .join("")}</ul>`;
 }
@@ -302,6 +324,23 @@ function marketMarkup(data, layout) {
     rows = layout.items.map(rowMarkup).join("");
   }
 
+  // THE MONTH'S LINE, DRAWN FROM THE SOLVER'S OWN POINT LIST.
+  //
+  // An inline SVG rather than a stack of divs, because the same points reach
+  // Scribus and the PDF as a `poly` and this is the one place they could
+  // disagree. Nothing here recomputes a coordinate: the solver normalised the
+  // closes into the plot box, and the browser and the plate read that.
+  const trend = layout.trend
+    ? `<figure class="smart-card-market-trend" style="height:${g.trendHeight}px">
+        <figcaption style="font-size:${g.trendLabelFontPx}px;line-height:${g.trendLabelLineHeightPx}px">${escapeHtml(layout.trend.headLine)}</figcaption>
+        <svg viewBox="0 0 ${layout.trend.width} ${layout.trend.plotHeight}" width="${layout.trend.width}" height="${layout.trend.plotHeight}" preserveAspectRatio="none" role="img">
+          <polygon points="${layout.trend.area.map((pt) => `${pt.x.toFixed(2)},${pt.y.toFixed(2)}`).join(" ")}" fill="${layout.trend.ink}" fill-opacity="0.12"></polygon>
+          <polyline points="${layout.trend.points.map((pt) => `${pt.x.toFixed(2)},${pt.y.toFixed(2)}`).join(" ")}" fill="none" stroke="${layout.trend.ink}" stroke-width="1.1" stroke-linejoin="round"></polyline>
+        </svg>
+        <small style="font-size:${g.trendFootFontPx}px;line-height:${g.trendFootLineHeightPx}px">${escapeHtml(layout.trend.footLine)}</small>
+      </figure>`
+    : "";
+
   const brief = layout.briefLines?.length
     ? `<aside class="smart-card-market-brief" style="min-height:${g.briefHeight}px;line-height:${g.lineHeightPx}px;padding:${g.rowPadding * 2}px ${g.briefInset}px">
         <strong style="font-size:${g.headFontPx}px;line-height:${g.headLineHeightPx}px">${linesMarkup(layout.briefLabelLines)}</strong>
@@ -315,9 +354,10 @@ function marketMarkup(data, layout) {
     ? `<p class="smart-card-market-note" style="font-size:${g.sourceFontPx}px;line-height:${g.sourceLineHeightPx}px">${linesMarkup(layout.noteLines)}</p>`
     : "";
 
-  return `<div class="smart-card-market" style="font-size:${layout.fontPx}px">
+  return `<div class="smart-card-market" style="font-size:${layout.fontPx}px;padding-top:${g.topOffset || 0}px">
     <h3 style="height:${g.titleHeight}px;font-size:${g.titleFontPx}px;line-height:${g.titleLineHeightPx}px">${linesMarkup(layout.titleLines)}${layout.asOfLine ? `<small style="font-size:${g.headFontPx}px;line-height:${g.headLineHeightPx}px">${escapeHtml(layout.asOfLine)}</small>` : ""}</h3>
     <div class="smart-card-market-rows">${rows}</div>
+    ${trend}
     ${brief}
     ${note}
     <p class="smart-card-market-source" style="height:${g.sourceHeight}px;font-size:${g.sourceFontPx}px;line-height:${g.sourceLineHeightPx}px">${linesMarkup(layout.sourceLines)}</p>

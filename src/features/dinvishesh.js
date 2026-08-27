@@ -113,6 +113,7 @@ const DAYS = {
   // United Nations General Assembly resolution A/RES/75/27 proclaims
   // 27 December as the International Day of Epidemic Preparedness.
   '12-27': [event('आंतरराष्ट्रीय महामारी सज्जता दिन')],
+  '12-31': [event('वर्षाचा शेवटचा दिवस'), on(1600, 'ब्रिटिश ईस्ट इंडिया कंपनीला राजाज्ञा मिळाली')],
 };
 
 async function build(isoDate) {

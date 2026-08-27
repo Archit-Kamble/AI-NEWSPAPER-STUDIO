@@ -70,6 +70,14 @@ const numberMr = (value, decimals) => new Intl.NumberFormat('mr-IN', {
   maximumFractionDigits: decimals,
 }).format(value);
 
+// About one trading month.
+const MONTH_SESSIONS = 22;
+
+/** "१२ डिसें" - the short date a chart's axis ends are labelled with. */
+const monthDayMr = (iso) => new Intl.DateTimeFormat('mr-IN', {
+  day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata',
+}).format(new Date(`${iso}T12:00:00Z`));
+
 const percentMr = (value) => `${value >= 0 ? '+' : '−'}${numberMr(Math.abs(value), 2)}%`;
 
 /** The move in the instrument's own unit, which a rate table prints beside the percentage. */
@@ -96,12 +104,19 @@ function sessionPair(payload, requestedDate) {
   // zero, so that is the test.
     .filter((row) => row.date < requestedDate && Number.isFinite(row.close) && row.close > 0);
   if (sessions.length < 2) throw new Error('two completed sessions are not available');
-  return sessions.slice(-2);
+  // The pair the rate table prints, AND the run behind it. A printed market
+  // page carries a month's shape beside the day's figure - the number alone
+  // says whether today moved, the line says whether the month did - so the
+  // trailing sessions travel with the row and the card decides what to draw.
+  return { pair: sessions.slice(-2), series: sessions.slice(-MONTH_SESSIONS) };
 }
 
 async function fetchInstrument(instrument, date, fetchImpl, apiUrl) {
   const requested = new Date(`${date}T00:00:00Z`);
-  const from = new Date(requested); from.setUTCDate(from.getUTCDate() - 12);
+  // Forty-five calendar days back, because a MONTH of trading is about
+  // twenty-two sessions and weekends and holidays are not sessions. The old
+  // twelve-day window could not have drawn a month's line.
+  const from = new Date(requested); from.setUTCDate(from.getUTCDate() - 45);
   const until = new Date(requested); until.setUTCDate(until.getUTCDate() + 2);
   const query = new URLSearchParams({
     period1: String(Math.floor(from.getTime() / 1000)),
@@ -120,9 +135,10 @@ async function fetchInstrument(instrument, date, fetchImpl, apiUrl) {
     clearTimeout(timer);
   }
   if (!response.ok) throw new Error(`${instrument.label}: HTTP ${response.status}`);
-  const [previous, latest] = sessionPair(await response.json(), date);
+  const { pair, series } = sessionPair(await response.json(), date);
+  const [previous, latest] = pair;
   const changePercent = ((latest.close - previous.close) / previous.close) * 100;
-  return { ...instrument, previous, latest, changePercent };
+  return { ...instrument, previous, latest, series, changePercent };
 }
 
 /**
@@ -205,6 +221,30 @@ async function build(isoDate, {
   });
 
   const latestDate = rows[0].latest.date;
+
+  // THE MONTH'S SHAPE, FOR THE HEADLINE INDEX.
+  //
+  // One line, not four. A printed market panel draws the benchmark and prints
+  // the rest as figures - four overlaid series in a 40 mm box is a tangle, and
+  // an index and a metal do not even share an axis. The card carries the raw
+  // closes and the solver normalises them, so the chart on screen and the
+  // chart on the plate come from the same numbers.
+  const benchmark = priced.find((row) => row.group === 'index') || priced[0];
+  const benchmarkSeries = Array.isArray(benchmark?.series) ? benchmark.series : [];
+  const trend = benchmarkSeries.length >= 3 ? {
+    label: benchmark.label,
+    unit: benchmark.unit || '',
+    values: benchmarkSeries.map((session) => session.close),
+    from: monthDayMr(benchmarkSeries[0].date),
+    to: monthDayMr(benchmarkSeries[benchmarkSeries.length - 1].date),
+    sessions: benchmarkSeries.length,
+    changePercent: percentMr(
+      ((benchmarkSeries[benchmarkSeries.length - 1].close - benchmarkSeries[0].close)
+        / benchmarkSeries[0].close) * 100,
+    ),
+    high: numberMr(Math.max(...benchmarkSeries.map((x) => x.close)), benchmark.decimals),
+    low: numberMr(Math.min(...benchmarkSeries.map((x) => x.close)), benchmark.decimals),
+  } : null;
   const items = priced.map((row) => ({
     key: row.key,
     label: row.label,
@@ -225,6 +265,8 @@ async function build(isoDate, {
       asOf: new Intl.DateTimeFormat('mr-IN', { dateStyle: 'medium', timeZone: 'Asia/Kolkata' })
         .format(new Date(`${latestDate}T12:00:00Z`)),
       items,
+      trend,
+      trendLabel: 'गेल्या महिन्याचा कल',
       briefLabel: 'मागील सत्र',
       yesterdayBrief: sessionBrief(priced),
       // Said in the card, not only in a comment: the bullion figures are

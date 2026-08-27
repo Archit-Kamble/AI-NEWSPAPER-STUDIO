@@ -115,6 +115,15 @@ function shakaYear(isoDate) {
   return year - 78 - (afterNewYear ? 0 : 1);
 }
 
+/** "१० तास ५९ मिनिटे" - rounded to the minute as one quantity, never in halves. */
+function dayLengthMr(minutes) {
+  const total = Math.round(Number(minutes) || 0);
+  const hours = Math.floor(total / 60);
+  const mins = total % 60;
+  // "११ तास ० मिनिटे" is not how a printed almanac says eleven hours.
+  return mins ? `${devanagari(hours)} तास ${devanagari(mins)} मिनिटे` : `${devanagari(hours)} तास`;
+}
+
 async function build(isoDate, { place = DEFAULT_PLACE } = {}) {
   const events = solarEvents(isoDate, place);
   if (!events) return { error: 'That date could not be read.' };
@@ -125,7 +134,13 @@ async function build(isoDate, { place = DEFAULT_PLACE } = {}) {
   const items = [
     { label: 'सूर्योदय', text: clock(events.sunrise) },
     { label: 'सूर्यास्त', text: clock(events.sunset) },
-    { label: 'दिनमान', text: `${devanagari(Math.floor(daylight / 60))} तास ${devanagari(Math.round(daylight % 60))} मिनिटे` },
+    // ROUND THE MINUTES FIRST, THEN SPLIT.
+    //
+    // Flooring the hours and rounding the remainder independently prints
+    // "१० तास ६० मिनिटे" whenever the two disagree - photographed on a real
+    // almanac box, sunrise ०७:११ to sunset १८:१०, which is ten hours and
+    // fifty-nine. Sixty minutes is not a time a newspaper prints.
+    { label: 'दिनमान', text: dayLengthMr(daylight) },
     { label: 'राहुकाळ', text: `${clock(rahu.start)} ते ${clock(rahu.end)}` },
     { label: 'शके', text: devanagari(shakaYear(isoDate)) },
   ];

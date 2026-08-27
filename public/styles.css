@@ -3819,7 +3819,10 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   box-sizing: border-box;
 }
 .smart-card-market h3 {
-  margin: 0 0 6px;
+  /* NO bottom margin here: marketMarkup() writes the solver's resolved band
+     gap inline. A hard 6px in the stylesheet was a gap the solver could not
+     spread. */
+  margin: 0;
   color: #8a1428;
   font-weight: 700;
   text-align: center;
@@ -3854,7 +3857,11 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 .smart-card-market-row > * + * { border-left: 0.4px solid #ddcbd0; }
 .smart-card-market-row strong { color: #4f3036; display: flex; align-items: baseline; gap: 0.3em; }
 .smart-card-market-row strong i { font-style: normal; color: #857074; }
-.smart-card-market-row b { text-align: right; font-variant-numeric: tabular-nums; }
+.smart-card-market-row b {
+  text-align: right;
+  /* NO tabular-nums: layoutMarket() measures this column with the shaper,
+     which does not apply `tnum`. See the almanac's value cell. */
+}
 /* The move: one line, the direction mark with the percentage - and the change
    in the instrument's own unit ahead of it where the column can hold both.
    layoutMarket() decides which, by measuring; stacking the two was measured in
@@ -3867,15 +3874,6 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 .smart-card-market-row.is-up .market-change { color: #237548; }
 .smart-card-market-row.is-down .market-change { color: #a51d34; }
 .smart-card-market-row.is-flat .market-change { color: #6b6264; }
-.smart-card-market-brief {
-  margin-top: 6px;
-  border-left: 2px solid #8a1428;
-  background: #f7f1f2;
-  box-sizing: border-box;
-  color: #342a2c;
-}
-.smart-card-market-brief strong { display: block; color: #8a1428; letter-spacing: 0.03em; }
-.smart-card-market-brief p { margin: 0; }
 .smart-card-market-note { margin: 2px 0 0; color: #7a6266; }
 .smart-card-market-source { margin: 6px 0 0; color: #6b6264; text-align: right; }
 
@@ -6884,11 +6882,11 @@ body.print-view .page-imprint {
 .smart-card-advert .smart-card-content {
   box-shadow: inset 0 0 0 0.6px #202024;
 }
-/* सुविचार and दिनविशेष carry their nameplate as a COLUMN of the card, so their
-   rule goes round the whole frame - see borderBox in layout.js. */
-.smart-card-suvichar,
-.smart-card-dinvishesh { box-shadow: inset 0 0 0 0.6px #8a1428; }
-.smart-card-dinvishesh .smart-card-content { box-shadow: none; border-top: 0; }
+/* सुविचार carries its nameplate as a COLUMN of the card, so its rule goes
+   round the whole frame - see borderBox in layout.js. दिनविशेष sets its name
+   ACROSS THE HEAD like पंचांग, so its rule follows the box under the name. */
+.smart-card-suvichar { box-shadow: inset 0 0 0 0.6px #8a1428; }
+.smart-card-dinvishesh .smart-card-content { box-shadow: inset 0 0 0 0.6px #8a1428; }
 
 /* The month's scale. The y labels are placed absolutely against the figure's
    own box from the solver's numbers; the x row is a three-column strip so the

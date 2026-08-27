@@ -2429,6 +2429,75 @@ unchanged afterwards. A second copy of a card's geometry is precisely the drift
 this file exists to prevent, and one sitting where no test can execute it is the
 worst kind.
 
+### Judge a card in PRINT VIEW, and the room left over is SPREAD
+
+`#printViewBtn` takes the editor's chrome off the sheet. It is the only honest
+way to look at a card, and everything in this section was invisible until the
+page was photographed through it.
+
+**A card's leftover room never stacks.** Three goes at the market panel, each
+wrong in a different way and the third wrong in the way a reader notices first:
+
+| | |
+|---|---|
+| whole residual → the chart | a 0.9% month drawn as a mountain range |
+| chart capped, rest **centred** | ~55 px of white between the panel's own top rule and its title — a hole at the *head* of the box |
+| chart capped, rest **spread** | ✓ |
+
+A compositor opens the **leading**. The chart takes what it can carry
+(`MAX_TREND_PLOT_OF_WIDTH`), and the rest opens the gaps *between* the bands
+evenly — title to table, table to chart, chart to source — up to
+`MAX_BAND_GAP_GROWTH` of the card's own gap. Anything still left sits at the
+**foot**, where a printed panel can carry it; never at the head. On a real
+307×620 leg: **93% of the block set**, gap 6 → 24, plot 56 → 220.
+
+**The band gaps are the solver's, written inline.** `styles.css` carried a hard
+`margin: 0 0 6px` under the market title — the one gap it happened to know
+about — so any room the panel had left could only pile up somewhere the solver
+had not accounted for.
+
+**Two rows had to fill their own box too.** पंचांग's five rows never added up
+to exactly the box they were given, and the remainder showed as a **sixth,
+empty row inside the almanac's own double band**. A printed table spends that
+on its rows, bounded at half a line. Slack 14.5 px → **0**.
+
+### A ruled card sets its type inside its own rule
+
+`CARD_BORDERS` now lives in `layout.js` — the module both sides import — rather
+than in the export walk, because the **solver** has to know about a rule: type
+may not be set under it. Without the clearance the market panel's chart caption
+and its y-axis figures began at x=0 of the content box and the card's own
+hairline was drawn straight through them.
+
+The clearance is the rule's own depth plus a hair (2 px, 4 px for the double
+band), not a round number — on a 148 px almanac a generous inset costs the value
+column a whole size step.
+
+### A mark that is half margin draws half the size it reserves
+
+`denvishash.png` was 1380×752 with the word occupying **70% of the width and
+50% of the height** — against 88–98% for the other three marks, measured with
+an alpha scan at a threshold above the file's own faint watermark. So the box
+`heightShare` reserved was twice the depth of the letters in it and the
+nameplate drew small and adrift in a band of nothing. The asset is cropped to
+its own ink (989×399) and `aspect` is the real one.
+
+**Check a new mark's ink share before tuning its shares.** Two rounds of
+adjusting `heightShare` could not have fixed this, because the number was not
+the problem.
+
+### दिनविशेष is two ROWS, and सुविचार's mark opens the line
+
+Set as two *columns* the wordmark took a third of the box's **width** from the
+entries, and on a 190 px box that is the measure the reading matter needed. The
+standing name goes across the head with the day's entries as centred bullets
+beneath — which is what पंचांग already does, and now in the same hand. The block
+widened to 268 to give that mark measure enough to read as a nameplate.
+
+सुविचार keeps its `inline` mark, sized against the **line of type it opens**
+rather than against the strip: at `heightShare` 0.74 it stood half again as tall
+as the words and read as a logo pasted beside them.
+
 ### A Smart Card brings its own block
 
 `layout.js`'s **`SMART_CARD_BLOCK_SIZE`** states the frame a printed paper gives

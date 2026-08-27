@@ -358,12 +358,18 @@ function marketMarkup(data, layout) {
     ? `<p class="smart-card-market-note" style="font-size:${g.sourceFontPx}px;line-height:${g.sourceLineHeightPx}px">${linesMarkup(layout.noteLines)}</p>`
     : "";
 
-  return `<div class="smart-card-market" style="font-size:${layout.fontPx}px;padding-top:${g.topOffset || 0}px">
-    <h3 style="height:${g.titleHeight}px;font-size:${g.titleFontPx}px;line-height:${g.titleLineHeightPx}px">${linesMarkup(layout.titleLines)}${layout.asOfLine ? `<small style="font-size:${g.headFontPx}px;line-height:${g.headLineHeightPx}px">${escapeHtml(layout.asOfLine)}</small>` : ""}</h3>
-    <div class="smart-card-market-rows">${rows}</div>
+  // THE BAND GAPS ARE THE SOLVER'S, written inline. The stylesheet used to
+  // carry a hard 6px under the title, which is the one gap it happened to
+  // know about - so any room the panel had left over could only pile up
+  // somewhere the solver had not accounted for. layoutMarket() resolves one
+  // gap from what is actually left and every band is set to it, which is also
+  // the number the export walk steps by.
+  return `<div class="smart-card-market" style="font-size:${layout.fontPx}px">
+    <h3 style="height:${g.titleHeight}px;margin-bottom:${g.gap}px;font-size:${g.titleFontPx}px;line-height:${g.titleLineHeightPx}px">${linesMarkup(layout.titleLines)}${layout.asOfLine ? `<small style="font-size:${g.headFontPx}px;line-height:${g.headLineHeightPx}px">${escapeHtml(layout.asOfLine)}</small>` : ""}</h3>
+    <div class="smart-card-market-rows" style="margin-bottom:${trend ? g.gap : 0}px">${rows}</div>
     ${trend}
     ${note}
-    <p class="smart-card-market-source" style="height:${g.sourceHeight}px;font-size:${g.sourceFontPx}px;line-height:${g.sourceLineHeightPx}px">${linesMarkup(layout.sourceLines)}</p>
+    <p class="smart-card-market-source" style="margin-top:${g.gap}px;height:${g.sourceHeight}px;font-size:${g.sourceFontPx}px;line-height:${g.sourceLineHeightPx}px">${linesMarkup(layout.sourceLines)}</p>
   </div>`;
 }
 

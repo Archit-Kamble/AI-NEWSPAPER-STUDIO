@@ -79,7 +79,10 @@ const MIN_SUDOKU_CELL_PX = 10;
 const STRIP_MIN_FONT_PX = 9;
 // A month of closes drawn deeper than this against its own span stops
 // describing the month and starts dramatising it.
-const MAX_TREND_PLOT_OF_WIDTH = 0.55;
+const MAX_TREND_PLOT_OF_WIDTH = 0.72;
+// A band gap may open to this multiple of the card's standard gap and no
+// further. Past it the bands stop reading as one panel.
+const MAX_BAND_GAP_GROWTH = 4;
 
 // One comfortable-reading multiplier over the face's own clip-free minimum
 // (minLineHeightFor - ascent + descent, so a Marathi vowel sign is never
@@ -94,6 +97,40 @@ const GAP_PX = 6;
 // deliberately part of the card renderer rather than ordinary section images:
 // they belong to the card's finite geometry, travel with it to every edition,
 // and are emitted by the same export walk as the card's type.
+// EVERY CARD IS RULED, AND THE PAPER HAS TWO INKS FOR IT.
+//
+// The accent for a standing feature of the paper; black for a commercial block,
+// because an advertisement and a प्रकटपत्र are not the paper speaking. पंचांग
+// and राशिभविष्य carry the DOUBLE band - heavy outside, hairline inside - which
+// is what distinguishes an almanac from an ordinary ruled box in a printed
+// daily.
+//
+// It lives here, in the module both sides import, rather than in the export
+// walk: a rule is ink at the frame's own edge, and the SOLVER has to know about
+// it because type may not be set under it (see CARD_RULE_CLEARANCE_PX).
+export const CARD_BORDERS = Object.freeze({
+  suvichar: { ink: '#8a1428', double: false },
+  dinvishesh: { ink: '#8a1428', double: false },
+  panchang: { ink: '#8a1428', double: true },
+  rashi: { ink: '#8a1428', double: true },
+  havaman: { ink: '#8a1428', double: false },
+  market: { ink: '#8a1428', double: false },
+  sudoku: { ink: '#8a1428', double: false },
+  advert: { ink: '#202024', double: false },
+  tender: { ink: '#202024', double: false },
+});
+
+// A ruled box sets its type INSIDE its own rule. Without this the market
+// panel's chart caption and its y-axis figures began at x=0 of the content box
+// and the card's own hairline was drawn straight through them - photographed on
+// the page in print view. It is the same argument BOX_INSET_PX makes for an
+// ordinary ruled block, at the smaller scale a card works in.
+// A single hairline is 0.6px of ink; the almanac's double band is about 2.8.
+// The clearance is that ink plus a hair of air - not a flat number, because on
+// a 148px almanac a generous inset costs the value column a whole size step.
+const CARD_RULE_CLEARANCE_PX = 2;
+const DOUBLE_RULE_CLEARANCE_PX = 4;
+
 const CARD_ARTWORK = Object.freeze({
   // THE सुविचार MARK OPENS THE LINE IT NAMES.
   //
@@ -102,23 +139,30 @@ const CARD_ARTWORK = Object.freeze({
   // for. The mark therefore sets at the head of the line and the quote and its
   // credit run on after it - mark, thought, name, one rule of type across the
   // column, which is how a printed thought-for-the-day is set.
-  suvichar: { file: 'assets/smart-cards/SuvicharwithoutBG.png', aspect: 1300 / 664, placement: 'inline', heightShare: 0.74, widthShare: 0.2 },
+  suvichar: { file: 'assets/smart-cards/SuvicharwithoutBG.png', aspect: 1300 / 664, placement: 'inline', heightShare: 0.52, widthShare: 0.16 },
+  //                          ^ a LEAD-IN mark, sized against the line of type
+  //                          it opens rather than against the strip: at 0.74
+  //                          it stood half again as tall as the words and read
+  //                          as a logo pasted beside them.
   //                          ^ the mark stands INSIDE the card's own rule now,
   //                          so it may not fill the frame edge to edge: at
   //                          0.86 it measured 3px past the drawn card box.
-  // दिनविशेष IS TWO COLUMNS: THE NAME, AND THE DAY.
+  // दिनविशेष IS TWO ROWS: THE NAME, AND THE DAY UNDER IT.
   //
-  // The wordmark stands in its own column with the day's entries beside it,
-  // each centred in its half - which is the shape a Marathi daily gives this
-  // box and what the desk asked for. `inline` is exactly that placement, and
-  // it also settles the artwork's own vertical position: centred in the
-  // column rather than sitting on the box's top rule.
+  // Set as two columns the wordmark took a third of the box's WIDTH from the
+  // entries, and on a 190px box that is the measure the reading matter needed.
+  // The standing name goes across the head of the box with the day's entries
+  // as centred bullets beneath - which is what पंचांग already does, and now
+  // in the same hand: denvishash.png is 1380x752, the same artwork family as
+  // panchangwithoutBG.png, where dinvishesh-title-v2.png was a wide 4.16:1
+  // banner drawn by somebody else.
   //
-  // AND IT IS THE PAPER'S OWN NAMEPLATE FACE. dinvishesh-title-v2.png was a
-  // wide 4.16:1 banner in a different hand from पंचांग's and राशिभविष्य's
-  // marks; denvishash.png is 1380x752, the same artwork family as
-  // panchangwithoutBG.png, so the three standing boxes are set by one hand.
-  dinvishesh: { file: 'assets/smart-cards/denvishash.png', aspect: 1380 / 752, placement: 'inline', heightShare: 0.62, widthShare: 0.38 },
+  // The FILE was half margin. Measured: the word's ink filled 70% of
+  // denvishash.png's width and 50% of its height, against 88-98% for the other
+  // three marks - so the box this reserved was twice the depth of the letters
+  // in it, and the mark drew small and adrift in a band of nothing. The asset
+  // is cropped to its own ink now (989x399) and the aspect is the real one.
+  dinvishesh: { file: 'assets/smart-cards/denvishash.png', aspect: 989 / 399, placement: 'top', heightShare: 0.26, widthShare: 0.62 },
   panchang: { file: 'assets/smart-cards/panchangwithoutBG.png', aspect: 1380 / 752, placement: 'top', heightShare: 0.245, widthShare: 0.82 },
   // THE NAMEPLATE SITS IN THE MIDDLE OF THE WHEEL, NOT ABOVE IT.
   //
@@ -148,6 +192,17 @@ function rashiArtworkFile(sign) {
  * return the remaining content box. Both are expressed in the OUTER frame's
  * coordinates so the browser and all press writers can place them directly.
  */
+/** A rectangle pulled in on every side, never past nothing. */
+function inset(box, by) {
+  if (!by) return box;
+  return {
+    x: box.x + by,
+    y: box.y + by,
+    width: Math.max(0, box.width - by * 2),
+    height: Math.max(0, box.height - by * 2),
+  };
+}
+
 function cardArtworkFor(key, frame) {
   const config = CARD_ARTWORK[key];
   const content = {
@@ -156,8 +211,12 @@ function cardArtworkFor(key, frame) {
     width: frame.innerWidth,
     height: frame.innerHeight,
   };
+  // The card's own rule is ink, and type may not be set under it.
+  const rule = CARD_BORDERS[key]
+    ? (CARD_BORDERS[key].double ? DOUBLE_RULE_CLEARANCE_PX : CARD_RULE_CLEARANCE_PX)
+    : 0;
   if (!config || frame.innerWidth <= 0 || frame.innerHeight <= 0) {
-    return { artwork: null, content };
+    return { artwork: null, content: inset(content, rule) };
   }
 
   const gap = Math.min(GAP_PX, Math.max(2, frame.innerHeight * 0.06));
@@ -177,12 +236,12 @@ function cardArtworkFor(key, frame) {
       // follows the box; for an `inline` one the mark is a column of the box
       // and a rule drawn round the content alone would cut the card in half.
       borderBox: { x: 0, y: 0, width: frame.width, height: frame.height },
-      content: {
+      content: inset({
         x: x + width + gap,
         y: frame.padding,
         width: Math.max(0, frame.innerWidth - width - gap),
         height: frame.innerHeight,
-      },
+      }, rule),
     };
   }
 
@@ -195,7 +254,7 @@ function cardArtworkFor(key, frame) {
     const y = frame.padding + (frame.innerHeight - bandHeight) / 2 + gap;
     return {
       artwork: { file: config.file, x, y, width, height },
-      content,
+      content: inset(content, rule),
       band: { height: bandHeight, gap },
     };
   }
@@ -205,12 +264,12 @@ function cardArtworkFor(key, frame) {
   const y = frame.padding;
   return {
     artwork: { file: config.file, x, y, width: finalWidth, height, stretch: Boolean(config.stretch) },
-    content: {
+    content: inset({
       x: frame.padding,
       y: y + height + gap,
       width: frame.innerWidth,
       height: Math.max(0, frame.innerHeight - height - gap),
-    },
+    }, rule),
   };
 }
 
@@ -659,6 +718,22 @@ function layoutPanchang(data, frame) {
     };
   });
 
+  // THE ROWS FILL THE RING.
+  //
+  // Five rows solved for legibility rarely add up to exactly the box they were
+  // given, and what is left showed as a sixth, EMPTY row inside the almanac's
+  // own double band - photographed on the page in print view. A printed table
+  // spends that on its rows, which is also the more legible answer. Bounded by
+  // half a line so a nearly-empty card cannot become a ladder.
+  const stack = solved.items.reduce((sum, item) => sum + item.rowHeight, 0);
+  const spare = Math.max(0, frame.innerHeight - stack);
+  const perRow = solved.items.length
+    ? Math.min(spare / solved.items.length, solved.lineHeightPx * 0.5)
+    : 0;
+  const items = perRow > 0.2
+    ? solved.items.map((item) => ({ ...item, rowHeight: item.rowHeight + perRow }))
+    : solved.items;
+
   return {
     key: 'panchang',
     fitState: solved.fitState,
@@ -674,7 +749,7 @@ function layoutPanchang(data, frame) {
       ruleHeight: solved.ruleHeight,
       lineHeightPx: solved.lineHeightPx,
     },
-    items: solved.items,
+    items,
     violations: solved.fitState === 'OVERSET' ? ['SMART_CARD_OVERSET'] : [],
   };
 }
@@ -1657,11 +1732,16 @@ function layoutMarket(data, frame) {
     const noteHeight = noteLines.length * sourceLineHeightPx;
     const sourceHeight = Math.max(1, sourceLines.length) * sourceLineHeightPx;
 
+    // title -> table, table -> chart, chart/note -> source. The note rides
+    // against the chart above it (it is that chart's own caveat), so it does
+    // not open a gap of its own.
+    const gapCount = 2 + (trendHeight ? 1 : 0);
     return {
       height: titleHeight + GAP_PX + rowsHeight
         + (trendHeight ? GAP_PX + trendHeight : 0)
         + (noteHeight ? 2 + noteHeight : 0)
         + GAP_PX + sourceHeight,
+      gapCount,
       hardOverset,
       items,
       titleLines,
@@ -1712,10 +1792,19 @@ function layoutMarket(data, frame) {
   // The points are already normalised into the plot box, so growing it is a
   // proportional rescale of their y - no re-measurement, no re-wrap, and the
   // line the browser draws is still the line the plate draws.
-  // Bounded, because the chart's proportions are information too: given the
-  // whole residual of a 620 px leg the plot went past twice its own width and
-  // turned a 0.9% month into a mountain range. MAX_TREND_PLOT_OF_WIDTH is the
-  // deepest a month of closes may be drawn relative to its own span.
+  // THE ROOM LEFT OVER IS SPREAD, NOT STACKED.
+  //
+  // Two goes at this were wrong in the same way. Giving the WHOLE residual of
+  // a 620px leg to the chart drew a 0.9% month as a mountain range. Capping
+  // the chart and centring what was left put ~55px of white between the
+  // panel's own top rule and its title - a hole at the head of the box, which
+  // is the first thing a reader meets and the desk reported it at once.
+  //
+  // A compositor opens the LEADING. So the chart takes what it can carry, and
+  // the rest opens the gaps BETWEEN the bands evenly - title to table, table
+  // to chart, chart to note, note to source - up to a gap of its own. Anything
+  // still left is a genuine hole and sits at the FOOT, where a printed panel
+  // can carry it; never at the head.
   const residual = Math.max(0, frame.innerHeight - solved.height);
   const plotCeiling = frame.innerWidth * MAX_TREND_PLOT_OF_WIDTH;
   const grownPlotHeight = solved.trendPoints.length
@@ -1724,11 +1813,9 @@ function layoutMarket(data, frame) {
   const scaleY = solved.trendPlotHeight > 0 ? grownPlotHeight / solved.trendPlotHeight : 1;
   const grow = (points) => points.map((pt) => ({ x: pt.x, y: pt.y * scaleY }));
 
-  // Whatever the chart could not take is set as AIR ABOVE AND BELOW the panel,
-  // not left as a hole at its foot. A printed panel sits in the middle of the
-  // column it was given; a stack pinned to the top with a hand's width of
-  // white under it reads as unfinished copy.
-  const topOffset = Math.max(0, (residual - (grownPlotHeight - solved.trendPlotHeight)) / 2);
+  const spare = Math.max(0, residual - (grownPlotHeight - solved.trendPlotHeight));
+  const gapCount = solved.gapCount || 1;
+  const gap = Math.min(GAP_PX * MAX_BAND_GAP_GROWTH, GAP_PX + spare / gapCount);
 
   return {
     key: 'market',
@@ -1756,14 +1843,14 @@ function layoutMarket(data, frame) {
       rowPadding: solved.rowPadding,
       rowsHeight: solved.rowsHeight,
       headHeight: solved.headHeight,
-      topOffset,
+      gap,
       trendHeight: solved.trendHeight + (grownPlotHeight - solved.trendPlotHeight),
       trendPlotHeight: grownPlotHeight,
       trendLabelFontPx: solved.trendLabelFontPx,
       trendLabelLineHeightPx: solved.trendLabelLineHeightPx,
       trendFootFontPx: solved.trendFootFontPx,
       trendFootLineHeightPx: solved.trendFootLineHeightPx,
-      gap: GAP_PX,
+      // (the resolved band gap is set above; GAP_PX is only its floor)
     },
     trend: solved.trendPoints.length ? {
       headLine: solved.trendHeadLine,
@@ -2244,7 +2331,10 @@ export const SMART_CARD_BLOCK_SIZE = Object.freeze({
   panchang: { width: 148, height: 205 },
   rashi: { width: 307, height: 620 },
   suvichar: { width: 307, height: 72 },
-  dinvishesh: { width: 190, height: 150 },
+  // Wider than it was: the name now runs ACROSS the head of the box rather
+  // than standing in a column of it, and a 190px box gives that mark too
+  // little measure to be read as a nameplate.
+  dinvishesh: { width: 268, height: 160 },
   sudoku: { width: 232, height: 268 },
   // 168, not 210: measured, the forecast panel solves to the same 9px type at
   // 160 as at 210, so the extra 50px was air the panel then centred its

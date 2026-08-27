@@ -76,18 +76,10 @@ function smartCardLines(key, data, frame, cardLayout) {
   // This table is read here and mirrored by `.smart-card-<key>` in styles.css.
   // It is not a second geometry: a border is ink at the frame's own edge, so
   // both surfaces need only the frame, which both already have.
-  const CARD_BORDER = {
-    suvichar: { ink: '#8a1428', double: false },
-    dinvishesh: { ink: '#8a1428', double: false },
-    panchang: { ink: '#8a1428', double: true },
-    rashi: { ink: '#8a1428', double: true },
-    havaman: { ink: '#8a1428', double: false },
-    market: { ink: '#8a1428', double: false },
-    sudoku: { ink: '#8a1428', double: false },
-    advert: { ink: '#202024', double: false },
-    tender: { ink: '#202024', double: false },
-  };
-  const border = CARD_BORDER[key];
+  // The one border catalogue, from the shared module - never a second copy
+  // here. The solver already pulled each ruled card's content box inside its
+  // own rule (CARD_RULE_CLEARANCE_PX), so this only lays the ink down.
+  const border = (cardLayout.CARD_BORDERS || {})[key];
   if (border) {
     // The card's own borderBox, which is the content box for a card whose
     // nameplate sits above it and the whole frame for one whose nameplate is
@@ -541,9 +533,11 @@ function smartCardLines(key, data, frame, cardLayout) {
     const g = layout.geometry;
     const MARK = { up: '\u25B2', down: '\u25BC', flat: '\u2013' };
     const INK = { up: '#237548', down: '#a51d34', flat: '#6b6264' };
-    // The air the panel is centred in - the solver's number, the same one the
-    // canvas writes as its padding-top.
-    let y = subtitleOffsetPx + (g.topOffset || 0);
+    // A printed panel starts at the top of its own box. What the card has
+    // spare opens the gaps BETWEEN its bands (g.gap, resolved by the solver
+    // and written inline by the canvas), never a hole at the head.
+    const BAND = g.gap || GAP;
+    let y = subtitleOffsetPx;
     layout.titleLines.forEach((text, index) => line(
       text, 0, y + index * g.titleLineHeightPx, contentWidth, g.titleFontPx, 1,
       g.titleLineHeightPx, { bold: true, ink: '#8a1428' },
@@ -552,7 +546,7 @@ function smartCardLines(key, data, frame, cardLayout) {
       line(layout.asOfLine, 0, y + layout.titleLines.length * g.titleLineHeightPx,
         contentWidth, g.headFontPx, 1, g.headLineHeightPx, { ink: '#7a6266' });
     }
-    y += g.titleHeight + GAP;
+    y += g.titleHeight + BAND;
 
     const rowsTop = y;
     // The rows in their groups, in the same order the canvas paints them - a
@@ -606,7 +600,7 @@ function smartCardLines(key, data, frame, cardLayout) {
     // exists to prevent.
     if (layout.trend) {
       const axis = layout.trend.axis;
-      y += GAP;
+      y += BAND;
       line(layout.trend.headLine, 0, y, contentWidth, g.trendLabelFontPx, 0,
         g.trendLabelLineHeightPx, { bold: true, ink: '#8a1428' });
       const plotTop = y + g.trendLabelLineHeightPx + 2;

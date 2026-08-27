@@ -303,7 +303,7 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
   });
   renderPictureControls(callbacks.getImages?.() || [], undefined, section);
   bindPicturesPanel({ ...callbacks, onSelectImage: (id) => { selectPicture(id); selectPictureFrame(id); } });
-  bindSmartCard(callbacks.onRequestSmartCard, callbacks.onPatch, notify);
+  bindSmartCard(callbacks.onRequestSmartCard, callbacks.onPatch, notify, callbacks.onPlaceSmartCardInNewBlock);
   bindStorySource(callbacks);
   // The writing surface. Every keystroke goes down the same channel as the
   // Inspector's fields always did - draft, live canvas repaint, autosave.

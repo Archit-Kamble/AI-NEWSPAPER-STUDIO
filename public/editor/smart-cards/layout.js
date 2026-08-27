@@ -81,9 +81,25 @@ const GAP_PX = 6;
 // they belong to the card's finite geometry, travel with it to every edition,
 // and are emitted by the same export walk as the card's type.
 const CARD_ARTWORK = Object.freeze({
-  suvichar: { file: 'assets/smart-cards/SuvicharwithoutBG.png', aspect: 1380 / 752, placement: 'inline', heightShare: 0.95, widthShare: 0.22 },
-  dinvishesh: { file: 'assets/smart-cards/denvishash.png', aspect: 1380 / 752, placement: 'top', heightShare: 0.34, widthShare: 0.86, stretch: true },
-  panchang: { file: 'assets/smart-cards/panchangwithoutBG.png', aspect: 1380 / 752, placement: 'top', heightShare: 0.25, widthShare: 0.82 },
+  // THE NAMEPLATE SITS OVER THE COLUMN IT NAMES.
+  //
+  // `inline` put the सुविचार mark down the LEFT of the block at 98% of its
+  // height, with the quote set in the strip beside it - so the artwork and the
+  // words it introduces were two objects side by side rather than a heading
+  // and the lines under it, which is the desk's report ("suvichar name in
+  // image should align with next lines"). Every other standing card on this
+  // paper already sets its own mark as a centred head; this one now does too,
+  // and the quote below is centred on the same axis.
+  suvichar: { file: 'assets/smart-cards/SuvicharwithoutBG.png', aspect: 1300 / 664, placement: 'top', heightShare: 0.2, widthShare: 0.34 },
+  // A TITLE BLOCK IS A HEADING, NOT A BANNER.
+  //
+  // 0.37 of the block's height for the दिनविशेष wordmark took better than a
+  // third of the box before a single entry was set, on a card whose whole
+  // purpose is the entries. Measured on a 268x300 block: 96 px of artwork over
+  // 180 px of copy. A printed paper sets a standing head at a fraction of that
+  // and gives the room to the reading matter.
+  dinvishesh: { file: 'assets/smart-cards/dinvishesh-title-v2.png', aspect: 2140 / 514, placement: 'top', heightShare: 0.16, widthShare: 0.62 },
+  panchang: { file: 'assets/smart-cards/panchangwithoutBG.png', aspect: 1380 / 752, placement: 'top', heightShare: 0.245, widthShare: 0.82 },
   rashi: { file: 'assets/smart-cards/rashi-bhavishyawithoutBG.png', aspect: 1380 / 752, placement: 'top', heightShare: 0.15, widthShare: 0.72 },
 });
 
@@ -232,9 +248,9 @@ function measureAtomic(text, fontPx, family, weight, width) {
  * does, the smallest legible candidate is still returned - drawn at the
  * floor, flagged OVERSET, never shrunk further to hide it.
  */
-function solveFont(availableHeight, neededHeight) {
+function solveFont(availableHeight, neededHeight, candidates = CANDIDATE_FONT_PX) {
   let last = null;
-  for (const candidate of CANDIDATE_FONT_PX) {
+  for (const candidate of candidates) {
     const need = neededHeight(candidate);
     last = { ...need, fontPx: candidate };
     if (need.height <= availableHeight && !need.hardOverset) {
@@ -310,8 +326,28 @@ function layoutSudoku(data, frame) {
   const grid = isGrid(data?.grid) ? data.grid : isGrid(data?.solution) ? data.solution : null;
   if (!grid) return empty('sudoku');
 
-  const headingText = data?.difficulty ? `सुडोकू · ${data.difficulty}` : 'सुडोकू';
-  const headingFontPx = Math.max(7, Math.min(14, frame.innerWidth / 20));
+  // THE HEADING IS AN INVITATION, NOT A LABEL.
+  //
+  // The desk's report: the puzzle "should have more words like solve this
+  // today's sudoku rather than just having sudoku". A printed puzzle box names
+  // the day, asks the reader to play, and states the rule and the difficulty -
+  // that is what makes it a feature rather than a grid somebody left on the
+  // page.
+  const headingText = isGrid(data?.grid)
+    ? `आजचे सुडोकू सोडवा — प्रत्येक ओळ, स्तंभ व ३×३ चौकटीत १ ते ९ अंक भरा${data?.difficulty ? ` · काठिण्य : ${data.difficulty}` : ''}`
+    : 'कालच्या सुडोकूचे उत्तर — तुमचे उत्तर तपासून पाहा';
+  // This is an instruction band, not a one-word badge. Pick the largest size
+  // that holds the complete sentence on one line so it uses the wide measure
+  // above the square instead of turning into a tall second title.
+  const headingCandidates = [11, 10, 9, 8, 7, 6.5, 6];
+  let headingFontPx = headingCandidates[headingCandidates.length - 1];
+  let heading = measureAtomic(headingText, headingFontPx, 'serif', 700, frame.innerWidth);
+  for (const candidate of headingCandidates) {
+    const measured = measureAtomic(headingText, candidate, 'serif', 700, frame.innerWidth);
+    headingFontPx = candidate;
+    heading = measured;
+    if (!measured.hardOverset) break;
+  }
   const headingLineHeightPx = lineHeightFor(headingFontPx, 'serif', 700);
   const headingGap = Math.min(5, Math.max(2, frame.innerHeight * 0.018));
   const gridHeight = Math.max(0, frame.innerHeight - headingLineHeightPx - headingGap);
@@ -320,7 +356,6 @@ function layoutSudoku(data, frame) {
   // this is not a puzzle a reader can solve, so it is drawn at the floor and
   // flagged OVERSET rather than made unreadable to avoid the flag.
   const cell = Math.max(MIN_SUDOKU_CELL_PX, cellRaw);
-  const heading = measureAtomic(headingText, headingFontPx, 'serif', 700, frame.innerWidth);
   const fitState = cellRaw < MIN_SUDOKU_CELL_PX || heading.hardOverset ? 'OVERSET' : 'FITS';
   const gridSize = cell * 9;
   const top = headingLineHeightPx + headingGap
@@ -441,14 +476,31 @@ function layoutPanchang(data, frame) {
 
   const solved = solveFont(frame.innerHeight, (fontPx) => {
     const lineHeightPx = lineHeightFor(fontPx, 'serif', 400);
+    // THE CELL'S INSET IS THE SOLVER'S, NOT THE STYLESHEET'S.
+    //
+    // `.smart-card-table td` carried `padding: 0.15em 0.3em`, which the solver
+    // knew nothing about. At the 24 px this card was solving to, that is 14.4
+    // px of horizontal padding the value column never had and 7.2 px of extra
+    // height on every row - so the solver reported FITS with every value on
+    // one line while the browser wrapped "१२ तास ४७ मिनिटे" onto two and
+    // pushed शके off the bottom of the block. Photographed on a real card.
+    // The numbers are computed here and applied inline by the renderer and the
+    // export walk, so all three surfaces use the one inset.
+    const cellPadX = fontPx * 0.3;
+    const cellPadY = fontPx * 0.15;
     const maxLabelWidth = rows.reduce((max, item) => Math.max(max, measure(item.label, fontPx, 'serif', PANCHANG_LABEL_WEIGHT)), 0);
-    const labelWidth = Math.min(frame.innerWidth * 0.4, maxLabelWidth + GAP_PX);
-    const valueWidth = Math.max(0, frame.innerWidth - labelWidth - GAP_PX);
+    const labelWidth = Math.min(frame.innerWidth * 0.4, maxLabelWidth + cellPadX * 2 + GAP_PX);
+    const valueWidth = Math.max(0, frame.innerWidth - labelWidth);
+    // What the type actually has, inside the cell's own inset.
+    const labelTextWidth = Math.max(0, labelWidth - cellPadX * 2);
+    const valueTextWidth = Math.max(0, valueWidth - cellPadX * 2);
+    // The rule under each row is real ink and takes real room.
+    const ruleHeight = 0.4;
 
     let hardOverset = false;
     const items = rows.map((item) => {
-      const label = measureAtomic(item.label, fontPx, 'serif', PANCHANG_LABEL_WEIGHT, labelWidth);
-      const value = wrapSmartText(item.text ?? '', { width: valueWidth, fontPx, family: 'serif', weight: 400 });
+      const label = measureAtomic(item.label, fontPx, 'serif', PANCHANG_LABEL_WEIGHT, labelTextWidth);
+      const value = wrapSmartText(item.text ?? '', { width: valueTextWidth, fontPx, family: 'serif', weight: 400 });
       if (label.hardOverset || value.hardOverset) hardOverset = true;
       const valueLines = value.lines.map((l) => l.text);
       const lineCount = Math.max(1, valueLines.length);
@@ -456,20 +508,35 @@ function layoutPanchang(data, frame) {
         label: item.label,
         labelLines: [label.line],
         valueLines,
-        rowHeight: lineCount * lineHeightPx,
-        textNudgeY: String(item.label).replace(/\s/g, '') === 'राहुकाळ' ? -0.8 : 0,
+        rowHeight: lineCount * lineHeightPx + cellPadY * 2 + ruleHeight,
+        textNudgeY: String(item.label).replace(/\s/g, '') === 'राहुकाळ'
+          ? -Math.max(0, (lineCount - 1) * lineHeightPx / 2)
+          : 0,
       };
     });
 
     const height = items.reduce((sum, item) => sum + item.rowHeight, 0);
-    return { height, hardOverset, items, labelWidth, valueWidth, lineHeightPx };
+    return {
+      height, hardOverset, items, labelWidth, valueWidth,
+      labelTextWidth, valueTextWidth, cellPadX, cellPadY, ruleHeight, lineHeightPx,
+    };
   });
 
   return {
     key: 'panchang',
     fitState: solved.fitState,
     fontPx: solved.fontPx,
-    geometry: { rows: rows.length, labelWidth: solved.labelWidth, valueWidth: solved.valueWidth, lineHeightPx: solved.lineHeightPx },
+    geometry: {
+      rows: rows.length,
+      labelWidth: solved.labelWidth,
+      valueWidth: solved.valueWidth,
+      labelTextWidth: solved.labelTextWidth,
+      valueTextWidth: solved.valueTextWidth,
+      cellPadX: solved.cellPadX,
+      cellPadY: solved.cellPadY,
+      ruleHeight: solved.ruleHeight,
+      lineHeightPx: solved.lineHeightPx,
+    },
     items: solved.items,
     violations: solved.fitState === 'OVERSET' ? ['SMART_CARD_OVERSET'] : [],
   };
@@ -769,23 +836,74 @@ function layoutChart(data, frame) {
 
 // ---------------------------------------------------------------- suvichar ---
 
+/**
+ * THE THOUGHT FOR THE DAY IS A DISPLAY QUOTE, NOT A CAPTION.
+ *
+ * This solved the quote and its attribution as ONE ATOMIC LINE
+ * (`measureAtomic(displayLine, ...)`, `singleLine: true`) - so the only way a
+ * long quote could fit was to shrink until the whole sentence sat on a single
+ * row. Photographed on a real 268x300 block: the nameplate artwork inline at
+ * the left, the entire quote set at 8 px on one line beside it, and rather
+ * more than half the block standing empty underneath. A reader meets this box
+ * as the one piece of writing on the page that is meant to be read slowly, and
+ * it was the smallest type on the page.
+ *
+ * It is set the way a printed paper sets a pull quote instead: the words WRAP,
+ * they are centred on the measure, and the size is chosen to FILL the block
+ * rather than to avoid wrapping. Attribution goes on its own line under a
+ * short centred rule - which is what makes the artwork above and the lines
+ * below read as one column rather than a picture with a sentence next to it
+ * (the desk's report: "suvichar name in image should align with next lines").
+ */
 function layoutSuvichar(data, frame) {
   if (!data?.text) return empty('suvichar');
 
   const quoteText = String(data.text || '').trim();
   const attributionText = String(data.attribution || '').trim();
-  const displayLine = attributionText ? `${quoteText} — ${attributionText}` : quoteText;
+
+  // A quote is set with air around it - a printed thought-for-the-day is never
+  // jammed against its own rule.
+  const sideInset = Math.max(4, frame.innerWidth * 0.06);
+  const measureWidth = Math.max(1, frame.innerWidth - sideInset * 2);
 
   const solved = solveFont(frame.innerHeight, (fontPx) => {
-    const lineHeightPx = lineHeightFor(fontPx, 'serif', 400);
-    const measured = measureAtomic(displayLine, fontPx, 'serif', 400, frame.innerWidth);
+    // The quote leads; the attribution is deliberately smaller, as a credit is.
+    const lineHeightPx = lineHeightFor(fontPx, 'serif', 400) * 1.18;
+    const creditFontPx = Math.max(MIN_CARD_FONT_PX, fontPx * 0.62);
+    const creditLineHeightPx = lineHeightFor(creditFontPx, 'sans', 400);
+
+    const quote = wrapSmartText(quoteText, {
+      width: measureWidth, fontPx, family: 'serif', weight: 700,
+    });
+    const credit = attributionText
+      ? wrapSmartText(`— ${attributionText}`, {
+        width: measureWidth, fontPx: creditFontPx, family: 'sans', weight: 400,
+      })
+      : { lines: [], hardOverset: false };
+
+    const quoteLines = quote.lines.map((line) => line.text);
+    const attributionLines = credit.lines.map((line) => line.text);
+    const quoteHeight = Math.max(1, quoteLines.length) * lineHeightPx;
+    const creditHeight = attributionLines.length * creditLineHeightPx;
+    // The rule between the two, and the air either side of it.
+    const ruleGap = attributionLines.length ? Math.max(4, fontPx * 0.55) : 0;
+    const ruleWidth = Math.min(measureWidth * 0.4, Math.max(18, fontPx * 3));
+
     return {
-      height: lineHeightPx,
-      hardOverset: measured.hardOverset,
-      displayLine,
-      quoteLines: [quoteText],
-      attributionLines: attributionText ? [attributionText] : [],
+      height: quoteHeight + (creditHeight ? ruleGap * 2 + creditHeight : 0),
+      hardOverset: quote.hardOverset || credit.hardOverset,
+      quoteLines,
+      attributionLines,
       lineHeightPx,
+      creditFontPx,
+      creditLineHeightPx,
+      quoteHeight,
+      creditHeight,
+      ruleGap,
+      ruleWidth,
+      sideInset,
+      measureWidth,
+      displayLine: attributionText ? `${quoteText} — ${attributionText}` : quoteText,
     };
   });
 
@@ -793,7 +911,20 @@ function layoutSuvichar(data, frame) {
     key: 'suvichar',
     fitState: solved.fitState,
     fontPx: solved.fontPx,
-    geometry: { lineHeightPx: solved.lineHeightPx, singleLine: true },
+    geometry: {
+      lineHeightPx: solved.lineHeightPx,
+      creditFontPx: solved.creditFontPx,
+      creditLineHeightPx: solved.creditLineHeightPx,
+      quoteHeight: solved.quoteHeight,
+      creditHeight: solved.creditHeight,
+      ruleGap: solved.ruleGap,
+      ruleWidth: solved.ruleWidth,
+      sideInset: solved.sideInset,
+      measureWidth: solved.measureWidth,
+      // Kept so nothing that read this field breaks; it is no longer true and
+      // no renderer consults it.
+      singleLine: false,
+    },
     displayLine: solved.displayLine,
     quoteLines: solved.quoteLines,
     attributionLines: solved.attributionLines,
@@ -847,17 +978,148 @@ function weatherNumber(value) {
   return Number.isFinite(number) ? devanagariDigits(number) : '—';
 }
 
+/**
+ * THE WEATHER BOX IS A FORECAST, NOT A PARAGRAPH IN A PANEL.
+ *
+ * The previous layout put every city in an equal cell of a grid whose height
+ * was the WHOLE remaining block, and the renderer centred each cell's four
+ * small lines inside it. With one city - which is this paper's ordinary case,
+ * सातारा - that meant four lines of 12 px type floating in the middle of a
+ * 250 px panel with a hand's width of white above and below. Photographed: the
+ * desk's report that "havaman is not working" is what a reader sees, and the
+ * builder was fetching real Open-Meteo data correctly the whole time.
+ *
+ * A printed weather box leads with the NUMBER. So one city is set as a proper
+ * forecast panel - the place, the condition, then the maximum and minimum as
+ * display figures with their own labels, and the rain beneath - and several
+ * cities fall back to one compact ruled row each, which is how a paper prints
+ * a district table. Both are solved by the same font search.
+ */
+const HAVAMAN_SOLO_MAX = 1;
+
 function layoutHavaman(data, frame) {
   const cities = Array.isArray(data?.cities) ? data.cities.filter((city) => city && city.name) : [];
   if (!cities.length) return empty('havaman');
 
-  const columns = cities.length > 2 && frame.innerWidth >= 180 ? 2 : 1;
-  const rows = Math.ceil(cities.length / columns);
-  const columnGap = columns > 1 ? GAP_PX : 0;
-  const rowGap = 3;
-  const columnWidth = Math.max(0, (frame.innerWidth - columnGap * (columns - 1)) / columns);
   const sourceText = String(data.source || 'स्रोत : Open-Meteo').trim();
+  const solo = cities.length <= HAVAMAN_SOLO_MAX;
 
+  // ---- one city: a forecast panel that fills the block --------------------
+  if (solo) {
+    const city = cities[0];
+    const solved = solveFont(frame.innerHeight, (fontPx) => {
+      const lineHeightPx = lineHeightFor(fontPx, 'serif', 400);
+      // The reading the box exists for, set as display figures.
+      const figureFontPx = fontPx * 2.6;
+      const figureLineHeightPx = lineHeightFor(figureFontPx, 'sans', 700);
+      const capFontPx = Math.max(MIN_CARD_FONT_PX, fontPx * 0.82);
+      const capLineHeightPx = lineHeightFor(capFontPx, 'sans', 400);
+      const sourceFontPx = Math.max(MIN_CARD_FONT_PX, fontPx * 0.76);
+      const sourceLineHeightPx = lineHeightFor(sourceFontPx, 'serif', 400);
+
+      const inset = Math.max(3, fontPx * 0.5);
+      const width = Math.max(1, frame.innerWidth - inset * 2);
+      const halfWidth = Math.max(1, (width - GAP_PX) / 2);
+
+      const place = measureAtomic(city.name, fontPx * 1.25, 'serif', 700, width);
+      const condition = wrapSmartText(city.condition || '', {
+        width, fontPx, family: 'serif', weight: 400,
+      });
+      const maxText = `${weatherNumber(city.maxC)}°`;
+      const minText = `${weatherNumber(city.minC)}°`;
+      const maxFigure = measureAtomic(maxText, figureFontPx, 'sans', 700, halfWidth);
+      const minFigure = measureAtomic(minText, figureFontPx, 'sans', 700, halfWidth);
+      const rain = wrapSmartText(
+        `पाऊस ${weatherNumber(city.rainMm)} मिमी · शक्यता ${weatherNumber(city.rainChance)}%`,
+        { width, fontPx, family: 'serif', weight: 400 },
+      );
+      const source = wrapSmartText(sourceText, {
+        width, fontPx: sourceFontPx, family: 'serif', weight: 400,
+      });
+
+      const placeHeight = lineHeightFor(fontPx * 1.25, 'serif', 700);
+      const conditionLines = condition.lines.map((l) => l.text);
+      const rainLines = rain.lines.map((l) => l.text);
+      const sourceLines = source.lines.map((l) => l.text);
+      const conditionHeight = Math.max(1, conditionLines.length) * lineHeightPx;
+      const figureHeight = figureLineHeightPx + capLineHeightPx;
+      const rainHeight = Math.max(1, rainLines.length) * lineHeightPx;
+      const sourceHeight = Math.max(1, sourceLines.length) * sourceLineHeightPx;
+
+      return {
+        height: placeHeight + conditionHeight + GAP_PX + figureHeight + GAP_PX
+          + rainHeight + GAP_PX + sourceHeight,
+        hardOverset: place.hardOverset || condition.hardOverset || rain.hardOverset
+          || source.hardOverset || maxFigure.hardOverset || minFigure.hardOverset,
+        solo: true,
+        placeLine: place.line,
+        placeFontPx: fontPx * 1.25,
+        placeHeight,
+        conditionLines,
+        conditionHeight,
+        maxText,
+        minText,
+        maxLabel: 'कमाल',
+        minLabel: 'किमान',
+        figureFontPx,
+        figureLineHeightPx,
+        capFontPx,
+        capLineHeightPx,
+        figureHeight,
+        halfWidth,
+        rainLines,
+        rainHeight,
+        sourceLines,
+        sourceFontPx,
+        sourceLineHeightPx,
+        sourceHeight,
+        inset,
+        width,
+        lineHeightPx,
+      };
+    }, [22, 20, 18, 16, 14, 12, 11, 10, 9, 8, 7.5, 7, 6.5, 6, MIN_CARD_FONT_PX]);
+
+    return {
+      key: 'havaman',
+      fitState: solved.fitState,
+      fontPx: solved.fontPx,
+      geometry: {
+        solo: true,
+        columns: 1,
+        rows: 1,
+        lineHeightPx: solved.lineHeightPx,
+        placeFontPx: solved.placeFontPx,
+        placeHeight: solved.placeHeight,
+        conditionHeight: solved.conditionHeight,
+        figureFontPx: solved.figureFontPx,
+        figureLineHeightPx: solved.figureLineHeightPx,
+        capFontPx: solved.capFontPx,
+        capLineHeightPx: solved.capLineHeightPx,
+        figureHeight: solved.figureHeight,
+        halfWidth: solved.halfWidth,
+        rainHeight: solved.rainHeight,
+        inset: solved.inset,
+        width: solved.width,
+        sourceFontPx: solved.sourceFontPx,
+        sourceLineHeightPx: solved.sourceLineHeightPx,
+        sourceHeight: solved.sourceHeight,
+        gap: GAP_PX,
+      },
+      placeLine: solved.placeLine,
+      conditionLines: solved.conditionLines,
+      rainLines: solved.rainLines,
+      figures: [
+        { label: solved.maxLabel, text: solved.maxText, kind: 'max' },
+        { label: solved.minLabel, text: solved.minText, kind: 'min' },
+      ],
+      sourceLines: solved.sourceLines,
+      // Kept so a caller written against the old shape still finds a list.
+      items: [{ key: city.key || '', name: solved.placeLine }],
+      violations: solved.fitState === 'OVERSET' ? ['SMART_CARD_OVERSET'] : [],
+    };
+  }
+
+  // ---- several cities: one ruled row each, as a district table ------------
   const solved = solveFont(frame.innerHeight, (fontPx) => {
     const lineHeightPx = lineHeightFor(fontPx, 'serif', 400);
     const sourceFontPx = Math.max(MIN_CARD_FONT_PX, fontPx * 0.76);
@@ -865,62 +1127,73 @@ function layoutHavaman(data, frame) {
     const source = wrapSmartText(sourceText, {
       width: frame.innerWidth, fontPx: sourceFontPx, family: 'serif', weight: 400,
     });
-    const sourceLines = source.lines.map((line) => line.text);
+    const sourceLines = source.lines.map((l) => l.text);
     const sourceHeight = Math.max(1, sourceLines.length) * sourceLineHeightPx;
-    const gridHeight = Math.max(0, frame.innerHeight - sourceHeight - GAP_PX);
-    const cellHeight = Math.max(0, (gridHeight - rowGap * (rows - 1)) / rows);
+
+    const nameWidth = frame.innerWidth * 0.36;
+    const tempWidth = frame.innerWidth * 0.26;
+    const restWidth = Math.max(0, frame.innerWidth - nameWidth - tempWidth);
+    const rowPadding = Math.max(1.5, fontPx * 0.28);
     let hardOverset = source.hardOverset;
 
     const items = cities.map((city) => {
-      const name = measureAtomic(city.name, fontPx, 'serif', 700, columnWidth);
-      const condition = wrapSmartText(city.condition || '', {
-        width: columnWidth, fontPx, family: 'serif', weight: 400,
-      });
-      const temperature = wrapSmartText(
-        `कमाल ${weatherNumber(city.maxC)}° · किमान ${weatherNumber(city.minC)}°`,
-        { width: columnWidth, fontPx, family: 'serif', weight: 700 },
+      const name = measureAtomic(city.name, fontPx, 'serif', 700, nameWidth - 4);
+      const temp = measureAtomic(
+        `${weatherNumber(city.maxC)}° / ${weatherNumber(city.minC)}°`,
+        fontPx, 'sans', 700, tempWidth - 4,
       );
-      const rain = wrapSmartText(
-        `पाऊस ${weatherNumber(city.rainMm)} मिमी · शक्यता ${weatherNumber(city.rainChance)}%`,
-        { width: columnWidth, fontPx, family: 'serif', weight: 400 },
+      const rest = wrapSmartText(
+        `${city.condition || ''} · पाऊस ${weatherNumber(city.rainMm)} मिमी (${weatherNumber(city.rainChance)}%)`,
+        { width: restWidth - 4, fontPx, family: 'serif', weight: 400 },
       );
-      const conditionLines = condition.lines.map((line) => line.text);
-      const temperatureLines = temperature.lines.map((line) => line.text);
-      const rainLines = rain.lines.map((line) => line.text);
-      const height = (1 + conditionLines.length + temperatureLines.length + rainLines.length) * lineHeightPx;
-      const overset = name.hardOverset || condition.hardOverset || temperature.hardOverset
-        || rain.hardOverset || height > cellHeight;
-      if (overset) hardOverset = true;
+      hardOverset ||= name.hardOverset || temp.hardOverset || rest.hardOverset;
+      const restLines = rest.lines.map((l) => l.text);
       return {
-        key: city.key || '', name: name.line, conditionLines, temperatureLines, rainLines, height,
+        key: city.key || '',
+        name: name.line,
+        tempText: temp.line,
+        restLines,
+        rowHeight: Math.max(1, restLines.length) * lineHeightPx + rowPadding * 2,
       };
     });
 
+    const rowsHeight = items.reduce((sum, item) => sum + item.rowHeight, 0);
     return {
-      height: frame.innerHeight,
+      height: rowsHeight + GAP_PX + sourceHeight,
       hardOverset,
+      solo: false,
       items,
       lineHeightPx,
+      nameWidth,
+      tempWidth,
+      restWidth,
+      rowPadding,
+      rowsHeight,
+      sourceLines,
       sourceFontPx,
       sourceLineHeightPx,
-      sourceLines,
       sourceHeight,
-      gridHeight,
-      cellHeight,
     };
-  });
+  }, [16, 14, 12, 11, 10, 9, 8, 7.5, 7, 6.5, 6, MIN_CARD_FONT_PX]);
 
   return {
     key: 'havaman',
     fitState: solved.fitState,
     fontPx: solved.fontPx,
     geometry: {
-      columns, rows, columnWidth, columnGap, rowGap,
-      cellHeight: solved.cellHeight, gridHeight: solved.gridHeight,
+      solo: false,
+      columns: 1,
+      rows: cities.length,
       lineHeightPx: solved.lineHeightPx,
+      nameWidth: solved.nameWidth,
+      tempWidth: solved.tempWidth,
+      restWidth: solved.restWidth,
+      rowPadding: solved.rowPadding,
+      rowsHeight: solved.rowsHeight,
       sourceFontPx: solved.sourceFontPx,
       sourceLineHeightPx: solved.sourceLineHeightPx,
       sourceHeight: solved.sourceHeight,
+      gap: GAP_PX,
     },
     items: solved.items,
     sourceLines: solved.sourceLines,
@@ -930,92 +1203,259 @@ function layoutHavaman(data, frame) {
 
 // ------------------------------------------------------------------ market ---
 
+/**
+ * THE RATE TABLE A PAPER ACTUALLY PRINTS.
+ *
+ * Three columns, not two: what it is, what it closed at, and how far it moved
+ * - and the move is given BOTH in the instrument's own unit and as a
+ * percentage, which is how a market table is set everywhere. The rows are also
+ * grouped: निर्देशांक first, then सराफा, with a small head over each, because
+ * an index in points and a metal in rupees per १० ग्रॅम are not the same kind
+ * of number and a reader should not have to work that out from the label.
+ *
+ * Every column width here is measured against the REAL widest cell rather than
+ * taken as a share of the frame - a fixed 42/35/23 split had the rupee figures
+ * (₹१,३८,२९४) running into the change column on a narrow block while the
+ * label column stood half empty.
+ */
+const MARKET_GROUP_LABELS = Object.freeze({ index: 'निर्देशांक', bullion: 'सराफा बाजार' });
+
 function layoutMarket(data, frame) {
   const rows = Array.isArray(data?.items)
     ? data.items.filter((item) => item && item.label && item.value != null).slice(0, 10)
     : [];
   if (!rows.length) return empty('market');
 
+  // Rows in their groups, in the order the groups were first seen, so a
+  // payload with no `group` at all still lays out as one plain table.
+  const groupOrder = [];
+  for (const row of rows) {
+    const group = String(row.group || '');
+    if (!groupOrder.includes(group)) groupOrder.push(group);
+  }
+  const grouped = groupOrder.length > 1;
+
   const solved = solveFont(frame.innerHeight, (fontPx) => {
     const lineHeightPx = lineHeightFor(fontPx, 'serif', 400);
     const titleFontPx = fontPx * 1.35;
     const titleLineHeightPx = lineHeightFor(titleFontPx, 'serif', 700);
+    const headFontPx = Math.max(MIN_CARD_FONT_PX, fontPx * 0.8);
+    const headLineHeightPx = lineHeightFor(headFontPx, 'sans', 700);
+    const unitFontPx = Math.max(MIN_CARD_FONT_PX, fontPx * 0.72);
     const sourceFontPx = Math.max(MIN_CARD_FONT_PX, fontPx * 0.76);
     const sourceLineHeightPx = lineHeightFor(sourceFontPx, 'serif', 400);
+    const rowPadding = Math.max(1.2, fontPx * 0.22);
+
     const title = wrapSmartText(data.title || 'शेअर / सोने बाजार', {
       width: frame.innerWidth, fontPx: titleFontPx, family: 'serif', weight: 700,
     });
+    const asOfText = String(data.asOf || '').trim();
+    const asOf = asOfText
+      ? measureAtomic(asOfText, headFontPx, 'sans', 400, frame.innerWidth)
+      : { line: '', hardOverset: false };
+
+    // THE COLUMNS ARE MEASURED, NOT GUESSED.
+    const widest = (pick, weight, size) => rows.reduce(
+      (max, row) => Math.max(max, measure(String(pick(row) || ''), size, 'sans', weight)), 0,
+    );
+    const valueNeeded = widest((r) => r.value, 700, fontPx) + 6;
+    const changeNeeded = widest(
+      (r) => `\u25BC ${r.delta ? `${r.delta}  ` : ''}${r.change}`, 700, fontPx,
+    ) + 6;
+    const valueWidth = Math.min(frame.innerWidth * 0.42, valueNeeded);
+    const changeWidth = Math.min(frame.innerWidth * 0.3, changeNeeded);
+    const labelWidth = Math.max(0, frame.innerWidth - valueWidth - changeWidth);
+
+    let hardOverset = title.hardOverset || asOf.hardOverset;
+
+    const items = rows.map((row) => {
+      const label = measureAtomic(row.label, fontPx, 'serif', 700, labelWidth - 4);
+      const unitText = row.unit ? `(${row.unit})` : '';
+      const unit = unitText
+        ? measureAtomic(unitText, unitFontPx, 'sans', 400, labelWidth - 4)
+        : { line: '', hardOverset: false };
+      const value = measureAtomic(String(row.value), fontPx, 'sans', 700, valueWidth - 4);
+      hardOverset ||= label.hardOverset || value.hardOverset || unit.hardOverset;
+      // ONE LINE PER ROW.
+      //
+      // The move was set as two stacked lines - the percentage over the change
+      // in the instrument's own unit - and measured in the running DOM that
+      // column rendered 40 px inside a 29 px row and bled through the rule
+      // into the row below, on every row. A rate table's row is one line; the
+      // absolute move joins the percentage on that line when the column can
+      // hold both, and is dropped when it cannot, which is what a narrow
+      // column does in print rather than stacking.
+      const changeOnly = String(row.change || '');
+      const withDelta = row.delta ? `${row.delta}  ${changeOnly}` : changeOnly;
+      const bothFit = row.delta
+        && measure(`\u25BC ${withDelta}`, fontPx, 'sans', 700) <= changeWidth - 4;
+      const changeText = bothFit ? withDelta : changeOnly;
+      const change = measureAtomic(changeText, fontPx, 'sans', 700, changeWidth - 4);
+      hardOverset ||= change.hardOverset;
+      return {
+        group: String(row.group || ''),
+        labelText: label.line,
+        // The label's own drawn width, stated here so a writer can set the
+        // unit beside it without measuring anything a second time - the rule
+        // this module's header records: one measurement authority, never two.
+        labelWidthPx: measure(label.line, fontPx, 'serif', 700),
+        unitText: unit.line,
+        valueText: value.line,
+        changeText: change.line,
+        deltaText: '',
+        direction: row.direction
+          || (String(row.change || '').trim().startsWith('-') || String(row.change || '').trim().startsWith('\u2212') ? 'down'
+            : String(row.change || '').trim().startsWith('+') ? 'up' : 'flat'),
+        rowHeight: lineHeightPx + rowPadding * 2,
+      };
+    });
+
+    // A group head costs one line of its own.
+    const heads = grouped ? groupOrder.length : 0;
+    const headHeight = heads * (headLineHeightPx + rowPadding);
+
+    const briefText = String(data.yesterdayBrief || '').trim();
+    const briefLabel = briefText ? String(data.briefLabel || 'मागील सत्र').trim() : '';
+    const briefInset = Math.max(4, fontPx * 0.5);
+    const briefLabelWrapped = wrapSmartText(briefLabel, {
+      width: Math.max(0, frame.innerWidth - briefInset * 2), fontPx: headFontPx, family: 'sans', weight: 700,
+    });
+    const briefWrapped = wrapSmartText(briefText, {
+      width: Math.max(0, frame.innerWidth - briefInset * 2), fontPx, family: 'serif', weight: 400,
+    });
+    const noteText = String(data.note || '').trim();
+    const noteWrapped = noteText
+      ? wrapSmartText(noteText, { width: frame.innerWidth, fontPx: sourceFontPx, family: 'serif', weight: 400 })
+      : { lines: [], hardOverset: false };
     const source = wrapSmartText(data.source || 'स्रोत : संपादकीय पडताळणी', {
       width: frame.innerWidth, fontPx: sourceFontPx, family: 'serif', weight: 400,
     });
-    const briefText = String(data.yesterdayBrief || '').trim();
-    const briefLabel = briefText
-      ? `कालचा बाजार${data.asOf ? ` · ${String(data.asOf).trim()}` : ''}`
-      : '';
-    const briefLabelWrapped = wrapSmartText(briefLabel, {
-      width: Math.max(0, frame.innerWidth - 8), fontPx, family: 'serif', weight: 700,
-    });
-    const briefWrapped = wrapSmartText(briefText, {
-      width: Math.max(0, frame.innerWidth - 8), fontPx, family: 'serif', weight: 400,
-    });
-    const labelWidth = frame.innerWidth * 0.45;
-    const valueWidth = frame.innerWidth * 0.31;
-    const changeWidth = Math.max(0, frame.innerWidth - labelWidth - valueWidth);
-    let hardOverset = title.hardOverset || source.hardOverset
-      || briefLabelWrapped.hardOverset || briefWrapped.hardOverset;
-    const items = rows.map((item) => {
-      const label = wrapSmartText(item.label, { width: labelWidth - 4, fontPx, family: 'serif', weight: 700 });
-      const value = wrapSmartText(item.value, { width: valueWidth - 4, fontPx, family: 'serif', weight: 700 });
-      const change = wrapSmartText(item.change || '', { width: changeWidth - 4, fontPx, family: 'serif', weight: 700 });
-      hardOverset ||= label.hardOverset || value.hardOverset || change.hardOverset;
-      const lineCount = Math.max(1, label.lines.length, value.lines.length, change.lines.length);
-      return {
-        labelLines: label.lines.map((line) => line.text),
-        valueLines: value.lines.map((line) => line.text),
-        changeLines: change.lines.map((line) => line.text),
-        direction: String(item.change || '').trim().startsWith('-') ? 'down' : String(item.change || '').trim().startsWith('+') ? 'up' : 'flat',
-        rowHeight: lineCount * lineHeightPx + 2,
-      };
-    });
+    hardOverset ||= briefLabelWrapped.hardOverset || briefWrapped.hardOverset
+      || noteWrapped.hardOverset || source.hardOverset;
+
     const titleLines = title.lines.map((line) => line.text);
-    const sourceLines = source.lines.map((line) => line.text);
     const briefLabelLines = briefLabelWrapped.lines.map((line) => line.text);
     const briefLines = briefWrapped.lines.map((line) => line.text);
-    const titleHeight = Math.max(1, titleLines.length) * titleLineHeightPx;
-    const sourceHeight = Math.max(1, sourceLines.length) * sourceLineHeightPx;
-    const rowsHeight = items.reduce((sum, item) => sum + item.rowHeight, 0);
+    const noteLines = noteWrapped.lines.map((line) => line.text);
+    const sourceLines = source.lines.map((line) => line.text);
+
+    const titleHeight = Math.max(1, titleLines.length) * titleLineHeightPx
+      + (asOf.line ? headLineHeightPx : 0);
+    const rowsHeight = items.reduce((sum, item) => sum + item.rowHeight, 0) + headHeight;
     const briefHeight = briefText
-      ? (briefLabelLines.length + briefLines.length) * lineHeightPx + 6
+      ? (briefLabelLines.length * headLineHeightPx + briefLines.length * lineHeightPx) + rowPadding * 4
       : 0;
-    const height = titleHeight + GAP_PX + rowsHeight
-      + (briefHeight ? GAP_PX + briefHeight : 0)
-      + GAP_PX + sourceHeight;
+    const noteHeight = noteLines.length * sourceLineHeightPx;
+    const sourceHeight = Math.max(1, sourceLines.length) * sourceLineHeightPx;
+
     return {
-      height, hardOverset, items, titleLines, sourceLines, briefLabelLines, briefLines,
-      titleHeight, sourceHeight, briefHeight,
-      titleFontPx, titleLineHeightPx, sourceFontPx, sourceLineHeightPx,
-      lineHeightPx, labelWidth, valueWidth, changeWidth, rowsHeight,
+      height: titleHeight + GAP_PX + rowsHeight
+        + (briefHeight ? GAP_PX + briefHeight : 0)
+        + (noteHeight ? 2 + noteHeight : 0)
+        + GAP_PX + sourceHeight,
+      hardOverset,
+      items,
+      titleLines,
+      asOfLine: asOf.line,
+      sourceLines,
+      noteLines,
+      briefLabelLines,
+      briefLines,
+      titleHeight,
+      sourceHeight,
+      noteHeight,
+      briefHeight,
+      briefInset,
+      headHeight,
+      titleFontPx,
+      titleLineHeightPx,
+      headFontPx,
+      headLineHeightPx,
+      unitFontPx,
+      sourceFontPx,
+      sourceLineHeightPx,
+      lineHeightPx,
+      labelWidth,
+      valueWidth,
+      changeWidth,
+      rowPadding,
+      rowsHeight,
     };
-  });
+  }, [14, 12, 11, 10, 9, 8, 7.5, 7, 6.5, 6, MIN_CARD_FONT_PX]);
 
   return {
-    key: 'market', fitState: solved.fitState, fontPx: solved.fontPx,
+    key: 'market',
+    fitState: solved.fitState,
+    fontPx: solved.fontPx,
     geometry: {
-      titleHeight: solved.titleHeight, sourceHeight: solved.sourceHeight,
-      titleFontPx: solved.titleFontPx, titleLineHeightPx: solved.titleLineHeightPx,
-      sourceFontPx: solved.sourceFontPx, sourceLineHeightPx: solved.sourceLineHeightPx,
-      lineHeightPx: solved.lineHeightPx, labelWidth: solved.labelWidth,
-      valueWidth: solved.valueWidth, changeWidth: solved.changeWidth, rowsHeight: solved.rowsHeight,
+      grouped,
+      groupOrder,
+      groupLabels: MARKET_GROUP_LABELS,
+      titleHeight: solved.titleHeight,
+      sourceHeight: solved.sourceHeight,
+      noteHeight: solved.noteHeight,
+      titleFontPx: solved.titleFontPx,
+      titleLineHeightPx: solved.titleLineHeightPx,
+      headFontPx: solved.headFontPx,
+      headLineHeightPx: solved.headLineHeightPx,
+      unitFontPx: solved.unitFontPx,
+      unitLineHeightPx: lineHeightFor(solved.unitFontPx, 'sans', 400),
+      sourceFontPx: solved.sourceFontPx,
+      sourceLineHeightPx: solved.sourceLineHeightPx,
+      lineHeightPx: solved.lineHeightPx,
+      labelWidth: solved.labelWidth,
+      valueWidth: solved.valueWidth,
+      changeWidth: solved.changeWidth,
+      rowPadding: solved.rowPadding,
+      rowsHeight: solved.rowsHeight,
       briefHeight: solved.briefHeight,
+      briefInset: solved.briefInset,
+      headHeight: solved.headHeight,
+      gap: GAP_PX,
     },
-    titleLines: solved.titleLines, sourceLines: solved.sourceLines,
-    briefLabelLines: solved.briefLabelLines, briefLines: solved.briefLines,
+    titleLines: solved.titleLines,
+    asOfLine: solved.asOfLine,
+    sourceLines: solved.sourceLines,
+    noteLines: solved.noteLines,
+    briefLabelLines: solved.briefLabelLines,
+    briefLines: solved.briefLines,
     items: solved.items,
     violations: solved.fitState === 'OVERSET' ? ['SMART_CARD_OVERSET'] : [],
   };
 }
 
 // ------------------------------------------------------------------ tender ---
+
+/**
+ * A PRINTED प्रकटपत्र, IN ITS OWN BANDS.
+ *
+ * The reference the desk supplied is a real Maharashtra government notice as
+ * this paper printed it, and its shape is not decoration - a reader and a
+ * pleader both look for the same things in the same places:
+ *
+ *   महाराष्ट्र शासन                      issuer, over
+ *   उपजिल्हाधिकारी (भूसंपादन) क्र. २१      the office, centred
+ *   ────────────────────────────────
+ *   Email ID : ...            पत्ता :- ...   a ruled band, two ends
+ *   ────────────────────────────────
+ *   क्रमांक: ...         सातारा. दिनांक- ...  a second ruled band
+ *   ────────────────────────────────
+ *   भुमि संपादन अधिनियम ... कलम २१          the legal subject, centred
+ *              प्रकटपत्र                    the title, large, centred
+ *   body paragraphs, justified, indented
+ *              परिशिष्ट                    the appendix title
+ *   गाव- ...     तालुका- ...     जिल्हा- ...  group heads over the table
+ *   [ the ruled table ]
+ *   ठिकाण :- ...                             place and date, left
+ *   दिनांक :- ...                  प्रवीण साळुंके      signatory, right
+ *                                   उपजिल्हाधिकारी      designation
+ *   जिमाका /सातारा/ ...                        footer note, left
+ *
+ * The previous layout had the fields but not the bands: contact sat at the
+ * foot as one plain line, there was no place/date pair, no appendix title, no
+ * group heads and no signature block - so a desk got a notice that carried the
+ * facts and did not look like the thing it is.
+ */
 
 // The formal rule, cell borders and fixed 2 px inner inset are real vertical
 // ink in the browser. They do not belong to any text line, but they still
@@ -1024,73 +1464,145 @@ function layoutMarket(data, frame) {
 // here prevents a mathematically FITS notice from clipping its signature.
 const TENDER_RENDER_ALLOWANCE_PX = 20;
 
+// THE NOTICE'S OWN FRAME IS REAL WIDTH, TOO.
+//
+// `.smart-card-tender` draws a 0.8 px rule and insets its type 2 px inside it,
+// on all four sides - so the corridor the copy actually has is 5.6 px narrower
+// than the block's content box. The solver measured against the full width and
+// every wrapped line came out 5.6 px too long: photographed on a real notice,
+// the right-hand end of every paragraph and the date band ran under the rule
+// and off the card. Charged here so the measured width is the drawn width.
+const TENDER_FRAME_INSET_PX = 2 + 0.8;
+
 function layoutTender(data, frame) {
   if (!data?.issuer || (!data?.subject && !Array.isArray(data?.paragraphs))) return empty('tender');
   const paragraphs = Array.isArray(data.paragraphs) ? data.paragraphs.filter(Boolean).slice(0, 12) : [];
   const tableHeaders = Array.isArray(data?.table?.headers) ? data.table.headers.filter((cell) => cell != null).slice(0, 6) : [];
   const tableRows = tableHeaders.length && Array.isArray(data?.table?.rows)
     ? data.table.rows.filter(Array.isArray).slice(0, 20) : [];
+  const tableGroups = Array.isArray(data?.tableGroups)
+    ? data.tableGroups.filter(Boolean).slice(0, 4) : [];
 
-  const solved = solveFont(frame.innerHeight, (fontPx) => {
+  // The corridor inside the notice's own rule and inset.
+  const noticeWidth = Math.max(1, frame.innerWidth - TENDER_FRAME_INSET_PX * 2);
+
+  const solved = solveFont(frame.innerHeight - TENDER_FRAME_INSET_PX * 2, (fontPx) => {
     const lineHeightPx = lineHeightFor(fontPx, 'serif', 400);
     const strongLineHeightPx = lineHeightFor(fontPx, 'serif', 700);
     const issuerFontPx = fontPx * 1.18;
     const issuerLineHeightPx = lineHeightFor(issuerFontPx, 'serif', 700);
-    const titleFontPx = fontPx * 1.55;
+    const titleFontPx = fontPx * 1.9;
     const titleLineHeightPx = lineHeightFor(titleFontPx, 'serif', 700);
+    const smallFontPx = Math.max(MIN_CARD_FONT_PX, fontPx * 0.88);
+    const smallLineHeightPx = lineHeightFor(smallFontPx, 'serif', 400);
     const gap = Math.max(2, fontPx * 0.45);
+    // A notice's paragraphs are set justified with an opening indent, the same
+    // way this paper sets its running copy.
+    const indentPx = fontPx * 1.6;
+    const bandPadY = Math.max(1.5, fontPx * 0.25);
     let hardOverset = false;
     const band = (text, width, size, weight = 400) => {
       const wrapped = wrapSmartText(text || '', { width, fontPx: size, family: 'serif', weight });
       hardOverset ||= wrapped.hardOverset;
       return wrapped.lines.map((line) => line.text);
     };
-    const issuerLines = band(data.issuer, frame.innerWidth, issuerFontPx, 700);
-    const officeLines = band(data.office, frame.innerWidth, fontPx, 400);
-    const metaWidth = Math.max(0, (frame.innerWidth - gap) / 2);
-    const referenceLines = band(data.reference, metaWidth, fontPx, 400);
-    const dateLines = band(data.date, metaWidth, fontPx, 400);
-    const subjectLines = band(data.subject, frame.innerWidth, fontPx, 700);
-    const titleLines = band(data.noticeTitle || 'निविदा सूचना', frame.innerWidth, titleFontPx, 700);
+
+    const issuerLines = band(data.issuer, noticeWidth, issuerFontPx, 700);
+    const officeLines = band(data.office, noticeWidth, fontPx, 700);
+
+    // Two ruled bands, each with a left end and a right end.
+    const halfWidth = Math.max(0, (noticeWidth - gap) / 2);
+    const emailLines = band(data.email ? `Email ID : ${data.email}` : '', halfWidth, smallFontPx, 400);
+    const addressLines = band(data.address ? `पत्ता :- ${data.address}` : '', halfWidth, smallFontPx, 400);
+    const referenceLines = band(data.reference, halfWidth, smallFontPx, 400);
+    const dateLines = band(data.date, halfWidth, smallFontPx, 400);
+
+    const subjectLines = band(data.subject, noticeWidth, fontPx, 700);
+    const titleLines = band(data.noticeTitle || 'प्रकटपत्र', noticeWidth, titleFontPx, 700);
+
+    // The first line of a paragraph is indented, so it is measured narrower.
     const paragraphItems = paragraphs.map((text) => {
-      const lines = band(text, frame.innerWidth, fontPx, 400);
-      return { lines, height: lines.length * lineHeightPx };
+      const wrapped = wrapSmartText(text || '', {
+        width: Math.max(1, noticeWidth - indentPx), fontPx, family: 'serif', weight: 400,
+      });
+      hardOverset ||= wrapped.hardOverset;
+      const lines = wrapped.lines.map((line) => line.text);
+      return { lines, height: lines.length * lineHeightPx, indentPx };
     });
 
     const columnCount = Math.max(1, tableHeaders.length);
-    const columnWidth = frame.innerWidth / columnCount;
+    const columnWidth = noticeWidth / columnCount;
+    const cellPadX = Math.max(1.5, fontPx * 0.22);
     const resolveCells = (cells, weight) => {
       const resolved = Array.from({ length: columnCount }, (_, index) =>
-        band(cells[index] || '', Math.max(0, columnWidth - 4), fontPx, weight));
-      return { cells: resolved, height: Math.max(1, ...resolved.map((lines) => lines.length)) * lineHeightPx + 3 };
+        band(cells[index] || '', Math.max(0, columnWidth - cellPadX * 2), fontPx, weight));
+      return {
+        cells: resolved,
+        height: Math.max(1, ...resolved.map((lines) => lines.length)) * lineHeightPx + bandPadY * 2,
+      };
     };
+    const tableTitleLines = tableHeaders.length && data.tableTitle
+      ? band(data.tableTitle, noticeWidth, fontPx, 700) : [];
+    const groupWidth = tableGroups.length ? noticeWidth / tableGroups.length : 0;
+    const groupLines = tableGroups.map((text) => band(text, Math.max(0, groupWidth - 4), fontPx, 700));
+    const groupHeight = groupLines.length
+      ? Math.max(1, ...groupLines.map((lines) => lines.length)) * strongLineHeightPx + bandPadY
+      : 0;
     const table = tableHeaders.length ? {
-      columnCount, columnWidth,
+      columnCount, columnWidth, cellPadX,
       header: resolveCells(tableHeaders, 700),
       rows: tableRows.map((row) => resolveCells(row, 400)),
     } : null;
-    const contactLines = band(data.contact, frame.innerWidth, fontPx, 400);
-    const signatoryLines = band(data.signatory, frame.innerWidth * 0.48, fontPx, 700);
+
+    // The close: place and date on the left, the signature block on the right.
+    const placeLines = band(data.place ? `ठिकाण :- ${data.place}` : '', halfWidth, fontPx, 400);
+    const noticeDateLines = band(data.noticeDate ? `दिनांक :- ${data.noticeDate}` : '', halfWidth, fontPx, 400);
+    const signatoryLines = band(data.signatory, halfWidth, fontPx, 700);
+    const designationLines = band(data.signatoryDesignation, halfWidth, smallFontPx, 400);
+    const signOfficeLines = band(data.signatoryOffice, halfWidth, smallFontPx, 400);
+    const contactLines = band(data.contact, noticeWidth, smallFontPx, 400);
+    const footerLines = band(data.footerNote, noticeWidth, smallFontPx, 400);
 
     const lineBlock = (lines, lineHeight) => lines.length * lineHeight;
-    const metaHeight = Math.max(referenceLines.length, dateLines.length) * lineHeightPx;
+    const contactBandHeight = (emailLines.length || addressLines.length)
+      ? Math.max(emailLines.length, addressLines.length) * smallLineHeightPx + bandPadY * 2 : 0;
+    const referenceBandHeight = (referenceLines.length || dateLines.length)
+      ? Math.max(referenceLines.length, dateLines.length) * smallLineHeightPx + bandPadY * 2 : 0;
     const tableHeight = table ? table.header.height + table.rows.reduce((sum, row) => sum + row.height, 0) : 0;
+    const closeLeft = lineBlock(placeLines, lineHeightPx) + lineBlock(noticeDateLines, lineHeightPx);
+    const closeRight = lineBlock(signatoryLines, strongLineHeightPx)
+      + lineBlock(designationLines, smallLineHeightPx)
+      + lineBlock(signOfficeLines, smallLineHeightPx);
+    const closeHeight = Math.max(closeLeft, closeRight);
+
     const height = lineBlock(issuerLines, issuerLineHeightPx)
-      + lineBlock(officeLines, lineHeightPx)
-      + (metaHeight ? metaHeight + gap : 0)
+      + lineBlock(officeLines, strongLineHeightPx)
+      + contactBandHeight
+      + referenceBandHeight
+      + gap
       + lineBlock(subjectLines, strongLineHeightPx)
       + lineBlock(titleLines, titleLineHeightPx)
+      + gap
       + paragraphItems.reduce((sum, item) => sum + item.height + gap, 0)
+      + (tableTitleLines.length ? lineBlock(tableTitleLines, strongLineHeightPx) : 0)
+      + groupHeight
       + (tableHeight ? tableHeight + gap : 0)
-      + lineBlock(contactLines, lineHeightPx)
-      + lineBlock(signatoryLines, strongLineHeightPx)
-      + gap * 4
+      + lineBlock(contactLines, smallLineHeightPx)
+      + (closeHeight ? closeHeight + gap : 0)
+      + lineBlock(footerLines, smallLineHeightPx)
+      + gap * 2
       + TENDER_RENDER_ALLOWANCE_PX;
+
     return {
-      height, hardOverset, issuerLines, officeLines, referenceLines, dateLines,
-      subjectLines, titleLines, paragraphItems, table, contactLines, signatoryLines,
-      lineHeightPx, strongLineHeightPx, issuerFontPx, issuerLineHeightPx,
-      titleFontPx, titleLineHeightPx, gap,
+      height, hardOverset, issuerLines, officeLines, emailLines, addressLines,
+      referenceLines, dateLines, subjectLines, titleLines, paragraphItems,
+      tableTitleLines, groupLines, groupHeight, groupWidth, table,
+      placeLines, noticeDateLines, signatoryLines, designationLines, signOfficeLines,
+      contactLines, footerLines,
+      contactBandHeight, referenceBandHeight, closeHeight, halfWidth,
+      lineHeightPx, strongLineHeightPx, smallFontPx, smallLineHeightPx,
+      issuerFontPx, issuerLineHeightPx, titleFontPx, titleLineHeightPx,
+      gap, indentPx, bandPadY, cellPadX,
     };
   });
 
@@ -1098,14 +1610,151 @@ function layoutTender(data, frame) {
     key: 'tender', fitState: solved.fitState, fontPx: solved.fontPx,
     geometry: {
       lineHeightPx: solved.lineHeightPx, strongLineHeightPx: solved.strongLineHeightPx,
+      smallFontPx: solved.smallFontPx, smallLineHeightPx: solved.smallLineHeightPx,
       issuerFontPx: solved.issuerFontPx, issuerLineHeightPx: solved.issuerLineHeightPx,
-      titleFontPx: solved.titleFontPx, titleLineHeightPx: solved.titleLineHeightPx, gap: solved.gap,
+      titleFontPx: solved.titleFontPx, titleLineHeightPx: solved.titleLineHeightPx,
+      gap: solved.gap, indentPx: solved.indentPx, bandPadY: solved.bandPadY,
+      cellPadX: solved.cellPadX, halfWidth: solved.halfWidth,
+      noticeWidth, frameInsetPx: TENDER_FRAME_INSET_PX,
+      contactBandHeight: solved.contactBandHeight,
+      referenceBandHeight: solved.referenceBandHeight,
+      groupHeight: solved.groupHeight, groupWidth: solved.groupWidth,
+      closeHeight: solved.closeHeight,
     },
     issuerLines: solved.issuerLines, officeLines: solved.officeLines,
+    emailLines: solved.emailLines, addressLines: solved.addressLines,
     referenceLines: solved.referenceLines, dateLines: solved.dateLines,
     subjectLines: solved.subjectLines, titleLines: solved.titleLines,
-    paragraphItems: solved.paragraphItems, table: solved.table,
-    contactLines: solved.contactLines, signatoryLines: solved.signatoryLines,
+    paragraphItems: solved.paragraphItems,
+    tableTitleLines: solved.tableTitleLines, groupLines: solved.groupLines,
+    table: solved.table,
+    placeLines: solved.placeLines, noticeDateLines: solved.noticeDateLines,
+    signatoryLines: solved.signatoryLines, designationLines: solved.designationLines,
+    signOfficeLines: solved.signOfficeLines,
+    contactLines: solved.contactLines, footerLines: solved.footerLines,
+    violations: solved.fitState === 'OVERSET' ? ['SMART_CARD_OVERSET'] : [],
+  };
+}
+
+/**
+ * A DISPLAY ADVERTISEMENT.
+ *
+ * The one card on this paper whose words are not the newspaper's own, and it
+ * is set the way an advert desk sets one: a ruled panel, the advertiser's
+ * name as a small head, the shout line as large as the panel will carry, a
+ * standfirst under it, the detail as short lines, the offer in a reversed
+ * flash, and the contact on a rule at the foot. The artwork - supplied or
+ * generated - takes a share of the panel at the top and the type sets under
+ * it, so the advert reads as one object rather than a picture with words
+ * beside it.
+ *
+ * Every band is optional. An advert with nothing but a name and a telephone
+ * number is a real advert and must set cleanly.
+ */
+const ADVERT_IMAGE_SHARE = 0.42;
+
+function layoutAdvert(data, frame) {
+  const headlineText = String(data?.headline || '').trim();
+  const advertiserText = String(data?.advertiser || '').trim();
+  const lines = Array.isArray(data?.lines) ? data.lines.filter(Boolean).slice(0, 8) : [];
+  if (!headlineText && !advertiserText && !lines.length) return empty('advert');
+
+  const imageUrl = String(data?.imageUrl || '').trim();
+  const inset = Math.max(3, frame.innerWidth * 0.035);
+  const measureWidth = Math.max(1, frame.innerWidth - inset * 2);
+  // The picture's own share of the panel, reserved before the type is solved
+  // so the words are never measured against room the artwork is holding.
+  const imageHeight = imageUrl ? Math.round(frame.innerHeight * ADVERT_IMAGE_SHARE) : 0;
+  const typeHeight = Math.max(0, frame.innerHeight - imageHeight);
+
+  const solved = solveFont(typeHeight, (fontPx) => {
+    const lineHeightPx = lineHeightFor(fontPx, 'serif', 400);
+    const shoutFontPx = fontPx * 2.1;
+    const shoutLineHeightPx = lineHeightFor(shoutFontPx, 'sans', 700);
+    const nameFontPx = Math.max(MIN_CARD_FONT_PX, fontPx * 0.92);
+    const nameLineHeightPx = lineHeightFor(nameFontPx, 'sans', 700);
+    const standFontPx = fontPx * 1.1;
+    const standLineHeightPx = lineHeightFor(standFontPx, 'serif', 400);
+    const smallFontPx = Math.max(MIN_CARD_FONT_PX, fontPx * 0.86);
+    const smallLineHeightPx = lineHeightFor(smallFontPx, 'sans', 400);
+    const rowGap = Math.max(1.5, fontPx * 0.28);
+
+    const wrap = (text, size, family, weight) => wrapSmartText(String(text || ''), {
+      width: measureWidth, fontPx: size, family, weight,
+    });
+
+    const name = wrap(advertiserText, nameFontPx, 'sans', 700);
+    const shout = wrap(headlineText, shoutFontPx, 'sans', 700);
+    const stand = wrap(data?.subheadline, standFontPx, 'serif', 400);
+    const detail = lines.map((text) => wrap(text, fontPx, 'serif', 400));
+    const offer = wrap(data?.offer, fontPx, 'sans', 700);
+    const contact = wrap(data?.contact, smallFontPx, 'sans', 700);
+    const address = wrap(data?.address, smallFontPx, 'sans', 400);
+    const footer = wrap(data?.footer, smallFontPx, 'serif', 400);
+
+    const hardOverset = [name, shout, stand, offer, contact, address, footer, ...detail]
+      .some((wrapped) => wrapped.hardOverset);
+
+    const nameLines = name.lines.map((l) => l.text);
+    const shoutLines = shout.lines.map((l) => l.text);
+    const standLines = stand.lines.map((l) => l.text);
+    const detailLines = detail.flatMap((wrapped) => wrapped.lines.map((l) => l.text));
+    const offerLines = offer.lines.map((l) => l.text);
+    const contactLines = contact.lines.map((l) => l.text);
+    const addressLines = address.lines.map((l) => l.text);
+    const footerLines = footer.lines.map((l) => l.text);
+
+    const offerHeight = offerLines.length ? offerLines.length * lineHeightPx + rowGap * 2 : 0;
+    const height = nameLines.length * nameLineHeightPx
+      + (shoutLines.length ? rowGap + shoutLines.length * shoutLineHeightPx : 0)
+      + (standLines.length ? standLines.length * standLineHeightPx : 0)
+      + (detailLines.length ? rowGap + detailLines.length * lineHeightPx : 0)
+      + (offerHeight ? rowGap + offerHeight : 0)
+      + (contactLines.length ? rowGap + contactLines.length * smallLineHeightPx : 0)
+      + addressLines.length * smallLineHeightPx
+      + (footerLines.length ? rowGap + footerLines.length * smallLineHeightPx : 0);
+
+    return {
+      height, hardOverset,
+      nameLines, shoutLines, standLines, detailLines, offerLines,
+      contactLines, addressLines, footerLines,
+      lineHeightPx, shoutFontPx, shoutLineHeightPx, nameFontPx, nameLineHeightPx,
+      standFontPx, standLineHeightPx, smallFontPx, smallLineHeightPx,
+      offerHeight, rowGap,
+    };
+  }, [24, 20, 18, 16, 14, 12, 11, 10, 9, 8, 7.5, 7, 6.5, 6, MIN_CARD_FONT_PX]);
+
+  return {
+    key: 'advert',
+    fitState: solved.fitState,
+    fontPx: solved.fontPx,
+    geometry: {
+      inset,
+      measureWidth,
+      imageUrl,
+      imageHeight,
+      typeHeight,
+      lineHeightPx: solved.lineHeightPx,
+      shoutFontPx: solved.shoutFontPx,
+      shoutLineHeightPx: solved.shoutLineHeightPx,
+      nameFontPx: solved.nameFontPx,
+      nameLineHeightPx: solved.nameLineHeightPx,
+      standFontPx: solved.standFontPx,
+      standLineHeightPx: solved.standLineHeightPx,
+      smallFontPx: solved.smallFontPx,
+      smallLineHeightPx: solved.smallLineHeightPx,
+      offerHeight: solved.offerHeight,
+      rowGap: solved.rowGap,
+      aiArtwork: Boolean(data?.aiArtwork),
+    },
+    nameLines: solved.nameLines,
+    shoutLines: solved.shoutLines,
+    standLines: solved.standLines,
+    detailLines: solved.detailLines,
+    offerLines: solved.offerLines,
+    contactLines: solved.contactLines,
+    addressLines: solved.addressLines,
+    footerLines: solved.footerLines,
     violations: solved.fitState === 'OVERSET' ? ['SMART_CARD_OVERSET'] : [],
   };
 }
@@ -1122,6 +1771,7 @@ const LAYOUTS = {
   havaman: layoutHavaman,
   market: layoutMarket,
   tender: layoutTender,
+  advert: layoutAdvert,
   chart: layoutChart,
 };
 
@@ -1191,6 +1841,46 @@ export function layoutSmartCard(key, data, frame) {
     exactShaping: isShaperReady(),
     violations: fitState === 'OVERSET' ? ['SMART_CARD_OVERSET'] : [],
   };
+}
+
+/**
+ * THE BLOCK A CARD WANTS, WHEN IT IS BRINGING ITS OWN.
+ *
+ * A Smart Card used to be poured into whatever block the desk had already
+ * selected, which put the work in the wrong order: a sub-editor had to go and
+ * find - or make, and size - a frame before they could see what the card even
+ * looked like. The desk's report: "rather than fixing smart blocks at layout,
+ * after generating a smart block it will generate a new block with all data
+ * already filled in."
+ *
+ * So each card states the frame a printed paper actually gives it, in block
+ * pixels (2 px = 1 mm). These are the shapes, not arbitrary numbers:
+ *
+ *   panchang / rashi   a tall single column - a table read down
+ *   suvichar           a wide, shallow strip - one quote across a measure
+ *   dinvishesh         the same strip, a little deeper for two entries
+ *   sudoku             SQUARE, because the puzzle is
+ *   havaman / market   a single column panel
+ *   tender             a whole leg of a page - a statutory notice is long
+ *   advert             a display rectangle, the commonest booked size
+ *
+ * A caller may still override; this is the default a desk gets for free.
+ */
+export const SMART_CARD_BLOCK_SIZE = Object.freeze({
+  panchang: { width: 148, height: 300 },
+  rashi: { width: 268, height: 360 },
+  suvichar: { width: 268, height: 150 },
+  dinvishesh: { width: 268, height: 190 },
+  sudoku: { width: 232, height: 268 },
+  havaman: { width: 148, height: 250 },
+  market: { width: 148, height: 300 },
+  tender: { width: 300, height: 620 },
+  advert: { width: 268, height: 300 },
+  chart: { width: 268, height: 240 },
+});
+
+export function smartCardBlockSize(key) {
+  return SMART_CARD_BLOCK_SIZE[String(key || '')] || { width: 268, height: 260 };
 }
 
 export const SMART_CARD_LAYOUT_KEYS = Object.keys(LAYOUTS);

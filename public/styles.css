@@ -3510,7 +3510,9 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 .smart-card-table th,
 .smart-card-table td {
   border-bottom: 0.4px solid #d8d8de;
-  padding: 0.15em 0.3em;
+  /* NO padding here. It is written inline from layoutPanchang()'s own
+     cellPadX/cellPadY, because an em padding the solver cannot see is exactly
+     how this card came to report FITS while clipping its last row. */
   line-height: var(--devanagari-line);
   text-align: left;
   vertical-align: top;
@@ -3583,16 +3585,24 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 .smart-card-rashi .smart-card-line,
 .smart-card-list .smart-card-line { overflow: visible; }
 
+/* THE STANDING CARDS ARE RULED IN THEIR OWN STYLE.
+   The desk asked for a border on पंचांग and राशीभविष्य "according to its
+   style", and a printed almanac or horoscope box always carries one: a double
+   rule in the paper's accent, heavy outside and hairline inside, which is what
+   distinguishes a standing feature from an ordinary story block. Drawn with
+   two box-shadow rings so it costs no layout width - the solver's own measure
+   is unchanged and no card recomposes. */
 .smart-card-panchang .smart-card-content,
+.smart-card-rashi .smart-card-content,
 .smart-card-dinvishesh .smart-card-content {
   border-top: 0.7px solid #8a1428;
 }
-.smart-card-panchang .smart-card-content {
-  box-shadow: inset 0 0 0 0.7px #8a1428;
+.smart-card-panchang .smart-card-content,
+.smart-card-rashi .smart-card-content {
+  box-shadow: inset 0 0 0 0.6px #8a1428, inset 0 0 0 2.2px #fff, inset 0 0 0 2.8px #8a1428;
 }
 .smart-card-panchang .smart-card-table th,
 .smart-card-panchang .smart-card-table td {
-  padding: 0 0.35em;
   vertical-align: middle;
 }
 .smart-card-panchang .smart-card-table th {
@@ -3607,20 +3617,68 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 .smart-card-panchang .smart-card-table tr:nth-child(even) td { background: #fcf8f3; }
 .smart-card-panchang .smart-card-table tr:last-child th,
 .smart-card-panchang .smart-card-table tr:last-child td { border-bottom-color: #8a1428; }
-.smart-card-panchang .smart-card-table tr th { transform: translateY(var(--row-text-nudge, 0)); }
+.smart-card-panchang .panchang-label {
+  display: block;
+  transform: translateY(var(--row-text-nudge, 0));
+}
 
 .smart-card-suvichar { box-shadow: inset 0 0.6px #8a1428, inset 0 -0.6px #8a1428; }
-.smart-card-quote { margin: 0; display: flex; align-items: center; justify-content: flex-start; height: 100%; text-align: left; }
-.smart-card-quote p { margin: 0; font-style: normal; font-weight: 700; line-height: var(--devanagari-line); white-space: nowrap; }
-.smart-card-quote cite { font-style: normal; font-weight: 600; color: #5c5c66; }
+.smart-card-suvichar .smart-card-content { justify-content: center; }
+/* THE THOUGHT FOR THE DAY, SET AS A PULL QUOTE.
+   It used to be one nowrap row pinned to the left of a flex box - so the whole
+   sentence had to shrink until it fitted on a single line, and the block stood
+   better than half empty under it. The lines are wrapped and centred by
+   layoutSuvichar() now; this only paints them. */
+.smart-card-quote {
+  margin: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-sizing: border-box;
+}
+.smart-card-quote-text {
+  margin: 0;
+  font-style: normal;
+  font-weight: 700;
+  color: #1b1b20;
+}
+/* The short centred rule between the words and their credit - what makes the
+   standing head above, the quote and the attribution read as one column. */
+.smart-card-quote-rule {
+  display: block;
+  height: 0.7px;
+  background: #8a1428;
+}
+.smart-card-quote-credit {
+  display: block;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #6a5559;
+}
 
+/* दिनविशेष: the entries fill the box under their standing head rather than
+   sitting at the top of it with the rest of the block white. `align-content:
+   center` spreads them on the card's own axis - the solver's heights are
+   unchanged, so nothing recomposes; this only decides where the solved block
+   sits inside the room it was given. */
 .smart-card-list {
   position: relative;
   margin: 0;
   padding: 0;
+  height: 100%;
   display: grid;
+  /* See .smart-card-tender-copy: an auto track sizes to a nowrap line's full
+     min-content width and overflows the card. */
+  grid-template-columns: minmax(0, 1fr);
+  align-content: center;
   list-style: none;
   line-height: var(--devanagari-line);
+  font-weight: 600;
+  color: #201b1c;
 }
 .smart-card-list::before {
   content: "";
@@ -3666,23 +3724,53 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   border-left: 0.42em solid #8a1428;
 }
 
-.smart-card-weather-grid { display: grid; min-height: 0; }
-.smart-card-weather-city {
-  position: relative;
+/* THE FORECAST PANEL. One city led by its own figures - which is what a
+   printed weather box is - rather than four small centred lines adrift in a
+   250px cell, which is what the grid layout produced for this paper's ordinary
+   single-district case. */
+.smart-card-weather-solo {
   display: flex;
   flex-direction: column;
+  align-items: center;
   justify-content: center;
-  min-width: 0;
-  padding: 0.35em 0.5em 0.3em 0.65em;
-  border: 0.5px solid #d8c4c8;
-  border-left: 2px solid #8a1428;
-  background: linear-gradient(90deg, #fff7f7 0, #fff 58%);
+  height: 100%;
+  text-align: center;
+  box-sizing: border-box;
+  border-top: 0.8px solid #8a1428;
+  border-bottom: 0.8px solid #8a1428;
+  background: linear-gradient(180deg, #fff7f7 0, #fff 46%);
+}
+.smart-card-weather-place { display: block; color: #8a1428; font-weight: 700; }
+.smart-card-weather-condition { display: block; color: #4a4147; }
+.smart-card-weather-figures {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 100%;
+}
+.smart-card-weather-figure {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   box-sizing: border-box;
 }
-.smart-card-weather-city strong { color: #8a1428; font-weight: 700; }
-.smart-card-weather-city span { display: block; }
-.smart-card-weather-city .weather-temperature { font-weight: 700; }
-.smart-card-weather-city .weather-rain { color: #5e5052; }
+.smart-card-weather-figure b { font-weight: 700; font-variant-numeric: lining-nums; }
+.smart-card-weather-figure span { color: #6b6264; letter-spacing: 0.02em; }
+.smart-card-weather-figure.is-max b { color: #8a1428; }
+.smart-card-weather-figure.is-min b { color: #33506e; }
+.smart-card-weather-rain { display: block; color: #5e5052; }
+
+/* Several districts: one ruled row each, as a paper prints a district table. */
+.smart-card-weather-table { display: flex; flex-direction: column; height: 100%; }
+.smart-card-weather-row {
+  display: flex;
+  align-items: baseline;
+  box-sizing: border-box;
+  border-bottom: 0.4px solid #d8c4c8;
+}
+.smart-card-weather-row strong { color: #8a1428; font-weight: 700; }
+.smart-card-weather-row b { font-weight: 700; text-align: right; padding-right: 6px; }
+.smart-card-weather-row span { color: #5e5052; }
 .smart-card-weather-source {
   margin: 6px 0 0;
   color: #6b6264;
@@ -3702,8 +3790,26 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   color: #8a1428;
   font-weight: 700;
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
+.smart-card-market h3 small { display: block; color: #7a6266; font-weight: 600; }
 .smart-card-market-rows { border: 0.6px solid #cdaeb4; }
+/* A group head over its own rows - निर्देशांक, then सराफा बाजार. An index in
+   points and a metal in rupees per १० ग्रॅम are not the same kind of number,
+   and a reader should not have to infer that from the label. */
+.smart-card-market-head {
+  display: flex;
+  align-items: center;
+  padding: 0 0.35em;
+  background: #f4e8ea;
+  border-bottom: 0.4px solid #ddcbd0;
+  color: #8a1428;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  box-sizing: border-box;
+}
 .smart-card-market-row {
   display: flex;
   align-items: center;
@@ -3713,21 +3819,31 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 .smart-card-market-row:last-child { border-bottom: 0; }
 .smart-card-market-row > * { padding: 0 0.35em; box-sizing: border-box; }
 .smart-card-market-row > * + * { border-left: 0.4px solid #ddcbd0; }
-.smart-card-market-row strong { color: #4f3036; }
+.smart-card-market-row strong { color: #4f3036; display: flex; align-items: baseline; gap: 0.3em; }
+.smart-card-market-row strong i { font-style: normal; color: #857074; }
 .smart-card-market-row b { text-align: right; font-variant-numeric: tabular-nums; }
-.smart-card-market-row .market-change { text-align: right; font-weight: 700; }
-.smart-card-market-row .market-change.is-up { color: #237548; }
-.smart-card-market-row .market-change.is-down { color: #a51d34; }
+/* The move: one line, the direction mark with the percentage - and the change
+   in the instrument's own unit ahead of it where the column can hold both.
+   layoutMarket() decides which, by measuring; stacking the two was measured in
+   the running DOM rendering 40px inside a 29px row on every row. */
+.smart-card-market-row .market-change {
+  text-align: right;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.smart-card-market-row.is-up .market-change { color: #237548; }
+.smart-card-market-row.is-down .market-change { color: #a51d34; }
+.smart-card-market-row.is-flat .market-change { color: #6b6264; }
 .smart-card-market-brief {
   margin-top: 6px;
-  padding: 3px 5px;
   border-left: 2px solid #8a1428;
   background: #f7f1f2;
   box-sizing: border-box;
   color: #342a2c;
 }
-.smart-card-market-brief strong { display: block; color: #8a1428; }
+.smart-card-market-brief strong { display: block; color: #8a1428; letter-spacing: 0.03em; }
 .smart-card-market-brief p { margin: 0; }
+.smart-card-market-note { margin: 2px 0 0; color: #7a6266; }
 .smart-card-market-source { margin: 6px 0 0; color: #6b6264; text-align: right; }
 
 .smart-card-tender {
@@ -3751,14 +3867,37 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 .smart-card-tender h4 { font-weight: 700; }
 .smart-card-tender h2 { margin: var(--tender-gap) 0; color: #111; font-weight: 700; text-align: center; }
 .smart-card-tender h4 { margin-top: var(--tender-gap); text-align: center; }
-.smart-card-tender-meta { display: flex; justify-content: space-between; gap: var(--tender-gap); margin-top: 0; }
-.smart-card-tender-meta span { width: 50%; }
-.smart-card-tender-meta span:last-child { text-align: right; }
-.smart-card-tender-copy { display: grid; gap: var(--tender-gap); text-align: justify; }
-.smart-card-tender-table { width: 100%; margin-top: var(--tender-gap); border-collapse: collapse; table-layout: fixed; }
+/* The two ruled bands under the office: the email opposite the address, and
+   the outward number opposite the place and date. A printed government notice
+   sets both as full-width rules, not as a floating pair of lines. */
+.smart-card-tender-band {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 0.5px solid #777;
+  box-sizing: border-box;
+}
+.smart-card-tender-band span:last-child { text-align: right; }
+.smart-card-tender h5 { margin: var(--tender-gap) 0 0; font-weight: 700; text-align: center; }
+/* गाव- / तालुका- / जिल्हा- over the appendix. */
+.smart-card-tender-groups { display: flex; justify-content: space-between; font-weight: 700; text-align: center; }
+/* `minmax(0, 1fr)`, not the default `auto`.
+   Every composed line is `white-space: nowrap` (it was wrapped by the solver
+   and must never be re-broken here), so its MIN-CONTENT width is the whole
+   line - and an `auto` grid track sizes to min-content, which let the track
+   grow past the notice and every paragraph run 11 px off the right-hand rule.
+   Measured in the running DOM: container 382 px, line box 401 px. A `0`
+   minimum is what tells the track it may be narrower than its contents. */
+.smart-card-tender-copy {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--tender-gap);
+  text-align: justify;
+}
+.smart-card-tender-table { width: 100%; margin-top: 2px; border-collapse: collapse; table-layout: fixed; }
 .smart-card-tender-table th,
 .smart-card-tender-table td {
-  padding: 0.2em 0.3em;
+  /* Inset written inline from the solver's own cellPadX/bandPadY - an em
+     padding here is a second number the solver cannot see. */
   border: 0.5px solid #777;
   box-sizing: border-box;
   text-align: left;
@@ -3766,7 +3905,109 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 }
 .smart-card-tender-table th { background: #f2eded; font-weight: 700; text-align: center; }
 .smart-card-tender-contact { margin-top: var(--tender-gap) !important; }
-.smart-card-tender-signatory { width: 48%; margin: var(--tender-gap) 0 0 auto !important; font-weight: 700; text-align: center; }
+/* The close: place and date at the left, the signature block at the right -
+   name over designation over office, which is how a notice is signed. */
+.smart-card-tender-close {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-top: var(--tender-gap);
+}
+.smart-card-tender-place { text-align: left; }
+.smart-card-tender-sign { text-align: center; }
+.smart-card-tender-sign strong { display: block; font-weight: 700; }
+.smart-card-tender-sign span { display: block; }
+.smart-card-tender-footer { margin-top: var(--tender-gap) !important; text-align: left; }
+
+/* THE DISPLAY ADVERTISEMENT. A ruled panel: the advertiser's name as a small
+   head, the shout line, a standfirst, the detail, the offer reversed out of
+   the paper's accent, and the contact on a rule at the foot. */
+.smart-card-advert {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  box-sizing: border-box;
+  border: 1.2px solid #202024;
+  background: #fff;
+  color: #171719;
+  overflow: hidden;
+}
+.smart-card-advert-art { position: relative; width: 100%; flex: 0 0 auto; overflow: hidden; }
+.smart-card-advert-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* A generated illustration always says so. A reader cannot tell, and the desk
+   must never lose track of which pictures this paper made. */
+.smart-card-advert-ai {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  padding: 0 3px;
+  font: 700 6px/1.6 sans-serif;
+  letter-spacing: 0.08em;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+}
+.smart-card-advert-type {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-sizing: border-box;
+}
+.smart-card-advert-name {
+  display: block;
+  color: #8a1428;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.smart-card-advert-shout { display: block; font-weight: 700; color: #101014; }
+.smart-card-advert-stand { display: block; color: #3d3439; }
+.smart-card-advert-detail { display: block; color: #2a2427; }
+/* The offer, reversed - which is what a printed advert does with the one line
+   it wants a reader to see from across the page. */
+.smart-card-advert-offer {
+  display: block;
+  align-self: stretch;
+  box-sizing: border-box;
+  font-weight: 700;
+  color: #fff;
+  background: #8a1428;
+}
+.smart-card-advert-contact {
+  display: block;
+  align-self: stretch;
+  padding-top: 2px;
+  border-top: 0.6px solid #8a1428;
+  font-weight: 700;
+}
+.smart-card-advert-address { display: block; color: #4a4147; }
+.smart-card-advert-footer { display: block; color: #6b6264; }
+
+.smart-card-artwork { margin-top: 8px; border: 0; padding: 0; }
+.smart-card-artwork legend {
+  padding: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #6b6264;
+}
+.smart-card-check { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 0.76rem; }
+
+/* WHERE THE CARD LANDS. A pill pair, like the rashi variant control beside it,
+   so the two read as the same kind of choice. */
+.smart-card-destination { margin-top: 8px; border: 0; padding: 0; }
+.smart-card-destination legend {
+  padding: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #6b6264;
+}
 
 /* A card too small for its own block - still drawn at a legible minimum
    (layout.js clamps rather than shrinking past it), flagged rather than

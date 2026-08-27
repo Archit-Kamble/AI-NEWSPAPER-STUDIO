@@ -4,6 +4,97 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 1b. Every Smart Card set the way a printed paper sets it (2026-08-27)
+
+On `smart-card-styling`. All nine cards were drawn at real newspaper size and
+photographed; everything below was measured in the running browser.
+
+**The solver's inset must BE the rendered inset.** Three cards carried an `em`
+padding the stylesheet applied and `layoutSmartCard()` could not see, and each
+reported `FITS` while the browser drew past the block. पंचांग's cells cost
+14.4 px of width the value column never had — the solver put every value on one
+line, the browser wrapped दिनमान and pushed शके off the bottom. The notice's own
+0.8 px rule and 2 px inset cost 5.6 px, so every paragraph ran past the rule.
+And `.smart-card-tender-copy` was a grid with an `auto` track: a composed line
+is `white-space: nowrap`, so its min-content width is the whole line and the
+track sized to it — container 382 px, line box **401 px**. All three are now
+one number, computed by the solver and written inline.
+
+**The sudoku's rules never reached the plate.** The export emitted the eighty-one
+numerals and no grid at all — the browser drew them as CSS borders, so they
+existed on screen and in no export. Measured: `bar=1` for a puzzle the canvas
+draws with twenty. Ten verticals, ten horizontals, two weights, and the numerals
+now placed from the grid's own centred origin (they were set from x=0 while the
+canvas centres the table, so they were offset in every export too).
+
+**Swept canvas-against-export across all nine cards afterwards: 0 texts missing
+from any export**, images 1:1, and every card that draws a rule emits one —
+sudoku 1 → 21 bars, पंचांग 17 → 25, निविदा 5 → 17.
+
+**Card by card.** सुविचार was solved as one atomic line, so a long thought could
+only fit by shrinking: 8 px beside an inline mark with half the block white. It
+is a wrapped, centred pull quote at 24–28 px now. हवामान centred four small
+lines in a cell the height of the whole block — the desk's "havaman is not
+working", while the builder was fetching real Open-Meteo data correctly the
+whole time; it is a forecast panel led by its figures. शेअर/सोने listed bullion
+in **dollars per troy ounce**, which no Marathi paper sets; it is ₹ per १० ग्रॅम
+and per किलो, grouped, with ▲▼ and an honest note that the rate is derived from
+the international close. Its rate rows also rendered 40 px inside a 29 px row
+and bled through the rule — one line per row now, and 9 px → 11 px for it.
+निविदा gained the bands a real प्रकटपत्र carries, against the reference the
+desk supplied. दिनविशेष's wordmark took 0.37 of the block before an entry was
+set (now 0.16), and its table held 24 dates — the box was empty on ~93% of the
+year, now ~19%; the added entries are curated and want a desk's eye.
+
+**A close of zero is not a price.** `Number.isFinite` let one through: the FX
+feed returned `INR=X` close 0 for the newest session and the card went out
+reading सोने ₹० and −१००.००%.
+
+**A Smart Card brings its own block.** `SMART_CARD_BLOCK_SIZE` states the frame
+a printed paper gives each card; generating one creates that block and writes
+the card straight into it. The page grid still wins — a 148×300 request that
+lands as 151×264 still composes FITS, which is what the catalogue guarantees.
+
+**A display advertisement card**, new: the advertiser's own copy structured into
+the parts an advert has, forbidden from inventing a price, date or telephone
+number; artwork supplied or generated, the generated one briefed without text
+(generated Devanagari is unreadable) and marked AI on the card.
+
+`npm test` **974/974**. New: `tests/advertCard.test.js`,
+`tests/smartCardBlocks.test.js`, `tests/browser/smart-cards.browser.js`
+(**27/27** — every card at its own size, nothing crossing its block's edges,
+and the new-block placement driven end to end).
+
+**The cards this paper should have next**, in the order they would earn their
+keep for a Satara daily — proposed, not built:
+
+1. **आजचे बाजारभाव — कृषी उत्पन्न बाजार समिती.** The most-read table in a rural
+   Marathi daily: कांदा, टोमॅटो, ज्वारी, सोयाबीन, हरभरा — किमान / कमाल / सरासरी
+   per quintal for the local market yard. Maharashtra publishes this
+   (MSAMB / Agmarknet), so it is a real feed on the same footing as the weather
+   and the market card, and it is about this paper's own ground rather than
+   Mumbai's. Strongest single addition.
+2. **श्रद्धांजली / मृत्युनोंद.** A paid, highly formulaic block — photograph,
+   name, dates, the family's line, the mourners' names. Same shape as the
+   notice card: a family sends a message, the desk sets it. Real revenue.
+3. **अभीष्टचिंतन / वाढदिवस.** The same machinery, high volume, also paid.
+4. **आपत्कालीन दूरध्वनी.** Standing public-service furniture — रुग्णवाहिका,
+   पोलीस, अग्निशमन, रक्तपेढी, वीज तक्रार. Changes rarely, prints daily, needs
+   no feed at all: publication settings, not a generator.
+5. **पाणीपुरवठा / भारनियमन सूचना.** Hyper-local utility notices, operator-pasted
+   exactly like the tender.
+6. **शब्दकोडे.** A deterministic sibling of the sudoku — same date-seeded
+   generation, same grid geometry — but it needs a checked Marathi clue set
+   before it can be honest, which is a content job rather than a code one.
+
+**Still open, and deliberately:** the दिनविशेष table covers a fifth of the year,
+not all of it; a curated table only grows by somebody checking entries. The
+generated-advert artwork path is unverified against a live provider for the same
+reason `newsImage.service.js` already records — this account has no image quota;
+the refusal path is exercised and the success path is not.
+
+---
+
 ## 1a. Eight faults found by driving a brand-new edition (2026-08-26)
 
 A fresh 4-page fixture edition (**49291**, 2099-07-04) was started, filled with

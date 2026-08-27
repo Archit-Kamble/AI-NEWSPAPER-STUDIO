@@ -22,8 +22,9 @@
 //
 //   feed       a number from outside that must be true. सोन्याचे भाव, बाजारभाव,
 //              हवामान, शेअर बाजार. A feed only runs after a real provider is
-//              connected; Havaman now uses Open-Meteo while the other two stay
-//              unavailable. Inventing a rate is not a feature, it is a false
+//              connected; Havaman uses Open-Meteo and the combined Share/Gold
+//              card reads completed market sessions. The remaining specialist
+//              feeds stay unavailable. Inventing a rate is not a feature, it is a false
 //              statement printed over the masthead.
 
 const panchang = require('./panchang');
@@ -31,6 +32,9 @@ const dinvishesh = require('./dinvishesh');
 const written = require('./written');
 const sudoku = require('./sudoku');
 const havaman = require('./havaman');
+const market = require('./market');
+const tender = require('./tender');
+const advert = require('./advert');
 
 const catalogue = [
   {
@@ -101,6 +105,29 @@ const catalogue = [
     needs: 'Live Open-Meteo forecast (commercial API key in production); IMD can replace it when the publication IP is whitelisted.',
     build: (date, options) => havaman.build(date, options),
   },
+  {
+    key: 'market',
+    name: 'शेअर / सोने बाजार',
+    description: 'Automatic index and bullion closes with a previous-session brief.',
+    source: 'feed',
+    needs: 'Live Yahoo Finance closing-price feed.',
+    build: (date, options) => market.build(date, options),
+  },
+  {
+    key: 'advert',
+    name: 'जाहिरात',
+    description: "An advertiser's own copy, structured and set as a display advertisement; artwork supplied or generated.",
+    source: 'operator',
+    needs: "The advertiser's text. A generated illustration additionally needs GEMINI_API_KEY with image quota.",
+    build: (date, options) => advert.build(date, options),
+  },
+  {
+    key: 'tender',
+    name: 'निविदा / प्रकटपत्र',
+    description: 'Free-form desk copy structured as a formal printable notice.',
+    source: 'transform',
+    build: (date, options) => tender.build(date, options),
+  },
 ];
 
 const byKey = new Map(catalogue.map((feature) => [feature.key, feature]));
@@ -170,6 +197,7 @@ async function build(key, isoDate, options = {}) {
     if (composed.error) return composed;
     return composed[key] || { error: 'That feature was not in the reply.' };
   }
+  if (feature.source === 'transform') return feature.build(isoDate, options);
   return feature.build(isoDate, options);
 }
 

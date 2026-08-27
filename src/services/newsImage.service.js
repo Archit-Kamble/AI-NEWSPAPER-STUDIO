@@ -109,12 +109,45 @@ async function requestImage(prompt, { signal } = {}) {
  * why when the provider cannot answer - never a throw, because a picture is an
  * optional embellishment and the editor must keep working without one.
  */
-async function propose(section = {}, { count = DEFAULT_COUNT, ownerId = null, signal } = {}) {
+/**
+ * The brief for a DISPLAY ADVERTISEMENT's artwork, which is a different job
+ * from a news photograph and must not borrow its brief.
+ *
+ * A news picture is a record of something and this project's brief says so at
+ * length. An advert's artwork is openly a made image: it illustrates a product
+ * or a service, it is composed to sit behind or beside set type, and it may
+ * not carry text of its own - generated Devanagari is unreadable, and the
+ * advertiser's own words are set by the compositor, not drawn by a model.
+ *
+ * `aspect` is the shape of the hole the artwork is going into, so what comes
+ * back fits the block rather than being cropped to fit it.
+ */
+function advertBriefFor({ advertiser, headline, subject, aspect = '4:3' } = {}) {
+  const what = [headline, subject].filter(Boolean).join('. ') || String(advertiser || '');
+  return [
+    'A clean, uncluttered illustration for a display advertisement in a Marathi daily newspaper.',
+    `Subject: ${what}`,
+    '',
+    'Requirements:',
+    '- NO text, no lettering, no numerals, no signage, no logos, no watermarks of any kind.',
+    '  The advertiser\'s own words are set as type by the newspaper, never drawn into the image.',
+    '- No recognisable faces of real people and no public figures.',
+    '- Simple, bright, high-contrast composition that stays readable at newsprint screen.',
+    '- Generous plain area so the compositor can set type over or beside it.',
+    `- Aspect ratio approximately ${aspect}.`,
+  ].join('\n');
+}
+
+async function propose(section = {}, {
+  count = DEFAULT_COUNT, ownerId = null, signal, brief = null,
+} = {}) {
   if (!key()) {
     return { candidates: [], warning: conditions.deskSentence('unconfigured', 'Google Gemini') };
   }
   const wanted = Math.max(1, Math.min(MAX_COUNT, Number(count) || DEFAULT_COUNT));
-  const prompt = briefFor(section);
+  // A caller with its own brief supplies it - an advertisement's artwork is
+  // not a news photograph and must not be asked for as one.
+  const prompt = brief || briefFor(section);
 
   const candidates = [];
   let warning = null;
@@ -155,4 +188,4 @@ async function store({ data, mimeType }, ownerId) {
   return { ...asset, aiGenerated: true, url };
 }
 
-module.exports = { propose, briefFor, classify, DEFAULT_COUNT, MAX_COUNT };
+module.exports = { propose, briefFor, advertBriefFor, classify, DEFAULT_COUNT, MAX_COUNT };

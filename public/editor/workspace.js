@@ -55,7 +55,10 @@ import * as history from "./history/history.js";
 import * as autosave from "./autosave/autosave.js";
 import { draftFromSection, draftFromStory, payloadFromDraft, viewOfSection } from "./section-model.js";
 import { canRenderSmartCard, smartCardText } from "./smart-cards/smart-cards.js";
-import { manualCardFromText } from "./smart-cards/manual-cards.js";
+// The block a card wants when it brings its own - one catalogue, read by the
+// panel's preview and by the placement below, so a desk never reviews a card
+// at one size and gets it at another.
+import { smartCardBlockSize } from "./smart-cards/layout.js";
 import { smartCardFrame } from "./canvas/section-thumb.js";
 import { candidatesOn, runBulk } from "./external-editor/bulk-generate.js";
 import { computeAlignment } from "./external-editor/align.js";
@@ -536,29 +539,54 @@ async function removeSectionImage(imageId) {
 // Smart cards use the existing, classified daily-feature service. The only
 // client-side calculation is the selected block's available character budget;
 // it is the same grid used by the Space panel and press preflight.
-async function requestSmartCard({ key, variant, manualText = "" }) {
+async function requestSmartCard({
+  key, variant, manualText = "", destination = "selected",
+  imageUrl = "", wantsArtwork = false,
+}) {
   const newspaper = store.getState().newspaper;
   const section = store.getSelectedSection();
   const view = currentView();
-  if (!newspaper || !section || !view) return { error: "Choose a block first." };
+  if (!newspaper) return { error: "Open an edition first." };
+  // A CARD THAT IS BRINGING ITS OWN BLOCK IS MEASURED AGAINST THAT BLOCK.
+  //
+  // Otherwise the desk reviews a card solved for whatever frame happened to be
+  // open and gets a differently-solved one on the page - the exact fault the
+  // proposal preview was built to prevent, arriving from the other side. The
+  // stand-in carries the size layout.js says this card wants.
+  const bringsOwnBlock = destination === "new";
+  if (!bringsOwnBlock && (!section || !view)) return { error: "Choose a block first." };
+  const wanted = smartCardBlockSize(key);
+  const measureSection = bringsOwnBlock
+    ? { ...(section || {}), width_px: wanted.width, height_px: wanted.height, margin_px: 1 }
+    : section;
+  const measureView = bringsOwnBlock ? { ...(view || {}), headline: "", subheading: "", body: "" } : view;
 
-  const budget = buildFlowMap(section, { ...view, body: "" }, sectionImages.map(flowImageFromRow)).bodyCharBudget;
+  const budget = buildFlowMap(measureSection, { ...measureView, body: "" }, (bringsOwnBlock ? [] : sectionImages).map(flowImageFromRow)).bodyCharBudget;
   const smartVariant = key === "rashi" && variant === "auto"
     ? (budget < 180 ? "one" : budget < 520 ? "three" : "all")
     : variant;
   const signs = smartVariant === "one" ? 1 : smartVariant === "three" ? 3 : 12;
-  let result;
-  if (key === "market" || key === "tender") {
-    result = manualCardFromText(key, manualText);
-  } else {
-    const response = await fetch(`/api/features/${encodeURIComponent(key)}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date: newspaper.publication_date, charsPerSign: Math.max(30, Math.floor(budget / signs)), tier: getAiTier() }),
-    });
-    result = await response.json().catch(() => ({ error: "The Smart Card could not be built." }));
-    if (!response.ok) return result;
-  }
+  const response = await fetch(`/api/features/${encodeURIComponent(key)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      date: newspaper.publication_date,
+      charsPerSign: Math.max(30, Math.floor(budget / signs)),
+      tier: getAiTier(),
+      ...(key === "tender" || key === "advert" ? { sourceText: manualText } : {}),
+      // The advert's artwork, and the block it has to fit. The size travels
+      // with the request so a generated illustration comes back in the shape
+      // of the hole rather than being cropped into it afterwards.
+      ...(key === "advert" ? {
+        imageUrl,
+        wantsArtwork,
+        blockWidth: bringsOwnBlock ? wanted.width : Number(section?.width_px) || undefined,
+        blockHeight: bringsOwnBlock ? wanted.height : Number(section?.height_px) || undefined,
+      } : {}),
+    }),
+  });
+  const result = await response.json().catch(() => ({ error: "The Smart Card could not be built." }));
+  if (!response.ok) return result;
   if (result?.error) return result;
 
   // The structured payload, if the builder sent one. This is what is stored and
@@ -589,17 +617,82 @@ async function requestSmartCard({ key, variant, manualText = "" }) {
     smartCardKey: card && canRenderSmartCard(key) ? key : null,
     smartCardData: card && canRenderSmartCard(key) ? card : null,
     proposal: { headline: result.title || "", subheading: result.subtitle || "", body },
-    source: result.writtenBy ? "written"
-      : key === "dinvishesh" ? "curated"
-        : key === "havaman" ? "feed"
-          : key === "market" || key === "tender" ? "manual"
-            : "computed",
+    source: key === "tender" || key === "advert" ? "transformed"
+      : result.writtenBy ? "written"
+        : key === "dinvishesh" ? "curated"
+        : key === "havaman" || key === "market" ? "feed"
+          : "computed",
     fit: { bodyCharBudget: budget, charsUsed, charsRemaining: Math.max(0, budget - charsUsed) },
     // The SAME logical frame the block will solve the card against once
     // accepted - the proposal preview draws from this too (scaled up as one
     // object for comfortable reading), so a desk reviews the card at the
     // size and shape it will actually print, not a differently-solved one.
-    frame: smartCardFrame(section, view),
+    frame: bringsOwnBlock
+      ? { width: wanted.width, height: wanted.height, padding: 1 }
+      : smartCardFrame(section, view),
+  };
+}
+
+/**
+ * A SMART CARD THAT BRINGS ITS OWN BLOCK, ALREADY FILLED.
+ *
+ * The desk's report: "rather than fixing smart blocks at layout, after
+ * generating a smart block it will generate a new block with all data already
+ * filled in." Until now a card could only be poured into a frame somebody had
+ * already found, sized and emptied - which is the work in the wrong order,
+ * because the card's own shape is knowable before any of that (a sudoku is
+ * square, a statutory notice is a whole leg, a quote is a shallow strip).
+ *
+ * Two steps and no third: create the block at the size layout.js says this
+ * card wants, then write the card into it through the ordinary section save.
+ * Nothing new can go wrong here that + Block and an accept could not already.
+ */
+async function placeSmartCardInNewBlock(key, payload) {
+  const page = store.getCurrentPage();
+  const geometry = getGeometry();
+  if (!page || !geometry) return { error: "Open a page first." };
+  if (store.getState().dirty) await autosave.flush();
+
+  const wanted = smartCardBlockSize(key);
+  const rect = findFreeRect(page.sections || [], wanted.width, wanted.height);
+  const onTopOfSomething = (page.sections || []).some(
+    (s) => rect.x < Number(s.x_px) + Number(s.width_px)
+      && Number(s.x_px) < rect.x + rect.width
+      && rect.y < Number(s.y_px) + Number(s.height_px)
+      && Number(s.y_px) < rect.y + rect.height,
+  );
+
+  const created = await fetch(`/api/pages/${page.id}/sections`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(rect),
+  });
+  if (!created.ok) return { error: "The card's block could not be added." };
+  const updated = await created.json();
+  const added = updated.sections[updated.sections.length - 1];
+  if (!added) return { error: "The card's block could not be added." };
+
+  // The card, straight into the block that was just made for it. A full
+  // replace is safe here and only here: the block is one request old and has
+  // never carried anything.
+  const saved = await fetch(`/api/pages/${page.id}/sections/${encodeURIComponent(added.section_key)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ...payload,
+      // A card block is furniture, not a story: it carries no rule of its own
+      // unless a desk gives it one, and its type is the card's to decide.
+      marginPx: 1,
+    }),
+  });
+  if (!saved.ok) return { error: "The block was added but the card could not be written into it." };
+
+  store.replacePage(await saved.json(), { structural: true });
+  renderPageArea();
+  selectSection(added.section_key);
+  return {
+    sectionKey: added.section_key,
+    crowded: onTopOfSomething,
   };
 }
 
@@ -2070,6 +2163,7 @@ function renderSidePanels() {
     onRemoveImage: removeSectionImage,
     onRemoveBackground: removeImageBackground,
     onRequestSmartCard: requestSmartCard,
+    onPlaceSmartCardInNewBlock: placeSmartCardInNewBlock,
     onPickBlock: () => {
       selectFirstSection();
       scrollTo("workspaceTop");

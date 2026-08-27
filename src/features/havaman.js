@@ -40,6 +40,12 @@ function validIsoDate(value) {
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
+function dateInTimeZone(date = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(date);
+}
+
 async function forecastFor(location, isoDate, fetchImpl, { apiUrl = API, apiKey = '' } = {}) {
   const query = new URLSearchParams({
     latitude: String(location.latitude),
@@ -93,9 +99,13 @@ async function build(isoDate, {
   openMeteoApiKey = process.env.OPEN_METEO_API_KEY,
   openMeteoEndpoint,
   commercialUse = process.env.NODE_ENV === 'production',
+  currentDate = dateInTimeZone(),
 } = {}) {
   const date = String(isoDate || '').slice(0, 10);
   if (!validIsoDate(date)) return { error: 'हवामानासाठी वैध तारीख आवश्यक आहे.' };
+  if (date > currentDate) {
+    return { error: `${date} ही भविष्यातील तारीख आहे; त्या दिवसाचा सातारा हवामान अंदाज अद्याप उपलब्ध नाही.` };
+  }
   if (typeof fetchImpl !== 'function') return { error: 'हवामान स्रोत उपलब्ध नाही.', upstream: true };
 
   const apiKey = String(openMeteoApiKey || '').trim();
@@ -140,5 +150,5 @@ async function build(isoDate, {
 
 module.exports = {
   build, forecastFor, conditionFor, validIsoDate,
-  DEFAULT_LOCATIONS, API, CUSTOMER_API, TIMEZONE,
+  dateInTimeZone, DEFAULT_LOCATIONS, API, CUSTOMER_API, TIMEZONE,
 };

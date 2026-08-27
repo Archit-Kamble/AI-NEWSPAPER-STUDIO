@@ -18,13 +18,18 @@ const CARDS = [
   { key: "dinvishesh", icon: "◷", label: "दिनविशेष", detail: "तपासलेली ऐतिहासिक नोंद", source: "Curated" },
   { key: "sudoku", icon: "▦", label: "सुडोकू", detail: "आजचे निर्धारक कोडे", source: "Calculated" },
   { key: "havaman", icon: "☁", label: "सातारा हवामान", detail: "कमाल, किमान आणि पावसाचा अंदाज", source: "Open-Meteo live" },
-  { key: "market", icon: "↗", label: "शेअर / सोने बाजार", detail: "पडताळलेले दर आणि बदल", source: "Desk supplied" },
-  { key: "tender", icon: "§", label: "निविदा / प्रकटपत्र", detail: "मजकूरापासून छापील सूचना", source: "Desk supplied" },
+  { key: "market", icon: "↗", label: "शेअर / सोने बाजार", detail: "बंद भाव आणि मागील सत्राचा आढावा", source: "Live market API" },
+  { key: "tender", icon: "§", label: "निविदा / प्रकटपत्र", detail: "कोणत्याही मजकुरापासून छापील सूचना", source: "AI structures copy" },
+  { key: "advert", icon: "▣", label: "जाहिरात", detail: "जाहिरातदाराचा मजकूर व चित्र", source: "AI structures copy" },
 ];
 
+// Which cards are built from text the OPERATOR pastes rather than from a date
+// or a feed. Both open the same box; only the advert also offers artwork.
+const MANUAL_CARDS = new Set(["tender", "advert"]);
+
 const MANUAL_PLACEHOLDERS = Object.freeze({
-  market: "बाजार दिनांक: २६/०८/२०२६\nसोने २४ कॅरेट | ₹७४,२५० | +०.४%\nचांदी | ₹९२,१०० | -०.२%\nसेन्सेक्स | ८१,४०० | +०.१%\nकालचा बाजार: बँक आणि धातू समभागांच्या वाढीमुळे निर्देशांक सकारात्मक बंद झाले.\nस्रोत: पडताळलेला बाजार अहवाल",
-  tender: "कार्यालय: जिल्हाधिकारी कार्यालय, सातारा\nसंदर्भ: निविदा/२०२६/१२\nदिनांक: २७/०८/२०२६\nविषय: कार्यालयीन साहित्य पुरवठा\nशीर्षक: निविदा सूचना\n\nपात्र पुरवठादारांकडून बंद लिफाफ्यात निविदा मागविण्यात येत आहेत.\n\nअ.क्र. | बाब | प्रमाण\n१ | कागद | १०० रीम\n\nसंपर्क: ०२१६२-२२२२२२\nस्वाक्षरी: जिल्हाधिकारी, सातारा",
+  tender: "उदा. ईमेल किंवा साधा परिच्छेद थेट पेस्ट करा:\n\nसातारा जिल्हाधिकारी कार्यालयाला 15 सप्टेंबरपर्यंत 100 रीम A4 कागदासाठी बंद लिफाफ्यात दरपत्रके हवी आहेत. संपर्क 02162-222222. — जिल्हाधिकारी, सातारा",
+  advert: "उदा. जाहिरातदाराचा संदेश जसाच्या तसा पेस्ट करा:\n\nश्री गणेश ट्रेडर्स, सातारा — शेती अवजारे, ठिबक संच व पंप विक्री व दुरुस्ती. गणेश चतुर्थीनिमित्त सर्व पंपांवर 10% सवलत, 20 सप्टेंबरपर्यंत. संपर्क 9822012345. पत्ता: पोवई नाका, सातारा.",
 });
 
 function choice(card, selected) {
@@ -60,10 +65,35 @@ export function smartCardMarkupPanel(view) {
       <div class="smart-card-pills"><button type="button" class="is-selected" data-rashi-variant="auto">Automatic</button><button type="button" data-rashi-variant="one">1 sign</button><button type="button" data-rashi-variant="three">3 signs</button><button type="button" data-rashi-variant="all">All 12</button></div>
     </fieldset>
     <fieldset class="smart-card-manual-input" id="smartCardManualInput" hidden>
-      <legend id="smartCardManualLegend">Verified desk data</legend>
-      <p>Paste text below or load a TXT, CSV or JSON file. The file is read locally and nothing is accepted until you review the rendered card.</p>
+      <legend id="smartCardManualLegend">Paste any source text</legend>
+      <p>Paste an email, paragraph or ordinary note, or load a TXT, CSV or JSON file. The newsroom AI turns it into the formal layout; you review every fact before accepting it.</p>
       <textarea id="smartCardManualText" rows="10"></textarea>
       <label class="smart-card-file-label">Load data/text file <input id="smartCardManualFile" type="file" accept=".txt,.csv,.json,text/plain,text/csv,application/json"></label>
+    </fieldset>
+    <!-- An advertisement's artwork. Supplied wins over generated: a desk that
+         has the advertiser's own picture is not asking a model to imagine it.
+         A generated illustration is briefed WITHOUT text - generated
+         Devanagari is unreadable, and the advertiser's words are the
+         compositor's to set - and is marked AI on the card itself. -->
+    <fieldset class="smart-card-artwork" id="smartCardArtwork" hidden>
+      <legend>Artwork</legend>
+      <label class="smart-card-file-label">The advertiser's own picture
+        <input id="smartCardAdvertImage" type="file" accept="image/*"></label>
+      <label class="smart-card-check"><input type="checkbox" id="smartCardWantsArtwork">
+        Generate an illustration sized for this block, if none is supplied</label>
+    </fieldset>
+    <!-- WHERE THE CARD LANDS. A desk should not have to find, size and empty a
+         frame before they can see what a card looks like - so the default is
+         that the card brings its own block, at the size a printed paper gives
+         that card (layout.js's SMART_CARD_BLOCK_SIZE). Putting it into the
+         block already open stays available, because replacing a card that is
+         already on the page is an ordinary thing to do. -->
+    <fieldset class="smart-card-destination" id="smartCardDestination">
+      <legend>Where it goes</legend>
+      <div class="smart-card-pills">
+        <button type="button" class="is-selected" data-card-destination="new">A new block, sized for this card</button>
+        <button type="button" data-card-destination="selected">The block that is open</button>
+      </div>
     </fieldset>
     <div class="smart-card-footer"><span class="smart-card-fit-note" id="smartCardFitNote">Measured against this block</span><button type="button" class="ext-editor-btn ext-editor-btn-primary" id="smartCardGenerate">Prepare card for review</button></div>
   </div><section id="smartCardProposal" class="ai-proposal smart-card-proposal" hidden></section>`;
@@ -77,8 +107,8 @@ function proposalMarkup(result) {
   const proposal = result.proposal;
   const source = result.source === "written" ? "AI draft — review required"
     : result.source === "curated" ? "Checked desk data"
-      : result.source === "feed" ? "Live Open-Meteo forecast"
-        : result.source === "manual" ? "Desk-supplied — verify before accepting"
+      : result.source === "feed" ? "Live source data"
+        : result.source === "transformed" ? "AI-structured copy — verify every fact"
         : "Calculated in SAHAS";
 
   // The card, drawn as it will print - solved against the SAME logical
@@ -120,9 +150,12 @@ function proposalMarkup(result) {
     <div class="ext-editor-toolbar"><button type="button" class="ext-editor-btn ext-editor-btn-primary" id="smartCardAccept">Accept card</button><button type="button" class="ext-editor-btn" id="smartCardDismiss">Discard</button></div>`;
 }
 
-export function bindSmartCard(requestCard, onPatch, onNotify) {
+export function bindSmartCard(requestCard, onPatch, onNotify, onPlaceInNewBlock) {
   let key = "panchang";
   let variant = "auto";
+  // "new" means the card brings its own block; "selected" writes into the one
+  // already open. New is the default - see the fieldset's own comment.
+  let destination = "new";
   const options = document.getElementById("smartCardRashiOptions");
   const manual = document.getElementById("smartCardManualInput");
   const manualText = document.getElementById("smartCardManualText");
@@ -137,18 +170,52 @@ export function bindSmartCard(requestCard, onPatch, onNotify) {
       button.setAttribute("aria-pressed", String(selected));
     });
     options.hidden = key !== "rashi";
-    const isManual = key === "market" || key === "tender";
+    const isManual = MANUAL_CARDS.has(key);
     manual.hidden = !isManual;
     if (isManual) {
-      manualLegend.textContent = key === "market" ? "Verified Share / Gold Market data" : "Tender notice text";
+      manualLegend.textContent = key === "advert"
+        ? "Paste the advertiser's own copy"
+        : "Paste any email, paragraph or normal text";
       manualText.placeholder = MANUAL_PLACEHOLDERS[key];
     }
+    // Artwork is the advert's alone: a picture belongs on an advertisement,
+    // and asking a model to illustrate a horoscope is not a feature.
+    const artwork = document.getElementById("smartCardArtwork");
+    if (artwork) artwork.hidden = key !== "advert";
   };
   document.querySelectorAll("[data-smart-card]").forEach((button) => button.addEventListener("click", () => selectCard(button.dataset.smartCard)));
+  document.querySelectorAll("[data-card-destination]").forEach((button) => button.addEventListener("click", () => {
+    destination = button.dataset.cardDestination;
+    document.querySelectorAll("[data-card-destination]").forEach((other) => other.classList.toggle("is-selected", other === button));
+    const note = document.getElementById("smartCardFitNote");
+    if (note) {
+      note.textContent = destination === "new"
+        ? "Sized for this card, placed on this page"
+        : "Measured against this block";
+    }
+  }));
   document.querySelectorAll("[data-rashi-variant]").forEach((button) => button.addEventListener("click", () => {
     variant = button.dataset.rashiVariant;
     document.querySelectorAll("[data-rashi-variant]").forEach((choiceButton) => choiceButton.classList.toggle("is-selected", choiceButton === button));
   }));
+  // The advertiser's own picture, uploaded through the ordinary image route so
+  // it lands in the same place every other block picture does.
+  let advertImageUrl = "";
+  document.getElementById("smartCardAdvertImage")?.addEventListener("change", async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const form = new FormData();
+    form.append("images", file);
+    try {
+      const response = await fetch("/api/uploads/images", { method: "POST", body: form });
+      if (!response.ok) throw new Error(String(response.status));
+      const uploaded = await response.json();
+      advertImageUrl = uploaded?.[0]?.url || uploaded?.urls?.[0] || "";
+      onNotify(advertImageUrl ? "Artwork attached to this advert." : "That picture could not be read.");
+    } catch {
+      onNotify("That picture could not be uploaded.");
+    }
+  });
   manualFile?.addEventListener("change", async () => {
     const file = manualFile.files?.[0];
     if (!file) return;
@@ -174,29 +241,43 @@ export function bindSmartCard(requestCard, onPatch, onNotify) {
       const result = await requestCard?.({
         key,
         variant: key === "rashi" ? variant : "auto",
-        manualText: key === "market" || key === "tender" ? manualText.value : "",
+        manualText: MANUAL_CARDS.has(key) ? manualText.value : "",
+        imageUrl: advertImageUrl,
+        wantsArtwork: key === "advert" && Boolean(document.getElementById("smartCardWantsArtwork")?.checked),
+        // The card is measured against the frame it will actually get: the
+        // block it is going into, or the one it is about to bring with it.
+        destination,
       });
       if (result?.error) return onNotify(result.error);
       if (!result?.proposal) return onNotify("No verified content is available for this card on this date.");
       const host = document.getElementById("smartCardProposal");
       host.hidden = false;
       host.innerHTML = proposalMarkup(result);
-      document.getElementById("smartCardAccept")?.addEventListener("click", () => {
-        // The DATA goes into the draft, not a picture of it. The body text goes
-        // with it because everything that measures a block reads body text -
-        // the character grid, the worklist, preflight, the fit action - but the
-        // card is what the page and the editor both draw.
-        onPatch({
+      document.getElementById("smartCardAccept")?.addEventListener("click", async () => {
+        const payload = {
           ...result.proposal,
           headline: "",
           subheading: "",
           smartCardKey: result.smartCardKey || null,
           smartCardData: result.smartCardData || null,
-          aiGenerated: result.source === "written",
+          aiGenerated: result.source === "written" || result.source === "transformed",
           status: "needs_review",
-        }, "smart-card");
+        };
         host.hidden = true;
-        onNotify("Smart Card added to the editable draft.");
+        // A NEW BLOCK, ALREADY FILLED - which is what the desk asked for. The
+        // block is created at the size this card wants, then the card's data
+        // is written straight into it, so nothing has to be laid out first.
+        if (destination === "new" && onPlaceInNewBlock) {
+          const placed = await onPlaceInNewBlock(result.smartCardKey || key, payload);
+          if (placed?.error) return onNotify(placed.error);
+          return onNotify(`${placed?.sectionKey || "Block"} added with the card already in it. Drag it where the page needs it.`);
+        }
+        // The DATA goes into the draft, not a picture of it. The body text goes
+        // with it because everything that measures a block reads body text -
+        // the character grid, the worklist, preflight, the fit action - but the
+        // card is what the page and the editor both draw.
+        onPatch(payload, "smart-card");
+        return onNotify("Smart Card added to the editable draft.");
       });
       document.getElementById("smartCardDismiss")?.addEventListener("click", () => {
         // Discard leaves the block exactly as it was. Nothing was written.

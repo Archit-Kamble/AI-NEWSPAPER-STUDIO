@@ -135,9 +135,15 @@ function labelledMarkup(layout) {
   // a <colgroup> so <th> itself stays bare (the label text is what a printed
   // page reads, not a style attribute) while the rendered column still
   // matches the width every value line was wrapped against.
-  const colgroup = `<colgroup><col style="width:${layout.geometry.labelWidth}px"><col></colgroup>`;
+  const g = layout.geometry;
+  // The cell inset is the SOLVER's number, written here - never the
+  // stylesheet's own em padding, which the solver could not see and which made
+  // this card report FITS while the browser wrapped a value and pushed the
+  // last row off the block.
+  const pad = `padding:${g.cellPadY}px ${g.cellPadX}px`;
+  const colgroup = `<colgroup><col style="width:${g.labelWidth}px"><col></colgroup>`;
   return `<table class="smart-card-table" style="font-size:${layout.fontPx}px">${colgroup}${layout.items
-    .map((item) => `<tr style="height:${item.rowHeight}px;--row-text-nudge:${item.textNudgeY || 0}px"><th>${linesMarkup(item.labelLines)}</th><td>${linesMarkup(item.valueLines)}</td></tr>`)
+    .map((item) => `<tr style="height:${item.rowHeight}px;--row-text-nudge:${item.textNudgeY || 0}px"><th style="${pad}"><span class="panchang-label">${linesMarkup(item.labelLines)}</span></th><td style="${pad}">${linesMarkup(item.valueLines)}</td></tr>`)
     .join("")}</table>`;
 }
 
@@ -193,13 +199,22 @@ function rashiMarkup(data, layout) {
 
 // ---------------------------------------------------------------- suvichar ---
 
+/**
+ * The thought for the day, set as a printed pull quote: the words wrapped and
+ * centred on their own measure, a short rule beneath them, and the credit
+ * under that. Every line here was already wrapped and measured by
+ * layoutSuvichar() - the browser is never asked to break one again.
+ */
 function suvicharMarkup(data, layout) {
   if (!data?.text || !layout.geometry) return null;
-  const attribution = layout.attributionLines?.length
-    ? `<cite> — ${escapeHtml(layout.attributionLines[0])}</cite>`
+  const g = layout.geometry;
+  const credit = layout.attributionLines?.length
+    ? `<span class="smart-card-quote-rule" style="width:${g.ruleWidth}px;margin:${g.ruleGap}px auto"></span>
+       <cite class="smart-card-quote-credit" style="font-size:${g.creditFontPx}px;line-height:${g.creditLineHeightPx}px">${linesMarkup(layout.attributionLines)}</cite>`
     : "";
-  return `<blockquote class="smart-card-quote" style="font-size:${layout.fontPx}px">
-    <p>${escapeHtml(layout.quoteLines[0])}${attribution}</p>
+  return `<blockquote class="smart-card-quote" style="font-size:${layout.fontPx}px;line-height:${g.lineHeightPx}px;padding:0 ${g.sideInset}px">
+    <p class="smart-card-quote-text">${linesMarkup(layout.quoteLines)}</p>
+    ${credit}
   </blockquote>`;
 }
 
@@ -214,69 +229,207 @@ function dinvisheshMarkup(data, layout) {
 
 // ----------------------------------------------------------------- havaman ---
 
+/**
+ * The forecast, led by its numbers. One city gets a real weather panel - the
+ * place, the condition, the maximum and minimum as display figures under their
+ * own captions, the rain beneath; several get one ruled row each. Both shapes
+ * come pre-solved from layoutHavaman(), which is also what the export walk
+ * reads, so the plate prints the panel the desk approved.
+ */
 function havamanMarkup(data, layout) {
-  if (!layout.items || !layout.items.length || !layout.geometry) return null;
+  if (!layout.geometry) return null;
   const g = layout.geometry;
-  const items = layout.items.map((item) => `<section class="smart-card-weather-city" style="height:${g.cellHeight}px;line-height:${g.lineHeightPx}px">
-      <strong>${escapeHtml(item.name)}</strong>
-      <span class="weather-condition">${linesMarkup(item.conditionLines)}</span>
-      <span class="weather-temperature">${linesMarkup(item.temperatureLines)}</span>
-      <span class="weather-rain">${linesMarkup(item.rainLines)}</span>
-    </section>`).join("");
-  const gridStyle = `grid-template-columns:repeat(${g.columns},${g.columnWidth}px);gap:${g.rowGap}px ${g.columnGap}px;height:${g.gridHeight}px;font-size:${layout.fontPx}px`;
   const source = layout.sourceLines?.length
     ? `<p class="smart-card-weather-source" style="font-size:${g.sourceFontPx}px;line-height:${g.sourceLineHeightPx}px;height:${g.sourceHeight}px">${linesMarkup(layout.sourceLines)}</p>`
     : "";
-  return `<div class="smart-card-weather-grid" style="${gridStyle}">${items}</div>${source}`;
+
+  if (g.solo) {
+    const figures = (layout.figures || []).map((figure) => `<div class="smart-card-weather-figure is-${figure.kind}" style="width:${g.halfWidth}px">
+        <b style="font-size:${g.figureFontPx}px;line-height:${g.figureLineHeightPx}px">${escapeHtml(figure.text)}</b>
+        <span style="font-size:${g.capFontPx}px;line-height:${g.capLineHeightPx}px">${escapeHtml(figure.label)}</span>
+      </div>`).join("");
+    return `<div class="smart-card-weather-solo" style="font-size:${layout.fontPx}px;line-height:${g.lineHeightPx}px;padding:0 ${g.inset}px">
+      <strong class="smart-card-weather-place" style="font-size:${g.placeFontPx}px;line-height:${g.placeHeight}px">${escapeHtml(layout.placeLine || "")}</strong>
+      <span class="smart-card-weather-condition">${linesMarkup(layout.conditionLines)}</span>
+      <div class="smart-card-weather-figures" style="gap:${g.gap}px;height:${g.figureHeight}px">${figures}</div>
+      <span class="smart-card-weather-rain">${linesMarkup(layout.rainLines)}</span>
+      ${source}
+    </div>`;
+  }
+
+  if (!layout.items || !layout.items.length) return null;
+  const rows = layout.items.map((item) => `<div class="smart-card-weather-row" style="height:${item.rowHeight}px;line-height:${g.lineHeightPx}px;padding:${g.rowPadding}px 0">
+      <strong style="width:${g.nameWidth}px">${escapeHtml(item.name)}</strong>
+      <b style="width:${g.tempWidth}px">${escapeHtml(item.tempText)}</b>
+      <span style="width:${g.restWidth}px">${linesMarkup(item.restLines)}</span>
+    </div>`).join("");
+  return `<div class="smart-card-weather-table" style="font-size:${layout.fontPx}px">${rows}${source}</div>`;
 }
 
 // ------------------------------------------------------------------ market ---
 
+/**
+ * The rate table: what it is, what it closed at, and how far it moved - the
+ * move given both as a percentage and in the instrument's own unit, with a
+ * direction mark, which is how every printed market table sets it. Rows are
+ * grouped under निर्देशांक / सराफा बाजार because an index in points and a
+ * metal in rupees per १० ग्रॅम are not the same kind of number.
+ */
+const MARKET_MARKS = { up: "\u25B2", down: "\u25BC", flat: "\u2013" };
+
 function marketMarkup(data, layout) {
   if (!layout.items?.length || !layout.geometry) return null;
   const g = layout.geometry;
-  const rows = layout.items.map((item) => `<div class="smart-card-market-row" style="height:${item.rowHeight}px;line-height:${g.lineHeightPx}px">
-      <strong style="width:${g.labelWidth}px">${linesMarkup(item.labelLines)}</strong>
-      <b style="width:${g.valueWidth}px">${linesMarkup(item.valueLines)}</b>
-      <span class="market-change is-${item.direction}" style="width:${g.changeWidth}px">${linesMarkup(item.changeLines)}</span>
-    </div>`).join("");
+
+  const rowMarkup = (item) => `<div class="smart-card-market-row is-${item.direction}" style="height:${item.rowHeight}px;line-height:${g.lineHeightPx}px;padding:${g.rowPadding}px 0">
+      <strong style="width:${g.labelWidth}px">${escapeHtml(item.labelText)}${item.unitText ? `<i style="font-size:${g.unitFontPx}px">${escapeHtml(item.unitText)}</i>` : ""}</strong>
+      <b style="width:${g.valueWidth}px">${escapeHtml(item.valueText)}</b>
+      <span class="market-change" style="width:${g.changeWidth}px">${MARKET_MARKS[item.direction] || ""} ${escapeHtml(item.changeText)}</span>
+    </div>`;
+
+  let rows = "";
+  if (g.grouped) {
+    for (const group of g.groupOrder) {
+      const inGroup = layout.items.filter((item) => item.group === group);
+      if (!inGroup.length) continue;
+      const label = g.groupLabels[group] || "";
+      if (label) {
+        rows += `<div class="smart-card-market-head" style="height:${g.headLineHeightPx + g.rowPadding}px;font-size:${g.headFontPx}px;line-height:${g.headLineHeightPx}px">${escapeHtml(label)}</div>`;
+      }
+      rows += inGroup.map(rowMarkup).join("");
+    }
+  } else {
+    rows = layout.items.map(rowMarkup).join("");
+  }
+
   const brief = layout.briefLines?.length
-    ? `<aside class="smart-card-market-brief" style="min-height:${g.briefHeight}px;line-height:${g.lineHeightPx}px">
-        <strong>${linesMarkup(layout.briefLabelLines)}</strong>
+    ? `<aside class="smart-card-market-brief" style="min-height:${g.briefHeight}px;line-height:${g.lineHeightPx}px;padding:${g.rowPadding * 2}px ${g.briefInset}px">
+        <strong style="font-size:${g.headFontPx}px;line-height:${g.headLineHeightPx}px">${linesMarkup(layout.briefLabelLines)}</strong>
         <p>${linesMarkup(layout.briefLines)}</p>
       </aside>`
     : "";
-  return `<div class="smart-card-market">
-    <h3 style="height:${g.titleHeight}px;font-size:${g.titleFontPx}px;line-height:${g.titleLineHeightPx}px">${linesMarkup(layout.titleLines)}</h3>
+  // What the bullion figures ARE - derived from the international close at the
+  // session's own rupee rate, never a सराफा retail quote. It prints; it is not
+  // a developer note.
+  const note = layout.noteLines?.length
+    ? `<p class="smart-card-market-note" style="font-size:${g.sourceFontPx}px;line-height:${g.sourceLineHeightPx}px">${linesMarkup(layout.noteLines)}</p>`
+    : "";
+
+  return `<div class="smart-card-market" style="font-size:${layout.fontPx}px">
+    <h3 style="height:${g.titleHeight}px;font-size:${g.titleFontPx}px;line-height:${g.titleLineHeightPx}px">${linesMarkup(layout.titleLines)}${layout.asOfLine ? `<small style="font-size:${g.headFontPx}px;line-height:${g.headLineHeightPx}px">${escapeHtml(layout.asOfLine)}</small>` : ""}</h3>
     <div class="smart-card-market-rows">${rows}</div>
     ${brief}
+    ${note}
     <p class="smart-card-market-source" style="height:${g.sourceHeight}px;font-size:${g.sourceFontPx}px;line-height:${g.sourceLineHeightPx}px">${linesMarkup(layout.sourceLines)}</p>
   </div>`;
 }
 
 // ------------------------------------------------------------------ tender ---
 
+/**
+ * The notice, in the bands a printed प्रकटपत्र carries: the issuer over its
+ * office; a ruled band with the email at one end and the address at the other;
+ * a second with the outward number opposite the place and date; the legal
+ * subject over the title; justified, indented paragraphs; the appendix under
+ * its own head with its group labels; then place and date on the left against
+ * the signature block on the right, and the jimaka note at the foot.
+ */
 function tenderMarkup(data, layout) {
   if (!layout.issuerLines?.length || !layout.geometry) return null;
   const g = layout.geometry;
-  const meta = layout.referenceLines.length || layout.dateLines.length
-    ? `<div class="smart-card-tender-meta"><span>${linesMarkup(layout.referenceLines)}</span><span>${linesMarkup(layout.dateLines)}</span></div>`
+
+  const splitBand = (left, right, fontPx, lineHeightPx, height, cls) =>
+    (left.length || right.length
+      ? `<div class="smart-card-tender-band ${cls}" style="height:${height}px;padding:${g.bandPadY}px 0;font-size:${fontPx}px;line-height:${lineHeightPx}px">
+          <span style="width:${g.halfWidth}px">${linesMarkup(left)}</span>
+          <span style="width:${g.halfWidth}px">${linesMarkup(right)}</span>
+        </div>`
+      : "");
+
+  const contactBand = splitBand(layout.emailLines, layout.addressLines,
+    g.smallFontPx, g.smallLineHeightPx, g.contactBandHeight, "is-contact");
+  const referenceBand = splitBand(layout.referenceLines, layout.dateLines,
+    g.smallFontPx, g.smallLineHeightPx, g.referenceBandHeight, "is-reference");
+
+  // The opening indent is the FIRST line's, which is how a paragraph is set -
+  // `text-indent` on the <p> reached every line, because each composed line is
+  // its own block. Every line is still MEASURED at the narrower indented width
+  // (layoutTender), so this can only ever leave a line room to spare.
+  const paragraphs = layout.paragraphItems.map((item) => `<p style="min-height:${item.height}px">${
+    (item.lines || []).map((text, index) => `<span class="smart-card-line"${
+      index === 0 ? ` style="padding-left:${item.indentPx}px"` : ""}>${escapeHtml(text)}</span>`).join("")
+  }</p>`).join("");
+
+  const groups = layout.groupLines?.length
+    ? `<div class="smart-card-tender-groups" style="height:${g.groupHeight}px;line-height:${g.strongLineHeightPx}px">${layout.groupLines
+      .map((lines) => `<span style="width:${g.groupWidth}px">${linesMarkup(lines)}</span>`).join("")}</div>`
     : "";
-  const paragraphs = layout.paragraphItems.map((item) =>
-    `<p style="min-height:${item.height}px">${linesMarkup(item.lines)}</p>`).join("");
+
+  const cellPad = `padding:${g.bandPadY}px ${g.cellPadX}px`;
   const table = layout.table ? `<table class="smart-card-tender-table"><thead><tr>${layout.table.header.cells
-    .map((lines) => `<th style="width:${layout.table.columnWidth}px;height:${layout.table.header.height}px">${linesMarkup(lines)}</th>`).join("")}</tr></thead><tbody>${layout.table.rows.map((row) => `<tr>${row.cells
-    .map((lines) => `<td style="width:${layout.table.columnWidth}px;height:${row.height}px">${linesMarkup(lines)}</td>`).join("")}</tr>`).join("")}</tbody></table>` : "";
+    .map((lines) => `<th style="width:${layout.table.columnWidth}px;height:${layout.table.header.height}px;${cellPad}">${linesMarkup(lines)}</th>`).join("")}</tr></thead><tbody>${layout.table.rows.map((row) => `<tr>${row.cells
+    .map((lines) => `<td style="width:${layout.table.columnWidth}px;height:${row.height}px;${cellPad}">${linesMarkup(lines)}</td>`).join("")}</tr>`).join("")}</tbody></table>` : "";
+
+  const close = (layout.placeLines?.length || layout.signatoryLines?.length)
+    ? `<div class="smart-card-tender-close" style="min-height:${g.closeHeight}px">
+        <div class="smart-card-tender-place" style="width:${g.halfWidth}px">
+          ${layout.placeLines?.length ? `<span class="smart-card-line">${linesMarkup(layout.placeLines)}</span>` : ""}
+          ${layout.noticeDateLines?.length ? `<span class="smart-card-line">${linesMarkup(layout.noticeDateLines)}</span>` : ""}
+        </div>
+        <div class="smart-card-tender-sign" style="width:${g.halfWidth}px">
+          <strong>${linesMarkup(layout.signatoryLines)}</strong>
+          <span style="font-size:${g.smallFontPx}px;line-height:${g.smallLineHeightPx}px">${linesMarkup(layout.designationLines)}</span>
+          <span style="font-size:${g.smallFontPx}px;line-height:${g.smallLineHeightPx}px">${linesMarkup(layout.signOfficeLines)}</span>
+        </div>
+      </div>`
+    : "";
+
   return `<article class="smart-card-tender" style="font-size:${layout.fontPx}px;line-height:${g.lineHeightPx}px;--tender-gap:${g.gap}px">
-    <header><h3 style="font-size:${g.issuerFontPx}px;line-height:${g.issuerLineHeightPx}px">${linesMarkup(layout.issuerLines)}</h3>${layout.officeLines.length ? `<p>${linesMarkup(layout.officeLines)}</p>` : ""}</header>
-    ${meta}
-    ${layout.subjectLines.length ? `<h4>${linesMarkup(layout.subjectLines)}</h4>` : ""}
+    <header><h3 style="font-size:${g.issuerFontPx}px;line-height:${g.issuerLineHeightPx}px">${linesMarkup(layout.issuerLines)}</h3>${layout.officeLines.length ? `<p style="line-height:${g.strongLineHeightPx}px">${linesMarkup(layout.officeLines)}</p>` : ""}</header>
+    ${contactBand}
+    ${referenceBand}
+    ${layout.subjectLines.length ? `<h4 style="line-height:${g.strongLineHeightPx}px">${linesMarkup(layout.subjectLines)}</h4>` : ""}
     <h2 style="font-size:${g.titleFontPx}px;line-height:${g.titleLineHeightPx}px">${linesMarkup(layout.titleLines)}</h2>
     <div class="smart-card-tender-copy">${paragraphs}</div>
+    ${layout.tableTitleLines?.length ? `<h5 style="line-height:${g.strongLineHeightPx}px">${linesMarkup(layout.tableTitleLines)}</h5>` : ""}
+    ${groups}
     ${table}
-    ${layout.contactLines.length ? `<p class="smart-card-tender-contact">${linesMarkup(layout.contactLines)}</p>` : ""}
-    ${layout.signatoryLines.length ? `<p class="smart-card-tender-signatory">${linesMarkup(layout.signatoryLines)}</p>` : ""}
+    ${layout.contactLines.length ? `<p class="smart-card-tender-contact" style="font-size:${g.smallFontPx}px;line-height:${g.smallLineHeightPx}px">${linesMarkup(layout.contactLines)}</p>` : ""}
+    ${close}
+    ${layout.footerLines?.length ? `<p class="smart-card-tender-footer" style="font-size:${g.smallFontPx}px;line-height:${g.smallLineHeightPx}px">${linesMarkup(layout.footerLines)}</p>` : ""}
   </article>`;
+}
+
+/**
+ * The advertisement, as an advert desk sets one: a ruled panel, the
+ * advertiser's name as a small head, the shout line, a standfirst, the detail,
+ * an offer flash reversed out of the accent, and the contact on a rule at the
+ * foot. Artwork - supplied by the advertiser or generated - sits at the top in
+ * the share layoutAdvert() reserved for it.
+ */
+function advertMarkup(data, layout) {
+  if (!layout.geometry) return null;
+  const g = layout.geometry;
+  const has = (lines) => Array.isArray(lines) && lines.length > 0;
+
+  const artwork = g.imageUrl
+    ? `<div class="smart-card-advert-art" style="height:${g.imageHeight}px"><img src="${escapeHtml(g.imageUrl)}" alt="">${
+      g.aiArtwork ? '<span class="smart-card-advert-ai">AI</span>' : ""}</div>`
+    : "";
+
+  return `<div class="smart-card-advert" style="font-size:${layout.fontPx}px;line-height:${g.lineHeightPx}px">
+    ${artwork}
+    <div class="smart-card-advert-type" style="padding:${g.rowGap}px ${g.inset}px;gap:${g.rowGap}px">
+      ${has(layout.nameLines) ? `<strong class="smart-card-advert-name" style="font-size:${g.nameFontPx}px;line-height:${g.nameLineHeightPx}px">${linesMarkup(layout.nameLines)}</strong>` : ""}
+      ${has(layout.shoutLines) ? `<b class="smart-card-advert-shout" style="font-size:${g.shoutFontPx}px;line-height:${g.shoutLineHeightPx}px">${linesMarkup(layout.shoutLines)}</b>` : ""}
+      ${has(layout.standLines) ? `<span class="smart-card-advert-stand" style="font-size:${g.standFontPx}px;line-height:${g.standLineHeightPx}px">${linesMarkup(layout.standLines)}</span>` : ""}
+      ${has(layout.detailLines) ? `<span class="smart-card-advert-detail">${linesMarkup(layout.detailLines)}</span>` : ""}
+      ${has(layout.offerLines) ? `<span class="smart-card-advert-offer" style="height:${g.offerHeight}px;padding:${g.rowGap}px 0">${linesMarkup(layout.offerLines)}</span>` : ""}
+      ${has(layout.contactLines) ? `<span class="smart-card-advert-contact" style="font-size:${g.smallFontPx}px;line-height:${g.smallLineHeightPx}px">${linesMarkup(layout.contactLines)}</span>` : ""}
+      ${has(layout.addressLines) ? `<span class="smart-card-advert-address" style="font-size:${g.smallFontPx}px;line-height:${g.smallLineHeightPx}px">${linesMarkup(layout.addressLines)}</span>` : ""}
+      ${has(layout.footerLines) ? `<span class="smart-card-advert-footer" style="font-size:${g.smallFontPx}px;line-height:${g.smallLineHeightPx}px">${linesMarkup(layout.footerLines)}</span>` : ""}
+    </div>
+  </div>`;
 }
 
 // -------------------------------------------------------------------- chart ---
@@ -362,6 +515,7 @@ const RENDERERS = {
   panchang: (data, layout) => labelledMarkup(layout),
   rashi: rashiMarkup,
   suvichar: suvicharMarkup,
+  advert: advertMarkup,
   dinvishesh: dinvisheshMarkup,
   havaman: havamanMarkup,
   market: marketMarkup,

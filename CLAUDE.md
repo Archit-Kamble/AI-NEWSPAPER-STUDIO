@@ -2113,6 +2113,127 @@ Two things that only showed up when it was tried:
   so Scribus would have opened with an empty frame — `tests/press.test.js` says
   so in those words. It carries the nameplate and any page-level overlay now.
 
+### Every Smart Card is SET, and set the way a printed paper sets it
+
+A pass over all nine cards, each one drawn at real newspaper size and
+photographed. Every finding below was measured in the running browser, not read
+out of the code.
+
+| card | was | is |
+|---|---|---|
+| सुविचार | solved as ONE ATOMIC LINE — 8 px type beside an inline mark, half the block white | a wrapped, centred pull quote at **24–28 px**, its mark as a head, the credit under a short rule |
+| दिनविशेष | wordmark took **0.37** of the block before an entry was set | 0.16, entries centred on the card's own axis |
+| पंचांग / राशीभविष्य | unruled | a **double rule** in the paper's accent — heavy outside, hairline inside |
+| सुडोकू | "सुडोकू सोडवा — …" | "**आजचे सुडोकू सोडवा** — प्रत्येक ओळ, स्तंभ व ३×३ चौकटीत १ ते ९ अंक भरा · काठिण्य : …" |
+| हवामान | four small lines centred in a cell the height of the whole block | a **forecast panel**: place, condition, कमाल/किमान as display figures, rain, source |
+| शेअर / सोने | $/troy ounce, one repeated verb, no direction | **₹ per १० ग्रॅम and per किलो**, grouped निर्देशांक / सराफा, ▲▼ with the move, an honest derivation note |
+| निविदा | the fields, none of the bands | the **printed प्रकटपत्र**: issuer over office, email opposite address, number opposite place-and-date, subject over title, justified indented copy, परिशिष्ट with its group heads, signature block, jimaka note |
+| जाहिरात | did not exist | a display advert — see below |
+
+**The solver's inset must BE the rendered inset.** Three cards carried an `em`
+padding in the stylesheet that `layoutSmartCard()` could not see, and every one
+of them reported `FITS` while the browser drew past the block:
+
+- `.smart-card-table td`'s `0.15em 0.3em` — at the 24 px पंचांग solved to, that
+  is 14.4 px of horizontal padding the value column never had. Measured: the
+  solver put every value on one line, the browser wrapped दिनमान and pushed
+  शके off the bottom. The inset is now computed by the solver and written
+  inline by the renderer and the export walk.
+- `.smart-card-tender` draws a 0.8 px rule and insets 2 px inside it — 5.6 px
+  the notice's copy did not have. Every paragraph ran past the rule.
+- `.smart-card-tender-copy` was `display: grid` with a default `auto` track.
+  Every composed line is `white-space: nowrap` (it was wrapped by the solver
+  and must never be re-broken), so its **min-content width is the whole line**
+  and an auto track sizes to it. Measured in the DOM: container 382 px, line
+  box **401 px**. `grid-template-columns: minmax(0, 1fr)` is the fix, and
+  `.smart-card-list` had the same shape.
+
+**A rate table's row is ONE line.** The move was set as the percentage stacked
+over the change in the instrument's own unit; measured in the DOM that column
+rendered **40 px inside a 29 px row** and bled through the rule into the row
+below, on every row. The absolute move now joins the percentage on the same
+line when the column can hold both, and is dropped when it cannot — which is
+what a narrow column does in print. The card went from 9 px to 11 px for it.
+
+**A close of zero is not a price.** `Number.isFinite` let one through: the FX
+feed returned `INR=X` close **0** for the newest session — its way of saying
+"not settled yet" — and the card went out reading सोने **₹०** and **−१००.००%**.
+Nothing that table prints can legitimately close at or below zero.
+
+**दिनविशेष held 24 dates**, so the box was empty on ~93% of the year. The table
+now covers ~19% of days. It is still a CURATED lookup — a model will cheerfully
+produce a plausible date for a real event — so the added entries want a desk's
+eye before an edition leans on them.
+
+### The sudoku's rules never reached the plate
+
+`smart-card-lines.js` emitted the eighty-one numerals and **not one grid rule**:
+the browser drew them as CSS borders on the `<td>`s, so they existed on screen
+and in no export at all. Measured on a real card, the whole walk emitted
+`bar=1` — the heading rule — for a puzzle the canvas draws with twenty. A
+sudoku without its grid is loose digits on white paper, and unsolvable.
+
+Ten verticals and ten horizontals now, in the stylesheet's own two weights
+(hairline between cells, heavier on the 3×3 boundaries and the frame), and the
+numerals are placed from the grid's own centred origin — they were being set
+from x=0 while the canvas centred the table, so they were horizontally offset
+in every export as well.
+
+**Swept across all nine cards afterwards**, canvas against export walk:
+**0 texts missing from any export**, images 1:1 on every card, and every card
+that draws a rule emits one — sudoku 1 → 21 bars, पंचांग 17 → 25, निविदा 5 →
+17.
+
+### A Smart Card brings its own block
+
+`layout.js`'s **`SMART_CARD_BLOCK_SIZE`** states the frame a printed paper gives
+each card, in block pixels: पंचांग and बाजार a tall single column, सुविचार a
+shallow strip, सुडोकू **square** because the puzzle is, निविदा a whole leg of a
+page. Generating a card creates that block and writes the card straight into
+it, so a desk never has to find, size and empty a frame before they can see
+what the card looks like. "The block that is open" remains available — replacing
+a card already on the page is an ordinary thing to do.
+
+The page's own grid still has the last word: a new block snaps to the column
+grid and is clamped to the room actually left on the page. What the catalogue
+guarantees is that the card **sets** in what it gets — a 148×300 request that
+lands as 151×264 still composes `FITS`, and `tests/smartCardBlocks.test.js`
+holds that for every card in the catalogue.
+
+### A display advertisement is the advertiser's words, set by the newspaper
+
+`src/features/advert.js` takes the copy an advert desk actually receives — an
+email, a WhatsApp paragraph, a line scribbled by the advertiser — and structures
+it into the parts a display advert has. It **never writes a claim the
+advertiser did not make**: no invented price, discount, date, guarantee,
+address or telephone number. An advertisement is a statement by the advertiser
+printed over this paper's masthead, and a made-up figure in one is not a typo.
+
+The artwork is a separate decision and optional. A supplied picture always
+beats a generated one — a desk holding the advertiser's own artwork is not
+asking a model to imagine it. A generated illustration goes through the one
+image service this project has (`newsImage.service.js`) with an **advert**
+brief rather than a news-photograph one, sized to the block's own aspect so it
+fits the hole rather than being cropped into it, and it forbids text in the
+image: generated Devanagari is unreadable and the advertiser's words are the
+compositor's to set. It is marked **AI** on the card itself, because a reader
+cannot tell and the desk must never lose track of which pictures this paper
+made. A refused illustration leaves an ordinary text advert and says so.
+
+### `tests/browser/smart-cards.browser.js`
+
+`npm test` can ask `layoutSmartCard()` whether a card fits, and it does. What it
+cannot see is the browser drawing something wider or taller than the answer it
+was given — which is what every fault above had in common. This net draws each
+card at the block it asks for and measures the DOM: it must fit, and nothing
+inside it may cross its own edges (one pixel of tolerance for border rounding,
+not more). Then it drives the half a desk presses — generate, accept, and the
+card arrives as a new block with its data already in it.
+
+```bash
+node tests/browser/smart-cards.browser.js            # defaults to 49291
+```
+
 ### What a Smart Card entry carries
 
 `smartCardLines()` gave every entry the card's own body line height, which was
@@ -2994,6 +3115,7 @@ node tests/browser/editor-controls.browser.js    # every control × every text o
 node tests/browser/body-editing.browser.js       # the caret, the selection, the gestures
 node tests/browser/story-picker.browser.js       # Take from Reporter, and clearing a story
 node tests/browser/desk-actions.browser.js       # the toolbar's own actions, and what each SAID
+node tests/browser/smart-cards.browser.js        # every card at its own size, and the block it brings
 ```
 
 `story-picker.browser.js` covers the path an editor uses most and no net drove:

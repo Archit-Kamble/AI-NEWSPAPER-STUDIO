@@ -89,12 +89,16 @@ test('sudoku: the 3x3 box rules are still the heavier ones', () => {
   assert.equal((html.match(/box-bottom/g) || []).length, 18, 'two heavier horizontal rules, nine columns wide');
 });
 
-test('sudoku: carries its own compact printed title and difficulty above the square grid', () => {
+test('sudoku: carries a useful one-line solving instruction and difficulty above the square grid', () => {
   const data = { ...sudokuData(), difficulty: 'मध्यम' };
   const result = layout.layoutSmartCard('sudoku', data, FRAME);
   const html = cards.smartCardMarkup('sudoku', data, FRAME);
-  assert.equal(result.geometry.headingText, 'सुडोकू · मध्यम');
+  // The heading names the day, invites the reader to play, states the rule
+  // and gives the difficulty - a puzzle box, not a one-word label.
+  assert.equal(result.geometry.headingText,
+    'आजचे सुडोकू सोडवा — प्रत्येक ओळ, स्तंभ व ३×३ चौकटीत १ ते ९ अंक भरा · काठिण्य : मध्यम');
   assert.match(html, /smart-card-sudoku-heading/);
+  assert.match(html, /प्रत्येक ओळ, स्तंभ/);
   assert.ok(result.geometry.top >= result.geometry.headingLineHeightPx, 'the grid starts below its title');
 });
 
@@ -192,7 +196,7 @@ test('panchang: all rows are present', () => {
   const html = cards.smartCardMarkup('panchang', panchangData(), FRAME);
   assert.equal((html.match(/<tr[ >]/g) || []).length, 5);
   for (const label of ['सूर्योदय', 'सूर्यास्त', 'दिनमान', 'राहुकाळ', 'शके']) {
-    assert.ok(html.includes(`<th>${label}</th>`));
+    assert.ok(html.includes(`<span class="panchang-label">${label}</span>`));
   }
 });
 
@@ -234,9 +238,17 @@ test('suvichar: the quote and its attribution are both present', () => {
   const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
   assert.ok(text.includes('प्रयत्ने वाळूचे कण रगडिता तेलही गळे.'), `quote words missing or reordered: ${text}`);
   assert.ok(html.includes('समर्थ रामदास'));
-  assert.equal(resolved.geometry.singleLine, true);
-  assert.equal(resolved.displayLine, 'प्रयत्ने वाळूचे कण रगडिता तेलही गळे. — समर्थ रामदास');
-  assert.doesNotMatch(html, /smart-card-line/, 'Suvichar is emitted as one unbroken printable line');
+  // THE QUOTE WRAPS NOW, and that is the point of the card.
+  //
+  // It used to be solved as ONE atomic line - so a long thought could only fit
+  // by shrinking until the whole sentence sat on a single row, and the block
+  // stood better than half empty under it. It is set as a printed pull quote
+  // instead: wrapped, centred, with the credit under its own rule.
+  assert.equal(resolved.geometry.singleLine, false);
+  assert.ok(resolved.quoteLines.length >= 1, 'the quote is resolved as lines');
+  assert.deepEqual(resolved.attributionLines, ['— समर्थ रामदास']);
+  assert.match(html, /smart-card-quote-text/);
+  assert.match(html, /smart-card-quote-credit/);
 });
 
 test('suvichar: fit state is explicit, both ways', () => {
@@ -278,11 +290,32 @@ test('havaman: every sourced city and the attribution are rendered from structur
   const result = layout.layoutSmartCard('havaman', data, FRAME);
   const html = cards.smartCardMarkup('havaman', data, FRAME);
   assert.equal(result.fitState, 'FITS');
-  assert.equal(result.geometry.columns, 2);
-  assert.equal((html.match(/smart-card-weather-city/g) || []).length, 4);
+  // FOUR CITIES ARE A DISTRICT TABLE - one ruled row each. (One city gets the
+  // forecast panel instead; see the test below.) The old equal-cell grid gave
+  // every city a cell the height of the whole block and centred four small
+  // lines in it, which for this paper's ordinary single-district case left a
+  // hand's width of white above and below.
+  assert.equal(result.geometry.solo, false);
+  assert.equal((html.match(/smart-card-weather-row/g) || []).length, 4);
   for (const city of data.cities) assert.ok(html.includes(city.name));
   assert.ok(html.includes('स्रोत : Open-Meteo'));
   assert.match(cards.smartCardText('havaman', data), /सातारा.*कमाल २७.३°.*किमान २१.९°/);
+});
+
+test('havaman: ONE city is set as a forecast panel, led by its own figures', () => {
+  // This paper's ordinary case is a single district, and the old grid layout
+  // answered it with four small lines centred in a 250px cell. A printed
+  // weather box leads with the number.
+  const data = { cities: [havamanData().cities[0]], source: 'स्रोत : Open-Meteo' };
+  const result = layout.layoutSmartCard('havaman', data, FRAME);
+  const html = cards.smartCardMarkup('havaman', data, FRAME);
+  assert.equal(result.geometry.solo, true);
+  assert.equal(result.figures.length, 2);
+  assert.deepEqual(result.figures.map((figure) => figure.kind), ['max', 'min']);
+  assert.match(html, /smart-card-weather-solo/);
+  assert.match(html, /smart-card-weather-figure is-max/);
+  assert.match(html, /smart-card-weather-figure is-min/);
+  assert.ok(html.includes('कमाल') && html.includes('किमान'));
 });
 
 test('havaman: a too-small sourced card is flagged, never silently clipped', () => {
@@ -309,9 +342,12 @@ test('market: verified rows render as a ruled rate table with directional change
   assert.equal(result.fitState, 'FITS');
   assert.equal(result.items[0].direction, 'up');
   assert.equal(result.items[1].direction, 'down');
-  assert.equal((html.match(/class="smart-card-market-row"/g) || []).length, 2);
+  assert.equal((html.match(/class="smart-card-market-row is-/g) || []).length, 2);
   assert.match(html, /smart-card-market-brief/);
-  assert.match(html, /कालचा बाजार/);
+  // The brief's own label is the card's (`briefLabel`), defaulting to
+  // मागील सत्र - the old line welded the label to the date and repeated the
+  // same verb for every instrument.
+  assert.match(html, /मागील सत्र/);
   assert.match(cards.smartCardText('market', data), /सोने २४ कॅरेट.*₹७४,२५०/);
   assert.match(cards.smartCardText('market', data), /निर्देशांक सकारात्मक/);
 });

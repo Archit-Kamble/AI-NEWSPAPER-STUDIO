@@ -160,7 +160,16 @@ test('a sudoku prints as its exact square-cell digits, from layoutSmartCard()\'s
   const xml = await scribus.blockFrames(section);
   const digitFrames = countTextFrames(xml);
   assert.equal(digitFrames, clueCount + 1, 'one compact title plus exactly one text frame per non-blank cell (a blank square is not a dot, and is not drawn)');
-  assert.match(xml, /CH="सुडोकू"/, 'the puzzle identifies itself inside the Smart Card');
+  assert.match(xml, /CH="आजचे सुडोकू सोडवा — प्रत्येक ओळ, स्तंभ व ३×३ चौकटीत १ ते ९ अंक भरा"/,
+    'the puzzle prints its complete solving instruction inside the Smart Card');
+
+  // AND ITS RULES. A sudoku without its grid is eighty-one numerals scattered
+  // on white paper. The browser drew them as CSS borders on the cells, so they
+  // existed on screen and in no export at all - measured on a real card, the
+  // whole walk emitted one bar (the heading rule) for a puzzle the canvas
+  // draws with twenty. Ten verticals and ten horizontals, two weights.
+  const rules = [...xml.matchAll(/PTYPE="6"/g)].length;
+  assert.ok(rules >= 20, `the 9x9 grid's own rules must reach the press file, got ${rules}`);
 });
 
 test('a rashi card prints its resolved reading/lucky lines, a panchang its resolved label/value rows - the SAME lines layoutSmartCard() resolved, not a re-flattened paragraph', async () => {
@@ -202,7 +211,7 @@ test('a rashi card prints its resolved reading/lucky lines, a panchang its resol
   }
 });
 
-test('desk-supplied market and tender cards remain structured in the Scribus press file', async () => {
+test('sourced market and AI-structured tender cards remain structured in the Scribus press file', async () => {
   const marketSection = {
     x_px: 10, y_px: 10, width_px: 307, height_px: 240, margin_px: 8,
     headline: '', subheading: '', body: '', images: [], smart_card_key: 'market',
@@ -214,9 +223,16 @@ test('desk-supplied market and tender cards remain structured in the Scribus pre
   };
   const marketXml = await scribus.blockFrames(marketSection);
   for (const text of ['शेअर / सोने बाजार', 'सोने २४ कॅरेट', '₹७४,२५०', 'सेन्सेक्स', '८१,४००',
-    'कालचा बाजार · २६/०८/२०२६', 'बँक आणि धातू समभागांच्या वाढीमुळे निर्देशांक', 'सकारात्मक बंद झाले.']) {
+    // The brief's label is the card's own (`briefLabel`, defaulting to
+    // मागील सत्र) and the session date is set under the title, not welded
+    // onto the label.
+    'मागील सत्र']) {
     assert.ok(marketXml.includes(`CH="${scribus.escapeXml(text)}"`), `${text} must reach the market press frame`);
   }
+  // Exact shaping decides where the sentence wraps for this frame. Test the
+  // whole copy in order, not one incidental line break.
+  const marketText = [...marketXml.matchAll(/CH="([^"]*)"/g)].map((match) => match[1]).join(' ');
+  assert.match(marketText, /बँक आणि धातू समभागांच्या वाढीमुळे निर्देशांक सकारात्मक बंद झाले\./);
 
   const tenderSection = {
     x_px: 10, y_px: 10, width_px: 307, height_px: 500, margin_px: 8,

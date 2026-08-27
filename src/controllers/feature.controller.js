@@ -25,6 +25,20 @@ async function buildOne(req, res) {
   const result = await features.build(req.params.key, date, {
     charsPerSign: Number(req.body?.charsPerSign) || undefined,
     tier: req.body?.tier,
+    // Used only by the Prakatpatra transformer. The source stays operator
+    // supplied and is never persisted by this endpoint; only the reviewed,
+    // structured card is accepted into a block later.
+    sourceText: typeof req.body?.sourceText === 'string' ? req.body.sourceText : undefined,
+    // The advert card's own three. `imageUrl` is a picture the desk already
+    // has (an upload, like any other block picture); `wantsArtwork` asks for a
+    // generated illustration instead, sized to the block it is going into -
+    // which is why the block's own dimensions travel with the request rather
+    // than being guessed here.
+    imageUrl: typeof req.body?.imageUrl === 'string' ? req.body.imageUrl : undefined,
+    wantsArtwork: req.body?.wantsArtwork === true,
+    blockWidth: Number(req.body?.blockWidth) || undefined,
+    blockHeight: Number(req.body?.blockHeight) || undefined,
+    ownerId: req.session?.user?.id || null,
   });
   if (result.error) return res.status(result.upstream ? 502 : result.unconfigured ? 503 : 400).json(result);
   res.json(result);

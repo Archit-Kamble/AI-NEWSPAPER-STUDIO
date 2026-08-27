@@ -217,22 +217,26 @@ test('sourced market and AI-structured tender cards remain structured in the Scr
     headline: '', subheading: '', body: '', images: [], smart_card_key: 'market',
     smart_card_data: {
       title: 'शेअर / सोने बाजार', source: 'स्रोत : संपादकीय पडताळणी', asOf: '२६/०८/२०२६',
-      yesterdayBrief: 'बँक आणि धातू समभागांच्या वाढीमुळे निर्देशांक सकारात्मक बंद झाले.',
+      trendLabel: 'गेल्या महिन्याचा कल',
+      trend: {
+        label: 'सेन्सेक्स', values: [80100, 80900, 80400, 81100, 81400],
+        from: '२८ जुलै', to: '२६ ऑग', sessions: 5,
+        changePercent: '+१.६२%', high: '८१,४००', low: '८०,१००',
+      },
       items: [{ label: 'सोने २४ कॅरेट', value: '₹७४,२५०', change: '+०.४%' }, { label: 'सेन्सेक्स', value: '८१,४००', change: '-०.२%' }],
     },
   };
   const marketXml = await scribus.blockFrames(marketSection);
   for (const text of ['शेअर / सोने बाजार', 'सोने २४ कॅरेट', '₹७४,२५०', 'सेन्सेक्स', '८१,४००',
-    // The brief's label is the card's own (`briefLabel`, defaulting to
-    // मागील सत्र) and the session date is set under the title, not welded
-    // onto the label.
-    'मागील सत्र']) {
+    // The month's line reaches the plate with its own scale: the caption, the
+    // high and the low on the y axis, and the two session dates on the x. A
+    // chart whose scale printed only in the browser would be a decoration on
+    // the plate.
+    'गेल्या महिन्याचा कल · सेन्सेक्स', '८०,१००', '२८ जुलै', '२६ ऑग']) {
     assert.ok(marketXml.includes(`CH="${scribus.escapeXml(text)}"`), `${text} must reach the market press frame`);
   }
-  // Exact shaping decides where the sentence wraps for this frame. Test the
-  // whole copy in order, not one incidental line break.
-  const marketText = [...marketXml.matchAll(/CH="([^"]*)"/g)].map((match) => match[1]).join(' ');
-  assert.match(marketText, /बँक आणि धातू समभागांच्या वाढीमुळे निर्देशांक सकारात्मक बंद झाले\./);
+  // And the line itself, not only its labels.
+  assert.ok(/PTYPE="6"/.test(marketXml), 'the month\'s line reaches the press file as real geometry');
 
   const tenderSection = {
     x_px: 10, y_px: 10, width_px: 307, height_px: 500, margin_px: 8,

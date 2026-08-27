@@ -141,37 +141,6 @@ async function fetchInstrument(instrument, date, fetchImpl, apiUrl) {
   return { ...instrument, previous, latest, series, changePercent };
 }
 
-/**
- * The previous session in ONE sentence.
- *
- * The old line read "सेन्सेक्स −०.२४% घसरला; निफ्टी ५० −०.५२% घसरला. सोने
- * −०.८६% आणि चांदी −०.९४% बदलले." - the same verb three times and a fourth
- * clause that says only "changed". A market brief says which way the day went
- * and names the mover, which is what a reader takes from it.
- */
-function sessionBrief(rows) {
-  const indices = rows.filter((row) => row.group === 'index');
-  const bullion = rows.filter((row) => row.group === 'bullion');
-  const up = indices.filter((row) => row.changePercent > 0).length;
-  const down = indices.filter((row) => row.changePercent < 0).length;
-  const mood = up && !down ? 'निर्देशांक वधारले'
-    : down && !up ? 'निर्देशांक घसरले'
-      : up && down ? 'निर्देशांकांत संमिश्र कल राहिला'
-        : 'निर्देशांक जवळपास स्थिर राहिले';
-
-  // The biggest single move of the session, in either direction - the one
-  // number a reader remembers.
-  const biggest = [...rows].sort(
-    (a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent),
-  )[0];
-  const metal = bullion.length
-    ? ` सराफा बाजारात ${bullion.map((row) => `${row.label} ${percentMr(row.changePercent)}`).join(' व ')}.`
-    : '';
-  const lead = biggest
-    ? ` सर्वाधिक हालचाल ${biggest.label}मध्ये (${percentMr(biggest.changePercent)}).`
-    : '';
-  return `${mood}.${lead}${metal}`;
-}
 
 async function build(isoDate, {
   fetchImpl = global.fetch,
@@ -267,8 +236,6 @@ async function build(isoDate, {
       items,
       trend,
       trendLabel: 'गेल्या महिन्याचा कल',
-      briefLabel: 'मागील सत्र',
-      yesterdayBrief: sessionBrief(priced),
       // Said in the card, not only in a comment: the bullion figures are
       // derived from the international close at the session's own rupee rate,
       // and are not a local सराफा retail quote.
@@ -285,6 +252,6 @@ async function build(isoDate, {
 }
 
 module.exports = {
-  build, fetchInstrument, sessionPair, sessionBrief, validIsoDate, dateInTimeZone,
+  build, fetchInstrument, sessionPair, validIsoDate, dateInTimeZone,
   INSTRUMENTS, USD_INR, GRAMS_PER_TROY_OUNCE, API,
 };

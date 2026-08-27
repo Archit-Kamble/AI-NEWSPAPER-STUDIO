@@ -95,29 +95,30 @@ const GAP_PX = 6;
 // they belong to the card's finite geometry, travel with it to every edition,
 // and are emitted by the same export walk as the card's type.
 const CARD_ARTWORK = Object.freeze({
-  // THE NAMEPLATE SITS OVER THE COLUMN IT NAMES.
+  // THE सुविचार MARK OPENS THE LINE IT NAMES.
   //
-  // `inline` put the सुविचार mark down the LEFT of the block at 98% of its
-  // height, with the quote set in the strip beside it - so the artwork and the
-  // words it introduces were two objects side by side rather than a heading
-  // and the lines under it, which is the desk's report ("suvichar name in
-  // image should align with next lines"). Every other standing card on this
-  // paper already sets its own mark as a centred head; this one now does too,
-  // and the quote below is centred on the same axis.
-  suvichar: { file: 'assets/smart-cards/SuvicharwithoutBG.png', aspect: 1300 / 664, placement: 'top', heightShare: 0.2, widthShare: 0.34 },
-  // A TITLE BLOCK IS A HEADING, NOT A BANNER.
+  // This card is a one-line strip now (see layoutSuvichar), and on a strip a
+  // centred head above the line is a second band the strip does not have room
+  // for. The mark therefore sets at the head of the line and the quote and its
+  // credit run on after it - mark, thought, name, one rule of type across the
+  // column, which is how a printed thought-for-the-day is set.
+  suvichar: { file: 'assets/smart-cards/SuvicharwithoutBG.png', aspect: 1300 / 664, placement: 'inline', heightShare: 0.74, widthShare: 0.2 },
+  //                          ^ the mark stands INSIDE the card's own rule now,
+  //                          so it may not fill the frame edge to edge: at
+  //                          0.86 it measured 3px past the drawn card box.
+  // दिनविशेष IS TWO COLUMNS: THE NAME, AND THE DAY.
   //
-  // 0.37 of the block's height for the दिनविशेष wordmark took better than a
-  // third of the box before a single entry was set, on a card whose whole
-  // purpose is the entries. Measured on a 268x300 block: 96 px of artwork over
-  // 180 px of copy. A printed paper sets a standing head at a fraction of that
-  // and gives the room to the reading matter.
-  // The wordmark names the box; it is not the box's headline. At 0.16/0.62
-  // it set a 150 px nameplate over a 16 px entry - nearly ten times the
-  // type it introduces - and the desk reported it as too big. A printed
-  // standing box sets its own name a rung or so above its entries, not an
-  // octave.
-  dinvishesh: { file: 'assets/smart-cards/dinvishesh-title-v2.png', aspect: 2140 / 514, placement: 'top', heightShare: 0.13, widthShare: 0.46 },
+  // The wordmark stands in its own column with the day's entries beside it,
+  // each centred in its half - which is the shape a Marathi daily gives this
+  // box and what the desk asked for. `inline` is exactly that placement, and
+  // it also settles the artwork's own vertical position: centred in the
+  // column rather than sitting on the box's top rule.
+  //
+  // AND IT IS THE PAPER'S OWN NAMEPLATE FACE. dinvishesh-title-v2.png was a
+  // wide 4.16:1 banner in a different hand from पंचांग's and राशिभविष्य's
+  // marks; denvishash.png is 1380x752, the same artwork family as
+  // panchangwithoutBG.png, so the three standing boxes are set by one hand.
+  dinvishesh: { file: 'assets/smart-cards/denvishash.png', aspect: 1380 / 752, placement: 'inline', heightShare: 0.62, widthShare: 0.38 },
   panchang: { file: 'assets/smart-cards/panchangwithoutBG.png', aspect: 1380 / 752, placement: 'top', heightShare: 0.245, widthShare: 0.82 },
   // THE NAMEPLATE SITS IN THE MIDDLE OF THE WHEEL, NOT ABOVE IT.
   //
@@ -171,6 +172,11 @@ function cardArtworkFor(key, frame) {
     const y = frame.padding + (frame.innerHeight - height) / 2;
     return {
       artwork: { file: config.file, x, y, width, height },
+      // THE RULE GOES ROUND THE WHOLE CARD when the nameplate stands INSIDE
+      // it. For a `top` nameplate the mark sits over the box and the rule
+      // follows the box; for an `inline` one the mark is a column of the box
+      // and a rule drawn round the content alone would cut the card in half.
+      borderBox: { x: 0, y: 0, width: frame.width, height: frame.height },
       content: {
         x: x + width + gap,
         y: frame.padding,
@@ -1568,50 +1574,70 @@ function layoutMarket(data, frame) {
     // deep box exaggerates a quiet month into a mountain range.
     const trendPlotHeight = trend ? Math.max(22, Math.min(56, frame.innerWidth * 0.28)) : 0;
     let trendHead = { line: '', hardOverset: false };
-    let trendFoot = { line: '', hardOverset: false };
     let trendPoints = [];
     let trendArea = [];
     let trendHigh = 0;
     let trendLow = 0;
+    let trendAxis = null;
     if (trend) {
       const headText = `${String(data.trendLabel || 'गेल्या महिन्याचा कल')} · ${trend.label || ''}`.trim();
       trendHead = measureAtomic(headText, trendLabelFontPx, 'sans', 700, frame.innerWidth);
-      const footText = [trend.from, trend.to].filter(Boolean).join(' — ')
-        + (trend.changePercent ? `  ${trend.changePercent}` : '');
-      trendFoot = measureAtomic(footText, trendFootFontPx, 'sans', 400, frame.innerWidth);
-      hardOverset ||= trendHead.hardOverset || trendFoot.hardOverset;
+      hardOverset ||= trendHead.hardOverset;
 
       const values = trend.values.map(Number).filter((v) => Number.isFinite(v));
       trendHigh = Math.max(...values);
       trendLow = Math.min(...values);
+
+      // A CHART WITHOUT ITS SCALE IS A DECORATION.
+      //
+      // The line alone says the month wobbled; it cannot say between what and
+      // what, or over which days. The high and the low label the y axis at the
+      // two points the reader can actually verify against the rate table above,
+      // and the first and last session date label the x axis. Both are
+      // measured, so the plot is given the room that is left rather than the
+      // labels being laid over the line.
+      const highLabel = String(trend.high || '');
+      const lowLabel = String(trend.low || '');
+      const axisWidth = Math.max(
+        measure(highLabel, trendFootFontPx, 'sans', 400),
+        measure(lowLabel, trendFootFontPx, 'sans', 400),
+      ) + 3;
+      const plotWidth = Math.max(1, frame.innerWidth - axisWidth);
+
       // A flat month is a flat line down the middle, never a division by zero.
       const span = trendHigh - trendLow || 1;
-      const stepX = values.length > 1 ? frame.innerWidth / (values.length - 1) : 0;
+      const stepX = values.length > 1 ? plotWidth / (values.length - 1) : 0;
       trendPoints = values.map((value, index) => ({
-        x: index * stepX,
+        x: axisWidth + index * stepX,
         y: trendPlotHeight - ((value - trendLow) / span) * trendPlotHeight,
       }));
       // The tint under the line is the same point list closed along the foot,
       // so it can never disagree with the line above it.
       trendArea = [
-        { x: 0, y: trendPlotHeight },
+        { x: axisWidth, y: trendPlotHeight },
         ...trendPoints,
         { x: trendPoints[trendPoints.length - 1].x, y: trendPlotHeight },
       ];
+      trendAxis = {
+        width: axisWidth,
+        plotWidth,
+        highLabel,
+        lowLabel,
+        fromLabel: String(trend.from || ''),
+        toLabel: String(trend.to || ''),
+        changeLabel: String(trend.changePercent || ''),
+        sessionsLabel: trend.sessions ? `${devanagariDigits(trend.sessions)} सत्रे` : '',
+      };
     }
     const trendHeight = trend
       ? trendLabelLineHeightPx + 2 + trendPlotHeight + 2 + trendFootLineHeightPx
       : 0;
 
-    const briefText = String(data.yesterdayBrief || '').trim();
-    const briefLabel = briefText ? String(data.briefLabel || 'मागील सत्र').trim() : '';
-    const briefInset = Math.max(4, fontPx * 0.5);
-    const briefLabelWrapped = wrapSmartText(briefLabel, {
-      width: Math.max(0, frame.innerWidth - briefInset * 2), fontPx: headFontPx, family: 'sans', weight: 700,
-    });
-    const briefWrapped = wrapSmartText(briefText, {
-      width: Math.max(0, frame.innerWidth - briefInset * 2), fontPx, family: 'serif', weight: 400,
-    });
+    // NO "मागील सत्र" PARAGRAPH. It restated in prose what the ▲▼ column and
+    // the month's line already say in figures, and a rate panel that explains
+    // its own table twice is a panel with nothing to add. Removed at the
+    // source too - market.js no longer composes the sentence - rather than
+    // being left unrendered, which would be a payload nobody reads.
     const noteText = String(data.note || '').trim();
     const noteWrapped = noteText
       ? wrapSmartText(noteText, { width: frame.innerWidth, fontPx: sourceFontPx, family: 'serif', weight: 400 })
@@ -1619,28 +1645,21 @@ function layoutMarket(data, frame) {
     const source = wrapSmartText(data.source || 'स्रोत : संपादकीय पडताळणी', {
       width: frame.innerWidth, fontPx: sourceFontPx, family: 'serif', weight: 400,
     });
-    hardOverset ||= briefLabelWrapped.hardOverset || briefWrapped.hardOverset
-      || noteWrapped.hardOverset || source.hardOverset;
+    hardOverset ||= noteWrapped.hardOverset || source.hardOverset;
 
     const titleLines = title.lines.map((line) => line.text);
-    const briefLabelLines = briefLabelWrapped.lines.map((line) => line.text);
-    const briefLines = briefWrapped.lines.map((line) => line.text);
     const noteLines = noteWrapped.lines.map((line) => line.text);
     const sourceLines = source.lines.map((line) => line.text);
 
     const titleHeight = Math.max(1, titleLines.length) * titleLineHeightPx
       + (asOf.line ? headLineHeightPx : 0);
     const rowsHeight = items.reduce((sum, item) => sum + item.rowHeight, 0) + headHeight;
-    const briefHeight = briefText
-      ? (briefLabelLines.length * headLineHeightPx + briefLines.length * lineHeightPx) + rowPadding * 4
-      : 0;
     const noteHeight = noteLines.length * sourceLineHeightPx;
     const sourceHeight = Math.max(1, sourceLines.length) * sourceLineHeightPx;
 
     return {
       height: titleHeight + GAP_PX + rowsHeight
         + (trendHeight ? GAP_PX + trendHeight : 0)
-        + (briefHeight ? GAP_PX + briefHeight : 0)
         + (noteHeight ? 2 + noteHeight : 0)
         + GAP_PX + sourceHeight,
       hardOverset,
@@ -1649,16 +1668,12 @@ function layoutMarket(data, frame) {
       asOfLine: asOf.line,
       sourceLines,
       noteLines,
-      briefLabelLines,
-      briefLines,
       titleHeight,
       sourceHeight,
       noteHeight,
-      briefHeight,
-      briefInset,
       headHeight,
       trendHeadLine: trendHead.line,
-      trendFootLine: trendFoot.line,
+      trendAxis,
       trendPoints,
       trendArea,
       trendHeight,
@@ -1740,8 +1755,6 @@ function layoutMarket(data, frame) {
       changeWidth: solved.changeWidth,
       rowPadding: solved.rowPadding,
       rowsHeight: solved.rowsHeight,
-      briefHeight: solved.briefHeight,
-      briefInset: solved.briefInset,
       headHeight: solved.headHeight,
       topOffset,
       trendHeight: solved.trendHeight + (grownPlotHeight - solved.trendPlotHeight),
@@ -1754,7 +1767,7 @@ function layoutMarket(data, frame) {
     },
     trend: solved.trendPoints.length ? {
       headLine: solved.trendHeadLine,
-      footLine: solved.trendFootLine,
+      axis: solved.trendAxis,
       points: grow(solved.trendPoints),
       area: grow(solved.trendArea),
       plotHeight: grownPlotHeight,
@@ -1765,8 +1778,6 @@ function layoutMarket(data, frame) {
     asOfLine: solved.asOfLine,
     sourceLines: solved.sourceLines,
     noteLines: solved.noteLines,
-    briefLabelLines: solved.briefLabelLines,
-    briefLines: solved.briefLines,
     items: solved.items,
     violations: solved.fitState === 'OVERSET' ? ['SMART_CARD_OVERSET'] : [],
   };
@@ -2144,7 +2155,7 @@ export function layoutSmartCard(key, data, frame) {
   if (!fn) return empty(String(key || ''));
 
   const clamped = clampFrame(frame);
-  const { artwork, content, band } = cardArtworkFor(normalKey, clamped);
+  const { artwork, content, band, borderBox } = cardArtworkFor(normalKey, clamped);
   const contentFrame = {
     width: content.width,
     height: content.height,
@@ -2188,6 +2199,10 @@ export function layoutSmartCard(key, data, frame) {
     ...result,
     artwork,
     contentBox: content,
+    // The rectangle this card's own rule follows. Usually the content box;
+    // the whole frame when the nameplate stands inside the card as a column
+    // of it, where a rule round the content alone would cut the card in two.
+    borderBox: borderBox || content,
     subtitle,
     fitState,
     exactShaping: isShaperReady(),
@@ -2223,12 +2238,18 @@ export const SMART_CARD_BLOCK_SIZE = Object.freeze({
   // happens to need on one day. A standing almanac box is small and square-ish;
   // the horoscope and the market panel are whole legs of a page; a सुविचार is
   // a one-line strip across the top of a column.
-  panchang: { width: 148, height: 232 },
+  // 205: measured, the five rows solve to the same 14px type at 205 as at 232
+  // and leave 6.7px of slack instead of 27. The extra sat INSIDE the almanac's
+  // own double ring and read as a sixth, empty row - photographed on the page.
+  panchang: { width: 148, height: 205 },
   rashi: { width: 307, height: 620 },
   suvichar: { width: 307, height: 72 },
   dinvishesh: { width: 190, height: 150 },
   sudoku: { width: 232, height: 268 },
-  havaman: { width: 148, height: 210 },
+  // 168, not 210: measured, the forecast panel solves to the same 9px type at
+  // 160 as at 210, so the extra 50px was air the panel then centred its
+  // content in - which is the desk's "too much gap between सातारा and स्रोत".
+  havaman: { width: 148, height: 168 },
   market: { width: 307, height: 620 },
   tender: { width: 300, height: 620 },
   advert: { width: 268, height: 300 },

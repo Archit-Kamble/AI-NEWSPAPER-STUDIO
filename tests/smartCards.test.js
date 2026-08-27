@@ -330,7 +330,13 @@ test('market: verified rows render as a ruled rate table with directional change
   const data = {
     title: 'शेअर / सोने बाजार',
     asOf: '२६/०८/२०२६',
-    yesterdayBrief: 'बँक आणि धातू समभागांच्या वाढीमुळे निर्देशांक सकारात्मक बंद झाले.',
+    trendLabel: 'गेल्या महिन्याचा कल',
+    trend: {
+      label: 'सेन्सेक्स',
+      values: [80100, 80900, 80400, 81100, 81400],
+      from: '२८ जुलै', to: '२६ ऑग', sessions: 5,
+      changePercent: '+१.६२%', high: '८१,४००', low: '८०,१००',
+    },
     items: [
       { label: 'सोने २४ कॅरेट', value: '₹७४,२५०', change: '+०.४%' },
       { label: 'सेन्सेक्स', value: '८१,४००', change: '-०.२%' },
@@ -343,13 +349,22 @@ test('market: verified rows render as a ruled rate table with directional change
   assert.equal(result.items[0].direction, 'up');
   assert.equal(result.items[1].direction, 'down');
   assert.equal((html.match(/class="smart-card-market-row is-/g) || []).length, 2);
-  assert.match(html, /smart-card-market-brief/);
-  // The brief's own label is the card's (`briefLabel`), defaulting to
-  // मागील सत्र - the old line welded the label to the date and repeated the
-  // same verb for every instrument.
-  assert.match(html, /मागील सत्र/);
+  // THE "मागील सत्र" PARAGRAPH IS GONE, deliberately: it restated in prose what
+  // the ▲▼ column and the month's line already say in figures. Removed at the
+  // source (market.js no longer composes the sentence) rather than left
+  // unrendered, so nothing measures a card against text it does not draw.
+  assert.doesNotMatch(html, /smart-card-market-brief/);
+  assert.doesNotMatch(html, /मागील सत्र/);
+  // The month's line, with its own scale: the high and the low label the y
+  // axis at the two figures a reader can check against the table above, and
+  // the first and last session label the x axis.
+  assert.match(html, /smart-card-market-trend/);
+  assert.match(html, /trend-y-high/);
+  assert.match(html, /trend-y-low/);
+  assert.match(html, /८१,४००/);
+  assert.match(html, /२८ जुलै/);
   assert.match(cards.smartCardText('market', data), /सोने २४ कॅरेट.*₹७४,२५०/);
-  assert.match(cards.smartCardText('market', data), /निर्देशांक सकारात्मक/);
+  assert.match(cards.smartCardText('market', data), /गेल्या महिन्याचा कल/);
 });
 
 test('tender: office, subject, paragraphs, table and signatory remain structured', () => {

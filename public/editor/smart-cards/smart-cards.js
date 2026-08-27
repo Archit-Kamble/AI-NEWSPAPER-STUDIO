@@ -330,23 +330,27 @@ function marketMarkup(data, layout) {
   // Scribus and the PDF as a `poly` and this is the one place they could
   // disagree. Nothing here recomputes a coordinate: the solver normalised the
   // closes into the plot box, and the browser and the plate read that.
+  const axis = layout.trend && layout.trend.axis;
   const trend = layout.trend
     ? `<figure class="smart-card-market-trend" style="height:${g.trendHeight}px">
         <figcaption style="font-size:${g.trendLabelFontPx}px;line-height:${g.trendLabelLineHeightPx}px">${escapeHtml(layout.trend.headLine)}</figcaption>
         <svg viewBox="0 0 ${layout.trend.width} ${layout.trend.plotHeight}" width="${layout.trend.width}" height="${layout.trend.plotHeight}" preserveAspectRatio="none" role="img">
+          <line x1="${axis.width}" y1="0.3" x2="${layout.trend.width}" y2="0.3" stroke="#ddcbd0" stroke-width="0.6"></line>
+          <line x1="${axis.width}" y1="${(layout.trend.plotHeight / 2).toFixed(2)}" x2="${layout.trend.width}" y2="${(layout.trend.plotHeight / 2).toFixed(2)}" stroke="#eadfe1" stroke-width="0.5" stroke-dasharray="2 2"></line>
+          <line x1="${axis.width}" y1="0" x2="${axis.width}" y2="${layout.trend.plotHeight}" stroke="#c9aeb3" stroke-width="0.6"></line>
           <polygon points="${layout.trend.area.map((pt) => `${pt.x.toFixed(2)},${pt.y.toFixed(2)}`).join(" ")}" fill="${layout.trend.ink}" fill-opacity="0.12"></polygon>
           <polyline points="${layout.trend.points.map((pt) => `${pt.x.toFixed(2)},${pt.y.toFixed(2)}`).join(" ")}" fill="none" stroke="${layout.trend.ink}" stroke-width="1.1" stroke-linejoin="round"></polyline>
         </svg>
-        <small style="font-size:${g.trendFootFontPx}px;line-height:${g.trendFootLineHeightPx}px">${escapeHtml(layout.trend.footLine)}</small>
+        <b class="trend-y trend-y-high" style="font-size:${g.trendFootFontPx}px;line-height:${g.trendFootLineHeightPx}px;width:${axis.width}px;top:${g.trendLabelLineHeightPx + 2}px">${escapeHtml(axis.highLabel)}</b>
+        <b class="trend-y trend-y-low" style="font-size:${g.trendFootFontPx}px;line-height:${g.trendFootLineHeightPx}px;width:${axis.width}px;top:${(g.trendLabelLineHeightPx + 2 + layout.trend.plotHeight - g.trendFootLineHeightPx).toFixed(2)}px">${escapeHtml(axis.lowLabel)}</b>
+        <small class="trend-x" style="font-size:${g.trendFootFontPx}px;line-height:${g.trendFootLineHeightPx}px;padding-left:${axis.width}px">
+          <span>${escapeHtml(axis.fromLabel)}</span>
+          <span>${escapeHtml(axis.sessionsLabel)} ${escapeHtml(axis.changeLabel)}</span>
+          <span>${escapeHtml(axis.toLabel)}</span>
+        </small>
       </figure>`
     : "";
 
-  const brief = layout.briefLines?.length
-    ? `<aside class="smart-card-market-brief" style="min-height:${g.briefHeight}px;line-height:${g.lineHeightPx}px;padding:${g.rowPadding * 2}px ${g.briefInset}px">
-        <strong style="font-size:${g.headFontPx}px;line-height:${g.headLineHeightPx}px">${linesMarkup(layout.briefLabelLines)}</strong>
-        <p>${linesMarkup(layout.briefLines)}</p>
-      </aside>`
-    : "";
   // What the bullion figures ARE - derived from the international close at the
   // session's own rupee rate, never a सराफा retail quote. It prints; it is not
   // a developer note.
@@ -358,7 +362,6 @@ function marketMarkup(data, layout) {
     <h3 style="height:${g.titleHeight}px;font-size:${g.titleFontPx}px;line-height:${g.titleLineHeightPx}px">${linesMarkup(layout.titleLines)}${layout.asOfLine ? `<small style="font-size:${g.headFontPx}px;line-height:${g.headLineHeightPx}px">${escapeHtml(layout.asOfLine)}</small>` : ""}</h3>
     <div class="smart-card-market-rows">${rows}</div>
     ${trend}
-    ${brief}
     ${note}
     <p class="smart-card-market-source" style="height:${g.sourceHeight}px;font-size:${g.sourceFontPx}px;line-height:${g.sourceLineHeightPx}px">${linesMarkup(layout.sourceLines)}</p>
   </div>`;
@@ -699,7 +702,11 @@ export function smartCardText(key, data) {
     return asList(data.items)
       .filter((item) => item?.label && item?.value != null)
       .map((item) => `${item.label} : ${item.value}${item.change ? ` (${item.change})` : ""}`)
-      .concat(data.yesterdayBrief ? [`कालचा बाजार${data.asOf ? ` (${data.asOf})` : ""} : ${data.yesterdayBrief}`] : [])
+      // No "कालचा बाजार" sentence: the card stopped printing that paragraph
+      // (it restated the ▲▼ column in prose), and smartCardText() is a
+      // RENDERING of the card, never a richer second version of it - a block
+      // measured on text the card does not draw is measured wrongly.
+      .concat(data.trend ? [`${data.trendLabel || "गेल्या महिन्याचा कल"} : ${data.trend.from} — ${data.trend.to} ${data.trend.changePercent || ""}`.trim()] : [])
       .concat(data.source ? [String(data.source)] : [])
       .join("\n");
   }

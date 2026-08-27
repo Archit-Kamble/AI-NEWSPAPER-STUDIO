@@ -2337,6 +2337,98 @@ day of 10 h 59.6 m printed **"१० तास ६० मिनिटे"**. The
 now and then split, and a whole number of hours drops the minutes entirely —
 "११ तास", which is how an almanac says it.
 
+### The nameplate is a COLUMN of the card, or a heading over it
+
+`cardArtworkFor()` has three placements and each one answers a different
+question about the mark:
+
+| | | |
+|---|---|---|
+| `top` | पंचांग | the mark stands over the box it names |
+| `middle` | राशिभविष्य | the mark crosses the column's waist |
+| `inline` | सुविचार, दिनविशेष | the mark is a **column of** the card |
+
+**सुविचार is mark, thought, name — one rule of type.** On a strip a centred
+head above the line is a second band the strip has not got, so the mark opens
+the line and the quote and its credit run on after it.
+
+**दिनविशेष is two columns**: the wordmark in one, the day's entries as centred
+bullets in the other, each centred in its half. And it is the paper's own
+nameplate face — `dinvishesh-title-v2.png` was a 4.16:1 banner in a different
+hand from पंचांग's and राशिभविष्य's marks; `denvishash.png` is 1380×752, the
+same artwork family as `panchangwithoutBG.png`, so the three standing boxes are
+set by one hand.
+
+**A card whose mark stands inside it is ruled round the whole frame**
+(`borderBox`). For a `top` nameplate the mark sits over the box and the rule
+follows the box; for an `inline` one a rule round the *content* alone would cut
+the card in half. The solver states which rectangle, and both surfaces read it.
+
+### Every card is ruled, in one of the paper's two inks
+
+`CARD_BORDER` (`export/smart-card-lines.js`, mirrored by `.smart-card-<key>` in
+`styles.css`) — the accent for a standing feature of the paper (सुविचार,
+दिनविशेष, पंचांग, राशिभविष्य, हवामान, बाजार, सुडोकू), black for a commercial
+block (जाहिरात, निविदा), because an advertisement and a प्रकटपत्र are not the
+paper speaking. पंचांग and राशिभविष्य keep the **double** band — heavy outside,
+hairline inside — which is what tells an almanac from an ordinary ruled box.
+
+This is not a second geometry: a border is ink at the frame's own edge, and
+both surfaces already have the frame.
+
+### A rate panel does not explain its own table in prose
+
+The **"मागील सत्र"** paragraph restated in figures what the ▲▼ column already
+said, and it is gone — **at the source**, not merely unrendered: `market.js` no
+longer composes the sentence, `smartCardText()` no longer emits it, and nothing
+measures a block against text the card does not draw.
+
+**The month's line carries its own scale.** A chart without one is a
+decoration: the line alone says the month wobbled, not between what and what,
+or over which days. The **high and the low label the y axis** — the two figures
+a reader can check against the rate table directly above — and the **first and
+last session date label the x axis**, with the session count and the month's
+own change between them. Both are measured, so the plot is given the room that
+is left rather than the labels being laid over the line.
+
+**The writers take a poly's points as `[x, y]` PAIRS**
+(`scribus.service.js`'s `polyFrame` destructures them); the solver states them
+as `{x, y}` because that is what the browser's `<svg>` consumes. One conversion,
+at the boundary — getting this wrong throws *"object is not iterable"* out of
+the Scribus walk, which is how it was found.
+
+### A card is only as tall as its own content
+
+Three blocks were carrying air the card then had to do something with, and each
+did something different and wrong:
+
+- **हवामान** solved to the same 9 px type at 160 as at 210, and the panel
+  centred its content in the difference — the desk's "too much gap between
+  सातारा and स्रोत". Now **148×168**.
+- **पंचांग**'s five rows left 27 px of slack *inside the almanac's own double
+  ring*, which read as a sixth, empty row. Same type at 205 as at 232, slack
+  6.7 px. Now **148×205**.
+- **The market panel** finished at 55% of a whole leg — answered by the chart
+  taking the room, bounded (above).
+
+**And राशिभविष्य's signs are centred in their rows.** A row is the block
+divided by the row count, and a sign carrying two lines of reading rather than
+three leaves the difference as slack. Pinned to the top, all of it collected at
+the *foot* of each cell — which is what put a hand's width of white immediately
+above the nameplate band, since the band follows the third row's own trailing
+space.
+
+### The export walk had a second, unreachable copy of itself
+
+465 lines: `chart`, `sudoku`, `rashi`, `panchang`, `suvichar`, `dinvishesh`,
+`havaman`, `market`, `tender` — the whole branch chain again, left behind when
+the live set above it was rewritten. It was a strict subset (it never gained an
+`advert` branch), and nothing could reach it because every branch above ends in
+`return out`. Deleted, with the canvas-against-export sweep of all nine cards
+unchanged afterwards. A second copy of a card's geometry is precisely the drift
+this file exists to prevent, and one sitting where no test can execute it is the
+worst kind.
+
 ### A Smart Card brings its own block
 
 `layout.js`'s **`SMART_CARD_BLOCK_SIZE`** states the frame a printed paper gives

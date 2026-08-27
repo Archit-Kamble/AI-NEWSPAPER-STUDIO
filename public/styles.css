@@ -3538,12 +3538,19 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 .smart-card-rashi-sign {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
+  /* CENTRED IN ITS ROW, not pinned to its top. A row is as deep as the block
+     divided by the row count, and a sign carrying two lines of reading rather
+     than three leaves the difference as slack. Pinned to the top, all of that
+     slack collects at the FOOT of the cell - which is what put a hand's width
+     of white immediately above the nameplate band, since the band follows the
+     third row's own trailing space. Split above and below, the column reads
+     evenly and the band sits where it was placed. */
+  align-content: center;
+  align-items: center;
   gap: 0 6px;
   border-bottom: 0.5px solid #d5c7c9;
   box-sizing: border-box;
 }
-.smart-card-rashi-sign:nth-child(6n + 1),
 .smart-card-rashi-sign:first-child { border-top: 0.5px solid #d5c7c9; }
 .smart-card-rashi-sign .rashi-art {
   display: block;
@@ -3601,13 +3608,7 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 .smart-card-rashi .smart-card-content {
   box-shadow: inset 0 0 0 0.6px #8a1428, inset 0 0 0 2.2px #fff, inset 0 0 0 2.8px #8a1428;
 }
-/* दिनविशेष is a BOX: one rule round the whole card, its nameplate on a single
-   line at the head, and the day's entries as centred bullets under it. The
-   ring is a single hairline rather than the almanac's double band - a standing
-   list is not an almanac, and two rules on a 190px box is all rule. */
-.smart-card-dinvishesh .smart-card-content {
-  box-shadow: inset 0 0 0 0.6px #8a1428;
-}
+
 .smart-card-panchang .smart-card-table th,
 .smart-card-panchang .smart-card-table td {
   vertical-align: middle;
@@ -6867,3 +6868,49 @@ body.print-view .page-imprint {
 }
 .smart-card-quote.is-strip .smart-card-quote-text { flex: 0 1 auto; }
 .smart-card-quote.is-strip .smart-card-quote-credit { flex: 0 0 auto; white-space: nowrap; }
+
+/* EVERY CARD IS RULED. The accent for a standing feature of the paper, black
+   for a commercial block - an advertisement and a प्रकटपत्र are not the paper
+   speaking. Mirrors CARD_BORDER in src/services/export/smart-card-lines.js;
+   a border is ink at the frame's own edge, so neither surface needs anything
+   the other has not got. पंचांग and राशिभविष्य keep their double band, which
+   is what tells an almanac from an ordinary ruled box. */
+.smart-card-havaman .smart-card-content,
+.smart-card-market .smart-card-content,
+.smart-card-sudoku .smart-card-content {
+  box-shadow: inset 0 0 0 0.6px #8a1428;
+}
+.smart-card-tender .smart-card-content,
+.smart-card-advert .smart-card-content {
+  box-shadow: inset 0 0 0 0.6px #202024;
+}
+/* सुविचार and दिनविशेष carry their nameplate as a COLUMN of the card, so their
+   rule goes round the whole frame - see borderBox in layout.js. */
+.smart-card-suvichar,
+.smart-card-dinvishesh { box-shadow: inset 0 0 0 0.6px #8a1428; }
+.smart-card-dinvishesh .smart-card-content { box-shadow: none; border-top: 0; }
+
+/* The month's scale. The y labels are placed absolutely against the figure's
+   own box from the solver's numbers; the x row is a three-column strip so the
+   first session, the summary and the last session sit at the two ends and the
+   middle whatever their widths. */
+.smart-card-market-trend { position: relative; }
+.smart-card-market-trend .trend-y {
+  position: absolute;
+  left: 0;
+  text-align: right;
+  padding-right: 3px;
+  box-sizing: border-box;
+  font-family: var(--font-sans, inherit);
+  font-weight: 400;
+  color: #7a6266;
+  white-space: nowrap;
+}
+.smart-card-market-trend .trend-x {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  box-sizing: border-box;
+}
+.smart-card-market-trend .trend-x span:nth-child(2) { text-align: center; }
+.smart-card-market-trend .trend-x span:nth-child(3) { text-align: right; }

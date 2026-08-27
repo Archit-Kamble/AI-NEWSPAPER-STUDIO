@@ -3,23 +3,27 @@ const assert = require('node:assert/strict');
 
 const market = require('../src/features/market');
 
+// FOUR SESSIONS, NOT TWO. The rate table needs the last two; the month's line
+// needs a run behind them (layoutMarket draws nothing under three points), so
+// a two-session stub could not exercise the chart at all. The last two closes
+// of each series are the ones every rate assertion below reads.
 function responseFor(symbol) {
   const closes = {
-    '^BSESN': [77000, 77770],
-    '^NSEI': [24000, 23880],
-    'GC=F': [4600, 4646],
-    'SI=F': [68, 68],
+    '^BSESN': [76500, 76800, 77000, 77770],
+    '^NSEI': [23500, 23700, 24000, 23880],
+    'GC=F': [4550, 4580, 4600, 4646],
+    'SI=F': [67, 67, 68, 68],
     // The rupee rate the bullion closes are converted through - fetched from
     // the same session as the metal it converts, so a Tuesday gold close is
     // never priced at Thursday's rupee.
-    'INR=X': [88, 88],
+    'INR=X': [88, 88, 88, 88],
   }[symbol];
   return {
     ok: true, status: 200,
     async json() {
       return {
         chart: { result: [{
-          timestamp: [1787616000, 1787702400],
+          timestamp: [1787443200, 1787529600, 1787616000, 1787702400],
           indicators: { quote: [{ close: closes }] },
         }] },
       };
@@ -59,10 +63,16 @@ test('market card fetches every rate automatically and derives the previous-sess
   assert.equal(silver.unit, 'किलो');
   assert.match(silver.value, /^₹/);
 
-  // The brief says which way the session went and names the biggest mover -
-  // never the same verb three times over.
-  assert.match(result.card.yesterdayBrief, /संमिश्र|वधारले|घसरले|स्थिर/);
-  assert.match(result.card.yesterdayBrief, /सर्वाधिक हालचाल/);
+  // NO "मागील सत्र" SENTENCE. It restated in prose what the ▲▼ column already
+  // says in figures, and the card now carries the month's LINE instead, which
+  // says something the table cannot: whether the month moved, not just today.
+  assert.equal(result.card.yesterdayBrief, undefined);
+  assert.ok(result.card.trend, 'the card carries the benchmark\'s month');
+  assert.equal(result.card.trend.label, 'सेन्सेक्स');
+  assert.ok(result.card.trend.values.length >= 3, 'a line needs three points');
+  assert.match(result.card.trend.changePercent, /[+\u2212]/);
+  assert.ok(result.card.trend.high && result.card.trend.low, 'the y axis is labelled');
+  assert.ok(result.card.trend.from && result.card.trend.to, 'the x axis is labelled');
   // And the card SAYS the bullion rate is derived, rather than passing an
   // international parity off as a सराफा retail quote.
   assert.match(result.card.note, /सूचक दर/);

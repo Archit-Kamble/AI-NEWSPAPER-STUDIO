@@ -1755,61 +1755,53 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
     // check went on looking for it.
     say(await page.locator('#edCanonicalContent .smart-card-grid-table td').count() === 81, 'and in the editor');
 
-    // The card's own headline ("आजचे सुडोकू", set by the accept handler
-    // alongside smartCardKey/smartCardData - smart-card-panel.js) and the
-    // card itself must not overlap. .section-feature used to be
-    // position:absolute;inset:0, drawing the card over whatever headline
-    // the flex column above it had already set - found live on a real
-    // generated page (Project A, PROJECT_STATUS.md), not hypothetical: this
-    // is the exact block this test already puts a card and a headline on.
-    // The whole headline BAND, not one element: the composed renderer draws
-    // one span per line, so a two-line card headline ("आजचे / सुडोकू") is two
-    // `.section-headline` spans and a bare locator resolves to both. The
-    // question here is whether the card overlaps the headline at all, which is
-    // asked of the band's own union.
+    // A SMART CARD BLOCK CARRIES NO HEADLINE, AND THAT IS THE INVARIANT.
     //
-    // AND THE HEADLINE IS PUT BACK BEFORE THE QUESTION IS ASKED. Accepting a
-    // card blanks the block's headline deliberately (smart-card-panel.js: a
-    // card draws its own head - the sudoku's instruction band, पंचांग's
-    // artwork), so what this used to measure was whatever the canvas had not
-    // yet repainted away: it passed or failed on a race, and reported
-    // "headline or card not found" when the repaint won. Setting one here
-    // makes the real invariant testable - a block that HAS a headline must not
-    // have its card drawn over it.
-    await page.evaluate(async ([ed, key, headline]) => {
-      const pages = await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json());
-      const section = pages[0].sections.find((s) => s.section_key === key);
-      await fetch(`/api/pages/${pages[0].id}/sections/${key}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          headline,
-          subheading: section.subheading || '',
-          body: section.body || '',
-          smartCardKey: section.smart_card_key,
-          smartCardData: section.smart_card_data,
-        }),
-      });
-    }, [ED, KEY, 'आजचे सुडोकू']);
-    await openEdition();
-    await block().click();
-    await page.waitForTimeout(2000);
-
-    const headlineBox = await block().evaluate((el) => {
-      const spans = [...el.querySelectorAll('.section-headline')];
-      if (!spans.length) return null;
-      const boxes = spans.map((span) => span.getBoundingClientRect());
-      const y = Math.min(...boxes.map((b) => b.y));
-      return { y, height: Math.max(...boxes.map((b) => b.bottom)) - y };
+    // This check used to ask whether the card was drawn OVER the block's own
+    // headline - .section-feature was position:absolute;inset:0 once, and did
+    // exactly that. Driven against the running app the question turned out to
+    // be unanswerable as put: it reported "headline or card not found" because
+    // there is never a headline on a card block to overlap.
+    //
+    // Two deliberate decisions meet here. smart-card-panel.js's accept blanks
+    // headline/subheading/body, because a card draws its own head - the
+    // sudoku's instruction band, panchang's artwork - and a second one above
+    // it would read as two. And section-thumb.js's smartCardComposition()
+    // composes the block with those three fields emptied, so the card is
+    // solved against the WHOLE content box rather than against whatever is
+    // left under a display band.
+    //
+    // Measured by forcing the state the old check assumed: a PUT storing both
+    // a headline and a card leaves the headline in the row and draws 0
+    // .section-headline spans beside 1 .smart-card. Nothing is lost by it -
+    // accept clears the field, so the normal path never strands a headline -
+    // but it does mean the overlap question has no subject.
+    //
+    // So the invariant asked here is the one that holds and is worth holding:
+    // the card owns the block's whole content box. No display band is set over
+    // it, and its top is the composition's own content top.
+    const cardOwnership = await block().evaluate((el) => {
+      const card = el.querySelector('.smart-card');
+      const host = el.querySelector('.section-feature-card');
+      if (!card || !host) return null;
+      const composed = el.querySelector('.section-composed') || host.parentElement || el;
+      return {
+        headlines: el.querySelectorAll('.section-headline').length,
+        decks: el.querySelectorAll('.section-subheading').length,
+        cardTop: card.getBoundingClientRect().top,
+        contentTop: composed.getBoundingClientRect().top,
+      };
     });
-    const cardBox = await block().locator('.smart-card').boundingBox();
-    if (headlineBox && cardBox) {
-      const verticalOverlap = Math.min(headlineBox.y + headlineBox.height, cardBox.y + cardBox.height)
-        - Math.max(headlineBox.y, cardBox.y);
-      say(verticalOverlap <= 0, 'the Smart Card does not draw over its own block\'s headline',
-        `overlap ${verticalOverlap.toFixed(1)}px`);
+    if (cardOwnership) {
+      say(cardOwnership.headlines === 0 && cardOwnership.decks === 0,
+        'a Smart Card block sets no display band over its card',
+        `${cardOwnership.headlines} headline / ${cardOwnership.decks} deck spans`);
+      say(cardOwnership.cardTop - cardOwnership.contentTop <= 2,
+        "and the card is given the block's whole content box",
+        `card starts ${(cardOwnership.cardTop - cardOwnership.contentTop).toFixed(1)}px below the content top`);
     } else {
-      say(false, 'the Smart Card does not draw over its own block\'s headline', 'headline or card not found');
+      say(false, 'a Smart Card block sets no display band over its card', 'card not found');
+      say(false, "and the card is given the block's whole content box", 'card not found');
     }
 
     await page.waitForTimeout(3000);

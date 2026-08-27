@@ -2184,6 +2184,78 @@ in every export as well.
 that draws a rule emits one — sudoku 1 → 21 bars, पंचांग 17 → 25, निविदा 5 →
 17.
 
+### A card is judged on the PAGE, not in a box of its own size
+
+Every card in the styling pass was drawn one at a time, in a host the size of
+the block it asks for, and measured for overflow. That net is real and it
+passes. It also cannot see the two faults a real features page showed the
+moment one was made up and photographed — both of them about a card meeting a
+frame the catalogue did not choose.
+
+**The twelve signs are set in as many columns as the frame will carry.**
+`layoutRashi` had a two-way rule — one column, or two once the frame reached
+180 px — written for the tall narrow box this card usually gets. On a real
+620×320 features block that makes each of six rows **53 px** deep, and a row
+that shallow rejects every candidate above **7.5 px**: 10.6 pt of reading
+matter across a 150 mm card, with half the block's width spent on nothing.
+
+The frame decides now, which is the argument `measureColumns()` already makes
+for body copy. Every column count whose column can still set a name beside a
+reading is tried, and the one resolving the **largest type** wins. On that
+block: 2 columns of six at 7.5 px → **4 columns of three at 9.0 px**, all
+twelve signs, which is the strip a printed paper runs.
+
+Ties go to fewest empty cells, then to the **deepest rows** — and that last
+key is what decides the all-OVERSET case, where every candidate lands on the
+ladder's floor and nothing else separates them. Without it a 260×400 frame
+took one column of twelve, worse by any measure than the two the old fixed
+rule gave.
+
+**A दिनविशेष entry is newspaper type, not a poster.** `solveFont()` takes the
+largest candidate that fits — right for the सुविचार pull quote, whose whole
+job is display, and wrong for a list. On a real 307×200 block it reached the
+ladder's **32 px** top: 45 pt, beside 9 pt columns. The entry has a ceiling as
+well as a floor now, stated against the paper's own running body
+(`publication-type.js`, imported rather than restated): `MAX_ENTRY_OF_BODY`
+2.5, so 16 px.
+
+**And the room the ceiling gives back is spent on AIR, not on letters** — the
+gaps between entries open, bounded at one line — which is the rule `compose.js`
+already follows when it closes the last fraction of a column with the leading.
+
+The wordmark came down with it (`heightShare`/`widthShare` 0.16/0.62 →
+0.13/0.46). It named the box in a 150 px nameplate over a 16 px entry; a
+printed standing box sets its own name a rung above its entries, not an octave.
+
+**The layout fault had a data fault under it.** `dinvishesh.js` was a list of
+day names — "प्रजासत्ताक दिन", and nothing else — so the box carried one short
+line and a hand's width of white whatever size the block was, which is *why*
+the layout inflated it. What a Marathi daily carries is the **dated**
+anniversary, so `on(year, what)` sets one with the year in Devanagari numerals
+and 21 dates gained theirs. The curation rule at the top of that file is
+unchanged and matters more here than anywhere: a wrong year is a falsehood
+printed over the masthead, so every line is one a person has checked, and a
+desk must still read the table against its own reference before an edition
+leans on it.
+
+**A card block carries no headline, and both halves of that are deliberate.**
+`smart-card-panel.js`'s accept blanks headline/subheading/body — a card draws
+its own head (the sudoku's instruction band, पंचांग's artwork) and a second one
+above it reads as two stories. And `section-thumb.js`'s
+`smartCardComposition()` composes the block with those three fields emptied, so
+the card is solved against the **whole** content box rather than against what
+is left under a display band. Forcing the other state proves it: a PUT storing
+a headline *and* a card leaves the headline in the row and draws 0
+`.section-headline` spans beside 1 `.smart-card`. Nothing is stranded, because
+accept clears the field — but a net asking "does the card overlap its
+headline?" has no subject, which is what `workspace.browser.js`'s last failing
+check turned out to be. It asks the invariant that holds instead: no display
+band over the card, and the card's top is the composition's own content top.
+
+`scripts`-free way to look at this: build a features page carrying every card
+at a real block size and screenshot the **canvas**, not the card. The isolated
+net measures overflow; only the page shows type that fits and is still wrong.
+
 ### A Smart Card brings its own block
 
 `layout.js`'s **`SMART_CARD_BLOCK_SIZE`** states the frame a printed paper gives

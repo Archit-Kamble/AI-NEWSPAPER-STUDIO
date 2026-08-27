@@ -260,7 +260,7 @@ test('dinvishesh: all entries are present, in order', () => {
   const items = [...html.matchAll(/<li[^>]*>(.*?)<\/li>/g)]
     .map((m) => m[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
   assert.equal(items.length, data.entries.length);
-  assert.deepEqual(items, data.entries.map((e) => e.text), 'entries must print in the SAME order they were stored');
+  assert.deepEqual(items, data.entries.map((e) => `◆ ${e.text}`), 'serious markers and entries must print in the SAME order they were stored');
 });
 
 test('dinvishesh: fit state is explicit, both ways', () => {
@@ -289,6 +289,49 @@ test('havaman: a too-small sourced card is flagged, never silently clipped', () 
   const result = layout.layoutSmartCard('havaman', havamanData(), TINY_FRAME);
   assert.equal(result.fitState, 'OVERSET');
   assert.equal(result.items.length, 4);
+});
+
+// ----------------------------------------------------------- desk supplied ---
+
+test('market: verified rows render as a ruled rate table with directional changes', () => {
+  const data = {
+    title: 'शेअर / सोने बाजार',
+    asOf: '२६/०८/२०२६',
+    yesterdayBrief: 'बँक आणि धातू समभागांच्या वाढीमुळे निर्देशांक सकारात्मक बंद झाले.',
+    items: [
+      { label: 'सोने २४ कॅरेट', value: '₹७४,२५०', change: '+०.४%' },
+      { label: 'सेन्सेक्स', value: '८१,४००', change: '-०.२%' },
+    ],
+    source: 'स्रोत : संपादकीय पडताळणी',
+  };
+  const html = cards.smartCardMarkup('market', data, FRAME);
+  const result = layout.layoutSmartCard('market', data, FRAME);
+  assert.equal(result.fitState, 'FITS');
+  assert.equal(result.items[0].direction, 'up');
+  assert.equal(result.items[1].direction, 'down');
+  assert.equal((html.match(/class="smart-card-market-row"/g) || []).length, 2);
+  assert.match(html, /smart-card-market-brief/);
+  assert.match(html, /कालचा बाजार/);
+  assert.match(cards.smartCardText('market', data), /सोने २४ कॅरेट.*₹७४,२५०/);
+  assert.match(cards.smartCardText('market', data), /निर्देशांक सकारात्मक/);
+});
+
+test('tender: office, subject, paragraphs, table and signatory remain structured', () => {
+  const data = {
+    issuer: 'जिल्हाधिकारी कार्यालय, सातारा', reference: 'निविदा/२०२६/१२', date: '२७/०८/२०२६',
+    subject: 'कार्यालयीन साहित्य पुरवठा', noticeTitle: 'निविदा सूचना',
+    paragraphs: ['पात्र पुरवठादारांकडून बंद लिफाफ्यात निविदा मागविण्यात येत आहेत.'],
+    table: { headers: ['अ.क्र.', 'बाब', 'प्रमाण'], rows: [['१', 'कागद', '१०० रीम']] },
+    signatory: 'जिल्हाधिकारी, सातारा',
+  };
+  const frame = { width: 307, height: 500, padding: 8 };
+  const html = cards.smartCardMarkup('tender', data, frame);
+  const result = layout.layoutSmartCard('tender', data, frame);
+  assert.equal(result.fitState, 'FITS');
+  assert.match(html, /smart-card-tender-table/);
+  assert.match(html, /जिल्हाधिकारी कार्यालय/);
+  assert.match(html, /१०० रीम/);
+  assert.match(cards.smartCardText('tender', data), /अ\.क्र\. \| बाब \| प्रमाण/);
 });
 
 // --------------------------------------------------------------- subtitle ---
@@ -331,7 +374,7 @@ test('one legal piece wider than the whole card is reported, never invented a mi
 // ------------------------------------------------------ cross-cutting rules ---
 
 test('the same card and the same frame always produce the same deterministic layout', () => {
-  for (const [key, data] of [['sudoku', sudokuData()], ['rashi', rashiData()], ['panchang', panchangData()], ['suvichar', { text: 'विचार', attribution: 'क' }], ['dinvishesh', dinvisheshData()], ['havaman', havamanData()]]) {
+  for (const [key, data] of [['sudoku', sudokuData()], ['rashi', rashiData()], ['panchang', panchangData()], ['suvichar', { text: 'विचार', attribution: 'क' }], ['dinvishesh', dinvisheshData()], ['havaman', havamanData()], ['market', { title: 'बाजार', items: [{ label: 'सोने', value: '७४०००', change: '+१%' }] }]]) {
     const a = layout.layoutSmartCard(key, data, FRAME);
     const b = layout.layoutSmartCard(key, data, FRAME);
     assert.deepEqual(a, b, `${key}: identical input must give an identical result`);

@@ -330,7 +330,7 @@ function cardItems(key, data, frame, originX, originY, mono = false) {
         x: originX + mm(line.x), y: originY + mm(line.y),
         width: mm(line.width), height: mm(line.height),
         file: String(line.file || '').replace(/^\//, ''),
-        resolved: null, rotation: 0, mono,
+        resolved: null, rotation: 0, mono, stretch: Boolean(line.stretch),
       });
       continue;
     }

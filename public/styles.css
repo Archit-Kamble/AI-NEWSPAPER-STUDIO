@@ -3439,6 +3439,17 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   object-position: center;
   pointer-events: none;
 }
+.smart-card-artwork.is-stretched { object-fit: fill; }
+.smart-card-title-rule {
+  position: absolute;
+  z-index: 0;
+  display: block;
+  height: 0.7px;
+  background: linear-gradient(90deg, transparent, #b97984 28%, #8a1428);
+}
+.smart-card-title-rule + .smart-card-title-rule {
+  background: linear-gradient(90deg, #8a1428, #b97984 72%, transparent);
+}
 .smart-card-content {
   position: absolute;
   display: flex;
@@ -3596,6 +3607,7 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 .smart-card-panchang .smart-card-table tr:nth-child(even) td { background: #fcf8f3; }
 .smart-card-panchang .smart-card-table tr:last-child th,
 .smart-card-panchang .smart-card-table tr:last-child td { border-bottom-color: #8a1428; }
+.smart-card-panchang .smart-card-table tr th { transform: translateY(var(--row-text-nudge, 0)); }
 
 .smart-card-suvichar { box-shadow: inset 0 0.6px #8a1428, inset 0 -0.6px #8a1428; }
 .smart-card-quote { margin: 0; display: flex; align-items: center; justify-content: flex-start; height: 100%; text-align: left; }
@@ -3621,7 +3633,7 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 }
 .smart-card-list li { position: relative; box-sizing: border-box; }
 .smart-card-list li::before {
-  content: "";
+  content: none;
   position: absolute;
   left: 0;
   top: 0.55em;
@@ -3629,6 +3641,29 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   height: 4px;
   border-radius: 50%;
   background: #8a1428;
+}
+.smart-card-list .dinvishesh-symbol {
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: #8a1428;
+  font-size: 0.72em;
+  line-height: var(--devanagari-line);
+}
+.smart-card-list .dinvishesh-symbol.is-flag {
+  top: 0.22em;
+  width: 0.45em;
+  height: 0.8em;
+  border-left: 0.08em solid #8a1428;
+}
+.smart-card-list .dinvishesh-symbol.is-flag::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-top: 0.2em solid transparent;
+  border-bottom: 0.2em solid transparent;
+  border-left: 0.42em solid #8a1428;
 }
 
 .smart-card-weather-grid { display: grid; min-height: 0; }
@@ -3653,6 +3688,85 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   color: #6b6264;
   text-align: right;
 }
+
+.smart-card-market {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border-top: 0.8px solid #8a1428;
+  border-bottom: 0.8px solid #8a1428;
+  box-sizing: border-box;
+}
+.smart-card-market h3 {
+  margin: 0 0 6px;
+  color: #8a1428;
+  font-weight: 700;
+  text-align: center;
+}
+.smart-card-market-rows { border: 0.6px solid #cdaeb4; }
+.smart-card-market-row {
+  display: flex;
+  align-items: center;
+  border-bottom: 0.4px solid #ddcbd0;
+  box-sizing: border-box;
+}
+.smart-card-market-row:last-child { border-bottom: 0; }
+.smart-card-market-row > * { padding: 0 0.35em; box-sizing: border-box; }
+.smart-card-market-row > * + * { border-left: 0.4px solid #ddcbd0; }
+.smart-card-market-row strong { color: #4f3036; }
+.smart-card-market-row b { text-align: right; font-variant-numeric: tabular-nums; }
+.smart-card-market-row .market-change { text-align: right; font-weight: 700; }
+.smart-card-market-row .market-change.is-up { color: #237548; }
+.smart-card-market-row .market-change.is-down { color: #a51d34; }
+.smart-card-market-brief {
+  margin-top: 6px;
+  padding: 3px 5px;
+  border-left: 2px solid #8a1428;
+  background: #f7f1f2;
+  box-sizing: border-box;
+  color: #342a2c;
+}
+.smart-card-market-brief strong { display: block; color: #8a1428; }
+.smart-card-market-brief p { margin: 0; }
+.smart-card-market-source { margin: 6px 0 0; color: #6b6264; text-align: right; }
+
+.smart-card-tender {
+  height: 100%;
+  /* Keep the notice inset identical to the press primitive walk. A relative
+     em inset made the browser consume materially more room as the solver
+     stepped the type up, while PDF/Scribus kept a fixed 2 px inset; the
+     signatory could therefore be approved in one surface and clipped in the
+     other. */
+  padding: 2px;
+  border: 0.8px solid #202024;
+  box-sizing: border-box;
+  color: #171719;
+}
+.smart-card-tender header { padding-bottom: var(--tender-gap); border-bottom: 0.5px solid #777; text-align: center; }
+.smart-card-tender h2,
+.smart-card-tender h3,
+.smart-card-tender h4,
+.smart-card-tender p { margin: 0; }
+.smart-card-tender h3,
+.smart-card-tender h4 { font-weight: 700; }
+.smart-card-tender h2 { margin: var(--tender-gap) 0; color: #111; font-weight: 700; text-align: center; }
+.smart-card-tender h4 { margin-top: var(--tender-gap); text-align: center; }
+.smart-card-tender-meta { display: flex; justify-content: space-between; gap: var(--tender-gap); margin-top: 0; }
+.smart-card-tender-meta span { width: 50%; }
+.smart-card-tender-meta span:last-child { text-align: right; }
+.smart-card-tender-copy { display: grid; gap: var(--tender-gap); text-align: justify; }
+.smart-card-tender-table { width: 100%; margin-top: var(--tender-gap); border-collapse: collapse; table-layout: fixed; }
+.smart-card-tender-table th,
+.smart-card-tender-table td {
+  padding: 0.2em 0.3em;
+  border: 0.5px solid #777;
+  box-sizing: border-box;
+  text-align: left;
+  vertical-align: top;
+}
+.smart-card-tender-table th { background: #f2eded; font-weight: 700; text-align: center; }
+.smart-card-tender-contact { margin-top: var(--tender-gap) !important; }
+.smart-card-tender-signatory { width: 48%; margin: var(--tender-gap) 0 0 auto !important; font-weight: 700; text-align: center; }
 
 /* A card too small for its own block - still drawn at a legible minimum
    (layout.js clamps rather than shrinking past it), flagged rather than
@@ -5054,6 +5168,13 @@ body.story-fullscreen { overflow: hidden; }
 .smart-card-choice-copy { min-width: 0; display: grid; gap: 2px; }.smart-card-choice-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .77rem; }.smart-card-choice-copy small { overflow: hidden; color: #72727c; font-size: .66rem; line-height: 1.22; }
 .smart-card-source { grid-column: 2; color: #8a6b72; font-size: .61rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
 .smart-card-rashi-options { margin: 0; padding: var(--s2); border: 1px solid #ead9dd; border-radius: 8px; background: #fffafb; }.smart-card-rashi-options[hidden] { display: none; }.smart-card-rashi-options legend { padding: 0 4px; color: #6a454d; font-size: .72rem; font-weight: 700; }.smart-card-rashi-options p { margin: 0 0 8px; color: #6d6265; font-size: .7rem; line-height: 1.35; }
+.smart-card-manual-input { margin: 0; padding: var(--s2); border: 1px solid #ead9dd; border-radius: 8px; background: #fffafb; }
+.smart-card-manual-input[hidden] { display: none; }
+.smart-card-manual-input legend { padding: 0 4px; color: #6a454d; font-size: .72rem; font-weight: 700; }
+.smart-card-manual-input p { margin: 0 0 8px; color: #6d6265; font-size: .7rem; line-height: 1.35; }
+.smart-card-manual-input textarea { box-sizing: border-box; width: 100%; padding: 9px; border: 1px solid #d5ccd0; border-radius: 6px; background: white; font: .75rem/1.55 var(--font-sans); resize: vertical; }
+.smart-card-file-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; color: #5f4b50; font-size: .7rem; font-weight: 700; }
+.smart-card-file-label input { max-width: 62%; font-size: .66rem; }
 .smart-card-pills { display: flex; flex-wrap: wrap; gap: var(--s1); }.smart-card-pills button { padding: var(--s1) var(--s2); border: 1px solid #dbdbe1; border-radius: 999px; background: white; color: #55555f; cursor: pointer; font-size: .67rem; font-weight: 650; }.smart-card-pills button.is-selected { border-color: var(--accent); background: var(--accent); color: white; }
 .smart-card-footer { display: grid; gap: 8px; }.smart-card-footer .ext-editor-btn { width: 100%; }.smart-card-fit-note { color: #3d7258; font-size: .7rem; font-weight: 650; }.smart-card-fit-note::before { content: '✓ '; }.smart-card-proposal { margin-top: 12px; }.smart-card-proposal h4 { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }.smart-card-proposal h4 .muted { font-size: .65rem; font-weight: 600; white-space: nowrap; }.smart-card-subtitle { color: #666670; font-weight: 600; }
 @media (max-width: 560px) { .story-editor-paper { margin: 8px; }.smart-card-grid { grid-template-columns: minmax(0, 1fr); }.story-editor-foot { flex-direction: column; }.rt-foot-note { text-align: left; } }

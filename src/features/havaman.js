@@ -14,9 +14,6 @@ const TIMEZONE = 'Asia/Kolkata';
 
 const DEFAULT_LOCATIONS = Object.freeze([
   { key: 'satara', name: 'सातारा', latitude: 17.6805, longitude: 74.0183 },
-  { key: 'karad', name: 'कराड', latitude: 17.285, longitude: 74.184 },
-  { key: 'wai', name: 'वाई', latitude: 17.952, longitude: 73.89 },
-  { key: 'phaltan', name: 'फलटण', latitude: 17.991, longitude: 74.431 },
 ]);
 
 function conditionFor(code) {
@@ -127,9 +124,9 @@ async function build(isoDate, {
 
   return {
     title: 'हवामान',
-    subtitle: 'सातारा जिल्हा',
+    subtitle: 'सातारा',
     card: {
-      subtitle: 'सातारा जिल्हा · हवामान अंदाज',
+      subtitle: 'सातारा · हवामान अंदाज',
       date,
       cities,
       source: 'स्रोत : Open-Meteo',

@@ -81,8 +81,8 @@ const GAP_PX = 6;
 // they belong to the card's finite geometry, travel with it to every edition,
 // and are emitted by the same export walk as the card's type.
 const CARD_ARTWORK = Object.freeze({
-  suvichar: { file: 'assets/smart-cards/SuvicharwithoutBG.png', aspect: 1380 / 752, placement: 'inline', heightShare: 0.82, widthShare: 0.18 },
-  dinvishesh: { file: 'assets/smart-cards/denvishash.png', aspect: 1380 / 752, placement: 'top', heightShare: 0.34, widthShare: 0.72 },
+  suvichar: { file: 'assets/smart-cards/SuvicharwithoutBG.png', aspect: 1380 / 752, placement: 'inline', heightShare: 0.95, widthShare: 0.22 },
+  dinvishesh: { file: 'assets/smart-cards/denvishash.png', aspect: 1380 / 752, placement: 'top', heightShare: 0.34, widthShare: 0.86, stretch: true },
   panchang: { file: 'assets/smart-cards/panchangwithoutBG.png', aspect: 1380 / 752, placement: 'top', heightShare: 0.25, widthShare: 0.82 },
   rashi: { file: 'assets/smart-cards/rashi-bhavishyawithoutBG.png', aspect: 1380 / 752, placement: 'top', heightShare: 0.15, widthShare: 0.72 },
 });
@@ -136,10 +136,11 @@ function cardArtworkFor(key, frame) {
     };
   }
 
-  const x = frame.padding + (frame.innerWidth - width) / 2;
+  const finalWidth = config.stretch ? frame.innerWidth * config.widthShare : width;
+  const x = frame.padding + (frame.innerWidth - finalWidth) / 2;
   const y = frame.padding;
   return {
-    artwork: { file: config.file, x, y, width, height },
+    artwork: { file: config.file, x, y, width: finalWidth, height, stretch: Boolean(config.stretch) },
     content: {
       x: frame.padding,
       y: y + height + gap,
@@ -451,7 +452,13 @@ function layoutPanchang(data, frame) {
       if (label.hardOverset || value.hardOverset) hardOverset = true;
       const valueLines = value.lines.map((l) => l.text);
       const lineCount = Math.max(1, valueLines.length);
-      return { label: item.label, labelLines: [label.line], valueLines, rowHeight: lineCount * lineHeightPx };
+      return {
+        label: item.label,
+        labelLines: [label.line],
+        valueLines,
+        rowHeight: lineCount * lineHeightPx,
+        textNudgeY: String(item.label).replace(/\s/g, '') === 'राहुकाळ' ? -0.8 : 0,
+      };
     });
 
     const height = items.reduce((sum, item) => sum + item.rowHeight, 0);
@@ -806,13 +813,14 @@ function layoutDinvishesh(data, frame) {
     const rowGap = Math.min(2, fontPx * 0.2);
     let hardOverset = false;
     const items = entries.map((entry) => {
-      const text = typeof entry === 'string' ? entry : (entry.text || '');
+      const text = typeof entry === 'string' ? entry : (entry.label || entry.text || '');
+      const symbol = typeof entry === 'object' && entry.symbol ? String(entry.symbol) : '◆';
       const wrapped = wrapSmartText(text, {
         width: Math.max(0, frame.innerWidth - textInset), fontPx, family: 'serif', weight: 400,
       });
       if (wrapped.hardOverset) hardOverset = true;
       const lines = wrapped.lines.map((l) => l.text);
-      return { lines, height: Math.max(1, lines.length) * lineHeightPx };
+      return { symbol, lines, height: Math.max(1, lines.length) * lineHeightPx };
     });
     const height = items.reduce((sum, item) => sum + item.height, 0)
       + Math.max(0, items.length - 1) * rowGap;
@@ -920,6 +928,188 @@ function layoutHavaman(data, frame) {
   };
 }
 
+// ------------------------------------------------------------------ market ---
+
+function layoutMarket(data, frame) {
+  const rows = Array.isArray(data?.items)
+    ? data.items.filter((item) => item && item.label && item.value != null).slice(0, 10)
+    : [];
+  if (!rows.length) return empty('market');
+
+  const solved = solveFont(frame.innerHeight, (fontPx) => {
+    const lineHeightPx = lineHeightFor(fontPx, 'serif', 400);
+    const titleFontPx = fontPx * 1.35;
+    const titleLineHeightPx = lineHeightFor(titleFontPx, 'serif', 700);
+    const sourceFontPx = Math.max(MIN_CARD_FONT_PX, fontPx * 0.76);
+    const sourceLineHeightPx = lineHeightFor(sourceFontPx, 'serif', 400);
+    const title = wrapSmartText(data.title || 'शेअर / सोने बाजार', {
+      width: frame.innerWidth, fontPx: titleFontPx, family: 'serif', weight: 700,
+    });
+    const source = wrapSmartText(data.source || 'स्रोत : संपादकीय पडताळणी', {
+      width: frame.innerWidth, fontPx: sourceFontPx, family: 'serif', weight: 400,
+    });
+    const briefText = String(data.yesterdayBrief || '').trim();
+    const briefLabel = briefText
+      ? `कालचा बाजार${data.asOf ? ` · ${String(data.asOf).trim()}` : ''}`
+      : '';
+    const briefLabelWrapped = wrapSmartText(briefLabel, {
+      width: Math.max(0, frame.innerWidth - 8), fontPx, family: 'serif', weight: 700,
+    });
+    const briefWrapped = wrapSmartText(briefText, {
+      width: Math.max(0, frame.innerWidth - 8), fontPx, family: 'serif', weight: 400,
+    });
+    const labelWidth = frame.innerWidth * 0.45;
+    const valueWidth = frame.innerWidth * 0.31;
+    const changeWidth = Math.max(0, frame.innerWidth - labelWidth - valueWidth);
+    let hardOverset = title.hardOverset || source.hardOverset
+      || briefLabelWrapped.hardOverset || briefWrapped.hardOverset;
+    const items = rows.map((item) => {
+      const label = wrapSmartText(item.label, { width: labelWidth - 4, fontPx, family: 'serif', weight: 700 });
+      const value = wrapSmartText(item.value, { width: valueWidth - 4, fontPx, family: 'serif', weight: 700 });
+      const change = wrapSmartText(item.change || '', { width: changeWidth - 4, fontPx, family: 'serif', weight: 700 });
+      hardOverset ||= label.hardOverset || value.hardOverset || change.hardOverset;
+      const lineCount = Math.max(1, label.lines.length, value.lines.length, change.lines.length);
+      return {
+        labelLines: label.lines.map((line) => line.text),
+        valueLines: value.lines.map((line) => line.text),
+        changeLines: change.lines.map((line) => line.text),
+        direction: String(item.change || '').trim().startsWith('-') ? 'down' : String(item.change || '').trim().startsWith('+') ? 'up' : 'flat',
+        rowHeight: lineCount * lineHeightPx + 2,
+      };
+    });
+    const titleLines = title.lines.map((line) => line.text);
+    const sourceLines = source.lines.map((line) => line.text);
+    const briefLabelLines = briefLabelWrapped.lines.map((line) => line.text);
+    const briefLines = briefWrapped.lines.map((line) => line.text);
+    const titleHeight = Math.max(1, titleLines.length) * titleLineHeightPx;
+    const sourceHeight = Math.max(1, sourceLines.length) * sourceLineHeightPx;
+    const rowsHeight = items.reduce((sum, item) => sum + item.rowHeight, 0);
+    const briefHeight = briefText
+      ? (briefLabelLines.length + briefLines.length) * lineHeightPx + 6
+      : 0;
+    const height = titleHeight + GAP_PX + rowsHeight
+      + (briefHeight ? GAP_PX + briefHeight : 0)
+      + GAP_PX + sourceHeight;
+    return {
+      height, hardOverset, items, titleLines, sourceLines, briefLabelLines, briefLines,
+      titleHeight, sourceHeight, briefHeight,
+      titleFontPx, titleLineHeightPx, sourceFontPx, sourceLineHeightPx,
+      lineHeightPx, labelWidth, valueWidth, changeWidth, rowsHeight,
+    };
+  });
+
+  return {
+    key: 'market', fitState: solved.fitState, fontPx: solved.fontPx,
+    geometry: {
+      titleHeight: solved.titleHeight, sourceHeight: solved.sourceHeight,
+      titleFontPx: solved.titleFontPx, titleLineHeightPx: solved.titleLineHeightPx,
+      sourceFontPx: solved.sourceFontPx, sourceLineHeightPx: solved.sourceLineHeightPx,
+      lineHeightPx: solved.lineHeightPx, labelWidth: solved.labelWidth,
+      valueWidth: solved.valueWidth, changeWidth: solved.changeWidth, rowsHeight: solved.rowsHeight,
+      briefHeight: solved.briefHeight,
+    },
+    titleLines: solved.titleLines, sourceLines: solved.sourceLines,
+    briefLabelLines: solved.briefLabelLines, briefLines: solved.briefLines,
+    items: solved.items,
+    violations: solved.fitState === 'OVERSET' ? ['SMART_CARD_OVERSET'] : [],
+  };
+}
+
+// ------------------------------------------------------------------ tender ---
+
+// The formal rule, cell borders and fixed 2 px inner inset are real vertical
+// ink in the browser. They do not belong to any text line, but they still
+// consume the notice frame. Measured against the rendered DOM at the largest
+// fitting candidate, 20 px is the complete non-type allowance; charging it
+// here prevents a mathematically FITS notice from clipping its signature.
+const TENDER_RENDER_ALLOWANCE_PX = 20;
+
+function layoutTender(data, frame) {
+  if (!data?.issuer || (!data?.subject && !Array.isArray(data?.paragraphs))) return empty('tender');
+  const paragraphs = Array.isArray(data.paragraphs) ? data.paragraphs.filter(Boolean).slice(0, 12) : [];
+  const tableHeaders = Array.isArray(data?.table?.headers) ? data.table.headers.filter((cell) => cell != null).slice(0, 6) : [];
+  const tableRows = tableHeaders.length && Array.isArray(data?.table?.rows)
+    ? data.table.rows.filter(Array.isArray).slice(0, 20) : [];
+
+  const solved = solveFont(frame.innerHeight, (fontPx) => {
+    const lineHeightPx = lineHeightFor(fontPx, 'serif', 400);
+    const strongLineHeightPx = lineHeightFor(fontPx, 'serif', 700);
+    const issuerFontPx = fontPx * 1.18;
+    const issuerLineHeightPx = lineHeightFor(issuerFontPx, 'serif', 700);
+    const titleFontPx = fontPx * 1.55;
+    const titleLineHeightPx = lineHeightFor(titleFontPx, 'serif', 700);
+    const gap = Math.max(2, fontPx * 0.45);
+    let hardOverset = false;
+    const band = (text, width, size, weight = 400) => {
+      const wrapped = wrapSmartText(text || '', { width, fontPx: size, family: 'serif', weight });
+      hardOverset ||= wrapped.hardOverset;
+      return wrapped.lines.map((line) => line.text);
+    };
+    const issuerLines = band(data.issuer, frame.innerWidth, issuerFontPx, 700);
+    const officeLines = band(data.office, frame.innerWidth, fontPx, 400);
+    const metaWidth = Math.max(0, (frame.innerWidth - gap) / 2);
+    const referenceLines = band(data.reference, metaWidth, fontPx, 400);
+    const dateLines = band(data.date, metaWidth, fontPx, 400);
+    const subjectLines = band(data.subject, frame.innerWidth, fontPx, 700);
+    const titleLines = band(data.noticeTitle || 'निविदा सूचना', frame.innerWidth, titleFontPx, 700);
+    const paragraphItems = paragraphs.map((text) => {
+      const lines = band(text, frame.innerWidth, fontPx, 400);
+      return { lines, height: lines.length * lineHeightPx };
+    });
+
+    const columnCount = Math.max(1, tableHeaders.length);
+    const columnWidth = frame.innerWidth / columnCount;
+    const resolveCells = (cells, weight) => {
+      const resolved = Array.from({ length: columnCount }, (_, index) =>
+        band(cells[index] || '', Math.max(0, columnWidth - 4), fontPx, weight));
+      return { cells: resolved, height: Math.max(1, ...resolved.map((lines) => lines.length)) * lineHeightPx + 3 };
+    };
+    const table = tableHeaders.length ? {
+      columnCount, columnWidth,
+      header: resolveCells(tableHeaders, 700),
+      rows: tableRows.map((row) => resolveCells(row, 400)),
+    } : null;
+    const contactLines = band(data.contact, frame.innerWidth, fontPx, 400);
+    const signatoryLines = band(data.signatory, frame.innerWidth * 0.48, fontPx, 700);
+
+    const lineBlock = (lines, lineHeight) => lines.length * lineHeight;
+    const metaHeight = Math.max(referenceLines.length, dateLines.length) * lineHeightPx;
+    const tableHeight = table ? table.header.height + table.rows.reduce((sum, row) => sum + row.height, 0) : 0;
+    const height = lineBlock(issuerLines, issuerLineHeightPx)
+      + lineBlock(officeLines, lineHeightPx)
+      + (metaHeight ? metaHeight + gap : 0)
+      + lineBlock(subjectLines, strongLineHeightPx)
+      + lineBlock(titleLines, titleLineHeightPx)
+      + paragraphItems.reduce((sum, item) => sum + item.height + gap, 0)
+      + (tableHeight ? tableHeight + gap : 0)
+      + lineBlock(contactLines, lineHeightPx)
+      + lineBlock(signatoryLines, strongLineHeightPx)
+      + gap * 4
+      + TENDER_RENDER_ALLOWANCE_PX;
+    return {
+      height, hardOverset, issuerLines, officeLines, referenceLines, dateLines,
+      subjectLines, titleLines, paragraphItems, table, contactLines, signatoryLines,
+      lineHeightPx, strongLineHeightPx, issuerFontPx, issuerLineHeightPx,
+      titleFontPx, titleLineHeightPx, gap,
+    };
+  });
+
+  return {
+    key: 'tender', fitState: solved.fitState, fontPx: solved.fontPx,
+    geometry: {
+      lineHeightPx: solved.lineHeightPx, strongLineHeightPx: solved.strongLineHeightPx,
+      issuerFontPx: solved.issuerFontPx, issuerLineHeightPx: solved.issuerLineHeightPx,
+      titleFontPx: solved.titleFontPx, titleLineHeightPx: solved.titleLineHeightPx, gap: solved.gap,
+    },
+    issuerLines: solved.issuerLines, officeLines: solved.officeLines,
+    referenceLines: solved.referenceLines, dateLines: solved.dateLines,
+    subjectLines: solved.subjectLines, titleLines: solved.titleLines,
+    paragraphItems: solved.paragraphItems, table: solved.table,
+    contactLines: solved.contactLines, signatoryLines: solved.signatoryLines,
+    violations: solved.fitState === 'OVERSET' ? ['SMART_CARD_OVERSET'] : [],
+  };
+}
+
 // ------------------------------------------------------------------ router ---
 
 const LAYOUTS = {
@@ -930,6 +1120,8 @@ const LAYOUTS = {
   suvichar: layoutSuvichar,
   dinvishesh: layoutDinvishesh,
   havaman: layoutHavaman,
+  market: layoutMarket,
+  tender: layoutTender,
   chart: layoutChart,
 };
 

@@ -98,7 +98,7 @@ test('dinvishesh carries its checked entries as entries', async () => {
   const built = await dinvishesh.build('2031-08-15');
   assert.ok(Array.isArray(built.card.entries));
   assert.ok(built.card.entries.length > 0);
-  assert.ok(built.card.entries.every((entry) => typeof entry === 'string' && entry.trim()));
+  assert.ok(built.card.entries.every((entry) => entry.label?.trim() && entry.symbol?.trim()));
 });
 
 // -------------------------------------------------- G/H/M. accept and reload ---

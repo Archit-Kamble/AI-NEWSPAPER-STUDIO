@@ -48,6 +48,12 @@ function smartCardLines(key, data, frame, cardLayout) {
   if (layout.artwork?.file) {
     out.push({ kind: 'image', ...layout.artwork });
   }
+  if (key === 'rashi' && layout.artwork) {
+    const y = layout.artwork.y + layout.artwork.height / 2;
+    const rightX = layout.artwork.x + layout.artwork.width + 6;
+    out.push({ kind: 'bar', x: 0, y, width: Math.max(0, layout.artwork.x - 6), height: 0.7, ink: '#8a1428' });
+    out.push({ kind: 'bar', x: rightX, y, width: Math.max(0, (Number(frame.width) || 0) - rightX), height: 0.7, ink: '#8a1428' });
+  }
 
   // AN ENTRY'S BOX IS ITS OWN TYPE'S, not the card's body line.
   //
@@ -241,7 +247,7 @@ function smartCardLines(key, data, frame, cardLayout) {
     for (const [index, item] of layout.items.entries()) {
       bar(0, top, labelWidth, item.rowHeight, '#fbf2f3');
       if (index % 2 === 1) bar(labelWidth, top, valueWidth, item.rowHeight, '#fcf8f3');
-      line(item.labelLines[0] || '', 0, top, labelWidth, layout.fontPx, 0,
+      line(item.labelLines[0] || '', 0, top + item.textNudgeY, labelWidth, layout.fontPx, 0,
         lineHeightPx, { bold: true, ink: '#8a1428' });
       item.valueLines.forEach((text, i) =>
         line(text, labelWidth, top + i * lineHeightPx, valueWidth, layout.fontPx, 0,
@@ -268,7 +274,15 @@ function smartCardLines(key, data, frame, cardLayout) {
     bar(1.45, top, 0.6, Math.max(0, layout.items.reduce((sum, item) => sum + item.height, 0)
       + Math.max(0, layout.items.length - 1) * rowGap), '#d5a9b0');
     for (const item of layout.items) {
-      bar(0, top + Math.max(1, lineHeightPx * 0.43), 4, 4, '#8a1428');
+      if (item.symbol === 'flag') {
+        const stemX = 1;
+        const stemY = top + lineHeightPx * 0.2;
+        bar(stemX, stemY, 0.55, lineHeightPx * 0.68, '#8a1428');
+        poly([[stemX + 0.55, stemY], [stemX + 4.2, stemY + 2], [stemX + 0.55, stemY + 4]], '#8a1428');
+      } else {
+        line(item.symbol, 0, top, Math.max(4, textInset - 1), layout.fontPx * 0.72, 1,
+          lineHeightPx, { bold: true, ink: '#8a1428' });
+      }
       item.lines.forEach((text, i) => line(
         text, textInset, top + i * lineHeightPx, Math.max(0, contentWidth - textInset), layout.fontPx,
       ));
@@ -308,6 +322,120 @@ function smartCardLines(key, data, frame, cardLayout) {
       text, 0, subtitleOffsetPx + g.gridHeight + GAP + index * g.sourceLineHeightPx,
       contentWidth, g.sourceFontPx, 2, g.sourceLineHeightPx,
     ));
+    return out;
+  }
+
+  if (key === 'market') {
+    const g = layout.geometry;
+    let y = subtitleOffsetPx;
+    layout.titleLines.forEach((text, index) => line(
+      text, 0, y + index * g.titleLineHeightPx, contentWidth, g.titleFontPx, 1,
+      g.titleLineHeightPx, { bold: true, ink: '#8a1428' },
+    ));
+    y += g.titleHeight + GAP;
+    const rowsTop = y;
+    for (const item of layout.items) {
+      bar(0, y, contentWidth, item.rowHeight, '#fffafa');
+      item.labelLines.forEach((text, index) => line(
+        text, 2, y + index * g.lineHeightPx, Math.max(0, g.labelWidth - 4), layout.fontPx, 0,
+        g.lineHeightPx, { bold: true, ink: '#4f3036' },
+      ));
+      item.valueLines.forEach((text, index) => line(
+        text, g.labelWidth, y + index * g.lineHeightPx, g.valueWidth - 2, layout.fontPx, 2,
+        g.lineHeightPx, { bold: true },
+      ));
+      item.changeLines.forEach((text, index) => line(
+        text, g.labelWidth + g.valueWidth, y + index * g.lineHeightPx, g.changeWidth - 2,
+        layout.fontPx, 2, g.lineHeightPx,
+        { bold: true, ink: item.direction === 'up' ? '#237548' : item.direction === 'down' ? '#a51d34' : '#111111' },
+      ));
+      y += item.rowHeight;
+      bar(0, y - 0.4, contentWidth, 0.4, '#ddcbd0');
+    }
+    bar(0, rowsTop, 0.6, g.rowsHeight, '#cdaeb4');
+    bar(contentWidth - 0.6, rowsTop, 0.6, g.rowsHeight, '#cdaeb4');
+    bar(g.labelWidth - 0.2, rowsTop, 0.4, g.rowsHeight, '#ddcbd0');
+    bar(g.labelWidth + g.valueWidth - 0.2, rowsTop, 0.4, g.rowsHeight, '#ddcbd0');
+    if (layout.briefLines?.length) {
+      y += GAP;
+      bar(0, y, contentWidth, g.briefHeight, '#f7f1f2');
+      bar(0, y, 2, g.briefHeight, '#8a1428');
+      let briefY = y + 3;
+      layout.briefLabelLines.forEach((text, index) => line(
+        text, 4, briefY + index * g.lineHeightPx, Math.max(0, contentWidth - 8),
+        layout.fontPx, 0, g.lineHeightPx, { bold: true, ink: '#8a1428' },
+      ));
+      briefY += layout.briefLabelLines.length * g.lineHeightPx;
+      layout.briefLines.forEach((text, index) => line(
+        text, 4, briefY + index * g.lineHeightPx, Math.max(0, contentWidth - 8),
+        layout.fontPx, 0, g.lineHeightPx,
+      ));
+      y += g.briefHeight;
+    }
+    y += GAP;
+    layout.sourceLines.forEach((text, index) => line(
+      text, 0, y + index * g.sourceLineHeightPx, contentWidth, g.sourceFontPx, 2, g.sourceLineHeightPx,
+    ));
+    return out;
+  }
+
+  if (key === 'tender') {
+    const g = layout.geometry;
+    let y = subtitleOffsetPx + g.gap;
+    bar(0, subtitleOffsetPx, contentWidth, 0.8, '#202024');
+    bar(0, subtitleOffsetPx, 0.8, Math.max(0, Number(frame.height) || 0), '#202024');
+    bar(contentWidth - 0.8, subtitleOffsetPx, 0.8, Math.max(0, Number(frame.height) || 0), '#202024');
+    const putLines = (lines, x, width, fontPx, height, align = 0, style = {}) => {
+      lines.forEach((text, index) => line(text, x, y + index * height, width, fontPx, align, height, style));
+      y += lines.length * height;
+    };
+    putLines(layout.issuerLines, 2, contentWidth - 4, g.issuerFontPx, g.issuerLineHeightPx, 1, { bold: true });
+    putLines(layout.officeLines, 2, contentWidth - 4, layout.fontPx, g.lineHeightPx, 1);
+    bar(1, y + g.gap - 0.4, contentWidth - 2, 0.5, '#777777');
+    y += g.gap;
+    if (layout.referenceLines.length || layout.dateLines.length) {
+      const metaTop = y;
+      layout.referenceLines.forEach((text, index) => line(text, 2, metaTop + index * g.lineHeightPx,
+        contentWidth / 2 - 4, layout.fontPx, 0, g.lineHeightPx));
+      layout.dateLines.forEach((text, index) => line(text, contentWidth / 2, metaTop + index * g.lineHeightPx,
+        contentWidth / 2 - 2, layout.fontPx, 2, g.lineHeightPx));
+      y += Math.max(layout.referenceLines.length, layout.dateLines.length) * g.lineHeightPx + g.gap;
+    }
+    putLines(layout.subjectLines, 2, contentWidth - 4, layout.fontPx, g.strongLineHeightPx, 1, { bold: true });
+    y += g.gap;
+    putLines(layout.titleLines, 2, contentWidth - 4, g.titleFontPx, g.titleLineHeightPx, 1, { bold: true });
+    y += g.gap;
+    for (const paragraph of layout.paragraphItems) {
+      putLines(paragraph.lines, 2, contentWidth - 4, layout.fontPx, g.lineHeightPx, 0);
+      y += g.gap;
+    }
+    if (layout.table) {
+      const tableTop = y;
+      const rows = [layout.table.header, ...layout.table.rows];
+      rows.forEach((row, rowIndex) => {
+        if (rowIndex === 0) bar(1, y, contentWidth - 2, row.height, '#f2eded');
+        row.cells.forEach((cell, column) => cell.forEach((text, index) => line(
+          text, column * layout.table.columnWidth + 2, y + index * g.lineHeightPx,
+          Math.max(0, layout.table.columnWidth - 4), layout.fontPx, rowIndex === 0 ? 1 : 0,
+          g.lineHeightPx, { bold: rowIndex === 0 },
+        )));
+        y += row.height;
+        bar(1, y - 0.5, contentWidth - 2, 0.5, '#777777');
+      });
+      for (let column = 0; column <= layout.table.columnCount; column += 1) {
+        bar(column * layout.table.columnWidth, tableTop, 0.5, y - tableTop, '#777777');
+      }
+      y += g.gap;
+    }
+    putLines(layout.contactLines, 2, contentWidth - 4, layout.fontPx, g.lineHeightPx, 0);
+    if (layout.signatoryLines.length) {
+      y += g.gap;
+      layout.signatoryLines.forEach((text, index) => line(
+        text, contentWidth * 0.52, y + index * g.strongLineHeightPx, contentWidth * 0.46,
+        layout.fontPx, 1, g.strongLineHeightPx, { bold: true },
+      ));
+    }
+    bar(0, Math.max(0, (Number(frame.height) || 0) - 0.8), contentWidth, 0.8, '#202024');
     return out;
   }
 

@@ -71,7 +71,8 @@ test('Havaman is the one connected feed and uses the supplied live-source client
 
 test('दिनविशेष is a checked lookup, and stays silent on a date nobody checked', async () => {
   const independence = await features.build('dinvishesh', '2026-08-15');
-  assert.match(independence.items[0].text, /१९४७/);
+  assert.equal(independence.items[0].text, 'स्वातंत्र्य दिन');
+  assert.equal(independence.card.entries[0].symbol, 'flag');
 
   // A date with no curated entry reports that it is empty - it does not ask a
   // model to make an anniversary up.

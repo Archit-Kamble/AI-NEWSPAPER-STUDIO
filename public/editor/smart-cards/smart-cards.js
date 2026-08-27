@@ -137,7 +137,7 @@ function labelledMarkup(layout) {
   // matches the width every value line was wrapped against.
   const colgroup = `<colgroup><col style="width:${layout.geometry.labelWidth}px"><col></colgroup>`;
   return `<table class="smart-card-table" style="font-size:${layout.fontPx}px">${colgroup}${layout.items
-    .map((item) => `<tr style="height:${item.rowHeight}px"><th>${linesMarkup(item.labelLines)}</th><td>${linesMarkup(item.valueLines)}</td></tr>`)
+    .map((item) => `<tr style="height:${item.rowHeight}px;--row-text-nudge:${item.textNudgeY || 0}px"><th>${linesMarkup(item.labelLines)}</th><td>${linesMarkup(item.valueLines)}</td></tr>`)
     .join("")}</table>`;
 }
 
@@ -208,7 +208,7 @@ function suvicharMarkup(data, layout) {
 function dinvisheshMarkup(data, layout) {
   if (!layout.items || !layout.items.length || !layout.geometry) return null;
   return `<ul class="smart-card-list" style="font-size:${layout.fontPx}px;gap:${layout.geometry.rowGap}px">${layout.items
-    .map((item) => `<li style="min-height:${item.height}px;padding-left:${layout.geometry.textInset}px">${linesMarkup(item.lines)}</li>`)
+    .map((item) => `<li style="min-height:${item.height}px;padding-left:${layout.geometry.textInset}px"><b class="dinvishesh-symbol${item.symbol === "flag" ? " is-flag" : ""}" aria-hidden="true">${item.symbol === "flag" ? "" : escapeHtml(item.symbol)}</b>${linesMarkup(item.lines)}</li>`)
     .join("")}</ul>`;
 }
 
@@ -228,6 +228,55 @@ function havamanMarkup(data, layout) {
     ? `<p class="smart-card-weather-source" style="font-size:${g.sourceFontPx}px;line-height:${g.sourceLineHeightPx}px;height:${g.sourceHeight}px">${linesMarkup(layout.sourceLines)}</p>`
     : "";
   return `<div class="smart-card-weather-grid" style="${gridStyle}">${items}</div>${source}`;
+}
+
+// ------------------------------------------------------------------ market ---
+
+function marketMarkup(data, layout) {
+  if (!layout.items?.length || !layout.geometry) return null;
+  const g = layout.geometry;
+  const rows = layout.items.map((item) => `<div class="smart-card-market-row" style="height:${item.rowHeight}px;line-height:${g.lineHeightPx}px">
+      <strong style="width:${g.labelWidth}px">${linesMarkup(item.labelLines)}</strong>
+      <b style="width:${g.valueWidth}px">${linesMarkup(item.valueLines)}</b>
+      <span class="market-change is-${item.direction}" style="width:${g.changeWidth}px">${linesMarkup(item.changeLines)}</span>
+    </div>`).join("");
+  const brief = layout.briefLines?.length
+    ? `<aside class="smart-card-market-brief" style="min-height:${g.briefHeight}px;line-height:${g.lineHeightPx}px">
+        <strong>${linesMarkup(layout.briefLabelLines)}</strong>
+        <p>${linesMarkup(layout.briefLines)}</p>
+      </aside>`
+    : "";
+  return `<div class="smart-card-market">
+    <h3 style="height:${g.titleHeight}px;font-size:${g.titleFontPx}px;line-height:${g.titleLineHeightPx}px">${linesMarkup(layout.titleLines)}</h3>
+    <div class="smart-card-market-rows">${rows}</div>
+    ${brief}
+    <p class="smart-card-market-source" style="height:${g.sourceHeight}px;font-size:${g.sourceFontPx}px;line-height:${g.sourceLineHeightPx}px">${linesMarkup(layout.sourceLines)}</p>
+  </div>`;
+}
+
+// ------------------------------------------------------------------ tender ---
+
+function tenderMarkup(data, layout) {
+  if (!layout.issuerLines?.length || !layout.geometry) return null;
+  const g = layout.geometry;
+  const meta = layout.referenceLines.length || layout.dateLines.length
+    ? `<div class="smart-card-tender-meta"><span>${linesMarkup(layout.referenceLines)}</span><span>${linesMarkup(layout.dateLines)}</span></div>`
+    : "";
+  const paragraphs = layout.paragraphItems.map((item) =>
+    `<p style="min-height:${item.height}px">${linesMarkup(item.lines)}</p>`).join("");
+  const table = layout.table ? `<table class="smart-card-tender-table"><thead><tr>${layout.table.header.cells
+    .map((lines) => `<th style="width:${layout.table.columnWidth}px;height:${layout.table.header.height}px">${linesMarkup(lines)}</th>`).join("")}</tr></thead><tbody>${layout.table.rows.map((row) => `<tr>${row.cells
+    .map((lines) => `<td style="width:${layout.table.columnWidth}px;height:${row.height}px">${linesMarkup(lines)}</td>`).join("")}</tr>`).join("")}</tbody></table>` : "";
+  return `<article class="smart-card-tender" style="font-size:${layout.fontPx}px;line-height:${g.lineHeightPx}px;--tender-gap:${g.gap}px">
+    <header><h3 style="font-size:${g.issuerFontPx}px;line-height:${g.issuerLineHeightPx}px">${linesMarkup(layout.issuerLines)}</h3>${layout.officeLines.length ? `<p>${linesMarkup(layout.officeLines)}</p>` : ""}</header>
+    ${meta}
+    ${layout.subjectLines.length ? `<h4>${linesMarkup(layout.subjectLines)}</h4>` : ""}
+    <h2 style="font-size:${g.titleFontPx}px;line-height:${g.titleLineHeightPx}px">${linesMarkup(layout.titleLines)}</h2>
+    <div class="smart-card-tender-copy">${paragraphs}</div>
+    ${table}
+    ${layout.contactLines.length ? `<p class="smart-card-tender-contact">${linesMarkup(layout.contactLines)}</p>` : ""}
+    ${layout.signatoryLines.length ? `<p class="smart-card-tender-signatory">${linesMarkup(layout.signatoryLines)}</p>` : ""}
+  </article>`;
 }
 
 // -------------------------------------------------------------------- chart ---
@@ -315,6 +364,8 @@ const RENDERERS = {
   suvichar: suvicharMarkup,
   dinvishesh: dinvisheshMarkup,
   havaman: havamanMarkup,
+  market: marketMarkup,
+  tender: tenderMarkup,
   chart: chartMarkup,
 };
 
@@ -365,12 +416,15 @@ export function smartCardMarkup(key, data, frame) {
     ? `<p class="smart-card-subtitle" style="font-size:${layout.subtitle.fontPx}px">${linesMarkup(layout.subtitle.lines)}</p>`
     : "";
   const artwork = layout.artwork
-    ? `<img class="smart-card-artwork" src="/${escapeHtml(layout.artwork.file)}" alt="" aria-hidden="true" style="left:${layout.artwork.x}px;top:${layout.artwork.y}px;width:${layout.artwork.width}px;height:${layout.artwork.height}px">`
+    ? `<img class="smart-card-artwork${layout.artwork.stretch ? " is-stretched" : ""}" src="/${escapeHtml(layout.artwork.file)}" alt="" aria-hidden="true" style="left:${layout.artwork.x}px;top:${layout.artwork.y}px;width:${layout.artwork.width}px;height:${layout.artwork.height}px">`
+    : "";
+  const titleRules = key === "rashi" && layout.artwork
+    ? `<i class="smart-card-title-rule" style="left:0;top:${layout.artwork.y + layout.artwork.height / 2}px;width:${Math.max(0, layout.artwork.x - 6)}px"></i><i class="smart-card-title-rule" style="left:${layout.artwork.x + layout.artwork.width + 6}px;top:${layout.artwork.y + layout.artwork.height / 2}px;width:${Math.max(0, (Number(frame?.width) || 0) - layout.artwork.x - layout.artwork.width - 6)}px"></i>`
     : "";
   const content = layout.contentBox || { x: 0, y: 0, width: Number(frame?.width) || 0, height: Number(frame?.height) || 0 };
   const contentStyle = `left:${content.x}px;top:${content.y}px;width:${content.width}px;height:${content.height}px`;
   const cls = `smart-card smart-card-${escapeHtml(key)}${layout.fitState === "OVERSET" ? " is-overset" : ""}`;
-  return `<div class="${cls}" data-fit-state="${escapeHtml(layout.fitState)}">${artwork}<div class="smart-card-content" style="${contentStyle}">${subtitle}${inside}</div></div>`;
+  return `<div class="${cls}" data-fit-state="${escapeHtml(layout.fitState)}">${titleRules}${artwork}<div class="smart-card-content" style="${contentStyle}">${subtitle}${inside}</div></div>`;
 }
 
 /**
@@ -432,7 +486,7 @@ export function smartCardText(key, data) {
   }
 
   if (key === "dinvishesh") {
-    return asList(data.entries).map((e) => (typeof e === "string" ? e : e?.text || "")).join("\n");
+    return asList(data.entries).map((e) => (typeof e === "string" ? e : e?.label || e?.text || "")).join("\n");
   }
 
   if (key === "panchang") {
@@ -445,6 +499,23 @@ export function smartCardText(key, data) {
       .map((city) => `${city.name} : ${city.condition || ""} · कमाल ${devanagari(city.maxC)}° · किमान ${devanagari(city.minC)}° · पाऊस ${devanagari(city.rainMm)} मिमी (${devanagari(city.rainChance)}%)`)
       .concat(data.source ? [String(data.source)] : [])
       .join("\n");
+  }
+
+  if (key === "market") {
+    return asList(data.items)
+      .filter((item) => item?.label && item?.value != null)
+      .map((item) => `${item.label} : ${item.value}${item.change ? ` (${item.change})` : ""}`)
+      .concat(data.yesterdayBrief ? [`कालचा बाजार${data.asOf ? ` (${data.asOf})` : ""} : ${data.yesterdayBrief}`] : [])
+      .concat(data.source ? [String(data.source)] : [])
+      .join("\n");
+  }
+
+  if (key === "tender") {
+    const table = Array.isArray(data?.table?.headers)
+      ? [data.table.headers, ...asList(data.table.rows)].map((row) => asList(row).join(" | "))
+      : [];
+    return [data.issuer, data.office, data.reference, data.date, data.subject, data.noticeTitle,
+      ...asList(data.paragraphs), ...table, data.contact, data.signatory].filter(Boolean).join("\n");
   }
 
   return "";

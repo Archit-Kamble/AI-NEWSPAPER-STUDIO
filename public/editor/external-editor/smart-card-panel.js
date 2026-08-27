@@ -17,8 +17,15 @@ const CARDS = [
   { key: "suvichar", icon: "✦", label: "सुविचार", detail: "आजचा विचार आणि श्रेय", source: "AI draft" },
   { key: "dinvishesh", icon: "◷", label: "दिनविशेष", detail: "तपासलेली ऐतिहासिक नोंद", source: "Curated" },
   { key: "sudoku", icon: "▦", label: "सुडोकू", detail: "आजचे निर्धारक कोडे", source: "Calculated" },
-  { key: "havaman", icon: "☁", label: "हवामान", detail: "कमाल, किमान आणि पावसाचा अंदाज", source: "Open-Meteo live" },
+  { key: "havaman", icon: "☁", label: "सातारा हवामान", detail: "कमाल, किमान आणि पावसाचा अंदाज", source: "Open-Meteo live" },
+  { key: "market", icon: "↗", label: "शेअर / सोने बाजार", detail: "पडताळलेले दर आणि बदल", source: "Desk supplied" },
+  { key: "tender", icon: "§", label: "निविदा / प्रकटपत्र", detail: "मजकूरापासून छापील सूचना", source: "Desk supplied" },
 ];
+
+const MANUAL_PLACEHOLDERS = Object.freeze({
+  market: "बाजार दिनांक: २६/०८/२०२६\nसोने २४ कॅरेट | ₹७४,२५० | +०.४%\nचांदी | ₹९२,१०० | -०.२%\nसेन्सेक्स | ८१,४०० | +०.१%\nकालचा बाजार: बँक आणि धातू समभागांच्या वाढीमुळे निर्देशांक सकारात्मक बंद झाले.\nस्रोत: पडताळलेला बाजार अहवाल",
+  tender: "कार्यालय: जिल्हाधिकारी कार्यालय, सातारा\nसंदर्भ: निविदा/२०२६/१२\nदिनांक: २७/०८/२०२६\nविषय: कार्यालयीन साहित्य पुरवठा\nशीर्षक: निविदा सूचना\n\nपात्र पुरवठादारांकडून बंद लिफाफ्यात निविदा मागविण्यात येत आहेत.\n\nअ.क्र. | बाब | प्रमाण\n१ | कागद | १०० रीम\n\nसंपर्क: ०२१६२-२२२२२२\nस्वाक्षरी: जिल्हाधिकारी, सातारा",
+});
 
 function choice(card, selected) {
   return `<button type="button" class="smart-card-choice${selected ? " is-selected" : ""}${card.unavailable ? " is-unavailable" : ""}"
@@ -52,6 +59,12 @@ export function smartCardMarkupPanel(view) {
       <legend>राशींचा समावेश</legend><p>Automatic uses the available space. Override only for this edition.</p>
       <div class="smart-card-pills"><button type="button" class="is-selected" data-rashi-variant="auto">Automatic</button><button type="button" data-rashi-variant="one">1 sign</button><button type="button" data-rashi-variant="three">3 signs</button><button type="button" data-rashi-variant="all">All 12</button></div>
     </fieldset>
+    <fieldset class="smart-card-manual-input" id="smartCardManualInput" hidden>
+      <legend id="smartCardManualLegend">Verified desk data</legend>
+      <p>Paste text below or load a TXT, CSV or JSON file. The file is read locally and nothing is accepted until you review the rendered card.</p>
+      <textarea id="smartCardManualText" rows="10"></textarea>
+      <label class="smart-card-file-label">Load data/text file <input id="smartCardManualFile" type="file" accept=".txt,.csv,.json,text/plain,text/csv,application/json"></label>
+    </fieldset>
     <div class="smart-card-footer"><span class="smart-card-fit-note" id="smartCardFitNote">Measured against this block</span><button type="button" class="ext-editor-btn ext-editor-btn-primary" id="smartCardGenerate">Prepare card for review</button></div>
   </div><section id="smartCardProposal" class="ai-proposal smart-card-proposal" hidden></section>`;
 }
@@ -65,6 +78,7 @@ function proposalMarkup(result) {
   const source = result.source === "written" ? "AI draft — review required"
     : result.source === "curated" ? "Checked desk data"
       : result.source === "feed" ? "Live Open-Meteo forecast"
+        : result.source === "manual" ? "Desk-supplied — verify before accepting"
         : "Calculated in SAHAS";
 
   // The card, drawn as it will print - solved against the SAME logical
@@ -110,6 +124,10 @@ export function bindSmartCard(requestCard, onPatch, onNotify) {
   let key = "panchang";
   let variant = "auto";
   const options = document.getElementById("smartCardRashiOptions");
+  const manual = document.getElementById("smartCardManualInput");
+  const manualText = document.getElementById("smartCardManualText");
+  const manualLegend = document.getElementById("smartCardManualLegend");
+  const manualFile = document.getElementById("smartCardManualFile");
   const generate = document.getElementById("smartCardGenerate");
   const selectCard = (next) => {
     key = next;
@@ -119,12 +137,27 @@ export function bindSmartCard(requestCard, onPatch, onNotify) {
       button.setAttribute("aria-pressed", String(selected));
     });
     options.hidden = key !== "rashi";
+    const isManual = key === "market" || key === "tender";
+    manual.hidden = !isManual;
+    if (isManual) {
+      manualLegend.textContent = key === "market" ? "Verified Share / Gold Market data" : "Tender notice text";
+      manualText.placeholder = MANUAL_PLACEHOLDERS[key];
+    }
   };
   document.querySelectorAll("[data-smart-card]").forEach((button) => button.addEventListener("click", () => selectCard(button.dataset.smartCard)));
   document.querySelectorAll("[data-rashi-variant]").forEach((button) => button.addEventListener("click", () => {
     variant = button.dataset.rashiVariant;
     document.querySelectorAll("[data-rashi-variant]").forEach((choiceButton) => choiceButton.classList.toggle("is-selected", choiceButton === button));
   }));
+  manualFile?.addEventListener("change", async () => {
+    const file = manualFile.files?.[0];
+    if (!file) return;
+    if (file.size > 1024 * 1024) {
+      manualFile.value = "";
+      return onNotify("That text file is larger than 1 MB.");
+    }
+    manualText.value = await file.text();
+  });
 
   // Taking a card back off a block. Both halves go together: a key with no
   // payload is a block that says it holds a sudoku and cannot draw one.
@@ -138,7 +171,11 @@ export function bindSmartCard(requestCard, onPatch, onNotify) {
     const label = generate.textContent;
     generate.textContent = "Measuring this block…";
     try {
-      const result = await requestCard?.({ key, variant: key === "rashi" ? variant : "auto" });
+      const result = await requestCard?.({
+        key,
+        variant: key === "rashi" ? variant : "auto",
+        manualText: key === "market" || key === "tender" ? manualText.value : "",
+      });
       if (result?.error) return onNotify(result.error);
       if (!result?.proposal) return onNotify("No verified content is available for this card on this date.");
       const host = document.getElementById("smartCardProposal");

@@ -202,6 +202,39 @@ test('a rashi card prints its resolved reading/lucky lines, a panchang its resol
   }
 });
 
+test('desk-supplied market and tender cards remain structured in the Scribus press file', async () => {
+  const marketSection = {
+    x_px: 10, y_px: 10, width_px: 307, height_px: 240, margin_px: 8,
+    headline: '', subheading: '', body: '', images: [], smart_card_key: 'market',
+    smart_card_data: {
+      title: 'शेअर / सोने बाजार', source: 'स्रोत : संपादकीय पडताळणी', asOf: '२६/०८/२०२६',
+      yesterdayBrief: 'बँक आणि धातू समभागांच्या वाढीमुळे निर्देशांक सकारात्मक बंद झाले.',
+      items: [{ label: 'सोने २४ कॅरेट', value: '₹७४,२५०', change: '+०.४%' }, { label: 'सेन्सेक्स', value: '८१,४००', change: '-०.२%' }],
+    },
+  };
+  const marketXml = await scribus.blockFrames(marketSection);
+  for (const text of ['शेअर / सोने बाजार', 'सोने २४ कॅरेट', '₹७४,२५०', 'सेन्सेक्स', '८१,४००',
+    'कालचा बाजार · २६/०८/२०२६', 'बँक आणि धातू समभागांच्या वाढीमुळे निर्देशांक', 'सकारात्मक बंद झाले.']) {
+    assert.ok(marketXml.includes(`CH="${scribus.escapeXml(text)}"`), `${text} must reach the market press frame`);
+  }
+
+  const tenderSection = {
+    x_px: 10, y_px: 10, width_px: 307, height_px: 500, margin_px: 8,
+    headline: '', subheading: '', body: '', images: [], smart_card_key: 'tender',
+    smart_card_data: {
+      issuer: 'जिल्हाधिकारी कार्यालय, सातारा', reference: 'निविदा/२०२६/१२', date: '२७/०८/२०२६',
+      subject: 'कार्यालयीन साहित्य पुरवठा', noticeTitle: 'निविदा सूचना',
+      paragraphs: ['पात्र पुरवठादारांकडून बंद लिफाफ्यात निविदा मागविण्यात येत आहेत.'],
+      table: { headers: ['अ.क्र.', 'बाब', 'प्रमाण'], rows: [['१', 'कागद', '१०० रीम']] },
+      signatory: 'जिल्हाधिकारी, सातारा',
+    },
+  };
+  const tenderXml = await scribus.blockFrames(tenderSection);
+  for (const text of ['जिल्हाधिकारी कार्यालय, सातारा', 'निविदा सूचना', 'अ.क्र.', 'कागद', '१०० रीम']) {
+    assert.ok(tenderXml.includes(`CH="${scribus.escapeXml(text)}"`), `${text} must reach the tender press frame`);
+  }
+});
+
 test('a Smart Card too small for its own block is refused by preflight, not silently clipped in the press file', async () => {
   const preflight = require('../src/services/preflight.service');
   const tinySection = {

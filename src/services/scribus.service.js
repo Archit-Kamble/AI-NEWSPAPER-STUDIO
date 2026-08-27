@@ -417,7 +417,7 @@ function smartCardFrames({ key, data, frame, xMm, yMm, ownPage, cardLayout, fami
               WIDTH="${mmRound(mm(line.width))}" HEIGHT="${mmRound(mm(line.height))}"
               ROT="0" OwnPage="${ownPage}" ItemID="${nextId()}" PTYPE="2" FRTYPE="0"
               PWIDTH="0" PCOLOR="None" PCOLOR2="None"
-              PFILE="${escapeXml(`./${String(line.file || '').replace(/^\//, '')}`)}" SCALETYPE="1" RATIO="1" TEXTFLOWMODE="0"/>`;
+              PFILE="${escapeXml(`./${String(line.file || '').replace(/^\//, '')}`)}" SCALETYPE="1" RATIO="${line.stretch ? '0' : '1'}" TEXTFLOWMODE="0"/>`;
     }
     // A chart's bars are rectangles, which this file already draws for a
     // block's ground and a reversed headline's panel. Emitted as ink rather
@@ -507,7 +507,7 @@ function furnitureFrames(items, { pageOffsetMm, ownPage, family = 'sans', weight
               WIDTH="${mmRound(item.width)}" HEIGHT="${mmRound(item.height)}"
               ROT="0" OwnPage="${ownPage}" ItemID="${nextId()}" PTYPE="2" FRTYPE="0"
               PWIDTH="0" PCOLOR="None" PCOLOR2="None"
-              PFILE="${escapeXml(item.file)}" SCALETYPE="1" RATIO="1" TEXTFLOWMODE="0"/>`;
+              PFILE="${escapeXml(item.file)}" SCALETYPE="1" RATIO="${item.stretch ? '0' : '1'}" TEXTFLOWMODE="0"/>`;
     }
     if (item.kind === 'text') {
       return lineFrame({

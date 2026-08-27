@@ -55,6 +55,7 @@ import * as history from "./history/history.js";
 import * as autosave from "./autosave/autosave.js";
 import { draftFromSection, draftFromStory, payloadFromDraft, viewOfSection } from "./section-model.js";
 import { canRenderSmartCard, smartCardText } from "./smart-cards/smart-cards.js";
+import { manualCardFromText } from "./smart-cards/manual-cards.js";
 import { smartCardFrame } from "./canvas/section-thumb.js";
 import { candidatesOn, runBulk } from "./external-editor/bulk-generate.js";
 import { computeAlignment } from "./external-editor/align.js";
@@ -535,7 +536,7 @@ async function removeSectionImage(imageId) {
 // Smart cards use the existing, classified daily-feature service. The only
 // client-side calculation is the selected block's available character budget;
 // it is the same grid used by the Space panel and press preflight.
-async function requestSmartCard({ key, variant }) {
+async function requestSmartCard({ key, variant, manualText = "" }) {
   const newspaper = store.getState().newspaper;
   const section = store.getSelectedSection();
   const view = currentView();
@@ -546,13 +547,19 @@ async function requestSmartCard({ key, variant }) {
     ? (budget < 180 ? "one" : budget < 520 ? "three" : "all")
     : variant;
   const signs = smartVariant === "one" ? 1 : smartVariant === "three" ? 3 : 12;
-  const response = await fetch(`/api/features/${encodeURIComponent(key)}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ date: newspaper.publication_date, charsPerSign: Math.max(30, Math.floor(budget / signs)), tier: getAiTier() }),
-  });
-  const result = await response.json().catch(() => ({ error: "The Smart Card could not be built." }));
-  if (!response.ok) return result;
+  let result;
+  if (key === "market" || key === "tender") {
+    result = manualCardFromText(key, manualText);
+  } else {
+    const response = await fetch(`/api/features/${encodeURIComponent(key)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date: newspaper.publication_date, charsPerSign: Math.max(30, Math.floor(budget / signs)), tier: getAiTier() }),
+    });
+    result = await response.json().catch(() => ({ error: "The Smart Card could not be built." }));
+    if (!response.ok) return result;
+  }
+  if (result?.error) return result;
 
   // The structured payload, if the builder sent one. This is what is stored and
   // what draws; the body text below is a RENDERING of it, kept because
@@ -585,7 +592,8 @@ async function requestSmartCard({ key, variant }) {
     source: result.writtenBy ? "written"
       : key === "dinvishesh" ? "curated"
         : key === "havaman" ? "feed"
-          : "computed",
+          : key === "market" || key === "tender" ? "manual"
+            : "computed",
     fit: { bodyCharBudget: budget, charsUsed, charsRemaining: Math.max(0, budget - charsUsed) },
     // The SAME logical frame the block will solve the card against once
     // accepted - the proposal preview draws from this too (scaled up as one

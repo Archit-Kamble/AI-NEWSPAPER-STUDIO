@@ -91,7 +91,7 @@ test('a good card still draws — the guard did not blunt the renderer', () => {
     signs: [{ key: 'mesh', name: 'मेष', text: 'आजचा दिवस चांगला.', luckyNumber: 7, luckyColour: 'निळा' }],
   }, FRAME);
   assert.match(rashi, /मेष/);
-  assert.match(rashi, /आजचा दिवस चांगला/);
+  assert.match(rashi.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' '), /आजचा दिवस चांगला/);
 
   const suvichar = cards.smartCardMarkup('suvichar', { text: 'प्रयत्ने वाळूचे कण रगडिता तेलही गळे.', attribution: 'समर्थ रामदास' }, FRAME);
   assert.match(suvichar, /प्रयत्ने/);

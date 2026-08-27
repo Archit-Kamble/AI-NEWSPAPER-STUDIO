@@ -520,7 +520,10 @@ export function sectionClassName(view, { selected = false, dirty = false, overfl
   // block holding only a placed picture (section_images), no headline/body/
   // legacy image_url, was drawn with the empty-block treatment on the canvas
   // itself, not just badged wrong.
-  const filled = Boolean(view.headline || view.body || view.imageUrl || hasImages);
+  const filled = Boolean(
+    view.headline || view.body || view.imageUrl || hasImages
+    || (view.smartCardKey && view.smartCardData),
+  );
   return [
     "newspaper-section",
     // What the layout decided this block is, and how it is ruled off. Both are

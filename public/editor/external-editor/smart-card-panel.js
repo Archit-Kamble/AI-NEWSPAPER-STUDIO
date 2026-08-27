@@ -17,7 +17,7 @@ const CARDS = [
   { key: "suvichar", icon: "✦", label: "सुविचार", detail: "आजचा विचार आणि श्रेय", source: "AI draft" },
   { key: "dinvishesh", icon: "◷", label: "दिनविशेष", detail: "तपासलेली ऐतिहासिक नोंद", source: "Curated" },
   { key: "sudoku", icon: "▦", label: "सुडोकू", detail: "आजचे निर्धारक कोडे", source: "Calculated" },
-  { key: "havaman", icon: "☁", label: "हवामान", detail: "विश्वसनीय स्रोत जोडणे बाकी", source: "Source needed", unavailable: true },
+  { key: "havaman", icon: "☁", label: "हवामान", detail: "कमाल, किमान आणि पावसाचा अंदाज", source: "Open-Meteo live" },
 ];
 
 function choice(card, selected) {
@@ -62,7 +62,10 @@ export { smartCardMarkupPanel as smartCardMarkup };
 
 function proposalMarkup(result) {
   const proposal = result.proposal;
-  const source = result.source === "written" ? "AI draft — review required" : result.source === "curated" ? "Checked desk data" : "Calculated in SAHAS";
+  const source = result.source === "written" ? "AI draft — review required"
+    : result.source === "curated" ? "Checked desk data"
+      : result.source === "feed" ? "Live Open-Meteo forecast"
+        : "Calculated in SAHAS";
 
   // The card, drawn as it will print - solved against the SAME logical
   // frame (result.frame, from workspace.js's requestSmartCard()) the real

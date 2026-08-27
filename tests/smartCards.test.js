@@ -54,6 +54,19 @@ function dinvisheshData() {
   };
 }
 
+function havamanData() {
+  return {
+    subtitle: 'सातारा जिल्हा · हवामान अंदाज',
+    cities: [
+      { key: 'satara', name: 'सातारा', condition: 'रिमझिम पाऊस', maxC: 27.3, minC: 21.9, rainMm: 3.3, rainChance: 82 },
+      { key: 'karad', name: 'कराड', condition: 'अंशतः ढगाळ', maxC: 29, minC: 22, rainMm: 0.4, rainChance: 20 },
+      { key: 'wai', name: 'वाई', condition: 'पावसाच्या सरी', maxC: 26, minC: 20, rainMm: 5.2, rainChance: 74 },
+      { key: 'phaltan', name: 'फलटण', condition: 'बहुतेक निरभ्र', maxC: 31, minC: 23, rainMm: 0, rainChance: 5 },
+    ],
+    source: 'स्रोत : Open-Meteo',
+  };
+}
+
 // ----------------------------------------------------------------- sudoku ---
 
 test('sudoku: all 81 cells are exact squares, in a known frame', () => {
@@ -74,6 +87,15 @@ test('sudoku: the 3x3 box rules are still the heavier ones', () => {
   const html = cards.smartCardMarkup('sudoku', sudokuData(), FRAME);
   assert.equal((html.match(/box-right/g) || []).length, 18, 'two heavier vertical rules, nine rows deep');
   assert.equal((html.match(/box-bottom/g) || []).length, 18, 'two heavier horizontal rules, nine columns wide');
+});
+
+test('sudoku: carries its own compact printed title and difficulty above the square grid', () => {
+  const data = { ...sudokuData(), difficulty: 'मध्यम' };
+  const result = layout.layoutSmartCard('sudoku', data, FRAME);
+  const html = cards.smartCardMarkup('sudoku', data, FRAME);
+  assert.equal(result.geometry.headingText, 'सुडोकू · मध्यम');
+  assert.match(html, /smart-card-sudoku-heading/);
+  assert.ok(result.geometry.top >= result.geometry.headingLineHeightPx, 'the grid starts below its title');
 });
 
 test('sudoku: fits a real, roomy frame at FITS', () => {
@@ -147,19 +169,21 @@ test('rashi: a false FITS is closed - twenty repetitions of real reading copy ca
   assert.ok(result.items[0].readingLines.length > 3, `expected many wrapped lines, got ${result.items[0].readingLines.length}`);
 });
 
-test('rashi: row height is content-aware - a sign with more real text gets a taller row, not a uniform share', () => {
-  const data = {
-    signs: [
-      { key: 'short', name: 'अ', text: 'ठीक.', luckyNumber: 1, luckyColour: 'लाल' },
-      { key: 'long', name: 'ब', text: 'हा एक खूप मोठा आणि तपशीलवार मजकूर आहे जो अनेक ओळींमध्ये विभागला जाईल.', luckyNumber: 2, luckyColour: 'निळा' },
-    ],
-  };
-  // One column (narrow frame), so both signs are separate rows - the row
-  // heights must differ, because the old code gave every row an identical
-  // frame.innerHeight / rows share regardless of content.
-  const result = layout.layoutSmartCard('rashi', data, { width: 140, height: 300, padding: 8 });
-  const [shortHeight, longHeight] = result.geometry.rowHeights;
-  assert.ok(longHeight > shortHeight, `the row with more real text must be taller: short=${shortHeight} long=${longHeight}`);
+test('rashi: all six visual rows keep the same newspaper rhythm', () => {
+  const result = layout.layoutSmartCard('rashi', rashiData(), { width: 307, height: 632, padding: 0 });
+  assert.equal(result.geometry.rowHeights.length, 6);
+  assert.equal(new Set(result.geometry.rowHeights).size, 1, 'all sign pairs must occupy equal-height rows');
+  assert.ok(result.items.every((item) => item.readingLines.length <= 3), 'every normal reading stays within the reserved three-line measure');
+});
+
+test('rashi: every production sign is paired with its downloaded artwork', () => {
+  const keys = ['mesh', 'vrishabh', 'mithun', 'kark', 'sinh', 'kanya', 'tula', 'vrischik', 'dhanu', 'makar', 'kumbh', 'meen'];
+  const data = { signs: keys.map((key, i) => ({
+    key, name: `राशी${i}`, text: 'आजचा दिवस चांगला जाईल.', luckyNumber: i + 1, luckyColour: 'निळा',
+  })) };
+  const result = layout.layoutSmartCard('rashi', data, { width: 307, height: 632, padding: 0 });
+  assert.equal(result.items.filter((item) => item.imageFile).length, 12);
+  assert.match(result.items.find((item) => item.key === 'vrischik').imageFile, /rashi-vrishchik\.png$/);
 });
 
 // ---------------------------------------------------------------- panchang ---
@@ -233,7 +257,7 @@ test('dinvishesh: all entries are present, in order', () => {
   // assuming no markup ever sits between the tags.
   const data = dinvisheshData();
   const html = cards.smartCardMarkup('dinvishesh', data, FRAME);
-  const items = [...html.matchAll(/<li>(.*?)<\/li>/g)]
+  const items = [...html.matchAll(/<li[^>]*>(.*?)<\/li>/g)]
     .map((m) => m[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
   assert.equal(items.length, data.entries.length);
   assert.deepEqual(items, data.entries.map((e) => e.text), 'entries must print in the SAME order they were stored');
@@ -245,6 +269,26 @@ test('dinvishesh: fit state is explicit, both ways', () => {
   assert.equal(fits.fitState, 'FITS');
   const oversets = layout.layoutSmartCard('dinvishesh', data, TINY_FRAME);
   assert.equal(oversets.fitState, 'OVERSET');
+});
+
+// ----------------------------------------------------------------- havaman ---
+
+test('havaman: every sourced city and the attribution are rendered from structured data', () => {
+  const data = havamanData();
+  const result = layout.layoutSmartCard('havaman', data, FRAME);
+  const html = cards.smartCardMarkup('havaman', data, FRAME);
+  assert.equal(result.fitState, 'FITS');
+  assert.equal(result.geometry.columns, 2);
+  assert.equal((html.match(/smart-card-weather-city/g) || []).length, 4);
+  for (const city of data.cities) assert.ok(html.includes(city.name));
+  assert.ok(html.includes('स्रोत : Open-Meteo'));
+  assert.match(cards.smartCardText('havaman', data), /सातारा.*कमाल २७.३°.*किमान २१.९°/);
+});
+
+test('havaman: a too-small sourced card is flagged, never silently clipped', () => {
+  const result = layout.layoutSmartCard('havaman', havamanData(), TINY_FRAME);
+  assert.equal(result.fitState, 'OVERSET');
+  assert.equal(result.items.length, 4);
 });
 
 // --------------------------------------------------------------- subtitle ---
@@ -287,7 +331,7 @@ test('one legal piece wider than the whole card is reported, never invented a mi
 // ------------------------------------------------------ cross-cutting rules ---
 
 test('the same card and the same frame always produce the same deterministic layout', () => {
-  for (const [key, data] of [['sudoku', sudokuData()], ['rashi', rashiData()], ['panchang', panchangData()], ['suvichar', { text: 'विचार', attribution: 'क' }], ['dinvishesh', dinvisheshData()]]) {
+  for (const [key, data] of [['sudoku', sudokuData()], ['rashi', rashiData()], ['panchang', panchangData()], ['suvichar', { text: 'विचार', attribution: 'क' }], ['dinvishesh', dinvisheshData()], ['havaman', havamanData()]]) {
     const a = layout.layoutSmartCard(key, data, FRAME);
     const b = layout.layoutSmartCard(key, data, FRAME);
     assert.deepEqual(a, b, `${key}: identical input must give an identical result`);
@@ -315,7 +359,7 @@ test('the page and the Block Editor draw from the SAME markup for the same frame
   assert.equal(first, second);
 });
 
-test('an unknown key still returns a real fitState object, not a throw', () => {
+test('an empty payload for a known card still returns a real fitState object, not a throw', () => {
   const result = layout.layoutSmartCard('havaman', { items: [] }, FRAME);
   assert.equal(result.fitState, 'EMPTY');
   assert.equal(result.violations.length, 0);

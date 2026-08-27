@@ -21,15 +21,16 @@
 //              call a day.
 //
 //   feed       a number from outside that must be true. सोन्याचे भाव, बाजारभाव,
-//              हवामान, शेअर बाजार. These are declared here but deliberately
-//              have no provider yet: until a real source is connected, the box
-//              does not run. Inventing a gold rate is not a feature, it is a
-//              false statement printed over the masthead.
+//              हवामान, शेअर बाजार. A feed only runs after a real provider is
+//              connected; Havaman now uses Open-Meteo while the other two stay
+//              unavailable. Inventing a rate is not a feature, it is a false
+//              statement printed over the masthead.
 
 const panchang = require('./panchang');
 const dinvishesh = require('./dinvishesh');
 const written = require('./written');
 const sudoku = require('./sudoku');
+const havaman = require('./havaman');
 
 const catalogue = [
   {
@@ -77,8 +78,7 @@ const catalogue = [
     source: 'written',
   },
 
-  // Declared, not implemented. A box with no source does not run - see the
-  // note at the top of this file.
+  // A box with no source does not run - see the note at the top of this file.
   {
     key: 'sone-chandi',
     name: 'सोने - चांदी दर',
@@ -98,7 +98,8 @@ const catalogue = [
     name: 'हवामान',
     description: 'City-wise maximum, minimum and rainfall.',
     source: 'feed',
-    needs: 'An IMD or equivalent forecast feed.',
+    needs: 'Live Open-Meteo forecast (commercial API key in production); IMD can replace it when the publication IP is whitelisted.',
+    build: (date, options) => havaman.build(date, options),
   },
 ];
 
@@ -126,7 +127,14 @@ async function buildAll(isoDate, options = {}) {
       else out[feature.key] = result;
     }
     if (feature.source === 'feed') {
-      notes.push(`${feature.name}: not run — ${feature.needs}`);
+      const requestedFeeds = Array.isArray(options.feedKeys) ? options.feedKeys : [];
+      if (feature.build && requestedFeeds.includes(feature.key)) {
+        const result = await feature.build(isoDate, options);
+        if (result?.error) notes.push(`${feature.name}: ${result.error}`);
+        else out[feature.key] = result;
+      } else {
+        notes.push(`${feature.name}: not run — ${feature.needs}`);
+      }
     }
   }
 
@@ -152,7 +160,10 @@ async function buildAll(isoDate, options = {}) {
 async function build(key, isoDate, options = {}) {
   const feature = byKey.get(key);
   if (!feature) return { error: 'No such feature.' };
-  if (feature.source === 'feed') return { error: `Not run — ${feature.needs}` };
+  if (feature.source === 'feed') {
+    if (!feature.build) return { error: `Not run — ${feature.needs}` };
+    return feature.build(isoDate, options);
+  }
 
   if (feature.source === 'written') {
     const composed = await written.buildAll(isoDate, options);

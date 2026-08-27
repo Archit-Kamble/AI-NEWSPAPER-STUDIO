@@ -582,7 +582,10 @@ async function requestSmartCard({ key, variant }) {
     smartCardKey: card && canRenderSmartCard(key) ? key : null,
     smartCardData: card && canRenderSmartCard(key) ? card : null,
     proposal: { headline: result.title || "", subheading: result.subtitle || "", body },
-    source: result.writtenBy ? "written" : key === "dinvishesh" ? "curated" : "computed",
+    source: result.writtenBy ? "written"
+      : key === "dinvishesh" ? "curated"
+        : key === "havaman" ? "feed"
+          : "computed",
     fit: { bodyCharBudget: budget, charsUsed, charsRemaining: Math.max(0, budget - charsUsed) },
     // The SAME logical frame the block will solve the card against once
     // accepted - the proposal preview draws from this too (scaled up as one

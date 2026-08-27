@@ -243,6 +243,7 @@ async function blockItems(section, { mono = false } = {}) {
       section.smart_card_key, section.smart_card_data, frame,
       x0 + mm(composition.content.left + (frame.offsetX || 0)),
       y0 + mm(composition.bodyTop + (frame.offsetY || 0)),
+      mono,
     ));
     return items.filter(Boolean);
   }
@@ -313,7 +314,7 @@ async function blockItems(section, { mono = false } = {}) {
  * block" rather than taking the block. Two call sites, one walk, so a chart in
  * a panel and a chart in a block cannot print differently.
  */
-function cardItems(key, data, frame, originX, originY) {
+function cardItems(key, data, frame, originX, originY, mono = false) {
   const items = [];
   const ALIGN = ['left', 'center', 'right'];
   // From the module cache rather than a parameter: blockItems() destructures
@@ -323,6 +324,16 @@ function cardItems(key, data, frame, originX, originY) {
   // reach here before ensureComposeReady() has run - both callers await it.
   const { smartCardLayout } = modules;
   for (const line of smartCardLines(key, data, frame, smartCardLayout)) {
+    if (line.kind === 'image') {
+      items.push({
+        kind: 'image',
+        x: originX + mm(line.x), y: originY + mm(line.y),
+        width: mm(line.width), height: mm(line.height),
+        file: String(line.file || '').replace(/^\//, ''),
+        resolved: null, rotation: 0, mono,
+      });
+      continue;
+    }
     // A chart's bars are rectangles, which is a kind this model already has.
     if (line.kind === 'bar') {
       items.push({

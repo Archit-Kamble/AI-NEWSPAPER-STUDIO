@@ -2,8 +2,8 @@ const features = require('../features');
 
 // The day's standing features - राशिभविष्य, सूर्योदय-सूर्यास्त, दिनविशेष,
 // सुविचार. Content that changes daily and needs no reporter. See
-// src/features/index.js for how each one is classified and why the ones that
-// would need a market or weather feed deliberately do not run.
+// src/features/index.js for how computed, curated, written and sourced-feed
+// cards are kept distinct.
 function list(req, res) {
   res.json(features.list());
 }
@@ -26,7 +26,7 @@ async function buildOne(req, res) {
     charsPerSign: Number(req.body?.charsPerSign) || undefined,
     tier: req.body?.tier,
   });
-  if (result.error) return res.status(result.unconfigured ? 503 : 400).json(result);
+  if (result.error) return res.status(result.upstream ? 502 : result.unconfigured ? 503 : 400).json(result);
   res.json(result);
 }
 

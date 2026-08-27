@@ -83,7 +83,9 @@ function isGrid(grid) {
 function sudokuMarkup(data, layout) {
   const grid = isGrid(data?.grid) ? data.grid : isGrid(data?.solution) ? data.solution : null;
   if (!grid || !layout.geometry) return null;
-  const { cell, gridSize, top } = layout.geometry;
+  const {
+    cell, gridSize, top, headingText, headingFontPx, headingLineHeightPx,
+  } = layout.geometry;
   const cellStyle = `width:${cell}px;height:${cell}px;font-size:${layout.fontPx}px`;
 
   const rows = grid.map((row, y) => {
@@ -98,7 +100,10 @@ function sudokuMarkup(data, layout) {
     return `<tr>${cells}</tr>`;
   }).join("");
 
-  return `<table class="smart-card-grid-table" role="presentation" style="width:${gridSize}px;height:${gridSize}px;margin:${top}px auto 0">${rows}</table>`;
+  return `<div class="smart-card-sudoku-body">
+    <p class="smart-card-sudoku-heading" style="height:${headingLineHeightPx}px;font-size:${headingFontPx}px;line-height:${headingLineHeightPx}px">${escapeHtml(headingText)}</p>
+    <table class="smart-card-grid-table" role="presentation" style="width:${gridSize}px;height:${gridSize}px;left:calc(50% - ${gridSize / 2}px);top:${top}px">${rows}</table>
+  </div>`;
 }
 
 // --------------------------------------------------------------- label/value ---
@@ -160,18 +165,29 @@ function labelledMarkup(layout) {
  */
 function rashiMarkup(data, layout) {
   if (!layout.items || !layout.items.length || !layout.geometry) return null;
-  const { columns, rowHeights, nameWidth } = layout.geometry;
+  const {
+    columns, rowHeights, columnGap, iconSize, itemPadding, lineHeightPx,
+  } = layout.geometry;
 
   const items = layout.items
-    .map((item) => `<li class="smart-card-rashi-sign">
-        <strong class="rashi-name" style="width:${nameWidth}px">${escapeHtml(item.name)}</strong>
-        <span class="rashi-text">${linesMarkup(item.readingLines)}</span>
-        ${item.luckLines.length ? `<small class="rashi-luck">${linesMarkup(item.luckLines)}</small>` : ""}
+    .map((item, index) => `<li class="smart-card-rashi-sign" style="height:${rowHeights[index % rowHeights.length]}px;padding:${itemPadding}px">
+        <span class="rashi-emblem" style="width:${iconSize}px">
+          ${item.imageFile
+    ? `<img class="rashi-art" src="/${escapeHtml(item.imageFile)}" alt="${escapeHtml(item.name)}" style="width:${iconSize}px;height:${iconSize}px">`
+    : `<span class="rashi-art rashi-art-missing" style="width:${iconSize}px;height:${iconSize}px" aria-hidden="true"></span>`}
+          ${item.luckLines.length
+    ? `<small class="rashi-luck rashi-luck-under" style="font-size:${item.luckFontPx}px;line-height:${item.luckLineHeightPx}px">${linesMarkup(item.luckLines)}</small>`
+    : ""}
+        </span>
+        <span class="rashi-copy" style="line-height:${lineHeightPx}px">
+          <strong class="rashi-name">${escapeHtml(item.name)}</strong>
+          <span class="rashi-text">${linesMarkup(item.readingLines)}</span>
+        </span>
       </li>`)
     .join("");
 
   const gridStyle = `font-size:${layout.fontPx}px;grid-template-columns:repeat(${columns},1fr);`
-    + `grid-auto-flow:column;grid-template-rows:${rowHeights.map((h) => `${h}px`).join(" ")}`;
+    + `column-gap:${columnGap}px;grid-auto-flow:column;grid-template-rows:${rowHeights.map((h) => `${h}px`).join(" ")}`;
   return `<ul class="smart-card-rashi" style="${gridStyle}">${items}</ul>`;
 }
 
@@ -191,9 +207,27 @@ function suvicharMarkup(data, layout) {
 
 function dinvisheshMarkup(data, layout) {
   if (!layout.items || !layout.items.length || !layout.geometry) return null;
-  return `<ul class="smart-card-list" style="font-size:${layout.fontPx}px">${layout.items
-    .map((item) => `<li>${linesMarkup(item.lines)}</li>`)
+  return `<ul class="smart-card-list" style="font-size:${layout.fontPx}px;gap:${layout.geometry.rowGap}px">${layout.items
+    .map((item) => `<li style="min-height:${item.height}px;padding-left:${layout.geometry.textInset}px">${linesMarkup(item.lines)}</li>`)
     .join("")}</ul>`;
+}
+
+// ----------------------------------------------------------------- havaman ---
+
+function havamanMarkup(data, layout) {
+  if (!layout.items || !layout.items.length || !layout.geometry) return null;
+  const g = layout.geometry;
+  const items = layout.items.map((item) => `<section class="smart-card-weather-city" style="height:${g.cellHeight}px;line-height:${g.lineHeightPx}px">
+      <strong>${escapeHtml(item.name)}</strong>
+      <span class="weather-condition">${linesMarkup(item.conditionLines)}</span>
+      <span class="weather-temperature">${linesMarkup(item.temperatureLines)}</span>
+      <span class="weather-rain">${linesMarkup(item.rainLines)}</span>
+    </section>`).join("");
+  const gridStyle = `grid-template-columns:repeat(${g.columns},${g.columnWidth}px);gap:${g.rowGap}px ${g.columnGap}px;height:${g.gridHeight}px;font-size:${layout.fontPx}px`;
+  const source = layout.sourceLines?.length
+    ? `<p class="smart-card-weather-source" style="font-size:${g.sourceFontPx}px;line-height:${g.sourceLineHeightPx}px;height:${g.sourceHeight}px">${linesMarkup(layout.sourceLines)}</p>`
+    : "";
+  return `<div class="smart-card-weather-grid" style="${gridStyle}">${items}</div>${source}`;
 }
 
 // -------------------------------------------------------------------- chart ---
@@ -280,6 +314,7 @@ const RENDERERS = {
   rashi: rashiMarkup,
   suvichar: suvicharMarkup,
   dinvishesh: dinvisheshMarkup,
+  havaman: havamanMarkup,
   chart: chartMarkup,
 };
 
@@ -329,8 +364,13 @@ export function smartCardMarkup(key, data, frame) {
   const subtitle = layout.subtitle?.lines.length
     ? `<p class="smart-card-subtitle" style="font-size:${layout.subtitle.fontPx}px">${linesMarkup(layout.subtitle.lines)}</p>`
     : "";
+  const artwork = layout.artwork
+    ? `<img class="smart-card-artwork" src="/${escapeHtml(layout.artwork.file)}" alt="" aria-hidden="true" style="left:${layout.artwork.x}px;top:${layout.artwork.y}px;width:${layout.artwork.width}px;height:${layout.artwork.height}px">`
+    : "";
+  const content = layout.contentBox || { x: 0, y: 0, width: Number(frame?.width) || 0, height: Number(frame?.height) || 0 };
+  const contentStyle = `left:${content.x}px;top:${content.y}px;width:${content.width}px;height:${content.height}px`;
   const cls = `smart-card smart-card-${escapeHtml(key)}${layout.fitState === "OVERSET" ? " is-overset" : ""}`;
-  return `<div class="${cls}" data-fit-state="${escapeHtml(layout.fitState)}">${subtitle}${inside}</div>`;
+  return `<div class="${cls}" data-fit-state="${escapeHtml(layout.fitState)}">${artwork}<div class="smart-card-content" style="${contentStyle}">${subtitle}${inside}</div></div>`;
 }
 
 /**
@@ -397,6 +437,14 @@ export function smartCardText(key, data) {
 
   if (key === "panchang") {
     return asList(data.items).filter(Boolean).map((item) => `${item.label} : ${item.text}`).join("\n");
+  }
+
+  if (key === "havaman") {
+    return asList(data.cities)
+      .filter((city) => city?.name)
+      .map((city) => `${city.name} : ${city.condition || ""} · कमाल ${devanagari(city.maxC)}° · किमान ${devanagari(city.minC)}° · पाऊस ${devanagari(city.rainMm)} मिमी (${devanagari(city.rainChance)}%)`)
+      .concat(data.source ? [String(data.source)] : [])
+      .join("\n");
   }
 
   return "";

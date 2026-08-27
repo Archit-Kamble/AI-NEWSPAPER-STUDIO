@@ -112,7 +112,11 @@ async function fillEdition(newspaperId, { tier } = {}) {
   const horoscopeBlock = blocks.find((block) => block.feature_key === 'rashi');
   const charsPerSign = horoscopeBlock ? await perSignBudget(horoscopeBlock) : undefined;
 
-  const built = await features.buildAll(paper.publication_date, { charsPerSign, tier });
+  const built = await features.buildAll(paper.publication_date, {
+    charsPerSign,
+    tier,
+    feedKeys: [...new Set(blocks.map((block) => block.feature_key).filter(Boolean))],
+  });
 
   const filled = [];
   const skipped = [];

@@ -159,7 +159,8 @@ test('a sudoku prints as its exact square-cell digits, from layoutSmartCard()\'s
   };
   const xml = await scribus.blockFrames(section);
   const digitFrames = countTextFrames(xml);
-  assert.equal(digitFrames, clueCount, 'exactly one text frame per non-blank cell, no more (a blank square is not a dot, and is not drawn)');
+  assert.equal(digitFrames, clueCount + 1, 'one compact title plus exactly one text frame per non-blank cell (a blank square is not a dot, and is not drawn)');
+  assert.match(xml, /CH="सुडोकू"/, 'the puzzle identifies itself inside the Smart Card');
 });
 
 test('a rashi card prints its resolved reading/lucky lines, a panchang its resolved label/value rows - the SAME lines layoutSmartCard() resolved, not a re-flattened paragraph', async () => {
@@ -179,6 +180,9 @@ test('a rashi card prints its resolved reading/lucky lines, a panchang its resol
   );
   const rashiLayout = smartCardLayout.layoutSmartCard('rashi', rashiData, rashiFrame);
   const rashiXml = await scribus.blockFrames(rashiSection);
+  assert.match(rashiXml, /PFILE="\.\/assets\/smart-cards\/rashi-bhavishyawithoutBG\.png"/, 'the Rashi title artwork reaches Scribus');
+  assert.match(rashiXml, /PFILE="\.\/assets\/smart-cards\/rashi-mesh\.png"/, 'Mesh artwork reaches Scribus');
+  assert.match(rashiXml, /PFILE="\.\/assets\/smart-cards\/rashi-vrishabh\.png"/, 'Vrishabh artwork reaches Scribus');
   for (const item of rashiLayout.items) {
     assert.ok(rashiXml.includes(`CH="${item.name}"`), `sign name ${item.name} must reach the press file`);
     for (const line of item.readingLines) assert.ok(rashiXml.includes(`CH="${scribus.escapeXml(line)}"`), `reading line "${line}" must reach the press file, resolved exactly as layoutSmartCard() wrapped it`);
@@ -191,6 +195,7 @@ test('a rashi card prints its resolved reading/lucky lines, a panchang its resol
     smart_card_key: 'panchang', smart_card_data: panchangData,
   };
   const panchangXml = await scribus.blockFrames(panchangSection);
+  assert.match(panchangXml, /PFILE="\.\/assets\/smart-cards\/panchangwithoutBG\.png"/, 'Panchang artwork reaches Scribus');
   for (const item of panchangData.items) {
     assert.ok(panchangXml.includes(`CH="${item.label}"`), `label ${item.label} must reach the press file`);
     assert.ok(panchangXml.includes(`CH="${item.text}"`), `value ${item.text} must reach the press file`);

@@ -42,11 +42,31 @@ test('the Shaka year turns over at the start of Chaitra, not in January', () => 
 });
 
 test('a feature that needs an outside source refuses to run rather than inventing one', async () => {
-  for (const key of ['sone-chandi', 'bajarbhav', 'havaman']) {
+  for (const key of ['sone-chandi', 'bajarbhav']) {
     const result = await features.build(key, '2026-08-03');
     assert.ok(result.error, `${key} must not produce content without a source`);
     assert.match(result.error, /Not run/);
   }
+});
+
+test('Havaman is the one connected feed and uses the supplied live-source client', async () => {
+  const result = await features.build('havaman', '2026-08-03', {
+    weatherLocations: [{ key: 'satara', name: 'सातारा', latitude: 17.6805, longitude: 74.0183 }],
+    fetchImpl: async () => ({
+      ok: true,
+      async json() {
+        return {
+          daily: {
+            time: ['2026-08-03'], weather_code: [2],
+            temperature_2m_max: [28], temperature_2m_min: [21],
+            precipitation_sum: [0.4], precipitation_probability_max: [20],
+          },
+        };
+      },
+    }),
+  });
+  assert.equal(result.card.cities[0].name, 'सातारा');
+  assert.equal(result.card.cities[0].condition, 'अंशतः ढगाळ');
 });
 
 test('दिनविशेष is a checked lookup, and stays silent on a date nobody checked', async () => {

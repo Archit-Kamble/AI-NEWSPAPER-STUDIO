@@ -27,10 +27,28 @@ test('statusOf: an explicit status (e.g. "ready") is never overridden by hasImag
   assert.equal(statusOf(view, true), 'ready');
 });
 
+test('statusOf: a structured Smart Card is content even with empty article fields', async () => {
+  const { statusOf } = await import('../public/editor/status/section-status.js');
+  const view = {
+    headline: '', body: '', imageUrl: '', newsItemId: null, status: 'empty',
+    smartCardKey: 'rashi', smartCardData: { signs: [{ key: 'mesh', text: 'आजचा दिवस चांगला.' }] },
+  };
+  assert.equal(statusOf(view, false), 'editing');
+});
+
 test('sectionClassName: a block with only a placed picture is drawn "filled", not empty-styled', async () => {
   const { sectionClassName } = await import('../public/editor/canvas/section-thumb.js');
   const view = { headline: '', body: '', imageUrl: '', blockType: 'photo', borderStyle: 'none' };
 
   assert.ok(!sectionClassName(view, {}).includes('filled'), 'no picture, no text - genuinely unfilled');
   assert.ok(sectionClassName(view, { hasImages: true }).includes('filled'), 'a placed picture makes the block filled');
+});
+
+test('sectionClassName: a Smart Card is drawn filled without fake article copy', async () => {
+  const { sectionClassName } = await import('../public/editor/canvas/section-thumb.js');
+  const view = {
+    headline: '', body: '', imageUrl: '', blockType: 'article', borderStyle: 'none',
+    smartCardKey: 'suvichar', smartCardData: { text: 'विचार' },
+  };
+  assert.ok(sectionClassName(view, {}).includes('filled'));
 });

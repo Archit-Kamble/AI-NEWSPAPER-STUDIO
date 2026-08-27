@@ -26,7 +26,7 @@ export function isExplicit(statusKey) {
 // Content fields - touching any of these is what moves a section into `editing`.
 // Classification (category/location/tags/language) and typography do not: they
 // are metadata about the article, not the article.
-export const CONTENT_FIELDS = ["headline", "subheading", "body", "caption", "imageUrl"];
+export const CONTENT_FIELDS = ["headline", "subheading", "body", "caption", "imageUrl", "smartCardKey", "smartCardData"];
 
 export function isContentEdit(patch) {
   return Object.keys(patch).some((key) => CONTENT_FIELDS.includes(key));
@@ -48,7 +48,8 @@ export function statusOf(view, hasImages = false) {
   // it - derivation must never silently overwrite an explicit decision.
   if (isExplicit(view.status)) return view.status;
   if (view.aiGenerated) return "ai_generated";
-  if (!view.headline && !view.body && !view.imageUrl && !hasImages) {
+  const hasSmartCard = Boolean(view.smartCardKey && view.smartCardData);
+  if (!view.headline && !view.body && !view.imageUrl && !hasImages && !hasSmartCard) {
     return view.newsItemId ? "story_linked" : "empty";
   }
   // A section straight off a linked story is still `story_linked`; it becomes

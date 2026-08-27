@@ -38,6 +38,16 @@ function smartCardLines(key, data, frame, cardLayout) {
   if (layout.fitState === 'EMPTY') return [];
 
   const out = [];
+  const contentX = Number(layout.contentBox?.x) || 0;
+  const contentY = Number(layout.contentBox?.y) || 0;
+  const contentWidth = Number(layout.contentBox?.width) || Number(frame.width) || 0;
+
+  // Artwork is a first-class neutral item. It therefore reaches Scribus,
+  // PDF, IDML and Word from this same walk instead of existing as browser-only
+  // decoration that disappears from the printed paper.
+  if (layout.artwork?.file) {
+    out.push({ kind: 'image', ...layout.artwork });
+  }
 
   // AN ENTRY'S BOX IS ITS OWN TYPE'S, not the card's body line.
   //
@@ -64,21 +74,32 @@ function smartCardLines(key, data, frame, cardLayout) {
   const line = (text, x, y, width, fontPx, align = 0, height = null, style = {}) => {
     if (!text) return;
     out.push({
-      text, x, y, width, fontPx, align, height: height || fontPx * ratio,
+      text, x: contentX + x, y: contentY + y, width, fontPx, align, height: height || fontPx * ratio,
       ink: style.ink || null, bold: Boolean(style.bold),
     });
   };
 
   if (layout.subtitle?.lines?.length) {
     layout.subtitle.lines.forEach((text, i) =>
-      line(text, 0, i * layout.subtitle.lineHeightPx, frame.width, layout.subtitle.fontPx, 1,
+      line(text, 0, i * layout.subtitle.lineHeightPx, contentWidth, layout.subtitle.fontPx, 1,
         layout.subtitle.lineHeightPx));
   }
   const subtitleOffsetPx = layout.subtitle?.height || 0;
 
-  const bar = (x, y, width, height, ink) => out.push({ kind: 'bar', x, y, width, height, ink });
+  const image = (file, x, y, width, height) => out.push({
+    kind: 'image', file, x: contentX + x, y: contentY + y, width, height,
+  });
+  const bar = (x, y, width, height, ink) => out.push({
+    kind: 'bar', x: contentX + x, y: contentY + y, width, height, ink,
+  });
   const poly = (points, ink, { close = true, strokeWidth = 0 } = {}) =>
-    out.push({ kind: 'poly', points, ink, close, strokeWidth });
+    out.push({
+      kind: 'poly',
+      points: (points || []).map(([x, y]) => [contentX + x, contentY + y]),
+      ink,
+      close,
+      strokeWidth,
+    });
 
   // The gap between the wheel and its legend - the card's own body size, which
   // is the only measure on a card that means anything.
@@ -150,12 +171,17 @@ function smartCardLines(key, data, frame, cardLayout) {
         y += g.rowHeight;
       });
     }
-    if (g.source) line(g.source, 0, y, frame.width, layout.fontPx * 0.85, 0);
+    if (g.source) line(g.source, 0, y, contentWidth, layout.fontPx * 0.85, 0);
     return out;
   }
 
   if (key === 'sudoku' || key === 'sudoku-solution') {
-    const { cell, top } = layout.geometry;
+    const {
+      cell, top, headingText, headingFontPx, headingLineHeightPx,
+    } = layout.geometry;
+    line(headingText, 0, subtitleOffsetPx, contentWidth, headingFontPx, 0,
+      headingLineHeightPx, { bold: true, ink: '#8a1428' });
+    bar(0, subtitleOffsetPx + headingLineHeightPx - 0.6, contentWidth, 0.6, '#8a1428');
     const isGrid = (value) => Array.isArray(value) && value.length === 9
       && value.every((row) => Array.isArray(row) && row.length === 9);
     const rows = isGrid(data?.grid) ? data.grid : isGrid(data?.solution) ? data.solution : [];
@@ -168,44 +194,120 @@ function smartCardLines(key, data, frame, cardLayout) {
   }
 
   if (key === 'rashi') {
-    const { rows, rowHeights, columnWidth, nameWidth, lineHeightPx } = layout.geometry;
+    const {
+      rows, rowHeights, columnWidth, columnGap, iconSize, itemPadding, lineHeightPx,
+    } = layout.geometry;
     layout.items.forEach((item, index) => {
       const column = Math.floor(index / rows);
       const row = index % rows;
       const rowTop = rowHeights.slice(0, row).reduce((sum, h) => sum + h, 0);
-      const colX = column * columnWidth;
-      line(item.name, colX, subtitleOffsetPx + rowTop, nameWidth, layout.fontPx);
-      [...item.readingLines, ...item.luckLines].forEach((text, i) =>
-        line(text, colX + nameWidth, subtitleOffsetPx + rowTop + i * lineHeightPx, columnWidth - nameWidth, layout.fontPx));
+      const colX = column * (columnWidth + columnGap);
+      const top = subtitleOffsetPx + rowTop + itemPadding;
+      if (item.imageFile) image(item.imageFile, colX + itemPadding, top, iconSize, iconSize);
+      const luckTop = top + iconSize + 2;
+      item.luckLines.forEach((text, i) => line(
+        text,
+        colX + itemPadding,
+        luckTop + i * item.luckLineHeightPx,
+        iconSize,
+        item.luckFontPx,
+        1,
+        item.luckLineHeightPx,
+        { bold: true, ink: '#6a5559' },
+      ));
+      const textX = colX + itemPadding + iconSize + 6;
+      const textWidth = Math.max(0, columnWidth - iconSize - 6 - itemPadding * 2);
+      line(item.name, textX, top, textWidth, layout.fontPx, 0, lineHeightPx, { bold: true, ink: '#8a1428' });
+      item.readingLines.forEach((text, i) =>
+        line(text, textX, top + (i + 1) * lineHeightPx, textWidth, layout.fontPx));
     });
+    rowHeights.forEach((height, row) => {
+      const y = subtitleOffsetPx + rowHeights.slice(0, row + 1).reduce((sum, value) => sum + value, 0) - 0.5;
+      bar(0, y, contentWidth, 0.5, '#d5c7c9');
+    });
+    if (layout.geometry.columns > 1) {
+      bar(columnWidth + columnGap / 2 - 0.25, subtitleOffsetPx, 0.5,
+        rowHeights.reduce((sum, height) => sum + height, 0), '#d5c7c9');
+    }
     return out;
   }
 
   if (key === 'panchang') {
     const { labelWidth, valueWidth, lineHeightPx } = layout.geometry;
     let top = subtitleOffsetPx;
-    for (const item of layout.items) {
-      line(item.labelLines[0] || '', 0, top, labelWidth, layout.fontPx);
+    bar(0, top, contentWidth, 0.6, '#8a1428');
+    bar(0, top, 0.6, layout.items.reduce((sum, item) => sum + item.rowHeight, 0), '#8a1428');
+    bar(contentWidth - 0.6, top, 0.6, layout.items.reduce((sum, item) => sum + item.rowHeight, 0), '#8a1428');
+    for (const [index, item] of layout.items.entries()) {
+      bar(0, top, labelWidth, item.rowHeight, '#fbf2f3');
+      if (index % 2 === 1) bar(labelWidth, top, valueWidth, item.rowHeight, '#fcf8f3');
+      line(item.labelLines[0] || '', 0, top, labelWidth, layout.fontPx, 0,
+        lineHeightPx, { bold: true, ink: '#8a1428' });
       item.valueLines.forEach((text, i) =>
-        line(text, labelWidth, top + i * lineHeightPx, valueWidth, layout.fontPx));
+        line(text, labelWidth, top + i * lineHeightPx, valueWidth, layout.fontPx, 0,
+          lineHeightPx, { bold: true }));
       top += item.rowHeight;
+      bar(0, top - 0.4, contentWidth, 0.4, '#d8c4c8');
     }
+    bar(labelWidth - 0.25, subtitleOffsetPx, 0.5, top - subtitleOffsetPx, '#dec8cc');
+    bar(0, top - 0.6, contentWidth, 0.6, '#8a1428');
     return out;
   }
 
   if (key === 'suvichar') {
-    line(layout.displayLine, 0, subtitleOffsetPx, frame.width, layout.fontPx, 1,
+    out.push({ kind: 'bar', x: 0, y: 0, width: Number(frame.width) || contentWidth, height: 0.6, ink: '#8a1428' });
+    out.push({ kind: 'bar', x: 0, y: Math.max(0, (Number(frame.height) || 0) - 0.6), width: Number(frame.width) || contentWidth, height: 0.6, ink: '#8a1428' });
+    line(layout.displayLine, 0, subtitleOffsetPx, contentWidth, layout.fontPx, 0,
       layout.geometry.lineHeightPx);
     return out;
   }
 
   if (key === 'dinvishesh') {
-    const { lineHeightPx } = layout.geometry;
+    const { lineHeightPx, textInset, rowGap } = layout.geometry;
     let top = subtitleOffsetPx;
+    bar(1.45, top, 0.6, Math.max(0, layout.items.reduce((sum, item) => sum + item.height, 0)
+      + Math.max(0, layout.items.length - 1) * rowGap), '#d5a9b0');
     for (const item of layout.items) {
-      item.lines.forEach((text, i) => line(text, 0, top + i * lineHeightPx, frame.width, layout.fontPx));
-      top += item.height;
+      bar(0, top + Math.max(1, lineHeightPx * 0.43), 4, 4, '#8a1428');
+      item.lines.forEach((text, i) => line(
+        text, textInset, top + i * lineHeightPx, Math.max(0, contentWidth - textInset), layout.fontPx,
+      ));
+      top += item.height + rowGap;
     }
+    return out;
+  }
+
+  if (key === 'havaman') {
+    const g = layout.geometry;
+    layout.items.forEach((item, index) => {
+      const column = index % g.columns;
+      const row = Math.floor(index / g.columns);
+      const x = column * (g.columnWidth + g.columnGap);
+      const top = subtitleOffsetPx + row * (g.cellHeight + g.rowGap);
+      bar(x, top, g.columnWidth, g.cellHeight, '#fff7f7');
+      bar(x, top, 2, g.cellHeight, '#8a1428');
+      let y = top;
+      line(item.name, x + 4, y, Math.max(0, g.columnWidth - 6), layout.fontPx, 0,
+        g.lineHeightPx, { bold: true, ink: '#8a1428' });
+      y += g.lineHeightPx;
+      for (const text of item.conditionLines) {
+        line(text, x + 4, y, Math.max(0, g.columnWidth - 6), layout.fontPx, 0, g.lineHeightPx);
+        y += g.lineHeightPx;
+      }
+      for (const text of item.temperatureLines) {
+        line(text, x + 4, y, Math.max(0, g.columnWidth - 6), layout.fontPx, 0,
+          g.lineHeightPx, { bold: true });
+        y += g.lineHeightPx;
+      }
+      for (const text of item.rainLines) {
+        line(text, x + 4, y, Math.max(0, g.columnWidth - 6), layout.fontPx, 0, g.lineHeightPx);
+        y += g.lineHeightPx;
+      }
+    });
+    layout.sourceLines.forEach((text, index) => line(
+      text, 0, subtitleOffsetPx + g.gridHeight + GAP + index * g.sourceLineHeightPx,
+      contentWidth, g.sourceFontPx, 2, g.sourceLineHeightPx,
+    ));
     return out;
   }
 

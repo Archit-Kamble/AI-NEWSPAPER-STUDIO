@@ -76,6 +76,79 @@ const MIN_SUDOKU_CELL_PX = 10;
 const LEADING_MULTIPLIER = 1.08;
 const GAP_PX = 6;
 
+// Registered artwork for the four standing newspaper cards. The files are
+// deliberately part of the card renderer rather than ordinary section images:
+// they belong to the card's finite geometry, travel with it to every edition,
+// and are emitted by the same export walk as the card's type.
+const CARD_ARTWORK = Object.freeze({
+  suvichar: { file: 'assets/smart-cards/SuvicharwithoutBG.png', aspect: 1380 / 752, placement: 'inline', heightShare: 0.82, widthShare: 0.18 },
+  dinvishesh: { file: 'assets/smart-cards/denvishash.png', aspect: 1380 / 752, placement: 'top', heightShare: 0.34, widthShare: 0.72 },
+  panchang: { file: 'assets/smart-cards/panchangwithoutBG.png', aspect: 1380 / 752, placement: 'top', heightShare: 0.25, widthShare: 0.82 },
+  rashi: { file: 'assets/smart-cards/rashi-bhavishyawithoutBG.png', aspect: 1380 / 752, placement: 'top', heightShare: 0.15, widthShare: 0.72 },
+});
+
+const RASHI_ARTWORK_KEYS = new Set([
+  'mesh', 'vrishabh', 'mithun', 'kark', 'sinh', 'kanya',
+  'tula', 'vrishchik', 'dhanu', 'makar', 'kumbh', 'meen',
+]);
+
+function rashiArtworkFile(sign) {
+  let key = String(sign?.key || '').trim().toLowerCase();
+  if (key === 'vrischik') key = 'vrishchik';
+  return RASHI_ARTWORK_KEYS.has(key) ? `assets/smart-cards/rashi-${key}.png` : null;
+}
+
+/**
+ * Reserve the exact rectangle occupied by a card's registered artwork and
+ * return the remaining content box. Both are expressed in the OUTER frame's
+ * coordinates so the browser and all press writers can place them directly.
+ */
+function cardArtworkFor(key, frame) {
+  const config = CARD_ARTWORK[key];
+  const content = {
+    x: frame.padding,
+    y: frame.padding,
+    width: frame.innerWidth,
+    height: frame.innerHeight,
+  };
+  if (!config || frame.innerWidth <= 0 || frame.innerHeight <= 0) {
+    return { artwork: null, content };
+  }
+
+  const gap = Math.min(GAP_PX, Math.max(2, frame.innerHeight * 0.06));
+  const height = Math.max(0, Math.min(
+    frame.innerHeight * config.heightShare,
+    (frame.innerWidth * config.widthShare) / config.aspect,
+  ));
+  const width = height * config.aspect;
+
+  if (config.placement === 'inline') {
+    const x = frame.padding;
+    const y = frame.padding + (frame.innerHeight - height) / 2;
+    return {
+      artwork: { file: config.file, x, y, width, height },
+      content: {
+        x: x + width + gap,
+        y: frame.padding,
+        width: Math.max(0, frame.innerWidth - width - gap),
+        height: frame.innerHeight,
+      },
+    };
+  }
+
+  const x = frame.padding + (frame.innerWidth - width) / 2;
+  const y = frame.padding;
+  return {
+    artwork: { file: config.file, x, y, width, height },
+    content: {
+      x: frame.padding,
+      y: y + height + gap,
+      width: frame.innerWidth,
+      height: Math.max(0, frame.innerHeight - height - gap),
+    },
+  };
+}
+
 function clampFrame(frame) {
   const width = Math.max(0, Number(frame?.width) || 0);
   const height = Math.max(0, Number(frame?.height) || 0);
@@ -236,20 +309,30 @@ function layoutSudoku(data, frame) {
   const grid = isGrid(data?.grid) ? data.grid : isGrid(data?.solution) ? data.solution : null;
   if (!grid) return empty('sudoku');
 
-  const cellRaw = Math.floor(Math.min(frame.innerWidth / 9, frame.innerHeight / 9));
+  const headingText = data?.difficulty ? `सुडोकू · ${data.difficulty}` : 'सुडोकू';
+  const headingFontPx = Math.max(7, Math.min(14, frame.innerWidth / 20));
+  const headingLineHeightPx = lineHeightFor(headingFontPx, 'serif', 700);
+  const headingGap = Math.min(5, Math.max(2, frame.innerHeight * 0.018));
+  const gridHeight = Math.max(0, frame.innerHeight - headingLineHeightPx - headingGap);
+  const cellRaw = Math.floor(Math.min(frame.innerWidth / 9, gridHeight / 9));
   // Clamped UP to the minimum, never shrunk past it - a sudoku smaller than
   // this is not a puzzle a reader can solve, so it is drawn at the floor and
   // flagged OVERSET rather than made unreadable to avoid the flag.
   const cell = Math.max(MIN_SUDOKU_CELL_PX, cellRaw);
-  const fitState = cellRaw < MIN_SUDOKU_CELL_PX ? 'OVERSET' : 'FITS';
+  const heading = measureAtomic(headingText, headingFontPx, 'serif', 700, frame.innerWidth);
+  const fitState = cellRaw < MIN_SUDOKU_CELL_PX || heading.hardOverset ? 'OVERSET' : 'FITS';
   const gridSize = cell * 9;
-  const top = Math.max(0, (frame.innerHeight - gridSize) / 2);
+  const top = headingLineHeightPx + headingGap
+    + Math.max(0, (gridHeight - gridSize) / 2);
 
   return {
     key: 'sudoku',
     fitState,
     fontPx: Math.max(1, cell * 0.62),
-    geometry: { cell, gridSize, top },
+    geometry: {
+      cell, gridSize, top, headingText: heading.line,
+      headingFontPx, headingLineHeightPx, headingGap,
+    },
     violations: fitState === 'OVERSET' ? ['SMART_CARD_OVERSET'] : [],
   };
 }
@@ -257,22 +340,44 @@ function layoutSudoku(data, frame) {
 // ------------------------------------------------------------------- rashi ---
 
 const RASHI_NAME_WEIGHT = 700;
-const MIN_NAME_WIDTH_PX_EM = 2;
+const RASHI_COLUMN_GAP_PX = 6;
+const RASHI_ITEM_PADDING_PX = 3;
+const RASHI_READING_MAX_LINES = 3;
 
-function rashiItemHeight(sign, { readingWidth, fontPx, lineHeightPx }) {
+function rashiItemHeight(sign, { readingWidth, luckWidth, fontPx, lineHeightPx, iconSize, rowHeight }) {
+  const name = measureAtomic(sign.name || '', fontPx, 'serif', RASHI_NAME_WEIGHT, readingWidth);
   const reading = wrapSmartText(sign.text, { width: readingWidth, fontPx, family: 'serif', weight: 400 });
-  const luckText = [
+  const luckParts = [
     sign.luckyNumber != null ? `शुभ अंक ${devanagariDigits(sign.luckyNumber)}` : '',
     sign.luckyColour ? `शुभ रंग ${sign.luckyColour}` : '',
-  ].filter(Boolean).join(' · ');
-  const luck = luckText ? measureAtomic(luckText, fontPx, 'serif', 400, readingWidth) : null;
+  ].filter(Boolean);
+  const luckFontPx = Math.max(MIN_CARD_FONT_PX, fontPx * 0.86);
+  const luckLineHeightPx = lineHeightFor(luckFontPx, 'serif', 700);
+  const measuredLuck = luckParts.map((part) => measureAtomic(part, luckFontPx, 'serif', 700, luckWidth));
+  const luckLines = measuredLuck.map((part) => part.line);
+  const luckOverset = measuredLuck.some((part) => part.hardOverset);
 
-  const readingLines = reading.lines.map((l) => l.text);
-  const luckLines = luck ? [luck.line] : [];
-  const lines = Math.max(1, readingLines.length + luckLines.length);
-  const hardOverset = reading.hardOverset || Boolean(luck?.hardOverset);
+  const readingLines = reading.lines.map((line) => line.text);
+  const textHeight = Math.max(1, 1 + readingLines.length) * lineHeightPx;
+  const emblemHeight = iconSize + (luckLines.length ? 2 + luckLines.length * luckLineHeightPx : 0);
+  const neededHeight = Math.max(emblemHeight, textHeight) + RASHI_ITEM_PADDING_PX * 2;
+  const hardOverset = name.hardOverset
+    || reading.hardOverset
+    || readingLines.length > RASHI_READING_MAX_LINES
+    || luckOverset
+    || neededHeight > rowHeight;
 
-  return { readingLines, luckLines, height: lines * lineHeightPx, hardOverset };
+  return {
+    key: sign.key || '',
+    name: name.line,
+    imageFile: rashiArtworkFile(sign),
+    readingLines,
+    luckLines,
+    luckFontPx,
+    luckLineHeightPx,
+    height: neededHeight,
+    hardOverset,
+  };
 }
 
 function layoutRashi(data, frame) {
@@ -283,37 +388,43 @@ function layoutRashi(data, frame) {
   // line of reading side by side without wrapping to single words: two
   // columns of six, halving how tall the card needs to be.
   const WIDE_COLUMN_PX = 90;
-  const columns = frame.innerWidth >= WIDE_COLUMN_PX * 2 ? 2 : 1;
+  const columns = signs.length > 6 && frame.innerWidth >= WIDE_COLUMN_PX * 2 ? 2 : 1;
   const rows = Math.ceil(signs.length / columns);
-  const columnWidth = columns > 0 ? frame.innerWidth / columns : frame.innerWidth;
+  const columnGap = columns > 1 ? RASHI_COLUMN_GAP_PX : 0;
+  const columnWidth = columns > 0
+    ? (frame.innerWidth - columnGap * (columns - 1)) / columns
+    : frame.innerWidth;
+  const rowHeight = rows > 0 ? frame.innerHeight / rows : frame.innerHeight;
+  const iconSize = Math.max(0, Math.min(46, columnWidth * 0.29, rowHeight * 0.54));
+  const readingWidth = Math.max(0, columnWidth - iconSize - GAP_PX - RASHI_ITEM_PADDING_PX * 2);
 
   const solved = solveFont(frame.innerHeight, (fontPx) => {
     const lineHeightPx = lineHeightFor(fontPx, 'serif', 400);
-    // The name column is only as wide as the widest sign name actually
-    // needs, at THIS candidate size - not a guessed fraction of the card.
-    const maxNameWidth = signs.reduce((max, sign) => Math.max(max, measure(sign.name || '', fontPx, 'serif', RASHI_NAME_WEIGHT)), 0);
-    const nameWidth = Math.min(columnWidth * 0.35, Math.max(fontPx * MIN_NAME_WIDTH_PX_EM, maxNameWidth + GAP_PX));
-    const readingWidth = Math.max(0, columnWidth - nameWidth - GAP_PX);
-
-    const items = signs.map((sign) => ({ ...rashiItemHeight(sign, { readingWidth, fontPx, lineHeightPx }), key: sign.key, name: sign.name || '' }));
+    const items = signs.map((sign) => rashiItemHeight(
+      sign,
+      { readingWidth, luckWidth: iconSize, fontPx, lineHeightPx, iconSize, rowHeight },
+    ));
     const hardOverset = items.some((item) => item.hardOverset);
-
-    const rowHeights = [];
-    for (let r = 0; r < rows; r += 1) {
-      const left = items[r];
-      const right = columns === 2 ? items[r + rows] : null;
-      rowHeights.push(Math.max(left?.height || 0, right?.height || 0));
-    }
-    const height = rowHeights.reduce((sum, h) => sum + h, 0);
-
-    return { height, hardOverset, items, rowHeights, nameWidth, lineHeightPx };
+    return { height: frame.innerHeight, hardOverset, items, lineHeightPx };
   });
 
   return {
     key: 'rashi',
     fitState: solved.fitState,
     fontPx: solved.fontPx,
-    geometry: { columns, rows, rowHeights: solved.rowHeights, columnWidth, nameWidth: solved.nameWidth, lineHeightPx: solved.lineHeightPx },
+    geometry: {
+      columns,
+      rows,
+      rowHeights: Array.from({ length: rows }, () => rowHeight),
+      rowHeight,
+      columnWidth,
+      columnGap,
+      iconSize,
+      readingWidth,
+      itemPadding: RASHI_ITEM_PADDING_PX,
+      lineHeightPx: solved.lineHeightPx,
+      readingMaxLines: RASHI_READING_MAX_LINES,
+    },
     items: solved.items,
     violations: solved.fitState === 'OVERSET' ? ['SMART_CARD_OVERSET'] : [],
   };
@@ -691,24 +802,120 @@ function layoutDinvishesh(data, frame) {
 
   const solved = solveFont(frame.innerHeight, (fontPx) => {
     const lineHeightPx = lineHeightFor(fontPx, 'serif', 400);
+    const textInset = Math.max(4, fontPx * 0.72);
+    const rowGap = Math.min(2, fontPx * 0.2);
     let hardOverset = false;
     const items = entries.map((entry) => {
       const text = typeof entry === 'string' ? entry : (entry.text || '');
-      const wrapped = wrapSmartText(text, { width: frame.innerWidth, fontPx, family: 'serif', weight: 400 });
+      const wrapped = wrapSmartText(text, {
+        width: Math.max(0, frame.innerWidth - textInset), fontPx, family: 'serif', weight: 400,
+      });
       if (wrapped.hardOverset) hardOverset = true;
       const lines = wrapped.lines.map((l) => l.text);
       return { lines, height: Math.max(1, lines.length) * lineHeightPx };
     });
-    const height = items.reduce((sum, item) => sum + item.height, 0);
-    return { height, hardOverset, items, lineHeightPx };
+    const height = items.reduce((sum, item) => sum + item.height, 0)
+      + Math.max(0, items.length - 1) * rowGap;
+    return { height, hardOverset, items, lineHeightPx, textInset, rowGap };
   });
 
   return {
     key: 'dinvishesh',
     fitState: solved.fitState,
     fontPx: solved.fontPx,
-    geometry: { rows: entries.length, lineHeightPx: solved.lineHeightPx },
+    geometry: {
+      rows: entries.length, lineHeightPx: solved.lineHeightPx,
+      textInset: solved.textInset, rowGap: solved.rowGap,
+    },
     items: solved.items,
+    violations: solved.fitState === 'OVERSET' ? ['SMART_CARD_OVERSET'] : [],
+  };
+}
+
+// ----------------------------------------------------------------- havaman ---
+
+function weatherNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? devanagariDigits(number) : '—';
+}
+
+function layoutHavaman(data, frame) {
+  const cities = Array.isArray(data?.cities) ? data.cities.filter((city) => city && city.name) : [];
+  if (!cities.length) return empty('havaman');
+
+  const columns = cities.length > 2 && frame.innerWidth >= 180 ? 2 : 1;
+  const rows = Math.ceil(cities.length / columns);
+  const columnGap = columns > 1 ? GAP_PX : 0;
+  const rowGap = 3;
+  const columnWidth = Math.max(0, (frame.innerWidth - columnGap * (columns - 1)) / columns);
+  const sourceText = String(data.source || 'स्रोत : Open-Meteo').trim();
+
+  const solved = solveFont(frame.innerHeight, (fontPx) => {
+    const lineHeightPx = lineHeightFor(fontPx, 'serif', 400);
+    const sourceFontPx = Math.max(MIN_CARD_FONT_PX, fontPx * 0.76);
+    const sourceLineHeightPx = lineHeightFor(sourceFontPx, 'serif', 400);
+    const source = wrapSmartText(sourceText, {
+      width: frame.innerWidth, fontPx: sourceFontPx, family: 'serif', weight: 400,
+    });
+    const sourceLines = source.lines.map((line) => line.text);
+    const sourceHeight = Math.max(1, sourceLines.length) * sourceLineHeightPx;
+    const gridHeight = Math.max(0, frame.innerHeight - sourceHeight - GAP_PX);
+    const cellHeight = Math.max(0, (gridHeight - rowGap * (rows - 1)) / rows);
+    let hardOverset = source.hardOverset;
+
+    const items = cities.map((city) => {
+      const name = measureAtomic(city.name, fontPx, 'serif', 700, columnWidth);
+      const condition = wrapSmartText(city.condition || '', {
+        width: columnWidth, fontPx, family: 'serif', weight: 400,
+      });
+      const temperature = wrapSmartText(
+        `कमाल ${weatherNumber(city.maxC)}° · किमान ${weatherNumber(city.minC)}°`,
+        { width: columnWidth, fontPx, family: 'serif', weight: 700 },
+      );
+      const rain = wrapSmartText(
+        `पाऊस ${weatherNumber(city.rainMm)} मिमी · शक्यता ${weatherNumber(city.rainChance)}%`,
+        { width: columnWidth, fontPx, family: 'serif', weight: 400 },
+      );
+      const conditionLines = condition.lines.map((line) => line.text);
+      const temperatureLines = temperature.lines.map((line) => line.text);
+      const rainLines = rain.lines.map((line) => line.text);
+      const height = (1 + conditionLines.length + temperatureLines.length + rainLines.length) * lineHeightPx;
+      const overset = name.hardOverset || condition.hardOverset || temperature.hardOverset
+        || rain.hardOverset || height > cellHeight;
+      if (overset) hardOverset = true;
+      return {
+        key: city.key || '', name: name.line, conditionLines, temperatureLines, rainLines, height,
+      };
+    });
+
+    return {
+      height: frame.innerHeight,
+      hardOverset,
+      items,
+      lineHeightPx,
+      sourceFontPx,
+      sourceLineHeightPx,
+      sourceLines,
+      sourceHeight,
+      gridHeight,
+      cellHeight,
+    };
+  });
+
+  return {
+    key: 'havaman',
+    fitState: solved.fitState,
+    fontPx: solved.fontPx,
+    geometry: {
+      columns, rows, columnWidth, columnGap, rowGap,
+      cellHeight: solved.cellHeight, gridHeight: solved.gridHeight,
+      lineHeightPx: solved.lineHeightPx,
+      sourceFontPx: solved.sourceFontPx,
+      sourceLineHeightPx: solved.sourceLineHeightPx,
+      sourceHeight: solved.sourceHeight,
+    },
+    items: solved.items,
+    sourceLines: solved.sourceLines,
     violations: solved.fitState === 'OVERSET' ? ['SMART_CARD_OVERSET'] : [],
   };
 }
@@ -722,6 +929,7 @@ const LAYOUTS = {
   panchang: layoutPanchang,
   suvichar: layoutSuvichar,
   dinvishesh: layoutDinvishesh,
+  havaman: layoutHavaman,
   chart: layoutChart,
 };
 
@@ -741,12 +949,21 @@ const LAYOUTS = {
  * answer once smartCardMarkup() drew it.
  */
 export function layoutSmartCard(key, data, frame) {
-  const fn = LAYOUTS[String(key || '')];
+  const normalKey = String(key || '');
+  const fn = LAYOUTS[normalKey];
   if (!fn) return empty(String(key || ''));
 
   const clamped = clampFrame(frame);
-  let subtitle = solveSubtitle(data?.subtitle, clamped);
-  let bodyFrame = { ...clamped, innerHeight: Math.max(0, clamped.innerHeight - subtitle.height) };
+  const { artwork, content } = cardArtworkFor(normalKey, clamped);
+  const contentFrame = {
+    width: content.width,
+    height: content.height,
+    padding: 0,
+    innerWidth: content.width,
+    innerHeight: content.height,
+  };
+  let subtitle = solveSubtitle(data?.subtitle, contentFrame);
+  let bodyFrame = { ...contentFrame, innerHeight: Math.max(0, contentFrame.innerHeight - subtitle.height) };
 
   let result = fn(data, bodyFrame);
   if (result.fitState === 'EMPTY') return result;
@@ -766,8 +983,8 @@ export function layoutSmartCard(key, data, frame) {
   // get larger and never oversets on the strength of this.
   const cap = result.fontPx * MAX_SUBTITLE_OF_BODY;
   if (subtitle.fontPx > cap) {
-    subtitle = solveSubtitle(data?.subtitle, clamped, cap);
-    bodyFrame = { ...clamped, innerHeight: Math.max(0, clamped.innerHeight - subtitle.height) };
+    subtitle = solveSubtitle(data?.subtitle, contentFrame, cap);
+    bodyFrame = { ...contentFrame, innerHeight: Math.max(0, contentFrame.innerHeight - subtitle.height) };
     const restated = fn(data, bodyFrame);
     if (restated.fitState !== 'EMPTY') result = restated;
   }
@@ -775,6 +992,8 @@ export function layoutSmartCard(key, data, frame) {
   const fitState = subtitle.hardOverset || result.fitState === 'OVERSET' ? 'OVERSET' : 'FITS';
   return {
     ...result,
+    artwork,
+    contentBox: content,
     subtitle,
     fitState,
     exactShaping: isShaperReady(),

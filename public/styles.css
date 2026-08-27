@@ -3426,12 +3426,27 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
    again the way they did before.
    --------------------------------------------------------------------------- */
 .smart-card {
+  position: relative;
   width: 100%;
   height: 100%;
+  overflow: hidden;
+  min-height: 0;
+}
+.smart-card-artwork {
+  position: absolute;
+  display: block;
+  object-fit: contain;
+  object-position: center;
+  pointer-events: none;
+}
+.smart-card-content {
+  position: absolute;
   display: flex;
   flex-direction: column;
-  gap: 0.3em;
+  gap: 0;
+  min-width: 0;
   min-height: 0;
+  box-sizing: border-box;
 }
 .smart-card .smart-card-subtitle {
   margin: 0;
@@ -3444,12 +3459,24 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 /* The puzzle. Square cells whatever the block's proportions, because a sudoku
    drawn in rectangles is not a sudoku. */
 .smart-card-grid-table {
+  position: absolute;
   border-collapse: collapse;
   table-layout: fixed;
   width: 100%;
   flex: 1 1 auto;
   min-height: 0;
   font-variant-numeric: tabular-nums;
+}
+.smart-card-sudoku-body { position: relative; width: 100%; height: 100%; }
+.smart-card-sudoku-heading {
+  position: absolute;
+  inset: 0 0 auto;
+  margin: 0;
+  border-bottom: 0.7px solid #8a1428;
+  color: #8a1428;
+  font-weight: 700;
+  letter-spacing: 0.015em;
+  text-align: left;
 }
 .smart-card-grid-table td {
   border: 0.4px solid #9a9aa2;
@@ -3487,23 +3514,145 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
    end of the sentence. The name column's width is the block's own inline
    style (rashiMarkup(), from layoutRashi()'s real measured nameWidth) - the
    grid track just follows it rather than guessing a second number. */
-.smart-card-rashi { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.25em; }
+.smart-card-rashi {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  row-gap: 0;
+  min-height: 0;
+}
 .smart-card-rashi-sign {
   display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 0 0.4em;
-  line-height: var(--devanagari-line);
-  border-bottom: 0.4px solid #eeeef2;
-  padding-bottom: 0.2em;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 0 6px;
+  border-bottom: 0.5px solid #d5c7c9;
+  box-sizing: border-box;
 }
-.smart-card-rashi-sign .rashi-name { grid-row: 1 / span 2; font-weight: 700; white-space: nowrap; }
-.smart-card-rashi-sign .rashi-luck { color: #6a6a72; font-size: 0.85em; }
+.smart-card-rashi-sign:nth-child(6n + 1),
+.smart-card-rashi-sign:first-child { border-top: 0.5px solid #d5c7c9; }
+.smart-card-rashi-sign .rashi-art {
+  display: block;
+  object-fit: cover;
+  object-position: center;
+  border: 0.5px solid #9b7d82;
+  border-radius: 3px;
+  box-sizing: border-box;
+}
+.smart-card-rashi-sign .rashi-art-missing { background: #f5efef; }
+.smart-card-rashi-sign .rashi-emblem {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  min-width: 0;
+}
+.smart-card-rashi-sign .rashi-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.smart-card-rashi-sign .rashi-name {
+  color: #8a1428;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.smart-card-rashi-sign .rashi-text { color: #191516; }
+.smart-card-rashi-sign .rashi-luck {
+  color: #6a5559;
+  font-weight: 700;
+}
+.smart-card-rashi-sign .rashi-luck-under {
+  display: block;
+  text-align: center;
+  white-space: nowrap;
+}
 
-.smart-card-quote { margin: 0; display: flex; align-items: center; justify-content: center; height: 100%; text-align: center; }
-.smart-card-quote p { margin: 0; font-style: italic; line-height: var(--devanagari-line); white-space: nowrap; }
+.smart-card-rashi .smart-card-line,
+.smart-card-list .smart-card-line { overflow: visible; }
+
+.smart-card-panchang .smart-card-content,
+.smart-card-dinvishesh .smart-card-content {
+  border-top: 0.7px solid #8a1428;
+}
+.smart-card-panchang .smart-card-content {
+  box-shadow: inset 0 0 0 0.7px #8a1428;
+}
+.smart-card-panchang .smart-card-table th,
+.smart-card-panchang .smart-card-table td {
+  padding: 0 0.35em;
+  vertical-align: middle;
+}
+.smart-card-panchang .smart-card-table th {
+  color: #8a1428;
+  background: #fbf2f3;
+}
+.smart-card-panchang .smart-card-table td {
+  border-left: 0.5px solid #dec8cc;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.smart-card-panchang .smart-card-table tr:nth-child(even) td { background: #fcf8f3; }
+.smart-card-panchang .smart-card-table tr:last-child th,
+.smart-card-panchang .smart-card-table tr:last-child td { border-bottom-color: #8a1428; }
+
+.smart-card-suvichar { box-shadow: inset 0 0.6px #8a1428, inset 0 -0.6px #8a1428; }
+.smart-card-quote { margin: 0; display: flex; align-items: center; justify-content: flex-start; height: 100%; text-align: left; }
+.smart-card-quote p { margin: 0; font-style: normal; font-weight: 700; line-height: var(--devanagari-line); white-space: nowrap; }
 .smart-card-quote cite { font-style: normal; font-weight: 600; color: #5c5c66; }
 
-.smart-card-list { margin: 0; padding-left: 1em; display: grid; gap: 0.2em; line-height: var(--devanagari-line); }
+.smart-card-list {
+  position: relative;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  list-style: none;
+  line-height: var(--devanagari-line);
+}
+.smart-card-list::before {
+  content: "";
+  position: absolute;
+  top: 0.2em;
+  bottom: 0.2em;
+  left: 1.7px;
+  width: 0.6px;
+  background: #d5a9b0;
+}
+.smart-card-list li { position: relative; box-sizing: border-box; }
+.smart-card-list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #8a1428;
+}
+
+.smart-card-weather-grid { display: grid; min-height: 0; }
+.smart-card-weather-city {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  padding: 0.35em 0.5em 0.3em 0.65em;
+  border: 0.5px solid #d8c4c8;
+  border-left: 2px solid #8a1428;
+  background: linear-gradient(90deg, #fff7f7 0, #fff 58%);
+  box-sizing: border-box;
+}
+.smart-card-weather-city strong { color: #8a1428; font-weight: 700; }
+.smart-card-weather-city span { display: block; }
+.smart-card-weather-city .weather-temperature { font-weight: 700; }
+.smart-card-weather-city .weather-rain { color: #5e5052; }
+.smart-card-weather-source {
+  margin: 6px 0 0;
+  color: #6b6264;
+  text-align: right;
+}
 
 /* A card too small for its own block - still drawn at a legible minimum
    (layout.js clamps rather than shrinking past it), flagged rather than

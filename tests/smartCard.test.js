@@ -173,7 +173,7 @@ test('the renderer draws the builder\'s own grid, with the 3x3 rules', async () 
 
   assert.equal((html.match(/<tr>/g) || []).length, 9, 'nine rows');
   assert.equal((html.match(/<td/g) || []).length, 81, 'eighty-one squares');
-  assert.ok(!html.includes('·'), 'a blank square is blank, not a dot');
+  assert.ok(!html.includes('>·<'), 'a blank square is blank, not a dot');
   assert.equal((html.match(/box-right/g) || []).length, 18, 'two heavier vertical rules, nine rows deep');
   assert.equal((html.match(/box-bottom/g) || []).length, 18, 'two heavier horizontal rules, nine columns wide');
 
@@ -205,7 +205,7 @@ test('the renderer keeps a sign\'s lucky number and colour as their own fields',
   assert.ok(html.includes('rashi-luck'), 'on their own line, not welded to the sentence');
 });
 
-test('an unknown card falls through to the block\'s copy rather than vanishing', async () => {
+test('an empty or invalid card falls through to the block\'s copy rather than vanishing', async () => {
   const { smartCardMarkup } = await import('../public/editor/smart-cards/smart-cards.js');
   assert.equal(smartCardMarkup('havaman', { items: [] }), null);
   assert.equal(smartCardMarkup('sudoku', null), null);

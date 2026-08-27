@@ -154,6 +154,23 @@ test('a picture and its caption both reach the model, in millimetres', async () 
     && item.runs.some((run) => run.text.includes('फोटो'))), 'the caption is there too');
 });
 
+test('Smart Card artwork and all twelve Rashi panels reach every shared export', async () => {
+  const keys = ['mesh', 'vrishabh', 'mithun', 'kark', 'sinh', 'kanya', 'tula', 'vrischik', 'dhanu', 'makar', 'kumbh', 'meen'];
+  const built = await model.buildPrintModel(newspaper, pageOf([articleSection({
+    block_type: 'feature', headline: '', subheading: '', body: '',
+    width_px: 307, height_px: 632,
+    smart_card_key: 'rashi',
+    smart_card_data: {
+      signs: keys.map((key, index) => ({
+        key, name: `राशी${index}`, text: 'आजचा दिवस चांगला जाईल.', luckyNumber: index + 1, luckyColour: 'निळा',
+      })),
+    },
+  })]));
+  const artwork = built.pages[0].items.filter((item) => item.kind === 'image' && item.file.startsWith('assets/smart-cards/'));
+  assert.equal(artwork.length, 13, 'one title plus twelve sign panels');
+  assert.ok(artwork.some((item) => item.file.endsWith('rashi-vrishchik.png')), 'the vrischik data key maps to the correctly spelled downloaded file');
+});
+
 test('type sizes are POINTS, and the page is millimetres - never editor pixels', async () => {
   const built = await model.buildPrintModel(newspaper, pageOf([articleSection()]));
   assert.equal(built.widthMm, 330, '660 editor px is 330 mm at 2 px/mm');

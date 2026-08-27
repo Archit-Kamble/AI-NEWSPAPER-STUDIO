@@ -411,6 +411,14 @@ function smartCardFrames({ key, data, frame, xMm, yMm, ownPage, cardLayout, fami
   // same resolved card. This places what that walk returns and decides nothing
   // about where it goes.
   return smartCardLines(key, data, frame, cardLayout).map((line) => {
+    if (line.kind === 'image') {
+      return `
+  <PAGEOBJECT XPOS="${mmRound(xMm + mm(line.x))}" YPOS="${mmRound(yMm + mm(line.y))}"
+              WIDTH="${mmRound(mm(line.width))}" HEIGHT="${mmRound(mm(line.height))}"
+              ROT="0" OwnPage="${ownPage}" ItemID="${nextId()}" PTYPE="2" FRTYPE="0"
+              PWIDTH="0" PCOLOR="None" PCOLOR2="None"
+              PFILE="${escapeXml(`./${String(line.file || '').replace(/^\//, '')}`)}" SCALETYPE="1" RATIO="1" TEXTFLOWMODE="0"/>`;
+    }
     // A chart's bars are rectangles, which this file already draws for a
     // block's ground and a reversed headline's panel. Emitted as ink rather
     // than as an empty text frame.

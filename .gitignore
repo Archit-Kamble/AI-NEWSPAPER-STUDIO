@@ -20,3 +20,4 @@ models/
 *.log
 npm-debug.log*
 .DS_Store
+.scratch/

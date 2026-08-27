@@ -1725,12 +1725,26 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
     }, [ED, KEY]);
 
     await page.locator('[data-smart-card="sudoku"]').click();
+    // INTO THE BLOCK THAT IS OPEN, which is what this whole section is about:
+    // the card, its headline and the block's own composition sharing one
+    // frame. The panel's DEFAULT is now "a new block, sized for this card" -
+    // a desk should not have to find and empty a frame before they can see a
+    // card - so the other destination has to be asked for explicitly here.
+    await page.locator('[data-card-destination="selected"]').click();
+    await page.waitForTimeout(300);
     await page.locator('#smartCardGenerate').click();
     await page.waitForTimeout(4000);
     const rows = await page.locator('#smartCardPreview .smart-card-grid-table tr').count();
     const cells = await page.locator('#smartCardPreview .smart-card-grid-table td').count();
     say(rows === 9 && cells === 81, 'a sudoku is reviewed as a real 9x9 grid', `${rows} rows, ${cells} cells`);
-    say(!(await page.locator('#smartCardPreview').innerText()).includes('·'), 'a blank square is blank, not a dot');
+    // IN THE GRID, which is what this check is about. Asked of the whole
+    // preview it also caught the heading's own separator - "आजचे सुडोकू सोडवा
+    // — … · काठिण्य : मध्यम" - which is ordinary punctuation in a sentence and
+    // has nothing to do with whether a blank square draws a dot. Measured on a
+    // real preview: 0 cells contain one, and the heading does.
+    const dottedCells = await page.evaluate(() => [...document.querySelectorAll('#smartCardPreview .smart-card-grid-table td')]
+      .filter((td) => td.textContent.includes('·')).length);
+    say(dottedCells === 0, 'a blank square is blank, not a dot', `${dottedCells} cells with a dot`);
 
     await page.locator('#smartCardAccept').click();
     await page.waitForTimeout(1500);
@@ -1753,6 +1767,34 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
     // `.section-headline` spans and a bare locator resolves to both. The
     // question here is whether the card overlaps the headline at all, which is
     // asked of the band's own union.
+    //
+    // AND THE HEADLINE IS PUT BACK BEFORE THE QUESTION IS ASKED. Accepting a
+    // card blanks the block's headline deliberately (smart-card-panel.js: a
+    // card draws its own head - the sudoku's instruction band, पंचांग's
+    // artwork), so what this used to measure was whatever the canvas had not
+    // yet repainted away: it passed or failed on a race, and reported
+    // "headline or card not found" when the repaint won. Setting one here
+    // makes the real invariant testable - a block that HAS a headline must not
+    // have its card drawn over it.
+    await page.evaluate(async ([ed, key, headline]) => {
+      const pages = await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json());
+      const section = pages[0].sections.find((s) => s.section_key === key);
+      await fetch(`/api/pages/${pages[0].id}/sections/${key}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          headline,
+          subheading: section.subheading || '',
+          body: section.body || '',
+          smartCardKey: section.smart_card_key,
+          smartCardData: section.smart_card_data,
+        }),
+      });
+    }, [ED, KEY, 'आजचे सुडोकू']);
+    await openEdition();
+    await block().click();
+    await page.waitForTimeout(2000);
+
     const headlineBox = await block().evaluate((el) => {
       const spans = [...el.querySelectorAll('.section-headline')];
       if (!spans.length) return null;

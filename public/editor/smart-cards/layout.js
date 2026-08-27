@@ -40,6 +40,14 @@ import { shapeWidthPx, isShaperReady } from '../compose/shaper.js';
 import { breakPieces, trimEndClusters } from '../compose/graphemes.js';
 // The paper's own inks. A chart may be printed in any of them - see chartInk().
 import { INKS, sanitiseInk } from '../layout/inks.js';
+// The paper's running body size, read from the one catalogue that owns it
+// rather than restated here. publication-type.js is a dual CJS/global script
+// (its CJS branch is guarded on `typeof module`), so importing it for its
+// side effect installs `SahasPublicationType` in both Node and the browser.
+import '../layout/publication-type.js';
+
+const RUNNING_BODY_PX = (globalThis.SahasPublicationType
+  && globalThis.SahasPublicationType.DEFAULT_BODY_FONT_PX) || 6.4;
 
 // Devanagari numerals - how this paper prints a number. Duplicated from
 // smart-cards.js's own DIGITS/devanagari() (not imported - smart-cards.js
@@ -98,7 +106,12 @@ const CARD_ARTWORK = Object.freeze({
   // purpose is the entries. Measured on a 268x300 block: 96 px of artwork over
   // 180 px of copy. A printed paper sets a standing head at a fraction of that
   // and gives the room to the reading matter.
-  dinvishesh: { file: 'assets/smart-cards/dinvishesh-title-v2.png', aspect: 2140 / 514, placement: 'top', heightShare: 0.16, widthShare: 0.62 },
+  // The wordmark names the box; it is not the box's headline. At 0.16/0.62
+  // it set a 150 px nameplate over a 16 px entry - nearly ten times the
+  // type it introduces - and the desk reported it as too big. A printed
+  // standing box sets its own name a rung or so above its entries, not an
+  // octave.
+  dinvishesh: { file: 'assets/smart-cards/dinvishesh-title-v2.png', aspect: 2140 / 514, placement: 'top', heightShare: 0.13, widthShare: 0.46 },
   panchang: { file: 'assets/smart-cards/panchangwithoutBG.png', aspect: 1380 / 752, placement: 'top', heightShare: 0.245, widthShare: 0.82 },
   rashi: { file: 'assets/smart-cards/rashi-bhavishyawithoutBG.png', aspect: 1380 / 752, placement: 'top', heightShare: 0.15, widthShare: 0.72 },
 });
@@ -416,47 +429,121 @@ function rashiItemHeight(sign, { readingWidth, luckWidth, fontPx, lineHeightPx, 
   };
 }
 
+function rashiArrangement(signs, frame, columns) {
+  const rows = Math.ceil(signs.length / columns);
+  const columnGap = columns > 1 ? RASHI_COLUMN_GAP_PX : 0;
+  const columnWidth = (frame.innerWidth - columnGap * (columns - 1)) / columns;
+  const rowHeight = rows > 0 ? frame.innerHeight / rows : frame.innerHeight;
+  const iconSize = Math.max(0, Math.min(46, columnWidth * 0.29, rowHeight * 0.54));
+  const readingWidth = Math.max(0, columnWidth - iconSize - GAP_PX - RASHI_ITEM_PADDING_PX * 2);
+  return { rows, columnGap, columnWidth, rowHeight, iconSize, readingWidth };
+}
+
+/**
+ * THE TWELVE SIGNS ARE SET IN AS MANY COLUMNS AS THE FRAME WILL CARRY.
+ *
+ * The count used to be a two-way rule - one column, or two once the frame
+ * reached 180 px - and it was written for the tall narrow box this card
+ * usually gets. Given a WIDE one it is the wrong shape twice over: on a real
+ * 620 x 320 features block the twelve signs set as two columns of six, which
+ * makes each row 53 px deep, and a row that shallow rejects every candidate
+ * above 7.5 px. Measured on the page: 7.5 px is 10.6 pt of reading matter set
+ * across a 150 mm card - unreadable, and half the block's own width spent on
+ * nothing.
+ *
+ * The frame decides, not a constant. Every column count whose column is still
+ * wide enough to set a name beside a reading is tried, and the one that
+ * resolves the LARGEST type wins - the same argument `measureColumns()` makes
+ * for body copy, and for the same reason: more columns means shallower rows
+ * only if the sign count forces it, and here three columns of four is both
+ * wider-rowed and better proportioned than two of six. Ties go to the
+ * arrangement with the fewest empty cells, then to the fewest columns, so a
+ * card can never gain a ragged last column for no typographic gain.
+ */
 function layoutRashi(data, frame) {
   const signs = Array.isArray(data?.signs) ? data.signs.filter(Boolean) : [];
   if (!signs.length) return empty('rashi');
 
-  // Narrow frame: one column of all twelve. Wide enough for a name and a
-  // line of reading side by side without wrapping to single words: two
-  // columns of six, halving how tall the card needs to be.
   const WIDE_COLUMN_PX = 90;
-  const columns = signs.length > 6 && frame.innerWidth >= WIDE_COLUMN_PX * 2 ? 2 : 1;
-  const rows = Math.ceil(signs.length / columns);
-  const columnGap = columns > 1 ? RASHI_COLUMN_GAP_PX : 0;
-  const columnWidth = columns > 0
-    ? (frame.innerWidth - columnGap * (columns - 1)) / columns
-    : frame.innerWidth;
-  const rowHeight = rows > 0 ? frame.innerHeight / rows : frame.innerHeight;
-  const iconSize = Math.max(0, Math.min(46, columnWidth * 0.29, rowHeight * 0.54));
-  const readingWidth = Math.max(0, columnWidth - iconSize - GAP_PX - RASHI_ITEM_PADDING_PX * 2);
-
-  const solved = solveFont(frame.innerHeight, (fontPx) => {
-    const lineHeightPx = lineHeightFor(fontPx, 'serif', 400);
-    const items = signs.map((sign) => rashiItemHeight(
-      sign,
-      { readingWidth, luckWidth: iconSize, fontPx, lineHeightPx, iconSize, rowHeight },
-    ));
-    const hardOverset = items.some((item) => item.hardOverset);
-    return { height: frame.innerHeight, hardOverset, items, lineHeightPx };
+  const candidates = [];
+  for (let columns = 1; columns <= Math.min(signs.length, 6); columns += 1) {
+    const shape = rashiArrangement(signs, frame, columns);
+    if (columns > 1 && shape.columnWidth < WIDE_COLUMN_PX) continue;
+    const solved = solveFont(frame.innerHeight, (fontPx) => {
+      const lineHeightPx = lineHeightFor(fontPx, 'serif', 400);
+      const items = signs.map((sign) => rashiItemHeight(sign, {
+        readingWidth: shape.readingWidth,
+        luckWidth: shape.iconSize,
+        fontPx,
+        lineHeightPx,
+        iconSize: shape.iconSize,
+        rowHeight: shape.rowHeight,
+      }));
+      return { height: frame.innerHeight, hardOverset: items.some((i) => i.hardOverset), items, lineHeightPx };
+    });
+    candidates.push({
+      columns,
+      shape,
+      solved,
+      empties: shape.rows * columns - signs.length,
+      // How many signs the arrangement cannot set. Every candidate reports the
+      // same `height` (the frame's), so when NOTHING fits there is no overflow
+      // measure to rank by and every arrangement lands on the ladder's floor -
+      // at which point "fewest columns" would pick one column of twelve in a
+      // 260 px frame, which is worse than the two the old fixed rule gave.
+      // The count of signs that genuinely will not set is the honest ranking.
+      unset: (solved.items || []).filter((item) => item.hardOverset).length,
+    });
+  }
+  if (!candidates.length) candidates.push({
+    columns: 1,
+    shape: rashiArrangement(signs, frame, 1),
+    solved: solveFont(frame.innerHeight, (fontPx) => {
+      const lineHeightPx = lineHeightFor(fontPx, 'serif', 400);
+      const shape = rashiArrangement(signs, frame, 1);
+      const items = signs.map((sign) => rashiItemHeight(sign, {
+        readingWidth: shape.readingWidth, luckWidth: shape.iconSize, fontPx,
+        lineHeightPx, iconSize: shape.iconSize, rowHeight: shape.rowHeight,
+      }));
+      return { height: frame.innerHeight, hardOverset: items.some((i) => i.hardOverset), items, lineHeightPx };
+    }),
+    empties: 0,
   });
 
+  const fitting = candidates.filter((c) => c.solved.fitState === 'FITS');
+  const pool = fitting.length ? fitting : candidates;
+  const best = pool.reduce((winner, candidate) => {
+    if (!winner) return candidate;
+    if (candidate.solved.fontPx !== winner.solved.fontPx) {
+      return candidate.solved.fontPx > winner.solved.fontPx ? candidate : winner;
+    }
+    if (candidate.unset !== winner.unset) return candidate.unset < winner.unset ? candidate : winner;
+    if (candidate.empties !== winner.empties) return candidate.empties < winner.empties ? candidate : winner;
+    // Deepest rows last: at equal type and equal raggedness the arrangement
+    // that gives each sign the most room is the better page. It is also what
+    // decides the all-OVERSET case, where every candidate reports the ladder's
+    // floor and there is nothing else to separate them - one column of twelve
+    // in a 260 px frame is worse than two of six, however you count it.
+    if (candidate.shape.rowHeight !== winner.shape.rowHeight) {
+      return candidate.shape.rowHeight > winner.shape.rowHeight ? candidate : winner;
+    }
+    return candidate.columns < winner.columns ? candidate : winner;
+  }, null);
+
+  const { shape, solved, columns } = best;
   return {
     key: 'rashi',
     fitState: solved.fitState,
     fontPx: solved.fontPx,
     geometry: {
       columns,
-      rows,
-      rowHeights: Array.from({ length: rows }, () => rowHeight),
-      rowHeight,
-      columnWidth,
-      columnGap,
-      iconSize,
-      readingWidth,
+      rows: shape.rows,
+      rowHeights: Array.from({ length: shape.rows }, () => shape.rowHeight),
+      rowHeight: shape.rowHeight,
+      columnWidth: shape.columnWidth,
+      columnGap: shape.columnGap,
+      iconSize: shape.iconSize,
+      readingWidth: shape.readingWidth,
       itemPadding: RASHI_ITEM_PADDING_PX,
       lineHeightPx: solved.lineHeightPx,
       readingMaxLines: RASHI_READING_MAX_LINES,
@@ -934,9 +1021,37 @@ function layoutSuvichar(data, frame) {
 
 // -------------------------------------------------------------- dinvishesh ---
 
+/**
+ * A DINVISHESH ENTRY IS NEWSPAPER TYPE, NOT A POSTER.
+ *
+ * `solveFont()` takes the largest candidate that fits, which is right for a
+ * card whose whole job is display - the सुविचार pull quote - and wrong for a
+ * list. Measured on a real 307 x 200 features block carrying the one entry
+ * this day's curated table holds: the solver reached the ladder's 32 px top,
+ * which is 45 pt. Nothing in a printed daily sets a standing list item at 45
+ * pt; beside a 9 pt column it reads as a poster pasted onto the page, and the
+ * desk reported exactly that.
+ *
+ * So the entry has a CEILING as well as a floor, stated against the paper's
+ * own running body (`publication-type.js`): at most `MAX_ENTRY_OF_BODY` times
+ * the size the columns beside it are set in. A feature list is set larger
+ * than body copy and nowhere near display.
+ *
+ * And the room the ceiling gives back is spent on AIR, not on letters - the
+ * same rule the compositor already follows when it closes the last fraction
+ * of a column with the leading. The entries spread evenly down the box, which
+ * is how a printed दिनविशेष sets, instead of clumping at the top under a
+ * hand's width of white.
+ */
+const MAX_ENTRY_OF_BODY = 2.5;
+const MAX_ENTRY_ROW_GAP_RATIO = 1.2;
+
 function layoutDinvishesh(data, frame) {
   const entries = Array.isArray(data?.entries) ? data.entries.filter(Boolean) : [];
   if (!entries.length) return empty('dinvishesh');
+
+  const ceiling = RUNNING_BODY_PX * MAX_ENTRY_OF_BODY;
+  const candidates = CANDIDATE_FONT_PX.filter((px) => px <= ceiling);
 
   const solved = solveFont(frame.innerHeight, (fontPx) => {
     const lineHeightPx = lineHeightFor(fontPx, 'serif', 400);
@@ -945,7 +1060,7 @@ function layoutDinvishesh(data, frame) {
     let hardOverset = false;
     const items = entries.map((entry) => {
       const text = typeof entry === 'string' ? entry : (entry.label || entry.text || '');
-      const symbol = typeof entry === 'object' && entry.symbol ? String(entry.symbol) : '◆';
+      const symbol = typeof entry === 'object' && entry.symbol ? String(entry.symbol) : '\u25c6';
       const wrapped = wrapSmartText(text, {
         width: Math.max(0, frame.innerWidth - textInset), fontPx, family: 'serif', weight: 400,
       });
@@ -956,7 +1071,17 @@ function layoutDinvishesh(data, frame) {
     const height = items.reduce((sum, item) => sum + item.height, 0)
       + Math.max(0, items.length - 1) * rowGap;
     return { height, hardOverset, items, lineHeightPx, textInset, rowGap };
-  });
+  }, candidates.length ? candidates : [MIN_CARD_FONT_PX]);
+
+  // Bounded vertical justification: the leftover opens the gaps between
+  // entries, up to a gap of its own line and no further. Anything beyond that
+  // is a genuine hole in the box and stays one - the block is simply deeper
+  // than the day's curated entries need.
+  const gaps = Math.max(0, solved.items.length - 1);
+  const residual = Math.max(0, frame.innerHeight - solved.height);
+  const rowGap = gaps > 0
+    ? Math.min(solved.rowGap + residual / gaps, solved.lineHeightPx * MAX_ENTRY_ROW_GAP_RATIO)
+    : solved.rowGap;
 
   return {
     key: 'dinvishesh',
@@ -964,7 +1089,7 @@ function layoutDinvishesh(data, frame) {
     fontPx: solved.fontPx,
     geometry: {
       rows: entries.length, lineHeightPx: solved.lineHeightPx,
-      textInset: solved.textInset, rowGap: solved.rowGap,
+      textInset: solved.textInset, rowGap,
     },
     items: solved.items,
     violations: solved.fitState === 'OVERSET' ? ['SMART_CARD_OVERSET'] : [],

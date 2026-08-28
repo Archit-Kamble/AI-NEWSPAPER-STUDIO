@@ -9,9 +9,11 @@ const { geometryOf } = require('./src/layout/geometry');
 const { identityFor } = require('./src/layout/identity');
 const ai = require('./src/services/ai');
 const { asyncRoute } = require('./src/middleware/asyncRoute');
+const pool = require('./src/config/db');
 const { deskWrites, requireAdmin, requireDesk, requireSignIn } = require('./src/middleware/auth');
 const { syncTemplates } = require('./src/layout/syncTemplates');
-const { upload } = require('./src/middleware/upload');
+const { upload, verifyUploadedImages } = require('./src/middleware/upload');
+const { PostgresSessionStore } = require('./src/middleware/sessionStore');
 const newsRoutes = require('./src/routes/news.routes');
 const newspaperRoutes = require('./src/routes/newspaper.routes');
 const pageRoutes = require('./src/routes/page.routes');
@@ -39,9 +41,25 @@ function assertSessionSecretConfigured() {
   );
 }
 
-function createApp() {
+function createApp(options = {}) {
   assertSessionSecretConfigured();
   const app = express();
+  app.set("sessionStore", options.sessionStore || new PostgresSessionStore());
+
+  // A BROWSER MUST NOT GUESS WHAT A STORED FILE IS.
+  //
+  // `nosniff` is the layer under the upload whitelist: even if something got
+  // onto disk with a name this paper did not choose, a browser may not decide
+  // from the bytes that it is a document and run it. The other two are
+  // ordinary hygiene for an application that holds a newsroom's session -
+  // it is never framed, and it does not leak the edition being worked on into
+  // a third party's referer log.
+  app.use((req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "SAMEORIGIN");
+    res.setHeader("Referrer-Policy", "same-origin");
+    next();
+  });
 
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ extended: true, limit: "50mb" }));
@@ -50,10 +68,24 @@ function createApp() {
   // the single selected public issue.
   app.use(
     session({
+      // A desk's login outlives a restart, and expired sessions are swept.
+      // Without a store this is express-session's MemoryStore, which leaks and
+      // signs the whole desk out whenever the process restarts.
+      store: app.get("sessionStore"),
       secret: process.env.SESSION_SECRET || "dev-secret",
       resave: false,
       saveUninitialized: false,
-      cookie: { secure: false },
+      // The cookie carries a desk's authority over the whole paper.
+      // `secure` was hard-coded false, so on any HTTPS deployment it was
+      // also sent over plain HTTP; it follows the deployment now. `sameSite`
+      // stops another site's page driving a desk's session by making the
+      // browser attach the cookie to its own cross-site request.
+      cookie: {
+        secure: process.env.NODE_ENV === "production",
+        httpOnly: true,
+        sameSite: "lax",
+        maxAge: 12 * 60 * 60 * 1000,
+      },
     }),
   );
   // Generated e-paper assets sit under public/uploads for deployment
@@ -63,9 +95,21 @@ function createApp() {
   app.get("/uploads/epaper/:id/:filename", asyncRoute(newspaperController.epaperAsset));
   app.use(express.static(path.join(__dirname, "public")));
 
-  app.get("/api/health", (req, res) => {
-    res.json({ status: "ok" });
-  });
+  // A HEALTH CHECK THAT DOES NOT CHECK ANYTHING IS WORSE THAN NONE.
+  //
+  // This answered `{status:"ok"}` unconditionally, without touching the
+  // database. So a monitor watching it stayed green while every real request
+  // returned 500 - the one situation the check exists to catch. It asks the
+  // database the cheapest question there is now, and says which part is down.
+  app.get("/api/health", asyncRoute(async (req, res) => {
+    try {
+      await pool.query("SELECT 1");
+    } catch (error) {
+      console.error(`[${new Date().toISOString()}] health: database unreachable`, error.message);
+      return res.status(503).json({ status: "degraded", database: "unreachable" });
+    }
+    return res.json({ status: "ok", database: "ok" });
+  }));
 
   app.use("/api/auth", authRoutes);
 
@@ -80,7 +124,7 @@ function createApp() {
   // the make-up routes below.
   app.use("/api/news", requireSignIn, newsRoutes);
 
-  app.post("/api/uploads/images", requireSignIn, upload.array("images"), (req, res) => {
+  app.post("/api/uploads/images", requireSignIn, upload.array("images"), asyncRoute(verifyUploadedImages), (req, res) => {
     const files = req.files || [];
     res.status(201).json({
       imageUrls: files.map((file) => `/uploads/${file.filename}`),
@@ -181,6 +225,20 @@ function createApp() {
     });
   });
 
+  // AN API PATH THAT DOES NOT EXIST SAYS SO, IN JSON.
+  //
+  // The SPA catch-all below answered EVERY unmatched path with index.html and
+  // a 200 - including `/api/*`. So a mistyped or removed endpoint came back as
+  // a successful HTML document: `response.ok` was TRUE, and the caller's
+  // `.json()` then threw a parse error from inside an async handler with
+  // nothing on screen to say why. That is the same silent failure this
+  // codebase already fixed for the five unchecked page re-reads, arriving
+  // through the router instead. An API route must never resolve to the
+  // application shell.
+  app.use("/api", (req, res) => {
+    res.status(404).json({ error: `No such endpoint: ${req.method} ${req.originalUrl}` });
+  });
+
   app.get("*", (req, res) => {
     res.sendFile(path.join(__dirname, "public", "index.html"));
   });
@@ -188,22 +246,87 @@ function createApp() {
   return app;
 }
 
-if (require.main === module) {
-  const app = createApp();
-  const port = process.env.PORT || 3000;
+// ONE STRAY PROMISE MUST NOT TAKE THE PAPER OFF THE AIR.
+//
+// Node terminates the process on an unhandled rejection - verified on the
+// version this runs under - and there was no handler anywhere. So a single
+// forgotten `.catch()` in any service, on any request, killed the server for
+// the whole newsroom, in the middle of an edition, and left NOTHING in any log
+// to say what had happened. That is the same fault the catch-all error handler
+// was written to fix, one level up, where it is fatal instead of merely
+// silent.
+//
+// The two are deliberately treated differently. A rejected promise is a bug in
+// one request and the process is still sound, so it is recorded and the paper
+// stays up. An uncaught exception may have unwound the stack anywhere, so the
+// process is no longer trustworthy: it is recorded and the server is closed
+// down deliberately, for the supervisor to restart, rather than left serving
+// from an unknown state.
+function installCrashHandlers(server) {
+  process.on("unhandledRejection", (reason) => {
+    console.error(
+      `[${new Date().toISOString()}] UNHANDLED REJECTION - the edition is unchanged and the server is still up`,
+      reason instanceof Error ? (reason.stack || reason.message) : reason,
+    );
+  });
 
-  // Layouts live in src/layout/templates.js; the templates table exists only to
-  // satisfy pages.template_key's foreign key, so it is brought into line before
-  // the server accepts a request.
-  syncTemplates()
-    .then((count) => console.log(`Synced ${count} layouts`))
-    .then(() => hydratePublicationIdentity())
-    .catch((error) => console.error('Publication settings load failed:', error.message))
-    .finally(() => {
-      app.listen(port, () => {
-        console.log(`Server running on http://localhost:${port}`);
-      });
+  process.on("uncaughtException", (error) => {
+    console.error(
+      `[${new Date().toISOString()}] UNCAUGHT EXCEPTION - shutting down; the supervisor should restart`,
+      error?.stack || error,
+    );
+    shutdown(server, 1);
+  });
+}
+
+// A DEPLOY IN THE MIDDLE OF A SAVE MUST NOT LOSE THE BLOCK.
+//
+// Without this, SIGTERM kills the process outright and every request in flight
+// dies with it - including a block being written. Refusing new connections and
+// letting the open ones finish costs a few seconds and is the difference
+// between a restart and a lost story. The timer is the backstop for a request
+// that never finishes.
+let shuttingDown = false;
+function shutdown(server, code = 0) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log("Shutting down: finishing requests already in flight...");
+  const force = setTimeout(() => {
+    console.error("Shutdown timed out; exiting anyway.");
+    process.exit(code || 1);
+  }, 10000);
+  force.unref?.();
+  server.close(() => {
+    pool.end().catch(() => {}).finally(() => process.exit(code));
+  });
+}
+
+if (require.main === module) {
+  const port = process.env.PORT || 3000;
+  const sessionStore = new PostgresSessionStore();
+  const app = createApp({ sessionStore });
+
+  // Each of these is reported as ITSELF. They used to share one `.catch`
+  // labelled "Publication settings load failed", so a template-sync failure
+  // was logged as a settings failure - a misleading line is worse than none at
+  // four in the morning. Neither is fatal: the server still listens, so the
+  // health check can be reached and can say what is wrong.
+  const ready = sessionStore.ready()
+    .catch((error) => { console.error("Session store unavailable:", error.message); })
+    .then(() => syncTemplates()
+      .then((count) => console.log(`Synced ${count} layouts`))
+      .catch((error) => { console.error("Layout sync failed:", error.message); }))
+    .then(() => hydratePublicationIdentity()
+      .catch((error) => { console.error("Publication settings load failed:", error.message); }));
+
+  ready.finally(() => {
+    const server = app.listen(port, () => {
+      console.log(`Server running on http://localhost:${port}`);
     });
+    installCrashHandlers(server);
+    process.on("SIGTERM", () => shutdown(server, 0));
+    process.on("SIGINT", () => shutdown(server, 0));
+  });
 }
 
 module.exports = { createApp };

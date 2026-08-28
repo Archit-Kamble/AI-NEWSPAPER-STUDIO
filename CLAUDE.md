@@ -3459,6 +3459,138 @@ and it had to be refilled with `scripts/fill-edition-copy.js`.
 node tests/browser/visual-pass.browser.js            # defaults to 40294 / lead
 ```
 
+## What must stay true for this to run a newspaper
+
+A pre-production audit, all of it verified against the running server before
+and after. None of these is visible in a screenshot, and none would be noticed
+on an ordinary day — they are noticed on the day somebody looks for them, which
+for a newspaper is press day. `tests/hardening.test.js` holds every one.
+
+### A picture upload is judged by its BYTES
+
+The stored extension came from `file.originalname` and the only check was
+`file.mimetype.startsWith('image/')`. **Both of those are the caller's own
+words.** So a file called `evil.html`, declared `image/png`, was written to
+`public/uploads/<uuid>.html` and served straight back by `express.static`:
+
+```
+$ curl .../uploads/1787919329122-<uuid>.html
+<script>alert(document.domain)</script>        200 text/html
+```
+
+That is **stored cross-site scripting on the origin the desk's own session
+lives on** — and `/api/uploads/images` needs only `requireSignIn`, so any
+reporter account could have run script in the owner's browser and taken the
+paper over. Verified by doing it.
+
+Four layers close it, and each one alone has a hole:
+
+| | |
+|---|---|
+| an exact type whitelist | not `startsWith('image/')`, which admits `image/svg+xml` — an SVG is a document that can carry script |
+| the extension comes from THAT whitelist | never from the filename, so the name on disk cannot be chosen at all. This is the layer that covers `/api/news` too, which shares the same `storage` |
+| the bytes are read back and checked against the format's signature | a caller can state `image/png` for anything |
+| `X-Content-Type-Options: nosniff` | so a browser cannot decide for itself that a stored file is really HTML |
+
+A traversing filename (`../../evil.html`) is neutralised by the same change —
+the name is a UUID plus the type's own extension.
+
+### A login is written down before it is announced
+
+`req.session.user = user; res.json(...)` left the write to whenever the session
+middleware got round to it. **In memory that is the same tick and nothing
+shows; in PostgreSQL it is a round trip**, and the first request a browser
+makes after signing in raced it — measured as `user: null`, with the identical
+next request answering correctly. A desk would see *"Sign in to do that"*
+immediately after signing in, sometimes.
+
+`regenerate` is in the same fix for a second and larger reason: it issues a new
+session id at the moment the account changes. Without it an id fixed on a
+browser before sign-in still identifies the session after it — **session
+fixation**. The id a desk's authority hangs on must be one this server minted
+after the password was checked.
+
+### A password may not be guessed at sixty-seven times a second
+
+The login route had no throttle. Measured: twenty wrong passwords for the
+owner's own account in **297 ms**, and the twenty-first treated like the first —
+about 5.8 million guesses a day against the account that creates logins and
+blocks reporters. It is also a denial of service in its own right, because
+every attempt costs a bcrypt comparison, which is expensive *on purpose*.
+
+`loginThrottle` is a bare in-process Map with a sweep, matching what this
+project already does for the information cache and for the same stated reason.
+**Keyed on the account and the address TOGETHER**, and that matters both ways:
+on the address alone a newsroom behind one router locks itself out; on the
+account alone anyone can lock the editor out of their own paper on deadline —
+the throttle becomes the attack.
+
+### One stray promise may not take the paper off the air
+
+Node terminates the process on an unhandled rejection — verified on the version
+this runs under — and **there was no handler anywhere**. A single forgotten
+`.catch()` in any service, on any request, killed the server for the whole
+newsroom mid-edition and left nothing in any log. The two cases are treated
+differently on purpose: a rejected promise is a bug in one request and the
+process is still sound, so it is recorded and the paper stays up; an uncaught
+exception may have unwound the stack anywhere, so it is recorded and the server
+is shut down deliberately for the supervisor to restart.
+
+`SIGTERM` now finishes the requests already in flight before exiting. Without
+it a deploy in the middle of a save loses the block.
+
+### A desk login outlives a restart
+
+`express-session` with no `store` uses MemoryStore, whose own documentation
+says it leaks and is not for production. Every restart signed out every editor
+at once, and the store grew one entry per login for the life of the process.
+Sessions live in PostgreSQL now (`src/middleware/sessionStore.js`) — one small
+table through the pool that is already open, no new dependency, no Redis. The
+table is created **in code**, not in `schema.sql`, because `schema.sql` is
+never run at boot and a session table applied by hand is a server that refuses
+every login on a fresh deploy. Every query funnels through `ready()` so a
+database that has never held a session heals itself on first use.
+
+### An API path that does not exist says so, in JSON
+
+`app.get("*")` answered **every** unmatched path with `index.html` and a 200 —
+including `/api/*`. So a mistyped or removed endpoint came back as a successful
+HTML document: `response.ok` was TRUE, and the caller's `.json()` then threw a
+parse error from inside an async handler with nothing on screen. That is the
+same silent failure the five unchecked page re-reads had, arriving through the
+router instead.
+
+### A health check that checks nothing is worse than none
+
+`/api/health` answered `{status:"ok"}` without touching the database, so a
+monitor stayed green while every real request returned 500 — the one situation
+the check exists to catch. It asks the database the cheapest question there is
+now and answers 503 when it cannot.
+
+### The pool reads its credentials at module load
+
+`src/config/db.js` reads `process.env` once, when it is first required. Any
+entry point reaching a repository before `dotenv.config()` therefore builds a
+pool with `undefined` for the password and fails every query with *"client
+password must be a string"* — a message that says nothing about the cause.
+`server.js` gets the order right and several `scripts/` do not, so the file
+loads its own env. `dotenv` never overwrites a variable already set, so a real
+environment still wins.
+
+### What was checked and found already correct
+
+Worth recording so it is not re-audited: every GET on a `deskWrites` router
+either repeats `requireDesk` or is a stateless catalogue lookup with no
+database access (`/ladder`, `/supported-page-counts`, `/api/features`). The
+e-paper asset route validates its filename against a regex **and** the release
+manifest, and the PDF route checks path containment; path traversal is refused.
+The palette boundary refuses a foreign tint at the service. Every outbound call
+— AI providers, RSS, weather, market — already carries an `AbortController`
+timeout. The e-paper capture token is 256 bits, single-use and expiring. No
+secret is reachable over HTTP, and only variable *names* ever appear in logs or
+in desk-facing text. `SESSION_SECRET` is already refused at boot when
+`NODE_ENV=production`.
+
 ## Page model
 
 ```

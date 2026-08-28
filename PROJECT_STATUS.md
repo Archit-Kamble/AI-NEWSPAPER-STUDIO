@@ -4,6 +4,54 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 1. Production hardening audit (2026-08-28)
+
+A sweep for anything that could bite in production, each item verified against
+the running server before and after. Held by `tests/hardening.test.js` (14
+cases). Full detail in CLAUDE.md, "What must stay true for this to run a
+newspaper".
+
+**Critical — stored XSS through the picture upload.** The stored extension came
+from the caller's filename and the only check was
+`mimetype.startsWith('image/')`; both are the caller's own words. An HTML file
+declared `image/png` was written as `<uuid>.html` and served back as
+`text/html` on the origin the desk's session lives on. `/api/uploads/images`
+needs only `requireSignIn`, so any reporter account could have taken the paper
+over. Closed with an exact type whitelist, an extension taken from that
+whitelist rather than the filename (which also covers `/api/news`, sharing the
+same storage), a magic-byte check on the written file, and `nosniff`.
+
+**High.**
+- No `unhandledRejection` handler anywhere, and Node terminates on one — a
+  single forgotten `.catch()` took the whole newsroom down mid-edition with
+  nothing logged. Rejections are now recorded and survived; uncaught exceptions
+  are recorded and shut down deliberately.
+- The login answered before the session was written. Harmless with MemoryStore,
+  a real race against PostgreSQL: the first request after signing in measured
+  `user: null`. Fixed with an explicit `save`, and `regenerate` alongside it,
+  which also closes session fixation.
+- No login throttle: 20 guesses in 297 ms against the owner account, and a
+  bcrypt-powered CPU DoS besides. Now 10 failures per account+address.
+- `/api/*` fell through to the SPA catch-all as 200 + HTML, so `response.ok`
+  was true and `.json()` threw inside async handlers.
+
+**Medium.** MemoryStore sessions (leaked, and signed the desk out on every
+restart) moved to PostgreSQL with no new dependency; `/api/health` now actually
+asks the database; `SIGTERM` finishes in-flight requests; the session cookie
+follows the deployment for `secure` and gained `sameSite`; the pool gained a
+connection timeout so a request fails instead of hanging; `db.js` loads its own
+env so no entry point can build a pool with an undefined password.
+
+**Checked and already correct**, recorded so it is not re-audited: the
+`deskWrites` GET trap (every GET either repeats `requireDesk` or is a stateless
+catalogue lookup), e-paper path traversal, the palette boundary, outbound
+timeouts on every provider, the e-paper capture token, secret reachability, and
+the production `SESSION_SECRET` guard.
+
+**Verified:** `npm test` 995 → **1009**. Browser nets re-run after the changes.
+
+---
+
 ## 1a. Pre-merge checkup of `smart-card-styling` (2026-08-28)
 
 A full sweep before merging to `main`: dead code, duplicate catalogues, and

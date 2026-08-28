@@ -27,6 +27,27 @@ const RECENT_LIMIT = 12;
 const FALLBACK_PAGE_COUNTS = Object.freeze([4, 6, 8, 10, 12, 14, 16]);
 
 const devanagari = (value) => String(value).replace(/\d/g, (d) => DIGITS[Number(d)]);
+const isoDate = (value) => String(value || '').slice(0, 10);
+
+/** The edition belonging to the date the desk selected, never implicitly today. */
+export function editionForDate(editions, date) {
+  const wanted = isoDate(date);
+  return (Array.isArray(editions) ? editions : [])
+    .find((edition) => isoDate(edition?.publication_date) === wanted) || null;
+}
+
+/** The one request shape used by the date-aware edition creator. */
+export function editionStartPayload({ publicationDate, pageCount, name, carryForward, fillFeatures } = {}) {
+  const payload = {
+    publicationDate: isoDate(publicationDate),
+    pageCount: Number(pageCount) || 4,
+    carryForward: carryForward !== false,
+    fillFeatures: fillFeatures !== false,
+  };
+  const cleanName = String(name || '').trim();
+  if (cleanName) payload.name = cleanName;
+  return payload;
+}
 
 export async function loadSupportedPageCounts(fetcher = fetch) {
   try {
@@ -120,11 +141,11 @@ export async function renderEditions(host, { onOpen }) {
     return;
   }
   const list = Array.isArray(editions) ? editions : [];
-  const todays = list.find((e) => String(e.publication_date || '').slice(0, 10) === today);
+  const todays = editionForDate(list, today);
   const supportedCounts = await loadSupportedPageCounts();
   const pageOptions = (selected) => supportedCounts.map((count) => `<option value="${count}" ${Number(count) === Number(selected) ? 'selected' : ''}>${count}</option>`).join('');
-  const selectedPages = todays?.page_count || supportedCounts[0] || 4;
-  const ladder = await fetch(`/api/newspapers/ladder?pages=${selectedPages}`).then((r) => r.json()).catch(() => []);
+  const defaultPages = supportedCounts[0] || 4;
+  const todayLadder = await fetch(`/api/newspapers/ladder?pages=${todays?.page_count || defaultPages}`).then((r) => r.json()).catch(() => []);
 
   host.innerHTML = `
     <div class="form-section">
@@ -139,24 +160,52 @@ export async function renderEditions(host, { onOpen }) {
             : 'Starting it builds the page ladder, carries the booked adverts forward from the last edition and fills the day&rsquo;s standing features.'}</p>
         </div>
         <div class="edition-today-form">
-          <label>Date
-            <input type="date" id="editionDate" value="${today}">
-          </label>
           ${todays ? `<p><strong>Current edition:</strong> ${devanagari(todays.page_count || 0)} pages</p>
             <button class="btn-submit" id="openEditionBtn">Open Edition</button>
             <label>Change pages
-              <select id="editionPages">${pageOptions(todays.page_count)}</select>
+              <select id="todayEditionPages">${pageOptions(todays.page_count)}</select>
             </label>
             <button class="btn-secondary" id="resizeEditionBtn">Change Page Count</button>`
-            : `<label>Pages
-                <select id="editionPages">${pageOptions(selectedPages)}</select>
-              </label>
-              <button class="btn-submit" id="startEditionBtn">Start Edition</button>`}
+            : '<button class="btn-submit" id="startTodayBtn">Start Today\'s Edition</button>'}
         </div>
       </div>
-      <p class="edition-ladder" id="editionLadder">${ladderLine(ladder)}</p>
+      <p class="edition-ladder" id="todayEditionLadder">${ladderLine(todayLadder)}</p>
 
-      <h3 class="editions-heading">Recent editions</h3>
+      <div class="editions-list-heading">
+        <div>
+          <h3 class="editions-heading">Past Newspapers</h3>
+          <p>Create a newspaper for any date, or open the one already assigned to that date.</p>
+        </div>
+        <button class="btn-submit" id="createEditionToggle" type="button">+ Create Edition</button>
+      </div>
+
+      <form class="dashboard-card edition-creator" id="editionCreator" hidden>
+        <div class="edition-creator-heading">
+          <div><h3>Create Edition</h3><p>Select the publication date first. An existing date opens its own edition; a free date creates a new one.</p></div>
+          <button class="btn-secondary" id="createEditionClose" type="button" aria-label="Close edition creator">Close</button>
+        </div>
+        <div class="edition-creator-fields">
+          <label>Publication date
+            <input type="date" id="createEditionDate" value="${today}" required>
+          </label>
+          <label>Edition name <small>Optional</small>
+            <input type="text" id="createEditionName" placeholder="Uses the publication name">
+          </label>
+          <label>Pages
+            <select id="createEditionPages">${pageOptions(defaultPages)}</select>
+          </label>
+        </div>
+        <div class="edition-creator-options">
+          <label><input type="checkbox" id="createEditionCarry" checked> Carry booked adverts from the previous edition</label>
+          <label><input type="checkbox" id="createEditionFeatures" checked> Fill standing daily features for this date</label>
+        </div>
+        <p class="edition-existing-note" id="createEditionExisting" aria-live="polite"></p>
+        <p class="edition-ladder" id="createEditionLadder"></p>
+        <div class="edition-creator-actions">
+          <button class="btn-submit" id="createEditionSubmit" type="submit">Create Edition</button>
+        </div>
+      </form>
+
       <input class="edition-search" id="editionSearch" placeholder="Search by date or name…">
       <div id="editionList"></div>
       ${list.length > RECENT_LIMIT
@@ -194,44 +243,101 @@ export async function renderEditions(host, { onOpen }) {
     paint();
   });
 
-  // The ladder is shown before the edition is made, not after - the desk sees
-  // what four pages will actually be.
-  const pagesInput = host.querySelector('#editionPages');
-  pagesInput.addEventListener('change', async () => {
-    const rungs = await fetch(`/api/newspapers/ladder?pages=${Number(pagesInput.value) || 4}`)
-      .then((r) => r.json()).catch(() => []);
-    host.querySelector('#editionLadder').innerHTML = ladderLine(rungs);
-  });
-
+  // Today's card opens/resizes TODAY only. Date selection lives exclusively
+  // in the creator below, so editing a date can never still open today's id.
   host.querySelector('#openEditionBtn')?.addEventListener('click', () => onOpen(todays.id));
+  const todayPagesInput = host.querySelector('#todayEditionPages');
+  todayPagesInput?.addEventListener('change', async () => {
+    const rungs = await fetch(`/api/newspapers/ladder?pages=${Number(todayPagesInput.value) || defaultPages}`)
+      .then((r) => r.json()).catch(() => []);
+    host.querySelector('#todayEditionLadder').innerHTML = ladderLine(rungs);
+  });
   host.querySelector('#resizeEditionBtn')?.addEventListener('click', async (event) => {
     const button = event.currentTarget; button.disabled = true;
     try {
-      const response = await fetch(`/api/newspapers/${todays.id}/resize`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pageCount: Number(pagesInput.value) }) });
+      const response = await fetch(`/api/newspapers/${todays.id}/resize`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pageCount: Number(todayPagesInput.value) }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.code === 'EDITION_RESIZE_HAS_CONTENT' ? `Cannot reduce: ${result.blockers.map((p) => `page ${p.pageNumber} (${p.reasons.join(', ')})`).join('; ')}` : (result.code || 'Could not change page count.'));
       onOpen(todays.id, result);
     } catch (error) { button.disabled = false; alert(error.message); }
   });
-  host.querySelector('#startEditionBtn')?.addEventListener('click', async (event) => {
-    const button = event.currentTarget;
-    button.disabled = true;
-    button.textContent = 'Starting…';
+
+  // One date-aware creator for every edition. It checks the chosen date before
+  // submission, so an occupied date says "Open Existing Edition" and a free
+  // date says "Create Edition". The server remains the final authority if
+  // another desk starts that date between this check and the POST.
+  const creator = host.querySelector('#editionCreator');
+  const creatorDate = host.querySelector('#createEditionDate');
+  const creatorName = host.querySelector('#createEditionName');
+  const creatorPages = host.querySelector('#createEditionPages');
+  const creatorCarry = host.querySelector('#createEditionCarry');
+  const creatorFeatures = host.querySelector('#createEditionFeatures');
+  const creatorExisting = host.querySelector('#createEditionExisting');
+  const creatorLadder = host.querySelector('#createEditionLadder');
+  const creatorSubmit = host.querySelector('#createEditionSubmit');
+  let ladderRequest = 0;
+
+  const refreshCreator = async () => {
+    const selectedDate = creatorDate.value || today;
+    const existing = editionForDate(list, selectedDate);
+    const locked = Boolean(existing);
+    for (const control of [creatorName, creatorPages, creatorCarry, creatorFeatures]) control.disabled = locked;
+    if (existing) creatorPages.value = String(existing.page_count || defaultPages);
+    creatorSubmit.textContent = existing ? 'Open Existing Edition' : 'Create Edition';
+    creatorExisting.classList.toggle('has-existing-edition', locked);
+    creatorExisting.textContent = existing
+      ? `${selectedDate} already has edition ${existing.id} with ${existing.page_count || 0} pages. It will be opened without changing its blocks.`
+      : `${selectedDate} is available for a new edition.`;
+
+    const request = ++ladderRequest;
+    const rungs = await fetch(`/api/newspapers/ladder?pages=${Number(creatorPages.value) || defaultPages}`)
+      .then((r) => r.json()).catch(() => []);
+    if (request === ladderRequest) creatorLadder.innerHTML = ladderLine(rungs);
+  };
+
+  const openCreator = async (date = today) => {
+    creator.hidden = false;
+    creatorDate.value = isoDate(date) || today;
+    await refreshCreator();
+    creatorDate.focus();
+    creator.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  };
+
+  host.querySelector('#createEditionToggle').addEventListener('click', () => openCreator(today));
+  host.querySelector('#startTodayBtn')?.addEventListener('click', () => openCreator(today));
+  host.querySelector('#createEditionClose').addEventListener('click', () => { creator.hidden = true; });
+  creatorDate.addEventListener('change', refreshCreator);
+  creatorPages.addEventListener('change', refreshCreator);
+
+  creator.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const selectedDate = creatorDate.value || today;
+    const existing = editionForDate(list, selectedDate);
+    if (existing) {
+      onOpen(Number(existing.id), { created: false, existing: true, newspaper: existing });
+      return;
+    }
+
+    creatorSubmit.disabled = true;
+    creatorSubmit.textContent = 'Creating…';
     try {
       const response = await fetch('/api/newspapers/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          publicationDate: host.querySelector('#editionDate').value || today,
-          pageCount: Number(pagesInput.value) || 4,
-        }),
+        body: JSON.stringify(editionStartPayload({
+          publicationDate: selectedDate,
+          pageCount: creatorPages.value,
+          name: creatorName.value,
+          carryForward: creatorCarry.checked,
+          fillFeatures: creatorFeatures.checked,
+        })),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Could not start the edition.');
       onOpen(result.newspaper.id, result);
     } catch (error) {
-      button.disabled = false;
-      button.textContent = "Start today's edition";
+      creatorSubmit.disabled = false;
+      await refreshCreator();
       alert(error.message);
     }
   });

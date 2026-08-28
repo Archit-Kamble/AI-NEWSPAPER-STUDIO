@@ -2808,6 +2808,35 @@ renderer can draw — the difference between a choice and a state.
 - The picker's first tile shows **all five miniatures at once**, because the
   point of this choice is that there isn't one demo to show.
 
+### A centred entry is ONE entry, and its lines are the solver's
+
+Found by a sweep no net had run: comparing what the browser paints against what
+the export walk emits, for **rules and marks** rather than only for text
+presence. Two faults in दिनविशेष, and each one alone changes what the paper
+says:
+
+- **The plate prefixed the mark to every wrapped line.** A two-line anniversary
+  therefore printed as **two bulleted entries** — the plate carrying three where
+  the desk approved two. The canvas had always drawn it once.
+- **The canvas discarded the solver's line breaks.**
+  `.smart-card-list.is-centred .smart-card-line` overrode the base rule to
+  `display: inline; white-space: normal`, handing the whole entry back to the
+  browser to re-flow as a paragraph. Measured on a real 268 px card: the solver
+  set `१६०० — ब्रिटिश ईस्ट इंडिया कंपनीला` / `राजाज्ञा मिळाली` and the browser
+  drew `…राजाज्ञा` / `मिळाली`. **A card measured at one set of breaks and drawn
+  at another can overflow the block the solver passed it as FITS.**
+
+The base rule already said the right thing — `.smart-card-line { display:
+block; white-space: nowrap }`, "a resolved line therefore never re-wraps here".
+The fix is to stop overriding it. The mark opens the first line **from inside
+it** (`centredLinesMarkup`); laid outside the rows it would take a row of its
+own above the words. The `::before { content: " " }` patch that had been
+holding two inline spans apart goes with it — that weld was the override's
+symptom, not a separate bug.
+
+`tests/smartCards.test.js` holds both halves, and both fail against the old
+code.
+
 ### A lead-in mark is set to the LINE it opens
 
 `cardArtworkFor()` reserves a mark's box before the card is solved, so it can

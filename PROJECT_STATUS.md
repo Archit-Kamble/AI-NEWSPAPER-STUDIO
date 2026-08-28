@@ -4,6 +4,49 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 1a. Pre-merge checkup of `smart-card-styling` (2026-08-28)
+
+A full sweep before merging to `main`: dead code, duplicate catalogues, and
+every card driven end to end.
+
+**One real bug, and it needed a new kind of sweep to find.** Every previous
+canvas-against-export sweep compared TEXT presence. Comparing **rules and
+marks** found that दिनविशेष disagreed on both surfaces at once: the plate
+prefixed the entry mark to every wrapped line (a two-line anniversary printing
+as two entries — the paper saying it carries three where the desk approved
+two), and the canvas overrode `.smart-card-line` to `display: inline` so the
+browser re-flowed the entry and discarded the solver's own line breaks. Fixed
+in the renderer, the stylesheet and the export walk; held by two tests in
+`tests/smartCards.test.js` that both fail against the old code. See CLAUDE.md,
+"A centred entry is ONE entry, and its lines are the solver's".
+
+**Removed:** two superseded nameplate assets kept alive only by comments
+(`dinvishesh-title-v2.png`, `SuvicharwithoutBG.png`), the twelve byte-identical
+copies of the sign marks staged at the repo root, and one screenshot this
+branch had added to a tracked output directory.
+
+**Checked and left alone:** the export walk has one `return` and no unreachable
+branch (the 465-line dead copy deleted earlier has not come back); no orphan
+`.smart-card-*` selector (`.smart-card-suvichar` is emitted through the
+`smart-card-${key}` template); every export of the four smart-card modules has
+a consumer except `wrapSmartText`, which is used twenty times inside its own
+module.
+
+**Verified:** `npm test` 993 → 995 (the two new regressions). Browser nets
+workspace 224/224, visual-pass 46/46, editor-parity 70/70, smart-cards 27/27.
+A new end-to-end drive of all nine builders plus the five advert shapes,
+60/60. A rule-parity sweep of every card on the real demo spread, 41/41. On
+the page in print view every card reports `FITS` with **zero** overflowing
+elements, filling 93.7–99.7% of its own block.
+
+**Two harness lessons.** Running `visual-pass` and `editor-parity` in parallel
+makes them fight over the same block and both time out — they must run
+sequentially. And a day-bound card (हवामान, बाजार) correctly REFUSES a future
+date rather than inventing a forecast or a close; a net that asks one for
+`2099-12-31` is testing its own mistake.
+
+---
+
 ## 1b. Every Smart Card set the way a printed paper sets it (2026-08-27)
 
 On `smart-card-styling`. All nine cards were drawn at real newspaper size and

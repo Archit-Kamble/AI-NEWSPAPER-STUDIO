@@ -458,3 +458,66 @@ test('an empty payload for a known card still returns a real fitState object, no
   assert.equal(result.fitState, 'EMPTY');
   assert.equal(result.violations.length, 0);
 });
+
+// A CENTRED दिनविशेष ENTRY IS ONE ENTRY, ON BOTH SURFACES.
+//
+// Two faults, found by comparing what the browser paints against what the
+// export walk emits for the same card - which no net had ever done for RULES
+// and marks, only for text presence:
+//
+//   - the walk prefixed the entry's mark to EVERY wrapped line, so a two-line
+//     anniversary printed as two bulleted entries. The plate said the paper
+//     carried three where the desk approved two.
+//   - the canvas overrode `.smart-card-line` to `display: inline` so the
+//     browser re-flowed the whole entry as a paragraph, discarding the
+//     solver's own line breaks. Measured on a real 268px card: the solver set
+//     "१६०० — ब्रिटिश ईस्ट इंडिया कंपनीला" / "राजाज्ञा मिळाली" and the browser
+//     drew "…राजाज्ञा" / "मिळाली". A card measured at one set of breaks and
+//     drawn at another can overflow the block the solver passed.
+const { smartCardLines } = require('../src/services/export/smart-card-lines.js');
+
+const WRAPPING_DINVISHESH = {
+  entries: [
+    { label: 'वर्षाचा शेवटचा दिवस', symbol: '◆' },
+    { label: '१६०० — ब्रिटिश ईस्ट इंडिया कंपनीला राजाज्ञा मिळाली', symbol: '◆' },
+  ],
+};
+
+test('a centred दिनविशेष entry carries its mark ONCE, however many lines it sets in', () => {
+  const frame = { width: 268, height: 160, padding: 1 };
+  const solved = layout.layoutSmartCard('dinvishesh', WRAPPING_DINVISHESH, frame);
+  assert.equal(solved.geometry.centred, true, 'this fixture must exercise the centred shape');
+
+  const wrapped = solved.items.find((item) => item.lines.length > 1);
+  assert.ok(wrapped, 'the fixture must contain an entry the solver breaks over two lines');
+
+  const texts = smartCardLines('dinvishesh', WRAPPING_DINVISHESH, frame, layout)
+    .filter((item) => !item.kind && item.text)
+    .map((item) => String(item.text));
+
+  const marked = texts.filter((t) => t.trimStart().startsWith('◆'));
+  assert.equal(marked.length, solved.items.length,
+    `the plate must carry one mark per ENTRY (${solved.items.length}), not one per line - got ${marked.length}`);
+
+  // And the continuation line is the solver's own line, unprefixed.
+  const tail = wrapped.lines[wrapped.lines.length - 1];
+  assert.ok(texts.includes(tail), 'the continuation line reaches the plate as the solver set it');
+});
+
+test('a centred दिनविशेष entry keeps the solver\'s line breaks in the markup', () => {
+  const frame = { width: 268, height: 160, padding: 1 };
+  const solved = layout.layoutSmartCard('dinvishesh', WRAPPING_DINVISHESH, frame);
+  const html = cards.smartCardMarkup('dinvishesh', WRAPPING_DINVISHESH, frame);
+
+  // Every solved line is its own row element, so the browser cannot re-break
+  // them. `.smart-card-line` is `display: block; white-space: nowrap`.
+  const rows = html.match(/class="smart-card-line"/g) || [];
+  const solvedLines = solved.items.reduce((n, item) => n + item.lines.length, 0);
+  assert.equal(rows.length, solvedLines,
+    'one row element per solved line, so the drawn breaks are the measured breaks');
+
+  // The mark opens the first row from INSIDE it - outside, it would take a
+  // row of its own above the words.
+  assert.ok(/<span class="smart-card-line"><b class="dinvishesh-symbol[^"]*"[^>]*>◆<\/b>/.test(html),
+    'the mark is set into the first line, not laid beside the block of them');
+});

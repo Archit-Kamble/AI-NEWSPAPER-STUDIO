@@ -3719,13 +3719,15 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   display: inline;
   margin-inline-end: 0.4em;
 }
-/* A CENTRED ENTRY SETS AS A PARAGRAPH, AND ITS LINES STILL NEED THE SPACE
-   BETWEEN THEM. Each solved line is its own span; laid inline they abut with
-   no whitespace at all, so a two-line entry printed
-   "…कंपनीला राजाज्ञामिळाली" - two words welded into one, on the page and on
-   the plate. Photographed on a 268px दिनविशेष. */
-.smart-card-list.is-centred .smart-card-line { display: inline; white-space: normal; }
-.smart-card-list.is-centred .smart-card-line + .smart-card-line::before { content: " "; }
+/* A CENTRED ENTRY'S LINES ARE THE SOLVER'S, EACH ONE ITS OWN ROW.
+   This used to be `display: inline; white-space: normal`, which handed the
+   whole entry back to the browser to re-flow as a paragraph - so the solver's
+   breaks were discarded (measured: it set "…कंपनीला" / "राजाज्ञा मिळाली" and
+   the browser drew "…राजाज्ञा" / "मिळाली") and the two spans abutted with no
+   whitespace at all, welding two words into one. Both faults are the base
+   `.smart-card-line` rule being overridden; the fix is to stop overriding it.
+   The mark opens the first line from inside it (centredLinesMarkup). */
+.smart-card-list.is-centred .smart-card-line { text-align: center; }
 .smart-card-list li { position: relative; box-sizing: border-box; }
 .smart-card-list li::before {
   content: none;

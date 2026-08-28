@@ -253,10 +253,39 @@ function suvicharMarkup(data, layout) {
 
 function dinvisheshMarkup(data, layout) {
   if (!layout.items || !layout.items.length || !layout.geometry) return null;
-  const centred = layout.geometry.centred ? " is-centred" : "";
-  return `<ul class="smart-card-list${centred}" style="font-size:${layout.fontPx}px;gap:${layout.geometry.rowGap}px">${layout.items
-    .map((item) => `<li style="min-height:${item.height}px;padding-left:${layout.geometry.textInset}px"><b class="dinvishesh-symbol${item.symbol === "flag" ? " is-flag" : ""}" aria-hidden="true">${item.symbol === "flag" ? "" : escapeHtml(item.symbol)}</b>${linesMarkup(item.lines)}</li>`)
+  const centred = Boolean(layout.geometry.centred);
+  const cls = centred ? " is-centred" : "";
+  return `<ul class="smart-card-list${cls}" style="font-size:${layout.fontPx}px;gap:${layout.geometry.rowGap}px">${layout.items
+    .map((item) => {
+      const mark = `<b class="dinvishesh-symbol${item.symbol === "flag" ? " is-flag" : ""}" aria-hidden="true">${item.symbol === "flag" ? "" : escapeHtml(item.symbol)}</b>`;
+      // A CENTRED ENTRY CARRIES ITS MARK INSIDE ITS FIRST LINE. The mark is
+      // set into the line rather than hanging beside it (a hanging mark on a
+      // centred entry points at nothing), and the lines below it are the
+      // solver's own - each one its own centred row, never re-broken. Laying
+      // the mark outside them would put it on a row of its own.
+      const body = centred ? centredLinesMarkup(item.lines, mark) : `${mark}${linesMarkup(item.lines)}`;
+      return `<li style="min-height:${item.height}px;padding-left:${layout.geometry.textInset}px">${body}</li>`;
+    })
     .join("")}</ul>`;
+}
+
+/**
+ * The solved lines of one centred entry, the mark opening the first of them.
+ *
+ * Every line is its own row - the base `.smart-card-line` rule, which the
+ * centred variant used to override to `display: inline` so the browser could
+ * re-flow them as one paragraph. That threw the solver's own line breaks away:
+ * measured on a real 268px card, the solver set
+ * "१६०० - ब्रिटिश ईस्ट इंडिया कंपनीला" / "राजाज्ञा मिळाली" and the browser drew
+ * "...राजाज्ञा" / "मिळाली". A card measured at one set of breaks and drawn at
+ * another can overflow its own block, which is the one thing the solver exists
+ * to prevent.
+ */
+function centredLinesMarkup(lines, mark) {
+  if (!lines || !lines.length) return mark;
+  return lines
+    .map((line, i) => `<span class="smart-card-line">${i === 0 ? mark : ""}${escapeHtml(line)}</span>`)
+    .join("");
 }
 
 // ----------------------------------------------------------------- havaman ---

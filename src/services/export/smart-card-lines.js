@@ -470,8 +470,13 @@ function smartCardLines(key, data, frame, cardLayout) {
     }
     for (const item of layout.items) {
       if (centred) {
+        // THE MARK OPENS THE ENTRY, ONCE. It used to be prefixed to every
+        // line, so a two-line anniversary printed as two bulleted entries -
+        // the plate saying the paper carries three when the desk approved
+        // two. The canvas has always drawn it once; this is that.
+        const mark = item.symbol === 'flag' ? '\u25c6' : item.symbol;
         item.lines.forEach((text, i) => line(
-          `${item.symbol === 'flag' ? '\u25c6' : item.symbol} ${text}`,
+          i === 0 ? `${mark} ${text}` : text,
           0, top + i * lineHeightPx, contentWidth, layout.fontPx, 1, lineHeightPx,
         ));
         top += item.height + rowGap;

@@ -1128,7 +1128,7 @@ const DROP_CAP_GUTTER_EM = 0.5;
 // em) drew a letter a little over half the depth it had reserved, sitting in
 // its own hole; that is the same fault the size button already had, only
 // tidier.
-const SHIROREKHA_EM = 0.625;
+export const SHIROREKHA_EM = 0.625;
 
 // A LIST IN RUNNING COPY. The marker's own column is the widest marker plus
 // this gutter - half a body em, the same gap the drop cap leaves, and for the
@@ -1145,7 +1145,7 @@ const LIST_MAX_HANG_EM = 3;
 // Deliberately separate from faceAscent()/faceDescent(): those are this
 // engine's own measured INK extremes and are not the numbers CSS uses.
 export const FACE_BOX_ASCENT_EM = 0.930;
-const FACE_BOX_DESCENT_EM = 0.625;
+export const FACE_BOX_DESCENT_EM = 0.625;
 
 /**
  * The cap's own geometry, or null when the block has not asked for one.

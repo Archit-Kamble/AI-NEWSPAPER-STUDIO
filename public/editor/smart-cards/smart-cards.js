@@ -185,8 +185,14 @@ function rashiMarkup(data, layout) {
   const banded = bandHeight > 0 && bandAfterRow >= 0;
   const gridRowFor = (row) => (banded && row >= bandAfterRow ? row + 2 : row + 1);
 
+  // THE BAND IS RULED ON BOTH SIDES.
+  //
+  // Every sign carries a bottom rule, so the row above the band closed with
+  // one and the row below it opened with nothing - the desk's "the
+  // rashi-bhavishya word/image has 2 line upside, it should have same line
+  // downside also". The first sign under the band takes a top rule to match.
   const items = layout.items
-    .map((item, index) => `<li class="smart-card-rashi-sign" style="grid-column:${Math.floor(index / rows) + 1};grid-row:${gridRowFor(index % rows)};height:${rowHeights[index % rowHeights.length]}px;padding:${itemPadding}px">
+    .map((item, index) => `<li class="smart-card-rashi-sign${banded && index % rows === bandAfterRow ? " is-after-band" : ""}" style="grid-column:${Math.floor(index / rows) + 1};grid-row:${gridRowFor(index % rows)};height:${rowHeights[index % rowHeights.length]}px;padding:${itemPadding}px">
         <span class="rashi-emblem" style="width:${iconSize}px">
           ${item.imageFile
     ? `<img class="rashi-art" src="/${escapeHtml(item.imageFile)}" alt="${escapeHtml(item.name)}" style="width:${iconSize}px;height:${iconSize}px">`
@@ -641,14 +647,16 @@ export function smartCardMarkup(key, data, frame) {
   // and both surfaces now read cardRuleFor() for it.
   const ring = layout.borderBox ? cardRuleFor(key) : null;
   const rule = ring
-    ? `<i class="smart-card-rule" style="left:${layout.borderBox.x}px;top:${layout.borderBox.y}px;width:${layout.borderBox.width}px;height:${layout.borderBox.height}px;box-shadow:${
-      ring.double
-        ? `inset 0 0 0 ${ring.weightPx}px ${ring.ink},inset 0 0 0 2.2px #fff,inset 0 0 0 2.8px ${ring.ink}`
-        : `inset 0 0 0 ${ring.weightPx}px ${ring.ink}`
-    }"></i>`
+    ? `<i class="smart-card-rule" style="left:${layout.borderBox.x}px;top:${layout.borderBox.y}px;width:${layout.borderBox.width}px;height:${layout.borderBox.height}px;box-shadow:inset 0 0 0 ${ring.weightPx}px ${ring.ink}"></i>`
+    : "";
+  // The card's head rule: the hairline that closes a nameplate or a subtitle
+  // off from the box under it, which is what makes a standing feature read as
+  // a standing feature now that no card carries a double band.
+  const headRule = layout.headRule
+    ? `<i class="smart-card-head-rule" style="left:${layout.headRule.x}px;top:${layout.headRule.y}px;width:${layout.headRule.width}px"></i>`
     : "";
   const cls = `smart-card smart-card-${escapeHtml(key)}${layout.fitState === "OVERSET" ? " is-overset" : ""}`;
-  return `<div class="${cls}" data-fit-state="${escapeHtml(layout.fitState)}">${rule}${titleRules}${artwork}<div class="smart-card-content" style="${contentStyle}">${subtitle}${inside}</div></div>`;
+  return `<div class="${cls}" data-fit-state="${escapeHtml(layout.fitState)}">${rule}${headRule}${titleRules}${artwork}<div class="smart-card-content" style="${contentStyle}">${subtitle}${inside}</div></div>`;
 }
 
 /**

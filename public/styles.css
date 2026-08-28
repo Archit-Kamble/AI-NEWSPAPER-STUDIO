@@ -3551,7 +3551,8 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   border-bottom: 0.5px solid #d5c7c9;
   box-sizing: border-box;
 }
-.smart-card-rashi-sign:first-child { border-top: 0.5px solid #d5c7c9; }
+.smart-card-rashi-sign:first-child,
+.smart-card-rashi-sign.is-after-band { border-top: 0.5px solid #d5c7c9; }
 .smart-card-rashi-sign .rashi-art {
   display: block;
   object-fit: cover;
@@ -3718,7 +3719,13 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   display: inline;
   margin-inline-end: 0.4em;
 }
+/* A CENTRED ENTRY SETS AS A PARAGRAPH, AND ITS LINES STILL NEED THE SPACE
+   BETWEEN THEM. Each solved line is its own span; laid inline they abut with
+   no whitespace at all, so a two-line entry printed
+   "…कंपनीला राजाज्ञामिळाली" - two words welded into one, on the page and on
+   the plate. Photographed on a 268px दिनविशेष. */
 .smart-card-list.is-centred .smart-card-line { display: inline; white-space: normal; }
+.smart-card-list.is-centred .smart-card-line + .smart-card-line::before { content: " "; }
 .smart-card-list li { position: relative; box-sizing: border-box; }
 .smart-card-list li::before {
   content: none;
@@ -6900,6 +6907,20 @@ body.print-view .page-imprint {
   box-sizing: border-box;
   pointer-events: none;
 }
+/* The head rule: what closes a nameplate or a subtitle off from the box under
+   it. WHERE it goes is the solver's (layout.headRule), so the plate draws it
+   in the same place; this is only its weight and its ink. */
+.smart-card-head-rule {
+  position: absolute;
+  z-index: 1;
+  display: block;
+  height: 0.6px;
+  background: currentColor;
+  color: #8a1428;
+  pointer-events: none;
+}
+.smart-card-advert .smart-card-head-rule,
+.smart-card-tender .smart-card-head-rule { color: #202024; }
 
 /* The month's scale. The y labels are placed absolutely against the figure's
    own box from the solver's numbers; the x row is a three-column strip so the

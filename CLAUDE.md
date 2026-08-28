@@ -2593,6 +2593,60 @@ in what was *left* rather than in the strip, and 70 px of block holding a
   without that clamp the row was cut to the room left over and its nowrap line
   ran 7 px past a card that clips.
 
+### One rule per card, and a HEAD RULE where a nameplate stands
+
+पंचांग and राशिभविष्य carried a double band — heavy outside, hairline inside —
+on the argument that it is what tells an almanac from an ordinary ruled box.
+Beside seven single-ruled cards on a made-up page it reads as a mistake rather
+than as a style, and the desk said so plainly. `double` is **gone** from
+`CARD_BORDERS` and from both renderers; `weightPx` is the only thing that
+varies, and a commercial block's heavier black rule is still one rule on four
+equal sides.
+
+What marks a standing box instead is what a printed almanac actually does:
+**`layout.headRule` — the hairline that closes a nameplate or a subtitle off
+from the box under it.** It is stated by the solver in the card's own
+coordinates, so `smartCardMarkup()` and `smart-card-lines.js` draw it in the
+same place, and it costs nothing: a `top` nameplate already leaves `gap` under
+itself and `solveSubtitle()` already reserves `GAP_PX`, so the rule goes in room
+the card has. पंचांग and दिनविशेष get it under the mark, हवामान under
+`सातारा · हवामान अंदाज`.
+
+**राशिभविष्य's band is ruled on BOTH sides.** Every sign draws its own *bottom*
+rule, so the row above the band closed with one and the row below it opened with
+nothing. `.is-after-band` is the matching top rule, and the export walk — which
+drew neither that nor the column's opening rule — now emits both.
+
+### A drawn mark is aligned by its SHIROREKHA, not by its box
+
+Setting the सुविचार mark to the line box put equal boxes on one line and the
+**words on two**: the wordmark is a drawn, ornamented thing with a lotus above
+the letters and a flourish below, so its word rides low inside its own
+rectangle. The desk's report was exactly that — *"suvichar word/image is in
+style so it is still not align with next words"*.
+
+An alpha scan of the file finds the head stroke as the densest band of ink —
+rows 272–314 of 664, **1208 px across at its peak against ~500 for the
+letters** — so its top edge is at **0.4096** of the image's height, and that is
+`headStrokeAt` in the artwork catalogue. The mark is then laid on the *type's*
+own head stroke: `lineTop + baseline − fontPx × SHIROREKHA_EM`, with the
+baseline where the browser puts it inside the line box
+(`(L − F(A+D))/2 + F·A`). Those three numbers are **imported from
+`compose.js`**, never restated — it is the rule `composeBlock()` already sets a
+drop cap by, and the drop cap's comment says so in the same words.
+
+The strip's block grew 32 → **36** for it: aligned by the head stroke rather
+than centred, the mark's flourish hangs below the line, and at 32 its box began
+on the card's own rule.
+
+### A centred entry's lines still need the space between them
+
+`.smart-card-list.is-centred .smart-card-line` is `display: inline` so a
+दिनविशेष entry sets as a centred paragraph. Each solved line is its own span,
+and laid inline they abut with **no whitespace at all** — so a two-line entry
+printed `…कंपनीला राजाज्ञामिळाली`, two words welded into one, on the page and
+on the plate alike. Photographed on a 268 px card.
+
 ### A lead-in mark is set to the LINE it opens
 
 `cardArtworkFor()` reserves a mark's box before the card is solved, so it can

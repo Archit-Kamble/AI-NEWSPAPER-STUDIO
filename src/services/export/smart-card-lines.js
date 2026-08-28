@@ -18,6 +18,8 @@ const { devanagari } = require('../../layout/identity');
 
 // The paper's accent, the one a chart's bars and figures are set in.
 const CHART_ACCENT = '#c8102e';
+// The head rule's own weight, mirrored by .smart-card-head-rule in styles.css.
+const HEAD_RULE_PX = 0.6;
 
 /**
  * @returns {Array<{kind, text, x, y, width, fontPx, align}>} align is 0 left,
@@ -57,7 +59,7 @@ function smartCardLines(key, data, frame, cardLayout) {
 
   // THE STANDING CARDS' OWN RULE.
   //
-  // पंचांग and राशीभविष्य are ruled with a double band in the paper's accent -
+  // पंचांग and राशीभविष्य are ruled like every other card in the paper's accent -
   // heavy outside, hairline inside - which is what a printed almanac or
   // horoscope box carries and what distinguishes a standing feature from an
   // ordinary story block. The canvas draws it with two inset rings
@@ -97,7 +99,20 @@ function smartCardLines(key, data, frame, cardLayout) {
       out.push({ kind: 'bar', x: dx + w - offset - weight, y: dy + offset, width: weight, height: h - offset * 2, ink: border.ink });
     };
     ring(0, Number(border.weightPx) || 0.6);
-    if (border.double) ring(2.2, 0.6);
+  }
+
+  // The head rule - the hairline closing a nameplate or a subtitle off from
+  // the box under it. Stated by the solver in the card's own coordinates, so
+  // the plate draws it exactly where the canvas does.
+  if (layout.headRule) {
+    out.push({
+      kind: 'bar',
+      x: (Number(layout.headRule.x) || 0) - (Number(layout.contentBox?.x) || 0),
+      y: (Number(layout.headRule.y) || 0) - (Number(layout.contentBox?.y) || 0),
+      width: Number(layout.headRule.width) || 0,
+      height: HEAD_RULE_PX,
+      ink: (cardLayout.CARD_BORDERS[key] || {}).ink || '#8a1428',
+    });
   }
 
   // AN ENTRY'S BOX IS ITS OWN TYPE'S, not the card's body line.
@@ -317,6 +332,16 @@ function smartCardLines(key, data, frame, cardLayout) {
         + bandOffset(row) - 0.5;
       bar(0, y, contentWidth, 0.5, '#d5c7c9');
     });
+    // THE BAND IS RULED ON BOTH SIDES, and the column opens with a rule.
+    // Every sign draws its own BOTTOM rule, so the row above the band closed
+    // with one and the row below it opened with nothing - the canvas says so
+    // with :first-child and .is-after-band, and this walk said it with
+    // neither.
+    bar(0, subtitleOffsetPx, contentWidth, 0.5, '#d5c7c9');
+    if (banded) {
+      const above = rowHeights.slice(0, bandAfterRow).reduce((sum, h) => sum + h, 0);
+      bar(0, subtitleOffsetPx + above + bandHeight, contentWidth, 0.5, '#d5c7c9');
+    }
     if (layout.geometry.columns > 1) {
       // Two runs where a band splits the column, so the rule does not cross
       // the nameplate.

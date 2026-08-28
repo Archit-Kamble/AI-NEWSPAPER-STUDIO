@@ -36,6 +36,9 @@
 // second time, possibly onto a different set of lines.
 
 import { measureWidth as hmtxWidth, minLineHeightFor } from '../compose/font-metrics.js';
+// The three numbers a drawn mark has to be aligned by, from the one place the
+// compositor already states them - never restated here.
+import { FACE_BOX_ASCENT_EM, FACE_BOX_DESCENT_EM, SHIROREKHA_EM } from '../compose/compose.js';
 import { shapeWidthPx, isShaperReady } from '../compose/shaper.js';
 import { breakPieces, trimEndClusters } from '../compose/graphemes.js';
 // The paper's own inks. A chart may be printed in any of them - see chartInk().
@@ -112,16 +115,25 @@ const GAP_PX = 6;
 // advertisement and a प्रकटपत्र are ruled a shade heavier than the paper's own
 // standing boxes, which with the black ink is how a reader tells a commercial
 // block from editorial at a glance.
+//
+// ONE RULE, NEVER TWO. पंचांग and राशिभविष्य used to carry a double band -
+// heavy outside, hairline inside - on the argument that it is what tells an
+// almanac from an ordinary ruled box. Seen on a made-up page in print view
+// beside seven single-ruled cards it reads as a mistake rather than a style,
+// and the desk asked for it plainly: "panchang and rashi should not have
+// double box, should have single box border". The band's own head rule below
+// the nameplate is what marks a standing box now, which is what a printed
+// almanac actually does.
 export const CARD_BORDERS = Object.freeze({
-  suvichar: { ink: '#8a1428', double: false, weightPx: 0.6 },
-  dinvishesh: { ink: '#8a1428', double: false, weightPx: 0.6 },
-  panchang: { ink: '#8a1428', double: true, weightPx: 0.6 },
-  rashi: { ink: '#8a1428', double: true, weightPx: 0.6 },
-  havaman: { ink: '#8a1428', double: false, weightPx: 0.6 },
-  market: { ink: '#8a1428', double: false, weightPx: 0.6 },
-  sudoku: { ink: '#8a1428', double: false, weightPx: 0.6 },
-  advert: { ink: '#202024', double: false, weightPx: 1.2 },
-  tender: { ink: '#202024', double: false, weightPx: 0.8 },
+  suvichar: { ink: '#8a1428', weightPx: 0.6 },
+  dinvishesh: { ink: '#8a1428', weightPx: 0.6 },
+  panchang: { ink: '#8a1428', weightPx: 0.6 },
+  rashi: { ink: '#8a1428', weightPx: 0.6 },
+  havaman: { ink: '#8a1428', weightPx: 0.6 },
+  market: { ink: '#8a1428', weightPx: 0.6 },
+  sudoku: { ink: '#8a1428', weightPx: 0.6 },
+  advert: { ink: '#202024', weightPx: 1.2 },
+  tender: { ink: '#202024', weightPx: 0.8 },
 });
 
 // A ruled box sets its type INSIDE its own rule. Without this the market
@@ -133,10 +145,6 @@ export const CARD_BORDERS = Object.freeze({
 // The clearance is that ink plus a hair of air - not a flat number, because on
 // a 148px almanac a generous inset costs the value column a whole size step.
 const CARD_RULE_INK_PX = 0.6;
-// The almanac's band: a hairline, a hair of paper, and the heavy rule outside
-// it. Its ink reaches 2.8px in from the frame's edge whatever the outer rule
-// weighs, so the clearance is measured from there.
-const DOUBLE_RULE_INK_PX = 2.8;
 // A hair over half a millimetre of air between the card's own rule and the
 // first thing set inside it. Measured on the page in print view: with the
 // clearance taken off the CONTENT box and the rule then drawn round that same
@@ -156,8 +164,7 @@ export function cardRuleFor(key) {
   const border = CARD_BORDERS[String(key || '')];
   if (!border) return null;
   const weightPx = Number(border.weightPx) || CARD_RULE_INK_PX;
-  const inkPx = border.double ? DOUBLE_RULE_INK_PX : weightPx;
-  return { ...border, weightPx, inkPx, clearancePx: inkPx + CARD_RULE_AIR_PX };
+  return { ...border, weightPx, inkPx: weightPx, clearancePx: weightPx + CARD_RULE_AIR_PX };
 }
 
 const CARD_ARTWORK = Object.freeze({
@@ -168,7 +175,18 @@ const CARD_ARTWORK = Object.freeze({
   // for. The mark therefore sets at the head of the line and the quote and its
   // credit run on after it - mark, thought, name, one rule of type across the
   // column, which is how a printed thought-for-the-day is set.
-  suvichar: { file: 'assets/smart-cards/SuvicharwithoutBG.png', aspect: 1300 / 664, placement: 'inline', heightShare: 0.52, widthShare: 0.16 },
+  // THE MARK'S OWN SHIROREKHA, MEASURED IN THE FILE.
+  //
+  // Centring the mark's BOX on the line's box is not alignment: this wordmark
+  // is a drawn, ornamented thing with a lotus above the letters and a flourish
+  // below, so its word sits low in its own rectangle and the desk read it as
+  // still out of line ("suvichar word/image is in style so it is still not
+  // align with next words"). An alpha scan of the file finds the head stroke
+  // as the densest band of ink - rows 272..314 of 664, 1208 pixels across at
+  // its peak against ~500 for the letters - and its top edge is at 0.4096 of
+  // the image's height. Laid on the TYPE's own head stroke the mark reads as
+  // the first word of the line, which is what a lead-in mark is.
+  suvichar: { file: 'assets/smart-cards/SuvicharwithoutBG.png', aspect: 1300 / 664, placement: 'inline', heightShare: 0.52, widthShare: 0.16, headStrokeAt: 0.4096 },
   //                          ^ a LEAD-IN mark, sized against the line of type
   //                          it opens rather than against the strip: at 0.74
   //                          it stood half again as tall as the words and read
@@ -286,6 +304,12 @@ function cardArtworkFor(key, frame) {
   return {
     artwork: { file: config.file, x, y, width: finalWidth, height, stretch: Boolean(config.stretch) },
     borderBox,
+    // A NAMEPLATE OVER A BOX IS CLOSED WITH A RULE.
+    //
+    // It goes in the gap the mark already leaves, so it costs the card
+    // nothing - a rule is ink, and the room is there. This is what marks a
+    // standing feature now that no card carries a double band.
+    headRule: { x: pad, y: y + height + gap / 2, width: innerWidth },
     content: {
       x: pad,
       y: y + height + gap,
@@ -2336,7 +2360,7 @@ export function layoutSmartCard(key, data, frame) {
   if (!fn) return empty(String(key || ''));
 
   const clamped = clampFrame(frame);
-  const { artwork, content, band, borderBox } = cardArtworkFor(normalKey, clamped);
+  const { artwork, content, band, borderBox, headRule: markRule } = cardArtworkFor(normalKey, clamped);
   const frameFor = (width) => ({
     width,
     height: content.height,
@@ -2467,12 +2491,42 @@ export function layoutSmartCard(key, data, frame) {
     const left = artwork.x + Math.max(0, (availWidth - groupWidth) / 2);
     sized = { ...sized, x: left };
     contentBox = { x: left + sized.width + markGap, y: content.y, width: rowBox, height: content.height };
+
+    // A DRAWN MARK IS ALIGNED BY ITS SHIROREKHA, NOT BY ITS BOX.
+    //
+    // Its word sits wherever the artist put it inside the file - सुविचार's
+    // rides low under a lotus - so equal box heights put equal boxes on one
+    // line and the WORDS on two. This is the rule composeBlock() already sets
+    // a drop cap by: the cap's head stroke on the first line's head stroke.
+    const headAt = Number(markConfig.headStrokeAt) || 0;
+    const lineHeightPx = Number(result.geometry?.lineHeightPx) || 0;
+    const fontPx = Number(result.fontPx) || 0;
+    if (headAt > 0 && lineHeightPx > 0 && fontPx > 0) {
+      const lineTop = content.y + (content.height - lineHeightPx) / 2;
+      const baseline = (lineHeightPx - fontPx * (FACE_BOX_ASCENT_EM + FACE_BOX_DESCENT_EM)) / 2
+        + fontPx * FACE_BOX_ASCENT_EM;
+      const headStroke = lineTop + baseline - fontPx * SHIROREKHA_EM;
+      sized = { ...sized, y: headStroke - sized.height * headAt };
+    }
   }
+
+  // A SUBTITLE IS A HEAD TOO, AND IS CLOSED THE SAME WAY.
+  //
+  // solveSubtitle() already reserves GAP_PX under the band, so the rule sits
+  // in room the card has and displaces nothing.
+  const headRule = markRule || (subtitle.lines.length
+    ? {
+      x: contentBox.x,
+      y: contentBox.y + subtitle.lines.length * subtitle.lineHeightPx + GAP_PX / 2,
+      width: contentBox.width,
+    }
+    : null);
 
   return {
     ...result,
     artwork: sized,
     contentBox,
+    headRule,
     // The rectangle this card's own rule follows: the BLOCK's own edge, so the
     // four sides are the same rule at the same distance from the paper's grid
     // whatever furniture the card puts inside itself. Null when the card is
@@ -2525,7 +2579,7 @@ export const SMART_CARD_BLOCK_SIZE = Object.freeze({
   // that sets in one. Photographed on the page: a 23.8px line centred in 67px
   // of content, with the rest white. 620 is the paper's own full measure, and
   // 32 is that line plus the card's rule and a hair of air either side.
-  suvichar: { width: 620, height: 32 },
+  suvichar: { width: 620, height: 36 },
   // Wider than it was: the name now runs ACROSS the head of the box rather
   // than standing in a column of it, and a 190px box gives that mark too
   // little measure to be read as a nameplate.

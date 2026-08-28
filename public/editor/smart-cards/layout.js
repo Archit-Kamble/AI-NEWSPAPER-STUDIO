@@ -36,9 +36,53 @@
 // second time, possibly onto a different set of lines.
 
 import { measureWidth as hmtxWidth, minLineHeightFor } from '../compose/font-metrics.js';
+// Where a baseline lands inside a CSS line box - the face's own hhea, which is
+// what the browser lays this family out with (measured; see below).
+import { FACE_BOX_ASCENT_EM, FACE_BOX_DESCENT_EM } from '../compose/compose.js';
 // The three numbers a drawn mark has to be aligned by, from the one place the
 // compositor already states them - never restated here.
-import { FACE_BOX_ASCENT_EM, FACE_BOX_DESCENT_EM, SHIROREKHA_EM } from '../compose/compose.js';
+
+// WHERE THE HEAD STROKE OF A LINE OF TYPE SITS IN ITS OWN LINE BOX.
+//
+// Measured rather than assumed, by putting a zero-height inline-block in the
+// real line - its bottom margin edge IS the baseline - and reading the
+// distance from the line box's top:
+//
+//   font 7px  line 13.87  baseline  8.00      font 12px  line 23.78  baseline 13.00
+//   font 9px  line 17.84  baseline  9.00      font 16px  line 31.71  baseline 18.00
+//
+// All four are whole pixels, and all four are `round(0.930 × F) +
+// floor((L − 1.555 × F) / 2)` - so Chrome lays this face out with the FILE's
+// own hhea (compose.js's FACE_BOX_* pair, 0.930 / 0.625), not with the
+// 0.890 / 0.215 its canvas `fontBoundingBox` reports. The rounding is not
+// modelled: relying on one browser's pixel-snapping would be worse than half
+// a pixel of error, and unrounded the four predictions are within 1.3px.
+//
+// The शिरोरेखा's own height above the baseline is the face's
+// actualBoundingBoxAscent over plain consonants, and it rides HIGHER in the
+// bold cut - 0.645 against 0.625, measured on both. सुविचार's quote is set in
+// serif 700.
+const SHIROREKHA_BY_WEIGHT = Object.freeze({ 400: 0.625, 700: 0.645 });
+
+/**
+ * The top of the head stroke of a line of type, measured from the top of its
+ * own line box. The one place this arithmetic is written down.
+ */
+function headStrokeInLineBox(fontPx, lineHeightPx, weight = 700) {
+  const shiro = SHIROREKHA_BY_WEIGHT[weight] || SHIROREKHA_BY_WEIGHT[400];
+  // A FACE'S ASCENT AND DESCENT ARE WHOLE PIXELS, AND SO IS THE BASELINE.
+  //
+  // The four measurements above are exactly
+  // `floor(round(0.930·F) + (L − round(0.930·F) − round(0.625·F)) / 2)` -
+  // the font's metrics snapped to pixels, then the baseline snapped again.
+  // Unrounded, the same four are 8.00 / 9.92 / 13.39 / 18.36 against a
+  // measured 8 / 9 / 13 / 18, which is up to 1.3px and shows: on a 36px strip
+  // the mark's head stroke stood a pixel and a half below the words'.
+  const ascentPx = Math.round(fontPx * FACE_BOX_ASCENT_EM);
+  const descentPx = Math.round(fontPx * FACE_BOX_DESCENT_EM);
+  const baseline = Math.floor(ascentPx + (lineHeightPx - ascentPx - descentPx) / 2);
+  return baseline - fontPx * shiro;
+}
 // The shapes a display advertisement comes in. One catalogue, read by this
 // solver, by the renderer, by the press walk and by the generate panel.
 import { advertStyle, advertBlockSize } from './advert-styles.js';
@@ -1247,9 +1291,19 @@ function layoutSuvichar(data, frame) {
   // wrapped pull quote is the better answer and takes over, which is what a
   // narrow column gets in print.
   const oneLiner = solveWith(true);
-  const solved = oneLiner.fitState === 'FITS' && oneLiner.fontPx >= STRIP_MIN_FONT_PX
-    ? oneLiner
-    : solveWith(false);
+  // WHICH SHAPE THIS CARD ACTUALLY TOOK, stated once and read by everything.
+  //
+  // `inlineCredit` was standing in for it and is not the same question: a
+  // one-line quote with no attribution at all, or one whose credit will not
+  // join its line, is set through the WRAPPED blockquote - which writes the
+  // side inset again as its own padding. So a card that had merely resolved to
+  // one line got its content box cut to that line's width AND the padding on
+  // top, and the browser re-wrapped a line the solver had set flush.
+  // Measured on a 307x44 card: the quote 246.65px wide in a box the renderer
+  // left 227.6px of, set as two lines where the solver said one - and the
+  // mark, aligned to a first line that was no longer there, 8px out.
+  const isStrip = oneLiner.fitState === 'FITS' && oneLiner.fontPx >= STRIP_MIN_FONT_PX;
+  const solved = isStrip ? oneLiner : solveWith(false);
 
   return {
     key: 'suvichar',
@@ -1266,6 +1320,16 @@ function layoutSuvichar(data, frame) {
       // one line - which is the format the desk asked for (mark, quote,
       // credit, one rule of type) and what a lead-in mark does in print.
       markHeightPx: solved.lineHeightPx,
+      // WHERE THIS CARD'S FIRST LINE BEGINS, from the top of the content box.
+      //
+      // The strip centres one line in the box; the wrapped pull quote centres
+      // a paragraph plus its rule and credit. Only the card knows which shape
+      // it took, so only the card can say where the type a lead-in mark has to
+      // line up with actually starts.
+      // NOT clamped at zero: the blockquote is centred, so a quote deeper
+      // than its box genuinely begins above the box's own top and the mark
+      // has to go with it.
+      firstLineTopPx: (frame.innerHeight - solved.height) / 2,
       // THE MARK IS PART OF THE LINE, NOT A LOGO PARKED AT THE MARGIN.
       //
       // cardArtworkFor() reserves an `inline` mark at the content box's left
@@ -1276,7 +1340,8 @@ function layoutSuvichar(data, frame) {
       // layoutSmartCard() can set the mark, the gap and the row down as one
       // centred group, which is the format a printed thought-for-the-day has:
       // mark, thought, credit, one rule of type.
-      stripRowWidthPx: solved.oneLine
+      strip: isStrip,
+      stripRowWidthPx: isStrip
         ? solved.quoteInlineWidth + (solved.inlineCredit ? solved.creditGap + solved.creditInlineWidth : 0)
         : 0,
       lineHeightPx: solved.lineHeightPx,
@@ -2613,22 +2678,29 @@ export function layoutSmartCard(key, data, frame) {
     sized = { ...sized, x: left };
     contentBox = { x: left + sized.width + markGap, y: content.y, width: rowBox, height: content.height };
 
-    // A DRAWN MARK IS ALIGNED BY ITS SHIROREKHA, NOT BY ITS BOX.
-    //
-    // Its word sits wherever the artist put it inside the file - सुविचार's
-    // rides low under a lotus - so equal box heights put equal boxes on one
-    // line and the WORDS on two. This is the rule composeBlock() already sets
-    // a drop cap by: the cap's head stroke on the first line's head stroke.
-    const headAt = Number(markConfig.headStrokeAt) || 0;
-    const lineHeightPx = Number(result.geometry?.lineHeightPx) || 0;
-    const fontPx = Number(result.fontPx) || 0;
-    if (headAt > 0 && lineHeightPx > 0 && fontPx > 0) {
-      const lineTop = content.y + (content.height - lineHeightPx) / 2;
-      const baseline = (lineHeightPx - fontPx * (FACE_BOX_ASCENT_EM + FACE_BOX_DESCENT_EM)) / 2
-        + fontPx * FACE_BOX_ASCENT_EM;
-      const headStroke = lineTop + baseline - fontPx * SHIROREKHA_EM;
-      sized = { ...sized, y: headStroke - sized.height * headAt };
-    }
+  }
+
+  // A DRAWN MARK IS ALIGNED BY ITS SHIROREKHA, NOT BY ITS BOX - AT ANY SIZE.
+  //
+  // In Marathi every letter hangs from a horizontal head stroke, and a mark
+  // set beside type is right when the two strokes are one line. Its word sits
+  // wherever the artist put it inside the file, so equal box heights put equal
+  // boxes on one line and the WORDS on two. This is the rule composeBlock()
+  // already sets a drop cap by: the cap's head stroke on the first line's.
+  //
+  // It runs for EVERY shape the card takes, not only the one-line strip. The
+  // strip centres one line and the wrapped pull quote centres a paragraph, so
+  // the card states where its own first line begins (`firstLineTopPx`) and the
+  // mark is laid on that. Centred in the box instead, a mark beside a wrapped
+  // quote aligned with nothing at all - measured on a 307x44 card, 15.25px out
+  // where the strip sizes were within a pixel.
+  const headAt = Number(markConfig?.headStrokeAt) || 0;
+  const lineHeightPx = Number(result.geometry?.lineHeightPx) || 0;
+  const firstLineTopPx = Number(result.geometry?.firstLineTopPx);
+  const fontPx = Number(result.fontPx) || 0;
+  if (sized && headAt > 0 && lineHeightPx > 0 && fontPx > 0 && Number.isFinite(firstLineTopPx)) {
+    const headStroke = content.y + firstLineTopPx + headStrokeInLineBox(fontPx, lineHeightPx, 700);
+    sized = { ...sized, y: headStroke - sized.height * headAt };
   }
 
   // A SUBTITLE IS A HEAD TOO, AND IS CLOSED THE SAME WAY.
@@ -2728,7 +2800,7 @@ export function smartCardBlockSize(key, data = null) {
 
 // Re-exported so a caller that already imports the card catalogue does not
 // need a second import to ask what shapes an advert comes in.
-export { ADVERT_STYLES, ADVERT_STYLE_KEYS, ADVERT_SAMPLE, DEFAULT_ADVERT_STYLE, advertStyle, advertBlockSize } from './advert-styles.js';
+export { ADVERT_STYLES, ADVERT_STYLE_KEYS, ADVERT_SAMPLE, DEFAULT_ADVERT_STYLE, ADVERT_DESIGN_REQUEST, isDesignRequest, advertStyle, advertBlockSize } from './advert-styles.js';
 
 export const SMART_CARD_LAYOUT_KEYS = Object.keys(LAYOUTS);
 

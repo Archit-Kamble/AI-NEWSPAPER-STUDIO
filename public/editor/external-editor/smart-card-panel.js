@@ -10,7 +10,7 @@
 
 import { escapeHtml } from "../format.js";
 import { smartCardMarkup, canRenderSmartCard, smartCardFitState, SMART_CARD_OVERSET_NOTE } from "../smart-cards/smart-cards.js";
-import { ADVERT_STYLES, ADVERT_SAMPLE, DEFAULT_ADVERT_STYLE } from "../smart-cards/advert-styles.js";
+import { ADVERT_STYLES, ADVERT_SAMPLE, ADVERT_DESIGN_REQUEST } from "../smart-cards/advert-styles.js";
 
 const CARDS = [
   { key: "panchang", icon: "☀", label: "पंचांग", detail: "सूर्योदय, सूर्यास्त, राहुकाळ", source: "Calculated" },
@@ -46,6 +46,28 @@ const DEMO_PICTURE = "data:image/svg+xml;utf8,"
     + '<path d="M0 5 L2.6 1.9 L4.6 5 Z" fill="#b7ada4"/><path d="M3.6 5 L5.9 2.7 L8 5 Z" fill="#c7bfb7"/></svg>');
 
 const DEMO_WIDTH_PX = 132;
+
+// LET THE PAPER'S AI DESIGN IT - the default, and not a shape of its own.
+//
+// It cannot draw one demo, because the point is that there isn't one: the
+// model reads the advertiser's copy, picks from the same five and writes the
+// brief for the picture, so the tile shows all five at once. That is what is
+// actually on offer.
+function advertDesignChoice(selected) {
+  const strip = Object.values(ADVERT_STYLES).map((style) => {
+    const scale = (DEMO_WIDTH_PX / 2.6) / style.block.width;
+    return `<span class="advert-style-mini" style="width:${Math.ceil(style.block.width * scale)}px;height:${Math.ceil(style.block.height * scale)}px">
+      <span class="advert-style-sheet" style="width:${style.block.width}px;height:${style.block.height}px;transform:scale(${scale})">${
+  smartCardMarkup("advert", { ...ADVERT_SAMPLE, style: style.key, imageUrl: DEMO_PICTURE },
+    { width: style.block.width, height: style.block.height, padding: 1 }) || ""}</span></span>`;
+  }).join("");
+  return `<button type="button" class="advert-style is-auto${selected ? " is-selected" : ""}" data-advert-style="${ADVERT_DESIGN_REQUEST}" aria-pressed="${selected}">
+    <span class="advert-style-demo is-montage" style="width:${DEMO_WIDTH_PX}px">${strip}</span>
+    <strong>AI ठरवेल</strong>
+    <small>मजकूर वाचून रचना निवडतो आणि चित्र काढतो</small>
+    <em>different every time</em>
+  </button>`;
+}
 
 function advertStyleChoice(style, selected) {
   const block = style.block;
@@ -191,7 +213,9 @@ function proposalMarkup(result) {
 export function bindSmartCard(requestCard, onPatch, onNotify, onPlaceInNewBlock) {
   let key = "panchang";
   let variant = "auto";
-  let advertStyle = DEFAULT_ADVERT_STYLE;
+  // THE DEFAULT IS "you decide". A desk that wants a particular shape says so;
+  // otherwise the paper's own AI reads the copy and designs the advert.
+  let advertStyle = ADVERT_DESIGN_REQUEST;
   // "new" means the card brings its own block; "selected" writes into the one
   // already open. New is the default - see the fieldset's own comment.
   let destination = "new";
@@ -229,8 +253,9 @@ export function bindSmartCard(requestCard, onPatch, onNotify, onPlaceInNewBlock)
       if (key === "advert" && !styleField.dataset.drawn) {
         styleField.dataset.drawn = "1";
         const grid = styleField.querySelector(".advert-style-grid");
-        grid.innerHTML = Object.values(ADVERT_STYLES)
-          .map((style) => advertStyleChoice(style, style.key === advertStyle)).join("");
+        grid.innerHTML = advertDesignChoice(advertStyle === ADVERT_DESIGN_REQUEST)
+          + Object.values(ADVERT_STYLES)
+            .map((style) => advertStyleChoice(style, style.key === advertStyle)).join("");
         grid.querySelectorAll("[data-advert-style]").forEach((button) => button.addEventListener("click", () => {
           advertStyle = button.dataset.advertStyle;
           grid.querySelectorAll("[data-advert-style]").forEach((other) => {
@@ -303,6 +328,8 @@ export function bindSmartCard(requestCard, onPatch, onNotify, onPlaceInNewBlock)
         manualText: MANUAL_CARDS.has(key) ? manualText.value : "",
         imageUrl: advertImageUrl,
         wantsArtwork: key === "advert" && Boolean(document.getElementById("smartCardWantsArtwork")?.checked),
+        // The designed advert asks for its own picture - it is half of what
+        // was requested - so the checkbox only governs the fixed shapes.
         advertStyle: key === "advert" ? advertStyle : "",
         // The card is measured against the frame it will actually get: the
         // block it is going into, or the one it is about to bring with it.

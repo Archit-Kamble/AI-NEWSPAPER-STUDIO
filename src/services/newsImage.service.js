@@ -122,11 +122,20 @@ async function requestImage(prompt, { signal } = {}) {
  * `aspect` is the shape of the hole the artwork is going into, so what comes
  * back fits the block rather than being cropped to fit it.
  */
-function advertBriefFor({ advertiser, headline, subject, aspect = '4:3' } = {}) {
+function advertBriefFor({ advertiser, headline, subject, aspect = '4:3', look = '' } = {}) {
   const what = [headline, subject].filter(Boolean).join('. ') || String(advertiser || '');
+  const wanted = String(look || '').trim();
   return [
     'A clean, uncluttered illustration for a display advertisement in a Marathi daily newspaper.',
     `Subject: ${what}`,
+    // THE DESIGN THE NEWSROOM ASKED FOR, and only that.
+    //
+    // When a desk asks the paper's own AI to design the advert, the model
+    // writes this line and it is what makes two adverts from the same copy two
+    // different pictures. It is added to the brief and never replaces it: the
+    // requirements below are the NEWSPAPER's - no lettering, no real faces,
+    // readable at newsprint screen - and a written brief may not lift them.
+    ...(wanted ? [`Look and treatment: ${wanted}`] : []),
     '',
     'Requirements:',
     '- NO text, no lettering, no numerals, no signage, no logos, no watermarks of any kind.',

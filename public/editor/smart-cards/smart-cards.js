@@ -229,10 +229,14 @@ function suvicharMarkup(data, layout) {
   // One line: the credit runs on at the end of it, which is how a printed
   // thought-for-the-day strip sets. Wrapped: the credit drops under a short
   // centred rule, as a pull quote's does.
-  if (g.inlineCredit) {
+  // `g.strip` and NOT `g.inlineCredit`: a one-line quote with no attribution
+  // is still a strip, and it was being sent through the wrapped blockquote
+  // below - which writes the side inset again as padding, inside a box the
+  // solver had already cut to the line's own width. See layoutSuvichar.
+  if (g.strip) {
     return `<blockquote class="smart-card-quote is-strip" style="font-size:${layout.fontPx}px;line-height:${g.lineHeightPx}px">
       <p class="smart-card-quote-text">${linesMarkup(layout.quoteLines)}</p>
-      <cite class="smart-card-quote-credit" style="font-size:${g.creditFontPx}px;line-height:${g.lineHeightPx}px;margin-inline-start:${g.creditGap}px">${escapeHtml(g.creditText)}</cite>
+      ${g.creditText && g.inlineCredit ? `<cite class="smart-card-quote-credit" style="font-size:${g.creditFontPx}px;line-height:${g.lineHeightPx}px;margin-inline-start:${g.creditGap}px">${escapeHtml(g.creditText)}</cite>` : ""}
     </blockquote>`;
   }
   const credit = layout.attributionLines?.length

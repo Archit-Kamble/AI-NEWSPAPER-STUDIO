@@ -100,6 +100,25 @@ export const ADVERT_STYLES = Object.freeze({
 
 export const DEFAULT_ADVERT_STYLE = 'classic';
 
+// LET THE PAPER'S OWN AI DESIGN IT.
+//
+// This is a REQUEST, not a shape: it is what a desk asks for, and the builder
+// turns it into one of the shapes above before anything is stored. Nothing in
+// the database ever carries `auto` - a stored style is always a key this
+// renderer can draw, which is the difference between a choice and a state.
+//
+// The model picks the shape from this same catalogue and writes the brief for
+// the illustration, so two adverts from the same copy are not the same advert.
+// It cannot invent a shape the compositor has no geometry for, and it cannot
+// remove the picture guards (no text, no faces) - those are the image
+// service's and are added after its brief, not by it.
+export const ADVERT_DESIGN_REQUEST = 'auto';
+
+/** Whether a desk's answer is "you decide" rather than a shape. */
+export function isDesignRequest(key) {
+  return String(key || '') === ADVERT_DESIGN_REQUEST;
+}
+
 export const ADVERT_STYLE_KEYS = Object.keys(ADVERT_STYLES);
 
 /** The style a card asks for, or the paper's default. Never null. */

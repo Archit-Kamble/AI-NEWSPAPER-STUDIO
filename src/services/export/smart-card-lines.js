@@ -402,15 +402,19 @@ function smartCardLines(key, data, frame, cardLayout) {
     // row, so they are two runs at one baseline, placed from the SOLVER's own
     // measured quote width - never re-measured here, which is the rule this
     // file's header states.
-    if (g.inlineCredit) {
-      const boxH = (Number(layout.contentBox?.height) || Number(frame.height) || 0) - subtitleOffsetPx;
-      const top = subtitleOffsetPx + Math.max(0, (boxH - g.lineHeightPx) / 2);
-      const runWidth = g.quoteInlineWidth + g.creditGap + g.creditInlineWidth;
-      const left = g.sideInset + Math.max(0, (g.measureWidth - runWidth) / 2);
-      line(quoteLines[0] || '', left, top, g.quoteInlineWidth, layout.fontPx, 0,
+    // `g.strip`, not `g.inlineCredit` - the canvas switches on the same flag,
+    // and a one-line quote with no attribution is still a strip.
+    if (g.strip) {
+      // The solver placed the row: its box IS the row's own width and the
+      // first line's top is stated. Centring it again here would put the
+      // plate's strip somewhere the canvas never had it.
+      const top = subtitleOffsetPx + (Number(g.firstLineTopPx) || 0);
+      line(quoteLines[0] || '', 0, top, g.quoteInlineWidth, layout.fontPx, 0,
         g.lineHeightPx, { bold: true });
-      line(g.creditText, left + g.quoteInlineWidth + g.creditGap, top,
-        g.creditInlineWidth, g.creditFontPx, 0, g.lineHeightPx, { ink: '#6a5559' });
+      if (g.creditText && g.inlineCredit) {
+        line(g.creditText, g.quoteInlineWidth + g.creditGap, top,
+          g.creditInlineWidth, g.creditFontPx, 0, g.lineHeightPx, { ink: '#6a5559' });
+      }
       return out;
     }
 
@@ -418,7 +422,7 @@ function smartCardLines(key, data, frame, cardLayout) {
     const creditHeight = creditLines.length * g.creditLineHeightPx;
     const blockHeight = quoteHeight + (creditHeight ? g.ruleGap * 2 + creditHeight : 0);
     const boxHeight = (Number(layout.contentBox?.height) || Number(frame.height) || 0) - subtitleOffsetPx;
-    let y = subtitleOffsetPx + Math.max(0, (boxHeight - blockHeight) / 2);
+    let y = subtitleOffsetPx + (Number(g.firstLineTopPx) || Math.max(0, (boxHeight - blockHeight) / 2));
 
     quoteLines.forEach((text) => {
       line(text, g.sideInset, y, g.measureWidth, layout.fontPx, 1, g.lineHeightPx, { bold: true });

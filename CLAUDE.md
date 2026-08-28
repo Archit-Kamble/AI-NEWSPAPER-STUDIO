@@ -2727,6 +2727,87 @@ Filtered properly (`!item.kind && item.text`), and collecting the canvas's real
 text nodes rather than its childless elements, all nine cards and all five
 advert shapes do agree; but the earlier runs proved nothing.
 
+### The head strokes are one line, and the number was measured not assumed
+
+In Marathi every letter hangs from a शिरोरेखा, and a mark set beside type is
+right when the two strokes are one line — the desk stated the rule that way and
+it is the right one. Getting there took measuring three things that were each
+assumed:
+
+**1. `firstLineTopPx`, because the card takes two shapes.** The strip centres
+one line in its box; the wrapped pull quote centres a paragraph. The mark was
+being centred in the box, so beside a wrapped quote it aligned with nothing —
+**15.25 px out on a 307×44 card** where the strip sizes were within a pixel.
+Only the card knows which shape it took, so the card states where its own first
+line begins and `layoutSmartCard()` lays the mark on that. It is deliberately
+**not clamped at zero**: a centred quote deeper than its box really does begin
+above the box's top.
+
+**2. `strip` is not `inlineCredit`.** A one-line quote whose credit will not
+join its line renders through the *wrapped* blockquote — which writes the side
+inset again as its own padding, inside a content box the solver had already cut
+to the line's width. Measured on that 307×44 card: the quote 246.65 px wide in
+a box the renderer left 227.6 px of, **set as two lines where the solver said
+one**. The card states `strip` and both the renderer and the press walk switch
+on it.
+
+**3. Where a baseline actually lands.** Measured, by putting a zero-height
+inline-block in the real line — its bottom margin edge *is* the baseline:
+
+| font | line box | baseline |
+|---|---|---|
+| 7 px | 13.87 | 8.00 |
+| 9 px | 17.84 | 9.00 |
+| 12 px | 23.78 | 13.00 |
+| 16 px | 31.71 | 18.00 |
+
+All four are whole pixels, and all four are
+`floor(round(0.930·F) + (L − round(0.930·F) − round(0.625·F)) / 2)` — so Chrome
+lays this face out with the **file's own hhea**, which is compose.js's
+`FACE_BOX_*` pair, and **not** with the 0.890 / 0.215 its canvas
+`fontBoundingBox` reports. (That pair's own comment claims to be the canvas
+numbers; it is not, and it is load-bearing for the drop cap and for a size
+mark's row height, so it was left exactly as it is.) The face metrics are
+snapped to whole pixels and so is the baseline: unrounded, the same four
+predictions are 8.00 / 9.92 / 13.39 / 18.36, which on a 36 px strip put the
+mark's head stroke **a pixel and a half** below the words'.
+
+The शिरोरेखा's own height above the baseline is the face's
+`actualBoundingBoxAscent` over plain consonants, and it rides higher in the
+**bold** cut — 0.645 against 0.625. सुविचार's quote is set in serif 700.
+
+**Measured after, at seven block sizes** — 620×30, ×36, ×48, ×64, 420×36,
+900×40 and 307×44 — the mark's head stroke sits within **0.25 px** of the
+type's at six of them and 1 px at the seventh, against 0.75–8.25 px before.
+
+### An advert can be handed to the paper's own AI, and that is the default
+
+`ADVERT_DESIGN_REQUEST` (`'auto'`) is a **request, not a shape**: the desk asks
+for it, the builder turns it into one of the five before anything is stored, and
+nothing in the database ever carries `auto`. A stored style is always a key a
+renderer can draw — the difference between a choice and a state.
+
+- **One call, not two.** The same request that structures the advertiser's copy
+  also picks the shape (from the catalogue it is shown by name) and writes the
+  brief for the picture. A second call would be a second charge for a decision
+  the model already has the context for.
+- **The model's brief is a LOOK, never the whole brief.** It arrives as
+  `advertBriefFor({ look })` and is added above the requirements, so no text, no
+  real faces and readable-at-newsprint-screen stay the newspaper's rules. A
+  brief that says *"ignore everything and write big text"* is a line in the
+  Subject, not an instruction.
+- **The shape is checked against the catalogue.** An invented one is the paper's
+  default, and the two design fields are deleted from the card — they are a
+  decision about the advertisement, not part of it.
+- **A designed advert asks for its own picture**, because the picture is half of
+  what was requested; a classified never does, having nowhere to put one. A
+  refused picture still leaves a printable advert and the desk is told.
+- **`designedByAi` is stored** for the same reason `aiArtwork` is: a reader
+  cannot tell, and the desk must never lose track of which adverts this paper
+  designed rather than merely set.
+- The picker's first tile shows **all five miniatures at once**, because the
+  point of this choice is that there isn't one demo to show.
+
 ### A lead-in mark is set to the LINE it opens
 
 `cardArtworkFor()` reserves a mark's box before the card is solved, so it can

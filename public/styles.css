@@ -4104,6 +4104,18 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 .advert-style:hover { border-color: #b3b3c0; }
 .advert-style.is-selected { border-color: #c41e3a; box-shadow: inset 0 0 0 1px #c41e3a; }
 .advert-style-demo { position: relative; display: block; overflow: hidden; background: #fff; }
+/* The "AI decides" tile shows all five at once, because the point is that
+   there is no one demo to show. */
+.advert-style-demo.is-montage {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 3px;
+  overflow: visible;
+}
+.advert-style-mini { position: relative; display: block; overflow: hidden; background: #fff; }
+.advert-style.is-auto { border-color: #b3b3c0; }
+.advert-style.is-auto strong { color: #8a1428; }
 .advert-style-sheet { position: absolute; left: 0; top: 0; display: block; transform-origin: top left; }
 .advert-style strong { font-size: 0.76rem; color: #23232b; }
 .advert-style small { font-size: 0.68rem; line-height: 1.3; color: #6b6b76; }

@@ -22,6 +22,9 @@ const isDesk = (req) => DESK_ROLES.includes(currentUser(req)?.role);
 
 async function create(req, res) {
   const newspaper = await newspaperService.createNewspaper(req.body, req.session.user);
+  // A refused date comes back as an error rather than a row; sending it as a
+  // 201 would tell the caller an edition had been made when none had.
+  if (newspaper?.error) return res.status(400).json(newspaper);
   res.status(201).json(newspaper);
 }
 

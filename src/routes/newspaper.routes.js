@@ -1,4 +1,5 @@
 const express = require('express');
+const { guardIdParams } = require('../middleware/params');
 const { asyncController, asyncRoute } = require('../middleware/asyncRoute');
 const { publicationUpload } = require('../middleware/upload');
 const { requireDesk } = require('../middleware/auth');
@@ -10,6 +11,12 @@ const newspaperController = asyncController(require('../controllers/newspaper.co
 const pressReadiness = require('../services/pressReadiness.service');
 
 const router = express.Router();
+
+// Any :id / :somethingId this router carries is checked before a handler
+// runs, so a bad address is a 400 and never a database type error
+// surfacing as a 500. Registered with router.param(), not use(): Express
+// populates a route's own params only when that route matches.
+guardIdParams(router);
 
 router.post('/', newspaperController.create);
 // Both must be declared before '/:id', or "start" and "ladder" are read as ids.

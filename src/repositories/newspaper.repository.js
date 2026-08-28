@@ -9,6 +9,72 @@ async function create(newspaper) {
   return rows[0];
 }
 
+// THE EDITION FOR A DATE, asked the same way wherever it is asked.
+//
+// `findByDate` reads it through the pool; `claimDate` has to read it on its
+// own client, inside the transaction holding the date's lock. Two copies of
+// this SELECT would be two answers to "which edition is this date's" the
+// moment either was touched - the duplicated-SQL fault this project already
+// names - so the query is written once and both run it.
+const EDITION_FOR_DATE_SQL = `SELECT n.*,
+          COUNT(DISTINCT s.id) FILTER (
+            WHERE COALESCE(s.headline, '') <> '' OR COALESCE(s.body, '') <> ''
+               OR COALESCE(s.image_url, '') <> ''
+          )::int AS filled_block_count,
+          COUNT(DISTINCT p.id)::int AS page_count
+   FROM newspapers n
+   LEFT JOIN pages p ON p.newspaper_id = n.id
+   LEFT JOIN page_sections s ON s.page_id = p.id
+   WHERE n.publication_date = $1 AND n.parent_edition_id IS NULL
+   GROUP BY n.id
+   ORDER BY filled_block_count DESC, page_count DESC, n.created_at DESC
+   LIMIT 1`;
+
+// CLAIMING A DATE: THE CHECK AND THE CREATE, ON ONE CONNECTION, UNDER A LOCK.
+//
+// `findByDate` then `create` is a check-then-act. Two editors pressing "Start
+// edition" together - or one double-clicking a button that takes a second to
+// answer - both read nothing and both insert, and the newsroom ends up with
+// two papers for one day. This project has already lived through the version
+// of that where the desk could not find the edition holding its work.
+//
+// The lock has to be an ADVISORY one because there is no row to lock when the
+// answer is "nothing exists yet", and it has to be `_xact_` and taken on a
+// dedicated client, because the pool hands out a different connection per
+// query - a session-scoped lock taken here could be released on a connection
+// that never held it, or never released at all. One client, one transaction:
+// lock the date, look, insert if it is genuinely free, commit.
+//
+// `hashtext` maps the date to the bigint the advisory lock space uses. A
+// collision between two different dates would only ever make one wait briefly
+// for the other, which is harmless.
+async function claimDate(newspaper) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [String(newspaper.publicationDate)]);
+
+    const { rows: found } = await client.query(EDITION_FOR_DATE_SQL, [newspaper.publicationDate]);
+    if (found[0]) {
+      await client.query('COMMIT');
+      return { newspaper: found[0], created: false };
+    }
+
+    const { rows } = await client.query(
+      `INSERT INTO newspapers (name, template, publication_date, status, page_width_px, page_height_px, matter_width_px, matter_height_px, color_mode, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+      [newspaper.name, 'front', newspaper.publicationDate, 'draft', 660, 1060, 620, 1020, 'CMYK', newspaper.createdBy],
+    );
+    await client.query('COMMIT');
+    return { newspaper: rows[0], created: true };
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 // Editions newest first, and each one carrying the two numbers the desk judges
 // it by: how many pages it has, and how many of its blocks have copy in them.
 // A list that shows only a name and a status cannot tell a finished edition
@@ -132,22 +198,7 @@ async function clearEpaperRelease(id) {
  * have been filling, not whichever row was inserted first.
  */
 async function findByDate(publicationDate) {
-  const { rows } = await pool.query(
-    `SELECT n.*,
-            COUNT(DISTINCT s.id) FILTER (
-              WHERE COALESCE(s.headline, '') <> '' OR COALESCE(s.body, '') <> ''
-                 OR COALESCE(s.image_url, '') <> ''
-            )::int AS filled_block_count,
-            COUNT(DISTINCT p.id)::int AS page_count
-     FROM newspapers n
-     LEFT JOIN pages p ON p.newspaper_id = n.id
-     LEFT JOIN page_sections s ON s.page_id = p.id
-     WHERE n.publication_date = $1 AND n.parent_edition_id IS NULL
-     GROUP BY n.id
-     ORDER BY filled_block_count DESC, page_count DESC, n.created_at DESC
-     LIMIT 1`,
-    [publicationDate],
-  );
+  const { rows } = await pool.query(EDITION_FOR_DATE_SQL, [publicationDate]);
   return rows[0] || null;
 }
 
@@ -264,4 +315,4 @@ async function setHouseStyle(id, { bodyFamily, displayFamily, columnRules }) {
   return { newspaper: rows[0], restyled };
 }
 
-module.exports = { create, findAll, setHouseStyle, findEpaperReleases, findPublicEpaper, selectPublicEpaper, recordEpaperRelease, clearEpaperRelease, findById, findByDate, findAllByDate, findPrevious, update };
+module.exports = { create, claimDate, findAll, setHouseStyle, findEpaperReleases, findPublicEpaper, selectPublicEpaper, recordEpaperRelease, clearEpaperRelease, findById, findByDate, findAllByDate, findPrevious, update };

@@ -313,3 +313,167 @@ test('signing in issues a new session id, so a planted one cannot inherit a desk
     server.close();
   }
 });
+
+// -------------------------------------------------- what a URL may contain ---
+
+test('an id that cannot name a row is a 400, not a database type error', async () => {
+  const { isRowId } = require('../src/middleware/params');
+  // parseInt('abc') is NaN, and NaN reaches PostgreSQL as the string "NaN":
+  //   error: invalid input syntax for type integer: "NaN"
+  // Swept across every route, that was 888 of 2380 malformed requests
+  // answering 500 - a desk told "something went wrong on the server" for a
+  // stale bookmark or a typed URL.
+  for (const bad of ['abc', '-1', '0', '99999999999999999999', 'null', 'undefined', '1.5', 'NaN', '', '1e3', ' 1']) {
+    assert.equal(isRowId(bad), false, `"${bad}" must not be accepted as a row id`);
+  }
+  for (const good of ['1', '42', '51615', '2147483647']) {
+    assert.equal(isRowId(good), true, `"${good}" is a real row id`);
+  }
+  // parseInt would have taken "1.5" to 1 and served a different row entirely.
+  assert.equal(isRowId('2147483648'), false, 'past int4 no row can exist');
+});
+
+test('every shape of bad id answers 400 over HTTP, and a real one still works', async () => {
+  const { server, port } = listen();
+  const { signIn } = require('./helpers/desk');
+  try {
+    const desk = await signIn(port);
+    for (const bad of ['abc', '99999999999999999999', 'null', 'NaN', '1.5']) {
+      for (const path of [`/api/newspapers/${bad}`, `/api/newspapers/${bad}/pages`, `/epaper/${bad}`]) {
+        const response = await fetch(`http://127.0.0.1:${port}${path}`, { headers: { Cookie: desk.cookie } });
+        assert.equal(response.status, 400, `${path} must be a bad request, not a 500`);
+      }
+    }
+  } finally {
+    server.close();
+  }
+});
+
+test('a publication date that is not a real day is refused, not passed to the database', async () => {
+  const { publicationDateFrom, isCalendarDate } = require('../src/services/publicationDate');
+  // `isoDate` used to be String(value).slice(0, 10) - it TRUNCATED and never
+  // checked, so each of these reached PostgreSQL and answered
+  // `invalid input syntax for type date`, reported to the desk as a 500.
+  for (const bad of ['not-a-date', '0000-00-00', '2099-13-45', '2026-02-30', '2026-2-3', 'yesterday', {}, 42, []]) {
+    assert.equal(publicationDateFrom({ publicationDate: bad }).error, 'INVALID_PUBLICATION_DATE',
+      `${JSON.stringify(bad)} is not a day this paper can be dated`);
+  }
+  // A leap day is real in 2028 and not in 2026 - the shape cannot tell them
+  // apart, which is why the check round-trips through Date.
+  assert.equal(isCalendarDate('2028-02-29'), true);
+  assert.equal(isCalendarDate('2026-02-29'), false);
+  // Nothing supplied means today, which is what starting the day's paper means.
+  assert.match(publicationDateFrom({}).date, /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(publicationDateFrom({ publicationDate: '2099-06-15' }).date, '2099-06-15');
+  assert.equal(publicationDateFrom({ publicationDate: '2099-06-15T10:00:00Z' }).date, '2099-06-15');
+});
+
+test('overlapping "start edition" calls make ONE paper for the date', async () => {
+  const repo = require('../src/repositories/newspaper.repository');
+  const pool = require('../src/config/db');
+  const date = '2099-11-29';
+  try {
+    await pool.query('DELETE FROM newspapers WHERE publication_date = $1', [date]);
+    // Eight callers overlapping. The old shape - findByDate, then create - is
+    // a check-then-act: measured this way it made EIGHT editions for one date,
+    // which is the state this project has already lived through once, where
+    // the desk could not find the edition holding its work.
+    const claims = await Promise.all(Array.from({ length: 8 }, () =>
+      repo.claimDate({ name: 'race', publicationDate: date, createdBy: null })));
+
+    const { rows } = await pool.query(
+      'SELECT count(*)::int AS n FROM newspapers WHERE publication_date = $1 AND parent_edition_id IS NULL',
+      [date],
+    );
+    assert.equal(rows[0].n, 1, 'one paper per publication date, whatever the timing');
+    assert.equal(claims.filter((c) => c.created).length, 1, 'exactly one caller created it');
+    const ids = new Set(claims.map((c) => c.newspaper.id));
+    assert.equal(ids.size, 1, 'and every caller is handed the same edition');
+  } finally {
+    await pool.query('DELETE FROM newspapers WHERE publication_date = $1', [date]).catch(() => {});
+  }
+});
+
+test('starting an edition whose row exists but has no pages builds the ladder into it', async () => {
+  const repo = require('../src/repositories/newspaper.repository');
+  const pageRepo = require('../src/repositories/page.repository');
+  const pool = require('../src/config/db');
+  const { startEdition } = require('../src/services/editionStart.service');
+  const date = '2099-11-28';
+  try {
+    await pool.query('DELETE FROM newspapers WHERE publication_date = $1', [date]);
+    // A row with no pages: an interrupted start, a create through
+    // POST /api/newspapers (which makes the row and no ladder), or a page
+    // delete that took the last one. Verified live on a real date, the desk
+    // was handed `created: false, pageCount: 0` - a paper with no front page
+    // and nothing to write on.
+    const bare = await repo.create({ name: 'bare', publicationDate: date, createdBy: null });
+    assert.equal((await pageRepo.findByNewspaper(bare.id)).length, 0, 'the fixture must start page-less');
+
+    const result = await startEdition({ publicationDate: date, pageCount: 4, fillFeatures: false, carryForward: false });
+
+    assert.equal(result.newspaper.id, bare.id, 'the date keeps its one edition rather than gaining a second');
+    assert.equal(result.created, false, 'no new paper was made');
+    assert.equal(result.repaired, true, 'and the desk is told the existing one was given its pages');
+    assert.equal(result.pageCount, 4);
+    assert.equal((await pageRepo.findByNewspaper(bare.id)).length, 4, 'the ladder is really in the database');
+    assert.deepEqual(result.ladder.map((r) => r.pageNumber), [1, 2, 3, 4]);
+
+    // And an edition that already has pages is still opened untouched.
+    const again = await startEdition({ publicationDate: date, pageCount: 4, fillFeatures: false, carryForward: false });
+    assert.equal(again.created, false);
+    assert.equal(again.existing, true, 'a real edition is opened, not rebuilt');
+    assert.equal((await pageRepo.findByNewspaper(bare.id)).length, 4, 'and it does not gain more pages');
+  } finally {
+    await pool.query('DELETE FROM newspapers WHERE publication_date = $1', [date]).catch(() => {});
+  }
+});
+
+test('a section KEY still addresses a block, despite the route calling it :sectionId', async () => {
+  const { ID_PARAMS } = require('../src/middleware/params');
+  // The routes spell it `:sectionId` and it carries a KEY - `update`, `remove`
+  // and the picture routes hand it straight to
+  // `saveSection(pageId, sectionKey, ...)`. Guarding it as a number rejected
+  // every ordinary block save with a 400: `PUT /pages/94263/sections/
+  // feature-lead` is exactly what the editor sends, and 47 tests went red.
+  assert.ok(!ID_PARAMS.includes('sectionId'),
+    'sectionId carries a section key, so it must never be guarded as a row id');
+  for (const name of ['id', 'pageId', 'newspaperId', 'imageId', 'guideId']) {
+    assert.ok(ID_PARAMS.includes(name), `${name} is parsed with parseInt and must be guarded`);
+  }
+});
+
+test('writing a block by its key works end to end, and survives a resize', async () => {
+  const pool = require('../src/config/db');
+  const { server, port } = listen();
+  const { signIn } = require('./helpers/desk');
+  const date = '2099-11-27';
+  let editionId = null;
+  try {
+    await pool.query('DELETE FROM newspapers WHERE publication_date = $1', [date]);
+    const desk = await signIn(port);
+    const started = await desk.json('/api/newspapers/start', {
+      method: 'POST',
+      body: JSON.stringify({ publicationDate: date, pageCount: 4, fillFeatures: false, carryForward: false }),
+    });
+    editionId = started.newspaper.id;
+
+    const pages = await desk.json(`/api/newspapers/${editionId}/pages`);
+    const features = pages.find((page) => page.template_key === 'features');
+    const key = features.sections[0].section_key;
+    assert.match(key, /[a-z]/, 'a block is addressed by a key, not a number');
+
+    const saved = await desk(`/api/pages/${features.id}/sections/${key}`, {
+      method: 'PUT',
+      body: JSON.stringify({ headline: 'जतन केलेले पान', body: 'ही सामग्री टिकते.', status: 'draft' }),
+    });
+    assert.equal(saved.status, 200, 'a key in the :sectionId position is an ordinary save');
+
+    const after = await desk.json(`/api/newspapers/${editionId}/pages`);
+    const block = after.flatMap((p) => p.sections).find((s) => s.section_key === key);
+    assert.equal(block.headline, 'जतन केलेले पान');
+  } finally {
+    if (editionId) await pool.query('DELETE FROM newspapers WHERE id = $1', [editionId]).catch(() => {});
+    server.close();
+  }
+});

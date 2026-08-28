@@ -4,6 +4,50 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## 0. Forward-looking audit: what will break (2026-08-28)
+
+Not "what is broken" but "what will break". Held by `tests/hardening.test.js`
+(21 cases). Detail in CLAUDE.md, "What a bad request may not do".
+
+**Fuzzed and sound, recorded so it is not re-done.** `layoutSmartCard()` over
+2178 card/data/frame combinations and `composeSection()` over 2392 block
+compositions — degenerate frames, null and enormous and NaN data, every body
+shape from empty to 4000 aksharas to RTL and zero-width joiners, every
+presentational column at its extremes. Zero throws, zero NaN, zero Infinity.
+The compositor is not where the future exceptions live.
+
+**The API was.** Swept with ordinary bad input, **888 of 2380 requests answered
+500** — every one an unhandled exception reported to the desk as "something
+went wrong on the server". One cause in four shapes: an unvalidated id reaching
+PostgreSQL as `NaN`, as an out-of-range int4, as the string `"null"`, or as
+`1.5` which `parseInt` truncates to 1 and **serves the wrong row**. Closed with
+one `router.param()` guard. The remaining 80 were an unvalidated publication
+date (`isoDate` truncated to 10 characters and never checked, so `2099-13-45`
+and `{}` went straight to the database). **888 → 80 → 0.**
+
+**One paper per date was enforced only by a read-then-write.** Measured
+directly, eight overlapping callers produced **eight editions for one date**;
+`claimDate`, under a transaction-scoped advisory lock, produces one. Not a
+unique index, because `POST /api/newspapers` is a separate non-idempotent
+create that district editions rely on.
+
+**An edition row with no pages was handed to the desk as a paper** — verified
+live as `created: false, pageCount: 0`. `startEdition` now builds the ladder
+into the existing row and reports `repaired: true`.
+
+Also: an index on `newspapers.publication_date` (five queries use it, two every
+morning); 679 provably empty test-leaked editions removed after confirming
+nothing referenced them (846 → 167 parent editions), every edition holding work
+untouched.
+
+**A bug this pass introduced and caught:** guarding `:sectionId` as a number.
+The routes spell it that way and it carries a section KEY — 47 tests went red
+at once. Now excluded, with the reason recorded at the constant and a test.
+
+**Verified:** `npm test` 1009 → **1014**, API fuzz 0 × 5xx, browser nets green.
+
+---
+
 ## 1. Production hardening audit (2026-08-28)
 
 A sweep for anything that could bite in production, each item verified against

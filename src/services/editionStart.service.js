@@ -26,22 +26,11 @@
 
 const pool = require('../config/db');
 const newspaperRepository = require('../repositories/newspaper.repository');
+const { publicationDateFrom, todayWhereWePrint } = require('./publicationDate');
 const pageRepository = require('../repositories/page.repository');
 const editionFeatures = require('./editionFeatures.service');
 const { ladderFor, isSupportedEditionPageCount } = require('../layout/ladder');
 const { identity } = require('../layout/identity');
-
-/** Today, in the timezone the paper is printed in - never the server's, never UTC. */
-function todayWhereWePrint() {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: identity.timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
-}
-
-const isoDate = (value) => String(value || '').slice(0, 10);
 
 /**
  * Everything that repeats from one edition to the next, copied into the new one.
@@ -98,32 +87,79 @@ async function carryForwardAdverts(fromNewspaperId, toNewspaperId) {
  * which is what makes pressing the button twice harmless.
  */
 async function startEdition(body = {}, sessionUser = null) {
-  const date = isoDate(body.publicationDate || body.date) || todayWhereWePrint();
+  // The date is checked before anything else, for the same reason the page
+  // count is: it decides which edition this is, and an unreal one used to
+  // reach PostgreSQL and come back to the desk as a 500.
+  const { date, error: dateError } = publicationDateFrom(body);
+  if (dateError) return { error: dateError, created: false };
+
   const pageCount = Number(body.pageCount || 4);
   if (!isSupportedEditionPageCount(pageCount)) return { error: 'INVALID_EDITION_PAGE_COUNT', created: false };
   const carryForward = body.carryForward !== false;
   const fillFeatures = body.fillFeatures !== false;
 
-  const existing = await newspaperRepository.findByDate(date);
-  if (existing) {
-    const pages = await pageRepository.findByNewspaper(existing.id);
-
-    return {
-      newspaper: existing,
-      created: false,
-      existing: true,
-      pageCount: pages.length,
-      ladder: pages.map((page) => ({ pageNumber: page.page_number, templateKey: page.template_key })),
-      carriedAdverts: 0,
-      features: null,
-    };
-  }
-
-  const newspaper = await newspaperRepository.create({
+  // ONE PAPER PER DATE IS A PROMISE, AND A READ FOLLOWED BY A WRITE CANNOT
+  // KEEP IT.
+  //
+  // This is a check-then-act: `findByDate` says nothing exists, and only then
+  // does `create` run. Two editors pressing "Start edition" in the same moment
+  // - or one editor double-clicking a button that takes a second to answer -
+  // both read nothing and both create one. The database then holds two papers
+  // for one day and, as this project has already lived through, the desk
+  // cannot find the one holding its work. Measured directly, eight overlapping
+  // callers made EIGHT editions for one date; claimDate makes one. (Ten
+  // concurrent HTTP requests did not trigger it - request setup staggers them
+  // by more than the window. The window is narrow, not absent.)
+  //
+  // A transaction alone does not fix it: there is no row to lock when the
+  // answer is "nothing exists". An advisory lock on the DATE gives the two
+  // callers something to queue on, so the second one arrives after the first
+  // has committed and takes the `existing` branch, which is the branch that
+  // makes pressing the button twice harmless in the first place.
+  //
+  // Deliberately not a unique index: `POST /api/newspapers` is a separate,
+  // non-idempotent create that this newsroom's tests and district editions
+  // rely on, and a constraint would change what that route does. The lock
+  // guards the promise the START route makes without altering anyone else's.
+  const claim = await newspaperRepository.claimDate({
     name: body.name || identity.title,
     publicationDate: date,
     createdBy: sessionUser?.id || null,
   });
+  const existing = claim.created ? null : claim.newspaper;
+
+  if (existing) {
+    const pages = await pageRepository.findByNewspaper(existing.id);
+
+    // AN EDITION WITH NO PAGES IS NOT AN EDITION, AND OPENING ONE IS WORSE
+    // THAN MAKING ONE.
+    //
+    // "Open the one that exists" is right when there is something to open.
+    // A row can exist with no pages at all - an interrupted start, a create
+    // through `POST /api/newspapers` (which makes the row and no ladder), a
+    // page delete that took the last one - and the desk was then handed a
+    // paper with no front page and nothing to write on. Verified live: on a
+    // date carrying such a row, pressing Start answered
+    // `created: false, pageCount: 0, ladder: 0 pages`.
+    //
+    // Falling through builds the ladder into the row that is already there,
+    // so the date keeps its one edition and the desk gets a paper. It is the
+    // repair the button already implies: a desk pressing "Start edition" is
+    // asking for an edition it can work on.
+    if (pages.length > 0) {
+      return {
+        newspaper: existing,
+        created: false,
+        existing: true,
+        pageCount: pages.length,
+        ladder: pages.map((page) => ({ pageNumber: page.page_number, templateKey: page.template_key })),
+        carriedAdverts: 0,
+        features: null,
+      };
+    }
+  }
+
+  const newspaper = claim.newspaper;
 
   // The ladder, not four front pages.
   const ladder = ladderFor(pageCount);
@@ -149,7 +185,18 @@ async function startEdition(body = {}, sessionUser = null) {
     }
   }
 
-  return { newspaper, created: true, pageCount, ladder, carriedAdverts, features };
+  return {
+    newspaper,
+    created: claim.created,
+    // A row that already existed but had no pages has been given them. The
+    // desk is told which happened rather than being told a new paper was
+    // made when the date's own edition was repaired.
+    repaired: !claim.created,
+    pageCount,
+    ladder,
+    carriedAdverts,
+    features,
+  };
 }
 
 module.exports = { startEdition, carryForwardAdverts, todayWhereWePrint };

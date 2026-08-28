@@ -14,6 +14,7 @@ const { deskWrites, requireAdmin, requireDesk, requireSignIn } = require('./src/
 const { syncTemplates } = require('./src/layout/syncTemplates');
 const { upload, verifyUploadedImages } = require('./src/middleware/upload');
 const { PostgresSessionStore } = require('./src/middleware/sessionStore');
+const { guardIdParams } = require('./src/middleware/params');
 const newsRoutes = require('./src/routes/news.routes');
 const newspaperRoutes = require('./src/routes/newspaper.routes');
 const pageRoutes = require('./src/routes/page.routes');
@@ -54,6 +55,11 @@ function createApp(options = {}) {
   // ordinary hygiene for an application that holds a newsroom's session -
   // it is never framed, and it does not leak the edition being worked on into
   // a third party's referer log.
+  // The e-paper routes below hang off the app rather than a router, so the
+  // id guard is registered here as well. Without it `/epaper/abc` reaches the
+  // repository as NaN and answers 500 instead of "that is not an edition".
+  guardIdParams(app);
+
   app.use((req, res, next) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "SAMEORIGIN");

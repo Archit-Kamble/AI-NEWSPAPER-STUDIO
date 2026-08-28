@@ -1,4 +1,5 @@
 const newspaperRepository = require('../repositories/newspaper.repository');
+const { publicationDateFrom } = require('./publicationDate');
 const publicationRepository = require('../repositories/publication.repository');
 const { identity } = require('../layout/identity');
 const { TYPEFACES } = require('../../public/editor/layout/typefaces');
@@ -12,33 +13,30 @@ function withPublicationFiles(newspaper, files) {
   }, { ...newspaper });
 }
 
-// Today, where the paper is printed.
-//
-// `new Date().toISOString()` is UTC, and India is five and a half hours ahead
-// of it: between midnight and half past five every morning - which is exactly
-// when a daily paper is being made up - UTC is still on yesterday. An edition
-// created at 3 a.m. for that morning's paper was being dated the day before.
-//
-// The date on page one is the edition's identity and the key its archive is
-// indexed by, so it is worked out in the paper's own timezone.
-function todayWhereWePrint() {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: identity.timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
-}
+// The date this edition carries is worked out and checked in one place, by
+// `src/services/publicationDate.js`. This service used to keep its own copy of
+// `todayWhereWePrint()` and `editionStart.service.js` kept a second - the same
+// function twice, both of them there because `new Date().toISOString()` is UTC
+// and India is five and a half hours ahead, so between midnight and half past
+// five (exactly when a daily paper is made up) UTC is still on yesterday.
+// One copy now, beside the validation that belongs with it.
 
 async function createNewspaper(body, sessionUser) {
   // `publicationDate` is what every caller in this application sends - the
   // workspace, the tests and the API docs. This used to read only `body.date`,
   // so the date the caller asked for was silently dropped and every edition was
   // dated today. Both spellings are accepted now; neither is ignored.
-  const requested = body.publicationDate || body.date;
+  //
+  // The date is CHECKED, not merely read. It used to be passed through
+  // untouched, so "2099-13-45" or an object reached PostgreSQL and answered
+  // `invalid input syntax for type date` - reported to the desk as a 500 for
+  // a date it had typed.
+  const { date, error } = publicationDateFrom(body);
+  if (error) return { error };
+
   return newspaperRepository.create({
     name: body.name || 'साहस',
-    publicationDate: requested || todayWhereWePrint(),
+    publicationDate: date,
     createdBy: sessionUser?.id || null,
   });
 }

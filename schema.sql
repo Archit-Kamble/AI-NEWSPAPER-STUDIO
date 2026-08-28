@@ -804,3 +804,15 @@ ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS subheading_locked BOOLEAN NOT
 ALTER TABLE page_sections ALTER COLUMN text_align       TYPE VARCHAR(16);
 ALTER TABLE page_sections ALTER COLUMN headline_align   TYPE VARCHAR(16);
 ALTER TABLE page_sections ALTER COLUMN subheading_align TYPE VARCHAR(16);
+
+-- THE ARCHIVE IS INDEXED BY DATE, SO THE DATABASE SHOULD BE TOO.
+--
+-- Five queries filter or order on `publication_date`, and two of them run
+-- every time a day's paper is started: the idempotent "is there already an
+-- edition for this date" lookup, and "which edition came before this one"
+-- (which carries the booked adverts forward). At a few hundred rows a
+-- sequential scan costs nothing; a paper that prints daily for ten years,
+-- with district editions beside each one, is tens of thousands of rows
+-- scanned twice every morning.
+CREATE INDEX IF NOT EXISTS newspapers_publication_date_idx
+  ON newspapers (publication_date DESC);

@@ -3032,7 +3032,16 @@ ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS show_dateline BOOLEAN NOT NUL
 ALTER TABLE newspapers    ADD COLUMN IF NOT EXISTS body_family VARCHAR(40);
 ALTER TABLE newspapers    ADD COLUMN IF NOT EXISTS display_family VARCHAR(40);
 ALTER TABLE newspapers    ADD COLUMN IF NOT EXISTS column_rules BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- The archive is indexed by date, so the database should be too: five queries
+-- filter or order on this column and two of them run every morning.
+CREATE INDEX IF NOT EXISTS newspapers_publication_date_idx ON newspapers (publication_date DESC);
 ```
+
+**The session table is deliberately NOT in this list.** `user_sessions` is
+created in code (`src/middleware/sessionStore.js`), because `schema.sql` is
+never run at boot and a session table that has to be applied by hand is a
+server that refuses every login on a fresh deploy until somebody notices.
 
 ### A device must be removable, and the way out lives beside the way in
 
@@ -3590,6 +3599,105 @@ timeout. The e-paper capture token is 256 bits, single-use and expiring. No
 secret is reachable over HTTP, and only variable *names* ever appear in logs or
 in desk-facing text. `SESSION_SECRET` is already refused at boot when
 `NODE_ENV=production`.
+
+## What a bad request may not do
+
+A second audit, forward-looking: not "what is broken" but "what will break".
+Two engines were fuzzed and held up; the API did not. `tests/hardening.test.js`
+holds all of it.
+
+### The engines were fuzzed and are sound
+
+Worth recording so nobody re-does it. `layoutSmartCard()` over **2178**
+combinations — every card, against frames of 0×0, 1×1, 2000×2000 and negative
+sizes, with null/empty/enormous/NaN data — and `composeSection()` over **2392**
+block compositions, every body shape (empty, 4000 aksharas, no spaces, Latin,
+emoji, zero-width joiners, RTL, control characters) against every
+presentational column at its extremes. **Zero throws, zero NaN, zero Infinity,
+and every `line.at` a real source offset.** The compositor is not where the
+future exceptions are.
+
+### An id in a URL is checked once, at the door
+
+Controllers reach a row with `parseInt(req.params.id, 10)`. On anything that is
+not a number that is `NaN`, and `NaN` reaches PostgreSQL as the literal string
+`"NaN"`:
+
+```
+error: invalid input syntax for type integer: "NaN"
+```
+
+Swept across every route with ordinary bad ids — a stale bookmark, a truncated
+link, a typed URL — **888 of 2380 requests answered 500**. Four shapes did it
+and they are one fault: `abc` (NaN), `99999999999999999999` (out of range for
+int4), the strings `"null"`/`"undefined"` (a client's own bug arriving as text),
+and `1.5`, which `parseInt` silently truncates to 1 and **serves the wrong row**.
+
+`guardIdParams(router)` in `src/middleware/params.js` is the one check, applied
+at the router with `router.param()` — **not `use()`**, because Express
+populates a route's own `req.params` only when that route matches, so `use`
+sees the mount path's parameters and not the route's.
+
+**`sectionId` is deliberately NOT guarded, and the name is why it nearly was.**
+The routes spell it `:sectionId` and it carries a section **KEY**: `update`,
+`remove` and the picture routes hand it straight to
+`saveSection(pageId, sectionKey, …)`, and `sectionImage.service.js` spells its
+own signature `move(pageId, sectionKey, imageId, body)`. Guarding it as a number
+rejected every ordinary block save with a 400 — `PUT /pages/94263/sections/
+feature-lead` is exactly what the editor sends — and took **47 tests red** in
+one go. A key is a string in a VARCHAR column, so a bad one is a lookup that
+misses and answers 404, never a type error.
+
+### A publication date is checked, not truncated
+
+`isoDate` was `String(value || '').slice(0, 10)`. It truncates and never
+validates, so `"not-a-date"`, `"2099-13-45"`, `"2026-02-30"` and `{}` (as
+`"[object Ob"`) all reached PostgreSQL — the last 80 of those 888. The check
+round-trips through `Date` and compares, because the *shape* can be right while
+the day does not exist: `2028-02-29` is real and `2026-02-29` is not.
+
+Rejecting is right rather than falling back to today. A desk that asked for a
+particular day and silently got a different one would find the edition filed
+under a date nobody chose, and the archive is indexed by date.
+`src/services/publicationDate.js` is the one place, and it absorbed the
+`todayWhereWePrint()` that had been copied into two services.
+
+### One paper per date needs a lock, not a look
+
+`startEdition` read `findByDate` and then `create`. That is a check-then-act:
+both callers read nothing and both insert. Measured directly — eight
+overlapping callers — the old shape made **eight editions for one date**;
+`claimDate` makes one. (Ten *HTTP* requests did not trigger it: request setup
+staggers them by more than the window. The window is narrow, not absent.)
+
+`newspaperRepository.claimDate()` takes a **transaction-scoped advisory lock on
+the date** on one dedicated client, then looks, then inserts. It has to be
+advisory because there is no row to lock when the answer is "nothing exists",
+and it has to be one client because the pool hands out a different connection
+per query. Deliberately **not** a unique index: `POST /api/newspapers` is a
+separate non-idempotent create that district editions and the tests rely on.
+
+### An edition with no pages is not an edition
+
+"Open the one that exists" is right when there is something to open. A row can
+exist with no pages at all — an interrupted start, a create through
+`POST /api/newspapers` (which makes the row and no ladder), a page delete that
+took the last one — and the desk was handed a paper with no front page.
+Verified live: `created: false, pageCount: 0, ladder: 0 pages`.
+
+`startEdition` now builds the ladder into the row that is already there and
+reports `repaired: true`, so the date keeps its one edition and the desk is
+told which of the two things happened rather than being told a new paper was
+made.
+
+### The archive is indexed by date, so the database is too
+
+`newspapers_publication_date_idx`. Five queries filter or order on
+`publication_date` and two run every morning: the idempotent "is there already
+an edition for this date", and "which edition came before this one" (which
+carries the booked adverts forward). At a few hundred rows a sequential scan
+costs nothing; ten years of daily editions with district editions beside them
+is tens of thousands of rows scanned twice a day.
 
 ## Page model
 

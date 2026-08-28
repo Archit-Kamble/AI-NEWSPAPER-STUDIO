@@ -280,14 +280,20 @@ export async function renderEditions(host, { onOpen }) {
   const refreshCreator = async () => {
     const selectedDate = creatorDate.value || today;
     const existing = editionForDate(list, selectedDate);
-    const locked = Boolean(existing);
-    for (const control of [creatorName, creatorPages, creatorCarry, creatorFeatures]) control.disabled = locked;
-    if (existing) creatorPages.value = String(existing.page_count || defaultPages);
-    creatorSubmit.textContent = existing ? 'Open Existing Edition' : 'Create Edition';
-    creatorExisting.classList.toggle('has-existing-edition', locked);
-    creatorExisting.textContent = existing
-      ? `${selectedDate} already has edition ${existing.id} with ${existing.page_count || 0} pages. It will be opened without changing its blocks.`
-      : `${selectedDate} is available for a new edition.`;
+    // Three states, not two: a free date, a date carrying a made-up edition,
+    // and a date carrying a row with no pages at all. The third is opened as a
+    // paper with no front page unless the ladder is built into it, so it keeps
+    // its page controls live and the button says what it is about to do.
+    const madeUp = Boolean(existing) && Number(existing.page_count) > 0;
+    for (const control of [creatorName, creatorPages, creatorCarry, creatorFeatures]) control.disabled = madeUp;
+    if (madeUp) creatorPages.value = String(existing.page_count || defaultPages);
+    creatorSubmit.textContent = madeUp ? 'Open Existing Edition' : (existing ? 'Build Its Pages' : 'Create Edition');
+    creatorExisting.classList.toggle('has-existing-edition', Boolean(existing));
+    creatorExisting.textContent = madeUp
+      ? `${selectedDate} already has edition ${existing.id} with ${existing.page_count} pages. It will be opened without changing its blocks.`
+      : existing
+        ? `${selectedDate} has edition ${existing.id}, but it carries no pages. Its page ladder will be built into that same edition.`
+        : `${selectedDate} is available for a new edition.`;
 
     const request = ++ladderRequest;
     const rungs = await fetch(`/api/newspapers/ladder?pages=${Number(creatorPages.value) || defaultPages}`)
@@ -313,7 +319,12 @@ export async function renderEditions(host, { onOpen }) {
     event.preventDefault();
     const selectedDate = creatorDate.value || today;
     const existing = editionForDate(list, selectedDate);
-    if (existing) {
+    // An edition with no pages is not an edition - an interrupted start, a
+    // create through POST /api/newspapers, or a page delete that took the last
+    // one all leave a row the desk would open as a paper with no front page.
+    // `startEdition` builds the ladder into that row and reports `repaired`, so
+    // a page-less date goes through the server rather than being opened here.
+    if (existing && Number(existing.page_count) > 0) {
       onOpen(Number(existing.id), { created: false, existing: true, newspaper: existing });
       return;
     }

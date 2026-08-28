@@ -39,6 +39,9 @@ import { measureWidth as hmtxWidth, minLineHeightFor } from '../compose/font-met
 // The three numbers a drawn mark has to be aligned by, from the one place the
 // compositor already states them - never restated here.
 import { FACE_BOX_ASCENT_EM, FACE_BOX_DESCENT_EM, SHIROREKHA_EM } from '../compose/compose.js';
+// The shapes a display advertisement comes in. One catalogue, read by this
+// solver, by the renderer, by the press walk and by the generate panel.
+import { advertStyle, advertBlockSize } from './advert-styles.js';
 import { shapeWidthPx, isShaperReady } from '../compose/shaper.js';
 import { breakPieces, trimEndClusters } from '../compose/graphemes.js';
 // The paper's own inks. A chart may be printed in any of them - see chartInk().
@@ -175,18 +178,30 @@ const CARD_ARTWORK = Object.freeze({
   // for. The mark therefore sets at the head of the line and the quote and its
   // credit run on after it - mark, thought, name, one rule of type across the
   // column, which is how a printed thought-for-the-day is set.
+  // THE MARK IS THE WORD, AND NOTHING ELSE.
+  //
+  // SuvicharwithoutBG.png carried a lotus above the letters on the left, a
+  // rising sun above them on the right, and the word beneath both - so a mark
+  // drawn at the line's own height spent three-quarters of that height on
+  // ornament and set the WORD at a fraction of the type beside it. The desk:
+  // "remove suvichar word's upper and lower style in image, only word is
+  // enough". Both are separate blobs of ink in the file, so this is not a
+  // crop but a component split: the word's own connected mass (194 743 px of
+  // the file's ink) is kept and everything not touching it is dropped.
+  // suvichar-word.png is that mass, trimmed to itself - 1239x504 where the
+  // ornamented original was 1300x664, so at one drawn height the letters are
+  // a quarter larger.
+  //
   // THE MARK'S OWN SHIROREKHA, MEASURED IN THE FILE.
   //
-  // Centring the mark's BOX on the line's box is not alignment: this wordmark
-  // is a drawn, ornamented thing with a lotus above the letters and a flourish
-  // below, so its word sits low in its own rectangle and the desk read it as
-  // still out of line ("suvichar word/image is in style so it is still not
-  // align with next words"). An alpha scan of the file finds the head stroke
-  // as the densest band of ink - rows 272..314 of 664, 1208 pixels across at
-  // its peak against ~500 for the letters - and its top edge is at 0.4096 of
-  // the image's height. Laid on the TYPE's own head stroke the mark reads as
-  // the first word of the line, which is what a lead-in mark is.
-  suvichar: { file: 'assets/smart-cards/SuvicharwithoutBG.png', aspect: 1300 / 664, placement: 'inline', heightShare: 0.52, widthShare: 0.16, headStrokeAt: 0.4096 },
+  // Centring the mark's BOX on the line's box is not alignment - a drawn
+  // wordmark's letters sit wherever the artist put them inside its rectangle.
+  // An alpha scan finds the head stroke as the densest band of ink (rows
+  // 131..173 of 504, 1085 px across at its peak against ~500 for the letters),
+  // so its top edge is at 0.2599 of the image's height. Laid on the TYPE's own
+  // head stroke the mark reads as the first word of the line, which is what a
+  // lead-in mark is.
+  suvichar: { file: 'assets/smart-cards/suvichar-word.png', aspect: 1239 / 504, placement: 'inline', heightShare: 0.52, widthShare: 0.16, headStrokeAt: 0.2599 },
   //                          ^ a LEAD-IN mark, sized against the line of type
   //                          it opens rather than against the strip: at 0.74
   //                          it stood half again as tall as the words and read
@@ -2216,6 +2231,20 @@ function layoutTender(data, frame) {
  * number is a real advert and must set cleanly.
  */
 const ADVERT_IMAGE_SHARE = 0.42;
+// A greeting card's medallion, and a strip's square. Shares of the panel, so
+// they hold whatever block the page gives the advert.
+const ADVERT_MEDALLION_SHARE = 0.30;
+const ADVERT_SIDE_SHARE = 0.32;
+// A POSTER IS A PICTURE WITH WORDS ON IT, NOT WORDS WITH A PICTURE BEHIND.
+// Given the whole box to set in, the type filled it and the reversed panel
+// covered all but a strip of the photograph - which is the one thing a desk
+// chooses this shape for. Half the panel is the picture's, and the words are
+// solved against the rest.
+const ADVERT_POSTER_TYPE_SHARE = 0.52;
+// The चौकट's own rule, inside the card's ring, and the air the type keeps off
+// it - the same argument cardRuleFor() makes one level out.
+const ADVERT_FRAME_PX = 1.2;
+const ADVERT_FRAME_GAP_PX = 3;
 
 function layoutAdvert(data, frame) {
   const headlineText = String(data?.headline || '').trim();
@@ -2223,13 +2252,70 @@ function layoutAdvert(data, frame) {
   const lines = Array.isArray(data?.lines) ? data.lines.filter(Boolean).slice(0, 8) : [];
   if (!headlineText && !advertiserText && !lines.length) return empty('advert');
 
-  const imageUrl = String(data?.imageUrl || '').trim();
-  const inset = Math.max(3, frame.innerWidth * 0.035);
-  const measureWidth = Math.max(1, frame.innerWidth - inset * 2);
-  // The picture's own share of the panel, reserved before the type is solved
-  // so the words are never measured against room the artwork is holding.
-  const imageHeight = imageUrl ? Math.round(frame.innerHeight * ADVERT_IMAGE_SHARE) : 0;
-  const typeHeight = Math.max(0, frame.innerHeight - imageHeight);
+  // THE SHAPE IS A CHOICE, AND IT IS ONE ROW OF A CATALOGUE.
+  //
+  // A trader's panel, a शुभेच्छा चौकट, a photo poster, a strip and a small
+  // classified are five printed objects; they are NOT five solvers. The type
+  // bands below are solved once and this decides where the artwork goes, how
+  // the bands are aligned, what the panel is ruled with and whether the type
+  // is reversed out of ink.
+  const style = advertStyle(data?.style);
+  const supplied = String(data?.imageUrl || '').trim();
+  const imageUrl = style.art === 'none' ? '' : supplied;
+
+  // An inner rule is INK, and type may not be set under it - the same argument
+  // cardRuleFor() makes for the card's own ring one level out.
+  const frameInk = style.frame === 'double' ? ADVERT_FRAME_PX : 0;
+  const frameGap = style.frame === 'double' ? ADVERT_FRAME_GAP_PX : 0;
+  const framePad = frameInk + frameGap;
+
+  const boxX = framePad;
+  const boxY = framePad;
+  const boxWidth = Math.max(1, frame.innerWidth - framePad * 2);
+  const boxHeight = Math.max(1, frame.innerHeight - framePad * 2);
+
+  // Where the artwork sits, and what is left for the words. Reserved BEFORE
+  // the type is solved, so the words are never measured against room the
+  // picture is holding.
+  let art = null;
+  let typeBox = { x: boxX, y: boxY, width: boxWidth, height: boxHeight };
+  if (imageUrl && style.art === 'band') {
+    const height = Math.round(boxHeight * ADVERT_IMAGE_SHARE);
+    art = { x: boxX, y: boxY, width: boxWidth, height };
+    typeBox = { x: boxX, y: boxY + height, width: boxWidth, height: Math.max(1, boxHeight - height) };
+  } else if (imageUrl && style.art === 'medallion') {
+    const side = Math.min(boxHeight * ADVERT_MEDALLION_SHARE, boxWidth * 0.44);
+    art = { x: boxX + (boxWidth - side) / 2, y: boxY, width: side, height: side };
+    typeBox = { x: boxX, y: boxY + side, width: boxWidth, height: Math.max(1, boxHeight - side) };
+  } else if (imageUrl && style.art === 'side') {
+    const side = Math.min(boxHeight, boxWidth * ADVERT_SIDE_SHARE);
+    art = { x: boxX, y: boxY + (boxHeight - side) / 2, width: side, height: side };
+    typeBox = { x: boxX + side, y: boxY, width: Math.max(1, boxWidth - side), height: boxHeight };
+  } else if (imageUrl && style.art === 'full') {
+    // THE PICTURE IS THE ADVERT. The type sits on a solid reversed block over
+    // its foot - never on the photograph itself: a screen behind type is a
+    // tint no newsprint press can be relied on to hold, and white letters on
+    // an unknown photograph are white letters nobody can read.
+    art = { x: 0, y: 0, width: frame.innerWidth, height: frame.innerHeight, bleed: true };
+    typeBox = { x: boxX, y: boxY, width: boxWidth, height: boxHeight };
+  }
+
+  const inset = Math.max(3, typeBox.width * 0.05);
+  const measureWidth = Math.max(1, typeBox.width - inset * 2);
+  // A classified's two rules are ink inside its own box, so the type is solved
+  // against what is left; a poster leaves the picture its half.
+  const ruleRoom = style.frame === 'rule' ? ADVERT_FRAME_PX * 2 + ADVERT_FRAME_GAP_PX * 2 : 0;
+  if (ruleRoom) {
+    typeBox = {
+      x: typeBox.x,
+      y: typeBox.y + ADVERT_FRAME_PX + ADVERT_FRAME_GAP_PX,
+      width: typeBox.width,
+      height: Math.max(1, typeBox.height - ruleRoom),
+    };
+  }
+  const typeHeight = style.art === 'full' && art
+    ? Math.max(0, typeBox.height * ADVERT_POSTER_TYPE_SHARE)
+    : typeBox.height;
 
   const solved = solveFont(typeHeight, (fontPx) => {
     const lineHeightPx = lineHeightFor(fontPx, 'serif', 400);
@@ -2268,7 +2354,9 @@ function layoutAdvert(data, frame) {
     const addressLines = address.lines.map((l) => l.text);
     const footerLines = footer.lines.map((l) => l.text);
 
-    const offerHeight = offerLines.length ? offerLines.length * lineHeightPx + rowGap * 2 : 0;
+    const offerHeight = offerLines.length
+      ? offerLines.length * lineHeightPx + (style.offer === 'plain' ? 0 : rowGap * 2)
+      : 0;
     const height = nameLines.length * nameLineHeightPx
       + (shoutLines.length ? rowGap + shoutLines.length * shoutLineHeightPx : 0)
       + (standLines.length ? standLines.length * standLineHeightPx : 0)
@@ -2288,15 +2376,42 @@ function layoutAdvert(data, frame) {
     };
   }, [24, 20, 18, 16, 14, 12, 11, 10, 9, 8, 7.5, 7, 6.5, 6, MIN_CARD_FONT_PX]);
 
+  // A POSTER'S PANEL IS ONLY AS DEEP AS ITS WORDS.
+  //
+  // Given the whole box it would cover the photograph it is printed over, and
+  // the picture is the reason a desk chose this shape.
+  const panel = style.art === 'full' && art
+    ? (() => {
+      const depth = Math.min(typeBox.height, solved.height + solved.rowGap * 2);
+      return { x: boxX, y: boxY + boxHeight - depth, width: boxWidth, height: depth };
+    })()
+    : null;
+  if (panel) typeBox = { x: panel.x, y: panel.y, width: panel.width, height: panel.height };
+
   return {
     key: 'advert',
     fitState: solved.fitState,
     fontPx: solved.fontPx,
     geometry: {
+      style: style.key,
+      shape: style.shape,
+      align: style.align,
+      frameStyle: style.frame,
+      offerStyle: style.offer,
+      reversed: Boolean(style.reversed && art),
+      frameInk,
+      framePad,
+      frameHairPx: ADVERT_FRAME_PX,
+      panel,
+      art,
+      typeBox,
       inset,
       measureWidth,
       imageUrl,
-      imageHeight,
+      // Kept under their old names: every reader of this geometry - the
+      // renderer, the export walk - already speaks them, and a rename would
+      // buy nothing but risk.
+      imageHeight: art && !art.bleed ? art.height : 0,
       typeHeight,
       lineHeightPx: solved.lineHeightPx,
       shoutFontPx: solved.shoutFontPx,
@@ -2487,8 +2602,14 @@ export function layoutSmartCard(key, data, frame) {
         y: content.y + (content.height - sized.height * (markRoom / sized.width)) / 2,
       };
     }
-    const groupWidth = sized.width + markGap + rowBox;
-    const left = artwork.x + Math.max(0, (availWidth - groupWidth) / 2);
+    // A LEAD-IN MARK OPENS THE LINE, SO IT STANDS AT THE LEFT.
+    //
+    // Centred with the row it drifted right as the block widened - the desk's
+    // "suvichar word should be always closer to left side/starting", and the
+    // gap they read as growing is the white the centring opened before it.
+    // A strip is set flush from its own left edge, exactly as the first word
+    // of any line is.
+    const left = artwork.x;
     sized = { ...sized, x: left };
     contentBox = { x: left + sized.width + markGap, y: content.y, width: rowBox, height: content.height };
 
@@ -2595,9 +2716,19 @@ export const SMART_CARD_BLOCK_SIZE = Object.freeze({
   chart: { width: 268, height: 240 },
 });
 
-export function smartCardBlockSize(key) {
+export function smartCardBlockSize(key, data = null) {
+  // AN ADVERT BRINGS THE BLOCK ITS OWN SHAPE WANTS.
+  //
+  // A strip banner is 620x152 and a small classified 148x176; giving both the
+  // trader panel's 268x300 would make the desk resize every advert by hand,
+  // which is the work SMART_CARD_BLOCK_SIZE exists to remove.
+  if (String(key || '') === 'advert' && data?.style) return advertBlockSize(data.style);
   return SMART_CARD_BLOCK_SIZE[String(key || '')] || { width: 268, height: 260 };
 }
+
+// Re-exported so a caller that already imports the card catalogue does not
+// need a second import to ask what shapes an advert comes in.
+export { ADVERT_STYLES, ADVERT_STYLE_KEYS, ADVERT_SAMPLE, DEFAULT_ADVERT_STYLE, advertStyle, advertBlockSize } from './advert-styles.js';
 
 export const SMART_CARD_LAYOUT_KEYS = Object.keys(LAYOUTS);
 

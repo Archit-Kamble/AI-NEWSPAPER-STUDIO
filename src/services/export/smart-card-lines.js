@@ -686,60 +686,93 @@ function smartCardLines(key, data, frame, cardLayout) {
 
   if (key === 'advert') {
     const g = layout.geometry;
-    const boxWidth = Number(layout.contentBox?.width) || contentWidth;
-    const boxHeight = Number(layout.contentBox?.height) || Number(frame.height) || 0;
-    // The panel's own rule, on all four sides.
-    bar(0, subtitleOffsetPx, boxWidth, 1.2, '#202024');
-    bar(0, subtitleOffsetPx + boxHeight - 1.2, boxWidth, 1.2, '#202024');
-    bar(0, subtitleOffsetPx, 1.2, boxHeight, '#202024');
-    bar(boxWidth - 1.2, subtitleOffsetPx, 1.2, boxHeight, '#202024');
+    // NO PANEL RULE HERE. The advert's own ring is drawn once at the block's
+    // edge from cardRuleFor(), like every other card's; this walk used to lay
+    // a second 1.2px box down 2.6px inside it, so the plate carried the double
+    // border the canvas had already lost.
+    const rel = (rect) => ({
+      x: (Number(rect.x) || 0),
+      y: subtitleOffsetPx + (Number(rect.y) || 0),
+      width: Number(rect.width) || 0,
+      height: Number(rect.height) || 0,
+    });
 
-    let y = subtitleOffsetPx;
-    if (g.imageUrl && g.imageHeight > 0) {
-      // The artwork is a first-class item, so it reaches Scribus, the PDF, the
-      // IDML and Word from this same walk rather than being browser-only
-      // decoration that disappears from the printed paper.
-      out.push({
-        kind: 'image', file: g.imageUrl, x: 0, y, width: boxWidth, height: g.imageHeight,
-      });
-      y += g.imageHeight;
+    // The artwork is a first-class item, so it reaches Scribus, the PDF, the
+    // IDML and Word from this same walk rather than being browser-only
+    // decoration that disappears from the printed paper. Where it goes is the
+    // solver's rectangle, whichever of the five shapes this advert is.
+    if (g.art && g.imageUrl) {
+      const box = rel(g.art);
+      out.push({ kind: 'image', file: g.imageUrl, x: box.x, y: box.y, width: box.width, height: box.height });
     }
-    y += g.rowGap;
+    // The चौकट: one rule inside the card's ring.
+    if (g.frameStyle === 'double' && g.frameInk > 0) {
+      const inset = g.framePad - g.frameInk;
+      const w = Math.max(0, (Number(frame.width) || contentWidth) - inset * 2);
+      const h = Math.max(0, (Number(frame.height) || 0) - inset * 2);
+      bar(inset, subtitleOffsetPx + inset, w, g.frameInk, '#202024');
+      bar(inset, subtitleOffsetPx + inset + h - g.frameInk, w, g.frameInk, '#202024');
+      bar(inset, subtitleOffsetPx + inset, g.frameInk, h, '#202024');
+      bar(inset + w - g.frameInk, subtitleOffsetPx + inset, g.frameInk, h, '#202024');
+    }
+    // A poster's reversed panel goes down BEFORE its type, exactly as the
+    // canvas paints it and as a .sla must be ordered.
+    if (g.panel) {
+      const box = rel(g.panel);
+      bar(box.x, box.y, box.width, box.height, '#101014');
+    }
+    if (g.frameStyle === 'rule') {
+      const box = rel(g.typeBox);
+      const hair = Number(g.frameHairPx) || 1.2;
+      bar(box.x, box.y - hair, box.width, hair, '#202024');
+      bar(box.x, box.y + box.height, box.width, hair, '#202024');
+    }
+
+    const type = rel(g.typeBox);
+    const textX = type.x + g.inset;
+    const align = g.align === 'centre' ? 1 : 0;
+    const reversed = Boolean(g.reversed);
+    const ink = (normal, light) => (reversed ? light : normal);
+    let y = type.y + g.rowGap;
 
     const put = (lines, fontPx, height, style = {}) => {
       (lines || []).forEach((text) => {
-        line(text, g.inset, y, g.measureWidth, fontPx, 1, height, style);
+        line(text, textX, y, g.measureWidth, fontPx, align, height, style);
         y += height;
       });
-      if (lines && lines.length) y += 0;
     };
 
-    put(layout.nameLines, g.nameFontPx, g.nameLineHeightPx, { bold: true, ink: '#8a1428' });
+    put(layout.nameLines, g.nameFontPx, g.nameLineHeightPx, { bold: true, ink: ink('#8a1428', '#f0c9cf') });
     if (layout.shoutLines?.length) y += g.rowGap;
-    put(layout.shoutLines, g.shoutFontPx, g.shoutLineHeightPx, { bold: true, ink: '#101014' });
-    put(layout.standLines, g.standFontPx, g.standLineHeightPx, { ink: '#3d3439' });
+    put(layout.shoutLines, g.shoutFontPx, g.shoutLineHeightPx, { bold: true, ink: ink('#101014', '#ffffff') });
+    put(layout.standLines, g.standFontPx, g.standLineHeightPx, { ink: ink('#3d3439', '#ffffff') });
     if (layout.detailLines?.length) y += g.rowGap;
-    put(layout.detailLines, layout.fontPx, g.lineHeightPx, { ink: '#2a2427' });
+    put(layout.detailLines, layout.fontPx, g.lineHeightPx, { ink: ink('#2a2427', '#ffffff') });
     if (layout.offerLines?.length) {
       y += g.rowGap;
-      // Reversed out of the accent, exactly as the canvas paints it: the ground
-      // first, then white type over it.
-      bar(0, y, boxWidth, g.offerHeight, '#8a1428');
-      const offerTop = y + g.rowGap;
+      // Whichever way this shape sets its offer: reversed out of the accent,
+      // between two rules, or as plain type.
+      if (g.offerStyle === 'reverse') {
+        bar(type.x, y, type.width, g.offerHeight, '#8a1428');
+      } else if (g.offerStyle === 'rule') {
+        bar(textX, y, g.measureWidth, 0.6, '#8a1428');
+        bar(textX, y + g.offerHeight - 0.6, g.measureWidth, 0.6, '#8a1428');
+      }
+      const offerTop = y + (g.offerStyle === 'plain' ? 0 : g.rowGap);
       layout.offerLines.forEach((text, index) => line(
-        text, g.inset, offerTop + index * g.lineHeightPx, g.measureWidth, layout.fontPx, 1,
-        g.lineHeightPx, { bold: true, ink: '#ffffff' },
+        text, textX, offerTop + index * g.lineHeightPx, g.measureWidth, layout.fontPx, align,
+        g.lineHeightPx, { bold: true, ink: g.offerStyle === 'reverse' ? '#ffffff' : '#8a1428' },
       ));
       y += g.offerHeight;
     }
     if (layout.contactLines?.length) {
       y += g.rowGap;
-      bar(g.inset, y - 0.6, g.measureWidth, 0.6, '#8a1428');
-      put(layout.contactLines, g.smallFontPx, g.smallLineHeightPx, { bold: true });
+      bar(textX, y - 0.6, g.measureWidth, 0.6, '#8a1428');
+      put(layout.contactLines, g.smallFontPx, g.smallLineHeightPx, { bold: true, ink: ink('#171719', '#ffffff') });
     }
-    put(layout.addressLines, g.smallFontPx, g.smallLineHeightPx, { ink: '#4a4147' });
+    put(layout.addressLines, g.smallFontPx, g.smallLineHeightPx, { ink: ink('#4a4147', '#ffffff') });
     if (layout.footerLines?.length) y += g.rowGap;
-    put(layout.footerLines, g.smallFontPx, g.smallLineHeightPx, { ink: '#6b6264' });
+    put(layout.footerLines, g.smallFontPx, g.smallLineHeightPx, { ink: ink('#6b6264', '#ffffff') });
     return out;
   }
 
@@ -750,10 +783,9 @@ function smartCardLines(key, data, frame, cardLayout) {
     // measured its lines against, and the same one the canvas draws in.
     const inset = Number(g.frameInsetPx) || 0;
     const noticeWidth = Number(g.noticeWidth) || Math.max(0, contentWidth - inset * 2);
+    // NO NOTICE RULE HERE either - see the advert branch. The प्रकटपत्र's ring
+    // is the card's own, drawn once at the block's edge.
     let y = subtitleOffsetPx + g.gap;
-    bar(0, subtitleOffsetPx, contentWidth, 0.8, '#202024');
-    bar(0, subtitleOffsetPx, 0.8, Math.max(0, Number(frame.height) || 0), '#202024');
-    bar(contentWidth - 0.8, subtitleOffsetPx, 0.8, Math.max(0, Number(frame.height) || 0), '#202024');
     const putLines = (lines, x, width, fontPx, height, align = 0, style = {}) => {
       lines.forEach((text, index) => line(text, x, y + index * height, width, fontPx, align, height, style));
       y += lines.length * height;

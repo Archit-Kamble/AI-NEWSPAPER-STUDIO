@@ -2647,6 +2647,86 @@ and laid inline they abut with **no whitespace at all** — so a two-line entry
 printed `…कंपनीला राजाज्ञामिळाली`, two words welded into one, on the page and
 on the plate alike. Photographed on a 268 px card.
 
+### सुविचार's mark is the WORD, and it opens the line at the left
+
+Two more findings on the same strip, and both were about the artwork rather
+than the type.
+
+**The file was three-quarters ornament.** `SuvicharwithoutBG.png` carried a
+lotus above the letters on the left and a rising sun above them on the right,
+with the word beneath both — so a mark drawn at the line's own height spent
+most of that height on decoration and set the WORD at a fraction of the type
+beside it. Both are **separate blobs of ink**, so this is not a crop but a
+component split: the word's own connected mass (194 743 px of the file's ink)
+is kept and everything not touching it dropped. `suvichar-word.png` is
+1239×504 where the ornamented original was 1300×664, so at one drawn height
+the letters are a quarter larger, and `headStrokeAt` moved 0.4096 → **0.2599**.
+
+**A lead-in mark opens the line, so it stands at the LEFT.** Centred with the
+row it drifted right as the block widened — the desk's *"suvichar word should
+be always closer to left side/starting"*, and the gap they read as growing is
+the white the centring opened before it. `left = artwork.x`, and
+`.smart-card-quote.is-strip` is `justify-content: flex-start`.
+
+### An advertisement has SHAPES, and they are one solver
+
+`src/features/advert.js` structured an advertiser's copy and this product could
+set it exactly one way. A district daily prints several: the trader's panel
+with a photograph, the शुभेच्छा greeting inside a decorated चौकट, the strip
+across the foot of a page, the poster where a supplied photograph IS the
+advert, and the small all-type classified.
+
+**`public/editor/smart-cards/advert-styles.js` is a catalogue, not five
+layouts.** `layoutAdvert()` solves ONE set of type bands — the advertiser's
+name, the line that shouts, the standfirst, the detail, the offer, the contact
+— and reads five parameters to place them:
+
+| | |
+|---|---|
+| `art` | `band` / `medallion` / `full` / `side` / `none` |
+| `align` | `left` for a trader's panel and a strip, `centre` for the rest |
+| `frame` | `none`, `double` (the चौकट, one rule inside the card's ring), `rule` (a classified's two) |
+| `offer` | `reverse` out of the accent, between `rule`s, or `plain` |
+| `reversed` | white type out of a poster's solid panel |
+
+Each row also names **the block that shape asks for**, and
+`smartCardBlockSize('advert', data)` returns it — a strip is 620×176 and a
+classified 148×176, and giving both the trader panel's 268×300 would make the
+desk resize every advert by hand.
+
+- **A poster is a picture with words on it, not words with a picture behind.**
+  Given the whole box the type filled it and the reversed panel covered all but
+  a strip of the photograph — the one thing a desk chooses that shape for.
+  `ADVERT_POSTER_TYPE_SHARE` (0.52) is the words' half.
+- **The picker shows the thing, not its name.** Each tile is a real
+  composition of one demo advert at the block that shape asks for, drawn by the
+  same renderer the page uses and scaled down — so a style added to the
+  catalogue appears in the picker with no second piece of work, and a demo
+  cannot show a shape the page would not print. One advertiser's copy across
+  all five, because the point is to compare shapes.
+- **The style is validated at the builder, never trusted from the browser.**
+  It reaches the card's stored data and from there the renderer's own class
+  names. `resolveStyle()` reaches the shared catalogue by dynamic import, the
+  way this project already reaches the character grid and the ink palette from
+  Node.
+- **`.smart-card-advert` named two elements** — the card's own wrapper
+  (`smart-card-${key}`) and the renderer's root div — so every selector matched
+  both. That is the `.smart-card-artwork` collision that moved every nameplate
+  on every card, caught this time by a net that counted what it had drawn. The
+  root is `.smart-card-advert-body`.
+- **And the press walk was drawing a second panel rule.** The advert branch
+  laid a 1.2 px box down inside the card's own ring and the notice branch a
+  0.8 px one, so both printed the double border the canvas had already lost.
+  `tests/advertStyles.test.js` holds it as the general rule: no two hairlines
+  within 2 px of each other.
+
+**The canvas-against-export sweep had been vacuous.** It filtered the export
+walk's items on `kind === 'text'` — and a text item in that list carries **no
+`kind` at all** — so "0 texts missing" was counting nothing against nothing.
+Filtered properly (`!item.kind && item.text`), and collecting the canvas's real
+text nodes rather than its childless elements, all nine cards and all five
+advert shapes do agree; but the earlier runs proved nothing.
+
 ### A lead-in mark is set to the LINE it opens
 
 `cardArtworkFor()` reserves a mark's box before the card is solved, so it can

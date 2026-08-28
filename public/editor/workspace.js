@@ -541,7 +541,7 @@ async function removeSectionImage(imageId) {
 // it is the same grid used by the Space panel and press preflight.
 async function requestSmartCard({
   key, variant, manualText = "", destination = "selected",
-  imageUrl = "", wantsArtwork = false,
+  imageUrl = "", wantsArtwork = false, advertStyle = "",
 }) {
   const newspaper = store.getState().newspaper;
   const section = store.getSelectedSection();
@@ -555,7 +555,7 @@ async function requestSmartCard({
   // stand-in carries the size layout.js says this card wants.
   const bringsOwnBlock = destination === "new";
   if (!bringsOwnBlock && (!section || !view)) return { error: "Choose a block first." };
-  const wanted = smartCardBlockSize(key);
+  const wanted = smartCardBlockSize(key, { style: advertStyle });
   const measureSection = bringsOwnBlock
     ? { ...(section || {}), width_px: wanted.width, height_px: wanted.height, margin_px: 1 }
     : section;
@@ -580,6 +580,10 @@ async function requestSmartCard({
       ...(key === "advert" ? {
         imageUrl,
         wantsArtwork,
+        // Which SHAPE of advert. It decides the block the card brings with it
+        // as well as how the card is set, so it travels with the request
+        // rather than being applied afterwards.
+        style: advertStyle,
         blockWidth: bringsOwnBlock ? wanted.width : Number(section?.width_px) || undefined,
         blockHeight: bringsOwnBlock ? wanted.height : Number(section?.height_px) || undefined,
       } : {}),
@@ -653,7 +657,7 @@ async function placeSmartCardInNewBlock(key, payload) {
   if (!page || !geometry) return { error: "Open a page first." };
   if (store.getState().dirty) await autosave.flush();
 
-  const wanted = smartCardBlockSize(key);
+  const wanted = smartCardBlockSize(key, payload?.smartCardData);
   const rect = findFreeRect(page.sections || [], wanted.width, wanted.height);
   const onTopOfSomething = (page.sections || []).some(
     (s) => rect.x < Number(s.x_px) + Number(s.width_px)

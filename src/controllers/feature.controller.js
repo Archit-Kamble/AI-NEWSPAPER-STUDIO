@@ -36,6 +36,10 @@ async function buildOne(req, res) {
     // than being guessed here.
     imageUrl: typeof req.body?.imageUrl === 'string' ? req.body.imageUrl : undefined,
     wantsArtwork: req.body?.wantsArtwork === true,
+    // WHICH SHAPE of advert. Validated against the shared catalogue in the
+    // builder, never trusted from the browser - it reaches the card's stored
+    // data and therefore the renderer's class names.
+    style: typeof req.body?.style === 'string' ? req.body.style : undefined,
     blockWidth: Number(req.body?.blockWidth) || undefined,
     blockHeight: Number(req.body?.blockHeight) || undefined,
     ownerId: req.session?.user?.id || null,

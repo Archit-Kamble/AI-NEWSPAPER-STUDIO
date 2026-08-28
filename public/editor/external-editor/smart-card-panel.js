@@ -10,6 +10,7 @@
 
 import { escapeHtml } from "../format.js";
 import { smartCardMarkup, canRenderSmartCard, smartCardFitState, SMART_CARD_OVERSET_NOTE } from "../smart-cards/smart-cards.js";
+import { ADVERT_STYLES, ADVERT_SAMPLE, DEFAULT_ADVERT_STYLE } from "../smart-cards/advert-styles.js";
 
 const CARDS = [
   { key: "panchang", icon: "☀", label: "पंचांग", detail: "सूर्योदय, सूर्यास्त, राहुकाळ", source: "Calculated" },
@@ -31,6 +32,35 @@ const MANUAL_PLACEHOLDERS = Object.freeze({
   tender: "उदा. ईमेल किंवा साधा परिच्छेद थेट पेस्ट करा:\n\nसातारा जिल्हाधिकारी कार्यालयाला 15 सप्टेंबरपर्यंत 100 रीम A4 कागदासाठी बंद लिफाफ्यात दरपत्रके हवी आहेत. संपर्क 02162-222222. — जिल्हाधिकारी, सातारा",
   advert: "उदा. जाहिरातदाराचा संदेश जसाच्या तसा पेस्ट करा:\n\nश्री गणेश ट्रेडर्स, सातारा — शेती अवजारे, ठिबक संच व पंप विक्री व दुरुस्ती. गणेश चतुर्थीनिमित्त सर्व पंपांवर 10% सवलत, 20 सप्टेंबरपर्यंत. संपर्क 9822012345. पत्ता: पोवई नाका, सातारा.",
 });
+
+// A DESK CHOOSES A SHAPE BY LOOKING AT ONE.
+//
+// Each demo is drawn with the REAL renderer, at the block that shape asks for,
+// then scaled down - so the picker cannot show a shape the page would not
+// print, and a style added to the catalogue appears here with no second piece
+// of work. One advertiser's copy across all five, because the point is to
+// compare shapes and different copy in each would compare the copy.
+const DEMO_PICTURE = "data:image/svg+xml;utf8,"
+  + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 5">'
+    + '<rect width="8" height="5" fill="#d8d2cc"/><circle cx="5.7" cy="1.5" r="0.7" fill="#efeae5"/>'
+    + '<path d="M0 5 L2.6 1.9 L4.6 5 Z" fill="#b7ada4"/><path d="M3.6 5 L5.9 2.7 L8 5 Z" fill="#c7bfb7"/></svg>');
+
+const DEMO_WIDTH_PX = 132;
+
+function advertStyleChoice(style, selected) {
+  const block = style.block;
+  const drawn = smartCardMarkup("advert", { ...ADVERT_SAMPLE, style: style.key, imageUrl: DEMO_PICTURE },
+    { width: block.width, height: block.height, padding: 1 }) || "";
+  const scale = DEMO_WIDTH_PX / block.width;
+  return `<button type="button" class="advert-style${selected ? " is-selected" : ""}" data-advert-style="${style.key}" aria-pressed="${selected}">
+    <span class="advert-style-demo" style="width:${DEMO_WIDTH_PX}px;height:${Math.ceil(block.height * scale)}px">
+      <span class="advert-style-sheet" style="width:${block.width}px;height:${block.height}px;transform:scale(${scale})">${drawn}</span>
+    </span>
+    <strong>${escapeHtml(style.label)}</strong>
+    <small>${escapeHtml(style.detail)}</small>
+    <em>${block.width} × ${block.height}</em>
+  </button>`;
+}
 
 function choice(card, selected) {
   return `<button type="button" class="smart-card-choice${selected ? " is-selected" : ""}${card.unavailable ? " is-unavailable" : ""}"
@@ -75,6 +105,14 @@ export function smartCardMarkupPanel(view) {
          A generated illustration is briefed WITHOUT text - generated
          Devanagari is unreadable, and the advertiser's words are the
          compositor's to set - and is marked AI on the card itself. -->
+    <!-- WHICH SHAPE OF ADVERT. A district daily prints several, and until this
+         existed the product could only set one of them. The demos are drawn by
+         the real renderer at the block each shape asks for. -->
+    <fieldset class="advert-style-field" id="smartCardAdvertStyle" hidden>
+      <legend>What kind of advertisement</legend>
+      <p>Pick the shape first — it decides how the copy is set and the block the advert brings with it.</p>
+      <div class="advert-style-grid" role="group" aria-label="Advertisement style"></div>
+    </fieldset>
     <fieldset class="smart-card-artwork-field" id="smartCardArtwork" hidden>
       <legend>Artwork</legend>
       <label class="smart-card-file-label">The advertiser's own picture
@@ -153,6 +191,7 @@ function proposalMarkup(result) {
 export function bindSmartCard(requestCard, onPatch, onNotify, onPlaceInNewBlock) {
   let key = "panchang";
   let variant = "auto";
+  let advertStyle = DEFAULT_ADVERT_STYLE;
   // "new" means the card brings its own block; "selected" writes into the one
   // already open. New is the default - see the fieldset's own comment.
   let destination = "new";
@@ -182,6 +221,26 @@ export function bindSmartCard(requestCard, onPatch, onNotify, onPlaceInNewBlock)
     // and asking a model to illustrate a horoscope is not a feature.
     const artwork = document.getElementById("smartCardArtwork");
     if (artwork) artwork.hidden = key !== "advert";
+    const styleField = document.getElementById("smartCardAdvertStyle");
+    if (styleField) {
+      styleField.hidden = key !== "advert";
+      // Drawn on first sight rather than on every render: each demo is a real
+      // composition, and five of them is work no other card's panel does.
+      if (key === "advert" && !styleField.dataset.drawn) {
+        styleField.dataset.drawn = "1";
+        const grid = styleField.querySelector(".advert-style-grid");
+        grid.innerHTML = Object.values(ADVERT_STYLES)
+          .map((style) => advertStyleChoice(style, style.key === advertStyle)).join("");
+        grid.querySelectorAll("[data-advert-style]").forEach((button) => button.addEventListener("click", () => {
+          advertStyle = button.dataset.advertStyle;
+          grid.querySelectorAll("[data-advert-style]").forEach((other) => {
+            const on = other === button;
+            other.classList.toggle("is-selected", on);
+            other.setAttribute("aria-pressed", String(on));
+          });
+        }));
+      }
+    }
   };
   document.querySelectorAll("[data-smart-card]").forEach((button) => button.addEventListener("click", () => selectCard(button.dataset.smartCard)));
   document.querySelectorAll("[data-card-destination]").forEach((button) => button.addEventListener("click", () => {
@@ -244,6 +303,7 @@ export function bindSmartCard(requestCard, onPatch, onNotify, onPlaceInNewBlock)
         manualText: MANUAL_CARDS.has(key) ? manualText.value : "",
         imageUrl: advertImageUrl,
         wantsArtwork: key === "advert" && Boolean(document.getElementById("smartCardWantsArtwork")?.checked),
+        advertStyle: key === "advert" ? advertStyle : "",
         // The card is measured against the frame it will actually get: the
         // block it is going into, or the one it is about to bring with it.
         destination,

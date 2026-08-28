@@ -467,20 +467,50 @@ function advertMarkup(data, layout) {
   if (!layout.geometry) return null;
   const g = layout.geometry;
   const has = (lines) => Array.isArray(lines) && lines.length > 0;
+  const box = (rect) => `left:${rect.x}px;top:${rect.y}px;width:${rect.width}px;height:${rect.height}px`;
 
-  const artwork = g.imageUrl
-    ? `<div class="smart-card-advert-art" style="height:${g.imageHeight}px"><img src="${escapeHtml(g.imageUrl)}" alt="">${
+  // The artwork, wherever this shape puts it. One <img>, one rectangle from
+  // the solver - never a share of the panel worked out again here.
+  const artwork = g.art && g.imageUrl
+    ? `<div class="smart-card-advert-art" style="${box(g.art)}"><img src="${escapeHtml(g.imageUrl)}" alt="">${
       g.aiArtwork ? '<span class="smart-card-advert-ai">AI</span>' : ""}</div>`
     : "";
 
-  return `<div class="smart-card-advert" style="font-size:${layout.fontPx}px;line-height:${g.lineHeightPx}px">
-    ${artwork}
-    <div class="smart-card-advert-type" style="padding:${g.rowGap}px ${g.inset}px;gap:${g.rowGap}px">
+  // The चौकट, and the classified's two rules. Ink at a rectangle the solver
+  // already stood the type clear of.
+  const frame = g.frameStyle === "double"
+    ? `<i class="smart-card-advert-frame" style="left:${g.framePad - g.frameInk}px;top:${g.framePad - g.frameInk}px;right:${g.framePad - g.frameInk}px;bottom:${g.framePad - g.frameInk}px;border-width:${g.frameInk}px"></i>`
+    : "";
+
+  // A poster's reversed panel: solid ink over the foot of the photograph, so
+  // the type is white on black rather than white on whatever the picture is.
+  const panel = g.panel
+    ? `<i class="smart-card-advert-panel" style="${box(g.panel)}"></i>`
+    : "";
+
+  // A classified's two rules, over and under its type - inside the box the
+  // solver already stood the type clear of, never on the card's own edge.
+  const rules = g.frameStyle === "rule"
+    ? `<i class="smart-card-advert-hr" style="left:${g.typeBox.x}px;top:${g.typeBox.y - g.frameHairPx}px;width:${g.typeBox.width}px;height:${g.frameHairPx}px"></i>
+       <i class="smart-card-advert-hr" style="left:${g.typeBox.x}px;top:${g.typeBox.y + g.typeBox.height}px;width:${g.typeBox.width}px;height:${g.frameHairPx}px"></i>`
+    : "";
+
+  // NOT `.smart-card-advert`. smartCardMarkup() already puts `smart-card-advert`
+  // on the card's own wrapper (`smart-card-${key}`), so naming this div the
+  // same thing makes every selector and every test match two elements - the
+  // `.smart-card-artwork` collision that moved every nameplate on every card,
+  // caught here before it could do the same again.
+  const cls = `smart-card-advert-body is-${escapeHtml(g.style)}${g.reversed ? " is-reversed" : ""} is-${escapeHtml(g.align)}`;
+  const offerCls = g.offerStyle === "reverse" ? " is-reverse" : g.offerStyle === "rule" ? " is-ruled" : "";
+
+  return `<div class="${cls}" style="font-size:${layout.fontPx}px;line-height:${g.lineHeightPx}px">
+    ${artwork}${frame}${panel}${rules}
+    <div class="smart-card-advert-type" style="${box(g.typeBox)};padding:${g.rowGap}px ${g.inset}px;gap:${g.rowGap}px">
       ${has(layout.nameLines) ? `<strong class="smart-card-advert-name" style="font-size:${g.nameFontPx}px;line-height:${g.nameLineHeightPx}px">${linesMarkup(layout.nameLines)}</strong>` : ""}
       ${has(layout.shoutLines) ? `<b class="smart-card-advert-shout" style="font-size:${g.shoutFontPx}px;line-height:${g.shoutLineHeightPx}px">${linesMarkup(layout.shoutLines)}</b>` : ""}
       ${has(layout.standLines) ? `<span class="smart-card-advert-stand" style="font-size:${g.standFontPx}px;line-height:${g.standLineHeightPx}px">${linesMarkup(layout.standLines)}</span>` : ""}
       ${has(layout.detailLines) ? `<span class="smart-card-advert-detail">${linesMarkup(layout.detailLines)}</span>` : ""}
-      ${has(layout.offerLines) ? `<span class="smart-card-advert-offer" style="height:${g.offerHeight}px;padding:${g.rowGap}px 0">${linesMarkup(layout.offerLines)}</span>` : ""}
+      ${has(layout.offerLines) ? `<span class="smart-card-advert-offer${offerCls}" style="height:${g.offerHeight}px;padding:${g.offerStyle === "plain" ? 0 : g.rowGap}px 0">${linesMarkup(layout.offerLines)}</span>` : ""}
       ${has(layout.contactLines) ? `<span class="smart-card-advert-contact" style="font-size:${g.smallFontPx}px;line-height:${g.smallLineHeightPx}px">${linesMarkup(layout.contactLines)}</span>` : ""}
       ${has(layout.addressLines) ? `<span class="smart-card-advert-address" style="font-size:${g.smallFontPx}px;line-height:${g.smallLineHeightPx}px">${linesMarkup(layout.addressLines)}</span>` : ""}
       ${has(layout.footerLines) ? `<span class="smart-card-advert-footer" style="font-size:${g.smallFontPx}px;line-height:${g.smallLineHeightPx}px">${linesMarkup(layout.footerLines)}</span>` : ""}

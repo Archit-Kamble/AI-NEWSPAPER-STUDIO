@@ -3960,9 +3960,13 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 /* THE DISPLAY ADVERTISEMENT. A ruled panel: the advertiser's name as a small
    head, the shout line, a standfirst, the detail, the offer reversed out of
    the paper's accent, and the contact on a rule at the foot. */
-.smart-card-advert {
-  display: flex;
-  flex-direction: column;
+/* FIVE SHAPES, ONE SOLVER. Which artwork treatment, which alignment, which
+   rules and whether the type is reversed is ADVERT_STYLES in
+   editor/smart-cards/advert-styles.js; layoutAdvert() turns that into
+   rectangles and this only paints them. Every box below is placed from the
+   solver's own numbers, so the press file cannot put one somewhere else. */
+.smart-card-advert-body {
+  position: relative;
   height: 100%;
   box-sizing: border-box;
   /* See .smart-card-tender: the ring is the card's, drawn once at the block's
@@ -3971,8 +3975,22 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   color: #171719;
   overflow: hidden;
 }
-.smart-card-advert-art { position: relative; width: 100%; flex: 0 0 auto; overflow: hidden; }
+.smart-card-advert-art { position: absolute; overflow: hidden; }
 .smart-card-advert-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* The चौकट - one rule inside the card's own ring, which is what a printed
+   शुभेच्छा panel carries and what tells it from a trader's advert. */
+.smart-card-advert-frame {
+  position: absolute;
+  display: block;
+  border: 0 solid #202024;
+  pointer-events: none;
+}
+/* A poster's reversed panel: solid ink over the foot of the photograph. Never
+   a screen over the picture itself - a tint is not something newsprint can be
+   relied on to hold, and white type on an unknown photograph is unreadable. */
+.smart-card-advert-panel { position: absolute; display: block; background: #101014; }
+/* A classified's two rules, over and under its type. */
+.smart-card-advert-hr { position: absolute; display: block; height: 1.2px; background: #202024; }
 /* A generated illustration always says so. A reader cannot tell, and the desk
    must never lose track of which pictures this paper made. */
 .smart-card-advert-ai {
@@ -3986,7 +4004,7 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   background: rgba(0, 0, 0, 0.55);
 }
 .smart-card-advert-type {
-  flex: 1 1 auto;
+  position: absolute;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -3995,6 +4013,17 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   text-align: center;
   box-sizing: border-box;
 }
+/* A trader's panel and a strip are set flush left; a greeting, a poster and a
+   classified are centred. */
+.smart-card-advert-body.is-left .smart-card-advert-type { align-items: flex-start; text-align: left; }
+/* White out of the poster's panel - every band, not only the offer. */
+.smart-card-advert-body.is-reversed .smart-card-advert-type { color: #fff; }
+.smart-card-advert-body.is-reversed .smart-card-advert-name { color: #f0c9cf; }
+.smart-card-advert-body.is-reversed .smart-card-advert-shout,
+.smart-card-advert-body.is-reversed .smart-card-advert-stand,
+.smart-card-advert-body.is-reversed .smart-card-advert-detail,
+.smart-card-advert-body.is-reversed .smart-card-advert-address,
+.smart-card-advert-body.is-reversed .smart-card-advert-footer { color: #fff; }
 .smart-card-advert-name {
   display: block;
   color: #8a1428;
@@ -4012,9 +4041,19 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   align-self: stretch;
   box-sizing: border-box;
   font-weight: 700;
-  color: #fff;
-  background: #8a1428;
+  color: #171719;
 }
+/* Reversed out of the accent - what a printed advert does with the one line it
+   wants read from across the page. A greeting sets it between rules instead,
+   and a classified simply as its last line: a small all-type advert with a
+   solid bar in it stops being a classified. */
+.smart-card-advert-offer.is-reverse { color: #fff; background: #8a1428; }
+.smart-card-advert-offer.is-ruled {
+  color: #8a1428;
+  border-top: 0.6px solid #8a1428;
+  border-bottom: 0.6px solid #8a1428;
+}
+.smart-card-advert-body.is-reversed .smart-card-advert-offer.is-reverse { background: #8a1428; }
 .smart-card-advert-contact {
   display: block;
   align-self: stretch;
@@ -4032,6 +4071,44 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
    placed it. That is why the सुविचार mark sat under its own line and why
    दिनविशेष's name touched the box beneath it; measured in the DOM, inline
    style `top: 23.11px`, offsetTop 31. */
+/* THE ADVERT STYLE PICKER. Each tile holds a real composition of the demo
+   advert at the block that shape asks for, scaled down - so a desk chooses by
+   looking at the thing rather than at a name. */
+.advert-style-field { margin-top: 8px; border: 0; padding: 0; }
+.advert-style-field legend {
+  padding: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6b6b76;
+}
+.advert-style-field p { margin: 2px 0 6px; font-size: 0.74rem; color: #6b6b76; }
+.advert-style-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+.advert-style {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px;
+  border: 1px solid #d9d9e0;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  text-align: center;
+}
+.advert-style:hover { border-color: #b3b3c0; }
+.advert-style.is-selected { border-color: #c41e3a; box-shadow: inset 0 0 0 1px #c41e3a; }
+.advert-style-demo { position: relative; display: block; overflow: hidden; background: #fff; }
+.advert-style-sheet { position: absolute; left: 0; top: 0; display: block; transform-origin: top left; }
+.advert-style strong { font-size: 0.76rem; color: #23232b; }
+.advert-style small { font-size: 0.68rem; line-height: 1.3; color: #6b6b76; }
+.advert-style em { font-style: normal; font-size: 0.64rem; color: #9a9aa4; }
+
 .smart-card-artwork-field { margin-top: 8px; border: 0; padding: 0; }
 .smart-card-artwork-field legend {
   padding: 0;
@@ -6882,7 +6959,10 @@ body.print-view .page-imprint {
      centring aligns their baselines anyway, and the row now shares the mark's
      axis: same centre, same height, therefore the same top. */
   align-items: center;
-  justify-content: center;
+  /* FLUSH LEFT. The mark opens the line at the card's own left edge and the
+     quote runs on from it; centring the row was what let the two drift into
+     the middle of a wide strip. */
+  justify-content: flex-start;
   flex-wrap: nowrap;
 }
 /* A RESOLVED LINE NEVER RE-WRAPS. `flex: 0 1 auto` let the browser shrink the

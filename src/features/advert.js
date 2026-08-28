@@ -88,8 +88,23 @@ async function artworkFor(card, { width, height, ownerId, imageService = newsIma
   return { imageUrl: candidates?.[0]?.url || '', warning: warning || '' };
 }
 
+// WHICH SHAPE THE ADVERT IS SET IN.
+//
+// The catalogue is the browser's (public/editor/smart-cards/advert-styles.js)
+// and is reached the way this project already reaches the character grid and
+// the ink palette from Node - a dynamic import of the one module - because a
+// second list of style keys here is the drift this codebase has been bitten by
+// twice. It is validated rather than trusted: the key reaches the card's
+// stored data and from there the renderer's own class names.
+async function resolveStyle(style) {
+  const wanted = String(style || '').trim();
+  if (!wanted) return '';
+  const { ADVERT_STYLES, DEFAULT_ADVERT_STYLE } = await import('../../public/editor/smart-cards/advert-styles.js');
+  return ADVERT_STYLES[wanted] ? wanted : DEFAULT_ADVERT_STYLE;
+}
+
 async function build(isoDate, {
-  sourceText, tier, imageUrl = '', wantsArtwork = false,
+  sourceText, tier, imageUrl = '', wantsArtwork = false, style = '',
   blockWidth, blockHeight, ownerId = null,
   aiClient = ai, imageService = newsImage,
 } = {}) {
@@ -97,6 +112,7 @@ async function build(isoDate, {
   if (!text) return { error: 'जाहिरातीचा मजकूर — ईमेल, संदेश किंवा साधा परिच्छेद — पेस्ट करा.' };
   if (text.length > 20000) return { error: 'जाहिरातीचा मजकूर २०,००० अक्षरांपेक्षा मोठा असू शकत नाही.' };
 
+  const chosenStyle = await resolveStyle(style);
   const result = await aiClient.askForJson(promptFor(text), SCHEMA, { tier });
   if (result.error) return result;
   const card = result.data;
@@ -117,6 +133,10 @@ async function build(isoDate, {
     artworkWarning = artwork.warning;
   }
   card.aiArtwork = Boolean(!imageUrl && card.imageUrl);
+  // The shape travels WITH the card, because it decides how the card is set
+  // and which block it brings with it. Absent means the paper's default, which
+  // is what every advert stored before this existed carries.
+  if (chosenStyle) card.style = chosenStyle;
 
   return {
     title: card.headline,
@@ -132,4 +152,4 @@ async function build(isoDate, {
   };
 }
 
-module.exports = { build, promptFor, artworkFor, SCHEMA };
+module.exports = { build, promptFor, artworkFor, resolveStyle, SCHEMA };

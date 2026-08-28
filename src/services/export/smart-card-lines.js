@@ -77,14 +77,14 @@ function smartCardLines(key, data, frame, cardLayout) {
   // It is not a second geometry: a border is ink at the frame's own edge, so
   // both surfaces need only the frame, which both already have.
   // The one border catalogue, from the shared module - never a second copy
-  // here. The solver already pulled each ruled card's content box inside its
-  // own rule (CARD_RULE_CLEARANCE_PX), so this only lays the ink down.
+  // here. The solver already stood each ruled card's content clear of its own
+  // rule (cardRuleFor().clearancePx), so this only lays the ink down.
   const border = (cardLayout.CARD_BORDERS || {})[key];
   if (border) {
-    // The card's own borderBox, which is the content box for a card whose
-    // nameplate sits above it and the whole frame for one whose nameplate is
-    // a column INSIDE it. Every entry in this walk is placed relative to the
-    // content box, so the rule is offset back to where it belongs.
+    // The card's own borderBox: the BLOCK's own edge, so the four sides are
+    // one rule at one distance from the paper's grid whatever furniture the
+    // card puts inside itself. Every entry in this walk is placed relative to
+    // the content box, so the rule is offset back to where it belongs.
     const box = layout.borderBox || layout.contentBox || {};
     const w = Number(box.width) || contentWidth;
     const h = Number(box.height) || Number(frame.height) || 0;
@@ -96,7 +96,7 @@ function smartCardLines(key, data, frame, cardLayout) {
       out.push({ kind: 'bar', x: dx + offset, y: dy + offset, width: weight, height: h - offset * 2, ink: border.ink });
       out.push({ kind: 'bar', x: dx + w - offset - weight, y: dy + offset, width: weight, height: h - offset * 2, ink: border.ink });
     };
-    ring(0, 0.6);
+    ring(0, Number(border.weightPx) || 0.6);
     if (border.double) ring(2.2, 0.6);
   }
 

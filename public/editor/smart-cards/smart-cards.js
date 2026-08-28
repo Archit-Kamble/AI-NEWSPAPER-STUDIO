@@ -33,7 +33,7 @@
 // a different size.
 
 import { escapeHtml } from "../format.js";
-import { layoutSmartCard, arcPoints } from "./layout.js";
+import { layoutSmartCard, arcPoints, cardRuleFor } from "./layout.js";
 
 const DIGITS = ["०", "१", "२", "३", "४", "५", "६", "७", "८", "९"];
 
@@ -224,7 +224,7 @@ function suvicharMarkup(data, layout) {
   // thought-for-the-day strip sets. Wrapped: the credit drops under a short
   // centred rule, as a pull quote's does.
   if (g.inlineCredit) {
-    return `<blockquote class="smart-card-quote is-strip" style="font-size:${layout.fontPx}px;line-height:${g.lineHeightPx}px;padding:0 ${g.sideInset}px">
+    return `<blockquote class="smart-card-quote is-strip" style="font-size:${layout.fontPx}px;line-height:${g.lineHeightPx}px">
       <p class="smart-card-quote-text">${linesMarkup(layout.quoteLines)}</p>
       <cite class="smart-card-quote-credit" style="font-size:${g.creditFontPx}px;line-height:${g.lineHeightPx}px;margin-inline-start:${g.creditGap}px">${escapeHtml(g.creditText)}</cite>
     </blockquote>`;
@@ -622,13 +622,33 @@ export function smartCardMarkup(key, data, frame) {
   const artwork = layout.artwork
     ? `<img class="smart-card-artwork${layout.artwork.stretch ? " is-stretched" : ""}" src="/${escapeHtml(layout.artwork.file)}" alt="" aria-hidden="true" style="left:${layout.artwork.x}px;top:${layout.artwork.y}px;width:${layout.artwork.width}px;height:${layout.artwork.height}px">`
     : "";
-  const titleRules = key === "rashi" && layout.artwork
-    ? `<i class="smart-card-title-rule" style="left:0;top:${layout.artwork.y + layout.artwork.height / 2}px;width:${Math.max(0, layout.artwork.x - 6)}px"></i><i class="smart-card-title-rule" style="left:${layout.artwork.x + layout.artwork.width + 6}px;top:${layout.artwork.y + layout.artwork.height / 2}px;width:${Math.max(0, (Number(frame?.width) || 0) - layout.artwork.x - layout.artwork.width - 6)}px"></i>`
-    : "";
   const content = layout.contentBox || { x: 0, y: 0, width: Number(frame?.width) || 0, height: Number(frame?.height) || 0 };
+  // The band's own rules run to the card's TYPE measure, not to its frame -
+  // drawn from 0 to the frame's width they ran into the card's ring at both
+  // ends (measured: l0 and r0 against a rule at the block's edge), which is
+  // two rules meeting where a printer draws one.
+  const titleRules = key === "rashi" && layout.artwork
+    ? `<i class="smart-card-title-rule" style="left:${content.x}px;top:${layout.artwork.y + layout.artwork.height / 2}px;width:${Math.max(0, layout.artwork.x - content.x - 6)}px"></i><i class="smart-card-title-rule" style="left:${layout.artwork.x + layout.artwork.width + 6}px;top:${layout.artwork.y + layout.artwork.height / 2}px;width:${Math.max(0, content.x + content.width - layout.artwork.x - layout.artwork.width - 6)}px"></i>`
+    : "";
   const contentStyle = `left:${content.x}px;top:${content.y}px;width:${content.width}px;height:${content.height}px`;
+  // THE RING IS DRAWN FROM THE ONE CATALOGUE.
+  //
+  // It used to be nine hand-written rules in styles.css "mirroring" the export
+  // walk's own table, and the mirror had already drifted: प्रकटपत्र and the
+  // display advert each declared a border of their own as well, so both drew
+  // TWO rules 2px apart - which on the right and the bottom of a clipped card
+  // read as one thick smudged edge. A card's rule is ink at its frame's edge
+  // and both surfaces now read cardRuleFor() for it.
+  const ring = layout.borderBox ? cardRuleFor(key) : null;
+  const rule = ring
+    ? `<i class="smart-card-rule" style="left:${layout.borderBox.x}px;top:${layout.borderBox.y}px;width:${layout.borderBox.width}px;height:${layout.borderBox.height}px;box-shadow:${
+      ring.double
+        ? `inset 0 0 0 ${ring.weightPx}px ${ring.ink},inset 0 0 0 2.2px #fff,inset 0 0 0 2.8px ${ring.ink}`
+        : `inset 0 0 0 ${ring.weightPx}px ${ring.ink}`
+    }"></i>`
+    : "";
   const cls = `smart-card smart-card-${escapeHtml(key)}${layout.fitState === "OVERSET" ? " is-overset" : ""}`;
-  return `<div class="${cls}" data-fit-state="${escapeHtml(layout.fitState)}">${titleRules}${artwork}<div class="smart-card-content" style="${contentStyle}">${subtitle}${inside}</div></div>`;
+  return `<div class="${cls}" data-fit-state="${escapeHtml(layout.fitState)}">${rule}${titleRules}${artwork}<div class="smart-card-content" style="${contentStyle}">${subtitle}${inside}</div></div>`;
 }
 
 /**

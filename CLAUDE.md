@@ -2528,6 +2528,71 @@ should be same"*. The ring from `CARD_BORDERS` is each card's only rule now;
 ring and even on every side. The export walk lost its matching top/bottom bars
 for सुविचार and हवामान in the same pass.
 
+### The rule is the BLOCK's edge, and the type sets inside it
+
+The pass above left one ring per card and put it in the wrong place, which is
+the desk's next four reports at once — *"many words touching the border in
+share market"*, *"in rashi bhavishya images/logos touching border"*,
+*"panchang did not have … outer border for block, same for havaman"*, and
+*"prakatpatra and advertise block's having two borders and right and bottom
+borders are overlapping"*.
+
+**One rectangle cannot be both the edge of the card and the edge of its type.**
+`cardArtworkFor()` subtracted the clearance from the CONTENT box and the ring
+was then drawn round that same rectangle, so the clearance moved the *ink*
+inward and bought the words nothing. Measured on the page in print view:
+
+| | ring at | first thing inside it |
+|---|---|---|
+| market | 2,2 301×394 | every band at `l2 t2 r2` — flush against it |
+| sudoku | 2,2 301×298 | grid `b1`, heading `t2` |
+| राशिभविष्य | 4,4 297×374 (2.8 px band) | sign artwork at x=7 — 0.2 px off the inner hairline |
+| पंचांग | 4,60 140×142 | a rule round the TABLE, and the block itself unruled |
+
+The ring takes the frame now (`borderBox` is `0,0,width,height` for every ruled
+card) and `pad = max(frame.padding, clearance)` stands the type clear of it —
+`ink + CARD_RULE_AIR_PX`, so a heavier rule or the almanac's double band buys
+its own room. Measured after: every card 2.3–4.8 px inside its own rule, and
+पंचांग's double band now rings the block, which is the "inner border for box
+**and** outer border for block" that was asked for.
+
+**And the ring is drawn from the one catalogue.** `styles.css` carried a
+hand-kept mirror of `CARD_BORDERS` — its own comment said so — and the mirror
+had already drifted: `.smart-card-tender` and `.smart-card-advert` each
+declared a `border` of their own *as well*, so both drew two rules 2 px apart,
+coinciding on the right and the bottom where the card clips. `cardRuleFor()` is
+the lookup; `smartCardMarkup()` writes one `.smart-card-rule` inline and
+`smart-card-lines.js` lays the same ink down for the plate. `weightPx` lives
+there too — a display advert and a प्रकटपत्र are ruled a shade heavier, in
+black, because an advertisement is not the paper speaking; it is still one rule,
+the same on all four sides.
+
+### सुविचार is one line, and the mark travels with it
+
+Three faults, all of them visible in one photograph of a 618×70 strip: the mark
+at `x=0` hard against the rule with the first word 77 px away, the row centred
+in what was *left* rather than in the strip, and 70 px of block holding a
+23.8 px line.
+
+- **The block is one line tall and the width of the page** — `620×32`, the line
+  plus the rule and a hair of air. It asked for a 307 px leg 72 px deep.
+- **`stripRowWidthPx`** is the row's own drawn width, so `layoutSmartCard()`
+  sets mark, gap and row down as ONE centred group. The content box is then cut
+  to that row, and the line inside it is `flex: 0 0 auto; white-space: nowrap` —
+  a resolved line never re-wraps, and `flex-shrink: 1` had let the browser break
+  it into two lines of type in a box with room for one (measured: quote-text 8 px
+  above the card and 10 px below).
+- **The side inset was being spent twice** — the solver took it off the measure
+  and the renderer wrote it again as the blockquote's own padding, inside a box
+  already cut to the row. A wrapped pull quote still insets; a strip does not
+  need to, because the centring IS its air.
+- **A lead-in mark's footprint is not known until the line is**, so there is one
+  bounded correction pass: solve, take the mark's real box from the resolved
+  line, solve again against the measure that actually leaves. Where the two do
+  not land on the same size in one pass **the mark yields, never the words** —
+  without that clamp the row was cut to the room left over and its nowrap line
+  ran 7 px past a card that clips.
+
 ### A lead-in mark is set to the LINE it opens
 
 `cardArtworkFor()` reserves a mark's box before the card is solved, so it can

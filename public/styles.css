@@ -3605,10 +3605,7 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
    as a band above and below with hairlines down the sides. The ring is the
    card's only rule now; पंचांग and राशिभविष्य keep the almanac's double band,
    which is a ring inside a ring and still even on every side. */
-.smart-card-panchang .smart-card-content,
-.smart-card-rashi .smart-card-content {
-  box-shadow: inset 0 0 0 0.6px #8a1428, inset 0 0 0 2.2px #fff, inset 0 0 0 2.8px #8a1428;
-}
+
 
 .smart-card-panchang .smart-card-table th,
 .smart-card-panchang .smart-card-table td {
@@ -3642,7 +3639,6 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   transform: translateY(var(--row-text-nudge, 0));
 }
 
-.smart-card-suvichar { box-shadow: inset 0 0 0 0.6px #8a1428; }
 .smart-card-suvichar .smart-card-content { justify-content: center; }
 /* THE THOUGHT FOR THE DAY, SET AS A PULL QUOTE.
    It used to be one nowrap row pinned to the left of a flex box - so the whole
@@ -3882,7 +3878,10 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
      signatory could therefore be approved in one surface and clipped in the
      other. */
   padding: 2px;
-  border: 0.8px solid #202024;
+  /* NO border here: the card's own ring is drawn at the block's edge from
+     cardRuleFor(). A second one at this element's edge is the two-rules fault
+     the desk photographed - and being 2px in, its right and bottom sat all but
+     on top of the ring. */
   box-sizing: border-box;
   color: #171719;
 }
@@ -3959,7 +3958,8 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   flex-direction: column;
   height: 100%;
   box-sizing: border-box;
-  border: 1.2px solid #202024;
+  /* See .smart-card-tender: the ring is the card's, drawn once at the block's
+     own edge. */
   background: #fff;
   color: #171719;
   overflow: hidden;
@@ -6878,29 +6878,28 @@ body.print-view .page-imprint {
   justify-content: center;
   flex-wrap: nowrap;
 }
-.smart-card-quote.is-strip .smart-card-quote-text { flex: 0 1 auto; }
+/* A RESOLVED LINE NEVER RE-WRAPS. `flex: 0 1 auto` let the browser shrink the
+   quote below its own measure and break it - which on a one-line strip is the
+   difference between a strip and two lines of type in a box that has room for
+   one. The solver cut the row's box to the line's own drawn width; the line
+   holds that width. */
+.smart-card-quote.is-strip .smart-card-quote-text { flex: 0 0 auto; white-space: nowrap; }
 .smart-card-quote.is-strip .smart-card-quote-credit { flex: 0 0 auto; white-space: nowrap; }
 
-/* EVERY CARD IS RULED. The accent for a standing feature of the paper, black
-   for a commercial block - an advertisement and a प्रकटपत्र are not the paper
-   speaking. Mirrors CARD_BORDER in src/services/export/smart-card-lines.js;
-   a border is ink at the frame's own edge, so neither surface needs anything
-   the other has not got. पंचांग and राशिभविष्य keep their double band, which
-   is what tells an almanac from an ordinary ruled box. */
-.smart-card-havaman .smart-card-content,
-.smart-card-market .smart-card-content,
-.smart-card-sudoku .smart-card-content {
-  box-shadow: inset 0 0 0 0.6px #8a1428;
+/* EVERY CARD IS RULED, AT ITS BLOCK'S OWN EDGE, THE SAME ON ALL FOUR SIDES.
+   WHICH ink and whether the band is double is cardRuleFor() in
+   editor/smart-cards/layout.js - the one catalogue the solver, this renderer
+   and the press walk all read - and smartCardMarkup() writes it inline. This
+   file used to carry a hand-kept "mirror" of that table and it had drifted:
+   प्रकटपत्र and the display advert declared a border of their own as well and
+   drew two rules 2px apart. Structural only, no ink. */
+.smart-card-rule {
+  position: absolute;
+  z-index: 1;
+  display: block;
+  box-sizing: border-box;
+  pointer-events: none;
 }
-.smart-card-tender .smart-card-content,
-.smart-card-advert .smart-card-content {
-  box-shadow: inset 0 0 0 0.6px #202024;
-}
-/* सुविचार carries its nameplate as a COLUMN of the card, so its rule goes
-   round the whole frame - see borderBox in layout.js. दिनविशेष sets its name
-   ACROSS THE HEAD like पंचांग, so its rule follows the box under the name. */
-.smart-card-suvichar { box-shadow: inset 0 0 0 0.6px #8a1428; }
-.smart-card-dinvishesh .smart-card-content { box-shadow: inset 0 0 0 0.6px #8a1428; }
 
 /* The month's scale. The y labels are placed absolutely against the figure's
    own box from the solver's numbers; the x row is a three-column strip so the

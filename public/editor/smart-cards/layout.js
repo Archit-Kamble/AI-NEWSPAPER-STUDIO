@@ -108,16 +108,20 @@ const GAP_PX = 6;
 // It lives here, in the module both sides import, rather than in the export
 // walk: a rule is ink at the frame's own edge, and the SOLVER has to know about
 // it because type may not be set under it (see CARD_RULE_CLEARANCE_PX).
+// `weightPx` is the rule's own weight, the SAME on all four sides. A display
+// advertisement and a प्रकटपत्र are ruled a shade heavier than the paper's own
+// standing boxes, which with the black ink is how a reader tells a commercial
+// block from editorial at a glance.
 export const CARD_BORDERS = Object.freeze({
-  suvichar: { ink: '#8a1428', double: false },
-  dinvishesh: { ink: '#8a1428', double: false },
-  panchang: { ink: '#8a1428', double: true },
-  rashi: { ink: '#8a1428', double: true },
-  havaman: { ink: '#8a1428', double: false },
-  market: { ink: '#8a1428', double: false },
-  sudoku: { ink: '#8a1428', double: false },
-  advert: { ink: '#202024', double: false },
-  tender: { ink: '#202024', double: false },
+  suvichar: { ink: '#8a1428', double: false, weightPx: 0.6 },
+  dinvishesh: { ink: '#8a1428', double: false, weightPx: 0.6 },
+  panchang: { ink: '#8a1428', double: true, weightPx: 0.6 },
+  rashi: { ink: '#8a1428', double: true, weightPx: 0.6 },
+  havaman: { ink: '#8a1428', double: false, weightPx: 0.6 },
+  market: { ink: '#8a1428', double: false, weightPx: 0.6 },
+  sudoku: { ink: '#8a1428', double: false, weightPx: 0.6 },
+  advert: { ink: '#202024', double: false, weightPx: 1.2 },
+  tender: { ink: '#202024', double: false, weightPx: 0.8 },
 });
 
 // A ruled box sets its type INSIDE its own rule. Without this the market
@@ -128,8 +132,33 @@ export const CARD_BORDERS = Object.freeze({
 // A single hairline is 0.6px of ink; the almanac's double band is about 2.8.
 // The clearance is that ink plus a hair of air - not a flat number, because on
 // a 148px almanac a generous inset costs the value column a whole size step.
-const CARD_RULE_CLEARANCE_PX = 2;
-const DOUBLE_RULE_CLEARANCE_PX = 4;
+const CARD_RULE_INK_PX = 0.6;
+// The almanac's band: a hairline, a hair of paper, and the heavy rule outside
+// it. Its ink reaches 2.8px in from the frame's edge whatever the outer rule
+// weighs, so the clearance is measured from there.
+const DOUBLE_RULE_INK_PX = 2.8;
+// A hair over half a millimetre of air between the card's own rule and the
+// first thing set inside it. Measured on the page in print view: with the
+// clearance taken off the CONTENT box and the rule then drawn round that same
+// rectangle, the air bought nothing at all - the market panel's every band sat
+// at l2 t2 r2 of a ring drawn at 2,2, the sudoku's grid ran to within 1px of
+// it top and bottom, and राशिभविष्य's sign artwork stood 0.2px off the
+// almanac band's inner hairline. The rule goes at the BLOCK's edge now and
+// this is measured from there, so it is air the type actually gets.
+const CARD_RULE_AIR_PX = 2;
+
+/**
+ * A card's own rule: its ink, its drawn weight, and the room type may not
+ * enter. One lookup, so the solver, the browser and the press walk cannot
+ * disagree about where a card's edge is.
+ */
+export function cardRuleFor(key) {
+  const border = CARD_BORDERS[String(key || '')];
+  if (!border) return null;
+  const weightPx = Number(border.weightPx) || CARD_RULE_INK_PX;
+  const inkPx = border.double ? DOUBLE_RULE_INK_PX : weightPx;
+  return { ...border, weightPx, inkPx, clearancePx: inkPx + CARD_RULE_AIR_PX };
+}
 
 const CARD_ARTWORK = Object.freeze({
   // THE सुविचार MARK OPENS THE LINE IT NAMES.
@@ -192,56 +221,47 @@ function rashiArtworkFile(sign) {
  * return the remaining content box. Both are expressed in the OUTER frame's
  * coordinates so the browser and all press writers can place them directly.
  */
-/** A rectangle pulled in on every side, never past nothing. */
-function inset(box, by) {
-  if (!by) return box;
-  return {
-    x: box.x + by,
-    y: box.y + by,
-    width: Math.max(0, box.width - by * 2),
-    height: Math.max(0, box.height - by * 2),
-  };
-}
-
 function cardArtworkFor(key, frame) {
   const config = CARD_ARTWORK[key];
-  const content = {
-    x: frame.padding,
-    y: frame.padding,
-    width: frame.innerWidth,
-    height: frame.innerHeight,
-  };
-  // The card's own rule is ink, and type may not be set under it.
-  const rule = CARD_BORDERS[key]
-    ? (CARD_BORDERS[key].double ? DOUBLE_RULE_CLEARANCE_PX : CARD_RULE_CLEARANCE_PX)
-    : 0;
-  if (!config || frame.innerWidth <= 0 || frame.innerHeight <= 0) {
-    return { artwork: null, content: inset(content, rule) };
+  // THE RULE IS THE BLOCK'S OWN EDGE, ON ALL FOUR SIDES.
+  //
+  // It used to follow the CONTENT box - the rectangle the type is set in -
+  // which put the ink exactly where the first word starts and left the block
+  // itself unruled. Photographed in print view: पंचांग and हवामान carried a
+  // rule floating 2px inside a block that had none of its own (the desk's
+  // "no outer border for the block"), while every band of the market panel,
+  // the sudoku's grid and राशिभविष्य's sign artwork were drawn hard against
+  // that same rule. One rectangle cannot be both the edge of the card and the
+  // edge of its type; the rule takes the frame and the type stands clear of it.
+  const rule = cardRuleFor(key);
+  const pad = Math.max(frame.padding, rule ? rule.clearancePx : 0);
+  const innerWidth = Math.max(0, frame.width - pad * 2);
+  const innerHeight = Math.max(0, frame.height - pad * 2);
+  const content = { x: pad, y: pad, width: innerWidth, height: innerHeight };
+  const borderBox = rule ? { x: 0, y: 0, width: frame.width, height: frame.height } : null;
+  if (!config || innerWidth <= 0 || innerHeight <= 0) {
+    return { artwork: null, content, borderBox };
   }
 
-  const gap = Math.min(GAP_PX, Math.max(2, frame.innerHeight * 0.06));
+  const gap = Math.min(GAP_PX, Math.max(2, innerHeight * 0.06));
   const height = Math.max(0, Math.min(
-    frame.innerHeight * config.heightShare,
-    (frame.innerWidth * config.widthShare) / config.aspect,
+    innerHeight * config.heightShare,
+    (innerWidth * config.widthShare) / config.aspect,
   ));
   const width = height * config.aspect;
 
   if (config.placement === 'inline') {
-    const x = frame.padding;
-    const y = frame.padding + (frame.innerHeight - height) / 2;
+    const x = pad;
+    const y = pad + (innerHeight - height) / 2;
     return {
       artwork: { file: config.file, x, y, width, height },
-      // THE RULE GOES ROUND THE WHOLE CARD when the nameplate stands INSIDE
-      // it. For a `top` nameplate the mark sits over the box and the rule
-      // follows the box; for an `inline` one the mark is a column of the box
-      // and a rule drawn round the content alone would cut the card in half.
-      borderBox: { x: 0, y: 0, width: frame.width, height: frame.height },
-      content: inset({
+      borderBox,
+      content: {
         x: x + width + gap,
-        y: frame.padding,
-        width: Math.max(0, frame.innerWidth - width - gap),
-        height: frame.innerHeight,
-      }, rule),
+        y: pad,
+        width: Math.max(0, innerWidth - width - gap),
+        height: innerHeight,
+      },
     };
   }
 
@@ -250,26 +270,28 @@ function cardArtworkFor(key, frame) {
     // card is handed the whole frame and the band, and decides which of its
     // rows fall above and below.
     const bandHeight = height + gap * 2;
-    const x = frame.padding + (frame.innerWidth - width) / 2;
-    const y = frame.padding + (frame.innerHeight - bandHeight) / 2 + gap;
+    const x = pad + (innerWidth - width) / 2;
+    const y = pad + (innerHeight - bandHeight) / 2 + gap;
     return {
       artwork: { file: config.file, x, y, width, height },
-      content: inset(content, rule),
+      content,
+      borderBox,
       band: { height: bandHeight, gap },
     };
   }
 
-  const finalWidth = config.stretch ? frame.innerWidth * config.widthShare : width;
-  const x = frame.padding + (frame.innerWidth - finalWidth) / 2;
-  const y = frame.padding;
+  const finalWidth = config.stretch ? innerWidth * config.widthShare : width;
+  const x = pad + (innerWidth - finalWidth) / 2;
+  const y = pad;
   return {
     artwork: { file: config.file, x, y, width: finalWidth, height, stretch: Boolean(config.stretch) },
-    content: inset({
-      x: frame.padding,
+    borderBox,
+    content: {
+      x: pad,
       y: y + height + gap,
-      width: frame.innerWidth,
-      height: Math.max(0, frame.innerHeight - height - gap),
-    }, rule),
+      width: innerWidth,
+      height: Math.max(0, innerHeight - height - gap),
+    },
   };
 }
 
@@ -1084,7 +1106,18 @@ function layoutSuvichar(data, frame) {
   // (measured: 563 px of type refused by a 544 px measure at 14 px, set at 12
   // instead). Bounded by the type it is protecting, it is the same air on a
   // narrow card and stops growing on a wide one.
-  const insetFor = (fontPx) => Math.max(4, Math.min(frame.innerWidth * 0.06, fontPx * 1.5));
+  // A WRAPPED PANEL INSETS ITS MEASURE; A STRIP DOES NOT NEED TO.
+  //
+  // The strip's mark, quote and credit are set down as one centred group
+  // (layoutSmartCard), so the air either side is the centring's and a side
+  // inset here is measure spent twice. Worse, it was spent in two different
+  // places: the solver took it off the measure and the renderer wrote it again
+  // as the blockquote's own padding, inside a box already cut to the row's
+  // drawn width - so the quote shrank and WRAPPED, 48px of type in a 30px
+  // strip. Measured in the DOM: quote-text 8px above the card and 10px below.
+  const insetFor = (fontPx, oneLineOnly) => (oneLineOnly
+    ? 0
+    : Math.max(4, Math.min(frame.innerWidth * 0.06, fontPx * 1.5)));
 
   // A सुविचार IS A ONE-LINE STRIP.
   //
@@ -1098,7 +1131,7 @@ function layoutSuvichar(data, frame) {
   // narrow column - falling back to the wrapped panel, which is the honest
   // answer rather than a clipped strip.
   const solveWith = (oneLineOnly) => solveFont(frame.innerHeight, (fontPx) => {
-    const sideInset = insetFor(fontPx);
+    const sideInset = insetFor(fontPx, oneLineOnly);
     const measureWidth = Math.max(1, frame.innerWidth - sideInset * 2);
     // The quote leads; the attribution is deliberately smaller, as a credit is.
     const lineHeightPx = lineHeightFor(fontPx, 'serif', 400) * 1.18;
@@ -1194,6 +1227,19 @@ function layoutSuvichar(data, frame) {
       // one line - which is the format the desk asked for (mark, quote,
       // credit, one rule of type) and what a lead-in mark does in print.
       markHeightPx: solved.lineHeightPx,
+      // THE MARK IS PART OF THE LINE, NOT A LOGO PARKED AT THE MARGIN.
+      //
+      // cardArtworkFor() reserves an `inline` mark at the content box's left
+      // edge and the strip then centres its row in what is LEFT, so the two
+      // ended up at opposite ends of a wide strip - measured on the page, the
+      // mark at x=0 and the first word 77px away with 30px of nothing between
+      // the mark and the row it opens. The row's own drawn width is stated so
+      // layoutSmartCard() can set the mark, the gap and the row down as one
+      // centred group, which is the format a printed thought-for-the-day has:
+      // mark, thought, credit, one rule of type.
+      stripRowWidthPx: solved.oneLine
+        ? solved.quoteInlineWidth + (solved.inlineCredit ? solved.creditGap + solved.creditInlineWidth : 0)
+        : 0,
       lineHeightPx: solved.lineHeightPx,
       creditFontPx: solved.creditFontPx,
       creditLineHeightPx: solved.creditLineHeightPx,
@@ -2291,22 +2337,55 @@ export function layoutSmartCard(key, data, frame) {
 
   const clamped = clampFrame(frame);
   const { artwork, content, band, borderBox } = cardArtworkFor(normalKey, clamped);
-  const contentFrame = {
-    width: content.width,
+  const frameFor = (width) => ({
+    width,
     height: content.height,
     padding: 0,
-    innerWidth: content.width,
+    innerWidth: width,
     innerHeight: content.height,
     // A 'middle' nameplate takes a band out of the card's own middle rather
     // than off its top, so the card is told about it and leaves the gap where
     // its rows fall. Absent for every other placement.
     band: band || null,
+  });
+  const solveAt = (width) => {
+    const contentFrame = frameFor(width);
+    const subtitle = solveSubtitle(data?.subtitle, contentFrame);
+    const bodyFrame = { ...contentFrame, innerHeight: Math.max(0, contentFrame.innerHeight - subtitle.height) };
+    return { contentFrame, subtitle, result: fn(data, bodyFrame) };
   };
-  let subtitle = solveSubtitle(data?.subtitle, contentFrame);
-  let bodyFrame = { ...contentFrame, innerHeight: Math.max(0, contentFrame.innerHeight - subtitle.height) };
 
-  let result = fn(data, bodyFrame);
+  let contentWidth = content.width;
+  let { contentFrame, subtitle, result } = solveAt(contentWidth);
   if (result.fitState === 'EMPTY') return result;
+
+  // A LEAD-IN MARK IS SET TO THE LINE, SO ITS FOOTPRINT IS NOT KNOWN UNTIL
+  // THE LINE IS.
+  //
+  // cardArtworkFor() can only reserve an `inline` mark from a share of the
+  // frame, and सुविचार then sets it to the line of type it opens - so on a
+  // strip only a line or two deep the reserved box was SMALLER than the line
+  // (measured on a 620x36 strip: mark 16px against a 23.8px line) and the two
+  // no longer shared a height, which is the whole reason their tops agree.
+  // One correction pass: the mark's real footprint is worked out from the
+  // resolved line and the card is solved again against the measure that
+  // actually leaves. Bounded at one, like the subtitle pass above it.
+  const markConfig = CARD_ARTWORK[normalKey];
+  const markGap = artwork ? content.x - (artwork.x + artwork.width) : 0;
+  const availWidth = artwork ? content.x + content.width - artwork.x : content.width;
+  if (artwork && markConfig?.placement === 'inline') {
+    const wanted = Math.min(Number(result.geometry?.markHeightPx) || 0, content.height);
+    const wantWidth = wanted > 0
+      ? Math.max(1, availWidth - wanted * markConfig.aspect - markGap)
+      : contentWidth;
+    if (Math.abs(wantWidth - contentWidth) > 1) {
+      const restated = solveAt(wantWidth);
+      if (restated.result.fitState !== 'EMPTY') {
+        contentWidth = wantWidth;
+        ({ contentFrame, subtitle, result } = restated);
+      }
+    }
+  }
 
   // A SUBTITLE MAY NOT OUTRANK THE CARD IT LABELS.
   //
@@ -2324,7 +2403,7 @@ export function layoutSmartCard(key, data, frame) {
   const cap = result.fontPx * MAX_SUBTITLE_OF_BODY;
   if (subtitle.fontPx > cap) {
     subtitle = solveSubtitle(data?.subtitle, contentFrame, cap);
-    bodyFrame = { ...contentFrame, innerHeight: Math.max(0, contentFrame.innerHeight - subtitle.height) };
+    const bodyFrame = { ...contentFrame, innerHeight: Math.max(0, contentFrame.innerHeight - subtitle.height) };
     const restated = fn(data, bodyFrame);
     if (restated.fitState !== 'EMPTY') result = restated;
   }
@@ -2338,13 +2417,13 @@ export function layoutSmartCard(key, data, frame) {
   // puts its top on the words' top, because the two are centred in the same
   // box. Shrinking it can only give the quote more measure, never less, so
   // nothing recomposes.
-  const markHeight = Number(result.geometry?.markHeightPx) || 0;
+  const markHeight = Math.min(Number(result.geometry?.markHeightPx) || 0, content.height);
   // Placed against the CONTENT box, not against the artwork's own reserved
   // rectangle. The quote is centred in the content box, so centring the mark in
   // that same box is what actually puts the two tops on one line - centring it
   // in the frame instead left it 8px low, measured in the DOM (mark centre 43,
   // line centre 35).
-  const sized = artwork && markHeight > 0 && markHeight < artwork.height
+  let sized = artwork && markHeight > 0 && markHeight !== artwork.height
     ? {
       ...artwork,
       width: artwork.width * (markHeight / artwork.height),
@@ -2352,15 +2431,53 @@ export function layoutSmartCard(key, data, frame) {
       y: content.y + (content.height - markHeight) / 2,
     }
     : artwork;
+  let contentBox = { ...content, width: contentWidth };
+
+  // A LEAD-IN MARK AND THE LINE IT OPENS ARE ONE CENTRED GROUP.
+  //
+  // The mark is reserved at the content box's left edge before the card is
+  // solved, and a strip then centres its row in what is left - so on a 618px
+  // strip the mark sat at x=0 hard against the card's rule and the first word
+  // began 77px away. Once the row's own drawn width is known the two are set
+  // down together: mark, gap, row, centred in the box they share. Only the
+  // horizontal moves, so the mark stays on the row's own line.
+  const rowWidth = Number(result.geometry?.stripRowWidthPx) || 0;
+  if (sized && rowWidth > 0 && markConfig?.placement === 'inline') {
+    // A hair over the shaped measure: the browser draws a nowrap line from the
+    // same advances but rounds where HarfBuzz does not, and a box cut to the
+    // exact number would centre a line half a pixel wider than itself.
+    const rowBox = rowWidth + 2;
+    // THE LINE IS THE CARD; THE MARK YIELDS TO IT.
+    //
+    // The correction pass above narrows the measure by the mark's real
+    // footprint and the card re-solves against it, but the two need not land
+    // on the same size in one pass - and when they do not it is the mark that
+    // gives way, never the words. Without this the row was cut to the room
+    // left over and its nowrap line ran 7px past a card that clips.
+    const markRoom = Math.max(0, availWidth - markGap - rowBox);
+    if (sized.width > markRoom) {
+      sized = {
+        ...sized,
+        width: markRoom,
+        height: sized.height * (markRoom / sized.width),
+        y: content.y + (content.height - sized.height * (markRoom / sized.width)) / 2,
+      };
+    }
+    const groupWidth = sized.width + markGap + rowBox;
+    const left = artwork.x + Math.max(0, (availWidth - groupWidth) / 2);
+    sized = { ...sized, x: left };
+    contentBox = { x: left + sized.width + markGap, y: content.y, width: rowBox, height: content.height };
+  }
 
   return {
     ...result,
     artwork: sized,
-    contentBox: content,
-    // The rectangle this card's own rule follows. Usually the content box;
-    // the whole frame when the nameplate stands inside the card as a column
-    // of it, where a rule round the content alone would cut the card in two.
-    borderBox: borderBox || content,
+    contentBox,
+    // The rectangle this card's own rule follows: the BLOCK's own edge, so the
+    // four sides are the same rule at the same distance from the paper's grid
+    // whatever furniture the card puts inside itself. Null when the card is
+    // unruled, and then nothing is drawn.
+    borderBox: borderBox || null,
     subtitle,
     fitState,
     exactShaping: isShaperReady(),
@@ -2401,7 +2518,14 @@ export const SMART_CARD_BLOCK_SIZE = Object.freeze({
   // own double ring and read as a sixth, empty row - photographed on the page.
   panchang: { width: 148, height: 205 },
   rashi: { width: 307, height: 620 },
-  suvichar: { width: 307, height: 72 },
+  // ONE LINE TALL, AND THE WIDTH OF THE PAGE.
+  //
+  // A thought for the day is a rule of type across the head of the sheet, and
+  // this asked for a 307px leg 72px deep - room for three lines of a thing
+  // that sets in one. Photographed on the page: a 23.8px line centred in 67px
+  // of content, with the rest white. 620 is the paper's own full measure, and
+  // 32 is that line plus the card's rule and a hair of air either side.
+  suvichar: { width: 620, height: 32 },
   // Wider than it was: the name now runs ACROSS the head of the box rather
   // than standing in a column of it, and a 190px box gives that mark too
   // little measure to be read as a nameplate.

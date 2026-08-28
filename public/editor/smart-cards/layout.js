@@ -446,7 +446,11 @@ function layoutSudoku(data, frame) {
   // This is an instruction band, not a one-word badge. Pick the largest size
   // that holds the complete sentence on one line so it uses the wide measure
   // above the square instead of turning into a tall second title.
-  const headingCandidates = [11, 10, 9, 8, 7, 6.5, 6];
+  // A rung larger than it was ([11 …]): the band is the card's own heading and
+  // was setting a shade under the numerals it introduces. It still holds the
+  // whole sentence on one line - the search below is unchanged - so the only
+  // effect is that the largest size it can reach is now larger.
+  const headingCandidates = [14, 13, 12, 11, 10, 9, 8, 7, 6.5, 6];
   let headingFontPx = headingCandidates[headingCandidates.length - 1];
   let heading = measureAtomic(headingText, headingFontPx, 'serif', 700, frame.innerWidth);
   for (const candidate of headingCandidates) {
@@ -1185,6 +1189,11 @@ function layoutSuvichar(data, frame) {
       creditGap: solved.creditGap,
       quoteInlineWidth: solved.quoteInlineWidth,
       creditInlineWidth: solved.creditInlineWidth,
+      // What the strip's mark should be set to: the line of type it opens.
+      // Both are centred in the same box, so equal heights put their tops on
+      // one line - which is the format the desk asked for (mark, quote,
+      // credit, one rule of type) and what a lead-in mark does in print.
+      markHeightPx: solved.lineHeightPx,
       lineHeightPx: solved.lineHeightPx,
       creditFontPx: solved.creditFontPx,
       creditLineHeightPx: solved.creditLineHeightPx,
@@ -1230,7 +1239,12 @@ function layoutSuvichar(data, frame) {
  * hand's width of white.
  */
 const MAX_ENTRY_OF_BODY = 2.5;
-const MAX_ENTRY_ROW_GAP_RATIO = 1.2;
+// The entries are a LIST, not a ladder: the gap between them opens a little,
+// and what is left over centres the stack in its box rather than being spent
+// on more air between two lines. Opening the gap to fill the box put the first
+// entry hard against the top rule and the last against the bottom - measured on
+// the page, and the desk asked for the bullets to sit in the middle.
+const MAX_ENTRY_ROW_GAP_RATIO = 0.6;
 
 function layoutDinvishesh(data, frame) {
   const entries = Array.isArray(data?.entries) ? data.entries.filter(Boolean) : [];
@@ -1268,6 +1282,11 @@ function layoutDinvishesh(data, frame) {
   const rowGap = gaps > 0
     ? Math.min(solved.rowGap + residual / gaps, solved.lineHeightPx * MAX_ENTRY_ROW_GAP_RATIO)
     : solved.rowGap;
+  const stackHeight = solved.items.reduce((sum, item) => sum + item.height, 0) + gaps * rowGap;
+  // Equal air above the first entry and below the last. The canvas gets it
+  // from `align-content: center`; the export walk reads this number, or the
+  // two surfaces would centre differently.
+  const topOffset = Math.max(0, (frame.innerHeight - stackHeight) / 2);
 
   return {
     key: 'dinvishesh',
@@ -1275,7 +1294,7 @@ function layoutDinvishesh(data, frame) {
     fontPx: solved.fontPx,
     geometry: {
       rows: entries.length, lineHeightPx: solved.lineHeightPx,
-      textInset: solved.textInset, rowGap,
+      textInset: solved.textInset, rowGap, stackHeight, topOffset,
       // A ruled box with the nameplate on one line at its head and the day's
       // entries as centred bullets under it - which is the दिनविशेष a Marathi
       // daily prints, and what the desk asked for. The rule is stated here so
@@ -1957,9 +1976,33 @@ function layoutTender(data, frame) {
     const officeLines = band(data.office, noticeWidth, fontPx, 700);
 
     // Two ruled bands, each with a left end and a right end.
+    //
+    // THE BAND IS SPLIT BY WHAT ITS TWO ENDS NEED, NOT DOWN THE MIDDLE.
+    // A Latin email address is long and a पत्ता is usually short, so a flat
+    // half broke "Email ID : slaomo21satara@gmail.com" onto a second line
+    // while the address half sat with room to spare - photographed on the
+    // notice, and it reads as a misaligned label because a wrapped
+    // continuation is not where the eye expects the value. Each end is
+    // measured; if both fit the band they get what they asked for, and only a
+    // genuinely over-long pair falls back to halves.
     const halfWidth = Math.max(0, (noticeWidth - gap) / 2);
-    const emailLines = band(data.email ? `Email ID : ${data.email}` : '', halfWidth, smallFontPx, 400);
-    const addressLines = band(data.address ? `पत्ता :- ${data.address}` : '', halfWidth, smallFontPx, 400);
+    const emailText = data.email ? `Email ID : ${data.email}` : '';
+    const addressText = data.address ? `पत्ता :- ${data.address}` : '';
+    const emailNeeds = emailText ? measure(emailText, smallFontPx, 'serif', 400) + 2 : 0;
+    const addressNeeds = addressText ? measure(addressText, smallFontPx, 'serif', 400) + 2 : 0;
+    const contactFits = emailNeeds + addressNeeds <= noticeWidth - gap;
+    // When both ends are long the address can WRAP and the email cannot - it
+    // is one unbreakable Latin run - so the email keeps what it needs up to
+    // most of the band and the address takes the rest over two lines. Split
+    // down the middle, "Email ID : …@gmail.com" broke after the label and the
+    // value sat on a line of its own, which is what the desk saw.
+    const EMAIL_MAX_SHARE = 0.62;
+    const emailWidth = contactFits
+      ? Math.max(emailNeeds, 1)
+      : Math.max(halfWidth, Math.min(emailNeeds, (noticeWidth - gap) * EMAIL_MAX_SHARE));
+    const addressWidth = Math.max(1, noticeWidth - gap - emailWidth);
+    const emailLines = band(emailText, emailWidth, smallFontPx, 400);
+    const addressLines = band(addressText, addressWidth, smallFontPx, 400);
     const referenceLines = band(data.reference, halfWidth, smallFontPx, 400);
     const dateLines = band(data.date, halfWidth, smallFontPx, 400);
 
@@ -2041,6 +2084,7 @@ function layoutTender(data, frame) {
 
     return {
       height, hardOverset, issuerLines, officeLines, emailLines, addressLines,
+      emailWidth, addressWidth,
       referenceLines, dateLines, subjectLines, titleLines, paragraphItems,
       tableTitleLines, groupLines, groupHeight, groupWidth, table,
       placeLines, noticeDateLines, signatoryLines, designationLines, signOfficeLines,
@@ -2060,6 +2104,10 @@ function layoutTender(data, frame) {
       issuerFontPx: solved.issuerFontPx, issuerLineHeightPx: solved.issuerLineHeightPx,
       titleFontPx: solved.titleFontPx, titleLineHeightPx: solved.titleLineHeightPx,
       gap: solved.gap, indentPx: solved.indentPx, bandPadY: solved.bandPadY,
+      // The contact band's two ends, split by what each needs rather than
+      // down the middle. The reference band below it stays on halves - a
+      // number and a date are both short.
+      emailWidth: solved.emailWidth, addressWidth: solved.addressWidth,
       cellPadX: solved.cellPadX, halfWidth: solved.halfWidth,
       noticeWidth, frameInsetPx: TENDER_FRAME_INSET_PX,
       contactBandHeight: solved.contactBandHeight,
@@ -2282,9 +2330,32 @@ export function layoutSmartCard(key, data, frame) {
   }
 
   const fitState = subtitle.hardOverset || result.fitState === 'OVERSET' ? 'OVERSET' : 'FITS';
+  // A CARD MAY SIZE ITS OWN MARK TO THE TYPE IT OPENS.
+  //
+  // cardArtworkFor() has to reserve the mark's box BEFORE the card is solved,
+  // so it can only work from shares of the frame. सुविचार's strip knows better
+  // once its line height is resolved: a lead-in mark set to the line it opens
+  // puts its top on the words' top, because the two are centred in the same
+  // box. Shrinking it can only give the quote more measure, never less, so
+  // nothing recomposes.
+  const markHeight = Number(result.geometry?.markHeightPx) || 0;
+  // Placed against the CONTENT box, not against the artwork's own reserved
+  // rectangle. The quote is centred in the content box, so centring the mark in
+  // that same box is what actually puts the two tops on one line - centring it
+  // in the frame instead left it 8px low, measured in the DOM (mark centre 43,
+  // line centre 35).
+  const sized = artwork && markHeight > 0 && markHeight < artwork.height
+    ? {
+      ...artwork,
+      width: artwork.width * (markHeight / artwork.height),
+      height: markHeight,
+      y: content.y + (content.height - markHeight) / 2,
+    }
+    : artwork;
+
   return {
     ...result,
-    artwork,
+    artwork: sized,
     contentBox: content,
     // The rectangle this card's own rule follows. Usually the content box;
     // the whole frame when the nameplate stands inside the card as a column

@@ -3599,11 +3599,12 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
    distinguishes a standing feature from an ordinary story block. Drawn with
    two box-shadow rings so it costs no layout width - the solver's own measure
    is unchanged and no card recomposes. */
-.smart-card-panchang .smart-card-content,
-.smart-card-rashi .smart-card-content,
-.smart-card-dinvishesh .smart-card-content {
-  border-top: 0.7px solid #8a1428;
-}
+/* ONE RING, THE SAME ON ALL FOUR SIDES. Each of these cards used to draw a
+   heavy rule of its own along the top (and the weather and market panels along
+   the bottom too) and then gained the card ring on top of it, so the box read
+   as a band above and below with hairlines down the sides. The ring is the
+   card's only rule now; पंचांग and राशिभविष्य keep the almanac's double band,
+   which is a ring inside a ring and still even on every side. */
 .smart-card-panchang .smart-card-content,
 .smart-card-rashi .smart-card-content {
   box-shadow: inset 0 0 0 0.6px #8a1428, inset 0 0 0 2.2px #fff, inset 0 0 0 2.8px #8a1428;
@@ -3641,7 +3642,7 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   transform: translateY(var(--row-text-nudge, 0));
 }
 
-.smart-card-suvichar { box-shadow: inset 0 0.6px #8a1428, inset 0 -0.6px #8a1428; }
+.smart-card-suvichar { box-shadow: inset 0 0 0 0.6px #8a1428; }
 .smart-card-suvichar .smart-card-content { justify-content: center; }
 /* THE THOUGHT FOR THE DAY, SET AS A PULL QUOTE.
    It used to be one nowrap row pinned to the left of a flex box - so the whole
@@ -3769,8 +3770,6 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   height: 100%;
   text-align: center;
   box-sizing: border-box;
-  border-top: 0.8px solid #8a1428;
-  border-bottom: 0.8px solid #8a1428;
   background: linear-gradient(180deg, #fff7f7 0, #fff 46%);
 }
 .smart-card-weather-place { display: block; color: #8a1428; font-weight: 700; }
@@ -3814,8 +3813,6 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   display: flex;
   flex-direction: column;
   height: 100%;
-  border-top: 0.8px solid #8a1428;
-  border-bottom: 0.8px solid #8a1428;
   box-sizing: border-box;
 }
 .smart-card-market h3 {
@@ -3907,6 +3904,10 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
   border-bottom: 0.5px solid #777;
   box-sizing: border-box;
 }
+/* The two ends of a band are LEFT and RIGHT. Without the explicit left the
+   first end inherited a centre from the notice above it, so a wrapped email
+   address sat adrift under its own "Email ID :" label. */
+.smart-card-tender-band span:first-child { text-align: left; }
 .smart-card-tender-band span:last-child { text-align: right; }
 .smart-card-tender h5 { margin: var(--tender-gap) 0 0; font-weight: 700; text-align: center; }
 /* गाव- / तालुका- / जिल्हा- over the appendix. */
@@ -4017,8 +4018,15 @@ body.dragging-block .section-hover-toolbar { display: none !important; }
 .smart-card-advert-address { display: block; color: #4a4147; }
 .smart-card-advert-footer { display: block; color: #6b6264; }
 
-.smart-card-artwork { margin-top: 8px; border: 0; padding: 0; }
-.smart-card-artwork legend {
+/* THE GENERATE PANEL'S artwork fieldset, NOT a card's nameplate image.
+   It was called `.smart-card-artwork` - the same class the card renderer puts
+   on its registered nameplate - so this `margin-top: 8px` landed on every
+   `top`-placed mark on every card and drew it 8px below where the solver had
+   placed it. That is why the सुविचार mark sat under its own line and why
+   दिनविशेष's name touched the box beneath it; measured in the DOM, inline
+   style `top: 23.11px`, offsetTop 31. */
+.smart-card-artwork-field { margin-top: 8px; border: 0; padding: 0; }
+.smart-card-artwork-field legend {
   padding: 0;
   font-size: 0.72rem;
   font-weight: 700;
@@ -6860,7 +6868,13 @@ body.print-view .page-imprint {
 /* सुविचार as a STRIP: quote and credit on one baseline, centred together. */
 .smart-card-quote.is-strip {
   flex-direction: row;
-  align-items: baseline;
+  /* CENTRED, not baseline-aligned. `baseline` aligns the quote and its credit
+     to each other but parks the whole row at the TOP of a full-height strip,
+     while the mark beside it is centred - so the two sat at opposite ends of
+     the box. layoutSuvichar gives the credit the quote's own line box, so
+     centring aligns their baselines anyway, and the row now shares the mark's
+     axis: same centre, same height, therefore the same top. */
+  align-items: center;
   justify-content: center;
   flex-wrap: nowrap;
 }

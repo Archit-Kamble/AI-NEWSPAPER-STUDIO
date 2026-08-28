@@ -362,8 +362,8 @@ function smartCardLines(key, data, frame, cardLayout) {
 
   if (key === 'suvichar') {
     const g = layout.geometry;
-    out.push({ kind: 'bar', x: 0, y: 0, width: Number(frame.width) || contentWidth, height: 0.6, ink: '#8a1428' });
-    out.push({ kind: 'bar', x: 0, y: Math.max(0, (Number(frame.height) || 0) - 0.6), width: Number(frame.width) || contentWidth, height: 0.6, ink: '#8a1428' });
+    // No top/bottom rules of its own: CARD_BORDERS already rings this card on
+    // all four sides, and a second pair here made the strip read as a band.
 
     // The same wrapped, CENTRED column the canvas paints. This used to emit
     // `layout.displayLine` - the quote and its credit run together as one
@@ -432,7 +432,10 @@ function smartCardLines(key, data, frame, cardLayout) {
     // beside it - a hanging mark on a centred entry points at nothing, which is
     // why the spine rule goes with it. The alignment flag is the solver's, read
     // by both surfaces, so the canvas and the plate cannot centre differently.
-    let top = subtitleOffsetPx;
+    // Centred in its own box, the same air above the first entry as below the
+    // last - the canvas gets it from `align-content: center`, this reads the
+    // solver's own number so the two cannot differ.
+    let top = subtitleOffsetPx + (Number(layout.geometry.topOffset) || 0);
     if (!centred) {
       bar(1.45, top, 0.6, stackHeight, '#d5a9b0');
     }
@@ -470,9 +473,9 @@ function smartCardLines(key, data, frame, cardLayout) {
     if (g.solo) {
       const blockHeight = g.placeHeight + g.conditionHeight + g.gap + g.figureHeight
         + g.gap + g.rainHeight + g.gap + g.sourceHeight;
-      // The panel's own rules, top and bottom, and its tinted ground.
-      bar(0, subtitleOffsetPx, contentWidth, 0.8, '#8a1428');
-      bar(0, subtitleOffsetPx + boxHeight - 0.8, contentWidth, 0.8, '#8a1428');
+      // No rules of its own: CARD_BORDERS rings this card on all four sides,
+      // and a heavier pair here made the box read as a band top and bottom
+      // with hairlines down the sides.
       let y = subtitleOffsetPx + Math.max(0, (boxHeight - blockHeight) / 2);
 
       line(layout.placeLine || '', g.inset, y, g.width, g.placeFontPx, 1,
@@ -731,13 +734,15 @@ function smartCardLines(key, data, frame, cardLayout) {
       y += lines.length * height;
     };
     // The two ends of a ruled band, and the rule under it.
-    const putBand = (left, right, height, fontPx, lineHeightPx) => {
+    const putBand = (left, right, height, fontPx, lineHeightPx, leftWidth, rightWidth) => {
       if (!height) return;
       const top = y + g.bandPadY;
+      const lw = leftWidth || half;
+      const rw = rightWidth || half;
       left.forEach((text, index) => line(text, inset + 2, top + index * lineHeightPx,
-        half - 4, fontPx, 0, lineHeightPx));
-      right.forEach((text, index) => line(text, inset + noticeWidth - half, top + index * lineHeightPx,
-        half - 2, fontPx, 2, lineHeightPx));
+        lw - 4, fontPx, 0, lineHeightPx));
+      right.forEach((text, index) => line(text, inset + noticeWidth - rw, top + index * lineHeightPx,
+        rw - 2, fontPx, 2, lineHeightPx));
       y += height;
       bar(1, y - 0.5, contentWidth - 2, 0.5, '#777777');
     };
@@ -747,7 +752,8 @@ function smartCardLines(key, data, frame, cardLayout) {
     bar(1, y - 0.4, contentWidth - 2, 0.5, '#777777');
 
     putBand(layout.emailLines || [], layout.addressLines || [],
-      g.contactBandHeight, g.smallFontPx, g.smallLineHeightPx);
+      g.contactBandHeight, g.smallFontPx, g.smallLineHeightPx,
+      g.emailWidth, g.addressWidth);
     putBand(layout.referenceLines || [], layout.dateLines || [],
       g.referenceBandHeight, g.smallFontPx, g.smallLineHeightPx);
     y += g.gap;

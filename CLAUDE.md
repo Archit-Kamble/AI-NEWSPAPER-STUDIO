@@ -2498,6 +2498,65 @@ widened to 268 to give that mark measure enough to read as a nameplate.
 rather than against the strip: at `heightShare` 0.74 it stood half again as tall
 as the words and read as a logo pasted beside them.
 
+### Two things called `.smart-card-artwork`, and one of them moved every nameplate
+
+The generate panel's artwork fieldset (`smart-card-panel.js`) and the card
+renderer's registered nameplate image carried the **same class name**, and the
+panel's rule was `margin-top: 8px`. So every `top`-placed mark on every card —
+पंचांग, राशिभविष्य, दिनविशेष — and the सुविचार strip's lead-in mark drew **8 px
+below where the solver placed it**. Measured in the DOM: inline style
+`top: 23.11px`, `offsetTop` 31.
+
+That is two desk reports at once — "दिनविशेष word touching down line", and the
+सुविचार mark sitting under its own line instead of beside it. Both were read as
+spacing faults and neither was: **a class name collision is a layout bug that
+looks like a taste problem.** The panel's fieldset is
+`.smart-card-artwork-field` now.
+
+Chasing it is also why the fix was found: the artwork's stated `top` and its
+measured `offsetTop` disagreed, which no amount of adjusting `heightShare`
+could have explained.
+
+### One ring per card, the same on all four sides
+
+Several cards drew a heavy rule of their own along the top — and the weather
+and market panels along the bottom too, 0.7–0.8 px — and then gained the card
+ring (0.6 px) on top of it. In print view that reads as a band above and below
+with hairlines down the sides, which is the desk's *"all 4 side border lines
+should be same"*. The ring from `CARD_BORDERS` is each card's only rule now;
+पंचांग and राशिभविष्य keep the almanac's double band, which is a ring inside a
+ring and even on every side. The export walk lost its matching top/bottom bars
+for सुविचार and हवामान in the same pass.
+
+### A lead-in mark is set to the LINE it opens
+
+`cardArtworkFor()` reserves a mark's box before the card is solved, so it can
+only work from shares of the frame. सुविचार's strip knows better once its line
+height is resolved: `markHeightPx` hands back the resolved line box, the mark
+is scaled to it and centred **in the content box** — the same box the quote is
+centred in — so the two tops land on one line. That is the format the desk
+asked for: mark, thought, credit, one rule of type.
+
+Centring it in the *frame* instead was measured wrong by 8 px, which is how the
+class collision above was finally cornered.
+
+### A band's two ends are LEFT and RIGHT
+
+`.smart-card-tender-band span:first-child` had no explicit alignment and
+inherited a centre from the notice, so a wrapped email address sat adrift under
+its own `Email ID :` label. And the band was split down the middle when the two
+ends do not want equal room: a Latin email address is **one unbreakable run**
+and a पत्ता wraps happily, so the email now keeps what it needs up to
+`EMAIL_MAX_SHARE` of the band and the address takes the rest over two lines.
+
+### दिनविशेष's entries are centred, not stretched
+
+Opening the row gap to fill the box put the first entry hard against the top
+rule and the last against the bottom. The gap opens a little
+(`MAX_ENTRY_ROW_GAP_RATIO`, 0.6 of a line) and what is left **centres the
+stack** — `align-content: center` on the canvas, `geometry.topOffset` in the
+export walk, so the two cannot centre differently.
+
 ### A Smart Card brings its own block
 
 `layout.js`'s **`SMART_CARD_BLOCK_SIZE`** states the frame a printed paper gives

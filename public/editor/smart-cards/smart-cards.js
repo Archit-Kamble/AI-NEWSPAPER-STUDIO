@@ -387,16 +387,17 @@ function tenderMarkup(data, layout) {
   if (!layout.issuerLines?.length || !layout.geometry) return null;
   const g = layout.geometry;
 
-  const splitBand = (left, right, fontPx, lineHeightPx, height, cls) =>
+  const splitBand = (left, right, fontPx, lineHeightPx, height, cls, leftWidth, rightWidth) =>
     (left.length || right.length
       ? `<div class="smart-card-tender-band ${cls}" style="height:${height}px;padding:${g.bandPadY}px 0;font-size:${fontPx}px;line-height:${lineHeightPx}px">
-          <span style="width:${g.halfWidth}px">${linesMarkup(left)}</span>
-          <span style="width:${g.halfWidth}px">${linesMarkup(right)}</span>
+          <span style="width:${leftWidth ?? g.halfWidth}px">${linesMarkup(left)}</span>
+          <span style="width:${rightWidth ?? g.halfWidth}px">${linesMarkup(right)}</span>
         </div>`
       : "");
 
   const contactBand = splitBand(layout.emailLines, layout.addressLines,
-    g.smallFontPx, g.smallLineHeightPx, g.contactBandHeight, "is-contact");
+    g.smallFontPx, g.smallLineHeightPx, g.contactBandHeight, "is-contact",
+    g.emailWidth, g.addressWidth);
   const referenceBand = splitBand(layout.referenceLines, layout.dateLines,
     g.smallFontPx, g.smallLineHeightPx, g.referenceBandHeight, "is-reference");
 

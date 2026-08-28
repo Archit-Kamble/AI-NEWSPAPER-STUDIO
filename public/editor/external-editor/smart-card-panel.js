@@ -75,7 +75,7 @@ export function smartCardMarkupPanel(view) {
          A generated illustration is briefed WITHOUT text - generated
          Devanagari is unreadable, and the advertiser's words are the
          compositor's to set - and is marked AI on the card itself. -->
-    <fieldset class="smart-card-artwork" id="smartCardArtwork" hidden>
+    <fieldset class="smart-card-artwork-field" id="smartCardArtwork" hidden>
       <legend>Artwork</legend>
       <label class="smart-card-file-label">The advertiser's own picture
         <input id="smartCardAdvertImage" type="file" accept="image/*"></label>

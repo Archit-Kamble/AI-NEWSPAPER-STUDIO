@@ -3743,6 +3743,45 @@ read the shared catalogue; do not reintroduce a local 10/16 px default.
 The schema migration changes the default only. Existing `body_font_px` values
 may be explicit desk choices and are never mass-backfilled.
 
+### Loading the story must not take the caret from the desk
+
+The desk reported three things that are one bug: headlines are hard to edit,
+edits do not show in the layout "instantly or sometimes never", and clicking
+sometimes lands somewhere else. All three are a focus race, and it can
+**corrupt copy**.
+
+`quill.clipboard.dangerouslyPasteHTML()` is `convert()` → `setContents()` →
+`setSelection()`, and that last step reaches `setNativeRange`, which calls
+`.focus()` on the editor root. Its `"silent"` argument suppresses the
+text-change EVENT; it does **not** stop the focus. So every load of a block's
+copy took the caret. Two call sites did it:
+
+| | |
+|---|---|
+| `mountFrame` | every time a block is selected |
+| the body sync in `refreshFrame` | guarded by `quill.hasFocus()` — which is **false whenever the caret is in the headline field**, so it ran precisely when it must not |
+
+Caught in the act by instrumenting `HTMLElement.prototype.focus`: the stack
+reads `dangerouslyPasteHTML → setSelection → setNativeRange → focus(ql-editor)`.
+The consequence is not cosmetic — typing a headline put **`XYZ` at offset 162
+of a real story**, with nothing on screen to say so.
+
+**The paste is kept, not replaced.** Composing the Delta by hand and calling
+`setContents` avoids the focus, and it was tried: Quill's trailing
+`setSelection` is what gives an unwritten block's drawn caret its place, so
+without it the caret stood 7 px above the body frame
+(`tests/browser/body-editing`). Quill therefore does exactly what it always
+did, and `loadBodyIntoQuill()` hands the caret back to whatever the desk was
+typing into — **at the same offset**, by restoring the saved Range, so a desk
+half way through a word does not get thrown to the start of the line.
+
+Measured on the half-fixed build (mount repaired, sync not): 2 of 24 attempts
+still landed in the story. With both repaired: 0 of 24.
+
+`tests/browser/headline-focus.browser.js` holds it, and its own header is
+explicit that it is a regression net rather than a reproduction — the original
+race needs a mount to land inside a window nothing outside the app can force.
+
 ### The accent marks are not ink
 
 `*word*` is the headline's one hand-marked emphasis, and `accent.js` strips the

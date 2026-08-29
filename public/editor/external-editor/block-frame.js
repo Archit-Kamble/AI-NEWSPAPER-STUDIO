@@ -2086,6 +2086,48 @@ function displaySizeAt(field) {
   return null;
 }
 
+// LOADING THE STORY MUST NOT TAKE THE CARET FROM THE DESK.
+//
+// `dangerouslyPasteHTML` is `convert()` -> `setContents()` -> `setSelection()`,
+// and that last step reaches `setNativeRange`, which calls `.focus()` on the
+// editor root. Its `"silent"` argument suppresses the text-change EVENT; it
+// does not stop the focus. So loading a block's copy TOOK THE CARET.
+//
+// That is a race a desk loses: click a block, click the headline field, and if
+// a mount or a body sync lands after the click, focus is pulled back into the
+// story and the keystrokes meant for the headline are inserted INTO IT. Caught
+// in the act - typing a headline put `XYZ` at offset 162 of a real story, with
+// nothing on screen to say so - and it is intermittent, which is the desk's
+// "sometimes edits are not shown in the layout, or never". Measured across 24
+// attempts at eight delays: 2 landed in the story before this, 0 after.
+//
+// The paste itself is KEPT rather than replaced. Quill's trailing
+// `setSelection` is what gives an unwritten block's drawn caret its place -
+// composing the Delta by hand and calling `setContents` instead left the
+// caret 7px above the body frame (tests/browser/body-editing). So Quill does
+// exactly what it always did, and whatever the desk was typing into is handed
+// its caret back afterwards, at the same offset, having never seen the change.
+function loadBodyIntoQuill(html) {
+  const active = document.activeElement;
+  const stolenFrom = active && active !== quill.root && !quill.root.contains(active)
+    && typeof active.focus === "function" ? active : null;
+  // Where the caret was in THAT field, so putting the focus back does not
+  // collapse it to the start of the line the desk was half way through.
+  const selection = window.getSelection();
+  const range = stolenFrom && selection && selection.rangeCount
+    ? selection.getRangeAt(0).cloneRange() : null;
+
+  quill.clipboard.dangerouslyPasteHTML(html, "silent");
+
+  if (!stolenFrom || document.activeElement === stolenFrom) return;
+  stolenFrom.focus({ preventScroll: true });
+  if (!range || !stolenFrom.contains(range.startContainer)) return;
+  try {
+    selection.removeAllRanges();
+    selection.addRange(range);
+  } catch { /* a field that has been re-rendered under us keeps the plain focus */ }
+}
+
 export async function mountFrame(section, view, images, callbacks, selectedPart = "block", selectedImageIds = []) {
   // The editor can be mounted again while a previous block had direct body
   // input active (edition reload, or reopening the workspace). Its hidden
@@ -2147,7 +2189,7 @@ export async function mountFrame(section, view, images, callbacks, selectedPart 
     },
   });
 
-  quill.clipboard.dangerouslyPasteHTML(quillHtmlFromStored(view.body || ""), "silent");
+  loadBodyIntoQuill(quillHtmlFromStored(view.body || ""));
   quill.on("text-change", (delta, old, source) => {
     if (source !== "user") return;
     hooks.onPatch?.({ body: copyFromFrame() }, "block-frame");
@@ -2273,7 +2315,11 @@ export function refreshFrame(section, view, images, source, selectedPart, select
   // throws it back to the start, which is how a rich editor becomes unusable.
   if (source === "block-frame" || !quill || quill.hasFocus()) return;
   const wanted = view.body || "";
-  if (copyFromFrame() !== wanted) quill.clipboard.dangerouslyPasteHTML(quillHtmlFromStored(wanted), "silent");
+  // The guard on the line above protects a desk typing in the BODY - but
+  // `quill.hasFocus()` is false whenever the caret is anywhere else, so this
+  // sync ran happily while a desk was typing a HEADLINE and dragged the caret
+  // into the story. Same load, same rule: never move the selection.
+  if (copyFromFrame() !== wanted) loadBodyIntoQuill(quillHtmlFromStored(wanted));
 }
 
 export function selectPictureFrame(id) {

@@ -3743,6 +3743,58 @@ read the shared catalogue; do not reintroduce a local 10/16 px default.
 The schema migration changes the default only. Existing `body_font_px` values
 may be explicit desk choices and are never mass-backfilled.
 
+### A panel's frame is the BLOCK's, not the payload's
+
+Found by building one block carrying every device the editor offers — 620×680,
+two thirds of the printable page — and looking at it. Five panels were stacked
+in the top-left corner with the headline pushed sideways round them.
+
+`panelOf()` clamps a panel inside its block and the service handed it the size
+**from the request body**:
+
+```js
+.map((entry) => panelOf(entry, { width: body.widthPx, height: body.heightPx }))
+```
+
+`payloadFromDraft()` does not carry `widthPx`/`heightPx` — an ordinary save is
+copy and presentation, not geometry — so `frame.width` arrived `undefined`,
+`maxX` collapsed to `width - width` = **0**, and every panel was clamped to
+`x=0, y=0`. Measured: a panel stored at (300, 400) came back at **(0, 0) after
+one ordinary save**. So a desk placed a fact box, a pull quote, a cross-head or
+a chart, and the next autosave slammed it into the corner, on top of the
+headline and on top of every other panel.
+
+The block's own row is the authority (`saveSection` already loads it). A
+payload that really is resizing the block still clamps against the size it is
+asking for. `tests/edition.test.js` holds all three cases and fails on the old
+line.
+
+**The showcase block itself is worth keeping as a way to look at the product**:
+edition `2099-09-09`, page one, `block-1` — kicker, centred Khand headline with
+an accent word, deck, dateline, three-line drop cap, three columns of
+justify-all copy, a captioned photograph, a tinted bulleted fact box, a bar
+chart with its source line, a ruled cross-head, a pull quote, an ornament
+separator, a 2 pt box and a cream ground. Every one of them was applied through
+the API the editor itself calls and then read back from the row.
+
+**And the API vocabulary is worth writing down**, because four of the five
+"failures" in that sweep were the caller's wrong words, not the product's:
+
+| | |
+|---|---|
+| create a block | `POST /api/pages/:id/sections` takes `x/y/width/height`, and assigns the key itself (`block-N`) |
+| place a picture | `sectionImage.add` needs **`url`**, not `imageUrl`; the row reads back as `width_px`/`height_px` |
+| a panel kind | `note`, `quote`, `crosshead`, `ornament` — never `box` or `plain` |
+| a chart panel | its card carries **`items`** of `{label, value}`, never `entries` |
+| a page's state | `{ state }`, one of `making_up` / `subbed` / `passed` |
+| a tint | one of the palette's own hexes; anything else is a 400, which is the boundary working |
+
+**A PUT is a full replace for the fields it covers.** CLAUDE.md already says so
+for the browser nets, and it applies to any API caller: sending
+`{ borderStyle }` alone blanks the headline, the deck and the story. The
+showcase sweep did exactly that to itself — every device verified, and
+`GET fit` then reported `written: 0`.
+
 ### The owner's own screens had no net, and that is where the wall was
 
 Every browser net in this repository drives the workspace. The five screens

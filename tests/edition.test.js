@@ -540,3 +540,74 @@ test("the house style reports the blocks it left alone, and can be told to set t
   assert.equal(again.restyled, 0);
   assert.equal(again.kept, 0);
 });
+
+// --- a panel stays where the desk put it ------------------------------------
+
+// `panelOf()` clamps a panel inside its block, and the service handed it the
+// size from the REQUEST BODY. `payloadFromDraft()` does not carry
+// `widthPx`/`heightPx` - an ordinary save is copy and presentation, not
+// geometry - so `frame.width` arrived `undefined`, `maxX` collapsed to
+// `width - width` = 0, and EVERY panel was clamped to x=0, y=0.
+//
+// A desk placed a fact box, a pull quote, a cross-head or a chart, and the
+// next autosave slammed it into the block's top-left corner - on top of the
+// headline and on top of every other panel. Found by building one block
+// carrying every device and looking at it: five panels stacked in the corner
+// with the headline pushed sideways round them.
+test('an inset panel keeps its place through an ordinary save', async (t) => {
+  const server = createApp().listen(0);
+  t.after(() => server.close());
+  const desk = await signIn(server.address().port);
+  const date = '2031-03-11';
+  await pool.query('DELETE FROM newspapers WHERE publication_date = $1', [date]);
+  t.after(() => pool.query('DELETE FROM newspapers WHERE publication_date = $1', [date]));
+
+  const started = await desk.json('/api/newspapers/start', {
+    method: 'POST',
+    body: JSON.stringify({ publicationDate: date, pageCount: 4, fillFeatures: false }),
+  });
+  const pages = await desk.json(`/api/newspapers/${started.newspaper.id}/pages`);
+  const page = pages[0];
+  const section = page.sections.find((s) => Number(s.width_px) >= 200 && Number(s.height_px) >= 200)
+    || page.sections[0];
+  const key = section.section_key;
+  const panelNow = async () => {
+    const fresh = await desk.json(`/api/newspapers/${started.newspaper.id}/pages`);
+    const row = fresh[0].sections.find((s) => s.section_key === key);
+    return (row.inset_panels || [])[0];
+  };
+
+  // Somewhere that is genuinely inside this block, whatever its size.
+  const x = Math.floor(Number(section.width_px) / 3);
+  const y = Math.floor(Number(section.height_px) / 3);
+  await desk.json(`/api/pages/${page.id}/sections/${key}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      headline: 'मथळा',
+      insetPanels: [{ kind: 'note', title: 'तपशील', lines: ['एक', 'दोन'], x, y, width: 80, height: 60 }],
+    }),
+  });
+  const placed = await panelNow();
+  assert.ok(placed, 'the panel was stored');
+  assert.equal(placed.x, x, 'a panel is stored where it was put');
+  assert.equal(placed.y, y);
+
+  // The save a desk makes by typing: copy and panels, no geometry. This is
+  // exactly what payloadFromDraft() sends.
+  await desk.json(`/api/pages/${page.id}/sections/${key}`, {
+    method: 'PUT',
+    body: JSON.stringify({ headline: 'बदललेला मथळा', insetPanels: [placed] }),
+  });
+  const after = await panelNow();
+  assert.equal(after.x, x, 'and an ordinary save does not slam it into the corner');
+  assert.equal(after.y, y);
+
+  // A payload that really IS resizing the block still clamps to the new size.
+  await desk.json(`/api/pages/${page.id}/sections/${key}`, {
+    method: 'PUT',
+    body: JSON.stringify({ insetPanels: [after], widthPx: 100, heightPx: 100 }),
+  });
+  const clamped = await panelNow();
+  assert.ok(clamped.x <= 20 && clamped.y <= 40,
+    `a resize still clamps the panel inside the block (got ${clamped.x},${clamped.y})`);
+});

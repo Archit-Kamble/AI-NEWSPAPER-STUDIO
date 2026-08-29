@@ -215,7 +215,25 @@ async function saveSection(pageId, sectionKey, body) {
     // to defend itself against - the same boundary the ink palette holds.
     insetPanels: body.insetPanels === undefined ? undefined
       : (Array.isArray(body.insetPanels) ? body.insetPanels : [])
-        .map((entry) => panelOf(entry, { width: body.widthPx, height: body.heightPx }))
+        // THE FRAME IS THE BLOCK'S, NOT THE PAYLOAD'S.
+        //
+        // `panelOf()` clamps a panel inside its block, and it was handed the
+        // size from the REQUEST. `payloadFromDraft()` does not carry
+        // `widthPx`/`heightPx` - an ordinary save is copy and presentation,
+        // not geometry - so `frame.width` arrived `undefined`, `maxX` fell to
+        // `width - width` = 0, and every panel was clamped to x=0, y=0.
+        //
+        // A desk therefore placed a fact box, a pull quote or a chart, and the
+        // next autosave slammed it into the block's top-left corner, on top of
+        // the headline and on top of every other panel. Measured: a panel
+        // stored at (300, 400) came back at (0, 0) after one ordinary save.
+        //
+        // The block's own row is the authority. A payload that really is
+        // resizing the block still clamps against the size it is asking for.
+        .map((entry) => panelOf(entry, {
+          width: Number(body.widthPx) || Number(before?.width_px) || 0,
+          height: Number(body.heightPx) || Number(before?.height_px) || 0,
+        }))
         .filter(Boolean)
         // A panel's ground goes through the SAME palette check a block's does.
         // inset-panels.js can only check the shape of a hex - it is loaded as a

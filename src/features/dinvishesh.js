@@ -123,7 +123,24 @@ async function build(isoDate) {
   // Nothing checked for this date is not a failure - it just means the box is
   // not run today, which is exactly what a desk would do rather than fill it
   // with something unverified.
-  if (!entries) return { empty: true, title: 'आजचा दिनविशेष' };
+  //
+  // BUT IT HAS TO SAY SO. `{ empty: true }` carried no `error`, and the
+  // workspace only stops on `result.error` - so the panel went on and built a
+  // card with no entries in it. The desk pressed Generate, got a proposal
+  // holding nothing, and could not accept it: "sometimes it returns 0
+  // characters to accept". This table covers 70 of 366 days, so that was the
+  // ordinary case on four days out of five, not an edge one.
+  //
+  // The sentence is Marathi for the same reason the retrieval refusals are:
+  // it is about a newspaper going to press, not a form-field error.
+  if (!entries) {
+    return {
+      empty: true,
+      title: 'आजचा दिनविशेष',
+      error: 'या तारखेसाठी पडताळलेली दिनविशेष नोंद उपलब्ध नाही. '
+        + 'नोंद तपासून dinvishesh.js मध्ये जोडा, किंवा या जागी दुसरे सदर निवडा.',
+    };
+  }
 
   return {
     title: 'आजचा दिनविशेष',

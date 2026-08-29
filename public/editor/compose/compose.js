@@ -553,8 +553,24 @@ function setDisplayFlow(text, {
   // 5-8% wider than its regular ghost, so measuring the whole flow at one
   // weight would reserve the wrong measure for the line it lands on. With no
   // marks this is the plain measurement it always was.
+  //
+  // AND THE ACCENT MARKS ARE NOT INK. `*word*` is the headline's one
+  // hand-marked emphasis, and `accent.js` strips the asterisks before
+  // anything is drawn - render.js, the .sla and the PDF all paint the
+  // SEGMENTS, never the marks. This measured them as ordinary characters, so
+  // the band was broken, SIZED and centred around two glyphs the reader never
+  // sees. Measured on a 400 px block, the same headline: 26.5 px without the
+  // marks, 24.5 px with them - an accented headline was set two pixels
+  // smaller than the identical plain one - and a centred line sat off its own
+  // words, by more wherever the invisible width pushed a word to the next
+  // line. That is the desk's "making headline align center is counting * too".
+  //
+  // Only the WIDTH ignores them. `text` and `at` keep the asterisks, so
+  // render.js still finds the phrase across a line break and a display mark
+  // still lands on the character it was set on.
   function measure2(t, at, px, fam, w) {
-    return measurePieceWidth(t, at, px, fam, w, marks, letterSpacingPx);
+    const drawn = t.includes('*') ? t.replace(/\*/g, '') : t;
+    return measurePieceWidth(drawn, at, px, fam, w, marks, letterSpacingPx);
   }
 }
 

@@ -484,3 +484,42 @@ test('a stored row with no proposal composes exactly as it did before', async ()
   const withRowsOwnByline = await copyFit.measureFit(section, [], { author: 'पाटील', location: 'सातारा' });
   assert.equal(withRowsOwnByline.composed.fingerprint, withoutOverride.composed.fingerprint);
 });
+
+// THE ACCENT MARKS ARE NOT INK.
+//
+// `*word*` is the headline's one hand-marked emphasis. `accent.js` strips the
+// asterisks before anything is drawn - render.js, the .sla and the PDF all
+// paint the SEGMENTS - but the compositor measured them as ordinary
+// characters, so the band was broken, SIZED and centred around two glyphs the
+// reader never sees.
+//
+// The desk's report was "making headline align center is counting * also".
+// Measured on a 400px block: the same headline resolved to 26.5px plain and
+// 24.5px accented, so an accented headline was set two pixels smaller than the
+// identical plain one, and a centred line sat off its own words.
+test('a headline is measured, sized and centred on the words, not on its accent marks', async () => {
+  const adapter = await import('../public/editor/compose/section-adapter.js');
+  const section = {
+    width_px: 400, height_px: 300, margin_px: 1, line_height: 1.45,
+    headline_font_px: 24, subheading_font_px: 13, body_font_px: 6.4,
+    headline_align: 'center', show_dateline: false,
+  };
+  const band = (headline) => adapter.composeSection(
+    section, { headline, subheading: '', body: '', author: '', location: '' },
+  ).bands.headline;
+
+  const plain = band('सातारा जिल्ह्यात नवीन योजना जाहीर');
+  const accented = band('सातारा जिल्ह्यात नवीन योजना *जाहीर*');
+
+  assert.equal(accented.resolvedPx, plain.resolvedPx,
+    'the marks must not change the size the headline is set at');
+  assert.equal(accented.lines.length, plain.lines.length,
+    'nor how many lines it takes');
+  assert.equal(accented.lines[0].width.toFixed(2), plain.lines[0].width.toFixed(2),
+    'nor its drawn width - the asterisks are never drawn');
+  assert.equal(accented.lines[0].x.toFixed(2), plain.lines[0].x.toFixed(2),
+    'so a centred line sits in exactly the same place');
+  // The text itself KEEPS the marks: render.js finds the phrase through them,
+  // and a display mark still lands on the character it was set on.
+  assert.ok(accented.lines[0].text.includes('*'));
+});

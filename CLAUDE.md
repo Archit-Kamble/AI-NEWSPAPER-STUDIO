@@ -3743,6 +3743,45 @@ read the shared catalogue; do not reintroduce a local 10/16 px default.
 The schema migration changes the default only. Existing `body_font_px` values
 may be explicit desk choices and are never mass-backfilled.
 
+### The accent marks are not ink
+
+`*word*` is the headline's one hand-marked emphasis, and `accent.js` strips the
+asterisks before anything is drawn — `render.js`, the `.sla` and the PDF all
+paint the SEGMENTS, never the marks. But `measure2()` in `compose.js` measured
+them as ordinary characters, so the band was broken, **sized** and centred
+around two glyphs the reader never sees.
+
+Measured on a 400 px block, the same headline both ways:
+
+| | plain | accented |
+|---|---|---|
+| resolved size | **26.5 px** | **24.5 px** |
+| drawn width | 380.9 | 381.9 |
+
+So an accented headline was set two pixels smaller than the identical plain
+one, and a centred line sat off its own words — by more wherever the invisible
+width pushed a word onto the next line. That is the desk's *"making headline
+align center is counting `*` also"*.
+
+Only the WIDTH ignores them. `text` and `at` keep the asterisks, so `render.js`
+still finds a phrase split across a line break and a display mark still lands
+on the character it was set on.
+
+### दिनविशेष has to say when it has nothing
+
+The table covers **70 of 366 days**, so on four days out of five `build()`
+returned `{ empty: true }` — and the workspace only stops on `result.error`, so
+the panel went on and built a card with no entries in it. The desk pressed
+Generate, got a proposal holding nothing, and could not accept it: *"sometimes
+it returns 0 characters to accept"*. It returns a Marathi refusal now, for the
+same reason the retrieval refusals are in Marathi — it is about a newspaper
+going to press, not a form-field error.
+
+**The coverage itself is curated data and is still thin.** Every entry is one a
+person has checked, because a wrong year is a falsehood printed over the
+masthead; the box wants more dates, added by a desk against its own reference,
+not generated.
+
 ### A panel's frame is the BLOCK's, not the payload's
 
 Found by building one block carrying every device the editor offers — 620×680,

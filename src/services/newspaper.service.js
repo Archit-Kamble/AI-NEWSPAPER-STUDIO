@@ -129,6 +129,9 @@ async function setHouseStyle(id, body = {}) {
   const result = await newspaperRepository.setHouseStyle(parseInt(id, 10), {
     bodyFamily, displayFamily,
     columnRules: typeof body.columnRules === 'boolean' ? body.columnRules : undefined,
+    // Only ever true because a desk was told how many blocks would be left
+    // behind and said "every block" - never a default, and never inferred.
+    applyToAll: body.applyToAll === true,
   });
   if (!result) return { notFound: true };
   return result;

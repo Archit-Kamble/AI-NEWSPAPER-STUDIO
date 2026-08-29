@@ -393,10 +393,16 @@ test('changing the paper\'s face works more than once', async () => {
   const fs = require('node:fs');
   const repo = fs.readFileSync('src/repositories/newspaper.repository.js', 'utf8');
   const body = repo.slice(repo.indexOf('async function setHouseStyle'));
-  assert.match(body, /font_family IS NOT DISTINCT FROM/,
+  // Both faces go through ONE guarded statement now, built per column, so the
+  // guard is asserted in that form rather than twice by name. What the two
+  // columns are is asserted below; that they BEHAVE is held end to end against
+  // a real edition in tests/edition.test.js ("the house style reports the
+  // blocks it left alone"), which is the stronger test and postdates this one.
+  assert.match(body, /IS NOT DISTINCT FROM \$3/,
     'a block still carrying the paper\'s PREVIOUS house face moves with the paper');
-  assert.match(body, /display_family IS NOT DISTINCT FROM/);
-  assert.match(body, /font_family IS DISTINCT FROM \$2/,
+  assert.match(body, /column: 'font_family'/);
+  assert.match(body, /column: 'display_family'/);
+  assert.match(body, /IS DISTINCT FROM \$2/,
     'and choosing the face already in force is a no-op, not a rewrite of every row');
   // The guard that makes it safe: a block a desk set by hand carries neither
   // NULL nor the old house face, so neither branch matches it.

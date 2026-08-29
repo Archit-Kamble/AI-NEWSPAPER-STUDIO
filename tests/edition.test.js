@@ -457,3 +457,86 @@ test('a headline is not shrunk to make room for its own body unless it has to be
     );
   }
 });
+
+// --- the paper's own face, and the blocks it could not reach -----------------
+
+// The desk's report was that changing the face of a whole edition "is not
+// working properly", on 2099-12-25. It was not: the paper's own column said
+// `serif` and 37 of its 46 blocks were set in `rozha`.
+//
+// The guarded backfill moves a block carrying NO face of its own or the
+// paper's PREVIOUS one, and leaves a face a sub-editor chose. That is right.
+// But "the previous face" is read from the paper's own column, and a block can
+// drift out of step with it - created before the propagation existed, or
+// restyled while it was broken. A drifted block is then indistinguishable from
+// a deliberate choice and NO house-style change can ever move it again, which
+// is the state that edition was stuck in.
+//
+// So the count left behind is reported, and the desk can say "every block"
+// explicitly. Never silently - a person presses it.
+test("the house style reports the blocks it left alone, and can be told to set them too", async (t) => {
+  const server = createApp().listen(0);
+  t.after(() => server.close());
+  const desk = await signIn(server.address().port);
+  const date = '2031-03-09';
+  await pool.query('DELETE FROM newspapers WHERE publication_date = $1', [date]);
+  t.after(() => pool.query('DELETE FROM newspapers WHERE publication_date = $1', [date]));
+
+  const started = await desk.json('/api/newspapers/start', {
+    method: 'POST',
+    body: JSON.stringify({ publicationDate: date, pageCount: 4, fillFeatures: false }),
+  });
+  const id = started.newspaper.id;
+  const sectionIds = async () => (await pool.query(
+    'SELECT s.id FROM page_sections s JOIN pages p ON p.id = s.page_id WHERE p.newspaper_id = $1 ORDER BY s.id',
+    [id],
+  )).rows.map((r) => r.id);
+  const facesNow = async () => (await pool.query(
+    `SELECT coalesce(display_family, '(null)') AS face, count(*)::int AS blocks
+       FROM page_sections s JOIN pages p ON p.id = s.page_id
+      WHERE p.newspaper_id = $1 GROUP BY 1`, [id],
+  )).rows.reduce((all, r) => ({ ...all, [r.face]: r.blocks }), {});
+
+  const all = await sectionIds();
+  assert.ok(all.length >= 4, 'the edition has blocks to restyle');
+
+  // The first change reaches every block, as it always did.
+  const first = await desk.json(`/api/newspapers/${id}/house-style`, {
+    method: 'PATCH', body: JSON.stringify({ displayFamily: 'khand' }),
+  });
+  assert.equal(first.restyled, all.length);
+  assert.equal(first.kept, 0, 'nothing is left behind when every block moved');
+
+  // One block a sub-editor set by hand, and one that has DRIFTED - carrying a
+  // face that is neither NULL nor the paper's own. The two are
+  // indistinguishable in the row, which is the whole difficulty.
+  await pool.query('UPDATE page_sections SET display_family = $2 WHERE id = $1', [all[0], 'sans']);
+  await pool.query('UPDATE page_sections SET display_family = $2 WHERE id = $1', [all[1], 'rozha']);
+
+  // The guarded change moves the rest and SAYS what it could not move. This is
+  // the number that used to exist nowhere, so the desk was told nothing.
+  const guarded = await desk.json(`/api/newspapers/${id}/house-style`, {
+    method: 'PATCH', body: JSON.stringify({ displayFamily: 'serif' }),
+  });
+  assert.equal(guarded.restyled, all.length - 2);
+  assert.equal(guarded.kept, 2, 'the two blocks with faces of their own are counted, not hidden');
+  const afterGuarded = await facesNow();
+  assert.equal(afterGuarded.sans, 1, "a sub-editor's own choice is never overwritten silently");
+  assert.equal(afterGuarded.rozha, 1);
+
+  // And when the desk says "every block", every block.
+  const forced = await desk.json(`/api/newspapers/${id}/house-style`, {
+    method: 'PATCH', body: JSON.stringify({ displayFamily: 'serif', applyToAll: true }),
+  });
+  assert.equal(forced.restyled, 2, 'only the two that still differed are written');
+  assert.equal(forced.kept, 0);
+  assert.deepEqual(await facesNow(), { serif: all.length });
+
+  // Choosing the face already in force stays a no-op rather than a rewrite of
+  // every row - true with applyToAll as well, which is the riskier path.
+  const again = await desk.json(`/api/newspapers/${id}/house-style`, {
+    method: 'PATCH', body: JSON.stringify({ displayFamily: 'serif', applyToAll: true }),
+  });
+  assert.equal(again.restyled, 0);
+  assert.equal(again.kept, 0);
+});

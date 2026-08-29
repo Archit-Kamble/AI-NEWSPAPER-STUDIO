@@ -1401,7 +1401,22 @@ function bindPaperControls() {
     + TYPEFACES.map((f) => option(f, paper.display_family)).join("");
   rulesBtn.classList.toggle("active", Boolean(paper.column_rules));
 
-  const send = async (patch) => {
+  const blocks = (n) => `${n} block${n === 1 ? "" : "s"}`;
+
+  // THE PAPER'S FACE, AND WHAT IT COULD NOT REACH.
+  //
+  // The house style moves a block that is carrying no face of its own or the
+  // paper's PREVIOUS one; a face a sub-editor chose is left alone deliberately.
+  // But a block can also drift out of step with the paper's own column, and
+  // then it is indistinguishable from a deliberate choice and no house change
+  // will ever move it again. On edition 40082 that was 37 of 46 blocks - the
+  // dropdown changed, the page did not, and this said NOTHING, because it only
+  // spoke when `restyled` was non-zero.
+  //
+  // So it always says what happened, and when blocks were left behind it
+  // offers to set them too. Never silently: the desk is told the number and
+  // presses it, which is the same shape as the placement repair.
+  const send = async (patch, { asked = false } = {}) => {
     const state = store.getState();
     if (!state.newspaper) return;
     try {
@@ -1412,14 +1427,38 @@ function bindPaperControls() {
       });
       state.newspaper = result.newspaper;
       rulesBtn.classList.toggle("active", Boolean(result.newspaper.column_rules));
+
+      // A face was named and some blocks are still set in something else.
+      // Ask once, and only when there is a face in this patch to apply.
+      const face = patch.bodyFamily || patch.displayFamily;
+      if (face && result.kept > 0 && !asked) {
+        const moved = result.restyled
+          ? `Set in ${blocks(result.restyled)}.`
+          : "No block took the new face.";
+        if (window.confirm(
+          `${moved}
+
+${blocks(result.kept)} keep a face of their own and were left alone.`
+          + `
+
+Set every block in this paper to it?`,
+        )) {
+          await send({ ...patch, applyToAll: true }, { asked: true });
+          return;
+        }
+      }
+
       // The blocks themselves changed under the editor, so the edition is
       // re-read rather than patched here - a face written onto forty blocks by
       // one SQL statement is not something this client can reconstruct, and
       // guessing would put the canvas and the database out of step.
       if (result.restyled) {
-        showNotice(`Set in ${result.restyled} block${result.restyled === 1 ? "" : "s"}. Reloading the edition…`);
+        showNotice(`Set in ${blocks(result.restyled)}. Reloading the edition…`);
         await renderWorkspace(state.newspaper.id);
       } else {
+        // It used to say nothing at all here, which is exactly how a control
+        // that had done its job came to read as broken.
+        if (face) showNotice(`Every block was already set in that face.`);
         renderPageArea();
       }
     } catch (error) {

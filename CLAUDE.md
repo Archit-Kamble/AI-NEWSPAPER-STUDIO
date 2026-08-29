@@ -3743,6 +3743,48 @@ read the shared catalogue; do not reintroduce a local 10/16 px default.
 The schema migration changes the default only. Existing `body_font_px` values
 may be explicit desk choices and are never mass-backfilled.
 
+### A block that has DRIFTED is not a decision, and the desk is told
+
+`setHouseStyle()`'s guarded backfill moves a block carrying no face of its own
+or the paper's **previous** one, and leaves a face a sub-editor chose. That is
+right and stays the default.
+
+But "the previous face" is read from `newspapers.body_family` /
+`display_family` — the paper's own column — and a block can drift out of step
+with it: created before the propagation existed, restyled while it was broken,
+or copied in from another page. A drifted block matches neither NULL nor `was`,
+so it is **indistinguishable from a deliberate choice and no house-style change
+can ever move it again.**
+
+Measured on edition 40082 (2099-12-25), which is how this was found: the paper
+said `serif` and **37 of its 46 blocks were set in `rozha`**. Choosing a new
+headline face moved 4 blocks and left 37 — and the control said **nothing at
+all**, because `bindPaperControls`' `send()` only spoke when `restyled` was
+non-zero. The dropdown changed, the page did not, and the desk reasonably
+reported the control as broken.
+
+Two halves, and the second is the one that made it look broken:
+
+- **The count left behind is reported** (`kept`), and the desk can say *every
+  block* explicitly (`applyToAll`). Never inferred, never a default — the same
+  shape as the placement repair: this software does not silently overwrite a
+  decision a person made, and it does not hide the fact that it declined to,
+  either. **A person presses it.**
+- **It always says what happened**, including "every block was already set in
+  that face". A control that did its job and said nothing is the fault this
+  codebase has already fixed once, in `showNotice()`.
+
+`IS DISTINCT FROM` throughout, never `<>`: NULL is a real state here (the desk
+has not said) and `<>` is NULL-blind, so a plain comparison silently skips every
+unset block. And `$3` is only **bound** when the guard references it —
+PostgreSQL refuses a bind supplying more parameters than the statement uses,
+which is a 500 rather than a silent miss.
+
+Held end to end against a real edition in `tests/edition.test.js`. The older
+assertion in `tests/deviceCorrections.test.js` inspects the source text and had
+to be updated when the two statements became one loop — a source-shaped test
+breaks on a legitimate refactor, which is why the behavioural one was added.
+
 ### The story browser is not a function of the PAGE
 
 A desk reported that changing page took one to two seconds. Measured in the

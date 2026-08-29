@@ -254,7 +254,7 @@ async function update(id, updates) {
  * in another. One value per block, on the block, is what the rest of this
  * system already relies on.
  */
-async function setHouseStyle(id, { bodyFamily, displayFamily, columnRules }) {
+async function setHouseStyle(id, { bodyFamily, displayFamily, columnRules, applyToAll = false }) {
   // THE FACE THE PAPER WAS SET IN BEFORE THIS CHANGE, read first because it is
   // what tells a house-style face apart from a desk's own choice.
   //
@@ -291,28 +291,61 @@ async function setHouseStyle(id, { bodyFamily, displayFamily, columnRules }) {
   );
   if (!rows[0]) return null;
 
+  // WHICH BLOCKS MOVE, AND THE HONEST COUNT OF THE ONES THAT DO NOT.
+  //
+  // The guarded backfill above is right and stays the default. But "the face
+  // this paper was set in before" is read from the paper's OWN column, and
+  // that column can disagree with what the blocks actually carry - a block
+  // created before the propagation existed, an edition restyled while it was
+  // broken, a page copied in. Once a block has drifted it matches neither NULL
+  // nor `was`, so it looks exactly like a sub-editor's deliberate choice and
+  // NO house-style change can ever move it again.
+  //
+  // Measured on edition 40082 (2099-12-25), which is how this was found: the
+  // paper said `serif` and 37 of its 46 blocks were set in `rozha`. Choosing a
+  // new headline face moved 4 blocks and left 37, and the desk was told
+  // nothing at all - the paper's own column changed, the page did not, and the
+  // control read as broken.
+  //
+  // So the count of blocks LEFT BEHIND is reported, and the desk can say
+  // "every block" explicitly. That is the same shape as the placement repair:
+  // this software does not silently overwrite a decision a person made, and it
+  // does not hide the fact that it declined to, either. A person presses it.
+  const faces = [
+    { family: bodyFamily, column: 'font_family', was: wasBody },
+    { family: displayFamily, column: 'display_family', was: wasDisplay },
+  ];
+
   let restyled = 0;
-  if (bodyFamily) {
+  let kept = 0;
+  for (const face of faces) {
+    if (!face.family) continue;
+    // `IS DISTINCT FROM` rather than `<>` throughout: NULL is a real state
+    // here (the desk has not said) and `<>` is NULL-blind, so a plain
+    // comparison silently skips every unset block.
+    // `$3` is only BOUND when the guard actually references it - PostgreSQL
+    // refuses a bind that supplies more parameters than the statement uses.
+    const guard = applyToAll
+      ? ''
+      : `AND (${face.column} IS NULL OR ${face.column} IS NOT DISTINCT FROM $3)`;
+    const values = applyToAll ? [id, face.family] : [id, face.family, face.was];
     const { rowCount } = await pool.query(
-      `UPDATE page_sections SET font_family = $2, updated_at = CURRENT_TIMESTAMP
-        WHERE (font_family IS NULL OR font_family IS NOT DISTINCT FROM $3)
-          AND font_family IS DISTINCT FROM $2
+      `UPDATE page_sections SET ${face.column} = $2, updated_at = CURRENT_TIMESTAMP
+        WHERE ${face.column} IS DISTINCT FROM $2 ${guard}
           AND page_id IN (SELECT id FROM pages WHERE newspaper_id = $1)`,
-      [id, bodyFamily, wasBody],
+      values,
     );
     restyled += rowCount;
-  }
-  if (displayFamily) {
-    const { rowCount } = await pool.query(
-      `UPDATE page_sections SET display_family = $2, updated_at = CURRENT_TIMESTAMP
-        WHERE (display_family IS NULL OR display_family IS NOT DISTINCT FROM $3)
-          AND display_family IS DISTINCT FROM $2
+
+    const { rows: left } = await pool.query(
+      `SELECT count(*)::int AS blocks FROM page_sections
+        WHERE ${face.column} IS DISTINCT FROM $2
           AND page_id IN (SELECT id FROM pages WHERE newspaper_id = $1)`,
-      [id, displayFamily, wasDisplay],
+      [id, face.family],
     );
-    restyled += rowCount;
+    kept += left[0].blocks;
   }
-  return { newspaper: rows[0], restyled };
+  return { newspaper: rows[0], restyled, kept };
 }
 
 module.exports = { create, claimDate, findAll, setHouseStyle, findEpaperReleases, findPublicEpaper, selectPublicEpaper, recordEpaperRelease, clearEpaperRelease, findById, findByDate, findAllByDate, findPrevious, update };

@@ -3743,6 +3743,56 @@ read the shared catalogue; do not reintroduce a local 10/16 px default.
 The schema migration changes the default only. Existing `body_font_px` values
 may be explicit desk choices and are never mass-backfilled.
 
+### The story browser is not a function of the PAGE
+
+A desk reported that changing page took one to two seconds. Measured in the
+running app, on this newsroom's own database, per page pill pressed:
+
+| written into | bytes | parse |
+|---|---|---|
+| `#storyExplorerResults` | **1,042,196** | 158-229 ms |
+| `#canvas` | 26,239 | 13 ms |
+| `#externalEditorPanel` | 42,840 | 9 ms |
+
+`renderStoryPickerPanel()` ran on every `PAGE` topic change and rebuilt the
+whole reporter archive from nothing — **1966 cards, one `<img>` each**, 13,141
+elements on the page — and every byte of it was **identical to what was already
+on screen**: `reporterNews` is set once per edition (`store.setEdition`), so
+the same array was re-rendered into the same panel to produce the same DOM.
+A CPU profile of the switch put 841 ms in `(program)` (the browser's own
+parse/style/layout) and 178 ms in `setAttribute`, which is what a megabyte of
+markup costs.
+
+What the panel actually depends on is **the story list and which story the
+selected block carries**. Neither is the page. So it is rebuilt when one of
+those changes and not otherwise, and when only the selection moved the
+explorer is asked to move its own highlight — `bindStoryExplorer()` returns a
+controller and keeps `selectedId` in its own closure, so there is **no second
+copy of which story is picked**.
+
+It also fixes a fault of its own that nobody had named: the rebuild reset the
+desk's search box and all four filters every time they changed page.
+
+**And the Space panel composed its reservation three times per render.**
+`reservedComposition()` is one composition per reservation candidate — six on
+an empty article block, as the comment beside it says — and
+`spacePanelMarkup()` asked for it at three separate points in the same
+function, for the same answer at three times the price, on the panel that
+redraws every time a block is selected. Composed once and passed down:
+`clusters` 28.0 → 15.6 ms, `shapeWidthEm` 19.8 → 12.1 ms per switch.
+
+Measured end to end, three switches, wall clock from the click to the second
+animation frame: **735 / 866 / 1150 ms → 237 / 91 / 141 ms.**
+
+Nothing about the compositor changed, and nothing may: the remaining cost is
+shaping, which is what makes the editor and the plate the same page.
+
+**The first render still builds all 1966 cards, once per edition opened**
+(~200 ms). That is deliberate for now — the panel has a search box and four
+filters, and capping the list would change what a desk sees. If the archive
+grows, cap it there with a "showing N of M" note, the way `editions.js` already
+does with `RECENT_LIMIT`.
+
 ### The byline is part of the block that was measured
 
 `write()` puts the paper's own name on a block whose `reporter_name` is empty

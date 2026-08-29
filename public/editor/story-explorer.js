@@ -115,4 +115,25 @@ export function bindStoryExplorer(reporterNews, onSelectStory, initialSelectedId
   });
 
   update();
+
+  // The explorer keeps its own `selectedId`, its own filters and its own
+  // cards, so a caller that only needs to move the highlight must be able to
+  // say so WITHOUT the panel being rebuilt around it. Rebuilding is a
+  // megabyte of markup and a card per story; moving the highlight is two
+  // class changes.
+  //
+  // `selectedId` stays the closure's, so the next filter change still renders
+  // the right card active - there is no second copy of which story is picked.
+  return {
+    setSelected(id) {
+      if (selectedId === id) return;
+      selectedId = id;
+      const results = document.getElementById("storyExplorerResults");
+      if (!results) return;
+      results.querySelectorAll(".story-card.active").forEach((card) => card.classList.remove("active"));
+      if (id != null) {
+        results.querySelector(`.story-card[data-story-id="${id}"]`)?.classList.add("active");
+      }
+    },
+  };
 }

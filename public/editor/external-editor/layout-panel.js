@@ -267,9 +267,15 @@ export function spacePanelMarkup(section, view, images = []) {
   // mid-resize would see a budget computed against where the picture USED
   // to be.
   const m = computeMetrics({ ...section, images }, view);
+  // ONCE per render. This is one composition per reservation candidate - the
+  // comment below says six on an empty article block - and it was being asked
+  // for three separate times in this one function, for the same answer at
+  // three times the price, on the panel that redraws every time a block is
+  // selected.
+  const reservedComposed = reservedComposition(section, view, images);
   const warnings = layoutWarnings({
     ...m,
-    reservedComposition: reservedComposition(section, view, images),
+    reservedComposition: reservedComposed,
     placementRepair: placementRepair(section, view, images),
   });
 
@@ -292,7 +298,7 @@ export function spacePanelMarkup(section, view, images = []) {
     // briefed against is shown here (headline-reserve.js, one definition for
     // both sides). Six compositions, ~13ms, and only on a block nobody has
     // typed into yet - never on the keystroke path.
-    const composition = reservedComposition(section, view, images) || m.composition;
+    const composition = reservedComposed || m.composition;
     const { capacity } = composition;
     const used = capacity.bodyCharsUsed;
     const fill = bodyFill(composition);
@@ -332,7 +338,7 @@ export function spacePanelMarkup(section, view, images = []) {
   // Named in lines, because that is what the desk can see standing empty -
   // weighted lines, so a corridor beside a cut-out counts for what it is
   // worth rather than for a whole one. See bodyFill().
-  const hole = m.composition ? bodyFill(reservedComposition(section, view, images) || m.composition).holeLines : 0;
+  const hole = m.composition ? bodyFill(reservedComposed || m.composition).holeLines : 0;
   const holeNote = !overflowing && hole >= 1 ? ` · ${hole} line${hole >= 2 ? "s" : ""} free at the foot` : "";
 
   return `

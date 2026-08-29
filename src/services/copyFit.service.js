@@ -111,7 +111,7 @@ async function ensureComposeReady() {
 }
 
 function viewFor(section, over = {}) {
-  return {
+  const view = {
     headline: over.headline ?? (section.headline || ''),
     subheading: over.subheading ?? (section.subheading || ''),
     body: over.body ?? (section.body || ''),
@@ -121,6 +121,32 @@ function viewFor(section, over = {}) {
     subheadingFontPx: Number(section.subheading_font_px) || 14,
     bodyFontPx: Number(section.body_font_px) || DEFAULT_BODY_FONT_PX,
   };
+  // THE DATELINE IS PART OF WHAT IS BEING MEASURED, AND THE BYLINE IS PART OF
+  // THE DATELINE.
+  //
+  // Every other field this view omits falls back to the row, which is right -
+  // that is the rule stated in CLAUDE.md, and a stored block therefore
+  // measures the same here as it does on the canvas. The byline is the one
+  // field a PROPOSAL introduces that the row does not have yet: `write()` puts
+  // the paper's own name on a block whose `reporter_name` is empty, and until
+  // the desk accepts, that name exists only in the proposal.
+  //
+  // Dropped here, the two sides measure two different blocks. The dateline is
+  // furniture prepended to the copy (`section-adapter`'s `prefix + text`), so
+  // the byline changes `bodyPlainText` - which the composition fingerprint
+  // hashes. The server measured `#` and the browser re-composed
+  // `# साहस वार्ता`, the fingerprints could never agree, and Accept refused
+  // every proposal with "the block's type, columns or pictures changed while
+  // this was being written". Measured across all 33 article blocks of a real
+  // edition: 33 mismatches, and removing the byline from the browser's view
+  // made all 33 agree - which is the wrong fix, because the byline is what
+  // prints.
+  //
+  // Only when the caller supplies one, so a block composed from its row alone
+  // (preflight, worklist, the placement repair) is unchanged to the byte.
+  if (over.author !== undefined) view.author = over.author;
+  if (over.location !== undefined) view.location = over.location;
+  return view;
 }
 
 /** Did the headline, deck or kicker run out of room for its own text? */
@@ -408,7 +434,15 @@ async function settleToFit({
   section, images, proposal, language, verifiedContext, askForMore, resizeBriefFor,
   maxCalls = MAX_FILL_CALLS,
 }) {
+  // The dateline is measured with the byline the proposal will actually
+  // print. `viewFor()` knows how to carry it; this is the line that used to
+  // throw it away before `viewFor()` could ever see it, which is why the
+  // fingerprint the desk was handed described a block with no byline in it.
+  // Carried only when the proposal states one, so nothing that composes a
+  // stored row alone changes.
   const over = { headline: proposal.headline, subheading: proposal.subheading };
+  if (proposal.author !== undefined) over.author = proposal.author;
+  if (proposal.location !== undefined) over.location = proposal.location;
   let fit = await measureFit(section, images, { ...over, body: proposal.body });
   const budget = openingTarget(fit.capacity);
   let body = proposal.body;

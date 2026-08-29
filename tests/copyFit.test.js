@@ -403,3 +403,84 @@ test('the headline reservation takes the WORST stand-in, because line count is n
   // old single-stand-in reservation silently assumed.
   assert.ok(budgets.length === candidates.length);
 });
+
+// THE BYLINE THE PROPOSAL CARRIES IS PART OF THE BLOCK IT WAS MEASURED IN.
+//
+// `write()` puts the paper's own name on a block whose `reporter_name` is
+// empty, and that name is part of the proposal - it exists nowhere else until
+// the desk accepts. The server measures the block, states the composition
+// fingerprint, and the browser re-composes the same words at click time and
+// requires the identical fingerprint before it will accept.
+//
+// So both sides have to compose the SAME dateline. `viewFor()` used to read
+// only headline/subheading/body from the proposal, so the server measured a
+// block with no byline while the browser re-composed one with `साहस वार्ता`
+// in its dateline - furniture prepended to the copy, and therefore inside
+// `bodyPlainText`, which the fingerprint hashes. The two could never agree:
+// measured across all 33 article blocks of a real edition, 33 of 33 refused.
+// The desk saw every proposal written, priced and displayed, and then
+// "the block's type, columns or pictures changed while this was being
+// written" on every single Accept.
+test("a proposal's byline is measured by the server, so Accept can match its fingerprint", async () => {
+  const adapter = await import('../public/editor/compose/section-adapter.js');
+  const section = {
+    width_px: 268, height_px: 296, margin_px: 1, line_height: 1.45,
+    headline_font_px: 24, subheading_font_px: 13, body_font_px: 6.4,
+    text_align: 'justify', show_dateline: true,
+    // The case this is about: the row names nobody, so the byline is the
+    // proposal's alone.
+    reporter_name: null, location: null, headline: '', subheading: '', body: '',
+  };
+  const proposal = {
+    headline: 'ई-२० इंधनाविरोधात युवक काँग्रेस आक्रमक',
+    subheading: 'इंधन धोरणाविरोधात कार्यकर्त्यांनी निदर्शने करत आंदोलन छेडले.',
+    body: 'देशात इंधनातील एथेनॉल मिश्रणाच्या ई-२० धोरणावरून राजकीय वातावरण तापले आहे. केंद्र सरकारच्या निर्णयाविरोधात युवक काँग्रेसने आक्रमक पवित्रा घेतला आहे.',
+    author: 'साहस वार्ता',
+  };
+
+  // Through the path `write()` actually takes. Testing `measureFit()` directly
+  // is NOT enough and this is the second half of the same bug: `settleToFit()`
+  // rebuilt its own `over` from headline and subheading alone, so the byline
+  // was thrown away one level ABOVE `viewFor()` and a test that called
+  // `measureFit()` itself passed while every real Accept still refused.
+  const settled = await copyFit.settleToFit({
+    section,
+    images: [],
+    proposal,
+    // The block is deeper than this sample, so the settle legitimately asks
+    // for more. What it adds is irrelevant here; what matters is that the
+    // fingerprint it finally states describes the block the browser will
+    // re-compose.
+    askForMore: async () => ({ data: { additions: [SENTENCE.repeat(4).trim()] } }),
+    resizeBriefFor: () => 'the exact wording is irrelevant to this fingerprint test',
+  });
+  const measured = settled.fit;
+
+  // What the browser re-composes at click time: the live draft plus the
+  // proposal, which is where the byline lands.
+  const accepted = adapter.composeSection(
+    { ...section, images: [] },
+    { headline: '', subheading: '', body: '', author: '', location: '',
+      ...proposal, body: settled.body },
+  );
+
+  assert.equal(
+    accepted.fingerprint, measured.composed.fingerprint,
+    'the browser must re-compose the fingerprint the server stated, or every Accept is refused',
+  );
+});
+
+// And a block composed from its row alone is untouched by that change - the
+// byline is only carried when a caller actually supplies one, so preflight,
+// the worklist and the placement repair still measure exactly what they did.
+test('a stored row with no proposal composes exactly as it did before', async () => {
+  const section = {
+    width_px: 190, height_px: 264, margin_px: 1, line_height: 1.45,
+    headline_font_px: 17, subheading_font_px: 11, body_font_px: 6.4,
+    show_dateline: true, reporter_name: 'पाटील', location: 'सातारा',
+    headline: 'मथळा', subheading: '', body: SENTENCE.repeat(6),
+  };
+  const withoutOverride = await copyFit.measureFit(section, [], {});
+  const withRowsOwnByline = await copyFit.measureFit(section, [], { author: 'पाटील', location: 'सातारा' });
+  assert.equal(withRowsOwnByline.composed.fingerprint, withoutOverride.composed.fingerprint);
+});

@@ -3743,6 +3743,46 @@ read the shared catalogue; do not reintroduce a local 10/16 px default.
 The schema migration changes the default only. Existing `body_font_px` values
 may be explicit desk choices and are never mass-backfilled.
 
+### The byline is part of the block that was measured
+
+`write()` puts the paper's own name on a block whose `reporter_name` is empty
+(`DEFAULT_BYLINE`, साहस वार्ता) and returns it as part of the **proposal** — it
+exists nowhere else until the desk accepts. Accept then re-composes the
+proposal against the live draft and requires the server's exact fingerprint.
+
+So both sides have to compose the same dateline, and they did not. The byline
+was dropped in **two** places on the way down, and either one alone is enough
+to make every Accept fail:
+
+| | |
+|---|---|
+| `settleToFit()` | rebuilt its own `over` as `{ headline, subheading }`, throwing the byline away one level **above** `viewFor()` |
+| `viewFor()` | read only headline/subheading/body from the proposal, so even a carried byline stopped here |
+
+The dateline is furniture prepended to the copy (`section-adapter`'s
+`prefix + text`), so it is inside `bodyPlainText`, which the fingerprint
+hashes. The server measured a block set `■` and the browser re-composed
+`■ साहस वार्ता`; the fingerprints could never agree. Measured across all 33
+article blocks of a real edition: **33 of 33 refused**, and the desk saw every
+proposal written, priced, displayed — and then *"the block's type, columns or
+pictures changed while this was being written"* on every single Accept. The
+generation was never the broken half.
+
+Removing the byline from the browser's view also makes all 33 agree and is the
+**wrong** fix: the byline is what prints, and the dateline takes real room —
+that is the same lesson as "The dateline is read from the ROW, like every other
+field", which cost a block one whole body line.
+
+Both are carried only when the caller actually supplies one, so anything that
+composes a stored row alone — preflight, the worklist, the placement repair —
+is unchanged to the byte.
+
+**A test at `measureFit()` cannot hold this.** The first one written passed
+while `settleToFit()` was still dropping the byline, because it called the
+lower function directly. `tests/copyFit.test.js` goes through `settleToFit()`,
+which is the path `write()` actually takes, and it fails when **either** half
+is reverted.
+
 ### An AI proposal belongs to one exact block snapshot
 
 Saving before the request is necessary but not sufficient: type, columns or a

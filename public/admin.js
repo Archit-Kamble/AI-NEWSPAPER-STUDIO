@@ -385,35 +385,121 @@ async function showPastNews() {
   }
   rightPanel.innerHTML =
     "<h3>Reporter News</h3><p>Review every reporter submission and approve it for publication.</p>";
-  content.innerHTML =
-    '<div class="form-section"><h2>REPORTER NEWS REVIEW</h2><div class="news-list" id="adminNewsList"></div></div>';
+
+  // A REVIEW QUEUE OF 1966 FILINGS IS NOT A LIST, IT IS A WALL.
+  //
+  // This used to append every filing to the live document one card at a time -
+  // measured on this newsroom's own database: 1972 cards, 17,780 DOM nodes,
+  // 1030 ms before the screen settled, with no way to search it. And every
+  // approval called showPastNews() again, so passing one story cost the whole
+  // wall a second time.
+  //
+  // Three changes, and none of them changes what the desk can reach: the cards
+  // are built into a fragment and attached ONCE, the queue is searchable and
+  // filtered by status the way the Reporters screen already is, and a decision
+  // updates its own card instead of rebuilding the screen.
+  content.innerHTML = `
+    <div class="form-section">
+      <h2>REPORTER NEWS REVIEW</h2>
+      <div class="news-review-controls">
+        <input id="adminNewsSearch" type="search" placeholder="Search by title, reporter or category…">
+        <select id="adminNewsStatus">
+          <option value="">All statuses</option>
+          ${[...new Set(news.map((n) => n.status).filter(Boolean))].sort()
+            .map((v) => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("")}
+        </select>
+        <span class="muted" id="adminNewsCount"></span>
+      </div>
+      <div class="news-list" id="adminNewsList"></div>
+    </div>`;
   const list = document.getElementById("adminNewsList");
   if (!news.length) {
     list.innerHTML = "<p>No reporter news yet.</p>";
     return;
   }
-  news.forEach((item) => {
+
+  const search = document.getElementById("adminNewsSearch");
+  const statusPick = document.getElementById("adminNewsStatus");
+  const countLabel = document.getElementById("adminNewsCount");
+  // The whole queue is still reachable - this is how many are DRAWN before the
+  // desk narrows it, the same bound the editions list uses.
+  const PAGE = 60;
+  let shown = PAGE;
+
+  const haystack = (item) => `${item.title || ""} ${item.reporter_name || item.reporterName || ""} ${item.category || ""}`.toLowerCase();
+  const matching = () => {
+    const q = search.value.trim().toLowerCase();
+    const st = statusPick.value;
+    return news.filter((item) => (!q || haystack(item).includes(q)) && (!st || item.status === st));
+  };
+
+  const cardFor = (item) => {
     const card = document.createElement("div");
     card.className = "admin-news-card";
+    card.dataset.newsId = item.id;
     card.innerHTML = `<div><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.reporter_name || item.reporterName || "Reporter")} · ${escapeHtml(item.category || "Uncategorised")}</small><p>${escapeHtml(item.description || "No description")}</p></div><div class="status-actions"><span class="status-pill ${escapeHtml(item.status)}">${escapeHtml(item.status)}</span><button class="btn-secondary approve">Approve</button><button class="btn-secondary reject">Reject</button></div>`;
-    card.querySelector(".approve").addEventListener("click", async () => {
-      await fetch(`/api/news/${item.id}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "approved" }),
-      });
-      showPastNews();
-    });
-    card.querySelector(".reject").addEventListener("click", async () => {
-      await fetch(`/api/news/${item.id}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "rejected" }),
-      });
-      showPastNews();
-    });
-    list.appendChild(card);
-  });
+
+    const decide = async (status, button) => {
+      const buttons = card.querySelectorAll("button");
+      buttons.forEach((b) => { b.disabled = true; });
+      const wasLabel = button.textContent;
+      button.textContent = "…";
+      try {
+        // The answer is READ. Unchecked, a rejected PATCH - an expired session,
+        // a 500 - repainted the same list with the same status and said
+        // nothing, so a desk had no way to tell a refusal from a success.
+        const response = await fetch(`/api/news/${item.id}/status`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status }),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || `The desk could not record that (HTTP ${response.status}).`);
+        // Only this card changed, so only this card is repainted - passing one
+        // story used to rebuild all 1966.
+        item.status = status;
+        const pill = card.querySelector(".status-pill");
+        pill.className = `status-pill ${status}`;
+        pill.textContent = status;
+        if (statusPick.value && statusPick.value !== status) paint();
+      } catch (error) {
+        alert(error.message || "That could not be saved. Try again.");
+      } finally {
+        buttons.forEach((b) => { b.disabled = false; });
+        button.textContent = wasLabel;
+      }
+    };
+
+    card.querySelector(".approve").addEventListener("click", (e) => decide("approved", e.currentTarget));
+    card.querySelector(".reject").addEventListener("click", (e) => decide("rejected", e.currentTarget));
+    return card;
+  };
+
+  function paint() {
+    const matches = matching();
+    // ONE attachment, not 1966. Building into a fragment keeps every append
+    // out of the live document until the whole batch is ready.
+    const fragment = document.createDocumentFragment();
+    matches.slice(0, shown).forEach((item) => fragment.appendChild(cardFor(item)));
+    list.replaceChildren(fragment);
+
+    if (matches.length > shown) {
+      const more = document.createElement("button");
+      more.className = "btn-secondary";
+      more.textContent = `Show ${Math.min(PAGE, matches.length - shown)} more of ${matches.length}`;
+      more.addEventListener("click", () => { shown += PAGE; paint(); });
+      list.appendChild(more);
+    }
+    countLabel.textContent = matches.length === news.length
+      ? `${news.length} filings`
+      : `${matches.length} of ${news.length} filings`;
+    if (!matches.length) list.innerHTML = "<p class=\"muted\">No filing matches that.</p>";
+  }
+
+  const renarrow = () => { shown = PAGE; paint(); };
+  search.addEventListener("input", renarrow);
+  statusPick.addEventListener("change", renarrow);
+  paint();
 }
 
 function showReporters() {

@@ -7,8 +7,19 @@
 
 let geometry = null;
 
+// The same rule the template cache learned: a FAILURE MUST NOT BE CACHED.
+// The page's own measurements are what every drag snaps to, so caching an
+// error body here would leave every snap reading `undefined` for the rest of
+// the session with nothing on screen to say why.
 export async function loadGeometry() {
-  if (!geometry) geometry = await fetch("/api/geometry").then((r) => r.json());
+  if (geometry) return geometry;
+  const response = await fetch("/api/geometry");
+  if (!response.ok) throw new Error(`geometry: HTTP ${response.status}`);
+  const loaded = await response.json();
+  if (!loaded || typeof loaded !== "object" || Array.isArray(loaded)) {
+    throw new Error("geometry: not a measurement set");
+  }
+  geometry = loaded;
   return geometry;
 }
 

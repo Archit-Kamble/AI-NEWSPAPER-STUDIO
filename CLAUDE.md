@@ -3743,6 +3743,65 @@ read the shared catalogue; do not reintroduce a local 10/16 px default.
 The schema migration changes the default only. Existing `body_font_px` values
 may be explicit desk choices and are never mass-backfilled.
 
+### The owner's own screens had no net, and that is where the wall was
+
+Every browser net in this repository drives the workspace. The five screens
+behind the ☰ — Past Newspapers, Past News, Reporters, Settings, E-paper — had
+none. Swept by driving them: all five load, all five land on their own heading,
+no failed requests, no exceptions. **Past News was the exception**, and it was
+the story-explorer disease again, in a different room:
+
+| | was | is |
+|---|---|---|
+| cards drawn | **1972**, appended to the live document one at a time | 60, built into a fragment and attached once |
+| DOM nodes | **17,780** | 582 |
+| settle | **1030 ms** | **166 ms** |
+| finding a filing | nothing — no search, no filter | search + status filter + "Show 60 more of N" |
+
+Two more faults in the same function, both of the kind this file already names:
+
+- **A decision rebuilt the whole queue.** `approve`/`reject` called
+  `showPastNews()` again, so passing one story redrew all 1972 cards. The card
+  repaints itself now.
+- **The PATCH's answer went unread** — the "five unchecked page re-reads" class
+  exactly. An expired session or a 500 repainted the same status and said
+  nothing, so a desk could not tell a refusal from a success. It is read, and
+  a refusal is spoken.
+
+### A cached failure outlives the blip that caused it
+
+`fetchTemplates()` and `loadGeometry()` both did
+`cache = await fetch(...).then((r) => r.json())` — caching **whatever came
+back**, and the catch-all answers a failure with `{ error: "..." }`, an object
+rather than a list. Measured by failing `/api/templates` exactly once:
+
+```
+templates.map is not a function
+#layoutSelect present after the blip      : 0
+#layoutSelect present after a page switch : 0
+templates requests made                   : 1   <- it never asks again
+```
+
+One blip — a restart, an expired session, a dropped connection — and the Layout
+picker was **gone for the rest of the session with no message**, throwing again
+on every later render, until somebody reloaded the page. Only a good answer is
+cached now, the render says so instead of throwing, and the next render tries
+again: after the same forced blip, 0 exceptions and the picker returns.
+
+`tests/browser/admin-screens.browser.js` holds all of it — the five screens,
+the bounded queue, the unread PATCH, and the blip recovery.
+
+```bash
+node tests/browser/admin-screens.browser.js
+```
+
+**What was swept and found sound**, so it is not re-audited: every GET route
+answers under 120 ms (the backend is not where the slowness is); the id sweep
+over 243 element ids found no dead control — every apparent one was generated
+through a `button(id, …)` or `numberField(id, …)` helper; `/epaper` returning
+404 is correct when nothing has been released, though it answers with a bare
+unstyled `<h1>` and could carry the paper's own furniture.
+
 ### A block that has DRIFTED is not a decision, and the desk is told
 
 `setHouseStyle()`'s guarded backfill moves a block carrying no face of its own

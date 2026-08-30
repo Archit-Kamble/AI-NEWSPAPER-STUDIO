@@ -103,7 +103,11 @@ function engineWarnings(composition) {
   }
   for (const w of composition.warnings || []) {
     const level = ENGINE_FAULTS[w.code];
-    if (level) out.push({ level, text: w.detail, code: w.code });
+    // The engine's own numbers travel with the sentence. This rebuilt the
+    // object from `detail` alone, so a warning that carries what to DO about
+    // it - HEADLINE_COULD_FILL's size and character count - arrived here with
+    // only the prose, and no offer could be built from it.
+    if (level) out.push({ level, text: w.detail, code: w.code, px: w.px, charsOver: w.charsOver });
   }
   return out;
 }
@@ -205,6 +209,30 @@ export function layoutWarnings(metrics) {
   const unprintable = engine.some((w) => w.code === "NO_LEGAL_MEASURE");
   // The warning names three things a desk could do; where SAHAS can work out
   // which one and where, it offers it instead of only describing it.
+  // THE HEADLINE THE BLOCK COULD HAVE.
+  //
+  // The desk's report was "the width of each line is becoming shorter". On
+  // five blocks of their own front page that is exactly right and it is not a
+  // typographic fault: the headline WOULD reach its measure at a larger size -
+  // 29px against 23.5px on the Jarange anchor - and growth was withheld
+  // because the copy is already at the foot. The engine has said so since
+  // HEADLINE_COULD_FILL was added.
+  //
+  // Saying it is not the same as offering it. This is the same shape as the
+  // placement repair below: a button, checked against the engine's own numbers
+  // before it is drawn, and a person presses it.
+  //
+  // It sets the SIZE and nothing else. The copy that then has no room is named
+  // in the sentence, and which sentence dies is an editorial decision - a far
+  // larger one than moving a picture, and not this software's to take.
+  const couldFill = engine.find((w) => w.code === "HEADLINE_COULD_FILL");
+  if (couldFill && couldFill.px > 0) {
+    couldFill.action = {
+      patch: { headlineFontPx: couldFill.px, headlineLocked: true },
+      label: `Set it at ${couldFill.px}px`,
+    };
+  }
+
   if (metrics.placementRepair) {
     const fault = engine.find((w) => w.code === "NO_LEGAL_MEASURE");
     if (fault) fault.action = { ...metrics.placementRepair, label: REPAIR_WORDS[metrics.placementRepair.how] || "Move it clear of the column" };
@@ -358,6 +386,11 @@ function warningsMarkup(warnings) {
   return warnings.map((w) => {
     if (!w.action) return `<p class="warning-item level-${w.level}">${w.text}</p>`;
     const { imageId, patch, label } = w.action;
+    // A section patch (the headline's size) rather than a picture's rectangle.
+    if (imageId === undefined) {
+      return `<p class="warning-item level-${w.level}">${w.text}`
+        + `<button type="button" class="warning-fix" data-fix-headline="${patch.headlineFontPx}">${label}</button></p>`;
+    }
     return `<p class="warning-item level-${w.level}">${w.text}`
       + `<button type="button" class="warning-fix" data-fix-placement="${imageId}"`
       + ` data-fix-rect="${patch.x},${patch.y},${patch.width},${patch.height}">${label}</button></p>`;

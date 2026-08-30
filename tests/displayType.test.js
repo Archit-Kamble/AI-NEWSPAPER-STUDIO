@@ -489,3 +489,75 @@ test('a resolved display size is a real size, not a float accumulation', () => {
     }
   }
 });
+
+// ------------------------------------- the headline the block COULD have ---
+//
+// The desk's second report on the same page: "the width of each line is
+// becoming shorter". On five blocks of their own front page that is exactly
+// right and it is not a typographic fault - the headline WOULD reach its
+// measure at a larger size (29px against 23.5px on the Jarange anchor) and
+// growth was withheld because the copy is already at the foot.
+//
+// The engine has said so since HEADLINE_COULD_FILL was written. Saying is not
+// offering, and a decision nobody can act on is one nobody takes.
+
+// The desk's own block, reproduced: the Jarange anchor on edition 54470, whose
+// headline sets 77%/77% because the story is at the foot and would set 95%/95%
+// at 29px. Found by measuring their page, not invented.
+const DENIED = {
+  width: 268, height: 296, padding: 1,
+  headlineFontPx: 24, subheadingFontPx: 13, bodyFontPx: 6.4, lineHeight: 1.45,
+  headline: 'अंतरवालीत जरांगे यांचे उपोषण; परभणीत वाद',
+  body: 'गावातील नागरिकांनी या उपक्रमात उत्स्फूर्त सहभाग घेतला आहे. '.repeat(34),
+};
+
+test('a headline denied its growth reports the SIZE and the COST as numbers, not only as prose', () => {
+  const denied = (compose.composeBlock(DENIED).warnings || [])
+    .find((w) => w.code === 'HEADLINE_COULD_FILL');
+  assert.ok(denied, 'this fixture must reach the withheld-growth state or it tests nothing');
+
+  // The panel builds its offer from these. Carried as FIELDS, because a desk
+  // told the size in a sentence cannot press the size - which is exactly how
+  // this arrived: engineWarnings() rebuilt the warning from `detail` alone and
+  // the numbers never reached the panel.
+  assert.ok(Number.isFinite(denied.px) && denied.px > 0, `px must be a number, got ${denied.px}`);
+  assert.ok(Number.isFinite(denied.requestedPx), 'the size it was asked for must be stated too');
+  assert.ok(denied.px > denied.requestedPx, 'the offer is a LARGER size, or there is nothing to offer');
+  assert.ok(Number.isFinite(denied.charsOver) && denied.charsOver > 0,
+    'and what it would cost, or the desk cannot weigh it');
+
+  assert.match(denied.detail, new RegExp(`${denied.px}px`));
+  assert.match(denied.detail, new RegExp(`${denied.charsOver} clusters`));
+});
+
+test('taking the offer really does fill the measure', () => {
+  const denied = (compose.composeBlock(DENIED).warnings || [])
+    .find((w) => w.code === 'HEADLINE_COULD_FILL');
+  assert.ok(denied, 'fixture did not reach the withheld-growth state');
+
+  const taken = compose.composeBlock({ ...DENIED, headlineFontPx: denied.px, headlineLocked: true });
+  const band = compose.headlineBandFit(taken.bands.headline);
+  assert.equal(taken.bands.headline.resolvedPx, denied.px, 'a locked size is the size that is set');
+  assert.ok(band.fill >= 0.95,
+    `the offer promised a filled measure and delivered ${band.fills.map((f) => Math.round(100 * f)).join('/')}`);
+});
+
+test('an offer is only made when it would actually fill', () => {
+  // It is called COULD_FILL and a desk cuts a sentence for it. The growth
+  // search does NOT always reach the bar - it accepts a near-full band when
+  // nothing in range fills - and before this was gated, a block whose offer
+  // read "would fill" set 96%/73% at the size it named. An offer that
+  // over-promises is worse than no offer.
+  const sentence = 'गावातील नागरिकांनी या उपक्रमात उत्स्फूर्त सहभाग घेतला आहे. ';
+  for (const headline of ['जिल्ह्यात पाणीटंचाईवर उपाययोजना सुरू', 'रस्ते दुरुस्तीसाठी निधी मंजूर', DENIED.headline]) {
+    for (let n = 6; n <= 40; n += 2) {
+      const frame = { ...DENIED, headline, body: sentence.repeat(n) };
+      const denied = (compose.composeBlock(frame).warnings || [])
+        .find((w) => w.code === 'HEADLINE_COULD_FILL');
+      if (!denied) continue;
+      const taken = compose.composeBlock({ ...frame, headlineFontPx: denied.px, headlineLocked: true });
+      assert.ok(compose.headlineBandFit(taken.bands.headline).fill >= 0.95,
+        `offered ${denied.px}px on a ${frame.width}px block and it did not fill`);
+    }
+  }
+});

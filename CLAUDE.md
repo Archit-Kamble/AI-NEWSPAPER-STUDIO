@@ -522,6 +522,42 @@ runs — and the two agreed closely enough to pass until this change. It calls
 `sectionImage.service.js`'s `copyStartsAt()` now. A test that reimplements the
 thing it tests can only ever pass by luck.
 
+
+#### A short headline on a full block is an OFFER, not a sentence
+
+The desk's second report on the same page: *"the width of each line is becoming
+shorter"*. On five blocks of their own front page that is exactly right and it
+is **not a typographic fault** — the headline would reach its measure at a
+larger size and growth was withheld because the copy is already at the foot:
+
+| block | set at | would fill at |
+|---|---|---|
+| anchor (Jarange) | 23.5px, 77/77 | **29px, 95/95** |
+| lead | 13.5px, 74/76 | 17px |
+| right-top | 27.5px, 78/72 | 34px |
+
+`HEADLINE_COULD_FILL` has said so since it was written, and the sentence is
+visible in the Space panel. **Saying is not offering.** It carries `px`,
+`requestedPx` and `charsOver` as FIELDS now, and `layout-panel.js` turns them
+into a button — the same shape as the placement repair, checked against the
+engine's own numbers before it is drawn, and a person presses it.
+
+- **It sets the SIZE and nothing else**, locked so the auto-fit cannot undo the
+  decision on the next composition. Which sentence dies is an editorial choice
+  far larger than moving a picture, and not this software's to take. The
+  clusters that will have no room are named in the same line.
+- **`engineWarnings()` rebuilt the warning from `detail` alone**, so a warning
+  carrying what to DO about it arrived at the panel as prose with the numbers
+  stripped. That is why no offer could be built until it was fixed.
+- **The offer is gated on actually filling.** It is called COULD_FILL and a
+  desk cuts a sentence for it, but the growth search does not always reach the
+  bar — it accepts a near-full band when nothing in range fills. Measured: a
+  block whose offer read "would fill" set **96/73** at the size it named. An
+  offer that over-promises is worse than no offer, and `tests/displayType.test.js`
+  is what caught it.
+- The wording says **clusters**, matching `BODY_OVERSET` beside it. The same
+  quantity under two words reads as two different numbers.
+
 ### Every control names the object it acts on
 
 `text_align` is the **body's** alignment and always was, and `setDisplayFlow()`

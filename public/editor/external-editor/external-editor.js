@@ -159,11 +159,21 @@ function renderToolsRail(section, view, callbacks) {
 // (layout-panel.js's placementRepair), so pressing it is an ordinary picture
 // patch - the same one a drag makes. Delegated on the group, which is
 // re-rendered wholesale on every refresh.
-function bindPlacementRepair(onPatchImage) {
+function bindPlacementRepair(onPatchImage, onPatch) {
   const group = document.getElementById("edSpaceGroup");
   if (!group || group.dataset.repairBound === "1") return;
   group.dataset.repairBound = "1";
   group.addEventListener("click", (event) => {
+    // The headline the block could have, if the copy made room - see
+    // layout-panel.js. Sets the size and LOCKS it, so the auto-fit does not
+    // simply undo the decision on the next composition.
+    const headlineFix = event.target.closest?.("[data-fix-headline]");
+    if (headlineFix) {
+      event.preventDefault();
+      const px = Number(headlineFix.dataset.fixHeadline);
+      if (Number.isFinite(px) && px > 0) onPatch?.({ headlineFontPx: px, headlineLocked: true }, "warning-fix");
+      return;
+    }
     const button = event.target.closest?.("[data-fix-placement]");
     if (!button) return;
     event.preventDefault();
@@ -291,7 +301,7 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
   // #edSpaceGroup belongs to the DOCK, not the settings rail - binding it in
   // renderToolsRail() bound a listener to an element that render had not
   // written yet, and the button drew correctly and did nothing.
-  bindPlacementRepair(callbacks.onPatchImage);
+  bindPlacementRepair(callbacks.onPatchImage, callbacks.onPatch);
 
   bindPictureControls({
     onAddImage: callbacks.onAddImage,

@@ -3015,11 +3015,20 @@ export function composeBlock(input = {}) {
   // a straight right edge and a sentence, it belongs to the desk, and the desk
   // can only make it if it is told the choice exists.
   const denied = input.headlineGrowthDenied;
-  if (denied) {
+  // Only when it really would fill. Where growth would merely improve the band
+  // there is nothing here worth cutting a sentence for, and
+  // HEADLINE_SHORT_OF_MEASURE below already says the headline is short.
+  if (denied && denied.fill >= HEADLINE_FILL_TARGET) {
     warnings.push({
       code: 'HEADLINE_COULD_FILL',
+      // Stated as FIELDS as well as inside the sentence. A desk that is told
+      // the size cannot press the size; the panel turns these into the offer,
+      // exactly as it does for a picture that has to move.
+      px: denied.px,
+      requestedPx: denied.requestedPx,
+      charsOver: denied.charsOver,
       detail: `This headline would fill its measure at ${denied.px}px rather than ${denied.requestedPx}px, `
-        + `but the block is full: ${denied.charsOver} characters of copy would have no room. `
+        + `but the block is full: ${denied.charsOver} clusters of copy would have no room. `
         + 'Cut the copy and set the headline larger, or leave it as it is.',
     });
   }
@@ -3205,6 +3214,13 @@ export function composeBlock(input = {}) {
         px: result.bands.headline.resolvedPx,
         requestedPx: result.bands.headline.requestedPx,
         charsOver: clusters(body.overset || result.bands.deck?.overset || '').length,
+        // What the grown band ACTUALLY reached. The warning is called
+        // COULD_FILL and promises a filled measure, and the growth search does
+        // not always deliver one - it accepts a near-full band when nothing in
+        // range fills. Measured: a block whose offer read "would fill at 24px"
+        // set 96%/73% at 24px. An offer that over-promises is worse than no
+        // offer, because a desk cuts a sentence for it.
+        fill: headlineBandFit(result.bands.headline).fill,
       },
     });
   }

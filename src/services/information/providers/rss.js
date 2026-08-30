@@ -223,31 +223,10 @@ async function fetchFeed(url, timeoutMs) {
 // silently matched everything. This was true from the day this function was
 // written; it surfaced only once real Marathi feeds were connected in Phase
 // 9 and a district query returned 91 unrelated items.
-function significantWords(text) {
-  return String(text || '').split(/[^\p{L}\p{M}\p{N}]+/u).map((w) => w.trim().toLowerCase()).filter((w) => w.length >= 3);
-}
-
-// Measured live against real feeds: "सातारा ताज्या बातम्या" (Satara latest
-// news) matched on "ताज्या"/"बातम्या" alone - words that mean "this is news"
-// and appear in nearly every headline about anything - and returned 91
-// items with nothing to do with Satara. The words that actually say WHAT the
-// query is about (the place, the topic) are what should decide a match; the
-// words that only say "this is current news" should not. Reusing
-// intent.js's own NEWS_WORDS/TEMPORAL_WORDS as the exclusion list rather
-// than a second one - the same words that make a seed "about something
-// current" are exactly the ones that carry no content of their own.
-const { NEWS_WORDS, TEMPORAL_WORDS } = require('../intent');
-const NOISE_WORDS = new Set([...NEWS_WORDS, ...TEMPORAL_WORDS].map((w) => w.toLowerCase()));
-
-// If every word in the query happened to be a noise word (rare - the intent
-// classifier already required a content signal to reach retrieval at all),
-// filtering to nothing would match everything indiscriminately, which is
-// worse than matching on the noise words. Fall back to the unfiltered words.
-function queryWordsFor(query) {
-  const words = significantWords(query);
-  const withoutNoise = words.filter((w) => !NOISE_WORDS.has(w));
-  return withoutNoise.length ? withoutNoise : words;
-}
+// The tokenizer and the noise list moved to ../words.js when duplicate
+// detection became a second caller. Same functions, same \p{M} lesson, one
+// implementation - see that file's header.
+const { significantWords, contentWords: queryWordsFor } = require('../words');
 
 function matchesQuery(item, queryWords) {
   // No words to match on means NOTHING matches, not everything. It read

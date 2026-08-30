@@ -263,13 +263,13 @@ async function fetchContext({ query, category, openWeb = false }) {
  * old story belongs in tomorrow's paper is an editorial decision, and this
  * module's whole discipline is to decline to make those early.
  */
-function annotate(items, { category, openWeb = false } = {}) {
+function annotate(items, { category, openWeb = false, windowMs } = {}) {
   return items.map((item) => {
     const source = toSource(item);
     return {
       ...source,
       title: truncate(item.title, EXCERPT_MAX_CHARS),
-      stale: freshness.isStale(source.publishedAt, category),
+      stale: freshness.isStale(source.publishedAt, category, windowMs),
       // An open-web item can never be `verified`, whatever its domain says.
       // Carrying that on the ITEM is what lets one pool hold both kinds and a
       // story be scored on the sources it actually has.

@@ -232,6 +232,36 @@ const HEADLINE_FILL_TARGET = 0.95;
 // line rather than a widow.
 const HEADLINE_CLOSE_MIN_FILL = 0.30;
 const HEADLINE_CLOSE_MIN_WORDS = 2;
+
+// The shrink bound, and it is the mirror of HEADLINE_GROWTH_CAP - a HIERARCHY
+// bound, not a typographic one.
+//
+// Growth has been capped since it was written, because a page reads as one
+// page when the bigger block shouts louder. Shrinking had no such bound, and
+// once the closing line is charged the fill search runs on nearly every
+// two-line headline and walks all the way down to the legibility floor
+// looking for a size that fills. Measured on a real front page: the 268x296
+// anchor, designed at 24px, came back at 14.5px in one line - 60% of the size
+// its own block was built around, and no longer the loudest thing on the page.
+//
+// 0.8 is deliberately tighter than growth's 1.25. Type that shrinks loses
+// hierarchy faster than type that grows gains it, and a headline is the one
+// object on the page whose size IS its meaning.
+//
+// It bounds the FILL search only. Shrinking to escape overset is unbounded and
+// must stay so: a word pushed off the block is worse than any of this.
+const HEADLINE_SHRINK_CAP = 0.8;
+
+// What counts as a professional right edge when 95% is physically out of
+// reach. growToFill() has used this number since it was written, for exactly
+// this reason ("a hierarchy cap can make 95% unreachable"); the fill search
+// now shares it rather than keeping a second opinion.
+const HEADLINE_NEAR_FULL = 0.90;
+
+// How much more an early line's slack costs than a late one's, per line.
+// Small on purpose: it decides ties between shapes the words made equally
+// good, and must never outweigh real evenness. See balanceDisplayLines().
+const DESCENT_BIAS = 0.05;
 const DISPLAY_FIT_STEP_PX = 0.5;
 
 // A deck explains the headline; it must not become another headline after the
@@ -319,6 +349,99 @@ function num(value, fallback) {
  * the exclusion geometry - it dodges a picture standing in its rows exactly
  * as the copy does.
  */
+
+/**
+ * A display band's lines, broken EVENLY rather than greedily.
+ *
+ * `pourBody` has balanced its lines since balanceParagraph() was written, and
+ * that function's own header says why greedy filling is wrong: it is optimal
+ * for LINE COUNT and terrible for evenness, because it spends all the slack on
+ * whichever line happens to meet a long word. Display type never got the same
+ * treatment, and a desk photographed the result - headlines set 97% / 42%,
+ * 97% / 41%, 97% / 43% across a real front page. A first line full to its
+ * measure over a stub is not a two-line headline; it is a one-line headline
+ * with a word fallen off the end, and it is what a sub-editor fixes by hand.
+ *
+ * The same guarantee as the body balancer, for the same reason: THE SLOT COUNT
+ * NEVER CHANGES. Pieces are re-assigned across the lines the greedy pass
+ * already fixed, so no band moves, no geometry shifts, and nothing below this
+ * flow is placed anywhere different.
+ *
+ * The cost is squared NORMALISED slack, not the body's `slackCost`. That one
+ * is built around what the justifier can close, and display type is never
+ * justified (JUSTIFY_MIN_EM is deliberately not applied to it) - there is no
+ * lever here, so what the eye sees is simply the ragged edge, and the even
+ * edge is the one to find. Normalised because a picture can narrow one band
+ * and two slots of different measures must still compare fairly.
+ *
+ * @param {string[]} pieces   the flow's own pieces, in order
+ * @param {number} used       how many of them the greedy pass consumed
+ * @param {number[]} measures the measure of each line, in order
+ * @param {(from:number,to:number)=>number} widthOf  drawn width of a run
+ * @returns {number[]|null}   piece index where each slot starts, or null when
+ *   no legal assignment exists (a piece wider than a slot it must land in) -
+ *   in which case the greedy lines stand, exactly as they did before.
+ */
+function balanceDisplayLines(pieces, used, measures, widthOf) {
+  const L = measures.length;
+  if (L < 2 || used < L) return null;
+
+  const INF = Infinity;
+  // cost[j][i] - best total badness placing pieces i.. onto slots j..
+  const cost = Array.from({ length: L + 1 }, () => new Float64Array(used + 1).fill(INF));
+  const cut = Array.from({ length: L + 1 }, () => new Int32Array(used + 1).fill(-1));
+  cost[L][used] = 0;
+
+  for (let j = L - 1; j >= 0; j -= 1) {
+    const measure = measures[j];
+    for (let i = used - 1; i >= 0; i -= 1) {
+      // Every remaining slot needs at least one piece, so this slot may take
+      // at most `used - i - (L - j - 1)` of them.
+      const maxTake = used - i - (L - j - 1);
+      if (maxTake < 1) continue;
+      let best = INF;
+      let bestCut = -1;
+      for (let take = 1; take <= maxTake; take += 1) {
+        const to = i + take;
+        const width = widthOf(i, to);
+        // A line may never be drawn past its own measure. Wider pieces only
+        // get wider, so the search for this slot ends here.
+        if (width > measure + 0.5) break;
+        const rest = cost[j + 1][to];
+        if (rest === INF) continue;
+        const slack = measure > 0 ? (measure - width) / measure : 0;
+        // DESCENDING, when the words will not divide evenly.
+        //
+        // Squared slack alone treats 49%/100% and 100%/49% as the SAME cost,
+        // so the solver picked whichever it reached first - and it reached the
+        // ascending one. A stranded short FIRST line is the very shape
+        // headlineBandFit()'s own header condemns ("a max cannot distinguish
+        // 49%/100% from the professional 98%/45%"), and greedy filling at
+        // least never produced it.
+        //
+        // So slack costs slightly more the earlier it falls. Where the pieces
+        // divide evenly this is far too small to change the answer; where they
+        // cannot, it sends the short line to the bottom, which is where a
+        // compositor puts it.
+        const total = rest + slack * slack * (1 + DESCENT_BIAS * (L - 1 - j));
+        if (total < best) { best = total; bestCut = to; }
+      }
+      cost[j][i] = best;
+      cut[j][i] = bestCut;
+    }
+  }
+
+  if (cost[0][0] === INF) return null;
+  const starts = [];
+  let at = 0;
+  for (let j = 0; j < L; j += 1) {
+    starts.push(at);
+    at = cut[j][at];
+    if (at < 0) return null;
+  }
+  return starts;
+}
+
 function setDisplayFlow(text, {
   top, bottomLimit, column, images, fontPx, lineHeight, family, weight, maxLines, letterSpacingPx = 0,
   align = 'left', marks = null, previousBaseline = null, flowKey = '', floor = null,
@@ -498,6 +621,47 @@ function setDisplayFlow(text, {
     y += bandHeight;
   }
 
+  // ------------------------------------------------------------- balance ---
+  //
+  // The loop above filled each line greedily, and greedy is what produced the
+  // 97% / 42% headlines a desk photographed. Re-assign the same pieces across
+  // the same slots so the ragged edge is EVEN - see balanceDisplayLines() for
+  // why the slot count may never change, and why the body's own cost function
+  // is the wrong one here.
+  //
+  // Skipped whenever the flow already overset an unbreakable token: that line
+  // is drawn past its measure by construction, so every candidate assignment
+  // is illegal and the balancer would only fall through to null anyway.
+  if (lines.length >= 2 && !violations.length) {
+    const offsets = [];
+    let runningAt = 0;
+    for (const piece of pieces) { offsets.push(runningAt); runningAt += piece.length; }
+
+    // Widths of the flow's own pieces, measured once. `trimmed` is what a
+    // line's LAST piece actually draws, once its trailing space is cut.
+    const full = pieces.map((piece, i) => measure2(piece, offsets[i], fontPx, family, weight));
+    const cutWidth = pieces.map((piece, i) => {
+      const cutPiece = trimEndClusters(piece);
+      return cutPiece === piece ? full[i] : measure2(cutPiece, offsets[i], fontPx, family, weight);
+    });
+    const prefix = [0];
+    for (let i = 0; i < full.length; i += 1) prefix.push(prefix[i] + full[i]);
+    const widthOf = (from, to) => (to <= from ? 0 : prefix[to - 1] - prefix[from] + cutWidth[to - 1]);
+
+    const starts = balanceDisplayLines(pieces, index, lines.map((line) => line.measure), widthOf);
+    if (starts) {
+      for (let j = 0; j < lines.length; j += 1) {
+        const from = starts[j];
+        const to = j + 1 < starts.length ? starts[j + 1] : index;
+        const text = trimEndClusters(pieces.slice(from, to).join(''));
+        const at = offsets[from];
+        lines[j].text = text;
+        lines[j].at = at;
+        lines[j].width = measure2(text, at, fontPx, family, weight);
+      }
+    }
+  }
+
   // ------------------------------------------------------------ alignment ---
   //
   // Display type obeys the desk's alignment exactly as the body does, and
@@ -591,11 +755,29 @@ export function headlineBandFit(set) {
   const closeFill = fills[fills.length - 1];
   const closeAcceptable = closeWords >= HEADLINE_CLOSE_MIN_WORDS
     && closeFill >= HEADLINE_CLOSE_MIN_FILL;
-  const workingFill = Math.min(...fills.slice(0, -1));
+  // EVERY line, including the close - and this is only correct because
+  // setDisplayFlow BALANCES its lines now.
+  //
+  // It used to be the minimum of the WORKING lines, which has the mirror flaw
+  // of the max it replaced: a max could not tell 49%/100% from a professional
+  // 98%/45%, and a working-line minimum cannot see a short close at all, so
+  // 97%/42% scored 0.97 and the size search stopped dead on it. A desk
+  // photographed the result - eight of eleven headlines on a real front page
+  // set 97%/41-43%, every one reported as a 97%-filled headline.
+  //
+  // The two changes are one change and must not be separated. Under greedy
+  // filling a short close is the NORMAL shape, so charging it alone condemns
+  // nearly every two-line headline; balanced, a short close means the band
+  // genuinely does not fill, and the search should keep looking - upward as
+  // well as down, which is how a headline grows to fill two lines instead of
+  // shrinking into one. Measured the other way round too: balancing alone,
+  // with this metric left as it was, took hard shrinks from 42 to 70, because
+  // an even 79%/79% scores worse on working lines than a stubbed 97%/42%.
+  const fill = Math.min(...fills);
   return {
     // A bad close must fail the same scalar gate every caller already uses;
     // this keeps headline choice, the AI panel and the compositor on one rule.
-    fill: closeAcceptable ? workingFill : 0,
+    fill: closeAcceptable ? fill : 0,
     closeAcceptable,
     closeWords,
     fills,
@@ -710,12 +892,46 @@ function fitDisplayFlow(text, options, { locked, minPx, maxPx = 0, fillTarget = 
       // half a pixel down restores the professional break. Search down from
       // the requested hierarchy rung before considering growth, and accept
       // only the first (largest) size whose complete line shape passes.
+      // OUTWARD from the requested rung, not downward first.
+      //
+      // This searched down to minPx before growth was ever considered and
+      // returned the first size that passed - so the answer was always the
+      // SMALLEST size that fills. Survivable while the metric could not see a
+      // short close (the band passed at the requested size immediately, so the
+      // search rarely ran); once the close is charged it runs on nearly every
+      // two-line headline, and downward-first collapsed a real front page -
+      // the anchor went from 21px in two lines to 14.5px in one, 60% of the
+      // size its own block was designed around. A headline that no longer
+      // shouts is not a fixed headline.
+      //
+      // Both directions genuinely fill, and differently: shrinking takes a
+      // two-line head towards ONE full line, growing takes it towards TWO.
+      // Which is nearer the design's own hierarchy rung is the question worth
+      // asking, so the search asks it - and at equal distance the smaller
+      // wins, because every pixel of display type is a pixel off the story.
       if (pass === 0 && fillTarget > 0 && bandFill(first) < fillTarget) {
-        for (let px = options.fontPx - DISPLAY_FIT_STEP_PX; px >= minPx - 0.001; px -= DISPLAY_FIT_STEP_PX) {
-          const attempt = setDisplayFlow(text, { ...attemptOptions, fontPx: px });
-          if (!failed(attempt) && bandFill(attempt) >= fillTarget) {
-            return { ...attempt, resolvedPx: px, shrunk: true };
+        const ceiling = maxPx > options.fontPx ? maxPx : options.fontPx;
+        const floorPx = Math.max(minPx, options.fontPx * HEADLINE_SHRINK_CAP);
+        const reach = Math.max(options.fontPx - floorPx, ceiling - options.fontPx);
+        let best = null;
+        for (let d = DISPLAY_FIT_STEP_PX; d <= reach + 0.001; d += DISPLAY_FIT_STEP_PX) {
+          for (const px of [options.fontPx - d, options.fontPx + d]) {
+            if (px < floorPx - 0.001 || px > ceiling + 0.001) continue;
+            const attempt = setDisplayFlow(text, { ...attemptOptions, fontPx: px });
+            if (failed(attempt)) continue;
+            const fill = bandFill(attempt);
+            if (fill >= fillTarget) {
+              return { ...attempt, resolvedPx: px, shrunk: px < options.fontPx, grew: px > options.fontPx };
+            }
+            if (!best || fill > best.fill) best = { set: attempt, px, fill };
           }
+        }
+        // Nothing fills. A near-full band at the block's own hierarchy makes a
+        // better page than a full one two rungs below it - the argument
+        // growToFill() has always made for growth, applied to the whole search
+        // rather than to half of it.
+        if (best && best.fill >= HEADLINE_NEAR_FULL) {
+          return { ...best.set, resolvedPx: best.px, shrunk: best.px < options.fontPx, grew: best.px > options.fontPx };
         }
       }
       // Only from the pass that got what it wanted. A flow already forced
@@ -730,7 +946,19 @@ function fitDisplayFlow(text, options, { locked, minPx, maxPx = 0, fillTarget = 
         ? { ...grown.set, resolvedPx: grown.px, shrunk: false, grew: true }
         : { ...first, resolvedPx: options.fontPx, shrunk: false };
     }
+    // The flow OVERSET at the requested size, so it must come down until it
+    // sets. This walk is deliberately unbounded - a word pushed off the block
+    // is worse than any loss of hierarchy - but it must still stop at the
+    // first size that is good enough, and "good enough" is the same near-full
+    // standard the fill search uses.
+    //
+    // Without that it walked past a professional setting to chase an exact
+    // number. Measured on the golden 268x248 lead: 20.5px sets two lines at
+    // 97%/94%, misses the 95% bar by a hair, and the loop carried on down to
+    // 10.5px - HALF the size the block was designed around, for one point of
+    // fill. Every one of the ten recorded geometries collapsed the same way.
     let firstClean = null;
+    let best = null;
     for (let px = options.fontPx - DISPLAY_FIT_STEP_PX; px >= minPx - 0.001; px -= DISPLAY_FIT_STEP_PX) {
       const attempt = setDisplayFlow(text, { ...attemptOptions, fontPx: px });
       if (failed(attempt)) continue;
@@ -738,6 +966,16 @@ function fitDisplayFlow(text, options, { locked, minPx, maxPx = 0, fillTarget = 
       if (!(pass === 0 && fillTarget > 0) || bandFill(attempt) >= fillTarget) {
         return { ...attempt, resolvedPx: px, shrunk: true };
       }
+      const fill = bandFill(attempt);
+      if (!best || fill > best.fill) best = { set: attempt, px, fill };
+      // Largest-first walk, so the first near-full size met is also the
+      // biggest one: take it rather than trading real hierarchy for a point.
+      if (fill >= HEADLINE_NEAR_FULL) {
+        return { ...attempt, resolvedPx: px, shrunk: true };
+      }
+    }
+    if (best && best.fill >= HEADLINE_NEAR_FULL) {
+      return { ...best.set, resolvedPx: best.px, shrunk: true };
     }
     if (firstClean) return { ...firstClean.set, resolvedPx: firstClean.px, shrunk: true };
   }

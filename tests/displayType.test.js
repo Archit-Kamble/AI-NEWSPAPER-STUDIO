@@ -40,7 +40,7 @@ const LEAD = {
 
 const fillOf = (band) => compose.headlineBandFit(band).fill;
 
-test('a headline short of its measure auto-fits until its complete line shape reaches the 95% bar', () => {
+test('a headline short of its measure auto-fits toward a fillable line shape', () => {
   // 81% of its measure on both lines at the size geometry.js chose for this
   // block: the shape of the desk's own complaint, on a block with no picture
   // in it so the fixture is about the type and nothing else.
@@ -53,14 +53,26 @@ test('a headline short of its measure auto-fits until its complete line shape re
     `this fixture must start SHORT or it tests nothing (it filled ${(100 * fillOf(asked.bands.headline)).toFixed(0)}%)`);
 
   assert.ok(set.bands.headline.grew || set.bands.headline.shrunk, 'the engine must have adjusted it');
-  assert.ok(fillOf(set.bands.headline) >= 0.95,
-    `and it must actually fill - got ${(100 * fillOf(set.bands.headline)).toFixed(0)}%`);
+  // NOT the 95% bar. That is what the search AIMS at; four Marathi words of
+  // these widths cannot reach it at any size, and headlineBandFit() now
+  // charges every line rather than only the working ones, so the same
+  // professional 97%/74% descending shape reads 0.74 here where it read 0.97
+  // before. What is held is that the engine found a shape worth setting.
+  assert.ok(fillOf(set.bands.headline) >= compose.HEADLINE_NEAR_FULL,
+    `and it must reach a setting worth having - got ${(100 * fillOf(set.bands.headline)).toFixed(0)}%`);
+  assert.ok(!compose.headlineBandFit(set.bands.headline).ascends,
+    'and it must not strand its first line');
 
-  const nearerRequested = compose.composeBlock({
-    ...frame, headline, headlineFontPx: set.bands.headline.resolvedPx + 0.5, headlineLocked: true,
-  });
-  assert.ok(fillOf(nearerRequested.bands.headline) < 0.95,
-    'the selected down-fit is the largest size below the requested rung whose whole line shape passes');
+  // The search runs OUTWARD from the requested rung and keeps the first size
+  // that passes, so the size half a pixel NEARER the rung must be worse. It
+  // used to run downward only, which is why this used to read "the largest
+  // size below the requested rung".
+  const requested = frame.headlineFontPx;
+  const resolved = set.bands.headline.resolvedPx;
+  const nearer = resolved > requested ? resolved - 0.5 : resolved + 0.5;
+  const nearerSet = compose.composeBlock({ ...frame, headline, headlineFontPx: nearer, headlineLocked: true });
+  assert.ok(fillOf(nearerSet.bands.headline) < fillOf(set.bands.headline),
+    `${nearer}px is nearer the rung than ${resolved}px and should have been kept if it were as good`);
 });
 
 test('headline working lines fill, the close is not a widow, and the deck stays one-line and subordinate', () => {
@@ -80,12 +92,24 @@ test('headline working lines fill, the close is not a widow, and the deck stays 
     const close = set.bands.headline.lines.at(-1);
     const closeWords = close.text.trim().split(/\s+/u).length;
 
-    assert.ok(quality.fill >= 0.95, `${frame.width}px headline working lines must reach 95%`);
+    // Not a fill bar. This headline is four long Marathi words and on a narrow
+    // measure they simply will not divide into two full lines at any size -
+    // what matters is the SHAPE the engine settles on. Held instead: the lines
+    // descend (no stranded first line), and the close is not a widow.
+    assert.ok(!quality.ascends,
+      `${frame.width}px headline strands its first line: ${quality.fills.map((f) => Math.round(100 * f)).join('/')}`);
     assert.ok(set.bands.headline.lineCount === 1 || closeWords >= 2,
       `${frame.width}px headline must not close on one word`);
     assert.equal(set.bands.deck.lineCount, 1, `${frame.width}px deck is a subordinate one-line flow`);
-    assert.ok(set.bands.deck.resolvedPx <= set.bands.headline.resolvedPx * 0.65 + 0.05,
-      `${frame.width}px deck must stay below the headline's resolved hierarchy rung`);
+    // The deck stays subordinate OR sits on its own legibility floor - which
+    // is what the engine does (`Math.max(flow.min, ...)`). On the 150px block
+    // the headline resolves to 9px, and 65% of that is below the smallest type
+    // this paper sets; the floor wins, and it must.
+    assert.ok(
+      set.bands.deck.resolvedPx <= set.bands.headline.resolvedPx * 0.65 + 0.05
+      || set.bands.deck.resolvedPx <= Math.max(compose.MIN_LEGIBLE_PX, 6.4) + 0.05,
+      `${frame.width}px deck must stay below the headline's rung unless it is already at its own floor`,
+    );
     assert.equal(set.overset.headline, '');
     assert.equal(set.overset.deck, '');
   }
@@ -183,7 +207,7 @@ test('filling the headline never costs a word', () => {
   // Room to spare: the headline takes the extra depth and fills its measure.
   const roomy = compose.composeBlock({ ...frame, body: sentence.repeat(4) });
   assert.ok(roomy.bands.headline.grew || roomy.bands.headline.shrunk);
-  assert.ok(fillOf(roomy.bands.headline) >= 0.9,
+  assert.ok(fillOf(roomy.bands.headline) >= compose.HEADLINE_NEAR_FULL,
     'when the hierarchy cap makes 95% unreachable, the best near-full legal setting is retained');
   assert.equal(roomy.overset.body, '', 'and the copy still fits');
 
@@ -362,12 +386,106 @@ test('a headline that already fills its measure is not nagged about', async () =
   await Promise.all([ensureFontsLoaded(), ensureShaperReady()]);
 
   const section = { section_key: 'full-head', width_px: 307, height_px: 264, block_type: 'article', images: [] };
-  const composed = composeSection(section, {
-    headline: 'साताऱ्यातील राजकीय घडामोडींना वेग आला असून चर्चा रंगली',
+  const view = {
     subheading: 'तपशील लवकरच',
     body: 'सातारा : जिल्हा प्रशासनाने नवीन नोंदणी प्रक्रिया सुरू केली आहे.',
     headlineFontPx: 23, subheadingFontPx: 14, bodyFontPx: 12, lineHeight: 1.45, marginPx: 1,
+  };
+  const codesFor = (headline) => (composeSection(section, { ...view, headline }).warnings || []).map((w) => w.code);
+
+  // A headline that reaches its measure is left alone.
+  assert.ok(!codesFor('साताऱ्यात नवी नोंदणी प्रक्रिया सुरू').includes('HEADLINE_SHORT_OF_MEASURE'),
+    'a headline that fills its column must not be nagged about');
+
+  // And one that genuinely does not IS told, with the number. Both directions,
+  // because the fixture this test used to carry stopped filling when
+  // headlineBandFit() began charging the closing line - it sets 96%/77%, which
+  // is a good headline and still not a full one, and a test that only checked
+  // the quiet case could not tell the difference.
+  assert.ok(codesFor('घनकचऱ्यावर चर्चा').includes('HEADLINE_SHORT_OF_MEASURE'),
+    'a headline that leaves half its column empty must be reported');
+});
+
+// ------------------------------------------------- balanced display lines ---
+//
+// The desk's report: "most of them are 2 lines, 1 line is full but second line
+// is 20% filled only having a lot of blank space - it should 1 line full or 2
+// lines full". Measured on their own front page and it was every block, not
+// some: 97/42, 97/42, 97/41, 97/43.
+
+test('a two-line headline breaks EVENLY, not greedily', () => {
+  // Four words that cannot make two full lines at any size - so the question
+  // is only how the shortfall is shared out. Greedy filling puts all of it on
+  // the last line; a compositor spreads it.
+  const headline = 'जिल्ह्यात पाणीटंचाईवर उपाययोजना सुरू';
+  const set = compose.composeBlock({ ...LEAD, width: 270, headline });
+  const band = compose.headlineBandFit(set.bands.headline);
+  if (set.bands.headline.lines.length < 2) return; // it filled one line, which is the other good answer
+
+  const spread = Math.max(...band.fills) - Math.min(...band.fills);
+  assert.ok(spread <= 0.35,
+    `the lines must be within a third of each other, got ${band.fills.map((f) => Math.round(100 * f)).join('/')}`);
+});
+
+test('a band whose lines ASCEND is refused - a stranded first line is worse than a short close', () => {
+  // Scored directly: no size search, no fixture that has to reproduce the
+  // shape. 49%/100% is the case headlineBandFit()'s own header names, and
+  // neither a max, a working-line minimum nor a whole-band minimum can see it.
+  const ascending = compose.headlineBandFit({
+    lines: [{ width: 49, measure: 100, text: 'सातारकरांच्या' }, { width: 100, measure: 100, text: 'सुरक्षिततेसाठी खड्डेमुक्त रस्ते' }],
   });
-  const codes = (composed.warnings || []).map((w) => w.code);
-  assert.ok(!codes.includes('HEADLINE_SHORT_OF_MEASURE'), `unexpected: ${codes.join(',')}`);
+  assert.equal(ascending.ascends, true);
+  assert.equal(ascending.fill, 0, 'an ascending band must fail the same gate every caller already uses');
+
+  // The professional descending shape it should lose to still passes.
+  const descending = compose.headlineBandFit({
+    lines: [{ width: 98, measure: 100, text: 'सातारकरांच्या सुरक्षिततेसाठी' }, { width: 45, measure: 100, text: 'खड्डेमुक्त रस्ते' }],
+  });
+  assert.equal(descending.ascends, false);
+  assert.ok(descending.fill > 0);
+
+  // And an evenly broken band is not condemned for wobbling a point or two.
+  const even = compose.headlineBandFit({
+    lines: [{ width: 77, measure: 100, text: 'एक दोन' }, { width: 79, measure: 100, text: 'तीन चार' }],
+  });
+  assert.equal(even.ascends, false, 'a balanced band wobbles either way and must stay legal');
+});
+
+test('a badly short band may leave the hierarchy range, but only for a FULL line', () => {
+  // The shrink bound protects the page's hierarchy against chasing points. It
+  // must not also trap a block whose only good answer is outside it: measured
+  // on the desk's own page, a 17px brief set 64%/68% inside the range and 99%
+  // on one line at 12.6px, and the bound was keeping the worse of the two.
+  const headline = 'नगरपालिकेची स्वच्छता मोहीम राबवण्यात आली';
+  const frame = { width: 111, height: 160, padding: 1, headlineFontPx: 17, subheadingFontPx: 11, bodyFontPx: 6.4, lineHeight: 1.45 };
+  const set = compose.composeBlock({ ...frame, headline });
+  const band = compose.headlineBandFit(set.bands.headline);
+
+  assert.ok(band.fill >= compose.HEADLINE_NEAR_FULL || set.bands.headline.lines.length === 1,
+    `a block left below the near-full bar must at least have been given a full single line, got `
+    + `${band.fills.map((f) => Math.round(100 * f)).join('/')} at ${set.bands.headline.resolvedPx}px`);
+  assert.equal(set.overset.headline, '', 'and never at the cost of a word');
+});
+
+test('a resolved display size is a real size, not a float accumulation', () => {
+  // The search steps outward by adding 0.5 to a distance, so a base of 14
+  // reached 8.700000000000001 - which is what the band reported, what a
+  // read-out printed, and what any test comparing sizes had to match.
+  // headline_font_px is NUMERIC(5,1).
+  for (const headline of [
+    'जिल्ह्यात पाणीटंचाईवर उपाययोजना सुरू',
+    'नगरपालिकेची स्वच्छता मोहीम राबवण्यात आली',
+    'रस्ते दुरुस्तीसाठी निधी मंजूर',
+  ]) {
+    for (const width of [111, 150, 190, 268, 307]) {
+      const set = compose.composeBlock({
+        width, height: 264, padding: 1, headlineFontPx: 14, subheadingFontPx: 11,
+        bodyFontPx: 6.4, lineHeight: 1.45, headline,
+      });
+      const px = set.bands.headline?.resolvedPx;
+      if (px === undefined) continue;
+      assert.equal(Math.round(px * 10), px * 10,
+        `${width}px block resolved ${px}, which is not a tenth`);
+    }
+  }
 });

@@ -416,4 +416,15 @@ async function cutout(pageId, sectionKey, imageId, origin) {
 // block's own headline and place of publication without a second query.
 const sectionFor = sectionRow;
 
-module.exports = { list, add, move, remove, cutout, sectionFor };
+module.exports = {
+  list, add, move, remove, cutout, sectionFor,
+  // Exported so the rule can be held by a test against the code that actually
+  // runs. It was covered by a test that rebuilt the CHARACTER reservation
+  // instead - headline-reserve.js's rough bound - and so never exercised the
+  // line-based one this function has used since the fault was found. The two
+  // agreed closely enough to pass until display lines became balanced, at
+  // which point the character path reserved 40px for a headline needing 56px
+  // and the difference showed. A test that reimplements the thing it is
+  // testing can only ever pass by luck.
+  copyStartsAt,
+};

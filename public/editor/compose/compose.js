@@ -232,12 +232,89 @@ const HEADLINE_FILL_TARGET = 0.95;
 // line rather than a widow.
 const HEADLINE_CLOSE_MIN_FILL = 0.30;
 const HEADLINE_CLOSE_MIN_WORDS = 2;
+
+// The shrink bound, and it is the mirror of HEADLINE_GROWTH_CAP - a HIERARCHY
+// bound, not a typographic one.
+//
+// Growth has been capped since it was written, because a page reads as one
+// page when the bigger block shouts louder. Shrinking had no such bound, and
+// once the closing line is charged the fill search runs on nearly every
+// two-line headline and walks all the way down to the legibility floor
+// looking for a size that fills. Measured on a real front page: the 268x296
+// anchor, designed at 24px, came back at 14.5px in one line - 60% of the size
+// its own block was built around, and no longer the loudest thing on the page.
+//
+// 0.8 is deliberately tighter than growth's 1.25. Type that shrinks loses
+// hierarchy faster than type that grows gains it, and a headline is the one
+// object on the page whose size IS its meaning.
+//
+// It bounds the FILL search only. Shrinking to escape overset is unbounded and
+// must stay so: a word pushed off the block is worse than any of this.
+const HEADLINE_SHRINK_CAP = 0.8;
+
+// What counts as a professional right edge when 95% is physically out of
+// reach - the words of a headline are fixed, and no size makes four long
+// Marathi words divide evenly.
+//
+// growToFill() has used a bar like this since it was written ("a hierarchy cap
+// can make 95% unreachable"), and the fill search now shares it rather than
+// keeping a second opinion. The NUMBER had to come down with the metric: it
+// was 0.90 against a working-line minimum, and the same shapes score lower
+// when every line is charged - a 97%/74% descending headline is 0.97 by the
+// old measure and 0.74 by this one, and it is the same headline.
+//
+// Swept over 700 real blocks against the ten recorded geometries:
+//
+//   0.85  mean size 1.029 of design, 14 blocks shrunk >15%
+//   0.80  mean size 1.037,           14
+//   0.75  mean size 1.065,           13
+//   0.70  mean size 1.069,           11   <- knee
+//   0.65  mean size 1.074,            8   but uneven 12 -> 17, and it takes
+//                                          four of the ten geometries with it
+//
+// Stub closes stay at zero at every value: what keeps them out is the balancer
+// and the close guard, not this.
+export const HEADLINE_NEAR_FULL = 0.70;
+
+// How much more an early line's slack costs than a late one's, per line.
+// Small on purpose: it decides ties between shapes the words made equally
+// good, and must never outweigh real evenness. See balanceDisplayLines().
+const DESCENT_BIAS = 0.05;
+
+// How much fuller a line may be than the one above it before the band reads as
+// a stranded first line rather than an evenly broken one. See headlineBandFit().
+const HEADLINE_ASCENT_TOLERANCE = 0.08;
 const DISPLAY_FIT_STEP_PX = 0.5;
+
+// Sizes are quantised to a tenth on the way out of the search.
+//
+// The steps are taken as `requested - d` with `d` accumulated by addition, so
+// a base like 14 reached 8.700000000000001 - and that noisy number is what the
+// band reported, what a read-out printed and what a test comparing sizes had to
+// match. `headline_font_px` is NUMERIC(5,1); a tenth is the real resolution of
+// this whole decision.
+const stepPx = (px) => Math.round(px * 10) / 10;
 
 // A deck explains the headline; it must not become another headline after the
 // headline auto-fits down. The catalog starts decks near 0.55 of headline
 // size. This is the outside hierarchy guard for an explicit/custom size.
 const DECK_MAX_HEADLINE_RATIO = 0.65;
+
+// And the floor, which was missing. The deck has had a hierarchy CEILING since
+// it was written - it must not become a second headline - but nothing kept it
+// from being squeezed the other way, and the display share is a fixed half of
+// the block, so every pixel the headline takes comes out of the deck.
+//
+// Measured on the 620x224 banner: at a 33px headline the deck sets 14.5px, at
+// 37px it sets 8px - 22% of the headline and 1.25x the body it sits above.
+// Type that close to the body is not display type; it reads as a caption, and
+// the block loses the middle rung of its own hierarchy.
+//
+// Stated against the BODY because that is what a deck has to be
+// distinguishable FROM. It is a preference like every other one here: the
+// reserve comes out of the headline's absolute share, and the relaxation
+// passes in fitDisplayFlow() give it back rather than let a word overset.
+const DECK_MIN_OF_BODY = 1.5;
 
 // How far a headline may grow to reach that.
 //
@@ -319,6 +396,99 @@ function num(value, fallback) {
  * the exclusion geometry - it dodges a picture standing in its rows exactly
  * as the copy does.
  */
+
+/**
+ * A display band's lines, broken EVENLY rather than greedily.
+ *
+ * `pourBody` has balanced its lines since balanceParagraph() was written, and
+ * that function's own header says why greedy filling is wrong: it is optimal
+ * for LINE COUNT and terrible for evenness, because it spends all the slack on
+ * whichever line happens to meet a long word. Display type never got the same
+ * treatment, and a desk photographed the result - headlines set 97% / 42%,
+ * 97% / 41%, 97% / 43% across a real front page. A first line full to its
+ * measure over a stub is not a two-line headline; it is a one-line headline
+ * with a word fallen off the end, and it is what a sub-editor fixes by hand.
+ *
+ * The same guarantee as the body balancer, for the same reason: THE SLOT COUNT
+ * NEVER CHANGES. Pieces are re-assigned across the lines the greedy pass
+ * already fixed, so no band moves, no geometry shifts, and nothing below this
+ * flow is placed anywhere different.
+ *
+ * The cost is squared NORMALISED slack, not the body's `slackCost`. That one
+ * is built around what the justifier can close, and display type is never
+ * justified (JUSTIFY_MIN_EM is deliberately not applied to it) - there is no
+ * lever here, so what the eye sees is simply the ragged edge, and the even
+ * edge is the one to find. Normalised because a picture can narrow one band
+ * and two slots of different measures must still compare fairly.
+ *
+ * @param {string[]} pieces   the flow's own pieces, in order
+ * @param {number} used       how many of them the greedy pass consumed
+ * @param {number[]} measures the measure of each line, in order
+ * @param {(from:number,to:number)=>number} widthOf  drawn width of a run
+ * @returns {number[]|null}   piece index where each slot starts, or null when
+ *   no legal assignment exists (a piece wider than a slot it must land in) -
+ *   in which case the greedy lines stand, exactly as they did before.
+ */
+function balanceDisplayLines(pieces, used, measures, widthOf) {
+  const L = measures.length;
+  if (L < 2 || used < L) return null;
+
+  const INF = Infinity;
+  // cost[j][i] - best total badness placing pieces i.. onto slots j..
+  const cost = Array.from({ length: L + 1 }, () => new Float64Array(used + 1).fill(INF));
+  const cut = Array.from({ length: L + 1 }, () => new Int32Array(used + 1).fill(-1));
+  cost[L][used] = 0;
+
+  for (let j = L - 1; j >= 0; j -= 1) {
+    const measure = measures[j];
+    for (let i = used - 1; i >= 0; i -= 1) {
+      // Every remaining slot needs at least one piece, so this slot may take
+      // at most `used - i - (L - j - 1)` of them.
+      const maxTake = used - i - (L - j - 1);
+      if (maxTake < 1) continue;
+      let best = INF;
+      let bestCut = -1;
+      for (let take = 1; take <= maxTake; take += 1) {
+        const to = i + take;
+        const width = widthOf(i, to);
+        // A line may never be drawn past its own measure. Wider pieces only
+        // get wider, so the search for this slot ends here.
+        if (width > measure + 0.5) break;
+        const rest = cost[j + 1][to];
+        if (rest === INF) continue;
+        const slack = measure > 0 ? (measure - width) / measure : 0;
+        // DESCENDING, when the words will not divide evenly.
+        //
+        // Squared slack alone treats 49%/100% and 100%/49% as the SAME cost,
+        // so the solver picked whichever it reached first - and it reached the
+        // ascending one. A stranded short FIRST line is the very shape
+        // headlineBandFit()'s own header condemns ("a max cannot distinguish
+        // 49%/100% from the professional 98%/45%"), and greedy filling at
+        // least never produced it.
+        //
+        // So slack costs slightly more the earlier it falls. Where the pieces
+        // divide evenly this is far too small to change the answer; where they
+        // cannot, it sends the short line to the bottom, which is where a
+        // compositor puts it.
+        const total = rest + slack * slack * (1 + DESCENT_BIAS * (L - 1 - j));
+        if (total < best) { best = total; bestCut = to; }
+      }
+      cost[j][i] = best;
+      cut[j][i] = bestCut;
+    }
+  }
+
+  if (cost[0][0] === INF) return null;
+  const starts = [];
+  let at = 0;
+  for (let j = 0; j < L; j += 1) {
+    starts.push(at);
+    at = cut[j][at];
+    if (at < 0) return null;
+  }
+  return starts;
+}
+
 function setDisplayFlow(text, {
   top, bottomLimit, column, images, fontPx, lineHeight, family, weight, maxLines, letterSpacingPx = 0,
   align = 'left', marks = null, previousBaseline = null, flowKey = '', floor = null,
@@ -498,6 +668,47 @@ function setDisplayFlow(text, {
     y += bandHeight;
   }
 
+  // ------------------------------------------------------------- balance ---
+  //
+  // The loop above filled each line greedily, and greedy is what produced the
+  // 97% / 42% headlines a desk photographed. Re-assign the same pieces across
+  // the same slots so the ragged edge is EVEN - see balanceDisplayLines() for
+  // why the slot count may never change, and why the body's own cost function
+  // is the wrong one here.
+  //
+  // Skipped whenever the flow already overset an unbreakable token: that line
+  // is drawn past its measure by construction, so every candidate assignment
+  // is illegal and the balancer would only fall through to null anyway.
+  if (lines.length >= 2 && !violations.length) {
+    const offsets = [];
+    let runningAt = 0;
+    for (const piece of pieces) { offsets.push(runningAt); runningAt += piece.length; }
+
+    // Widths of the flow's own pieces, measured once. `trimmed` is what a
+    // line's LAST piece actually draws, once its trailing space is cut.
+    const full = pieces.map((piece, i) => measure2(piece, offsets[i], fontPx, family, weight));
+    const cutWidth = pieces.map((piece, i) => {
+      const cutPiece = trimEndClusters(piece);
+      return cutPiece === piece ? full[i] : measure2(cutPiece, offsets[i], fontPx, family, weight);
+    });
+    const prefix = [0];
+    for (let i = 0; i < full.length; i += 1) prefix.push(prefix[i] + full[i]);
+    const widthOf = (from, to) => (to <= from ? 0 : prefix[to - 1] - prefix[from] + cutWidth[to - 1]);
+
+    const starts = balanceDisplayLines(pieces, index, lines.map((line) => line.measure), widthOf);
+    if (starts) {
+      for (let j = 0; j < lines.length; j += 1) {
+        const from = starts[j];
+        const to = j + 1 < starts.length ? starts[j + 1] : index;
+        const text = trimEndClusters(pieces.slice(from, to).join(''));
+        const at = offsets[from];
+        lines[j].text = text;
+        lines[j].at = at;
+        lines[j].width = measure2(text, at, fontPx, family, weight);
+      }
+    }
+  }
+
   // ------------------------------------------------------------ alignment ---
   //
   // Display type obeys the desk's alignment exactly as the body does, and
@@ -591,11 +802,47 @@ export function headlineBandFit(set) {
   const closeFill = fills[fills.length - 1];
   const closeAcceptable = closeWords >= HEADLINE_CLOSE_MIN_WORDS
     && closeFill >= HEADLINE_CLOSE_MIN_FILL;
-  const workingFill = Math.min(...fills.slice(0, -1));
+  // EVERY line, including the close - and this is only correct because
+  // setDisplayFlow BALANCES its lines now.
+  //
+  // It used to be the minimum of the WORKING lines, which has the mirror flaw
+  // of the max it replaced: a max could not tell 49%/100% from a professional
+  // 98%/45%, and a working-line minimum cannot see a short close at all, so
+  // 97%/42% scored 0.97 and the size search stopped dead on it. A desk
+  // photographed the result - eight of eleven headlines on a real front page
+  // set 97%/41-43%, every one reported as a 97%-filled headline.
+  //
+  // The two changes are one change and must not be separated. Under greedy
+  // filling a short close is the NORMAL shape, so charging it alone condemns
+  // nearly every two-line headline; balanced, a short close means the band
+  // genuinely does not fill, and the search should keep looking - upward as
+  // well as down, which is how a headline grows to fill two lines instead of
+  // shrinking into one. Measured the other way round too: balancing alone,
+  // with this metric left as it was, took hard shrinks from 42 to 70, because
+  // an even 79%/79% scores worse on working lines than a stubbed 97%/42%.
+  // A HEADLINE'S LINES DESCEND. A line fuller than the one above it is a
+  // stranded first line, and it is the worse of the two faults this function
+  // has to tell apart: the header above condemns 49%/100% by name, and neither
+  // a max, a working-line minimum nor a whole-band minimum can see it - all
+  // three score 49%/100% at least as well as the professional 98%/45% it
+  // should lose to.
+  //
+  // The balancer already prefers the descending shape where the words allow
+  // (DESCENT_BIAS). This is for where they do not: on a 307px block at 28px
+  // the two long words will not share a line at all, so the ONLY two-line
+  // split is the ascending one - and half a pixel down, at 27px, they do share
+  // it and the headline sets 98%/45%. Failing the ascending shape outright is
+  // what sends the size search that half pixel.
+  //
+  // The tolerance is what keeps a balanced band legal: 79%/79% wobbles by a
+  // point or two either way and must not be condemned for it.
+  const ascends = fills.some((f, i) => i > 0 && f > fills[i - 1] + HEADLINE_ASCENT_TOLERANCE);
+  const fill = ascends ? 0 : Math.min(...fills);
   return {
+    ascends,
     // A bad close must fail the same scalar gate every caller already uses;
     // this keeps headline choice, the AI panel and the compositor on one rule.
-    fill: closeAcceptable ? workingFill : 0,
+    fill: closeAcceptable ? fill : 0,
     closeAcceptable,
     closeWords,
     fills,
@@ -710,12 +957,92 @@ function fitDisplayFlow(text, options, { locked, minPx, maxPx = 0, fillTarget = 
       // half a pixel down restores the professional break. Search down from
       // the requested hierarchy rung before considering growth, and accept
       // only the first (largest) size whose complete line shape passes.
+      // OUTWARD from the requested rung, not downward first.
+      //
+      // This searched down to minPx before growth was ever considered and
+      // returned the first size that passed - so the answer was always the
+      // SMALLEST size that fills. Survivable while the metric could not see a
+      // short close (the band passed at the requested size immediately, so the
+      // search rarely ran); once the close is charged it runs on nearly every
+      // two-line headline, and downward-first collapsed a real front page -
+      // the anchor went from 21px in two lines to 14.5px in one, 60% of the
+      // size its own block was designed around. A headline that no longer
+      // shouts is not a fixed headline.
+      //
+      // Both directions genuinely fill, and differently: shrinking takes a
+      // two-line head towards ONE full line, growing takes it towards TWO.
+      // Which is nearer the design's own hierarchy rung is the question worth
+      // asking, so the search asks it - and at equal distance the smaller
+      // wins, because every pixel of display type is a pixel off the story.
       if (pass === 0 && fillTarget > 0 && bandFill(first) < fillTarget) {
-        for (let px = options.fontPx - DISPLAY_FIT_STEP_PX; px >= minPx - 0.001; px -= DISPLAY_FIT_STEP_PX) {
-          const attempt = setDisplayFlow(text, { ...attemptOptions, fontPx: px });
-          if (!failed(attempt) && bandFill(attempt) >= fillTarget) {
-            return { ...attempt, resolvedPx: px, shrunk: true };
+        const ceiling = maxPx > options.fontPx ? maxPx : options.fontPx;
+        const floorPx = Math.max(minPx, options.fontPx * HEADLINE_SHRINK_CAP);
+        const reach = Math.max(options.fontPx - floorPx, ceiling - options.fontPx);
+        let best = null;
+        for (let d = DISPLAY_FIT_STEP_PX; d <= reach + 0.001; d += DISPLAY_FIT_STEP_PX) {
+          for (const px of [stepPx(options.fontPx - d), stepPx(options.fontPx + d)]) {
+            if (px < floorPx - 0.001 || px > ceiling + 0.001) continue;
+            const attempt = setDisplayFlow(text, { ...attemptOptions, fontPx: px });
+            if (failed(attempt)) continue;
+            const fill = bandFill(attempt);
+            if (fill >= fillTarget) {
+              return { ...attempt, resolvedPx: px, shrunk: px < options.fontPx, grew: px > options.fontPx };
+            }
+            if (!best || fill > best.fill) best = { set: attempt, px, fill };
           }
+        }
+        // Nothing fills. A near-full band at the block's own hierarchy makes a
+        // better page than a full one two rungs below it - the argument
+        // growToFill() has always made for growth, applied to the whole search
+        // rather than to half of it.
+        if (best && best.fill >= HEADLINE_NEAR_FULL) {
+          return { ...best.set, resolvedPx: best.px, shrunk: best.px < options.fontPx, grew: best.px > options.fontPx };
+        }
+        // THE BOUND IS ON CHASING POINTS, NOT ON ESCAPING A BAD BAND.
+        //
+        // Two things are worth leaving the hierarchy range for, and both are
+        // all-or-nothing rather than a matter of degree:
+        //
+        //   a band that ASCENDS - a stranded first line is a fault, not a
+        //   shape; and
+        //   a band that reaches nothing like full inside the range, when a
+        //   size outside it sets the headline in ONE FULL LINE.
+        //
+        // Measured on the desk's own page: a 17px brief set 64%/68% inside the
+        // range and 99% on one line at 12.5px, and the bound was keeping the
+        // worse of the two. Loosening the bound itself was tried and is the
+        // wrong lever - it costs hierarchy on every block to fix the few: at
+        // 0.70 the blocks shrinking more than 15% below their design size go
+        // from 16 to 47, for one point of evenness.
+        //
+        // So the extended search accepts ONLY a genuinely full band. It cannot
+        // trade real size for a couple of points, which is the fault the
+        // narrow rule above exists to prevent.
+        const wantsEscape = headlineBandFit(first).ascends || !best || best.fill < HEADLINE_NEAR_FULL;
+        if (wantsEscape && floorPx > minPx) {
+          for (let raw = floorPx - DISPLAY_FIT_STEP_PX; raw >= minPx - 0.001; raw -= DISPLAY_FIT_STEP_PX) {
+            const px = stepPx(raw);
+            const attempt = setDisplayFlow(text, { ...attemptOptions, fontPx: px });
+            if (failed(attempt)) continue;
+            if (bandFill(attempt) >= fillTarget) {
+              return { ...attempt, resolvedPx: px, shrunk: true };
+            }
+          }
+        }
+
+        // Nothing reached even that, so the design size stands - "a headline
+        // whose words cannot fill is set at the size the design gave it", and
+        // chasing an improvement for its own sake is the "any improvement"
+        // fault this engine already measured its way out of once.
+        //
+        // ONE exception, and it is structural rather than a matter of degree:
+        // a band whose lines ASCEND is a stranded first line, which is a fault
+        // and not a shape. On a 307px block the two long words will not share
+        // a line at 28px, so the design size sets 49%/100%; half a pixel down
+        // they do share it and it sets 98%/45%. Escaping that is worth a size
+        // change. Two points of fill is not.
+        if (best && headlineBandFit(first).ascends && !headlineBandFit(best.set).ascends) {
+          return { ...best.set, resolvedPx: best.px, shrunk: best.px < options.fontPx, grew: best.px > options.fontPx };
         }
       }
       // Only from the pass that got what it wanted. A flow already forced
@@ -730,14 +1057,37 @@ function fitDisplayFlow(text, options, { locked, minPx, maxPx = 0, fillTarget = 
         ? { ...grown.set, resolvedPx: grown.px, shrunk: false, grew: true }
         : { ...first, resolvedPx: options.fontPx, shrunk: false };
     }
+    // The flow OVERSET at the requested size, so it must come down until it
+    // sets. This walk is deliberately unbounded - a word pushed off the block
+    // is worse than any loss of hierarchy - but it must still stop at the
+    // first size that is good enough, and "good enough" is the same near-full
+    // standard the fill search uses.
+    //
+    // Without that it walked past a professional setting to chase an exact
+    // number. Measured on the golden 268x248 lead: 20.5px sets two lines at
+    // 97%/94%, misses the 95% bar by a hair, and the loop carried on down to
+    // 10.5px - HALF the size the block was designed around, for one point of
+    // fill. Every one of the ten recorded geometries collapsed the same way.
     let firstClean = null;
-    for (let px = options.fontPx - DISPLAY_FIT_STEP_PX; px >= minPx - 0.001; px -= DISPLAY_FIT_STEP_PX) {
+    let best = null;
+    for (let raw = options.fontPx - DISPLAY_FIT_STEP_PX; raw >= minPx - 0.001; raw -= DISPLAY_FIT_STEP_PX) {
+      const px = stepPx(raw);
       const attempt = setDisplayFlow(text, { ...attemptOptions, fontPx: px });
       if (failed(attempt)) continue;
       firstClean ||= { set: attempt, px };
       if (!(pass === 0 && fillTarget > 0) || bandFill(attempt) >= fillTarget) {
         return { ...attempt, resolvedPx: px, shrunk: true };
       }
+      const fill = bandFill(attempt);
+      if (!best || fill > best.fill) best = { set: attempt, px, fill };
+      // Largest-first walk, so the first near-full size met is also the
+      // biggest one: take it rather than trading real hierarchy for a point.
+      if (fill >= HEADLINE_NEAR_FULL) {
+        return { ...attempt, resolvedPx: px, shrunk: true };
+      }
+    }
+    if (best && best.fill >= HEADLINE_NEAR_FULL) {
+      return { ...best.set, resolvedPx: best.px, shrunk: true };
     }
     if (firstClean) return { ...firstClean.set, resolvedPx: firstClean.px, shrunk: true };
   }
@@ -2544,6 +2894,14 @@ export function composeBlock(input = {}) {
   // where its own first baseline goes (baselineAfter()).
   let lastBaseline = null;
 
+  // What the deck needs at its smallest, reserved out of the headline's own
+  // ceiling. Zero when there is no deck, so a block without one composes byte
+  // for byte as before.
+  const deckFlow = flows.find((flow) => flow.key === 'deck');
+  const deckReserve = deckFlow && !deckFlow.locked
+    ? Math.max(deckFlow.min, bodyPx * DECK_MIN_OF_BODY) * Math.max(1.1, lineHeight - 0.15)
+    : 0;
+
   for (const flow of flows) {
     const displayLineHeight = Math.max(1.1, lineHeight - 0.15);
     const headlinePx = Number(result.bands.headline?.resolvedPx) || 0;
@@ -2573,7 +2931,15 @@ export function composeBlock(input = {}) {
       // INK, and baselineAfter()'s clearance term is what guarantees that,
       // from the two faces' own metrics.
       floor: content.top,
-      bottomLimit: Math.min(content.bottom, content.top + room * MAX_DISPLAY_SHARE, y + room * share),
+      // The headline may not take the whole display share when a deck has to
+      // follow it: the deck's own minimum band is reserved out of the ceiling
+      // first. Without this the headline holds its design size and the deck is
+      // squeezed to whatever is left - see DECK_MIN_OF_BODY.
+      bottomLimit: Math.min(
+        content.bottom,
+        content.top + room * MAX_DISPLAY_SHARE - (flow.key === 'headline' ? deckReserve : 0),
+        y + room * share,
+      ),
       column: { start: content.left, end: content.right },
       images,
       fontPx: effectivePx,

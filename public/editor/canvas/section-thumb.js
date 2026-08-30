@@ -9,6 +9,7 @@ import { featureTableMarkup } from "../layout/feature-table.js";
 import { smartCardMarkup, smartCardFitState, canRenderSmartCard, SMART_CARD_OVERSET_NOTE } from "../smart-cards/smart-cards.js";
 import { smartCardFrameFromComposition } from "../smart-cards/layout.js";
 import { escapeHtml } from "../format.js";
+import { legsOf, isContinuation, legsSentence } from "../layout/continuations.js";
 import { statusOf, statusLabel, statusClass } from "../status/section-status.js";
 import { computeMetrics } from "../layout/layout-metrics.js";
 import { imageTransformCss } from "../image/image-manager.js";
@@ -34,6 +35,11 @@ const ICONS = {
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="18" height="6" rx="1"/><path d="M3 16h12M3 20h8"/></svg>',
   reporter:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="8" r="3.2"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>',
+  // The jump, both ways round: out of this block, and into it.
+  continues:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 7h10M4 12h7"/><path d="M13 17h7m-3-3 3 3-3 3"/></svg>',
+  continued:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 7H10m10 5h-7"/><path d="M11 17H4m3-3-3 3 3 3"/></svg>',
   ai: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.7 4.9L18.6 8l-4.9 1.7L12 14.6l-1.7-4.9L5.4 8l4.9-1.1L12 2Z"/><path d="M18.5 14l.9 2.4 2.4.9-2.4.9-.9 2.4-.9-2.4-2.4-.9 2.4-.9.9-2.4Z"/></svg>',
   overflow:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 8v5M12 16.5v.5"/><path d="M10.3 3.9 2.4 18a1.8 1.8 0 0 0 1.6 2.7h16a1.8 1.8 0 0 0 1.6-2.7L13.7 3.9a1.8 1.8 0 0 0-3.4 0Z"/></svg>',
@@ -437,6 +443,27 @@ export function sectionComposition(section, view) {
   return fontsReady() ? composeSection(section, view) : null;
 }
 
+/**
+ * A block that is half of a story says so.
+ *
+ * This belongs in `.section-flags` and not in the label, and CLAUDE.md already
+ * says why the two are different: the label is what a block is CALLED and it
+ * fades once there is copy on it, while a flag is the block saying that
+ * something about it is not what it looks like. A block holding the back half
+ * of a story is exactly that - it reads as its own short article and it is not
+ * one, and the desk who has to notice is the one reading a made-up page.
+ */
+function continuationFlag(section) {
+  const legs = legsOf(section);
+  if (legs.length) {
+    return `<span class="section-flag flag-continues" title="This story carries on into ${escapeHtml(legsSentence(legs))}">${ICONS.continues}</span>`;
+  }
+  if (isContinuation(section)) {
+    return `<span class="section-flag flag-continued" title="The second leg of a story that starts in another block">${ICONS.continued}</span>`;
+  }
+  return "";
+}
+
 export function sectionInnerHtml(section, view, { dirty = false, selected = false } = {}) {
   const status = statusOf(view, Boolean((section.images || []).length));
   const type = sectionType(section.section_key);
@@ -457,6 +484,7 @@ export function sectionInnerHtml(section, view, { dirty = false, selected = fals
         ${view.aiGenerated ? `<span class="section-flag flag-ai" title="AI generated">${ICONS.ai}</span>` : ""}
         ${metrics.overflowing ? `<span class="section-flag flag-overflow" title="Content overflows this section">${ICONS.overflow}</span>` : ""}
         ${cardOverset ? `<span class="section-flag flag-overflow" title="${escapeHtml(SMART_CARD_OVERSET_NOTE)}">${ICONS.overflow}</span>` : ""}
+        ${continuationFlag(section)}
         ${dirty ? `<span class="section-flag flag-unsaved" title="Unsaved changes"></span>` : ""}
       </span>
       <span class="section-status-badge ${statusClass(status)}">${statusLabel(status)}</span>

@@ -65,6 +65,7 @@ import { computeAlignment } from "./external-editor/align.js";
 import { escapeHtml, closeOnEscape } from "./format.js";
 import { isContentEdit, isExplicit } from "./status/section-status.js";
 import { buildFlowMap, flowImageFromRow } from "./layout/text-flow.js";
+import { setContinuations, legsOf, legsSentence } from "./layout/continuations.js";
 // A side-effect module (CJS + globalThis, so the server can read it too), the
 // same way the device bar and Scribus reach it.
 import "./layout/typefaces.js";
@@ -110,6 +111,7 @@ export async function renderWorkspace(newspaperId) {
   }
 
   store.setEdition({ newspaper, pages, reporterNews });
+  setContinuations(pages);
   // Nothing is repaired on load, and that is the point.
   //
   // This used to ask POST /repair-structural-frames unconditionally every
@@ -735,6 +737,7 @@ function selectSection(sectionKey) {
   renderSidePanels();
   loadSectionImages();
   syncRemoveBlockButton();
+  syncReuniteButton();
   refreshToolbarSelection(true, store.getState().storyPickerOpen);
 }
 
@@ -1273,6 +1276,14 @@ function renderShell() {
                       title="Set the selected block a notch tighter so its copy fits">Make it fit</button>
               <button type="button" class="layout-btn" id="carryOverBtn"
                       title="Carry what does not fit onto a later page, with a jump line">Carry over</button>
+              <!-- The way out, beside the way in. reunite() has existed as
+                   long as carryOver() has and no control could reach it, so a
+                   story split across a page turn could not be put back at all.
+                   Disabled rather than hidden, so a desk can see the way out
+                   before they need it. (No backticks in here: this comment is
+                   inside a template literal, and one closes the string.) -->
+              <button type="button" class="layout-btn" id="reuniteBtn" disabled
+                      title="Bring a carried-over story back into one block">Reunite</button>
               <div class="canvas-toolbar-divider"></div>
               <button type="button" class="layout-btn" id="fillFeaturesBtn"
                       title="Fill राशिभविष्य, सूर्योदय-सूर्यास्त, दिनविशेष and सुविचार for this edition's date">Fill features</button>
@@ -1494,6 +1505,7 @@ Set every block in this paper to it?`,
   // actually makes - put what fits here, the rest on a later page, and set both
   // lines. One press, and it says where the story went.
   document.getElementById("carryOverBtn").addEventListener("click", carryOver);
+  document.getElementById("reuniteBtn").addEventListener("click", reunite);
 
   // What is left. The whole edition's unfinished work on one list, each block
   // with the number of characters it holds - which is the number a sub-editor
@@ -1879,6 +1891,17 @@ async function reloadPages(newspaperId) {
     if (!response.ok) throw new Error(String(response.status));
     const pages = await response.json();
     if (!Array.isArray(pages)) throw new Error("not a page list");
+    // BEFORE the pages are replaced, not after. `replacePage` publishes the
+    // PAGE topic synchronously, which repaints the canvas - so a catalogue
+    // updated on the line below is updated one paint too late, and the block
+    // goes on wearing the jump mark for an arrangement that has just been
+    // undone. Measured by pressing Reunite and watching the flag stay put
+    // while the database said the legs were already gone.
+    //
+    // Rebuilt from the FRESH pages rather than from the store's own copy, for
+    // the same reason: carry-over and reunite both change these links and both
+    // end here.
+    setContinuations(pages);
     pages.forEach((page) => store.replacePage(page, { structural: true }));
     return true;
   } catch (error) {
@@ -1903,6 +1926,42 @@ async function carryOver() {
 
   await reloadPages();
   showNotice(`Carried on to page ${result.to.pageNumber}, block "${result.to.sectionKey}". ${result.carryLine}`);
+}
+
+/**
+ * Bring a carried-over story back into one block.
+ *
+ * The exact reverse of Carry over and it goes through the endpoint that has
+ * always been there: `reunite()` strips the two furniture lines nobody typed -
+ * the "(उर्वरित पान ...)" this block ends on and the "(पान ...)" the second leg
+ * begins with - joins the copy, and empties the leg. A same-page continuation
+ * has no pick-up line to strip, and stripping an absent line is a no-op, so
+ * one call covers both.
+ */
+async function reunite() {
+  const page = store.getCurrentPage();
+  const key = store.getState().selectedSectionKey;
+  if (!page || !key) return showNotice("Select the block the story starts in first.");
+  const section = store.getSection(key);
+  const legs = legsOf(section);
+  if (!legs.length) return showNotice("This story does not carry on into another block.");
+
+  // It moves copy between two blocks, so whatever is in the draft has to be in
+  // the database first - the same reason Carry over and Make it fit save.
+  await saveNow();
+  const response = await fetch(`/api/pages/${page.id}/sections/${encodeURIComponent(key)}/reunite`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) return showNotice(result.error || "This story could not be brought back together.");
+
+  await reloadPages();
+  showNotice(
+    `Brought back into one block. ${result.reunited === 1 ? "One leg was" : `${result.reunited} legs were`} emptied - `
+    + "the copy is all here now, and the block may well be overset.",
+  );
 }
 
 async function fillFeatures() {
@@ -2115,6 +2174,24 @@ function syncRemoveBlockButton() {
   if (button) button.disabled = !store.getState().selectedSectionKey;
 }
 
+/**
+ * Reunite is live only on a block a story actually carries on FROM, and its
+ * title says where the rest of it is. Disabled rather than hidden, which is
+ * the rule the panel's own Remove buttons follow: a desk can see the way out
+ * before they need it, and a control that appears and disappears as the
+ * selection moves is one nobody learns is there.
+ */
+function syncReuniteButton() {
+  const button = document.getElementById("reuniteBtn");
+  if (!button) return;
+  const section = store.getSelectedSection();
+  const legs = section ? legsOf(section) : [];
+  button.disabled = !legs.length;
+  button.title = legs.length
+    ? `Bring this story back into one block - it carries on into ${legsSentence(legs)}`
+    : "Bring a carried-over story back into one block. Select the block the story starts in.";
+}
+
 /** Is the advert ear on this page, and may this page have one at all? */
 const MASTHEAD_EAR_KEY = "masthead-advert";
 
@@ -2185,6 +2262,7 @@ function renderPageArea() {
   if (indicator) indicator.innerHTML = pageIndicatorMarkup(page, state.pages);
   syncZoomControl();
   syncRemoveBlockButton();
+  syncReuniteButton();
   syncMastheadEarButton();
 }
 
@@ -2511,6 +2589,11 @@ function subscribeViews() {
     renderStoryPickerPanel();
     loadPageGuides();
     refreshToolbarSelection(Boolean(store.getState().selectedSectionKey), false);
+    // Carry over and Reunite both end by reloading the pages, and both change
+    // exactly this. selectFirstSection() below refreshes it too, but only when
+    // the selection actually MOVES - and after a reunite it usually does not,
+    // because the desk is still on the block they pressed it from.
+    syncReuniteButton();
     selectFirstSection();
   });
 

@@ -1427,6 +1427,56 @@ a feature, an advert or another continuation all refuse the move. A placed
 picture is allowed because an empty landing may already carry its photograph;
 its exclusion is included when the landing capacity is measured.
 
+### And it can be SEEN, and put back
+
+`page_sections.continued_from_section_id` has recorded which two blocks are one
+story since carry-over was written, and **nothing under `public/` had ever read
+the column** — not one file mentioned it. So once a desk split a story:
+
+- nothing on either block said the two were one story, and
+- there was no way to undo it. `reunite()` has existed as long as `carryOver()`
+  has, with its own route and its own tests, reachable from no control at all.
+
+That is this file's own rule broken — *"a device must be removable, and the way
+out lives beside the way in"* — and Carry over is not a device a desk can undo
+by hand: putting the copy back means finding the second leg, cutting its words
+out, stripping two furniture lines nobody typed, and pasting the result onto
+the end of the first.
+
+`public/editor/layout/continuations.js` is the ONE answer to both questions —
+*what continues this block* and *what does this block continue* — told the
+edition once and read by whoever draws or acts on a block. That is the shape
+`grid.js`'s geometry and `masthead.js`'s identity already use, and the reason
+is the same: **the renderers in this product are fed, they do not reach for the
+store.** Checked rather than assumed — only `workspace.js` imports `store.js`.
+
+- The mark goes in **`.section-flags`, not the label**. A label is what a block
+  is CALLED and it fades once there is copy on it; a flag is the block saying
+  it is not what it looks like, and a block holding the back half of a story
+  reads as its own short article and is not one. Both directions are the same
+  ink: it is one fact about a pair, like the column rule between them.
+- **Reunite sits beside Carry over**, disabled rather than hidden, with a title
+  naming where the rest of the story is.
+
+Two faults found by driving it, neither visible in the source:
+
+- **A backtick inside a template literal.** The toolbar markup is a template
+  literal, and a comment written as `` `reunite()` `` closed the string.
+  `node --check` passed it; Chrome answered *"Unexpected identifier 'reunite'"*
+  and the whole application rendered nothing. For that file the browser is the
+  authority, and the comment now says so.
+- **Ordering.** `reloadPages()` set the catalogue AFTER `store.replacePage()`,
+  which publishes the PAGE topic **synchronously** and repaints the canvas — so
+  the catalogue was one paint behind, and pressing Reunite left the jump mark
+  on a block whose legs the database had already released.
+
+```bash
+node tests/browser/story-continuation.browser.js            # defaults to 54470
+```
+
+It borrows an **empty** editorial block, writes its own copy, and puts it back
+empty from the crash path as well as the success path.
+
 ### A wide block sets in COLUMNS
 
 `measureColumns()` has always been able to work a column count out from a

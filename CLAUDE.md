@@ -3743,6 +3743,50 @@ read the shared catalogue; do not reintroduce a local 10/16 px default.
 The schema migration changes the default only. Existing `body_font_px` values
 may be explicit desk choices and are never mass-backfilled.
 
+### The page must not chase a panel that grows
+
+The desk's *"sometimes clicking somewhere is redirected to another place"* is
+not a redirect and not a scroll this code asks for. Selecting a block fills the
+Block Editor with that block's composed page, panels and fields — measured, it
+grows **1802 px → 2229 px** — and the browser's scroll anchoring
+(`overflow-anchor: auto`, the default) keeps ITS chosen anchor steady. The
+anchor is inside the panel that grew, so the window follows it: **a click on a
+block moved the viewport 668 px**, out of the newspaper and into the editor.
+
+Instrumented to be sure: no `scrollIntoView`, no `window.scrollTo`, and the
+only `focus()` in the window carries `preventScroll: true`. Nothing in this
+product asked for it. Measured before and after the fix, over every ordinary
+control:
+
+| | before | after |
+|---|---|---|
+| select a block | **+668 px** | 0 px |
+| page pill | **+349 / +668 px** | 0 px |
+| zoom, guides, print view, worklist | 0 px | 0 px |
+
+`overflow-anchor: none` on `.workspace-external-editor` takes that subtree out
+of anchor selection. The canvas above still anchors normally.
+
+**And it was masking a stale-rect comparison in the nets.**
+`body-editing.browser.js` measured the body frame BEFORE a double click and the
+drawn caret AFTER it, then required them within 6 px. Anchoring had been
+shifting the page back into agreement; without it the two readings are 7 px
+apart and the check failed. Both are viewport coordinates, so the frame is now
+read at the same moment as the caret. It passes on the old CSS too — the
+correction is neutral, which is what makes it a correction rather than a
+concession.
+
+### The colour on a headline word was the caret race
+
+Reported as *"if I change a headline word colour it is not happening instantly,
+and sometimes it never reflects in the layout"*. Retested after the caret fix
+and it is **fixed by it**: the ink reaches the field, the Block Editor's page
+and the newspaper canvas in **206 ms**, stores as
+`<span data-sahas-ink="#c8102e">`, and is still on the canvas after a reload.
+The cause was the focus race — Quill took the caret, so the selection in the
+headline field was gone by the time the ink was pressed and there was nothing
+for it to act on.
+
 ### The field the desk is about to type in has to be reachable
 
 Measured on a 1512×950 window, with a block selected:

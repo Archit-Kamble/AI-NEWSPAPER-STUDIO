@@ -426,8 +426,17 @@ const say = (ok, what, detail = '') => {
     await page.waitForTimeout(1000);
     const shown = await drawn();
     say(shown.caret, 'an unwritten block draws a caret where its first word will be set');
-    say(shown.caretAt && Math.abs(shown.caretAt.x - frame.left) < 6 && Math.abs(shown.caretAt.y - frame.top) < 6,
-      'and it stands at the head of the body frame', JSON.stringify({ caret: shown.caretAt, frame }));
+    // Read the frame AGAIN, now, rather than comparing the caret against a
+    // rectangle captured before the double click. Both are viewport
+    // coordinates, so a few pixels of scroll between the two measurements is
+    // enough to fail a 6px tolerance - which is what happened the moment the
+    // workspace stopped letting the browser re-anchor the page under it.
+    const frameNow = await page.evaluate(() => {
+      const r = document.getElementById('edBodyFrame').getBoundingClientRect();
+      return { top: Math.round(r.top), left: Math.round(r.left) };
+    });
+    say(shown.caretAt && Math.abs(shown.caretAt.x - frameNow.left) < 6 && Math.abs(shown.caretAt.y - frameNow.top) < 6,
+      'and it stands at the head of the body frame', JSON.stringify({ caret: shown.caretAt, frame: frameNow }));
     await page.keyboard.type('AB');
     await page.waitForTimeout(1400);
     say(await page.evaluate(() => [...document.querySelectorAll('#edCanonicalContent .section-body-line')]

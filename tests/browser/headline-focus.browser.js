@@ -63,6 +63,24 @@ const check = (name, ok, detail = '') => {
       .map((s) => s.dataset.sectionKey).slice(0, 3));
     check('the edition offers written blocks to type on', keys.length > 0, `${keys.length} blocks`);
 
+    // THE PAGE MUST NOT CHASE THE PANEL. Selecting a block fills the Block
+    // Editor and it grows ~430px; the browser's scroll anchoring then kept ITS
+    // anchor steady and dragged the window 668px down, out of the newspaper
+    // and into the editor - the desk's "clicking somewhere is redirected to
+    // another place". No scroll was ever asked for; `overflow-anchor: none`
+    // on that panel leaves the desk where they were.
+    await page.evaluate(() => window.scrollTo(0, 250));
+    await page.waitForTimeout(400);
+    for (const k of keys.slice(0, 2)) {
+      const y0 = await page.evaluate(() => Math.round(window.scrollY));
+      await page.evaluate((kk) => document.querySelector(`.newspaper-section[data-section-key="${kk}"]`)?.click(), k);
+      await page.waitForTimeout(1400);
+      const y1 = await page.evaluate(() => Math.round(window.scrollY));
+      check(`selecting ${k} does not throw the viewport`, Math.abs(y1 - y0) < 40, `${y1 - y0}px`);
+      await page.evaluate(() => window.scrollTo(0, 250));
+      await page.waitForTimeout(300);
+    }
+
     // AND THE FIELD MUST BE REACHABLE. Measured on a 1512x950 window, the
     // headline field sits ~1890px down the document - two screens below the
     // fold. Selecting the flow brings its field to the desk; re-selecting the

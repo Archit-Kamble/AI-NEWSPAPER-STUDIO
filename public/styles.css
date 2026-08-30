@@ -1296,7 +1296,23 @@ body {
   align-self: stretch;
 }
 .workspace-canvas-host { grid-area: page; }
-.workspace-external-editor { grid-area: editor; }
+.workspace-external-editor {
+  grid-area: editor;
+  /* THE PAGE MUST NOT CHASE THIS PANEL WHEN IT GROWS.
+     Selecting a block fills the Block Editor with that block's composed page,
+     its panels and its fields - measured, it grows from 1802px to 2229px. The
+     browser's scroll anchoring (overflow-anchor: auto, the default) then keeps
+     ITS chosen anchor steady, and because the anchor is inside the panel that
+     grew, the viewport follows it down: measured, a click on a block moved the
+     window 668px, from the newspaper page into the editor. That is the desk's
+     "sometimes clicking somewhere is redirected to another place", and it is
+     not a scroll this code asks for - no scrollIntoView, no scrollTo, nothing
+     focused without preventScroll. It is the browser being helpful about a
+     panel the desk is not looking at.
+     Excluding this subtree from anchor selection leaves the desk where they
+     were. The canvas above is untouched and still anchors normally. */
+  overflow-anchor: none;
+}
 
 /* Too narrow for two columns, so all three stack - and the ORDER changes, which
    is the reason they share one grid rather than sitting in two containers.

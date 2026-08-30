@@ -128,7 +128,7 @@ function editionRowHtml(edition, today) {
  * `onOpen(id)` opens an edition in the workspace - the panel never navigates by
  * itself, so the dashboard stays in charge of what the screen shows.
  */
-export async function renderEditions(host, { onOpen }) {
+export async function renderEditions(host, { onOpen, openCreator: startOpen = false } = {}) {
   const today = todayIso();
   let editions;
   try {
@@ -310,6 +310,10 @@ export async function renderEditions(host, { onOpen }) {
   };
 
   host.querySelector('#createEditionToggle').addEventListener('click', () => openCreator(today));
+  // The sidebar's own "+ New Edition" is an address (`#!/new-edition`), so it
+  // arrives here as a flag rather than as a click - a desk who bookmarks it,
+  // or reloads on it, gets the creator open exactly as if they had pressed it.
+  if (startOpen) await openCreator(today);
   host.querySelector('#startTodayBtn')?.addEventListener('click', () => openCreator(today));
   host.querySelector('#createEditionClose').addEventListener('click', () => { creator.hidden = true; });
   creatorDate.addEventListener('change', refreshCreator);

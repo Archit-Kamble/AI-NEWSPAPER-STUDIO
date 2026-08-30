@@ -163,7 +163,16 @@ test('every real block geometry sets professional copy: full, filled, unoverset'
 // over-40% outliers (17 -> 0) but COSTS headline fill (80% -> 77%), because a
 // smaller default drops headlines to one line with room to spare. A short
 // headline set larger is not the same fault as a headline that eats the block.
-test('a 229x120 block with a deck is the known display-share outlier', async () => {
+test('a 229x120 block with a deck now sets INSIDE the display share it used to blow through', async () => {
+  // This was the recorded outlier: headline plus deck took MORE than half a
+  // shallow block, because the display share was a fixed ceiling the headline
+  // filled first and the deck then had to overflow to be set at all.
+  //
+  // It is not an outlier any more. The deck's own minimum band is reserved out
+  // of the headline's ceiling before the headline claims it
+  // (DECK_MIN_OF_BODY), so the headline comes down instead of the band
+  // spilling past the cap. Measured: 21% of the block, against the >50% this
+  // test was written to record.
   const { ensureFontsLoaded } = await import('../public/editor/compose/font-metrics.js');
   const { ensureShaperReady } = await import('../public/editor/compose/shaper.js');
   const compose = await import('../public/editor/compose/section-adapter.js');
@@ -174,18 +183,28 @@ test('a 229x120 block with a deck is the known display-share outlier', async () 
   const headline = 'नगरपालिकेची स्वच्छता मोहीम राबवण्यात आली असून';
   const body = SENTENCES.join(' ');
 
-  const shareOf = (view) => {
+  const readOf = (view) => {
     const c = compose.composeSection(section, view);
     const top = c.content?.top ?? 0;
     const bottom = Math.max(...['kicker', 'headline', 'deck']
       .map((k) => (c.bands?.[k] ? c.bands[k].top + c.bands[k].height : top)));
-    return (bottom - top) / Math.max(1, c.frame.height);
+    return { share: (bottom - top) / Math.max(1, c.frame.height), composed: c };
   };
 
-  const withDeck = shareOf({ ...base, headline, subheading: DECK, body });
-  const without = shareOf({ ...base, headline, subheading: '', body });
-  assert.ok(withDeck > 0.5, `expected the known outlier, got ${(100 * withDeck).toFixed(0)}%`);
-  assert.ok(without <= 0.5, `without a deck it must be inside the cap, got ${(100 * without).toFixed(0)}%`);
+  const withDeck = readOf({ ...base, headline, subheading: DECK, body });
+  const without = readOf({ ...base, headline, subheading: '', body });
+
+  assert.ok(withDeck.share <= 0.5,
+    `a deck must no longer push the display band past half the block, got ${(100 * withDeck.share).toFixed(0)}%`);
+  assert.ok(without.share <= 0.5,
+    `without a deck it must be inside the cap, got ${(100 * without.share).toFixed(0)}%`);
+  assert.equal(withDeck.composed.overset.deck, '', 'and it must not have to overset to be set');
+  // Deliberately NOT asserting a deck size here. On a block this narrow the
+  // deck is limited by its own MEASURE, not by the room the headline left it:
+  // 27 Devanagari characters holding the one-line preference on a 229px block
+  // set at 6.8px whatever the headline does. The reserve fixes the room-
+  // limited case (the 620px banner's deck went 8px -> 15.9px) and correctly
+  // does nothing here.
 });
 
 // --- characterisation: fixed input, recorded output ------------------------
@@ -207,17 +226,30 @@ test('a 229x120 block with a deck is the known display-share outlier', async () 
 //
 // Regenerate deliberately, never reflexively - a number that moved without a
 // reason in the diff is the regression this exists to catch.
+// RE-RECORDED when display lines became balanced.
+//
+// `hlFill` is headlineBandFit()'s scalar and it now charges EVERY line rather
+// than only the working ones, so the same composition reports a lower number:
+// seven of these ten geometries are byte for byte what they were - same size,
+// same line count, same deck, same body lines - and only the figure describing
+// them moved. That is the point of the change, not a cost of it.
+//
+// Two really moved, both shallow blocks where the display share is tight and
+// the deck now has its own reserved minimum (DECK_MIN_OF_BODY):
+//   banner  34px in two lines with a stubbed close -> 24.5px in ONE line at
+//           99%, a deck that grew 13.5 -> 15.9px, and ten more lines of story
+//   foot    23.5px -> 22px, deck 8 -> 10px, still two lines
 const BASELINES = [
-  { n: 'banner', w: 620, h: 224, cols: 5, hlLines: 2, hlPx: 34, deckPx: 13.5, hlFill: 0.975, share: 0.496, bodyLines: 50 },
-  { n: 'lead', w: 268, h: 248, cols: 2, hlLines: 2, hlPx: 20.5, deckPx: 13, hlFill: 0.969, share: 0.316, bodyLines: 32 },
-  { n: 'anchor', w: 268, h: 296, cols: 2, hlLines: 2, hlPx: 20.5, deckPx: 13, hlFill: 0.969, share: 0.265, bodyLines: 42 },
-  { n: 'column', w: 229, h: 480, cols: 2, hlLines: 2, hlPx: 17.5, deckPx: 11.4, hlFill: 0.969, share: 0.141, bodyLines: 72 },
-  { n: 'second-lead', w: 190, h: 264, cols: 2, hlLines: 2, hlPx: 14.5, deckPx: 9.4, hlFill: 0.97, share: 0.212, bodyLines: 40 },
-  { n: 'third-lead', w: 150, h: 264, cols: 1, hlLines: 2, hlPx: 11.5, deckPx: 7.5, hlFill: 0.977, share: 0.169, bodyLines: 21 },
-  { n: 'foot', w: 307, h: 152, cols: 3, hlLines: 2, hlPx: 23.5, deckPx: 8, hlFill: 0.969, share: 0.493, bodyLines: 21 },
-  { n: 'report', w: 111, h: 168, cols: 1, hlLines: 2, hlPx: 8.5, deckPx: 6.4, hlFill: 0.98, share: 0.208, bodyLines: 12 },
-  { n: 'brief', w: 111, h: 160, cols: 1, hlLines: 2, hlPx: 8.5, deckPx: 6.4, hlFill: 0.98, share: 0.218, bodyLines: 11 },
-  { n: 'strip', w: 150, h: 120, cols: 1, hlLines: 2, hlPx: 11.5, deckPx: 7.5, hlFill: 0.977, share: 0.371, bodyLines: 6 },
+  { n: 'banner', w: 620, h: 224, cols: 5, hlLines: 1, hlPx: 24.5, deckPx: 15.9, hlFill: 0.99, share: 0.269, bodyLines: 60 },
+  { n: 'lead', w: 268, h: 248, cols: 2, hlLines: 2, hlPx: 20.5, deckPx: 13, hlFill: 0.935, share: 0.316, bodyLines: 32 },
+  { n: 'anchor', w: 268, h: 296, cols: 2, hlLines: 2, hlPx: 20.5, deckPx: 13, hlFill: 0.935, share: 0.265, bodyLines: 42 },
+  { n: 'column', w: 229, h: 480, cols: 2, hlLines: 2, hlPx: 17.5, deckPx: 11.4, hlFill: 0.936, share: 0.141, bodyLines: 72 },
+  { n: 'second-lead', w: 190, h: 264, cols: 2, hlLines: 2, hlPx: 14.5, deckPx: 9.4, hlFill: 0.936, share: 0.212, bodyLines: 40 },
+  { n: 'third-lead', w: 150, h: 264, cols: 1, hlLines: 2, hlPx: 11.5, deckPx: 7.5, hlFill: 0.943, share: 0.169, bodyLines: 21 },
+  { n: 'foot', w: 307, h: 152, cols: 3, hlLines: 2, hlPx: 22, deckPx: 10, hlFill: 0.875, share: 0.493, bodyLines: 21 },
+  { n: 'report', w: 111, h: 168, cols: 1, hlLines: 2, hlPx: 8.5, deckPx: 6.4, hlFill: 0.946, share: 0.208, bodyLines: 12 },
+  { n: 'brief', w: 111, h: 160, cols: 1, hlLines: 2, hlPx: 8.5, deckPx: 6.4, hlFill: 0.946, share: 0.218, bodyLines: 11 },
+  { n: 'strip', w: 150, h: 120, cols: 1, hlLines: 2, hlPx: 11.5, deckPx: 7.5, hlFill: 0.943, share: 0.371, bodyLines: 6 },
 ];
 
 const FIXED_HEADLINE = 'पाणीपुरवठा योजनेचे काम अंतिम टप्प्यात आले असल्याची माहिती';

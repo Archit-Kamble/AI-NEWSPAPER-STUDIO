@@ -167,24 +167,26 @@ test('a picture in an empty article block lands clear of the headline to come', 
   // measured across the database, a headline a picture narrows fills 59.4% of
   // its column against 95.0% where it keeps its full measure, and 46 of 96
   // such blocks run to three or four lines against none elsewhere.
-  const reserve = require('../public/editor/layout/headline-reserve.js');
+  //
+  // Asked of the SERVICE, deliberately. This used to rebuild the reservation
+  // from headline-reserve.js's character limits, which is a different and
+  // explicitly rougher answer - it reserved one line where a real headline
+  // takes two. The reservation that runs is measured in LINES; that is what is
+  // held here.
+  const { copyStartsAt } = require('../src/services/sectionImage.service.js');
   const compose = await engine();
   const empty = { section_key: 'x', width_px: 229, height_px: 480, block_type: 'article', images: [],
-    headline: '', subheading: '', body: '', ...{ margin_px: 1, line_height: 1.45, body_font_px: 6.4 } };
+    margin_px: 1, line_height: 1.45, body_font_px: 6.4, headline: '', subheading: '', body: '' };
 
   const bare = compose.composeSection(empty, { headline: '', subheading: '', body: '' });
-  const cols = Math.max(1, Math.round(bare.capacity.bodyCharCapacity / bare.capacity.fullMeasureEquivalents));
-  const reserved = compose.composeSection(empty, {
-    headline: reserve.standIn(reserve.headlineLimit(cols)),
-    subheading: reserve.standIn(reserve.subheadingLimit(cols)),
-    body: '',
-  });
-  assert.ok(reserved.bodyTop > bare.bodyTop + 8,
+  const reservedTop = await copyStartsAt(empty);
+
+  assert.ok(reservedTop > bare.bodyTop + 8,
     'a headline-less block reserved no room for the headline it will certainly get');
 
   // And the reserved position clears a real headline of the length a desk
   // actually writes.
   const real = compose.composeSection(empty, { ...TYPE, headline: HEADLINE, subheading: '', body: '' });
-  assert.ok(reserved.bodyTop >= real.bodyTop - 12,
-    `reserved ${reserved.bodyTop} but a real headline needs ${real.bodyTop}`);
+  assert.ok(reservedTop >= real.bodyTop - 12,
+    `reserved ${reservedTop} but a real headline needs ${real.bodyTop}`);
 });

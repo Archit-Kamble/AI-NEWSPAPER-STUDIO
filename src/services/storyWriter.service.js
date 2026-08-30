@@ -338,6 +338,43 @@ async function planningFit(section, images, { writeHeadline = true, writeSubhead
 // Only ever built from `status: 'verified'` context - `write()` never gets
 // this far with anything else, but the check is repeated here so this
 // function cannot be called from a new call site later and skip it.
+// What the sources DISAGREE about, and what a writer would plausibly assume
+// that they do NOT establish.
+//
+// A retrieval that finds two trustworthy sources stating different numbers is
+// `conflicting`, and on the single-story path that is a refusal - rightly, for
+// one block a sub-editor is waiting on. Across a whole edition it is ordinary:
+// accounts of a fresh incident differ for hours, and a newspaper reports that
+// they differ rather than picking one and printing it as fact. So a Fact
+// Packet may carry the disagreement, and the writer is told in the plainest
+// terms that resolving it is not its decision.
+//
+// `doNotClaim` is the other half and the more valuable one: the cause, the
+// toll, the motive, the title, the total - the things a fluent model fills in
+// because a story reads incomplete without them, and which nobody has
+// established.
+function packetGuardrails(context) {
+  const lines = [];
+  if (context.disagreements?.length) {
+    lines.push(
+      '',
+      'THE SOURCES DISAGREE about the following. Report that accounts differ —',
+      'name both readings, attribute each. Do NOT choose one and state it as',
+      'settled. That is an editorial decision and it is not yours:',
+      ...context.disagreements.map((d) => `  - ${d}`),
+    );
+  }
+  if (context.doNotClaim?.length) {
+    lines.push(
+      '',
+      'DO NOT CLAIM any of the following. Nothing above establishes them, and a',
+      'story that reads incomplete without one is a story that stays incomplete:',
+      ...context.doNotClaim.map((d) => `  - ${d}`),
+    );
+  }
+  return lines;
+}
+
 function verifiedContextBlock(verifiedContext) {
   if (!verifiedContext || !verifiedContext.facts?.length) return '';
   // AN OPEN-WEB RETRIEVAL IS LABELLED AS WHAT IT IS.
@@ -367,6 +404,7 @@ function verifiedContextBlock(verifiedContext) {
       'full story would normally cover is missing, leave it out rather than',
       'filling it from what you already know. A sub-editor will check every',
       'line of this before it prints.',
+      ...packetGuardrails(verifiedContext),
     ].join('\n');
   }
   if (verifiedContext.status !== 'verified') return '';
@@ -386,6 +424,7 @@ function verifiedContextBlock(verifiedContext) {
     'development that the facts above do not mention. If something a full',
     'story would normally cover is missing from the facts above, leave it out',
     'rather than filling it from what you already know.',
+    ...packetGuardrails(verifiedContext),
   ].join('\n');
 }
 
@@ -742,6 +781,21 @@ async function write(pageId, sectionKey, {
   lookUp = false, reason = false,
   // The whole internet, which the DESK verifies - see verifiedContextBlock().
   searchWeb = false,
+  // A FACT PACKET, already retrieved and already judged.
+  //
+  // The Newsdesk Run does its retrieval once for a whole edition and clusters
+  // it into events before any block is written, so by the time a block is
+  // written the facts, the sources, the disagreements and the do-not-claims
+  // already exist. Retrieving again per block would spend the requests a
+  // second time, and could return a DIFFERENT set of facts from the ones the
+  // desk approved in the plan preview - which is the worse of the two.
+  //
+  // Same shape as fetchContext() returns, so it enters at exactly the same
+  // point and every downstream promise - the brief, the schema, the settle
+  // loop, the fingerprint, the byline - is the one already tested. It cannot
+  // loosen anything: an unverified packet is still labelled unverified and
+  // still attributed.
+  providedContext = null,
 } = {}) {
   const clean = String(seed || '').trim();
   if (!clean) return { error: 'Say what the story is about first — a few words is enough.' };
@@ -761,10 +815,13 @@ async function write(pageId, sectionKey, {
   // the whole point: asking to be checked and then being written from memory
   // anyway would be worse than not asking, so this route cannot degrade into
   // an unchecked write.
-  const mustRetrieve = lookUp || searchWeb || information.needsRetrieval(intentCategory);
+  // A supplied packet IS the retrieval. Doing it again would be a second
+  // spend and could disagree with the plan the desk approved.
+  const mustRetrieve = !providedContext
+    && (lookUp || searchWeb || information.needsRetrieval(intentCategory));
   const retrievalCategory = (lookUp || searchWeb) && !information.needsRetrieval(intentCategory)
     ? 'current_news' : intentCategory;
-  let verifiedContext = null;
+  let verifiedContext = providedContext || null;
   if (mustRetrieve) {
     verifiedContext = await information.fetchContext({
       query: clean, category: retrievalCategory, openWeb: searchWeb,

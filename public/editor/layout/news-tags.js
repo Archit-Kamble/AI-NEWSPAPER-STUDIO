@@ -55,6 +55,7 @@ const TAGS = [
     // "local" is its own district and nobody else's.
     usesPlace: true,
     terms: [],
+    termsEn: [],
     scopes: [FEED_SCOPES.MAHARASHTRA],
     openWeb: 'required',
     about: 'News from the paper\'s own district and talukas: local bodies, schemes, water, roads, local crime, local politics, village and taluka events.',
@@ -64,6 +65,7 @@ const TAGS = [
     name: 'State politics',
     marathi: 'राज्य राजकारण',
     terms: ['महाराष्ट्र राजकारण', 'मंत्रिमंडळ', 'विधानसभा', 'सरकार निर्णय'],
+    termsEn: ['maharashtra government', 'assembly', 'cabinet', 'minister'],
     scopes: [FEED_SCOPES.MAHARASHTRA],
     openWeb: 'optional',
     about: 'Maharashtra government and assembly: cabinet decisions, ministers, state parties, state-level appointments and policy.',
@@ -73,6 +75,7 @@ const TAGS = [
     name: 'National politics',
     marathi: 'राष्ट्रीय राजकारण',
     terms: ['भारत राजकारण', 'संसद', 'केंद्र सरकार', 'पंतप्रधान'],
+    termsEn: ['parliament', 'prime minister', 'union government', 'lok sabha', 'cabinet'],
     scopes: [FEED_SCOPES.NATIONAL],
     openWeb: 'no',
     about: 'Union government and Parliament: central policy, national parties, the Prime Minister and union ministers, national appointments.',
@@ -82,6 +85,7 @@ const TAGS = [
     name: 'Agriculture',
     marathi: 'शेती',
     terms: ['शेतकरी', 'पीक', 'हमीभाव', 'कृषी', 'ऊस', 'कांदा'],
+    termsEn: ['farmers', 'crop', 'agriculture', 'msp', 'sugarcane', 'onion'],
     scopes: [FEED_SCOPES.MAHARASHTRA, FEED_SCOPES.NATIONAL],
     openWeb: 'optional',
     about: 'Farming: crop prices and procurement, monsoon and irrigation, farm schemes and loan waivers, sugar, onion and cotton, farmer protests.',
@@ -91,6 +95,7 @@ const TAGS = [
     name: 'Crime',
     marathi: 'गुन्हे',
     terms: ['गुन्हा', 'पोलीस', 'अटक', 'खून', 'अपघात'],
+    termsEn: ['police', 'arrested', 'murder', 'accident', 'court'],
     scopes: [FEED_SCOPES.MAHARASHTRA],
     openWeb: 'optional',
     about: 'Crime and policing: arrests, investigations, court verdicts, road accidents and major incidents.',
@@ -100,6 +105,7 @@ const TAGS = [
     name: 'Economy',
     marathi: 'अर्थकारण',
     terms: ['अर्थव्यवस्था', 'महागाई', 'बाजार', 'उद्योग', 'रोजगार'],
+    termsEn: ['economy', 'inflation', 'market', 'industry', 'employment', 'budget'],
     scopes: [FEED_SCOPES.NATIONAL, FEED_SCOPES.MAHARASHTRA],
     openWeb: 'optional',
     about: 'Economy and business: prices and inflation, markets, industry and investment, employment, banking and budgets.',
@@ -109,6 +115,7 @@ const TAGS = [
     name: 'Sports',
     marathi: 'क्रीडा',
     terms: ['क्रिकेट', 'सामना', 'क्रीडा', 'खेळाडू', 'cricket'],
+    termsEn: ['cricket', 'match', 'tournament', 'player', 'olympic'],
     scopes: [FEED_SCOPES.NATIONAL, FEED_SCOPES.MAHARASHTRA],
     openWeb: 'optional',
     about: 'Sport: cricket and other results and fixtures, Indian and Maharashtra players, tournaments and selections.',
@@ -118,6 +125,7 @@ const TAGS = [
     name: 'Entertainment',
     marathi: 'मनोरंजन',
     terms: ['मनोरंजन', 'मराठी चित्रपट', 'नाटक', 'मालिका'],
+    termsEn: ['marathi film', 'theatre', 'serial', 'actor'],
     scopes: [FEED_SCOPES.MAHARASHTRA, FEED_SCOPES.NATIONAL],
     openWeb: 'optional',
     about: 'Entertainment, weighted to Marathi: films, theatre, television serials, music and the artists behind them.',
@@ -127,6 +135,7 @@ const TAGS = [
     name: 'Bollywood',
     marathi: 'बॉलिवूड',
     terms: ['बॉलिवूड', 'हिंदी चित्रपट', 'bollywood'],
+    termsEn: ['bollywood', 'hindi film', 'box office'],
     scopes: [FEED_SCOPES.NATIONAL],
     openWeb: 'optional',
     about: 'Hindi film industry: releases, box office, casting and the industry\'s own news. Not Marathi cinema, which is entertainment.',
@@ -136,6 +145,7 @@ const TAGS = [
     name: 'Environment',
     marathi: 'पर्यावरण',
     terms: ['पर्यावरण', 'हवामान बदल', 'प्रदूषण', 'वनक्षेत्र', 'पाणी'],
+    termsEn: ['pollution', 'climate', 'forest', 'wildlife', 'river', 'water'],
     scopes: [FEED_SCOPES.MAHARASHTRA, FEED_SCOPES.NATIONAL],
     openWeb: 'optional',
     about: 'Environment: pollution, water and rivers, forests and wildlife, climate, and the rules and protests around them.',
@@ -145,6 +155,7 @@ const TAGS = [
     name: 'Education',
     marathi: 'शिक्षण',
     terms: ['शिक्षण', 'परीक्षा', 'विद्यापीठ', 'शाळा', 'निकाल'],
+    termsEn: ['exam', 'university', 'school', 'admission', 'result'],
     scopes: [FEED_SCOPES.MAHARASHTRA],
     openWeb: 'optional',
     about: 'Education: exams and results, schools and universities, admissions, teachers and education policy.',
@@ -154,6 +165,7 @@ const TAGS = [
     name: 'Health',
     marathi: 'आरोग्य',
     terms: ['आरोग्य', 'रुग्णालय', 'आजार', 'लस', 'औषध'],
+    termsEn: ['hospital', 'vaccine', 'outbreak', 'disease', 'health ministry'],
     scopes: [FEED_SCOPES.MAHARASHTRA, FEED_SCOPES.NATIONAL],
     openWeb: 'optional',
     about: 'Health: hospitals and treatment, outbreaks and vaccination, medicines, and public health schemes.',
@@ -163,6 +175,7 @@ const TAGS = [
     name: 'World',
     marathi: 'जग',
     terms: ['जागतिक', 'आंतरराष्ट्रीय', 'परराष्ट्र'],
+    termsEn: ['world', 'international', 'foreign', 'global'],
     scopes: [FEED_SCOPES.NATIONAL],
     openWeb: 'optional',
     about: 'News from outside India, and India\'s relations with other countries.',
@@ -196,9 +209,23 @@ export function tagList() {
 export function queryFor(tag, { place = '' } = {}) {
   const resolved = typeof tag === 'string' ? tagFor(tag) : tag;
   if (!resolved) return '';
+  // BOTH LANGUAGES, always, and this is not tidiness.
+  //
+  // The Maharashtra feeds publish in Marathi and the national ones (PIB, the
+  // Times, the Hindu, NDTV) publish in English. Measured on the real national
+  // feeds: the Marathi national-politics query returned FOUR items and the
+  // English one returned 107 - so a Marathi-only vocabulary made the national
+  // tags silently retrieve nothing at all, which reads to a desk as "there was
+  // no national news today".
+  //
+  // Matching is per WORD (rss.js), so one combined query serves both: the
+  // Marathi words match the Marathi feeds and the English words match the
+  // English ones, and neither dilutes the other. The terms are deliberately
+  // specific nouns for that reason - a broad word like "news" would match
+  // everything, which is what the noise list already exists to prevent.
   const words = resolved.usesPlace
-    ? [String(place || '').trim() || 'महाराष्ट्र']
-    : resolved.terms;
+    ? [String(place || '').trim() || 'महाराष्ट्र', ...(resolved.termsEn || [])]
+    : [...(resolved.terms || []), ...(resolved.termsEn || [])];
   return `${words.join(' ')} ${TODAY}`.replace(/\s+/g, ' ').trim();
 }
 

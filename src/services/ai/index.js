@@ -174,7 +174,20 @@ function validate(data, schema, path = '') {
  * @returns {{data, provider, tier, usage}} or {{error, unconfigured?}}
  */
 async function askForJson(prompt, schema, options = {}) {
-  const providers = chain();
+  // A five-deep chain is right for one block a sub-editor is waiting on and
+  // wrong for a batch. This newsroom's live chain is deepseek -> gemini ->
+  // sarvam -> anthropic -> groq at 120s each, so a single block whose
+  // providers all time out takes TEN MINUTES, and a twenty-block run could sit
+  // there for over an hour with nothing on screen. `maxProviders` lets an
+  // interactive, many-call path cap its own worst case without changing what
+  // the desk's own single-block button does.
+  //
+  // The timeout deliberately stays where it is. These are reasoning models
+  // writing Marathi and cutting them short reads to a desk as a failure that
+  // never happened - it is the CHAIN that is too long here, not the clock.
+  const providers = Number(options.maxProviders) > 0
+    ? chain().slice(0, Number(options.maxProviders))
+    : chain();
   if (!providers.length) {
     const primary = providerNamed(process.env.AI_PROVIDER) || PROVIDERS[DEFAULT_PROVIDER];
     return {

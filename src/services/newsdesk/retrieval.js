@@ -81,7 +81,7 @@ async function mapLimit(list, limit, fn) {
  *   query found it - an item CAN belong to two, and that is information the
  *   planner uses rather than a conflict to resolve here.
  */
-async function retrieve({ tagKeys = [], place = '' } = {}) {
+async function retrieve({ tagKeys = [], place = '', windowMs } = {}) {
   const { retrievalPlanFor } = await tags();
   const plan = retrievalPlanFor(tagKeys, { place });
   if (!plan.length) return { items: [], byTag: {}, errors: [], stats: { feedsFetched: 0, webQueries: 0 } };
@@ -117,7 +117,7 @@ async function retrieve({ tagKeys = [], place = '' } = {}) {
   // is only in how we came to it.
   const merged = new Map();
   const add = (raw, tagKey, openWeb) => {
-    for (const item of information.annotate(raw.slice(0, PER_TAG_LIMIT), { category: CATEGORY, openWeb })) {
+    for (const item of information.annotate(raw.slice(0, PER_TAG_LIMIT), { category: CATEGORY, openWeb, windowMs })) {
       const key = urlKey(item.url);
       if (!key) continue;
       const existing = merged.get(key);

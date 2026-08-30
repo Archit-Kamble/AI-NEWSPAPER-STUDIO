@@ -4905,6 +4905,53 @@ body.print-view .mono-forme-warning { display: none; }
   font-family: Arial, sans-serif;
   font-size: 0.82rem;
 }
+/* The press half of that panel: every page's stage, its forme, and who passed
+   it. Sizes and colours follow the findings list below it - it is one panel,
+   not two stuck together. */
+.press-panel { max-height: 72vh; }
+.press-pages { list-style: none; margin: 0; padding: 0; }
+.press-page {
+  padding: 10px 12px;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.press-page-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.press-state {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  background: #eceef3;
+  color: #444;
+}
+.press-state-subbed { background: #e6f0fb; color: #24558c; }
+.press-state-passed { background: #e3f3e8; color: #1f6b3a; }
+.press-errors { color: #b3261e; font-size: 0.78rem; }
+.press-passed { color: #666; }
+.press-page-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.press-state-pick { display: inline-flex; align-items: center; gap: 6px; color: #555; }
+.press-state-pick select { font: inherit; padding: 2px 4px; }
+/* Colour and mono are the two states of one control, so it says which it is
+   IN, not which it would move to - the toggle's own title carries that. */
+.press-forme {
+  padding: 3px 10px;
+  border: 1px solid #c9c9c9;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+}
+.press-forme[aria-pressed="true"] { border-color: #2f5fd6; color: #2f5fd6; font-weight: 600; }
+.press-forme[aria-pressed="false"] { color: #555; }
+.press-blockers { margin: 0; color: #7a4b46; }
+.press-blockers summary { cursor: pointer; }
+.press-blockers ul { margin: 4px 0 0; padding-left: 18px; }
+.press-blockers li { margin: 2px 0; }
+.press-findings-heading { margin: 10px 12px 4px; font-size: 0.82rem; color: #555; }
+.press-findings { list-style: none; margin: 0; padding: 0; }
+.press-clean { padding: 8px 12px; color: #1f6b3a; }
+
 .preflight-panel header {
   position: sticky;
   top: 0;

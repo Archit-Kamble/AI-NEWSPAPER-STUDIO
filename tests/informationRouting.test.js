@@ -250,3 +250,94 @@ test('mixed trust: an untrusted source alongside a trusted one does not block ve
   assert.equal(result.status, 'verified', 'the trusted source alone is enough; the untrusted one neither helps nor hurts');
   assert.equal(result.sources.length, 2, 'both are still returned for the desk to see');
 });
+
+// ------------------------------------------- publisher IDENTITY vs its name ---
+//
+// Found by running the real feeds: ABP Majha's Maharashtra feed sets its
+// channel <title> to its own top HEADLINE, so five stories arrived carrying a
+// "publisher" that changes through the day, and TV9 arrived under two
+// different names. Keyed on the name, `onePerPublisher()` - whose entire job
+// is stopping one newsroom manufacturing multi-source agreement - counted one
+// outlet as several voices. Keyed on the aggregator's host it collapses a
+// dozen papers into one. Both directions are held below.
+
+test('identity: one outlet under two names is ONE voice', async (t) => {
+  withTrustedDomains(t, ['tv9marathi.com']);
+  withRss(t, {
+    isConfigured: () => true,
+    search: async () => ({
+      items: [
+        {
+          title: 'A', description: 'Candidate X received 52,000 votes.',
+          link: 'https://www.tv9marathi.com/a', publishedAt: new Date().toISOString(),
+          publisher: 'TV9 Marathi',
+        },
+        {
+          title: 'B', description: 'Candidate X received 61,000 votes.',
+          link: 'https://tv9marathi.com/b', publishedAt: new Date().toISOString(),
+          publisher: 'TV9 Marathi- Marathi News, Marathi Samachar (समाचार), मराठी न्यूज़',
+        },
+      ],
+    }),
+  });
+  const result = await information.fetchContext({ query: 'one newsroom two names test', category: 'current_news' });
+  assert.equal(result.status, 'verified',
+    'one newsroom cannot disagree with itself into a conflict merely by renaming its feed');
+  assert.equal(result.facts.length, 1, 'two names, one voice');
+});
+
+test('identity: a headline leaking into the publisher field never becomes the display name', async (t) => {
+  withTrustedDomains(t, ['marathi.abplive.com']);
+  withRss(t, {
+    isConfigured: () => true,
+    search: async () => ({
+      items: [{
+        title: 'A', description: 'Candidate X received 52,000 votes.',
+        link: 'https://marathi.abplive.com/news/politics/a',
+        publishedAt: new Date().toISOString(),
+        publisher: 'Manoj Jarange Patil and Eknath Shinde: मनोज जरांगे एकनाथ शिंदेंवर संतापले, सर्वांदेखत नको ते बोलले',
+      }],
+    }),
+  });
+  const result = await information.fetchContext({ query: 'headline as publisher test', category: 'current_news' });
+  assert.equal(result.sources[0].publisher, 'marathi.abplive.com',
+    'an over-long name is an article title in the wrong element; show the domain instead');
+});
+
+test('identity: aggregated items keep their OWN publishers, not the aggregator', async (t) => {
+  withRss(t, { isConfigured: () => true, search: async () => ({ items: [] }) });
+  const websearch = require('../src/services/information/providers/websearch');
+  const realSearch = websearch.search;
+  websearch.search = async () => ({
+    items: [
+      { title: 'A', description: 'One.', link: 'https://news.google.com/rss/articles/a',
+        publishedAt: new Date().toISOString(), publisher: 'Pudhari', publisherUrl: 'https://www.pudhari.news/a' },
+      { title: 'B', description: 'Two.', link: 'https://news.google.com/rss/articles/b',
+        publishedAt: new Date().toISOString(), publisher: 'Lokmat', publisherUrl: 'https://www.lokmat.com/b' },
+    ],
+    errors: [],
+  });
+  t.after(() => { websearch.search = realSearch; });
+
+  const result = await information.fetchContext({ query: 'aggregator identity test', category: 'current_news', openWeb: true });
+  assert.equal(result.facts.length, 2,
+    'two papers reached through one aggregator are two voices, not one');
+});
+
+test('identity: items with NO usable domain fall back to their names, never to one shared "unknown"', async (t) => {
+  withTrustedDomains(t, ['wire-a.example.com', 'wire-b.example.com']);
+  withRss(t, {
+    isConfigured: () => true,
+    search: async () => ({
+      items: [
+        { title: 'A', description: 'Candidate X received 52,000 votes.', link: 'http://wire-a.example.com/a',
+          publishedAt: new Date().toISOString(), publisher: 'Wire A' },
+        { title: 'B', description: 'Candidate X received 61,000 votes.', link: 'http://wire-b.example.com/b',
+          publishedAt: new Date().toISOString(), publisher: 'Wire B' },
+      ],
+    }),
+  });
+  const result = await information.fetchContext({ query: 'no publisherUrl disagreement test', category: 'current_news' });
+  assert.equal(result.status, 'conflicting',
+    'safeHostname("") is the truthy string "unknown" - guarded, or every unattributed item is one voice');
+});

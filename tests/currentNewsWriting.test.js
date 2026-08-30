@@ -532,10 +532,10 @@ test('"search the whole internet" writes from unchecked sources - labelled, attr
     items: [
       { title: 'कास पाणीपुरवठा योजनेच्या पाईपलाईनला गळती', link: 'https://news.google.com/rss/articles/x',
         description: 'सातारा जिल्ह्यातील कास योजनेच्या वाहिनीला गळती लागल्याचे आढळले.',
-        publishedAt: new Date().toISOString(), publisher: 'Pudhari' },
+        publishedAt: new Date().toISOString(), publisher: 'Pudhari', publisherUrl: 'https://www.pudhari.news/x' },
       { title: 'कास योजनेची दुरुस्ती सुरू', link: 'https://news.google.com/rss/articles/y',
         description: 'दुरुस्तीचे काम हाती घेण्यात आले आहे.',
-        publishedAt: new Date().toISOString(), publisher: 'Lokmat.com' },
+        publishedAt: new Date().toISOString(), publisher: 'Lokmat.com', publisherUrl: 'https://www.lokmat.com/y' },
     ],
     errors: [],
   });

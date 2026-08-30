@@ -73,10 +73,56 @@ function truncate(text, max) {
 // The approved contract's `sources[]` shape: {publisher, trust, url,
 // publishedAt, excerpt}. Nothing else rides along - a raw feed item has no
 // business reaching a prompt or a desk screen unshaped.
+// A masthead is short. ABP Majha's Maharashtra feed sets its channel <title>
+// to its own top HEADLINE, which changes through the day - measured live:
+// "Manoj Jarange Patil and Eknath Shinde: मनोज जरांगे एकनाथ शिंदेंवर संतापले…"
+// arrived as the publisher of five separate stories. A feed's channel title is
+// therefore not reliably a publication name, so a long one is treated as what
+// it is (an article title that leaked into the wrong element) and the domain
+// is shown instead.
+const PUBLISHER_NAME_MAX = 40;
+
+// Hosts that are never themselves the publisher. A Google News link is a
+// redirect through the aggregator, so its host identifies Google and not the
+// newsroom - keyed on it, twenty-five stories from a dozen papers collapse
+// into one voice, which is the headline-as-publisher failure with the sign
+// flipped. The reader extracts each item's real <source url="..."> and that
+// wins; this is the fallback for an item that arrived without one, where the
+// NAME is the only distinguishing signal there is.
+const AGGREGATOR_HOSTS = new Set(['news.google.com']);
+
+function displayPublisher(item, domain) {
+  const named = String(item.publisher || '').trim();
+  if (!named || named.length > PUBLISHER_NAME_MAX) return domain || 'unknown';
+  return named;
+}
+
 function toSource(item) {
   const excerptSource = [item.title, item.description].filter(Boolean).join(' — ');
+  // safeHostname() answers 'unknown' rather than '' for anything it cannot
+  // parse, so it must never be handed an absent value: `safeHostname('')` is
+  // TRUTHY, and every unattributed item would share the one identity
+  // "unknown" - two different wires collapsing into one voice, which is the
+  // exact guarantee this field exists to keep. Guard the call, and treat the
+  // sentinel as no identity wherever it does arrive.
+  const attributed = item.publisherUrl ? safeHostname(item.publisherUrl) : '';
+  const linkHost = item.link ? safeHostname(item.link) : '';
+  const domain = attributed || linkHost || '';
+  // `trust` deliberately stays on the link we actually fetched. An open-web
+  // item is `unverified` by design however respectable the domain it names,
+  // and reading trust off an aggregator's attribution would quietly undo that.
+  const identifies = domain && domain !== 'unknown' && !AGGREGATOR_HOSTS.has(domain);
   return {
-    publisher: item.publisher || (item.link ? safeHostname(item.link) : 'unknown'),
+    publisher: displayPublisher(item, domain),
+    // The outlet's IDENTITY, and deliberately separate from its display name.
+    // Two things go wrong when a name is used as an identity, and both were
+    // measured on real feeds: one outlet whose channel title is its current
+    // headline counts as a new voice every time its front page changes, and
+    // TV9 arrives as both "TV9 Marathi" and "TV9 Marathi- Marathi News,
+    // Marathi Samachar (समाचार), मराठी न्यूज़" - two names, two votes, one
+    // newsroom. `onePerPublisher()` exists to make exactly that impossible,
+    // so it has to key on something the publisher cannot vary at will.
+    publisherDomain: identifies ? domain : null,
     trust: trust.trustForUrl(item.link),
     url: item.link || null,
     publishedAt: item.publishedAt,
@@ -118,7 +164,7 @@ function conflicts(sources) {
 function onePerPublisher(sources) {
   const seen = new Map();
   for (const source of sources) {
-    const key = (source.publisher || source.url || '').toLowerCase();
+    const key = (source.publisherDomain || source.publisher || source.url || '').toLowerCase();
     if (!seen.has(key)) seen.set(key, source);
   }
   return [...seen.values()];
@@ -204,8 +250,75 @@ async function fetchContext({ query, category, openWeb = false }) {
   return value;
 }
 
+
+/**
+ * Retrieved items, shaped and annotated, with no verdict attached.
+ *
+ * The one place a raw feed item becomes something the rest of SAHAS may look
+ * at - shared by the strict single-story path and by the Newsdesk Run, which
+ * is the point: a second copy of source shaping is the drift this project has
+ * been bitten by twice.
+ *
+ * Staleness and trust are STATED here, never acted on. Whether an eight-hour
+ * old story belongs in tomorrow's paper is an editorial decision, and this
+ * module's whole discipline is to decline to make those early.
+ */
+function annotate(items, { category, openWeb = false } = {}) {
+  return items.map((item) => {
+    const source = toSource(item);
+    return {
+      ...source,
+      title: truncate(item.title, EXCERPT_MAX_CHARS),
+      stale: freshness.isStale(source.publishedAt, category),
+      // An open-web item can never be `verified`, whatever its domain says.
+      // Carrying that on the ITEM is what lets one pool hold both kinds and a
+      // story be scored on the sources it actually has.
+      openWeb,
+    };
+  });
+}
+
+/**
+ * The candidate POOL for one query - every retrieved item, shaped and
+ * annotated, with no verify-or-refuse verdict attached.
+ *
+ * `fetchContext()` above answers "may a writer use this?" and is deliberately
+ * lossy on the way there: it keeps at most MAX_FACTS digests, collapses
+ * publishers, and throws the rest away, because a single story needs a small
+ * set of checked facts and nothing else.
+ *
+ * The Newsdesk Run needs the opposite. It clusters many articles into EVENTS,
+ * and an event is precisely a group of articles from different publishers -
+ * so the run needs the whole list, undeduplicated, with each item's own trust
+ * tier and staleness stated rather than acted on. The judgement stays where it
+ * always was; this only declines to make it early.
+ *
+ * Deliberately shares toSource/trust/freshness with the strict path. A second
+ * copy of source shaping is the drift this project has been bitten by twice.
+ */
+async function fetchPool({ query, category, openWeb = false, limit = 40 }) {
+  const retrievedAt = new Date().toISOString();
+  const base = { query, category, retrievedAt, items: [] };
+  if (!openWeb && !isConfigured()) return { ...base, status: 'unavailable' };
+
+  const scopes = routing.scopesFor(query);
+  const feeds = PROVIDERS.rss.feedsForScopes(scopes);
+  const { items } = openWeb
+    ? await OPEN_WEB.search(query, { timeoutMs: timeoutMs() })
+    : await PROVIDERS.rss.search(query, { timeoutMs: timeoutMs(), feeds });
+
+  if (!items.length) return { ...base, status: 'insufficient' };
+  return {
+    ...base,
+    status: openWeb ? 'unverified' : 'retrieved',
+    items: annotate(items.slice(0, limit), { category, openWeb }),
+  };
+}
+
 module.exports = {
   isConfigured,
+  fetchPool,
+  annotate,
   status,
   fetchContext,
   classifyIntent: intent.classifyIntent,

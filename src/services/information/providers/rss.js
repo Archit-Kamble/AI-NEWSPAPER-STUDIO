@@ -304,8 +304,56 @@ async function search(query, { timeoutMs = DEFAULT_TIMEOUT_MS, feeds: explicitFe
   return { items, errors };
 }
 
+/**
+ * Several queries against ONE fetch of each feed.
+ *
+ * `search()` is right for a single seed and wrong for a whole edition: a
+ * thirteen-tag brief calling it thirteen times fetches the same eight feeds
+ * thirteen times - around two hundred requests to a handful of publishers for
+ * one press run, which is both slow and rude. A feed is not a search engine,
+ * so the query never reaches it anyway: the fetch and the matching are already
+ * separate acts, and only the matching is per-query.
+ *
+ * So the union of every query's feeds is fetched once and each query is
+ * matched against the same parsed items. The matching itself is the SAME
+ * `matchesQuery` - there is deliberately no second implementation here, which
+ * is the whole reason this lives in the reader rather than in the caller.
+ *
+ * @param {Array<{key: string, query: string, feeds: string[]}>} queries
+ * @returns {{byKey: Map<string, object[]>, errors: object[], feedsFetched: number}}
+ */
+async function searchMany(queries = [], { timeoutMs = DEFAULT_TIMEOUT_MS, matchAll = false } = {}) {
+  const wanted = [...new Set(queries.flatMap((q) => q.feeds || []))];
+  if (!wanted.length) return { byKey: new Map(), errors: [], feedsFetched: 0 };
+
+  const results = await Promise.all(wanted.map((url) => fetchFeed(url, timeoutMs)));
+  const byFeed = new Map();
+  const errors = [];
+  results.forEach((result, index) => {
+    if (result.error) {
+      errors.push({ feed: wanted[index], error: result.error, condition: result.condition });
+      return;
+    }
+    byFeed.set(wanted[index], result.items);
+  });
+
+  const byKey = new Map();
+  for (const q of queries) {
+    const queryWords = queryWordsFor(q.query);
+    const hits = [];
+    for (const feed of q.feeds || []) {
+      for (const item of byFeed.get(feed) || []) {
+        if (matchAll || matchesQuery(item, queryWords)) hits.push(item);
+      }
+    }
+    byKey.set(q.key, hits);
+  }
+
+  return { byKey, errors, feedsFetched: byFeed.size };
+}
+
 module.exports = {
-  search, isConfigured, configuredFeeds, nationalFeeds, maharashtraFeeds, feedsForScopes,
+  search, searchMany, isConfigured, configuredFeeds, nationalFeeds, maharashtraFeeds, feedsForScopes,
   // exported for tests, which parse fixture strings directly
   parseFeed,
 };

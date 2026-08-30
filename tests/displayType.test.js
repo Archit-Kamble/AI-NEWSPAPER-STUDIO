@@ -405,3 +405,87 @@ test('a headline that already fills its measure is not nagged about', async () =
   assert.ok(codesFor('घनकचऱ्यावर चर्चा').includes('HEADLINE_SHORT_OF_MEASURE'),
     'a headline that leaves half its column empty must be reported');
 });
+
+// ------------------------------------------------- balanced display lines ---
+//
+// The desk's report: "most of them are 2 lines, 1 line is full but second line
+// is 20% filled only having a lot of blank space - it should 1 line full or 2
+// lines full". Measured on their own front page and it was every block, not
+// some: 97/42, 97/42, 97/41, 97/43.
+
+test('a two-line headline breaks EVENLY, not greedily', () => {
+  // Four words that cannot make two full lines at any size - so the question
+  // is only how the shortfall is shared out. Greedy filling puts all of it on
+  // the last line; a compositor spreads it.
+  const headline = 'जिल्ह्यात पाणीटंचाईवर उपाययोजना सुरू';
+  const set = compose.composeBlock({ ...LEAD, width: 270, headline });
+  const band = compose.headlineBandFit(set.bands.headline);
+  if (set.bands.headline.lines.length < 2) return; // it filled one line, which is the other good answer
+
+  const spread = Math.max(...band.fills) - Math.min(...band.fills);
+  assert.ok(spread <= 0.35,
+    `the lines must be within a third of each other, got ${band.fills.map((f) => Math.round(100 * f)).join('/')}`);
+});
+
+test('a band whose lines ASCEND is refused - a stranded first line is worse than a short close', () => {
+  // Scored directly: no size search, no fixture that has to reproduce the
+  // shape. 49%/100% is the case headlineBandFit()'s own header names, and
+  // neither a max, a working-line minimum nor a whole-band minimum can see it.
+  const ascending = compose.headlineBandFit({
+    lines: [{ width: 49, measure: 100, text: 'सातारकरांच्या' }, { width: 100, measure: 100, text: 'सुरक्षिततेसाठी खड्डेमुक्त रस्ते' }],
+  });
+  assert.equal(ascending.ascends, true);
+  assert.equal(ascending.fill, 0, 'an ascending band must fail the same gate every caller already uses');
+
+  // The professional descending shape it should lose to still passes.
+  const descending = compose.headlineBandFit({
+    lines: [{ width: 98, measure: 100, text: 'सातारकरांच्या सुरक्षिततेसाठी' }, { width: 45, measure: 100, text: 'खड्डेमुक्त रस्ते' }],
+  });
+  assert.equal(descending.ascends, false);
+  assert.ok(descending.fill > 0);
+
+  // And an evenly broken band is not condemned for wobbling a point or two.
+  const even = compose.headlineBandFit({
+    lines: [{ width: 77, measure: 100, text: 'एक दोन' }, { width: 79, measure: 100, text: 'तीन चार' }],
+  });
+  assert.equal(even.ascends, false, 'a balanced band wobbles either way and must stay legal');
+});
+
+test('a badly short band may leave the hierarchy range, but only for a FULL line', () => {
+  // The shrink bound protects the page's hierarchy against chasing points. It
+  // must not also trap a block whose only good answer is outside it: measured
+  // on the desk's own page, a 17px brief set 64%/68% inside the range and 99%
+  // on one line at 12.6px, and the bound was keeping the worse of the two.
+  const headline = 'नगरपालिकेची स्वच्छता मोहीम राबवण्यात आली';
+  const frame = { width: 111, height: 160, padding: 1, headlineFontPx: 17, subheadingFontPx: 11, bodyFontPx: 6.4, lineHeight: 1.45 };
+  const set = compose.composeBlock({ ...frame, headline });
+  const band = compose.headlineBandFit(set.bands.headline);
+
+  assert.ok(band.fill >= compose.HEADLINE_NEAR_FULL || set.bands.headline.lines.length === 1,
+    `a block left below the near-full bar must at least have been given a full single line, got `
+    + `${band.fills.map((f) => Math.round(100 * f)).join('/')} at ${set.bands.headline.resolvedPx}px`);
+  assert.equal(set.overset.headline, '', 'and never at the cost of a word');
+});
+
+test('a resolved display size is a real size, not a float accumulation', () => {
+  // The search steps outward by adding 0.5 to a distance, so a base of 14
+  // reached 8.700000000000001 - which is what the band reported, what a
+  // read-out printed, and what any test comparing sizes had to match.
+  // headline_font_px is NUMERIC(5,1).
+  for (const headline of [
+    'जिल्ह्यात पाणीटंचाईवर उपाययोजना सुरू',
+    'नगरपालिकेची स्वच्छता मोहीम राबवण्यात आली',
+    'रस्ते दुरुस्तीसाठी निधी मंजूर',
+  ]) {
+    for (const width of [111, 150, 190, 268, 307]) {
+      const set = compose.composeBlock({
+        width, height: 264, padding: 1, headlineFontPx: 14, subheadingFontPx: 11,
+        bodyFontPx: 6.4, lineHeight: 1.45, headline,
+      });
+      const px = set.bands.headline?.resolvedPx;
+      if (px === undefined) continue;
+      assert.equal(Math.round(px * 10), px * 10,
+        `${width}px block resolved ${px}, which is not a tenth`);
+    }
+  }
+});

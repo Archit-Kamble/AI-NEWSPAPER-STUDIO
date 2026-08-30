@@ -286,6 +286,15 @@ const DESCENT_BIAS = 0.05;
 const HEADLINE_ASCENT_TOLERANCE = 0.08;
 const DISPLAY_FIT_STEP_PX = 0.5;
 
+// Sizes are quantised to a tenth on the way out of the search.
+//
+// The steps are taken as `requested - d` with `d` accumulated by addition, so
+// a base like 14 reached 8.700000000000001 - and that noisy number is what the
+// band reported, what a read-out printed and what a test comparing sizes had to
+// match. `headline_font_px` is NUMERIC(5,1); a tenth is the real resolution of
+// this whole decision.
+const stepPx = (px) => Math.round(px * 10) / 10;
+
 // A deck explains the headline; it must not become another headline after the
 // headline auto-fits down. The catalog starts decks near 0.55 of headline
 // size. This is the outside hierarchy guard for an explicit/custom size.
@@ -971,7 +980,7 @@ function fitDisplayFlow(text, options, { locked, minPx, maxPx = 0, fillTarget = 
         const reach = Math.max(options.fontPx - floorPx, ceiling - options.fontPx);
         let best = null;
         for (let d = DISPLAY_FIT_STEP_PX; d <= reach + 0.001; d += DISPLAY_FIT_STEP_PX) {
-          for (const px of [options.fontPx - d, options.fontPx + d]) {
+          for (const px of [stepPx(options.fontPx - d), stepPx(options.fontPx + d)]) {
             if (px < floorPx - 0.001 || px > ceiling + 0.001) continue;
             const attempt = setDisplayFlow(text, { ...attemptOptions, fontPx: px });
             if (failed(attempt)) continue;
@@ -989,6 +998,38 @@ function fitDisplayFlow(text, options, { locked, minPx, maxPx = 0, fillTarget = 
         if (best && best.fill >= HEADLINE_NEAR_FULL) {
           return { ...best.set, resolvedPx: best.px, shrunk: best.px < options.fontPx, grew: best.px > options.fontPx };
         }
+        // THE BOUND IS ON CHASING POINTS, NOT ON ESCAPING A BAD BAND.
+        //
+        // Two things are worth leaving the hierarchy range for, and both are
+        // all-or-nothing rather than a matter of degree:
+        //
+        //   a band that ASCENDS - a stranded first line is a fault, not a
+        //   shape; and
+        //   a band that reaches nothing like full inside the range, when a
+        //   size outside it sets the headline in ONE FULL LINE.
+        //
+        // Measured on the desk's own page: a 17px brief set 64%/68% inside the
+        // range and 99% on one line at 12.5px, and the bound was keeping the
+        // worse of the two. Loosening the bound itself was tried and is the
+        // wrong lever - it costs hierarchy on every block to fix the few: at
+        // 0.70 the blocks shrinking more than 15% below their design size go
+        // from 16 to 47, for one point of evenness.
+        //
+        // So the extended search accepts ONLY a genuinely full band. It cannot
+        // trade real size for a couple of points, which is the fault the
+        // narrow rule above exists to prevent.
+        const wantsEscape = headlineBandFit(first).ascends || !best || best.fill < HEADLINE_NEAR_FULL;
+        if (wantsEscape && floorPx > minPx) {
+          for (let raw = floorPx - DISPLAY_FIT_STEP_PX; raw >= minPx - 0.001; raw -= DISPLAY_FIT_STEP_PX) {
+            const px = stepPx(raw);
+            const attempt = setDisplayFlow(text, { ...attemptOptions, fontPx: px });
+            if (failed(attempt)) continue;
+            if (bandFill(attempt) >= fillTarget) {
+              return { ...attempt, resolvedPx: px, shrunk: true };
+            }
+          }
+        }
+
         // Nothing reached even that, so the design size stands - "a headline
         // whose words cannot fill is set at the size the design gave it", and
         // chasing an improvement for its own sake is the "any improvement"
@@ -1029,7 +1070,8 @@ function fitDisplayFlow(text, options, { locked, minPx, maxPx = 0, fillTarget = 
     // fill. Every one of the ten recorded geometries collapsed the same way.
     let firstClean = null;
     let best = null;
-    for (let px = options.fontPx - DISPLAY_FIT_STEP_PX; px >= minPx - 0.001; px -= DISPLAY_FIT_STEP_PX) {
+    for (let raw = options.fontPx - DISPLAY_FIT_STEP_PX; raw >= minPx - 0.001; raw -= DISPLAY_FIT_STEP_PX) {
+      const px = stepPx(raw);
       const attempt = setDisplayFlow(text, { ...attemptOptions, fontPx: px });
       if (failed(attempt)) continue;
       firstClean ||= { set: attempt, px };

@@ -54,7 +54,7 @@ const check = (name, ok, detail = '') => {
       .then((r) => r.json()).then((n) => String(n.publication_date).slice(0, 10)), ED);
     await page.fill('#editionSearch', when);
     await page.waitForTimeout(800);
-    await page.locator(`.edition-row[data-edition-id="${ED}"] button`).click();
+    await page.locator(`.edition-row[data-edition-id="${ED}"] .edition-open`).click();
     await page.waitForSelector('#canvasSurface', { timeout: 30000 });
     await page.waitForTimeout(3500);
 

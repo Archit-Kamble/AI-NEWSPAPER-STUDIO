@@ -64,7 +64,7 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
     );
     await page.fill('#editionSearch', when);
     await page.waitForTimeout(700);
-    await page.locator(`.edition-row[data-edition-id="${ED}"] button`).click();
+    await page.locator(`.edition-row[data-edition-id="${ED}"] .edition-open`).click();
     await page.waitForSelector('#canvasSurface', { timeout: 20000 });
     await page.waitForTimeout(2200);
   }

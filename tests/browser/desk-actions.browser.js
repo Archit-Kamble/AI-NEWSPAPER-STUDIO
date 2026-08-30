@@ -65,7 +65,7 @@ const say = (ok, name, detail = '') => {
       (ed) => fetch(`/api/newspapers/${ed}`).then((r) => r.json()).then((n) => String(n.publication_date).slice(0, 10)), ED,
     );
     await page.fill('#editionSearch', when); await page.waitForTimeout(700);
-    await page.locator(`.edition-row[data-edition-id="${ED}"] button`).click();
+    await page.locator(`.edition-row[data-edition-id="${ED}"] .edition-open`).click();
     await page.waitForSelector('#canvasSurface', { timeout: 20000 });
     await page.waitForTimeout(3500);
 

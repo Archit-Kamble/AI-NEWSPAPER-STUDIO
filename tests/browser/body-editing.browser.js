@@ -75,7 +75,7 @@ const say = (ok, what, detail = '') => {
       .then((n) => String(n.publication_date).slice(0, 10)), ED);
     await page.fill('#editionSearch', when);
     await page.waitForTimeout(700);
-    await page.locator(`.edition-row[data-edition-id="${ED}"] button`).click();
+    await page.locator(`.edition-row[data-edition-id="${ED}"] .edition-open`).click();
     await page.waitForSelector('#canvasSurface', { timeout: 25000 });
     await page.waitForTimeout(2500);
     // The block may not be on page one - `centre-column`, the block the desk

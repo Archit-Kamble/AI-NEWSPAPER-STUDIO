@@ -7302,3 +7302,85 @@ left now, and the two justification icons differ where the settings do.
 
 `npm test` **942/942** with four new regressions. All seven browser nets green.
 Item 3 measured both in Node and by driving the running app.
+
+---
+
+## The Newsdesk Run — "Write empty blocks" makes up a newspaper
+
+The button briefed each empty block on its own and wrote them one at a time.
+That fills a page. A chief sub decides what tomorrow's paper is **made of** and
+then finds the stories for it, and that is what this now does.
+
+### Shape
+
+```
+THE BRIEF   per page: category x quantity x Required/Preferred/Avoid    free
+     ↓
+RETRIEVAL   one fetch per tag, feeds + open web                          free
+     ↓
+DEDUPE      against this edition and the last 7 days, deterministic      free
+     ↓
+THE PLAN    one Ultra call: cluster into events, assign to blocks     1 call
+     ↓
+PREVIEW     the desk reads it and drops what it does not want            free
+     ↓
+THE COPY    Fact Packet per story, cheap tier, four at a time         N calls
+     ↓
+THE PAGE    accepted server-side as needs_review, never overwriting design
+```
+
+Six of the eight steps cost nothing, and the checkpoint sits between the one
+expensive call and the many cheap ones.
+
+### Verified against the real thing
+
+Edition 54470 (2099-07-03), four pages, 27 empty writable blocks:
+
+| | |
+|---|---|
+| candidates retrieved | **187** from 13 feeds and 11 open-web searches, 4.1s |
+| stories planned | **26** in 103s, **0 rejected**, 0 blocks left empty |
+| largest event cluster | **19 separate articles** into one story |
+| local Satara stories found | 3, none of them on any national feed |
+| blocks written and placed | **11**, all `needs_review` |
+| the rest | failed on **every provider's daily quota** |
+
+Page one is fully made up and was photographed in print view: nine stories,
+proper columns, accent headlines, the पंचांग card, column rules, folio and
+registration marks.
+
+Browser-driven: **17/17**, no console errors — the form reads the edition's own
+free blocks, every control moves the thing it names, over-asking is stated
+rather than hidden, Drop marks without deleting, and the write button names its
+cost.
+
+`npm test` **1053/1053**, 22 of them new.
+
+### What was found by running it, not by reading it
+
+1. **An outlet's identity is its domain.** ABP Majha's feed sets its channel
+   `<title>` to its current top headline; TV9 arrives under two names. Keyed on
+   the name, `onePerPublisher()` was not keeping the guarantee it exists for.
+   Also closed: an aggregator's host is never the publisher, and
+   `safeHostname('')` returns the truthy string `'unknown'`.
+2. **The national feeds are in English.** A Marathi-only tag vocabulary
+   returned 4 items where English returned 107.
+3. **The planner must not write the facts.** Asking for them timed out at 120s
+   on a 33-block brief; the facts were never its to write.
+4. **The chain cap must count waiting, not attempts.** A quota refusal is
+   instant, so capping by count threw away every working understudy.
+5. **The concentration cap must not override the brief.**
+6. **A block with no room for copy** was costing a planner slot and a paid call.
+
+### Open
+
+- **Billing.** Every configured provider's free daily quota ran out on one
+  26-block run. Nothing here is usable on free tiers.
+- **Images.** The plan carries no picture candidates yet. Designed but not
+  built: licence status per candidate, generated artwork via
+  `newsImage.service.js`, open-licence and PIB lanes, and nothing with
+  uncertain rights ever auto-placed.
+- **A saved editorial profile** (40% local, 25% state…) so the brief opens
+  already shaped for this paper. `publication_settings` is the natural home.
+- **The plan is not persisted.** A desk that closes the panel loses the run.
+  `editionCompositionRun.repository` already exists and is where it belongs.

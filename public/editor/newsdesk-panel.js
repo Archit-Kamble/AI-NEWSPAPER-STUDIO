@@ -192,7 +192,11 @@ function copyRow(result) {
       <span class="muted">${escapeHtml(result?.error || "The AI did not answer.")}</span></li>`;
   }
   const fit = result.fit || {};
-  const pct = Number.isFinite(fit.fill) ? `${Math.round(fit.fill * 100)}% set` : "";
+  // `fit.fill` is bodyFill()'s whole record, not a number - the ratio is
+  // inside it. Multiplying the object gave NaN, which `Number.isFinite`
+  // then hid, so the desk was shown no fill figure at all on every row.
+  const ratio = fit.fill?.ratio;
+  const pct = Number.isFinite(ratio) ? `${Math.round(ratio * 100)}% set` : "";
   const state = fit.acceptable ? "fits" : (fit.overflowing ? "runs over" : "short of the foot");
   return `<li class="bulk-row">
     <strong>p${result.page}/${escapeHtml(result.sectionKey)}</strong>

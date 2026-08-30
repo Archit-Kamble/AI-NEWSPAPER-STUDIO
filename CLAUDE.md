@@ -1020,6 +1020,182 @@ Not yet built, on purpose: weather, sports, election and paid-news providers all
 
 A second copy of any of these is the failure mode this project has already been bitten by twice (the drifted template keys, and `object-fit: cover` on the page against `contain` in the editor).
 
+
+### "Write empty blocks" is the NEWSDESK RUN
+
+The button briefed each empty block on its own — "today's news for this place"
+— and wrote them one at a time. That fills a page; it does not make up a
+newspaper. A chief sub does not decide block by block: they decide what
+tomorrow's paper is **made of**, and then find the stories for it.
+
+Three screens over one panel (`public/editor/newsdesk-panel.js`), and the order
+is the whole safety argument:
+
+| | | cost |
+|---|---|---|
+| **The brief** | what each page carries, by category and demand | nothing |
+| **The plan** | what was found, which block each story goes in, on whose authority, and what could not honestly be filled | **one** call |
+| **The copy** | the approved stories written, four at a time | one call each |
+
+A desk sees what it is about to spend before spending it, and reads the stories
+before printing them — and can drop any of them for nothing, because no writing
+has happened yet. `POST /api/newspapers/:id/newsdesk/{plan,write,accept}`, all
+desk-only; only the third touches the paper.
+
+**Built a whole front page with it.** Edition 54470: 187 candidates from 13
+feeds and 11 searches, 26 stories planned in 103s, 0 rejected, 0 blocks left
+empty, and page one made up with the day's biggest story clustered from
+**nineteen separate articles** — plus three genuine Satara stories that exist on
+no national feed.
+
+#### A tag is a routing table, not a label
+
+`public/editor/layout/news-tags.js` is the one catalogue, reached from Node by
+the same dynamic `import()` as the character grid. Each tag carries its query
+terms, its feed scopes and whether it needs the open web — `local` **requires**
+it, because a district story is on the open web or nowhere.
+
+**Every tag is searched in BOTH languages.** The Maharashtra feeds publish in
+Marathi and the national ones (PIB, the Times, the Hindu, NDTV) publish in
+English. Measured: the Marathi national-politics query returned **4** items,
+the English one **107**. Matching is per word, so one combined query serves
+both. `national-politics` went 1 → 19 candidates, `environment` 6 → 19.
+
+**Demand is not a quantity.** Required / Preferred / Avoid, because a run that
+treats "three entertainment stories" as a promise fills the third block with
+the best of a bad list. Verified live: asked for three *required* local stories
+on a thin day, the planner left all three blocks empty with written reasons
+rather than fill them from dated and unchecked material.
+
+#### The planner SELECTS — it never supplies, counts or measures
+
+`src/services/newsdesk/planner.js`. One call at Ultra, and everything it cannot
+be trusted with is taken off it **structurally**:
+
+- **It may only cite sources BY ID** into the retrieved pool. A model asked to
+  "find the news and give references" answers fluently and falsely; an id it
+  invents fails validation and the story goes with it. `tests/newsdesk.test.js`
+  feeds it a made-up URL and a made-up id.
+- **It never writes the facts.** Asking for them TIMED OUT at 120s on a
+  33-block brief. Splitting the call per page was the obvious fix and the wrong
+  one — one call is what lets it see that four of the day's stories are the
+  same rally. The right fix was noticing the facts were never its to write: it
+  chooses the sources, and **the facts ARE those sources' excerpts**. Smaller,
+  faster, and safer, because a fact is then literally what a publisher wrote.
+  120s+ → 83s.
+- **Blocks reach it as ORDINALS** (`blocks.js`) — a rank and a coarse rung,
+  never dimensions. The pre-write reservation over-promises on 49 of 96 real
+  geometries, so a model handed pixels computes a character count that is wrong
+  on half the page. The raw row is stripped *in that module*, not left for
+  callers to remember.
+- **Quotas, one-story-per-block and a 40% concentration cap are re-applied in
+  code** afterwards. **The cap never overrides the brief** — it stops the
+  planner over-concentrating on whatever dominated the day's results, and a
+  desk that asked for five local stories gets five. Without that it refused the
+  desk's own required categories, and on a small edition refused nearly
+  everything (40% of two blocks rounds down to one).
+
+#### A duplicate is MARKED, never dropped
+
+`dedupe.js` compares by containment on content words, against this edition's
+own blocks and against what the paper ran in the previous seven days. The
+threshold is measured: over 92 real headlines and 4186 pairs, **0.6 catches
+nothing** — two papers reporting one event share fewer words than they appear
+to — while 0.5 catches three, all genuine. What prevents false positives is the
+floor of **three shared words**, not the ratio.
+
+Day two of a running story is not a duplicate, it is the story. Every match is
+marked with what it matched and where; a paper that silently drops its own
+follow-ups is worse than one that occasionally repeats itself.
+
+#### A block with no room for copy is not an empty block
+
+`candidatesOn()` decides what is *writable* and cannot see whether the frame
+has room once its pictures and display type are in it. Measured: the planner
+spent a slot on a footer, the writer then spent a **call** on it, and the answer
+was "this block has no room for copy". `planningFit()` is the same measurement
+and costs no provider call, so it is made once, before anything is planned — 27
+blocks in 0.3s.
+
+#### A block with a headline is COMMISSIONED
+
+A block where a sub-editor typed a headline and no copy is a story the desk has
+already decided on. Handing it a wire story would silently discard an editorial
+decision, so it is written from its own headline through the path that always
+did it (`writeCommissionedBlocks()`), and the panel offers that separately.
+
+#### The chain cap counts WAITING, not attempts
+
+`askForJson`'s `maxProviders`. Slicing the chain by count was wrong in the one
+case that matters: a provider out of quota answers in **milliseconds** (402, or
+a 429 naming a daily limit), so skipping past it costs nothing and stopping
+there throws away every working understudy. Measured — DeepSeek 402, Gemini out
+of daily quota — a cap of two made the run fail outright while Sarvam and Groq
+sat unused. What the cap is for is the five-deep **timeout**: five providers at
+120s is ten minutes for one block. So a failure that cost real time counts and
+an instant refusal does not.
+
+The planner also gets its own `timeoutMs` (240s). It is one call for a whole
+newspaper and a desk has been told it is a research step.
+
+#### Freshness is a desk's choice
+
+`isStale()` takes an explicit window; the categories stay the default. The 3h
+`current_news` window is right for checking one claim and wrong for making up
+tomorrow's paper — it called **122 of 150** real candidates stale. `DESK_WINDOWS`
+offers 6h/24h/3d/7d, defaulting to 24h.
+
+#### An outlet's identity is its DOMAIN
+
+Found fanning the real feeds out. ABP Majha's feed sets its channel `<title>`
+to its own top **headline**, so five stories arrived carrying a "publisher" that
+changes through the day; TV9 arrived under two names. `onePerPublisher()` —
+whose entire job is stopping one newsroom manufacturing multi-source agreement —
+was keying on that string.
+
+`publisherDomain` is the identity and the name is only a label. Three ways it
+goes wrong, all closed: an **aggregator's** host is never the publisher (Google
+News items carry their own `<source url="...">`, and keyed on the redirect a
+dozen papers collapse into one voice); `safeHostname('')` answers the **truthy**
+string `'unknown'`, so an absent URL gave every item one shared identity; and a
+name over 40 characters is an article title in the wrong element, so the domain
+is shown instead.
+
+#### Retrieval is per TAG, and each feed is fetched once
+
+`rss.searchMany()`. A feed is not a search engine — the query never reaches it —
+so the fetch and the matching are already separate acts and only the matching is
+per query. A thirteen-tag brief was going to cost ~200 requests to a handful of
+publishers; it costs 13. The open web genuinely needs one request per query and
+those are bounded at 3 at a time.
+
+Writers run **four** at a time, not eight: `rateLimit` is classified "no retry,
+straight to the understudy", so a burst does not fail loudly — it silently moves
+the rest of the paper onto a fallback whose plan truncates a full-page lead.
+
+#### Sources that DISAGREE are material, not a refusal
+
+On the single-story path `conflicting` is a refusal, rightly, for one block a
+sub-editor is waiting on. Across a whole edition it is ordinary: accounts of a
+fresh incident differ for hours, and a newspaper reports that they differ. A
+Fact Packet may carry `disagreements`, and the writer is told in plain terms
+that resolving them is not its decision. `doNotClaim` is the other half and the
+more valuable one — the cause, the toll, the motive, the total: what a fluent
+model fills in because the story reads incomplete without it.
+
+`storyWriter.write()` takes a **`providedContext`**, so a packet the desk has
+already approved enters at exactly the point a live retrieval would and every
+promise downstream — the brief, the schema, the settle loop, the fingerprint,
+the byline — is the one already tested. It cannot loosen anything: an unverified
+packet stays unverified and is still attributed.
+
+#### This feature needs billing enabled
+
+Measured on a 26-block run: **every configured provider's daily quota ran out** —
+DeepSeek 402, then Gemini, Sarvam and Groq. 11 blocks were placed across two
+runs and the rest failed on quota. That is an account matter and not a fault
+here, but nothing about this feature is usable on free tiers.
+
 ### The composition engine — one answer, in `public/editor/compose/`
 
 `composeBlock()` takes a frame, its copy, its type and its photographs and returns **one** object saying exactly where every line sits. It touches no DOM, no canvas and no layout engine, so it produces the same numbers in Node and in the browser. "The editor renders the same as the page" is therefore not a property kept true by tests — both surfaces draw the same list of positioned lines, and neither breaks a line at all.

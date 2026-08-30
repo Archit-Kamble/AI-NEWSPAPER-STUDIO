@@ -347,13 +347,19 @@ const say = (ok, what, detail = '') => {
         x: Math.round(box.left), y: Math.round(box.top) };
     }, part);
     if (!shown) { say(true, `this block has no ${part} to open`, ''); continue; }
-    await page.mouse.dblclick(await page.evaluate((flow) => {
-      const r = document.querySelector(`#edCanonicalContent .section-${flow === 'headline' ? 'headline' : 'subheading'}`).getBoundingClientRect();
-      return r.left + 24;
-    }, part), await page.evaluate((flow) => {
-      const r = document.querySelector(`#edCanonicalContent .section-${flow === 'headline' ? 'headline' : 'subheading'}`).getBoundingClientRect();
-      return r.top + r.height / 2;
-    }, part));
+    // Bring the band into view BEFORE taking its coordinates. `mouse.dblclick`
+    // takes VIEWPORT coordinates, and a band below the fold gives a y outside
+    // the window, so the press lands on nothing and the frame never opens -
+    // which reads as "the subheading opened empty" when the product is fine.
+    // A desk scrolls to what they are about to double-click; so does this.
+    const point = await page.evaluate((flow) => {
+      const el = document.querySelector(`#edCanonicalContent .section-${flow === 'headline' ? 'headline' : 'subheading'}`);
+      el.scrollIntoView({ block: 'center' });
+      const r = el.getBoundingClientRect();
+      return { x: r.left + 24, y: r.top + r.height / 2 };
+    }, part);
+    await page.waitForTimeout(400);
+    await page.mouse.dblclick(point.x, point.y);
     await page.waitForTimeout(1300);
     const open = await page.evaluate((flow) => {
       const frame = document.getElementById(flow === 'headline' ? 'edHeadlineFrame' : 'edSubheadingFrame');

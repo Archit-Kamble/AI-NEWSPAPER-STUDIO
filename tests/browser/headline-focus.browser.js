@@ -63,6 +63,41 @@ const check = (name, ok, detail = '') => {
       .map((s) => s.dataset.sectionKey).slice(0, 3));
     check('the edition offers written blocks to type on', keys.length > 0, `${keys.length} blocks`);
 
+    // AND THE FIELD MUST BE REACHABLE. Measured on a 1512x950 window, the
+    // headline field sits ~1890px down the document - two screens below the
+    // fold. Selecting the flow brings its field to the desk; re-selecting the
+    // same flow must move nothing, or the viewport creeps while they work.
+    const revealKey = keys[0];
+    await page.evaluate((k) => document.querySelector(`.newspaper-section[data-section-key="${k}"]`)?.click(), revealKey);
+    await page.waitForTimeout(1500);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(400);
+    const offBefore = await page.evaluate(() => {
+      const b = document.getElementById('edStoryHeadline').getBoundingClientRect();
+      return b.top >= window.innerHeight || b.bottom <= 0;
+    });
+    await page.evaluate(() => document.getElementById('edHeadlineFrame')?.scrollIntoView({ block: 'center' }));
+    await page.waitForTimeout(300);
+    const band = await page.evaluate(() => {
+      const r = document.getElementById('edHeadlineFrame').getBoundingClientRect();
+      return { x: r.left + 10, y: r.top + r.height / 2 };
+    });
+    await page.mouse.click(band.x, band.y);
+    await page.waitForTimeout(1800);
+    const onScreen = await page.evaluate(() => {
+      const b = document.getElementById('edStoryHeadline').getBoundingClientRect();
+      return b.top < window.innerHeight && b.bottom > 0;
+    });
+    check('selecting the headline brings its field within reach', !offBefore || onScreen,
+      offBefore ? `was off screen, now ${onScreen ? 'on' : 'still off'}` : 'was already in view');
+
+    const steadyBefore = await page.evaluate(() => Math.round(window.scrollY));
+    await page.mouse.click(band.x, band.y);
+    await page.waitForTimeout(1200);
+    const steadyAfter = await page.evaluate(() => Math.round(window.scrollY));
+    check('and re-selecting it does not move the viewport', Math.abs(steadyAfter - steadyBefore) <= 2,
+      `${steadyAfter - steadyBefore}px`);
+
     // THE INVARIANT, TESTED DIRECTLY RATHER THAN GAMBLED ON.
     //
     // The race above is real but probabilistic - it did not fire on every run,

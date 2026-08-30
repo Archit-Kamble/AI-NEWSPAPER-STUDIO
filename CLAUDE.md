@@ -3743,6 +3743,53 @@ read the shared catalogue; do not reintroduce a local 10/16 px default.
 The schema migration changes the default only. Existing `body_font_px` values
 may be explicit desk choices and are never mass-backfilled.
 
+### The field the desk is about to type in has to be reachable
+
+Measured on a 1512×950 window, with a block selected:
+
+| | |
+|---|---|
+| the newspaper page | 103 px, 462 px tall |
+| the Block Editor's own page | 898 px |
+| body writing surface | 1576 px |
+| **Headline field** | **1890 px — 2.0 screens down** |
+| **Subheading field** | **1960 px — 2.1 screens down** |
+
+`--page-area-h` is published correctly and the settings rail **is** capped; the
+height comes from the Block Editor itself (2229 px), whose two writing fields
+are the last thing in it.
+
+**Moving the fields above the composed page was tried twice and reverted both
+times.** It works — the headline field goes to 822 px — and it takes the page
+down with it: a picture handle then falls past the viewport, where
+`elementFromPoint` returns null, so the handle stops being draggable and undo
+has nothing to undo. `tests/browser/workspace.browser.js` caught it on both
+attempts. That is exactly the failure this file already records for a third
+toolbar row, arriving from a different direction, and it is worth stating as a
+rule: **in this layout, anything that moves the composed page down breaks
+something a desk drags.**
+
+So nothing moves. When the desk **selects** a display flow, its field is
+brought to them (`refreshStoryEditor`): only when the selection actually
+changed, only when the field is off-screen, `block: "nearest"`, and never while
+the caret is already inside it. Measured: the headline field goes from 1890 px
+(off screen) to 904 px (on screen), and re-selecting the same flow moves the
+viewport **0 px** — a viewport thrown around is its own bug report.
+
+**`selectedTextPart` cannot answer "did the selection just change".**
+`refreshBlockControls()` writes it before `refreshStoryEditor()` runs, so the
+comparison is always false by the time it is made. The reveal keeps its own
+`lastRevealedPart`; the first version used `selectedTextPart` and silently
+never fired.
+
+**A test that computes a click point must scroll first.**
+`tests/browser/body-editing.browser.js` double-clicked at raw viewport
+coordinates taken from `getBoundingClientRect()`. A band below the fold gives a
+y outside the window, the press lands on nothing, and the frame never opens —
+which reads as "the subheading opened empty" when the product is fine. It was
+passing on viewport luck, and any layout change that moved the page down
+exposed it.
+
 ### Loading the story must not take the caret from the desk
 
 The desk reported three things that are one bug: headlines are hard to edit,

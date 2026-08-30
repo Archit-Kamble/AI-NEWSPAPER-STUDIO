@@ -49,6 +49,8 @@ let escapeBound = false;
 // as object-specific - a newspaper does not let one paragraph pick its own
 // face, and the schema does not carry it either.
 let selectedTextPart = "body";
+// The flow whose field was last brought into view - see refreshStoryEditor().
+let lastRevealedPart = null;
 
 const TEXT_SIZE_FIELD = {
   headline: "headlineFontPx",
@@ -570,6 +572,46 @@ export function refreshStoryPictures(images) {
 export function refreshStoryEditor(view, section, images, source, selectedPart, selectedImageIds) {
   if (selectedPart === "headline" || selectedPart === "subheading" || selectedPart === "body") {
     selectedTextPart = selectedPart;
+  }
+  // THE FIELD THE DESK IS ABOUT TO TYPE IN HAS TO BE REACHABLE.
+  //
+  // Measured on a 1512x950 window: the headline field sits 1890px down the
+  // document and the subheading 1960px - two full screens below the fold, on
+  // the block a desk opens most. That is the "editing headlines is very
+  // difficult" report.
+  //
+  // The obvious answer - move the fields above the composed page - was tried
+  // and reverted: it takes the page down with it, and a picture handle then
+  // falls past the viewport where `elementFromPoint` returns null, so the
+  // handle stops being draggable and undo has nothing to undo. That is the
+  // exact failure CLAUDE.md already records for a toolbar row, arriving from
+  // a different direction, and the workspace net catches it both times.
+  //
+  // So nothing moves. When the desk SELECTS a display flow - by clicking its
+  // band on the page - its field is brought to them instead.
+  //
+  //   * only when the SELECTION CHANGED, never on an ordinary repaint, or the
+  //     page would creep on every keystroke;
+  //   * only when the field is actually off-screen;
+  //   * `block: "nearest"`, which scrolls the least that puts it in view and
+  //     does nothing at all when it is already there - the same rule
+  //     focusGroup() follows, and the reason it is not "center" is that a
+  //     viewport thrown around is its own bug report;
+  //   * never while the caret is already inside it.
+  // `selectedTextPart` is written by refreshBlockControls() before this runs,
+  // so it cannot say whether the selection just CHANGED. This feature keeps
+  // its own memory of what it last brought into view.
+  const movedTo = selectedPart !== lastRevealedPart;
+  lastRevealedPart = selectedPart;
+  if (movedTo && (selectedPart === "headline" || selectedPart === "subheading")) {
+    const field = document.getElementById(
+      selectedPart === "headline" ? "edStoryHeadline" : "edStorySubheading",
+    );
+    if (field && !field.contains(document.activeElement)) {
+      const box = field.getBoundingClientRect();
+      const offScreen = box.bottom < 0 || box.top > window.innerHeight;
+      if (offScreen) field.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
   }
 
   const headline = document.getElementById("edStoryHeadline");

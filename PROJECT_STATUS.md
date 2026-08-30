@@ -7459,3 +7459,53 @@ anchor holds 23.5px against a 24px design. Photographed in print view.
 - **A subheading is one line by design**, so the desk's "same applies to
   subheading" is answered indirectly: decks came up with the headlines on the
   real page (53→72, 54→88, 68→92, 69→97) because they stopped being squeezed.
+
+## The press path had no door — 30 Aug 2026
+
+Branch `page-production-state`. The most consequential of the four.
+
+`signoff.service.js` has done page sign-off properly since it was written:
+three stages, a refusal to pass a page while its blockers stand, and an
+`edition_history` row naming who passed what and when.
+
+**Nothing in the browser could reach it.** `PATCH /pages/:id/state` appears
+nowhere under `public/`, and neither does `GET /newspapers/:id/status`. So every
+page sits at `making_up` — and since `pressReadiness` blocks on
+`PAGE_NOT_PASSED`, **the press package, the press-final e-paper and the CMYK
+press export were all gated on a readiness no control could produce.**
+
+Measured on edition 54470: four pages, all `making_up`, `readyForPress: false`,
+`waitingOn: [1,2,3,4]`.
+
+`PATCH /pages/:id/colour` is the same fault one step along. `prints_colour`
+decides the page's **forme** and defaults to TRUE, so every page of every
+edition asks the press for four plates and nothing could say otherwise.
+
+### What landed
+
+`public/editor/press-panel.js`, behind the **Preflight** button that already
+existed — preflight is the check that *gates* passing, so the finding and the
+action belong on one panel. It also fixes something already wrong:
+`if (!report.findings.length) return` meant a **clean** edition drew no panel at
+all, which is exactly when a desk wants to pass its pages.
+
+Not on a toolbar row: `.canvas-toolbar-row` is `flex-wrap: wrap`, and CLAUDE.md
+records a third row pushing a picture handle out of the viewport.
+
+### Two things measurement corrected
+
+1. **The first version disabled "Passed for press" on any preflight error.**
+   Wrong in both directions — page 2 of 54470 has **zero preflight errors and
+   nine blockers** (a missing standing feature, four editorial destinations with
+   no story, generated copy nobody reviewed). The row lists
+   `readiness.blockers` from `/status` now, and a refusal repeats them.
+2. **`passed_by` is not who passed it.** It is `u.name` joined on
+   `state_changed_by`, so it survives a pull-back and names whoever moved the
+   page *last*. The panel gates its "Passed by …" line on the STATE;
+   `tests/pressPanelContract.test.js` holds it, because the field's name invites
+   exactly the bug it would cause.
+
+### Verified
+
+`npm test` 1063/1063. `tests/browser/press-panel.browser.js` 17/17, leaving
+every page on the stage and forme it found them.

@@ -7384,3 +7384,78 @@ cost.
   already shaped for this paper. `publication_settings` is the natural home.
 - **The plan is not persisted.** A desk that closes the panel loses the run.
   `editionCompositionRun.repository` already exists and is where it belongs.
+
+---
+
+## Headlines: even lines, descending
+
+**Reported:** *"most of them are 2 lines, 1 line is full but second line is 20%
+filled only having a lot of blank space — it should 1 line full or 2 lines
+full. same apply for subheading too"*.
+
+Measured on the desk's own front page first, and it was consistent rather than
+occasional: **97/42, 97/42, 97/41, 97/43**.
+
+### Cause
+
+Two, and they had to be fixed together:
+
+1. **Display type was filled greedily.** Body copy has had balanced (TeX-style)
+   line breaking since `balanceParagraph()` was written; headlines never did.
+2. **`headlineBandFit()` scored 97/42 as 0.97** — it took the minimum of the
+   *working* lines and only gated the close at 30%, so the size search stopped
+   dead on a visibly broken headline.
+
+Separating them makes things worse, measured: balancing alone with the old
+metric took hard shrinks from 42 to 70, because an even 79/79 scores worse on
+working lines than a stubbed 97/42.
+
+### Result, across 700 real blocks
+
+| | before | after |
+|---|---|---|
+| stub closing lines | 17 | **0** |
+| uneven headlines (>25pts) | 35 | **4** |
+| mean line spread | 2.6 pt | **0.5 pt** |
+| mean worst-line fill | 0.729 | **0.761** |
+| mean size vs design | 1.020 | **1.054** |
+| shrunk >15% below design | 42 | 43 |
+| body / deck / head overset | 0/0/0 | **0/0/0** |
+
+Evenness transformed, hierarchy unchanged, no copy cost. On page one of edition
+54470 every headline is now one full line (97–100%) or two even lines, and the
+anchor holds 23.5px against a 24px design. Photographed in print view.
+
+`npm test` **1057/1057**, four of them new.
+
+### Found on the way, each fixed
+
+1. **A deck had no hierarchy floor.** On the 620×224 banner a 37px headline
+   left an 8px deck — 1.25× the body. Its minimum band is reserved out of the
+   headline's ceiling now; costs nothing on 700 blocks and **retired the
+   recorded 229×120 display-share outlier**.
+2. **The overset shrink walked past a professional setting** to chase an exact
+   number — the golden 268×248 lead went 20.5px → 10.5px for one point of fill.
+3. **A stranded FIRST line (49/100)** — my own balancer produced it, and no
+   metric in the file could see it. Now refused structurally.
+4. **A regression I introduced**: a 17px brief set 64/68 inside the hierarchy
+   bound and 99% on one line outside it. The bound now yields to two
+   all-or-nothing faults only, never to a couple of points.
+5. **Float noise in resolved sizes** — `8.700000000000001`. Quantised to a tenth.
+6. **A test that reimplemented what it tested** — the picture-reservation test
+   rebuilt the *character* bound instead of calling `copyStartsAt()`, so it had
+   never exercised the line-based reservation that runs.
+
+### Open
+
+- **`HEADLINE_SHRINK_CAP` (0.8) is the one knob** if the desk wants the other
+  reading of the rule. Unbounded, every headline on page one becomes a single
+  full line (96–100%) — literally "1 line full" — at the cost of hierarchy: the
+  anchor drops 23.5px → 14.5px and blocks shrinking >15% go 43 → 69. Both
+  settings pass the full suite.
+- **`HEADLINE_SHORT_OF_MEASURE` fires on ~69% of blocks** and is noise by this
+  project's own standard. It is *pre-existing* (71% on main, measured) and was
+  deliberately left alone here rather than folded into a typography change.
+- **A subheading is one line by design**, so the desk's "same applies to
+  subheading" is answered indirectly: decks came up with the headlines on the
+  real page (53→72, 54→88, 68→92, 69→97) because they stopped being squeezed.

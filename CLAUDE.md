@@ -416,6 +416,112 @@ composed at **97.32%** in one repair call. Current-news repairs receive the same
 delimited verified-facts block as the original brief; changing line breaks must
 never become permission to add a fact.
 
+
+### A headline's lines are EVEN, and they DESCEND
+
+The desk's report: *"most of them are 2 lines, 1 line is full but second line
+is 20% filled only having a lot of blank space — it should 1 line full or 2
+lines full"*. Measured on their own front page and it was every block, not
+some: **97/42, 97/42, 97/41, 97/43**.
+
+Two causes, and they are one change that must not be separated.
+
+**Display type was filled GREEDILY.** `pourBody` has balanced its lines since
+`balanceParagraph()` was written, and that function's own header says why
+greedy is wrong — optimal for line count, terrible for evenness, because it
+spends all the slack on whichever line meets a long word. `setDisplayFlow()`
+balances now, over the **same slots** the greedy pass fixed, so no band moves
+and no geometry shifts. The cost is squared *normalised* slack, not the body's
+`slackCost`: display type is never justified, so there is no lever and the
+even edge is simply the one to find.
+
+**And the metric could not SEE a stub.** `headlineBandFit()` took the minimum
+of the **working** lines, so 97/42 scored **0.97** and the size search stopped
+dead on it. It charges every line now. Measured the other way round too:
+balancing alone, with the old metric, took hard shrinks from 42 to **70** —
+an even 79/79 scores worse on working lines than a stubbed 97/42.
+
+#### Three rules that fell out of measuring the result
+
+- **`HEADLINE_ASCENT_TOLERANCE` — the lines descend.** A line fuller than the
+  one above it is a *stranded first line*, and it is the worse fault: the
+  metric's own header condemns 49/100 by name, and no maximum, working-line
+  minimum or whole-band minimum can see it. The balancer prefers descent where
+  the words allow (`DESCENT_BIAS`) and the metric fails it outright where they
+  do not — which is what sends the search the half pixel to where two long
+  words *do* share a line.
+- **The search runs OUTWARD from the design's own rung**, not downward-first,
+  bounded by `HEADLINE_SHRINK_CAP` (0.8) mirroring the existing growth cap.
+  Downward-first collapsed a real front page — the anchor went from 21px in
+  two lines to 14.5px in one, 60% of the size its block was designed around.
+- **It stops at a good-enough band.** Walking past a professional setting to
+  chase an exact number took the golden 268×248 lead from 20.5px to **10.5px**
+  for one point of fill. `HEADLINE_NEAR_FULL` came down 0.90 → **0.70** with
+  the metric: the same 97/74 descending headline reads 0.97 by the old measure
+  and 0.74 by this one. The sweep is beside the constant.
+
+#### The bound is on chasing points, not on escaping a bad band
+
+The shrink cap protects hierarchy against small gains and must not also trap a
+block whose only good answer is outside it — measured, a 17px brief set 64/68
+inside the range and **99% on one line** at 12.6px, and the bound kept the
+worse of the two. Loosening the bound is the wrong lever: at 0.70 the blocks
+shrinking more than 15% below their design size go from 16 to **47** for one
+point of evenness.
+
+So the search may leave the range for two **all-or-nothing** reasons only: a
+band that ascends, and a band nothing like full inside the range when a size
+outside it sets one **full** line. It can never trade real size for a couple of
+points — that is the "any improvement" fault this engine already measured its
+way out of, and reintroducing it took `grew` from 309 to 495 and broke the test
+that records the rule.
+
+#### A deck has a hierarchy FLOOR, not only a ceiling
+
+`DECK_MAX_HEADLINE_RATIO` has stopped a deck becoming a second headline since
+it was written; nothing stopped it being squeezed the other way, and the
+display share is a fixed half of the block, so every pixel the headline takes
+comes out of the deck. Measured on the 620×224 banner: a 33px headline leaves a
+14.5px deck and a 37px headline leaves **8px** — 22% of the headline and 1.25×
+the body it sits above. That is not display type; it reads as a caption.
+
+`DECK_MIN_OF_BODY` reserves the deck's own minimum band out of the headline's
+ceiling *before* the headline claims it. It costs nothing on 700 real blocks
+and **retired the recorded 229×120 display-share outlier** — that block now
+sets inside the cap instead of overflowing it.
+
+#### Sizes are quantised to a tenth
+
+The search steps outward by adding 0.5 to a distance, so a base of 14 reached
+`8.700000000000001` — and that is what the band reported, what a read-out
+printed and what any test comparing sizes had to match. `headline_font_px` is
+`NUMERIC(5,1)`; a tenth is the real resolution of the whole decision.
+
+#### What it cost
+
+Across 700 real blocks:
+
+| | before | after |
+|---|---|---|
+| stub closing lines | 17 | **0** |
+| uneven headlines (>25pts) | 35 | **4** |
+| mean line spread | 2.6 pt | **0.5 pt** |
+| mean worst-line fill | 0.729 | **0.761** |
+| mean size vs design | 1.020 | **1.054** |
+| shrunk >15% below design | 42 | 43 |
+| body / deck / head overset | 0/0/0 | **0/0/0** |
+
+Evenness is transformed and hierarchy is unchanged. On the desk's own page
+every headline is now either **one full line (97–100%)** or **two even lines**,
+and the anchor keeps 23.5px against a 24px design.
+
+**One test update found a real coverage gap.** `tests/pictureBlocks.test.js`
+rebuilt `headline-reserve.js`'s **character** bound instead of calling the
+service, so it had never exercised the line-based reservation that actually
+runs — and the two agreed closely enough to pass until this change. It calls
+`sectionImage.service.js`'s `copyStartsAt()` now. A test that reimplements the
+thing it tests can only ever pass by luck.
+
 ### Every control names the object it acts on
 
 `text_align` is the **body's** alignment and always was, and `setDisplayFlow()`

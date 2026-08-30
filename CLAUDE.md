@@ -76,6 +76,70 @@ Still 0-byte scaffolding: `src/middleware/auth.middleware.js`, `src/middleware/e
 
 The workspace itself is **not** loaded by `app.js` — `editor/publication.js` pulls in `editor/workspace.js`, which is the real workspace and imports the `editor/canvas/`, `editor/external-editor/`, `editor/layout/`, `editor/history/`, `editor/status/` and `editor/autosave/` folders. There is no `admin/newspaper-workspace.js` or `admin/page-editor.js` any more; do not go looking for them.
 
+### Back goes back through the DESK, not out of it
+
+This product had no history handling anywhere — no `pushState`, no `popstate`,
+no hash. Every screen a desk reached (Past News, Reporters, Settings, E-paper,
+an open edition) was the **same history entry as the login page**, so Back —
+the gesture every person alive uses to mean "the thing before this" — left the
+application entirely.
+
+`public/admin/navigation.js` owns the history stack and nothing else. A screen
+is `{screen, id}`, addressed as `#!/edition/54470`.
+
+- **A hash, not a path.** A path is a second thing the server has to route and
+  get right, and `app.get("*")` already had to be taught not to answer `/api`
+  with `index.html` once. A hash never reaches the server. The `!` is there so
+  a screen name can never collide with an element id and make the browser
+  scroll to it.
+- Two things follow that were not asked for: a **reload** comes back to the
+  screen the desk was on, so an edition being made up survives a refresh; and
+  "open edition 54470" is a URL.
+- **Leaving an edition flushes autosave** (`leaveWorkspace()`). Autosave is on
+  a timer, so between the last keystroke and the next tick the only copy of a
+  sentence is in the draft — and Back is now one keypress from here.
+
+**Chrome fires `popstate` with a NULL state BEFORE `hashchange`** for a
+fragment navigation, which the specification does not lead you to expect. The
+popstate handler fell back to reading the hash and *trusting* it, so typing
+`#!/not-a-screen` set that as the current screen: the dashboard painted
+correctly underneath while the address bar went on naming a screen that does
+not exist. Both events funnel through one `arrive()`, which validates before it
+renders and is idempotent, so the second event of a pair does nothing.
+
+Two more faults the router exposed rather than caused:
+
+- The workspace's keyboard shortcuts are bound **once at the document** and
+  were therefore still bound after leaving the edition — harmless only while
+  there was nowhere to leave to. Ctrl+Z on the Reporters screen would have
+  reached the workspace's undo stack. Guarded on `.workspace-shell` being on
+  the page.
+- The sidebar's `active` class was **hard-coded onto the first button** in the
+  markup and never moved, so the menu said the desk was on Past Newspapers
+  whatever screen they were on. It follows the address now.
+
+**The header is sticky**, so the menu button never scrolls away. The document
+scrolls and the workspace is long, so a desk 1600 px down an edition had no way
+to another screen without scrolling back up. The bar is 60 px and `.sidebar`,
+the backdrop and `.container`'s `min-height` all already measure from that same
+60, so making it stick costs the page nothing it was not already reserving.
+Measured: the button sits at y=16 while the page is scrolled 1417 px, and is
+hit-testable there.
+
+**"+ New Edition" is the first thing in the menu**, above Past Newspapers.
+Starting the day's paper is the first thing a desk does and it was the one
+action with no way in from the menu — it lived only part-way down the
+dashboard. It has its own address, so it can be bookmarked.
+
+`tests/workspaceArchitecture.test.js` pinned `admin.js`'s exact import LIST, so
+it failed the moment that file legitimately also imported `leaveWorkspace` from
+the same module. Loosened to hold the invariant it was written for — *where*
+`renderWorkspace` comes from — rather than the spelling of the line.
+
+```bash
+node tests/browser/navigation.browser.js
+```
+
 ### Starting an edition
 
 `POST /api/newspapers/start` is how a day's paper begins, and it is **idempotent per date**: one paper per publication date, so pressing the button twice opens the existing edition rather than making a second one. (Before this existed the database reached 116 editions, most of them empty, and editors could not find the one holding their work.)

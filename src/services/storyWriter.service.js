@@ -796,6 +796,9 @@ async function write(pageId, sectionKey, {
   // loosen anything: an unverified packet is still labelled unverified and
   // still attributed.
   providedContext = null,
+  // How deep the provider chain may go for THIS call. A batch caps it; the
+  // desk's own single-block button does not. See ai/index.js.
+  maxProviders,
 } = {}) {
   const clean = String(seed || '').trim();
   if (!clean) return { error: 'Say what the story is about first — a few words is enough.' };
@@ -874,7 +877,7 @@ async function write(pageId, sectionKey, {
       reason,
     }),
     STORY_SCHEMA,
-    { tier: callTier },
+    { tier: callTier, maxProviders },
   );
   if (result.error) return { error: result.error, unconfigured: result.unconfigured };
 

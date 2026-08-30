@@ -51,7 +51,7 @@ const DEFAULT_PROVIDER = 'gemini';
 // and a lead story at Ultra is slower again. At 60s the call was being aborted
 // at this end while the model was still writing - which reads to the desk as
 // "the AI is broken" and bills for the thinking anyway.
-const timeoutMs = () => Number(process.env.AI_TIMEOUT_MS) || 120000;
+const timeoutMs = (override) => Number(override) > 0 ? Number(override) : (Number(process.env.AI_TIMEOUT_MS) || 120000);
 
 function providerNamed(name) {
   return PROVIDERS[String(name || '').toLowerCase().trim()] || null;
@@ -222,7 +222,7 @@ async function askForJson(prompt, schema, options = {}) {
     : null);
 
   for (const provider of providers) {
-    let result = await callOnce(provider, prompt, schema, tier, undefined, options.callBudget, 'initial');
+    let result = await callOnce(provider, prompt, schema, tier, undefined, options.callBudget, 'initial', options.timeoutMs);
     if (result.condition === 'budget') return { error: 'SERVICE_CALL_BUDGET_EXHAUSTED', callBudgetExhausted: true, attempts };
 
     // One retry, and only for the one failure that a retry can actually fix:
@@ -244,7 +244,7 @@ async function askForJson(prompt, schema, options = {}) {
       const roomier = provider.maxOutputTokens
         ? provider.maxOutputTokens(result.budget ? result.budget * 2 : undefined)
         : undefined;
-      result = await callOnce(provider, prompt, schema, gentler, roomier, options.callBudget, 'retry');
+      result = await callOnce(provider, prompt, schema, gentler, roomier, options.callBudget, 'retry', options.timeoutMs);
       if (result.condition === 'budget') return { error: 'SERVICE_CALL_BUDGET_EXHAUSTED', callBudgetExhausted: true, attempts };
       if (result.data) {
         const problem = validate(result.data, schema);
@@ -254,6 +254,7 @@ async function askForJson(prompt, schema, options = {}) {
             provider: provider.key,
             tier: gentler.key,
             usage: result.usage || null,
+            attempts,
             fellBackTo: provider === providers[0] ? null : provider.key,
             handover: provider === providers[0] ? null : handover(provider),
             // The desk is told its copy was written with less thinking than it
@@ -277,6 +278,10 @@ async function askForJson(prompt, schema, options = {}) {
           provider: provider.key,
           tier: tier.key,
           usage: result.usage || null,
+          // Kept on success too: a run that took three minutes because the
+          // first provider timed out looks identical to one that was simply
+          // slow, and only the attempt log tells them apart.
+          attempts,
           // Named only when it is not the one that was meant to answer, so the
           // desk knows tonight's copy came from the understudy - and, since the
           // conditions are classified, WHY.
@@ -335,9 +340,9 @@ function consumeProviderCall(budget, metadata) {
   if (Array.isArray(budget.events)) budget.events.push(event);
   budget.onConsume?.(event);
 }
-async function callOnce(provider, prompt, schema, tier, maxOutputTokens, callBudget, reason = 'initial') {
+async function callOnce(provider, prompt, schema, tier, maxOutputTokens, callBudget, reason = 'initial', overrideTimeoutMs) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs());
+  const timer = setTimeout(() => controller.abort(), timeoutMs(overrideTimeoutMs));
   try {
     consumeProviderCall(callBudget, { provider: provider.key, reason });
     return await provider.askForJson(prompt, schema, tier, { signal: controller.signal, maxOutputTokens });
@@ -346,7 +351,7 @@ async function callOnce(provider, prompt, schema, tier, maxOutputTokens, callBud
     // A dead socket and a stopwatch are different situations, and only one of
     // them says anything about the provider being reachable.
     return error.name === 'AbortError'
-      ? { error: `${provider.name} timed out after ${Math.round(timeoutMs() / 1000)}s.`, condition: 'timeout' }
+      ? { error: `${provider.name} timed out after ${Math.round(timeoutMs(overrideTimeoutMs) / 1000)}s.`, condition: 'timeout' }
       : { error: `${provider.name}: ${error.message}`, condition: 'unavailable' };
   } finally {
     clearTimeout(timer);

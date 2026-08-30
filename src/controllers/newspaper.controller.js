@@ -15,6 +15,9 @@ const plainTextModule = require('../layout/plain-text');
 const { ladderFor, getSupportedEditionPageCounts } = require('../layout/ladder');
 const editionResizeService = require('../services/editionResize.service');
 const compositionWorkflow = require('../services/editionCompositionWorkflow.service');
+const newsdesk = require('../services/newsdesk');
+const newsdeskWriter = require('../services/newsdesk/writer');
+const pageRepository = require('../repositories/page.repository');
 const pressReadiness = require('../services/pressReadiness.service');
 const { currentUser, DESK_ROLES } = require('../middleware/auth');
 
@@ -284,6 +287,72 @@ async function compositionApply(req, res) {
   res.status(result.ok ? 200 : result.code === 'RUN_ALREADY_ACTIVE' ? 409 : 400).json(result);
 }
 
+// ---------------------------------------------------------- the Newsdesk Run ---
+//
+// Three routes, and the separation between them is the safety argument for the
+// whole feature: plan costs ONE call and returns something a person reads;
+// write costs one per approved story and still saves nothing; accept is the
+// only one that touches the paper. A desk sees what it is about to spend
+// before it spends it, and what it is about to print before it prints it.
+
+async function newsdeskPlan(req, res) {
+  const result = await newsdesk.planEdition(Number(req.params.id), req.body?.brief || {}, {
+    callBudget: req.body?.callBudget,
+  });
+  if (result.error) return res.status(result.status || 400).json(result);
+  res.json(result);
+}
+
+async function newsdeskWrite(req, res) {
+  const stories = Array.isArray(req.body?.stories) ? req.body.stories : [];
+  if (!stories.length) return res.status(400).json({ error: 'No stories were approved to write.' });
+  // Every story names the block it is for, and the plan proved that block was
+  // open. Re-proving it here would need the plan back; what this must not do
+  // is trust a page id from the browser, so the block is looked up by page and
+  // key on the way in.
+  const result = await newsdeskWriter.writePlan(stories);
+  res.json(result);
+}
+
+async function newsdeskAccept(req, res) {
+  const rows = Array.isArray(req.body?.stories) ? req.body.stories : [];
+  if (!rows.length) return res.status(400).json({ error: 'Nothing was accepted.' });
+
+  const saved = [];
+  const refused = [];
+  for (const row of rows) {
+    const page = await pageRepository.findById(Number(row.pageId));
+    // The edition in the URL is the authority. A page id from a browser that
+    // belongs to a different paper must not be writable through this route.
+    if (!page || Number(page.newspaper_id) !== Number(req.params.id)) {
+      refused.push({ sectionKey: row.sectionKey, why: 'That block is not on this edition.' });
+      continue;
+    }
+    // The narrow seam: editorial content only. It may never reset the frame's
+    // geometry, its treatment or its images - a run that filled a block must
+    // not undo the design work already done on it.
+    const written = await pageRepository.saveComposedStoryContent(page.id, String(row.sectionKey), {
+      headline: row.proposal?.headline,
+      subheading: row.proposal?.subheading,
+      body: row.proposal?.body,
+      reporterName: row.proposal?.author,
+      category: row.tagKey || null,
+      editorialPriority: row.importance || 3,
+      language: 'Marathi',
+      // Never `passed`. Everything here was drafted by a model from sources a
+      // person has not yet read line by line.
+      status: 'needs_review',
+      aiGenerated: true,
+      aiNotes: row.retrieval
+        ? `Newsdesk Run · ${row.retrieval.status} · ${(row.retrieval.sources || []).map((s) => s.publisher).join(', ')}`
+        : 'Newsdesk Run',
+    });
+    if (written) saved.push({ page: page.page_number, sectionKey: row.sectionKey });
+    else refused.push({ sectionKey: row.sectionKey, why: 'That block no longer exists.' });
+  }
+  res.json({ saved: saved.length, refused, blocks: saved });
+}
+
 // The Scribus document and the press package both start from the same
 // newspaper row and its printed pages, so they share how that is fetched.
 async function loadForOutput(id) {
@@ -385,5 +454,6 @@ module.exports = {
   epaper, epaperHtml, selectedEpaperHtml, epaperPreviewHtml, epaperCanvasCaptureHtml, epaperList, selectEpaper,
   epaperAsset, epaperPdf, publishEpaper, publishCurrentEpaper, publishUploadedEpaperPdf, updateEpaperMap, unpublishEpaper,
   preflight, worklist, status, history, features, compositionPlan, compositionApply,
+  newsdeskPlan, newsdeskWrite, newsdeskAccept,
   scribus, pressPackage, exportEdition,
 };

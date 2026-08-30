@@ -7164,3 +7164,101 @@ body.print-view .page-imprint {
   line-height: 1.45;
 }
 .toggle.ai-open-web { flex-basis: 100%; }
+
+/* ---------------------------------------------------- The Newsdesk Run ---
+   Three screens over one panel - the brief, the plan, the copy. It is wider
+   and taller than the worklist because it is read rather than scanned: a desk
+   is deciding what tomorrow's paper is made of, and every row carries the
+   sources it rests on.                                                     */
+.newsdesk-panel {
+  width: min(760px, 94vw);
+  max-height: 82vh;
+  font-size: 0.84rem;
+}
+.newsdesk-controls {
+  display: flex;
+  gap: 16px;
+  align-items: flex-end;
+  padding: 0 12px 8px;
+}
+.newsdesk-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.76rem;
+  color: #555;
+}
+.newsdesk-page {
+  padding: 8px 12px;
+  border-top: 1px solid #eee;
+}
+.newsdesk-page h4 {
+  margin: 0 0 6px;
+  font-size: 0.86rem;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.newsdesk-over { color: #c8102e; font-weight: 600; }
+.newsdesk-wants { list-style: none; margin: 0 0 6px; padding: 0; }
+.newsdesk-want {
+  display: grid;
+  /* The category is what a desk reads first, so it takes the room. The count
+     is two digits and the demand is one of three words. */
+  grid-template-columns: 1fr 72px 116px 28px;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.newsdesk-want select,
+.newsdesk-want input { min-width: 0; padding: 3px 4px; font-size: 0.8rem; }
+.newsdesk-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border-top: 1px solid #ddd;
+  position: sticky;
+  bottom: 0;
+  background: #fff;
+}
+
+/* ------------------------------------------------------------- the plan --- */
+.newsdesk-plan { list-style: none; margin: 0; padding: 0; }
+.newsdesk-plan-row {
+  display: grid;
+  grid-template-columns: 92px 1fr auto;
+  gap: 10px;
+  padding: 9px 12px;
+  border-top: 1px solid #eee;
+  align-items: start;
+}
+/* Dropped, not deleted. A desk changing its mind must be able to change it
+   back, so the row stays where it was rather than vanishing. */
+.newsdesk-plan-row.is-dropped { opacity: 0.42; }
+.newsdesk-plan-where { display: flex; flex-direction: column; gap: 2px; }
+.newsdesk-rung {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #777;
+}
+.newsdesk-plan-story { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.newsdesk-headline { font-weight: 600; line-height: 1.35; }
+.newsdesk-checked { color: #2f6b45; font-size: 0.74rem; }
+/* The one thing on this screen a desk must not miss. */
+.newsdesk-unchecked { color: #a2541c; font-size: 0.74rem; font-weight: 600; }
+.newsdesk-repeat, .newsdesk-disagree { color: #6c675e; font-size: 0.74rem; }
+.newsdesk-facts, .newsdesk-sources {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  font-size: 0.76rem;
+  color: #444;
+}
+.newsdesk-facts li, .newsdesk-sources li { margin-bottom: 2px; }
+.newsdesk-plan-story details summary {
+  cursor: pointer;
+  font-size: 0.74rem;
+  color: #555;
+}
+.newsdesk-empty { padding: 8px 12px; border-top: 1px solid #eee; font-size: 0.78rem; }
+.newsdesk-empty ul { margin: 6px 0 0; padding-left: 18px; }

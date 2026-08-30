@@ -75,9 +75,17 @@ async function planEdition(newspaperId, brief = {}, { callBudget } = {}) {
   const pages = await pageRepository.findByNewspaper(newspaperId);
   const wantedPages = new Set((brief.pages || []).map((p) => Number(p.page)));
   const scoped = wantedPages.size ? pages.filter((p) => wantedPages.has(Number(p.page_number))) : pages;
-  const { blocks, byPage } = await blocksOf.emptyBlocks(scoped, { place });
+  const { unbriefed, commissioned, byPageUnbriefed } = await blocksOf.emptyBlocks(scoped, { place });
+  const blocks = unbriefed;
   if (!blocks.length) {
-    return { error: 'There are no empty blocks to fill on those pages.', status: 400, byPage };
+    return {
+      error: commissioned.length
+        ? `Every empty block on those pages already carries a headline. Those are written from their own headlines — this run finds stories for blocks with nothing in them.`
+        : 'There are no empty blocks to fill on those pages.',
+      status: 400,
+      byPage: byPageUnbriefed,
+      commissioned: commissioned.length,
+    };
   }
 
   // 2 — retrieval, once per tag. Free.
@@ -121,6 +129,12 @@ async function planEdition(newspaperId, brief = {}, { callBudget } = {}) {
     rejected: planned.rejected,
     counts: planned.counts,
     blocksOffered: planned.blocksOffered,
+    // Written from their own headlines rather than planned - the desk already
+    // said what these are about.
+    commissioned: commissioned.map((block) => ({
+      page: block.page, pageId: block.pageId, sectionKey: block.sectionKey,
+      seed: block.seed, rung: block.rung,
+    })),
     // What the desk must know BEFORE it fires the writing phase.
     review: {
       total: planned.stories.length,
@@ -139,6 +153,8 @@ async function planEdition(newspaperId, brief = {}, { callBudget } = {}) {
     provider: planned.provider,
     tier: planned.tier,
     handover: planned.handover,
+    attempts: planned.attempts,
+    promptChars: planned.promptChars,
   };
 }
 

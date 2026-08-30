@@ -35,6 +35,28 @@ export const FEED_SCOPES = { NATIONAL: 'national', MAHARASHTRA: 'maharashtra' };
  */
 export const DEMAND = { REQUIRED: 'required', PREFERRED: 'preferred', AVOID: 'avoid' };
 
+/** The same three, as the form offers them. */
+export const DEMAND_LEVELS = [
+  { key: DEMAND.REQUIRED, name: 'Required' },
+  { key: DEMAND.PREFERRED, name: 'Preferred' },
+  { key: DEMAND.AVOID, name: 'Avoid' },
+];
+
+/**
+ * How far back a run may reach.
+ *
+ * The keys must match src/services/information/freshness.js's DESK_WINDOWS -
+ * this is the list a desk PICKS from and that file is what the window means in
+ * milliseconds. An unknown key there falls back to the default rather than
+ * throwing, so a drift is visible as a wrong window and never as a broken run.
+ */
+export const DESK_FRESHNESS = [
+  { key: '6h', name: 'The last 6 hours' },
+  { key: '24h', name: 'Today' },
+  { key: '3d', name: 'The last 3 days' },
+  { key: '7d', name: 'The last week' },
+];
+
 /** The words that make a query read as "today's news" to intent.js. */
 const TODAY = 'आजच्या ताज्या बातम्या';
 

@@ -37,6 +37,9 @@ const PLANNER_TIER = 'ultra';
 // an interactive run.
 const MAX_PROVIDERS = 2;
 
+/** A whole edition's plan is worth waiting for. Four minutes, once. */
+const PLANNER_TIMEOUT_MS = 240000;
+
 /** Items shown to the planner. Enough for breadth, bounded for the budget. */
 const MAX_POOL = 150;
 
@@ -55,6 +58,24 @@ const EXCERPT_IN_PROMPT = 180;
  */
 const MAX_TAG_SHARE = 0.4;
 
+// THE PLANNER SELECTS. IT DOES NOT REWRITE THE FACTS.
+//
+// The first version asked it for the facts of each story as well, and a
+// 33-block edition then TIMED OUT at 120 seconds: thirty-three stories of
+// Marathi facts is a very large answer, and Devanagari is expensive per
+// character. Splitting the call per page was the obvious fix and is the wrong
+// one - the whole value of one call is that it can see that four of the day's
+// stories are the same rally.
+//
+// The right fix was to notice the facts were never the model's to write. It
+// chooses which retrieved items a story rests on; the facts of that story are
+// those items' own excerpts. Taking them straight from the pool is smaller,
+// faster, cheaper - and SAFER, because a fact is then literally what a
+// publisher wrote rather than a model's paraphrase of it.
+//
+// What is left is genuinely judgement: which items are one event, which event
+// belongs in which block, how much it matters, and what a writer must not
+// claim.
 const STORY_SCHEMA = {
   type: 'object',
   additionalProperties: false,
@@ -65,7 +86,7 @@ const STORY_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['page', 'sectionKey', 'tagKey', 'sourceIds', 'angle', 'headlineHint', 'importance', 'facts'],
+        required: ['page', 'sectionKey', 'tagKey', 'sourceIds', 'angle', 'importance'],
         properties: {
           page: { type: 'integer' },
           sectionKey: { type: 'string' },
@@ -75,7 +96,6 @@ const STORY_SCHEMA = {
           angle: { type: 'string' },
           headlineHint: { type: 'string' },
           importance: { type: 'integer' },
-          facts: { type: 'array', items: { type: 'string' } },
           disagreements: { type: 'array', items: { type: 'string' } },
           doNotClaim: { type: 'array', items: { type: 'string' } },
           why: { type: 'string' },
@@ -97,6 +117,22 @@ const STORY_SCHEMA = {
     },
   },
 };
+
+/** Facts a writer may use, taken from the chosen sources themselves. */
+const MAX_FACTS_PER_STORY = 6;
+
+function factsFrom(sources) {
+  const seen = new Set();
+  const facts = [];
+  for (const source of sources) {
+    const text = String(source.excerpt || '').trim();
+    if (!text || seen.has(text)) continue;
+    seen.add(text);
+    facts.push(text);
+    if (facts.length >= MAX_FACTS_PER_STORY) break;
+  }
+  return facts;
+}
 
 function poolBlock(items) {
   const lines = items.slice(0, MAX_POOL).map((item) => {
@@ -174,12 +210,12 @@ function promptFor({ brief, blocks, pool, placed, identity }) {
     '1. Group the source items into distinct EVENTS. Several papers reporting one rally, one accident or one cabinet decision are ONE story with several sources — not several stories. This matters more than anything else you do here.',
     '2. Choose the best events for the blocks available, honouring the desk\'s page-by-page request and its demand levels.',
     '3. Assign each chosen story to exactly one block, matching importance to frame size.',
-    '4. For each chosen story, state the facts the sources actually support.',
+    '4. Say what a writer must NOT claim from those sources, and where the sources disagree.',
     '',
     'RULES — each of these is checked after you answer',
     '',
     `* Refer to sources ONLY by the ids given above (${pool.length ? pool[0].id : 's001'} and so on). Never write a URL, never name a source that is not in the list, never invent an id. An id that is not in the list is discarded and the story with it.`,
-    '* Every fact must come from the excerpts above. If the sources do not say it, it is not a fact — put it in doNotClaim instead.',
+    '* Do NOT retype the facts. The story will be written from the excerpts of the sources you chose, exactly as they appear above — choosing the right sources IS choosing the facts.',
     '* Where sources DISAGREE, put both readings in `disagreements`. Never resolve a disagreement by choosing one — a newspaper reports that accounts differ.',
     '* `doNotClaim` is for what a writer would plausibly assume and the sources do NOT establish: a cause, a death toll, a motive, a person\'s title, a total.',
     '* A story marked ALREADY IN THE PAPER may still be chosen if it is a genuine follow-up with new facts — say so in `why`. Otherwise leave it.',
@@ -187,7 +223,8 @@ function promptFor({ brief, blocks, pool, placed, identity }) {
     '* Do not give one subject more than about a third of the edition, however much of the day\'s news it is. A paper is not a search result.',
     '* If a block has no story worth printing, leave it out of `stories` and say why in `leftEmpty`. An empty block is better than a weak one.',
     '',
-    'Write `angle`, `headlineHint`, `facts`, `disagreements` and `doNotClaim` in MARATHI. Write `why` in English — it is for the desk, not the page.',
+    'Keep every field SHORT. `angle` is one line saying what the story is. `headlineHint` is one possible headline, not the final one — the newspaper sets its own.',
+    'Write `angle`, `headlineHint`, `disagreements` and `doNotClaim` in MARATHI. Write `why` in English, in a few words — it is for the desk, not the page.',
     '`importance` is 1 (a filler) to 5 (the day\'s lead).',
   ].filter((line) => line !== null).join('\n');
 }
@@ -208,6 +245,11 @@ async function plan({ brief, blocks, pool, placed = [], identity = null, callBud
   const answer = await ai.askForJson(prompt, STORY_SCHEMA, {
     tier: PLANNER_TIER,
     maxProviders: MAX_PROVIDERS,
+    // One call, for a whole newspaper, that a desk has been told is a research
+    // step. The ordinary 120s is sized for a single block somebody is waiting
+    // on; cutting this one short throws away the only expensive thing the run
+    // does.
+    timeoutMs: PLANNER_TIMEOUT_MS,
     callBudget,
   });
   if (answer.error) return { error: answer.error, attempts: answer.attempts, unconfigured: answer.unconfigured };
@@ -218,6 +260,8 @@ async function plan({ brief, blocks, pool, placed = [], identity = null, callBud
     provider: answer.provider,
     tier: answer.tier,
     handover: answer.handover || null,
+    attempts: answer.attempts || null,
+    retriedAt: answer.retriedAt || null,
     promptChars: prompt.length,
   };
 }
@@ -280,7 +324,8 @@ function validate(data, { blocks, pool, brief }) {
       angle: String(story.angle || '').trim(),
       headlineHint: String(story.headlineHint || '').trim(),
       importance: Math.max(1, Math.min(5, Number(story.importance) || 3)),
-      facts: (story.facts || []).map((f) => String(f).trim()).filter(Boolean),
+      // Not the model's. The chosen sources' own words.
+      facts: factsFrom(sources),
       disagreements: (story.disagreements || []).map((f) => String(f).trim()).filter(Boolean),
       doNotClaim: (story.doNotClaim || []).map((f) => String(f).trim()).filter(Boolean),
       why: String(story.why || '').trim(),
@@ -300,11 +345,27 @@ function validate(data, { blocks, pool, brief }) {
 
   // Concentration, applied after the fact and to the WEAKEST stories first, so
   // a dominant subject loses its filler rather than its lead.
-  const cap = Math.max(1, Math.floor(accepted.length * MAX_TAG_SHARE));
+  //
+  // IT NEVER OVERRIDES THE BRIEF. A desk that asked for three local stories
+  // gets three: this cap exists to stop the PLANNER over-concentrating on
+  // whatever dominated the day's search results, not to second-guess an
+  // editor who has already said what tomorrow's paper should carry. Without
+  // this the cap silently refused the desk's own required categories - and on
+  // a small edition it refused nearly everything, since 40% of two blocks
+  // rounds down to one.
+  const askedFor = new Map();
+  for (const page of brief.pages || []) {
+    for (const want of page.wants || []) {
+      askedFor.set(want.tagKey, (askedFor.get(want.tagKey) || 0) + (Number(want.count) || 0));
+    }
+  }
+  const share = Math.ceil(accepted.length * MAX_TAG_SHARE);
+  const capFor = (tagKey) => Math.max(1, askedFor.get(tagKey) || 0, share);
   const counts = new Map();
   const kept = [];
   for (const story of [...accepted].sort((a, b) => b.importance - a.importance)) {
     const seen = counts.get(story.tagKey) || 0;
+    const cap = capFor(story.tagKey);
     if (seen >= cap) {
       rejected.push({ story: story.headlineHint, why: 'TAG_OVER_CONCENTRATED', detail: `${story.tagKey} capped at ${cap}` });
       continue;
@@ -324,4 +385,4 @@ function validate(data, { blocks, pool, brief }) {
   };
 }
 
-module.exports = { plan, validate, promptFor, STORY_SCHEMA, PLANNER_TIER, MAX_TAG_SHARE, MAX_POOL };
+module.exports = { plan, validate, promptFor, factsFrom, STORY_SCHEMA, PLANNER_TIER, PLANNER_TIMEOUT_MS, MAX_TAG_SHARE, MAX_POOL };

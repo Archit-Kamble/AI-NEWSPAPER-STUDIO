@@ -24,6 +24,7 @@ const information = require('../information');
 const rss = require('../information/providers/rss');
 const websearch = require('../information/providers/websearch');
 const trust = require('../information/trust');
+const { mapLimit } = require('./parallel');
 
 /** Open-web searches in the air at once. Politeness, not a rate limit. */
 const WEB_CONCURRENCY = 3;
@@ -54,23 +55,6 @@ function urlKey(url) {
   } catch {
     return String(url || '').trim().toLowerCase();
   }
-}
-
-async function mapLimit(list, limit, fn) {
-  const queue = [...list];
-  const out = [];
-  async function worker() {
-    while (queue.length) {
-      const item = queue.shift();
-      try {
-        out.push(await fn(item));
-      } catch (error) {
-        out.push({ error: error.message || String(error) });
-      }
-    }
-  }
-  await Promise.all(Array.from({ length: Math.max(1, Math.min(limit, list.length || 1)) }, worker));
-  return out;
 }
 
 /**

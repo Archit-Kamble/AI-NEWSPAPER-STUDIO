@@ -1277,7 +1277,7 @@ function renderShell() {
               <button type="button" class="layout-btn" id="fillFeaturesBtn"
                       title="Fill राशिभविष्य, सूर्योदय-सूर्यास्त, दिनविशेष and सुविचार for this edition's date">Fill features</button>
               <button type="button" class="layout-btn" id="writeEmptyBtn"
-                      title="Write every block on this page that has a headline and no copy — one request per block, and every one comes back as a proposal">Write empty blocks</button>
+                      title="Say what tomorrow's paper should be made of, page by page — SAHAS researches the news, plans the edition, and you read the plan before anything is written">Write empty blocks</button>
               <div class="canvas-toolbar-divider"></div>
               <button type="button" class="layout-btn active" id="guidesToggleBtn"
                       title="Show or hide ruler guides - hiding never deletes them">Guides</button>
@@ -1943,21 +1943,70 @@ async function fillFeatures() {
  * single block.
  */
 async function writeEmptyBlocks() {
+  const state = store.getState();
+  const newspaper = state.newspaper;
+  if (!newspaper) return;
+
+  const place = getIdentity()?.placeOfPublication || "";
+
+  // Which blocks are open, and which of them the desk has already commissioned
+  // by typing a headline into them. Computed from the store rather than
+  // fetched: candidatesOn() is the ONE rule for what is writable and it
+  // already runs in this browser - asking the server would be a second copy of
+  // it, which is the drift this project has been bitten by twice.
+  const byPage = {};
+  let commissioned = 0;
+  let openBlocks = 0;
+  for (const page of state.pages || []) {
+    const { ready } = candidatesOn(page, { place });
+    const unbriefed = ready.filter((block) => block.fromToday);
+    commissioned += ready.length - unbriefed.length;
+    openBlocks += ready.length;
+    if (unbriefed.length) byPage[page.page_number] = unbriefed.length;
+  }
+
+  if (!openBlocks) return showNotice("Every block in this edition is written, sold or standing furniture. There is nothing to fill.");
+
+  // Nothing to plan, but blocks the desk has already commissioned by typing a
+  // headline: that is exactly what this button used to do, so it still does it.
+  if (!Object.keys(byPage).length) return writeCommissionedBlocks();
+
+  const { openNewsdeskPanel } = await import("./newsdesk-panel.js");
+  openNewsdeskPanel({
+    newspaperId: newspaper.id,
+    byPage,
+    commissioned,
+    notice: showNotice,
+    // A block carrying a headline somebody typed is a story the desk has
+    // already decided on. It is written FROM that headline, through the path
+    // that has always done it - never handed a story off the wire, which would
+    // silently discard an editorial decision.
+    onWriteCommissioned: writeCommissionedBlocks,
+    // The run writes server-side across the whole edition, so the pages this
+    // browser is holding are stale the moment it lands. patchDraft() only ever
+    // reached the page the desk happened to be looking at, which is why this
+    // route does not use it.
+    onDone: () => reloadPages(),
+  });
+}
+
+/**
+ * Write the blocks on THIS page that already carry a headline.
+ *
+ * The desk has said what these are about; the job is to write that. One
+ * request per block, two at a time (bulk-generate.js says why), every one a
+ * proposal. This is what "Write empty blocks" did before the Newsdesk Run
+ * existed, and it is still the right thing for a commissioned block.
+ */
+async function writeCommissionedBlocks() {
   const page = store.getCurrentPage();
   if (!page) return;
 
-  // The paper's own ground, for the blocks that carry no headline to write
-  // from - they are briefed with today's news for this place instead, and the
-  // information layer refuses rather than letting the model invent one.
   const { ready, skipped } = candidatesOn(page, { place: getIdentity()?.placeOfPublication || "" });
-  if (!ready.length) {
-    return showNotice(
-      skipped.length
-        ? `Nothing to write on this page. ${skipped.length} block${skipped.length === 1 ? " was" : "s were"} left alone — an advert, a photograph, a standing feature, a reporter's story, or copy already written.`
-        : "Nothing to write on this page.",
-    );
+  const commissioned = ready.filter((block) => !block.fromToday);
+  if (!commissioned.length) {
+    return showNotice("No block on this page carries a headline waiting for its story.");
   }
-  const fromToday = ready.filter((block) => block.fromToday).length;
 
   const button = document.getElementById("writeEmptyBtn");
   const label = button?.textContent;
@@ -1965,10 +2014,8 @@ async function writeEmptyBlocks() {
 
   try {
     const batch = await runBulk({
-      blocks: ready,
+      blocks: commissioned,
       onProgress: ({ phase, finished, total, sectionKey }) => {
-        // "Generating 3 of 12" - and which one, because a desk watching a page
-        // fill wants to know where it has got to.
         if (button) button.textContent = `Writing ${Math.min(finished + 1, total)} of ${total}…`;
         if (phase === "start") showNotice(`Writing ${sectionKey} — ${finished} of ${total} done.`);
       },
@@ -1979,8 +2026,7 @@ async function writeEmptyBlocks() {
           body: JSON.stringify({ seed: block.seed, notes: block.notes, language: block.language, tier: getAiTier() }),
         }).then((response) => response.json().catch(() => ({ error: "The AI did not answer." }))),
     });
-
-    showBulkProposals(batch, skipped, { fromToday });
+    showBulkProposals(batch, skipped, { fromToday: 0 });
   } finally {
     if (button) { button.disabled = false; button.textContent = label; }
   }

@@ -20,6 +20,9 @@
 // reporter's story belongs to the reporter, and written copy is never
 // overwritten - and a second copy of it would drift.
 
+const storyWriter = require('../storyWriter.service');
+const sectionImages = require('../../repositories/sectionImage.repository');
+
 let bulkModule;
 async function bulk() {
   if (!bulkModule) bulkModule = await import('../../../public/editor/external-editor/bulk-generate.js');
@@ -88,6 +91,11 @@ async function emptyBlocks(pages = [], { place = '' } = {}) {
         // this run is for the ones with nothing in them at all.
         seed: candidate.seed,
         fromToday: candidate.fromToday,
+        // Kept for the room measurement above, and stripped before anything
+        // reaches a prompt - see the header: a planner may never be handed a
+        // frame's dimensions.
+        sectionId: section.id,
+        section,
       });
     }
   }
@@ -97,7 +105,63 @@ async function emptyBlocks(pages = [], { place = '' } = {}) {
   const byPage = {};
   for (const block of blocks) byPage[block.page] = (byPage[block.page] || 0) + 1;
 
-  return { blocks, byPage, total: blocks.length };
+  // A BLOCK WITH NO ROOM FOR COPY IS NOT AN EMPTY BLOCK.
+  //
+  // `candidatesOn()` decides what is WRITABLE - not sold, not standing
+  // furniture, not somebody's story. That is the right rule and it cannot see
+  // whether the frame has any room left once its pictures and its display type
+  // are in it. Measured on a real run: the planner spent a slot on a footer
+  // block, the writer then spent a CALL on it, and the answer was "this block
+  // has no room for copy" - a wasted slot and a wasted charge, on a day when
+  // the provider's quota was what ran out.
+  //
+  // planningFit() is the same measurement the writer would make, and it costs
+  // no provider call - it is the exact compositor. So it is made here, once,
+  // before anything is planned.
+  const roomy = [];
+  const noRoom = [];
+  for (const block of blocks) {
+    try {
+      const images = await sectionImages.listBySection(block.sectionId);
+      const fit = await storyWriter.planningFit(block.section, images);
+      (fit.guaranteedChars > 0 ? roomy : noRoom).push(block);
+    } catch {
+      // A block this cannot measure is offered rather than dropped: refusing
+      // to plan a block because a measurement threw is worse than planning one
+      // the writer then declines.
+      roomy.push(block);
+    }
+  }
+
+  // TWO KINDS OF EMPTY, and they must not be written the same way.
+  //
+  // A block where a sub-editor has typed a headline and no copy is a
+  // COMMISSIONED story: the desk has decided what it is about, and the job is
+  // to write that. Handing it a story off the wire instead would silently
+  // discard an editorial decision - the worst thing this run could do.
+  //
+  // A block with nothing in it is what the Newsdesk Run is for. Only those are
+  // offered to the planner; the commissioned ones are written from their own
+  // headlines, through the path that has always done that.
+  // The raw row was carried only so the room above could be measured. It is
+  // stripped HERE, not left for callers to remember: the whole discipline of
+  // this module is that a planner cannot be handed a frame's dimensions, and a
+  // rule kept by everyone remembering it is a rule that lasts until somebody
+  // does not.
+  const strip = ({ section, sectionId, ...rest }) => rest;
+  const unbriefed = roomy.filter((block) => block.fromToday).map(strip);
+  const commissioned = roomy.filter((block) => !block.fromToday).map(strip);
+
+  const byPageUnbriefed = {};
+  for (const block of unbriefed) byPageUnbriefed[block.page] = (byPageUnbriefed[block.page] || 0) + 1;
+
+  return {
+    blocks: blocks.map(strip), byPage, total: blocks.length,
+    unbriefed, commissioned, byPageUnbriefed,
+    // Named rather than silently dropped: a desk looking at an empty frame is
+    // owed the reason it was not offered a story for it.
+    noRoom: noRoom.map((block) => ({ page: block.page, sectionKey: block.sectionKey })),
+  };
 }
 
 module.exports = { emptyBlocks, rungFor, RUNGS };

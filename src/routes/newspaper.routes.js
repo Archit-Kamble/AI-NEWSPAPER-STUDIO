@@ -89,4 +89,12 @@ router.post('/:id/features', newspaperController.features);
 router.post('/:id/composition/plan', newspaperController.compositionPlan);
 router.post('/:id/composition/apply', newspaperController.compositionApply);
 
+// The Newsdesk Run. Desk-only at every step: an edition being planned is not
+// public, and `deskWrites` guards writes but leaves GETs open - these are all
+// POSTs, so they are covered, and they stay explicit because CLAUDE.md records
+// this exact assumption biting the migration twice.
+router.post('/:id/newsdesk/plan', requireDesk, newspaperController.newsdeskPlan);
+router.post('/:id/newsdesk/write', requireDesk, newspaperController.newsdeskWrite);
+router.post('/:id/newsdesk/accept', requireDesk, newspaperController.newsdeskAccept);
+
 module.exports = router;

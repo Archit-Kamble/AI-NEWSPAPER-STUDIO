@@ -119,7 +119,30 @@ function editionRowHtml(edition, today) {
       </div>
       <span class="status-pill ${escapeHtml(edition.status || 'draft')}">${escapeHtml(edition.status || 'draft')}</span>
       <button class="btn-secondary edition-open" data-edition-id="${edition.id}">Open</button>
+      <button class="btn-danger edition-delete" data-edition-id="${edition.id}"
+              title="Delete this edition and everything on its pages">Delete</button>
     </div>`;
+}
+
+/**
+ * What the desk is about to destroy, in the words of the thing itself.
+ *
+ * A confirmation that says "Delete edition 40294?" asks about an id. Nobody
+ * knows what is in an id, so the honest answer is always No and the desk
+ * learns to dismiss the question - which is the exact fault this codebase
+ * already fixed once, for a scoped AI overwrite that named three fields when
+ * one was changing.
+ */
+function deletionQuestion(edition) {
+  const fill = fillOf(edition);
+  const iso = String(edition.publication_date || '').slice(0, 10);
+  const what = fill.filled
+    ? `${fill.filled} of its ${fill.blocks} blocks have copy in them.`
+    : 'Nothing has been written into it.';
+  return `Delete the edition for ${marathiDate(iso)} (${iso})?\n\n`
+    + `${edition.name || 'Unnamed edition'} — ${edition.page_count || 0} pages. ${what}\n\n`
+    + 'Every page, block, story and placed picture on it goes with it, and this cannot be undone. '
+    + "Reporters' own filings are not affected.";
 }
 
 /**
@@ -230,8 +253,41 @@ export async function renderEditions(host, { onOpen }) {
     target.querySelectorAll('.edition-open').forEach((button) => {
       button.addEventListener('click', () => onOpen(Number(button.dataset.editionId)));
     });
+    target.querySelectorAll('.edition-delete').forEach((button) => {
+      button.addEventListener('click', () => removeEdition(Number(button.dataset.editionId), button));
+    });
   };
   paint();
+
+  async function removeEdition(id, button) {
+    const edition = list.find((e) => Number(e.id) === id);
+    if (!edition) return;
+    if (!window.confirm(deletionQuestion(edition))) return;
+
+    button.disabled = true;
+    const was = button.textContent;
+    button.textContent = 'Deleting…';
+    try {
+      const response = await fetch(`/api/newspapers/${id}`, { method: 'DELETE' });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result.code === 'EPAPER_RELEASED'
+          ? 'This edition is published as an e-paper. Open the E-paper screen, remove its public copy, then delete it.'
+          : result.error || `The edition could not be deleted (HTTP ${response.status}).`);
+      }
+      // Only the row that went is removed. Repainting the whole panel would
+      // throw away the desk's search and take the list back to the top, which
+      // on a database of 221 editions is most of the work of finding the next
+      // one to be rid of.
+      const at = list.findIndex((e) => Number(e.id) === id);
+      if (at >= 0) list.splice(at, 1);
+      paint();
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = was;
+      alert(error.message);
+    }
+  }
 
   host.querySelector('#editionSearch').addEventListener('input', (event) => {
     query = event.target.value;

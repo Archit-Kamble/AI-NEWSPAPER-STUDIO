@@ -1,9 +1,15 @@
+const fsp = require('fs/promises');
 const newspaperRepository = require('../repositories/newspaper.repository');
 const { publicationDateFrom } = require('./publicationDate');
 const publicationRepository = require('../repositories/publication.repository');
 const { identity } = require('../layout/identity');
 const { TYPEFACES } = require('../../public/editor/layout/typefaces');
 const pressReadiness = require('./pressReadiness.service');
+// Deleting an edition has to take its FILES with it, and both of these already
+// know where those live. Neither requires this module back, so there is no
+// cycle - checked rather than assumed.
+const epaper = require('./epaper.service');
+const epaperPublication = require('./epaperPublication.service');
 
 function withPublicationFiles(newspaper, files) {
   return files.reduce((result, file) => {
@@ -110,6 +116,59 @@ async function saveFinalFiles(id, files, sessionUser) {
  * the compositor would measure it as the serif and the press writer could not
  * embed it at all.
  */
+/**
+ * DELETING AN EDITION.
+ *
+ * This did not exist, and the absence showed: this newsroom's own database
+ * reached 221 editions across 13 dates, most of them empty starts and test
+ * fixtures, and the only way to be rid of one was SQL. A desk cannot be asked
+ * to open psql to tidy up after a mis-typed date.
+ *
+ * It is a hard delete, deliberately. There is no `archived` column and adding
+ * one would put a filter on every list query in the product for a state
+ * nothing else understands - and a "deleted" edition that still occupies its
+ * date would go on blocking `POST /start`, which is idempotent per date, so
+ * the desk could neither see it nor replace it. The protection is at the
+ * front instead: one thing that can refuse, and a confirmation that names
+ * what is about to go.
+ *
+ * ONE REFUSAL, AND IT IS ABOUT THE READER, NOT THE DESK. An edition with a
+ * public e-paper release is a promise already made to whoever has the link;
+ * the desk removes the public copy first (that route exists and says so in
+ * those words), and then the edition. Everything else - a draft, a finished
+ * paper, a paper that went to press - is the desk's own to remove, because a
+ * newspaper's archive is the desk's to keep and theirs to prune.
+ */
+async function deleteNewspaper(id) {
+  const summary = await newspaperRepository.contentSummary(id);
+  if (!summary) return { notFound: true };
+
+  if (summary.epaper_released_at) {
+    return {
+      error: 'This edition is published as an e-paper. Remove the public copy first, then delete it.',
+      code: 'EPAPER_RELEASED',
+      status: 409,
+      summary,
+    };
+  }
+
+  // The rows cascade; the FILES do not. A press PDF, a Scribus project and any
+  // e-paper derivative left on disk after the row is gone are unreachable
+  // bytes nobody can ever account for, so they go first - and if that fails,
+  // the edition stays, because an edition with orphaned files is recoverable
+  // and orphaned files with no edition are not.
+  const files = await publicationRepository.latestByNewspaper(id);
+  for (const file of files) {
+    const onDisk = epaperPublication.publicFile(file.storage_path);
+    if (onDisk) await fsp.rm(onDisk, { force: true }).catch(() => {});
+  }
+  await fsp.rm(epaper.editionDirectory(id), { recursive: true, force: true }).catch(() => {});
+
+  const removed = await newspaperRepository.remove(id);
+  if (!removed) return { notFound: true };
+  return { ok: true, id: Number(id), removed: summary };
+}
+
 async function setHouseStyle(id, body = {}) {
   const known = (value) => TYPEFACES.some((face) => face.key === value);
   const named = (key) => {
@@ -138,6 +197,7 @@ async function setHouseStyle(id, body = {}) {
 }
 
 module.exports = {
+  deleteNewspaper,
   setHouseStyle,
   createNewspaper,
   listNewspapers,

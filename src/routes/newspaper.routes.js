@@ -37,6 +37,10 @@ router.get('/', requireDesk, newspaperController.list);
 router.get('/latest', requireDesk, newspaperController.latest);
 router.get('/:id', requireDesk, newspaperController.getOne);
 router.patch('/:id', newspaperController.update);
+// Removing an edition is a WRITE, so `deskWrites` already guards it - and it
+// says requireDesk anyway, because CLAUDE.md records that assumption biting
+// this migration twice and this is the most destructive route in the file.
+router.delete('/:id', requireDesk, newspaperController.remove);
 // The paper's own type and its column rules - one decision for the edition,
 // not one per block. A write, so deskWrites already guards it.
 router.patch('/:id/house-style', newspaperController.houseStyle);

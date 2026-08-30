@@ -74,6 +74,18 @@ async function update(req, res) {
   res.json(newspaper);
 }
 
+/**
+ * Removing an edition. The one refusal it can carry - a live public e-paper -
+ * comes back as a 409 with its own code, so the desk is told which thing to do
+ * first rather than being told "no".
+ */
+async function remove(req, res) {
+  const result = await newspaperService.deleteNewspaper(parseInt(req.params.id, 10));
+  if (result.notFound) return res.status(404).json({ error: 'Not found' });
+  if (result.error) return res.status(result.status || 400).json({ error: result.error, code: result.code });
+  res.json(result);
+}
+
 async function houseStyle(req, res) {
   const result = await newspaperService.setHouseStyle(req.params.id, req.body || {});
   if (result.notFound) return res.status(404).json({ error: 'Not found' });
@@ -449,7 +461,7 @@ async function pressPackage(req, res) {
 
 module.exports = {
   houseStyle,
-  create, start, resize, ladder, supportedPageCounts, list, latest, getOne, update, saveFinalFiles,
+  create, start, resize, ladder, supportedPageCounts, list, latest, getOne, update, remove, saveFinalFiles,
   createDistrictEdition, listDistrictEditions, printedPages,
   epaper, epaperHtml, selectedEpaperHtml, epaperPreviewHtml, epaperCanvasCaptureHtml, epaperList, selectEpaper,
   epaperAsset, epaperPdf, publishEpaper, publishCurrentEpaper, publishUploadedEpaperPdf, updateEpaperMap, unpublishEpaper,

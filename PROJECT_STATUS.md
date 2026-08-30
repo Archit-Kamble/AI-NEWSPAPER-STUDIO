@@ -7459,3 +7459,58 @@ anchor holds 23.5px against a 24px design. Photographed in print view.
 - **A subheading is one line by design**, so the desk's "same applies to
   subheading" is answered indirectly: decks came up with the headlines on the
   real page (53→72, 54→88, 68→92, 69→97) because they stopped being squeezed.
+
+## The desk's own Back button — 30 Aug 2026
+
+Branch `desk-navigation`. Four reports from the desk, and the first three turn
+out to be one absence.
+
+### What was actually wrong
+
+**This product had no history handling anywhere.** No `pushState`, no
+`popstate`, no hash — swept, and not one reference in `public/`. So every screen
+a desk reached (Past News, Reporters, Settings, E-paper, an open edition) was
+the **same history entry as the login page**, and Back left the application.
+
+### What landed
+
+`public/admin/navigation.js`, 132 lines, owning the history stack and nothing
+else. A screen is `{screen, id}` addressed as `#!/edition/54470`.
+
+| | |
+|---|---|
+| Back / Forward | walk the desk's own screens |
+| a reload | comes back to the screen the desk was on |
+| a link | "open edition 54470" is a URL now |
+| leaving an edition | flushes autosave first (`leaveWorkspace()`) |
+| the menu button | sticky header — measured at y=16 while scrolled 1417px |
+| "+ New Edition" | first in the menu, above Past Newspapers, with its own address |
+
+A hash rather than a path, deliberately: a path is a second thing the server has
+to route and get right, and `app.get("*")` already had to be taught not to
+answer `/api` with `index.html` once.
+
+### Three faults found by driving it
+
+1. **Chrome fires `popstate` with a NULL state BEFORE `hashchange`** for a
+   fragment navigation. The popstate handler fell back to reading the hash and
+   *trusting* it, so `#!/not-a-screen` became the current screen: the dashboard
+   painted correctly underneath while the bar named a screen that does not
+   exist. Both events funnel through one idempotent `arrive()` now.
+2. **The workspace's keyboard shortcuts were still bound after leaving the
+   edition** — harmless only while there was nowhere to leave to. Ctrl+Z on the
+   Reporters screen would have reached the workspace's undo stack.
+3. **The sidebar's `active` class was hard-coded onto the first button** and
+   never moved.
+
+And one of my own: a **backtick inside a template literal** (in the sibling
+branch) closed the string; `node --check` passed it and Chrome rendered nothing.
+
+### Verified
+
+`npm test` 1060/1060. `tests/browser/navigation.browser.js` 19/19,
+`admin-screens.browser.js` 18/18, no page exceptions.
+
+`tests/workspaceArchitecture.test.js` pinned `admin.js`'s exact import LIST and
+failed on a legitimate change — loosened to hold the invariant it was written
+for (*where* `renderWorkspace` comes from), not the spelling.

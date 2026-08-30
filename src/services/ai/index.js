@@ -185,9 +185,22 @@ async function askForJson(prompt, schema, options = {}) {
   // The timeout deliberately stays where it is. These are reasoning models
   // writing Marathi and cutting them short reads to a desk as a failure that
   // never happened - it is the CHAIN that is too long here, not the clock.
-  const providers = Number(options.maxProviders) > 0
-    ? chain().slice(0, Number(options.maxProviders))
-    : chain();
+  const providers = chain();
+  // The cap counts WAITING, not attempts.
+  //
+  // Slicing the chain by count was the first version and it is wrong in the
+  // one case that matters: a provider out of quota answers in milliseconds
+  // (402, or a 429 naming a daily limit), so skipping past it costs nothing
+  // and stopping there throws away every working understudy. Measured on this
+  // newsroom - DeepSeek 402, Gemini out of daily quota - a cap of two meant
+  // the run failed outright while Sarvam and Anthropic sat unused.
+  //
+  // What the cap is actually for is the FIVE-DEEP TIMEOUT: five providers at
+  // 120 seconds is ten minutes for one block. So a failure that cost real time
+  // counts against the cap and an instant refusal does not.
+  const INSTANT = new Set(['auth', 'quotaExhausted', 'rateLimit', 'unconfigured']);
+  const cap = Number(options.maxProviders) > 0 ? Number(options.maxProviders) : Infinity;
+  let slowFailures = 0;
   if (!providers.length) {
     const primary = providerNamed(process.env.AI_PROVIDER) || PROVIDERS[DEFAULT_PROVIDER];
     return {
@@ -222,6 +235,7 @@ async function askForJson(prompt, schema, options = {}) {
     : null);
 
   for (const provider of providers) {
+    if (slowFailures >= cap) break;
     let result = await callOnce(provider, prompt, schema, tier, undefined, options.callBudget, 'initial', options.timeoutMs);
     if (result.condition === 'budget') return { error: 'SERVICE_CALL_BUDGET_EXHAUSTED', callBudgetExhausted: true, attempts };
 
@@ -297,6 +311,7 @@ async function askForJson(prompt, schema, options = {}) {
     }
 
     if (result.outputExhausted && !result.condition) result.condition = 'outputExhausted';
+    if (!INSTANT.has(result.condition)) slowFailures += 1;
     noteFailure(provider, result);
     attempts.push(result.error);
   }

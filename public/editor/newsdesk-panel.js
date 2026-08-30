@@ -87,9 +87,9 @@ function briefMarkup(run) {
     // rather than refusing it. Asking for MORE cannot be honoured and says so.
     const note = asked > free
       ? `<span class="newsdesk-over">${asked} asked for, only ${free} free</span>`
-      : `<span class="muted">${asked} of ${free} blocks</span>`;
+      : `<span class="muted">${asked} of ${free} block${free === 1 ? "" : "s"}</span>`;
     return `<section class="newsdesk-page">
-      <h4>Page ${page.page} <span class="muted">${free} block${free === 1 ? "" : "s"} free</span> ${note}</h4>
+      <h4>Page ${page.page} ${note}</h4>
       <ul class="newsdesk-wants">${page.wants.map((want, i) => wantRow(pageIndex, i, want, free)).join("")}</ul>
       <button type="button" class="ext-editor-btn" data-want-add="${pageIndex}">+ Category</button>
     </section>`;

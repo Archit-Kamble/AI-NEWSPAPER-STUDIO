@@ -53,6 +53,9 @@ async function write(req, res) {
       // Only ever FALSE on request. An absent flag means the ordinary block -
       // a story with a headline and a deck over it - so an older caller, and
       // every server-side caller, behaves exactly as it did.
+      // Only ever TRUE on request, so nothing that does not ask changes.
+      lookUp: req.body?.lookUp === true,
+      reason: req.body?.reason === true,
       writeHeadline: req.body?.writeHeadline !== false,
       writeSubheading: req.body?.writeSubheading !== false,
     },

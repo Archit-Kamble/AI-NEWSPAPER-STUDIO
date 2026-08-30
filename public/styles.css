@@ -7137,3 +7137,16 @@ body.print-view .page-imprint {
 }
 .news-review-controls input { flex: 1 1 260px; }
 .news-review-controls .muted { margin-left: auto; font-size: 0.82rem; color: #6a6a72; }
+
+/* The model's reading of the request, above the words it wrote. Quiet, but not
+   so quiet it is missed - it is the one line that can catch copy which reads
+   perfectly and says the opposite of what was asked. */
+.ai-understanding {
+  margin: 0 0 var(--s2);
+  padding: 7px 10px;
+  border-left: 3px solid var(--primary);
+  background: #fbf7ef;
+  border-radius: 0 6px 6px 0;
+  font-size: 0.86rem;
+}
+.ai-understanding .muted { font-size: 0.8rem; }

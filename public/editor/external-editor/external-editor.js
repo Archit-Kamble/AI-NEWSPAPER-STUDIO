@@ -436,7 +436,7 @@ export function refreshExternalEditor(section, view, story, source, selectedPart
   refreshPropertiesPanel(section, view, activeCallbacks?.getSelectedImage?.(), source, selectedPart, activeCallbacks?.getPage?.());
   refreshTypographyPanel(view, source, selectedPart);
   refreshStoryDetails(view, source);
-  refreshAiPanel(view, source);
+  refreshAiPanel(view, source, section, images);
   refreshStorySource(view, story);
   // Not when the change came from the editor itself - rewriting the box a
   // person has a cursor in throws the cursor back to the start, which is the

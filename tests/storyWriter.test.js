@@ -111,10 +111,17 @@ test('nothing is written without a subject', async () => {
   assert.match(result.error, /what the story is about/i);
 });
 
-test('the schema allows exactly the three things a block holds', () => {
-  assert.deepEqual(Object.keys(writer.STORY_SCHEMA.properties).sort(), ['body', 'headline', 'subheading']);
+test('the schema allows exactly the three things a block holds, plus the reading', () => {
+  // `understanding` is the model's own reading of the REQUEST - one line
+  // saying what it took the seed to mean. It is never printed and never
+  // reaches the block; it exists so a fluent story that says the opposite of
+  // the seed is visible before the desk accepts it. It is OPTIONAL, so a
+  // request that did not ask to reason is answered exactly as before.
+  assert.deepEqual(Object.keys(writer.STORY_SCHEMA.properties).sort(),
+    ['body', 'headline', 'subheading', 'understanding']);
   assert.equal(writer.STORY_SCHEMA.additionalProperties, false, 'no extra keys may come back');
-  assert.deepEqual(writer.STORY_SCHEMA.required.sort(), ['body', 'headline', 'subheading']);
+  assert.deepEqual(writer.STORY_SCHEMA.required.sort(), ['body', 'headline', 'subheading'],
+    'the reading is never required - only the three things a block prints');
 });
 
 test('the writer never writes to the database', () => {

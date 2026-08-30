@@ -434,3 +434,86 @@ test('desk UI: the panel markup includes the retrieval status placeholder, hidde
   assert.match(markup, /id="aiRetrievalStatus"/);
   assert.match(markup, /<section class="ai-retrieval" id="aiRetrievalStatus" hidden>/);
 });
+
+// ------------------------------------- the two things the desk can ask for ---
+//
+// A desk typed "rohit pawar admit in candi hospital" and got a fluent,
+// well-fitted story about him OPENING a hospital - the opposite of the seed,
+// with nothing on screen that could have warned them. Two opt-in controls
+// answer that, and both are OFF by default so nothing that does not ask
+// changes at all.
+
+test('"check the sources first" retrieves on a seed that does not read as news - and refuses the same way', async (t) => {
+  const { desk, page } = await withBlock(t, 'ZZ lookup forces retrieval');
+  withTrustedDomains(t, [TRUSTED]);
+  // Nothing comes back, which is the case that matters: a desk who asked to be
+  // checked must NOT be written for from the model's own memory.
+  withRss(t, { isConfigured: () => true, search: async () => ({ items: [] }) });
+  let called = 0;
+  withProviders(t, { gemini: { async askForJson() { called += 1; return { data: {} }; } } });
+
+  const evergreen = 'शेतीसाठी ठिबक सिंचनाचे फायदे';
+
+  // Without the box: an evergreen seed is the model's to answer, untouched.
+  const plain = await desk.json(`/api/pages/${page.id}/sections/lead/write`, {
+    method: 'POST', body: JSON.stringify({ seed: evergreen, tier: 'basic' }),
+  });
+  // `null`, not absent: the success path always reports the retrieval slot,
+  // and an evergreen seed leaves it empty.
+  assert.ok(!plain.retrieval, 'retrieval is not attempted for an evergreen seed');
+  assert.equal(called, 1, 'and the model is asked');
+
+  // With the box: the same seed is checked, and refused when nothing verifies.
+  called = 0;
+  const checked = await desk.json(`/api/pages/${page.id}/sections/lead/write`, {
+    method: 'POST', body: JSON.stringify({ seed: evergreen, tier: 'basic', lookUp: true }),
+  });
+  assert.ok(checked.error, 'it refuses rather than writing unchecked');
+  assert.equal(checked.proposal, undefined);
+  assert.equal(called, 0, 'and not one AI call is spent on a refusal');
+  assert.equal(checked.retrieval.status, 'insufficient');
+  assert.equal(checked.retrieval.askedFor, true, 'the desk is told they asked for this');
+});
+
+test('"think it through" returns the model\'s reading of the seed, and it never reaches the block', async (t) => {
+  const { desk, page } = await withBlock(t, 'ZZ reasoning returns a reading');
+  const prompts = [];
+  withProviders(t, {
+    gemini: {
+      async askForJson(prompt) {
+        // Recorded, not asserted here: a stub that throws inside the provider
+        // is reported to the caller as "the provider could not be reached",
+        // and the chain then falls through to every other provider.
+        prompts.push(String(prompt));
+        return {
+          data: {
+            understanding: 'Rohit Pawar was ADMITTED to Candi hospital, not opening it',
+            headline: 'कॅंडी रुग्णालयात रोहित पवार दाखल',
+            subheading: 'उपचारासाठी दाखल; प्रकृती स्थिर असल्याची माहिती',
+            body: 'रोहित पवार यांना कॅंडी रुग्णालयात दाखल करण्यात आले आहे.\n\nत्यांच्या प्रकृतीत सुधारणा होत असल्याचे सांगण्यात आले.',
+          },
+        };
+      },
+    },
+  });
+
+  const asked = await desk.json(`/api/pages/${page.id}/sections/lead/write`, {
+    method: 'POST', body: JSON.stringify({ seed: 'rohit pawar admit in candi hospital', tier: 'basic', reason: true }),
+  });
+  assert.match(asked.proposal.understanding, /ADMITTED/,
+    'the reading comes back so a misreading is visible before the desk accepts');
+  assert.match(prompts[0], /understanding/i,
+    'and the brief asked for what the request was understood to mean');
+
+  // And a request that did NOT ask carries exactly the keys it always did -
+  // `understanding` is opt-in, so no existing caller sees a new field. An
+  // evergreen seed, because a current-news one is correctly refused here for
+  // want of sources and would never reach a proposal at all.
+  const quiet = await desk.json(`/api/pages/${page.id}/sections/lead/write`, {
+    method: 'POST', body: JSON.stringify({ seed: 'शेतीसाठी ठिबक सिंचनाचे फायदे', tier: 'basic' }),
+  });
+  assert.ok(quiet.proposal, `an evergreen seed is written: ${quiet.error || ''}`);
+  assert.deepEqual(Object.keys(quiet.proposal).sort(), ['author', 'body', 'headline', 'subheading']);
+  assert.doesNotMatch(prompts[prompts.length - 1], /in `understanding`/,
+    'and a brief that did not ask to reason never mentions the reading');
+});

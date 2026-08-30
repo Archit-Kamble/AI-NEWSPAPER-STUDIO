@@ -19,7 +19,7 @@
 import { escapeHtml } from "../format.js";
 import { buildFlowMap, flowAscii, flowFit, flowImageFromRow } from "../layout/text-flow.js";
 import { plainText } from "../layout/rich-text.js";
-import { composeSection } from "../compose/section-adapter.js";
+import { composeSection, bodyFill } from "../compose/section-adapter.js";
 
 export const AI_ACTIONS = [
   { id: "aiGenerateLayout", label: "Generate Layout", intent: "layout" },
@@ -210,6 +210,26 @@ export function aiPanelMarkup(view) {
         <label class="toggle"><input type="checkbox" id="edAiWriteHeadline" checked> Write a headline</label>
         <label class="toggle"><input type="checkbox" id="edAiWriteSubheading" checked> Write a subheading</label>
       </div>
+      <!-- TWO THINGS THE DESK CAN ASK FOR BEFORE A WORD IS WRITTEN.
+           A desk typed "rohit pawar admit in candi hospital" and got a fluent,
+           well-fitted story about him OPENING a hospital - the opposite of the
+           seed, with nothing on screen that could have warned them, because a
+           proposal only ever showed its own words back.
+
+           "Check the sources first" forces the same verified retrieval a
+           current-news seed already gets (src/services/information/), on any
+           seed - and the SAME refusal when the sources are not there, because
+           asking to be checked and being written from memory anyway would be
+           worse than not asking.
+
+           "Think it through first" asks the model to state, in one line, what
+           it took the request to mean, before it writes - and gives it a rung
+           more thinking to do it with. The reading is shown with the proposal
+           and never printed. -->
+      <div class="ai-parts">
+        <label class="toggle"><input type="checkbox" id="edAiLookUp"> Check the sources first</label>
+        <label class="toggle"><input type="checkbox" id="edAiReason"> Think it through first</label>
+      </div>
       <p class="ai-seed-note" id="edAiSeedNote">It is written to fit — the exact compositor measures this block's real lines, columns and picture room.</p>
     </div>
 
@@ -222,8 +242,18 @@ export function aiPanelMarkup(view) {
       <textarea id="edAiPrompt" rows="3" placeholder="Extra instructions - tone, angle, must-mention facts...">${escapeHtml(view.aiNotes)}</textarea>
     </div>
     <div class="ext-editor-toolbar">
+      <!-- ONE BUTTON, AND IT SAYS WHICH WAY IT IS ABOUT TO REPAIR THE BLOCK.
+           It has always repaired BOTH directions - fillRemaining() cuts overset
+           copy first, for free, through the same exact settle controller
+           "Write this block" uses - but it was labelled "Fill remaining area"
+           and its tooltip said "carry the copy on into the space this block has
+           left". A desk whose block was OVERFLOWING had no reason on earth to
+           press it, which is why it was reported as only working one way.
+           Verified on a block 3349 characters over: pressing it trimmed to a
+           proposal that set 10 of 10 lines, full to the foot. The work was
+           there; the invitation was not. -->
       <button type="button" class="ext-editor-btn" id="aiFillRemaining"
-              title="Carry the copy on into the space this block has left, without changing a word of what is there">Fill remaining area with AI</button>
+              title="Fit the copy to this block - trim what overflows, or carry it on into the space that is left">Make the copy fit this block</button>
     </div>
     <!-- OPTIMIZE ACTS ON ONE OBJECT, and says which before it is pressed.
          It used to be a stub that built a request and told the desk nothing was
@@ -317,6 +347,7 @@ function proposalMarkup(result) {
     <h4>Written by ${escapeHtml(result.provider || "AI")}${result.fellBackTo ? " (fallback)" : ""}
       <span class="muted">review before accepting</span></h4>
     ${handoverNote(result)}
+    ${understandingNote(result)}
     <p class="ai-proposal-headline">${escapeHtml(proposal.headline)}</p>
     ${proposal.subheading ? `<p class="ai-proposal-sub">${escapeHtml(proposal.subheading)}</p>` : ""}
     <p class="ai-proposal-fit${over ? " over" : ""}">
@@ -392,6 +423,19 @@ function fillProposalMarkup(result) {
     </div>
     <p class="ai-proposal-warn">The desk must check every fact before this is printed. It enters the block as
        <strong>needs review</strong>.</p>`;
+}
+
+// WHAT THE MODEL TOOK THE REQUEST TO MEAN, shown before the words it wrote.
+//
+// This is the only part of a proposal that can catch the failure a fluent
+// model makes and a sub-editor cannot: copy that reads perfectly and says the
+// opposite of the seed. It is never printed and never reaches the block - it
+// is dropped from the patch on accept.
+function understandingNote(result) {
+  const line = String(result?.proposal?.understanding || "").trim();
+  if (!line) return "";
+  return `<p class="ai-understanding"><strong>Understood as:</strong> ${escapeHtml(line)}
+    <span class="muted">— if this is not what you meant, discard and say it differently.</span></p>`;
 }
 
 // A proposal was measured on the persisted block. Typography, columns or a
@@ -667,6 +711,8 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, g
             language: view?.language,
             writeHeadline: document.getElementById("edAiWriteHeadline")?.checked !== false,
             writeSubheading: document.getElementById("edAiWriteSubheading")?.checked !== false,
+            lookUp: document.getElementById("edAiLookUp")?.checked === true,
+            reason: document.getElementById("edAiReason")?.checked === true,
           }),
         },
       );
@@ -704,7 +750,10 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, g
         if (!confirmReplacement(getView())) return;
         // A proposal becomes a draft, never a saved story: it lands in the same
         // editable draft as typed copy and is marked for review.
-        onPatch({ ...result.proposal, aiGenerated: true, status: "needs_review" }, "ai-panel");
+        // `understanding` is the model's reading of the REQUEST, not part of
+        // the story - it is shown to the desk and dropped here.
+        const { understanding, ...copy } = result.proposal;
+        onPatch({ ...copy, aiGenerated: true, status: "needs_review" }, "ai-panel");
         host.hidden = true;
         onNotify("Written into the block. Check every fact before it prints.");
       });
@@ -879,7 +928,36 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, g
   });
 }
 
-export function refreshAiPanel(view, source) {
+// What the fill button is about to do, in the desk's own words. Overset and
+// underfilled are opposite repairs and the button does both, so it names the
+// one this block needs rather than describing half of its job.
+const FILL_LABEL = {
+  over: { label: "Trim the copy to fit", title: "This block is overflowing. Cut it back to the longest run that sets, at a sentence boundary." },
+  under: { label: "Fill the space that is left", title: "Carry the copy on into the space this block has left, without changing a word of what is there." },
+  fits: { label: "Make the copy fit this block", title: "Fit the copy to this block - trim what overflows, or carry it on into the space that is left." },
+};
+
+function fillDirection(section, view, images) {
+  try {
+    const composed = composeSection({ ...section, images: images || [] }, view);
+    if (composed.fitState === "OVERSET" || String(composed.overset?.body || "")) return "over";
+    const hole = bodyFill(composed).holeLines;
+    return hole >= 1 ? "under" : "fits";
+  } catch {
+    return "fits";
+  }
+}
+
+export function refreshAiPanel(view, source, section = null, images = []) {
+  // The button names the repair this block actually needs. Cheap enough to do
+  // on a refresh: it is one composition, the same one the Space panel beside
+  // it already runs.
+  const fill = document.getElementById("aiFillRemaining");
+  if (fill && section) {
+    const wanted = FILL_LABEL[fillDirection(section, view, images)];
+    if (fill.textContent !== wanted.label) fill.textContent = wanted.label;
+    fill.title = wanted.title;
+  }
   if (source === "ai-panel") return;
   const prompt = document.getElementById("edAiPrompt");
   if (prompt && document.activeElement !== prompt && prompt.value !== view.aiNotes) {

@@ -92,6 +92,16 @@ const STORY_SCHEMA = {
     headline: { type: 'string', description: 'The headline, as it will print.' },
     subheading: { type: 'string', description: 'One line under the headline. May be empty.' },
     body: { type: 'string', description: 'The story itself, in paragraphs separated by blank lines.' },
+    // WHAT THE MODEL TOOK THE SEED TO MEAN, in one line, before it wrote.
+    //
+    // A desk typed "rohit pawar admit in candi hospital" and got a story about
+    // Rohit Pawar OPENING a hospital. The copy was fluent, the fit was perfect,
+    // and it said the opposite of the seed - and nothing on screen could have
+    // warned anybody, because a proposal only ever showed its own words back.
+    // Asking for the reading makes the misreading visible BEFORE the desk
+    // accepts, which is the cheapest possible guard against the one failure a
+    // fluent model makes that a sub-editor cannot see coming.
+    understanding: { type: 'string', description: 'One short line: what you understood the request to be asking for. State the subject, what happened to them, and where. Do not write the story here.' },
   },
 };
 
@@ -357,7 +367,7 @@ function verifiedContextBlock(verifiedContext) {
  */
 function briefFor({
   seed, notes, fit, section, language, isLead, verifiedContext, accentStyle,
-  writeHeadline = true, writeSubheading = true,
+  writeHeadline = true, writeSubheading = true, reason = false,
 }) {
   const languageName = LANGUAGE_NAMES[language] || LANGUAGE_NAMES.Marathi;
   // Measured in the headline's and the deck's OWN type where a composition
@@ -393,6 +403,22 @@ function briefFor({
     '    complete story. Keep paragraphs short.',
     '  * Never repeat yourself, and never invent a fact to make it longer.',
     '    Copy that runs out of real material stops; it does not stretch.',
+    // THE READING COMES FIRST, and it is about the seed rather than the story.
+    // A desk typed "rohit pawar admit in candi hospital" and got a story about
+    // him OPENING a hospital: fluent, well fitted, and the opposite of what was
+    // asked. Stating the reading makes that visible before anything is
+    // accepted.
+    reason
+      ? '  * FIRST, in `understanding`, write ONE short line saying what you take'
+        + ' the request to be asking for: who it is about, what happened to them,'
+        + ' and where. Read the request literally - if it says someone was ADMITTED'
+        + ' to a hospital, it does not mean they opened one. If the request is'
+        + ' ambiguous or you cannot tell, say so plainly in that line rather than'
+        + ' choosing a reading and writing confidently from it.'
+      : '',
+    reason
+      ? '  * Then write the story to that reading, and to nothing else.'
+      : '',
     writeHeadline
       ? `  * The headline must be ${headlineFloor} to ${headlineChars} characters and written to fill its one or two allotted lines.`
       : '  * This block prints NO HEADLINE. Fill the headline field with a few words'
@@ -673,6 +699,17 @@ async function write(pageId, sectionKey, {
   // that is already set, a caption panel. Both default to true, so nothing that
   // does not ask changes at all.
   writeHeadline = true, writeSubheading = true,
+  // TWO THINGS THE DESK CAN ASK FOR, both off by default so nothing that does
+  // not ask changes at all.
+  //
+  //   lookUp  - check real sources before writing, whatever the seed looks
+  //             like. `classifyIntent()` only forces retrieval for a seed that
+  //             READS as current news; a desk who knows their seed is about a
+  //             real, recent event can say so and get the same guarantee.
+  //   reason  - think it through first: the model states what it understood
+  //             the seed to mean, and gets a larger thinking allowance to do
+  //             it with.
+  lookUp = false, reason = false,
 } = {}) {
   const clean = String(seed || '').trim();
   if (!clean) return { error: 'Say what the story is about first — a few words is enough.' };
@@ -687,14 +724,23 @@ async function write(pageId, sectionKey, {
   // any AI call is spent: "AI assists, it never owns" means it never gets to
   // be the source of today's facts either.
   const intentCategory = information.classifyIntent(clean);
+  // A desk that ticked "look it up" gets retrieval even on a seed that reads
+  // as evergreen - and the SAME refusal if the sources are not there. That is
+  // the whole point: asking to be checked and then being written from memory
+  // anyway would be worse than not asking, so this route cannot degrade into
+  // an unchecked write.
+  const mustRetrieve = lookUp || information.needsRetrieval(intentCategory);
+  const retrievalCategory = lookUp && !information.needsRetrieval(intentCategory)
+    ? 'current_news' : intentCategory;
   let verifiedContext = null;
-  if (information.needsRetrieval(intentCategory)) {
-    verifiedContext = await information.fetchContext({ query: clean, category: intentCategory });
+  if (mustRetrieve) {
+    verifiedContext = await information.fetchContext({ query: clean, category: retrievalCategory });
     if (verifiedContext.status !== 'verified') {
       return {
         error: information.refusalMessage(verifiedContext.status),
         retrieval: {
-          query: clean, category: intentCategory, status: verifiedContext.status, sources: verifiedContext.sources,
+          query: clean, category: retrievalCategory, status: verifiedContext.status, sources: verifiedContext.sources,
+          askedFor: lookUp || undefined,
         },
       };
     }
@@ -712,6 +758,11 @@ async function write(pageId, sectionKey, {
   }
 
   const accentStyle = section.headline_style === 'accent';
+  // "Think it through" buys the model room to think, one rung up the tier the
+  // desk chose. The tiers are a REQUEST, not a ceiling (CLAUDE.md measured the
+  // spread), so this widens the allowance rather than promising a spend.
+  const NEXT_TIER = { basic: 'plus', plus: 'ultra', ultra: 'ultra' };
+  const callTier = reason ? (NEXT_TIER[String(tier || 'basic')] || 'plus') : tier;
   const result = await ai.askForJson(
     briefFor({
       seed: clean,
@@ -724,9 +775,10 @@ async function write(pageId, sectionKey, {
       accentStyle,
       writeHeadline,
       writeSubheading,
+      reason,
     }),
     STORY_SCHEMA,
-    { tier },
+    { tier: callTier },
   );
   if (result.error) return { error: result.error, unconfigured: result.unconfigured };
 
@@ -748,6 +800,15 @@ async function write(pageId, sectionKey, {
     // other field.
     author: String(section.reporter_name || '').trim() || (await textFlow()).DEFAULT_BYLINE,
   };
+
+  // The model's own reading of the seed, so a misreading is visible before the
+  // desk accepts. Added ONLY when it was asked for: a proposal that nobody
+  // asked to reason about carries exactly the keys it always did, which is
+  // what every existing caller and test is entitled to.
+  if (reason) {
+    const read = String(result.data.understanding || '').trim();
+    if (read) proposal.understanding = read;
+  }
 
   // A character range in the first brief improves the odds; it cannot prove a
   // headline fills, because shaped Marathi words break at different widths.

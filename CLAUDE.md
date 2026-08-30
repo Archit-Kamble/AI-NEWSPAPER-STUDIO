@@ -3743,6 +3743,54 @@ read the shared catalogue; do not reintroduce a local 10/16 px default.
 The schema migration changes the default only. Existing `body_font_px` values
 may be explicit desk choices and are never mass-backfilled.
 
+### Two things the desk can ask for before a word is written
+
+A desk typed *"rohit pawar admit in candi hospital"* and got a fluent,
+well-fitted story about him **opening** a hospital — the opposite of the seed,
+with nothing on screen that could have warned them, because a proposal only
+ever showed its own words back. Two opt-in controls sit beside "Write a
+headline"/"Write a subheading", both **off by default**, so nothing that does
+not ask changes at all.
+
+**Check the sources first** (`lookUp`) forces the same verified retrieval a
+current-news seed already gets, on **any** seed — `classifyIntent()` only
+compels it for a seed that *reads* as news, and a desk who knows their seed is
+about a real event can say so. It carries the same refusal: measured, an
+evergreen seed writes normally without the box, and with it is refused in
+Marathi with `askedFor: true` and **not one AI call spent**. Asking to be
+checked must never degrade into being written from memory — that would be worse
+than not asking.
+
+**Think it through first** (`reason`) asks the model to state, in one line,
+what it took the request to mean, and gives it a rung more thinking to do it
+with (`NEXT_TIER`; the tiers are a request, not a ceiling). Verified against the
+real provider on the seed above: `understanding` came back as *"Rohit Pawar
+admission to Candi hospital"* and the headline set as
+**कॅंडी रुग्णालयात रोहित पवार दाखल** — admitted to, not opening.
+
+`understanding` is **opt-in and never printed**: it is added to the proposal
+only when it was asked for, so every existing caller sees exactly the keys it
+always did, and it is destructured out of the patch on accept. It is the only
+part of a proposal that can catch the one failure a fluent model makes that a
+sub-editor cannot see coming.
+
+### The fill button names the repair the block needs
+
+`fillRemaining()` has always repaired **both** directions — it trims overset
+copy first, for free, through the same exact settle controller `write()` uses.
+But the button said *"Fill remaining area with AI"* and its tooltip said
+*"carry the copy on into the space this block has left"*, so a desk whose block
+was **overflowing** had no reason on earth to press it. Reported as "it only
+works for underflowing"; verified on a block 3349 characters over, one press
+produced a proposal setting 10 of 10 lines, full to the foot. The work was
+there, the invitation was not.
+
+The label now follows the block's own state — *Trim the copy to fit* /
+*Fill the space that is left* — resolved from one composition on refresh, the
+same one the Space panel beside it already runs. Same rule as
+"every control names the object it acts on", one step out: a control must also
+name what it is about to **do**.
+
 ### The page must not chase a panel that grows
 
 The desk's *"sometimes clicking somewhere is redirected to another place"* is

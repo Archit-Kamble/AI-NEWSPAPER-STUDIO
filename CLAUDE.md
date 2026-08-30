@@ -3200,6 +3200,56 @@ guarantees is that the card **sets** in what it gets — a 148×300 request that
 lands as 151×264 still composes `FITS`, and `tests/smartCardBlocks.test.js`
 holds that for every card in the catalogue.
 
+### What a space on the page is WORTH, and the ear that was never charged for it
+
+`src/layout/rateCard.js` prices a block the way every rate card in the trade
+does — column-centimetres times a rate that depends on where on the paper it
+sits — and `GET /pages/:pageId/sections/:sectionKey/rate` has served it since it
+was written. **Nothing in the browser had ever asked.** So an advert desk that
+quotes a dozen times a day did it with a calculator, beside software that
+already knew the block's width in columns and its height in millimetres exactly.
+
+Properties → **What this space is worth** is the door. A `<details>` rather than
+a readout, fetched only when opened: the price is a question a desk asks about
+*some* blocks on some days, and a request per block selection is a request per
+click for an answer nobody wanted. A failure is never cached — the templates
+cache already taught that lesson.
+
+**And opening that door found the rate card charging the wrong rate.**
+`positionOf()` recognised the ear — the dearest space in the paper, `front-ear`
+at ₹900 per column-cm — by asking for a block **right of centre**, above a
+hard-coded `marginYPx + 420`. Both halves are wrong, and they were wrong
+together:
+
+| | the rule said | the paper is |
+|---|---|---|
+| side | right of centre (x > 361) | `MASTHEAD_ADVERT.col` is **0** — `geometry.js` reserves the ear from *"the matter's left edge"* |
+| band | 440 px | `regionsFor().header.bottom` is **144** |
+
+So the highest rate in the card was **unreachable**. Measured on edition
+54470's real front page: the ear at x=20 priced as an ordinary `front-page`
+block — 22.4 column-cm at ₹600 instead of ₹900, **₹18,144 where the card says
+₹27,216. The paper undercharged ₹9,072 on the dearest space it sells, every
+day it sold it.**
+
+**Loosening the side test alone would have been worse.** 440 px of band is deep
+enough to contain the LEAD (y=184), which would then have been sold as an ear.
+The band comes from `regionsFor()` now — the one geometry every other surface
+reads — and the side test is gone entirely: the nameplate band is reserved
+furniture, no editorial block may be in it, so *sitting in it* is the whole
+test, and it holds whichever corner a paper sells.
+
+**The test agreed with the bug.** `tests/production.test.js` asserted
+`front-ear` for a synthetic block at `x=450, y=164` — right of centre, and
+below the real band. The fixture and the rule were wrong in the same direction,
+which is the only way a test like that can pass. It is built from
+`getTemplate('front')`'s own ear now, and checks that the lead beside it is
+*not* one.
+
+```bash
+node tests/browser/advert-rate.browser.js            # defaults to 54470
+```
+
 ### A display advertisement is the advertiser's words, set by the newspaper
 
 `src/features/advert.js` takes the copy an advert desk actually receives — an

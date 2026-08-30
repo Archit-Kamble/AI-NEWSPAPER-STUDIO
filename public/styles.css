@@ -5061,6 +5061,27 @@ body.print-view .mono-forme-warning { display: none; }
   border-radius: 7px;
   font: inherit;
 }
+/* What a space on the page is worth. A disclosure, not a readout: the price is
+   a question a desk asks about some blocks on some days. */
+.prop-rate {
+  margin: 10px 0 4px;
+  padding: 8px 10px;
+  border: 1px solid #e2e2e8;
+  border-radius: 6px;
+  background: #fbfbfd;
+}
+.prop-rate summary { cursor: pointer; font-weight: 600; color: #444; }
+.prop-rate-total { margin: 8px 0 4px; font-size: 1.15rem; color: #1f6b3a; }
+.prop-rate-lines {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 12px;
+  margin: 0 0 6px;
+  font-size: 0.85rem;
+}
+.prop-rate-lines dt { color: #666; }
+.prop-rate-lines dd { margin: 0; font-variant-numeric: tabular-nums; }
+
 .edition-row {
   display: grid;
   grid-template-columns: minmax(160px, 1.1fr) minmax(160px, 1.4fr) 90px auto auto;

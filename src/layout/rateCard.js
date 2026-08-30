@@ -13,7 +13,7 @@
 // The rates below are SAHAS VARTA's to set; they are here so the feature works
 // out of the box and in one place so a rate change is one edit.
 
-const { geometryOf, pxToMm } = require('./geometry');
+const { geometryOf, pxToMm, regionsFor } = require('./geometry');
 
 // Rupees per column-centimetre. Position is most of the price: page one costs
 // several times an inside page, and the ear beside the nameplate - the first
@@ -34,18 +34,38 @@ const MINIMUM_COLUMN_CM = 4;
 /**
  * Which rate applies to a block, from where it sits.
  *
- * The ear is the block on page one that sits in the nameplate band's own row -
- * top of the page, to one side. It is recognised by position rather than by a
- * name, so a designer who draws one by hand gets the right price for it.
+ * The ear is the block on page one that sits inside the NAMEPLATE'S OWN BAND.
+ * That band is reserved furniture - `regionsFor()` hands the nameplate
+ * everything above `header.bottom` and no editorial block may be there - so
+ * sitting in it is the whole test, and it holds whichever corner the paper
+ * sells. It is still recognised by position rather than by a name, so a
+ * designer who draws one by hand gets the right price for it.
+ *
+ * BOTH HALVES OF THIS WERE WRONG, AND THEY WERE WRONG TOGETHER.
+ *
+ * It used to require the block to be RIGHT of centre, and to sit above a
+ * hard-coded `marginYPx + 420`. This paper's ear is on the LEFT:
+ * `MASTHEAD_ADVERT.col` is 0 and geometry.js reserves the ear from "the
+ * matter's left edge" in as many words. So the highest rate in the card was
+ * unreachable - measured on edition 54470's real front page, the ear at
+ * x=20 priced as an ordinary `front-page` block: 22.4 column-cm at Rs 600
+ * instead of Rs 900, Rs 18,144 where the card says Rs 27,216. **The paper
+ * undercharged Rs 9,072 on the dearest space it sells, every day.**
+ *
+ * And 420 was four hundred and forty pixels of band where the real one is
+ * 144, which is why loosening the side test alone would have been worse: the
+ * LEAD, at y=184, sits inside 440 and would have been sold as an ear.
+ *
+ * The band comes from `regionsFor()` now - the one geometry every other
+ * surface reads - rather than from a number in this file.
  */
 function positionOf(section, page, totalPages, geometry) {
   const pageNumber = Number(page?.page_number);
-  const top = Number(section.y_px);
-  const bandBottom = geometry.marginYPx + 420;
 
   if (pageNumber === 1) {
-    const rightOfCentre = Number(section.x_px) > geometry.marginXPx + geometry.matterWidthPx * 0.55;
-    if (top < bandBottom && rightOfCentre) return 'front-ear';
+    const band = regionsFor(geometry, 'front', 1).header.bottom;
+    const bottom = Number(section.y_px) + Number(section.height_px);
+    if (Number.isFinite(bottom) && Number.isFinite(band) && bottom <= band) return 'front-ear';
     return 'front-page';
   }
   if (totalPages && pageNumber === totalPages) return 'back-page';

@@ -7459,3 +7459,46 @@ anchor holds 23.5px against a 24px design. Photographed in print view.
 - **A subheading is one line by design**, so the desk's "same applies to
   subheading" is answered indirectly: decks came up with the headlines on the
   real page (53→72, 54→88, 68→92, 69→97) because they stopped being squeezed.
+
+## An edition can be deleted — 30 Aug 2026
+
+Branch `edition-delete`. There was no way to delete one; this database reached
+**221 editions across 13 dates** and the only way to be rid of one was psql.
+
+`DELETE /api/newspapers/:id`, desk-only, with the door on every edition row.
+
+- **Hard delete, deliberately.** An `archived` column would put a filter on
+  every list query, and a "deleted" edition would go on occupying its date — so
+  `POST /start` (idempotent per date) would keep opening a paper the desk can
+  neither see nor replace.
+- **One refusal, and it is about the reader.** A published e-paper is a promise
+  already made; 409 naming the thing to do first, not a wall.
+- **The question names the edition, not the id** — the date as the masthead sets
+  it, the page count, how many blocks carry copy, that it cannot be undone, and
+  that reporters' filings are safe.
+- **The rows cascade; the files do not.** Press PDF, Scribus project and
+  e-paper derivatives go first, and if that fails the edition stays.
+
+### The finding worth keeping
+
+**`schema.sql` disagreed with the live database.**
+`news_items.newspaper_id` has been declared `ON DELETE SET NULL` for as long as
+that file has existed; the database carries it as **NO ACTION**. Nothing could
+notice until an edition could be deleted at all — the first delete of an edition
+that had ever carried a reporter's story answered **500**, blamed on a
+constraint the schema file says is not there.
+
+Swept every foreign key in the database against its declared rule. Four carry
+NO ACTION; this was the only one that mattered here. (`news_items → users` and
+`newspapers → users` would block deleting a *user account*, which nothing in the
+product offers — noted, not fixed.)
+
+Fixed in three places: a guarded migration in `schema.sql`, applied to the dev
+database by hand, **and** an explicit detach inside the delete's own transaction,
+because `schema.sql` is never run at boot and another environment may carry
+either state.
+
+### Verified
+
+`npm test` 1064/1064. `tests/browser/edition-delete.browser.js` 11/11 — it makes
+its own 2099-dated fixture and removes it from the crash path too.

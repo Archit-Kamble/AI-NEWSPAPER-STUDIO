@@ -56,6 +56,7 @@ async function write(req, res) {
       // Only ever TRUE on request, so nothing that does not ask changes.
       lookUp: req.body?.lookUp === true,
       reason: req.body?.reason === true,
+      searchWeb: req.body?.searchWeb === true,
       writeHeadline: req.body?.writeHeadline !== false,
       writeSubheading: req.body?.writeSubheading !== false,
     },

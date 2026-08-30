@@ -3743,6 +3743,56 @@ read the shared catalogue; do not reintroduce a local 10/16 px default.
 The schema migration changes the default only. Existing `body_font_px` values
 may be explicit desk choices and are never mass-backfilled.
 
+### The whole internet, and the desk verifies it
+
+The checked feeds are national and state papers, and **a district daily's own
+stories are not in them** — a taluka water scheme, a local body decision, a
+name only the Satara papers carry. The strict path correctly refuses those, and
+refusing is not much use to the paper that has to print them.
+
+So there is a third control, `searchWeb`, and it carries the **opposite**
+guarantee to the other two:
+
+| | checked feeds | the open web |
+|---|---|---|
+| publishers | verified once, by a person (`trust.js`) | unchecked, whoever indexed the story |
+| status | `verified`, or it refuses | **`unverified`**, and it proceeds |
+| the brief says | VERIFIED SOURCE DATA | **UNVERIFIED** SOURCE DATA |
+| how the copy states things | as this paper's own fact | **attributed** — वृत्तानुसार |
+| who checks it | already done | **the desk, before it prints** |
+
+`providers/websearch.js` uses Google News's search endpoint because it **is**
+an RSS feed — the reader next door already parses it, no key, no vendor client
+— and because it indexes the district press this paper competes with. Verified
+live on a real Satara query: **51 items from Pudhari, Lokmat, Navarashtra,
+Dainik Prabhat and Esakal**, none of which any national feed carried. End to
+end through the real provider, the copy came back attributed:
+*"…असे वृत्तानुसार नोंदले आहे."*
+
+Four things hold the line, and each is a place it could have gone wrong:
+
+- **The open-web provider is NOT in `PROVIDERS`.** It needs no configuration,
+  so counting it would make `isConfigured()` permanently true and a newsroom
+  with no feeds at all would stop being told so. Four tests caught that.
+- **An item names its own publisher.** Google News carries
+  `<source url="…">` per item; without reading it, every hit inherited the
+  *channel* title and `onePerPublisher()` collapsed 51 district stories from a
+  dozen papers into one "Google News" voice.
+- **A search endpoint has already matched the query**, so `rss.search()` takes
+  `matchAll` and does not filter a second time on the seed's own words — that
+  threw away most of the good hits.
+- **The desk is told three times**: a note above the proposal naming how many
+  unchecked sources it came from, the publisher list to open, and the block
+  arriving as `needs_review`. A warning under copy that has already been read
+  is a warning that has already failed.
+
+**Sources added, each verified live** rather than found by search: ABP Majha's
+Maharashtra feed, Zee 24 Taas Marathi (`zeenews.india.com`), Saamana
+(`saamana.com`), and PIB's regional wire — which is `pib.gov.in`, so it carries
+OFFICIAL trust automatically. Tried and **dead**, so not added: eSakal (404),
+Loksatta (404 on three paths), Divya Marathi (403), Maharashtra Times (404),
+Mumbai Live (404), Pudhari's FeedBurner (404).
+
 ### Two things the desk can ask for before a word is written
 
 A desk typed *"rohit pawar admit in candi hospital"* and got a fluent,

@@ -16,8 +16,16 @@ const freshness = require('./freshness');
 const conditions = require('./conditions');
 const routing = require('./routing');
 const rss = require('./providers/rss');
+const websearch = require('./providers/websearch');
 
+// The CHECKED sources - the ones whose answers can be `verified`. The open-web
+// provider is deliberately NOT one of them: it needs no configuration, so
+// counting it here would make `isConfigured()` permanently true and a newsroom
+// with no feeds at all would stop being told so.
 const PROVIDERS = { rss };
+// Asked only when a desk explicitly ticks "search the whole internet", and its
+// answers are never `verified`. See providers/websearch.js.
+const OPEN_WEB = websearch;
 
 const EXCERPT_MAX_CHARS = 240;
 const MAX_FACTS = 5;
@@ -130,7 +138,7 @@ function digest(sources) {
  *   intent.classifyIntent()'s current_* / ambiguous values.
  * @returns {{query, category, retrievedAt, status, facts, sources}}
  */
-async function fetchContext({ query, category }) {
+async function fetchContext({ query, category, openWeb = false }) {
   const retrievedAt = () => new Date().toISOString();
   const empty = (resultStatus, sources = []) => ({
     query, category, retrievedAt: retrievedAt(), status: resultStatus, facts: [], sources,
@@ -138,9 +146,10 @@ async function fetchContext({ query, category }) {
 
   // Not cached: caching "nothing is configured" would mean a newsroom that
   // adds a feed mid-day stays refused for up to the freshness window anyway.
-  if (!isConfigured()) return empty('unavailable');
+  // An open-web search needs no feeds configured; the strict path does.
+  if (!openWeb && !isConfigured()) return empty('unavailable');
 
-  const key = cacheKey(category, query);
+  const key = `${openWeb ? 'web:' : ''}${cacheKey(category, query)}`;
   const cached = cache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
 
@@ -149,11 +158,32 @@ async function fetchContext({ query, category }) {
   // the flat legacy list when no scoped feeds are configured at all.
   const scopes = routing.scopesFor(query);
   const feeds = PROVIDERS.rss.feedsForScopes(scopes);
-  const { items } = await PROVIDERS.rss.search(query, { timeoutMs: timeoutMs(), feeds });
+  const { items } = openWeb
+    ? await OPEN_WEB.search(query, { timeoutMs: timeoutMs() })
+    : await PROVIDERS.rss.search(query, { timeoutMs: timeoutMs(), feeds });
 
   let value;
   if (!items.length) {
     value = empty('insufficient');
+  } else if (openWeb) {
+    // THE WHOLE INTERNET, AND NOTHING FROM IT IS VERIFIED.
+    //
+    // The strict path below requires an OFFICIAL or TRUSTED_NEWS publisher and
+    // refuses without one, because a checked publisher is what makes a fact
+    // safe to print unread. An open search cannot offer that and does not
+    // pretend to: its status is `unverified`, every fact carries the
+    // publisher it came from, and the desk is told - in the brief, in the
+    // panel, and on the block - that they must check each one before it
+    // prints. A district daily's own stories live here and nowhere else, so
+    // the choice is this or nothing; what must never happen is this being
+    // mistaken for the other.
+    const sources = onePerPublisher(items.map(toSource));
+    const fresh = sources.filter((s) => !freshness.isStale(s.publishedAt, category));
+    const usable = fresh.length ? fresh : sources;
+    value = {
+      query, category, retrievedAt: retrievedAt(), status: 'unverified',
+      facts: digest(usable), sources, mustVerify: true,
+    };
   } else {
     const sources = items.map(toSource);
     const trustworthy = sources.filter((s) => trust.CAN_VERIFY_ALONE.has(s.trust));

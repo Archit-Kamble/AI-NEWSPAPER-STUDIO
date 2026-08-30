@@ -517,3 +517,67 @@ test('"think it through" returns the model\'s reading of the seed, and it never 
   assert.doesNotMatch(prompts[prompts.length - 1], /in `understanding`/,
     'and a brief that did not ask to reason never mentions the reading');
 });
+
+test('"search the whole internet" writes from unchecked sources - labelled, attributed, and never called verified', async (t) => {
+  const { desk, page } = await withBlock(t, 'ZZ open web is never verified');
+  withTrustedDomains(t, [TRUSTED]);
+  // The checked feeds have nothing; the open web has the district press. That
+  // is the whole case this exists for - a taluka story the nationals do not
+  // carry.
+  withRss(t, { isConfigured: () => true, search: async () => ({ items: [] }) });
+
+  const websearch = require('../src/services/information/providers/websearch');
+  const realSearch = websearch.search;
+  websearch.search = async () => ({
+    items: [
+      { title: 'कास पाणीपुरवठा योजनेच्या पाईपलाईनला गळती', link: 'https://news.google.com/rss/articles/x',
+        description: 'सातारा जिल्ह्यातील कास योजनेच्या वाहिनीला गळती लागल्याचे आढळले.',
+        publishedAt: new Date().toISOString(), publisher: 'Pudhari' },
+      { title: 'कास योजनेची दुरुस्ती सुरू', link: 'https://news.google.com/rss/articles/y',
+        description: 'दुरुस्तीचे काम हाती घेण्यात आले आहे.',
+        publishedAt: new Date().toISOString(), publisher: 'Lokmat.com' },
+    ],
+    errors: [],
+  });
+  t.after(() => { websearch.search = realSearch; });
+
+  let brief = '';
+  withProviders(t, {
+    gemini: {
+      async askForJson(prompt) {
+        brief = String(prompt);
+        return { data: { headline: 'कास योजनेच्या वाहिनीला गळती', subheading: 'दुरुस्ती सुरू असल्याचे वृत्त',
+          body: 'कास पाणीपुरवठा योजनेच्या वाहिनीला गळती लागल्याचे वृत्तानुसार समजते.\n\nदुरुस्तीचे काम सुरू आहे.' } };
+      },
+    },
+  });
+
+  // A seed that READS as today's news, so the strict path is genuinely engaged
+  // and the contrast between the two is the one that matters.
+  const seed = 'सातारा कास पाणीपुरवठा योजना पाईपलाईन गळती आजची बातमी';
+
+  // Without the box the checked feeds have nothing, so it refuses - unchanged.
+  const strict = await desk.json(`/api/pages/${page.id}/sections/lead/write`, {
+    method: 'POST', body: JSON.stringify({ seed, tier: 'basic' }),
+  });
+  assert.ok(strict.error, 'the strict path still refuses when no checked source has it');
+
+  // With the box it writes, from named but UNCHECKED publishers.
+  const open = await desk.json(`/api/pages/${page.id}/sections/lead/write`, {
+    method: 'POST', body: JSON.stringify({ seed, tier: 'basic', searchWeb: true }),
+  });
+  assert.ok(open.proposal, `the open web writes: ${open.error || ''}`);
+  assert.equal(open.retrieval.status, 'unverified', 'and it is NEVER called verified');
+  assert.equal(open.retrieval.mustVerify, true, 'the desk is told they must check it');
+  assert.deepEqual(open.retrieval.sources.map((s) => s.publisher).sort(), ['Lokmat.com', 'Pudhari'],
+    'every publisher is named so the desk can go and look');
+  assert.ok(open.retrieval.sources.every((s) => s.trust === 'UNKNOWN'),
+    'none of them carries a trust this paper granted');
+
+  // The brief must say so too - unverified material may not arrive under the
+  // heading that means "this was checked".
+  assert.match(brief, /UNVERIFIED SOURCE DATA/);
+  assert.doesNotMatch(brief, /(?<!UN)VERIFIED SOURCE DATA —/,
+    'it never claims the checked-source heading');
+  assert.match(brief, /attribute/i, 'and the copy is written as reported, not as established');
+});

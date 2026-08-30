@@ -7150,3 +7150,17 @@ body.print-view .page-imprint {
   font-size: 0.86rem;
 }
 .ai-understanding .muted { font-size: 0.8rem; }
+
+/* Open-web copy: unchecked, and it has to say so above the words rather than
+   under them. Loud enough to stop a desk mid-scroll, because everything under
+   it is unverified. */
+.ai-verify-note {
+  margin: 0 0 var(--s2);
+  padding: 9px 11px;
+  border-left: 4px solid #b3541e;
+  background: #fdf3ec;
+  border-radius: 0 6px 6px 0;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+.toggle.ai-open-web { flex-basis: 100%; }

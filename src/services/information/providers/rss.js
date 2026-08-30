@@ -172,7 +172,20 @@ function parseFeed(xml) {
     }
     const description = cleanText(tag(block, isAtom ? 'summary' : 'description') || tag(block, 'content'));
     const publishedAt = parseDate(tag(block, 'pubDate') || tag(block, 'published') || tag(block, 'updated'));
-    return { title, link, description, publishedAt, publisher };
+    // AN ITEM MAY NAME ITS OWN PUBLISHER, and on a search endpoint it always
+    // does: Google News carries `<source url="...">The Times of India</source>`
+    // per item, because the items come from many papers rather than one. Taken
+    // when present, because otherwise every hit inherits the CHANNEL's title -
+    // which collapsed 51 district stories from a dozen papers into a single
+    // "Google News" source, and `onePerPublisher()` then threw all but one
+    // away as duplicates of one voice.
+    const itemSource = cleanText(tag(block, 'source'));
+    const sourceUrl = (/<source\b[^>]*url="([^"]*)"/i.exec(block) || [])[1] || '';
+    return {
+      title, link, description, publishedAt,
+      publisher: itemSource || publisher,
+      publisherUrl: sourceUrl || undefined,
+    };
   }).filter((item) => item.title || item.link);
 
   return { items };
@@ -263,10 +276,14 @@ function matchesQuery(item, queryWords) {
  * Never throws: one feed failing to fetch or parse is dropped and reported in
  * `errors`, not allowed to fail the whole search.
  */
-async function search(query, { timeoutMs = DEFAULT_TIMEOUT_MS, feeds: explicitFeeds } = {}) {
+async function search(query, { timeoutMs = DEFAULT_TIMEOUT_MS, feeds: explicitFeeds, matchAll = false } = {}) {
   const feeds = explicitFeeds || configuredFeeds();
   if (!feeds.length) return { items: [], errors: [] };
 
+  // `matchAll` is for a feed that has ALREADY matched the query - a search
+  // endpoint rather than a publisher's front page (providers/websearch.js).
+  // Filtering those a second time on the seed's own words throws away good
+  // hits whose headline happens to word it differently, which is most of them.
   const queryWords = queryWordsFor(query);
   const results = await Promise.all(feeds.map((url) => fetchFeed(url, timeoutMs)));
 
@@ -278,7 +295,9 @@ async function search(query, { timeoutMs = DEFAULT_TIMEOUT_MS, feeds: explicitFe
       return;
     }
     for (const item of result.items) {
-      if (matchesQuery(item, queryWords)) items.push(item);
+      // `matchAll`: the endpoint has already matched the query, so every item
+      // it returned is a hit. See the note where the option is read.
+      if (matchAll || matchesQuery(item, queryWords)) items.push(item);
     }
   });
 

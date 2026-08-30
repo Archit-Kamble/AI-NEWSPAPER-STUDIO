@@ -230,6 +230,18 @@ export function aiPanelMarkup(view) {
         <label class="toggle"><input type="checkbox" id="edAiLookUp"> Check the sources first</label>
         <label class="toggle"><input type="checkbox" id="edAiReason"> Think it through first</label>
       </div>
+      <!-- THE WHOLE INTERNET, AND THE DESK VERIFIES IT.
+           The checked feeds above are national and state papers, and a district
+           daily's own stories are not in them - a taluka water scheme, a local
+           body decision, a name only the Satara papers carry. Those exist on
+           the open web, so this searches it. NOTHING it finds is verified: the
+           publishers are unchecked, the copy is written as REPORTED rather than
+           as established, and the desk checks every line before it prints. That
+           is the whole bargain, and it is said here, in the brief, on the
+           proposal and on the block. -->
+      <div class="ai-parts">
+        <label class="toggle ai-open-web"><input type="checkbox" id="edAiSearchWeb"> Search the whole internet <span class="muted">— you must verify what it finds</span></label>
+      </div>
       <p class="ai-seed-note" id="edAiSeedNote">It is written to fit — the exact compositor measures this block's real lines, columns and picture room.</p>
     </div>
 
@@ -346,6 +358,7 @@ function proposalMarkup(result) {
   return `
     <h4>Written by ${escapeHtml(result.provider || "AI")}${result.fellBackTo ? " (fallback)" : ""}
       <span class="muted">review before accepting</span></h4>
+    ${verifyNote(result)}
     ${handoverNote(result)}
     ${understandingNote(result)}
     <p class="ai-proposal-headline">${escapeHtml(proposal.headline)}</p>
@@ -423,6 +436,22 @@ function fillProposalMarkup(result) {
     </div>
     <p class="ai-proposal-warn">The desk must check every fact before this is printed. It enters the block as
        <strong>needs review</strong>.</p>`;
+}
+
+// THE LINE THE DESK MUST READ BEFORE ACCEPTING OPEN-WEB COPY.
+//
+// Everything a proposal shows is reviewable, but this one is different in
+// kind: the facts under it were never checked by anybody. It says so plainly,
+// names how many unchecked publishers it came from, and points at the source
+// list the desk can open. It sits ABOVE the words, because a warning under
+// copy that has already been read is a warning that has already failed.
+function verifyNote(result) {
+  if (!result?.retrieval?.mustVerify) return "";
+  const n = (result.retrieval.sources || []).length;
+  return `<p class="ai-verify-note"><strong>Check every fact before this prints.</strong>
+    This was written from an open internet search of ${n} unchecked source${n === 1 ? "" : "s"} —
+    not from a publisher this paper has verified. Open the sources below, confirm the
+    names, numbers and dates yourself, and correct anything the copy has wrong.</p>`;
 }
 
 // WHAT THE MODEL TOOK THE REQUEST TO MEAN, shown before the words it wrote.
@@ -712,6 +741,7 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, g
             writeHeadline: document.getElementById("edAiWriteHeadline")?.checked !== false,
             writeSubheading: document.getElementById("edAiWriteSubheading")?.checked !== false,
             lookUp: document.getElementById("edAiLookUp")?.checked === true,
+            searchWeb: document.getElementById("edAiSearchWeb")?.checked === true,
             reason: document.getElementById("edAiReason")?.checked === true,
           }),
         },

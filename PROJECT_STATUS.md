@@ -7502,3 +7502,19 @@ either state.
 
 `npm test` 1064/1064. `tests/browser/edition-delete.browser.js` 11/11 — it makes
 its own 2099-dated fixture and removes it from the crash path too.
+
+### All four together
+
+They merge clean into one another in any order, and merged:
+
+- `npm test` **1067/1067**
+- `tests/browser/workspace.browser.js` — the 224-check regression net
+
+One real regression was caught by running that net rather than reasoning about
+it: eleven browser nets selected `.edition-row[data-edition-id="…"] button`,
+which was unambiguous only while a row carried one button. Adding **Delete**
+made it two, Playwright's strict mode refused, and the net died at check 0 of
+224 — every check after it silently never ran. Fixed on `edition-delete`, the
+branch that caused it. This is the failure CLAUDE.md already names: *"a browser
+test that crashes is worse than one that fails"*, and *read the last line, not
+the first*.

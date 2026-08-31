@@ -7439,3 +7439,23 @@ body.print-view .page-imprint {
    was set, and the stylesheet quietly undid it. Found in a screenshot, not by
    the net that had just checked the same screen. */
 .role-note:not([hidden]) { display: block; margin-top: 6px; color: #666; line-height: 1.5; }
+
+/* A COLOUR ON EVERY READING.
+   A chart used to print in one ink chosen for the whole chart, so three bars
+   measuring three different things were three identical black bars. The first
+   swatch is "the chart's own" and it is the default - choosing it again clears
+   the reading's colour rather than pinning it, the same rule the ink palette
+   already follows for Black and White. */
+.chart-row-inks { display: inline-flex; gap: 3px; align-items: center; }
+.chart-row-ink {
+  width: 18px; height: 18px; padding: 0;
+  border: 1px solid #cfcfcf; border-radius: 4px;
+  background: #fff; cursor: pointer; line-height: 0;
+}
+.chart-row-ink i {
+  display: block; width: 100%; height: 100%; border-radius: 3px;
+  /* "The chart's own" carries no background, so it reads as the empty swatch
+     it is - a diagonal hairline, the way a colour picker says "none". */
+  background-image: linear-gradient(45deg, transparent 45%, #bbb 45%, #bbb 55%, transparent 55%);
+}
+.chart-row-ink.is-on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }

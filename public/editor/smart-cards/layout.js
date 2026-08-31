@@ -940,6 +940,29 @@ export const CHART_INKS = Object.freeze(
   INKS.map((entry) => ({ key: entry.key, label: entry.label, hex: entry.hex || '#111111' })),
 );
 
+/**
+ * The ink ONE READING is printed in.
+ *
+ * Every chart used to print in a single ink chosen for the whole chart, with
+ * the pie alone tinting its slices apart. The desk's report is the obvious one
+ * once a bar chart is looked at: three bars, three different quantities, one
+ * black. A reading may now name its own ink, and it is checked against the
+ * paper's own palette (`sanitiseInk`) exactly as a block's tint is - a press
+ * has four plates and a colour mixed in a browser is not one of them.
+ *
+ * Where a reading says nothing the answer is what it always was: tints of the
+ * chart's one ink for a pie, and that ink flat for everything else. So no
+ * stored card changes, and this is additive to the byte.
+ */
+export function rowInk(item, index, base = CHART_ACCENT, kind = 'bar') {
+  const chosen = sanitiseInk(item?.ink);
+  if (chosen) return chosen;
+  // Black carries no hex - inks.js says black is the absence of a mark - so it
+  // is asked for by key, the way chartInk() already asks.
+  if (String(item?.ink || '').toLowerCase() === 'black') return '#111111';
+  return kind === 'pie' ? sliceInk(index, base) : base;
+}
+
 /** The ink slice `index` is printed in - a real hex, so every writer draws it. */
 export function sliceInk(index, base = CHART_ACCENT) {
   const shade = SLICE_SHADES[index % SLICE_SHADES.length];
@@ -998,13 +1021,14 @@ function layoutChart(data, frame) {
       const figurePx = fontPx * 2.2;
       const figureLine = lineHeightFor(figurePx, 'sans', 700);
       let hardOverset = false;
-      const items = rows.map((item) => {
+      const items = rows.map((item, index) => {
         const caption = wrapSmartText(String(item.label), { width: columnWidth - GAP_PX, fontPx, family: 'sans', weight: 400 });
         if (caption.hardOverset) hardOverset = true;
         return {
           label: String(item.label),
           value: Number(item.value),
           valueText: valueText(item),
+          ink: rowInk(item, index, ink, 'stat'),
           captionLines: caption.lines.map((l) => l.text),
           rowHeight: figureLine + Math.max(1, caption.lines.length) * lineHeightPx,
         };
@@ -1041,7 +1065,7 @@ function layoutChart(data, frame) {
       const items = rows.map((item, index) => {
         const share = Math.abs(Number(item.value)) / total;
         const slice = { label: String(item.label), value: Number(item.value), valueText: valueText(item),
-          share, from: turn, to: turn + share, swatch: index, ink: sliceInk(index, ink) };
+          share, from: turn, to: turn + share, swatch: index, ink: rowInk(item, index, ink, 'pie') };
         turn += share;
         return slice;
       });
@@ -1078,6 +1102,7 @@ function layoutChart(data, frame) {
         const value = Number(item.value);
         return {
           label: String(item.label), value, valueText: valueText(item),
+          ink: rowInk(item, index, ink, kind),
           x: inset + (rows.length > 1 ? index * step : plotWidth / 2),
           // Down the page from the plot's own top, which is where the highest
           // value sits.
@@ -1107,13 +1132,14 @@ function layoutChart(data, frame) {
     const trackWidth = Math.max(0, frame.innerWidth - labelWidth - valueWidth - CHART_VALUE_GAP_PX);
     let hardOverset = trackWidth <= fontPx;
     const rowHeight = lineHeightPx + CHART_BAR_GAP_PX;
-    const items = rows.map((item) => {
+    const items = rows.map((item, index) => {
       const label = measureAtomic(String(item.label), fontPx, 'sans', 400, labelWidth);
       if (label.hardOverset) hardOverset = true;
       return {
         label: label.line,
         value: Number(item.value),
         valueText: valueText(item),
+        ink: rowInk(item, index, ink, 'bar'),
         barWidth: Math.max(1, (Math.abs(Number(item.value)) / peak) * trackWidth),
         rowHeight,
       };
@@ -1130,6 +1156,16 @@ function layoutChart(data, frame) {
     fontPx: solved.fontPx,
     geometry: {
       chartType: solved.kind, rows: rows.length, peak: solved.peak, ink,
+      // WHAT THE CHART ACTUALLY NEEDS, as against what it was given.
+      //
+      // The solver has always known this - it is the number solveFont() fits
+      // against - and never said it out loud, so a chart placed as "a quarter
+      // of the block" reserved a quarter whether it held three readings or
+      // twelve. Photographed on a real 307x296 anchor: three bars filling the
+      // top third of the panel and the rest of it dead white, with the story
+      // set clear of every pixel. A panel that reserves room it does not use
+      // is a hole in the page, and the copy is what pays for it.
+      contentHeight: solved.height || 0,
       labelWidth: solved.labelWidth || 0, trackWidth: solved.trackWidth || 0,
       valueWidth: solved.valueWidth || 0, rowHeight: solved.rowHeight || 0,
       columns: solved.columns || 0, columnWidth: solved.columnWidth || 0,

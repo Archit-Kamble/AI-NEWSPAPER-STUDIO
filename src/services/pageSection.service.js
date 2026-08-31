@@ -10,6 +10,43 @@ const { BORDER_KEYS, BORDER_WIDTHS } = require('../../public/editor/layout/borde
 const { panelOf } = require('../../public/editor/layout/inset-panels');
 const { TYPEFACES } = require('../../public/editor/layout/typefaces');
 
+/**
+ * A CHART'S READINGS MAY NAME THEIR OWN INKS, AND THIS IS WHERE THAT IS CHECKED.
+ *
+ * inset-panels.js can only check the SHAPE of a colour - it is loaded as a
+ * plain script in the browser and cannot import the ESM ink catalogue - so the
+ * palette boundary lives here, where the catalogue is already awaited for the
+ * block's own tint and accent. It is the same argument as that one, and it is
+ * security as well as press correctness: a reading's ink is interpolated into
+ * the canvas's style attribute and into a `.sla`, so arbitrary stored text may
+ * never reach either renderer.
+ *
+ * A row that names nothing keeps naming nothing - absent is what means "the
+ * chart's own ink", and defaulting it here would silently pin every bar to one
+ * colour at the moment it is saved.
+ */
+function sanitiseCardInks(card, palette) {
+  if (!card || typeof card !== 'object' || !Array.isArray(card.items)) return card;
+  const legal = (value) => {
+    if (!value) return null;
+    // Black is the absence of a plate and carries no hex in the catalogue
+    // (inks.js), so it cannot come back from sanitiseInk and is asked for by
+    // name - exactly as chartInk() asks for it.
+    if (String(value).toLowerCase() === 'black' || String(value) === '#111111') return 'black';
+    return palette.sanitiseInk(value);
+  };
+  return {
+    ...card,
+    ink: card.ink ? (legal(card.ink) || undefined) : card.ink,
+    items: card.items.map((item) => {
+      if (!item || typeof item !== 'object') return item;
+      const ink = legal(item.ink);
+      const { ink: _dropped, ...rest } = item;
+      return ink ? { ...rest, ink } : rest;
+    }),
+  };
+}
+
 const PRINTABLE_FIELDS = ['news_item_id','kicker','headline','subheading','body','caption','image_url','smart_card_key','smart_card_data'];
 const comparable = (value) => JSON.stringify(value ?? null);
 
@@ -239,7 +276,11 @@ async function saveSection(pageId, sectionKey, body) {
         // inset-panels.js can only check the shape of a hex - it is loaded as a
         // plain script in the browser - so this is where a colour that is not
         // one of the paper's tints is refused.
-        .map((panel) => ({ ...panel, tint: panel.tint ? palette.sanitiseTint(panel.tint) : null })),
+        .map((panel) => ({
+          ...panel,
+          tint: panel.tint ? palette.sanitiseTint(panel.tint) : null,
+          ...(panel.card ? { card: sanitiseCardInks(panel.card, palette) } : {}),
+        })),
     // The display face, validated against the one typeface catalogue so a
     // foreign family can never reach a renderer.
     displayFamily: body.displayFamily,
@@ -258,7 +299,11 @@ async function saveSection(pageId, sectionKey, body) {
     // `feature_key`, which is the layout's word for what the block is FOR and
     // is not the desk's to change.
     smartCardKey: body.smartCardKey || null,
-    smartCardData: body.smartCardData || null,
+    // A whole-block card goes through the SAME per-reading ink check a chart
+    // panel does. Two paths reach one renderer, so a colour refused on one and
+    // waved through on the other is a colour the plate could still be asked
+    // for.
+    smartCardData: body.smartCardData ? sanitiseCardInks(body.smartCardData, palette) : null,
   };
 
   const proposed = {

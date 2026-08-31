@@ -180,6 +180,12 @@ function smartCardLines(key, data, frame, cardLayout) {
     // the moment the ink became a choice. The fallback is for a geometry
     // solved before `ink` was published.
     const ACCENT = g.ink || CHART_ACCENT;
+    // AND EVERY READING'S OWN INK, off that same solve. A reading may name a
+    // colour of its own now, so the plate reads `item.ink` rather than deriving
+    // one here - deriving it is how a pie's slices could have printed in shades
+    // the screen never drew. The fallback covers a geometry solved before
+    // per-reading ink existed.
+    const inkOf = (item, index) => item?.ink || cardLayout.sliceInk(index, ACCENT);
     let y = subtitleOffsetPx;
     if (g.chartType === 'stat') {
       const perBand = Math.max(1, g.columns);
@@ -188,7 +194,7 @@ function smartCardLines(key, data, frame, cardLayout) {
         const band = Math.floor(index / perBand);
         const x = column * g.columnWidth;
         const top = y + band * g.bandHeight;
-        line(item.valueText, x, top, g.columnWidth, g.figurePx, 1, g.figureLine, { ink: ACCENT, bold: true });
+        line(item.valueText, x, top, g.columnWidth, g.figurePx, 1, g.figureLine, { ink: inkOf(item, index), bold: true });
         (item.captionLines || []).forEach((text, i) =>
           line(text, x, top + g.figureLine + i * g.lineHeightPx, g.columnWidth, layout.fontPx, 1));
       });
@@ -199,11 +205,11 @@ function smartCardLines(key, data, frame, cardLayout) {
       const cx = g.radius;
       const cy = y + g.radius;
       layout.items.forEach((item, index) => {
-        // EACH SLICE IN A TINT OF THE ONE INK, resolved to a real hex here.
-        // A newspaper prints a pie in tints of a single ink, not in a rainbow -
-        // and a "shade" would have been a new concept every writer had to
-        // learn, when a lighter hex is something all three already draw.
-        const ink = cardLayout.sliceInk(index, ACCENT);
+        // EACH SLICE IN ITS OWN RESOLVED HEX. Where the desk has not chosen
+        // one, rowInk() gives back the tint of the chart's single ink this
+        // line used to compute - a newspaper prints a pie in tints of one ink,
+        // not in a rainbow - so an untouched pie is unchanged to the byte.
+        const ink = inkOf(item, index);
         poly(cardLayout.arcPoints(cx, cy, g.radius, item.from, item.to), ink, { close: true });
         const top = y + index * g.legendLine;
         bar(g.diameter + GAP, top + g.legendLine * 0.25, g.legendLine * 0.5, g.legendLine * 0.5, ink);
@@ -221,18 +227,18 @@ function smartCardLines(key, data, frame, cardLayout) {
         // Every point carries its own dot - on a line chart too, because a
         // reader follows a line by its readings and a printed line chart marks
         // them.
-        poly(cardLayout.arcPoints(item.x, y + item.y, g.dotRadius, 0, 1, { centre: false }), ACCENT, { close: true });
+        poly(cardLayout.arcPoints(item.x, y + item.y, g.dotRadius, 0, 1, { centre: false }), inkOf(item, index), { close: true });
         line(item.valueText, item.x - g.step / 2, y + item.y - g.valueBand,
-          g.step || frame.width, layout.fontPx, 1, null, { bold: true });
+          g.step || frame.width, layout.fontPx, 1, null, { bold: true, ink: inkOf(item, index) });
         line(item.label, item.x - g.step / 2, y + g.valueBand + g.plotHeight,
           g.step || frame.width, layout.fontPx, 1);
       });
       y += g.valueBand + g.plotHeight + g.labelBand;
     } else {
       const barHeight = Math.max(2, g.lineHeightPx * 0.62);
-      layout.items.forEach((item) => {
+      layout.items.forEach((item, index) => {
         line(item.label, 0, y, g.labelWidth, layout.fontPx, 0);
-        bar(g.labelWidth, y + (g.rowHeight - barHeight) / 2, item.barWidth, barHeight, ACCENT);
+        bar(g.labelWidth, y + (g.rowHeight - barHeight) / 2, item.barWidth, barHeight, inkOf(item, index));
         line(item.valueText, g.labelWidth + g.trackWidth + 2, y, g.valueWidth, layout.fontPx, 2, null, { bold: true });
         y += g.rowHeight;
       });

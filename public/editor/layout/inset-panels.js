@@ -180,8 +180,19 @@
    */
   function cardOf(raw) {
     if (!raw || typeof raw !== 'object') return null;
+    // A READING MAY NAME ITS OWN INK. Shape only here, for the reason above:
+    // which inks are legal is decided at the service, where the palette is
+    // already awaited, and rowInk() falls back to the chart's own ink for
+    // anything it does not recognise - so an unknown value can never reach a
+    // plate as an unknown colour. An absent ink is left absent rather than
+    // defaulted, because absent is what means "the chart's own".
     const items = (Array.isArray(raw.items) ? raw.items : [])
-      .map((entry) => ({ label: clean(entry?.label), value: Number(entry?.value) }))
+      .map((entry) => {
+        const row = { label: clean(entry?.label), value: Number(entry?.value) };
+        const ink = clean(entry?.ink);
+        if (ink) row.ink = ink;
+        return row;
+      })
       .filter((entry) => entry.label && Number.isFinite(entry.value));
     if (!items.length) return null;
     return {

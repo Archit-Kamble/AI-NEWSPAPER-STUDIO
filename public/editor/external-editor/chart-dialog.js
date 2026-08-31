@@ -30,7 +30,7 @@
 // collects a payload and hands it to the same `onPatch` every other control
 // ends in.
 import { escapeHtml } from "../format.js";
-import { CHART_INKS } from "../smart-cards/layout.js";
+import { CHART_INKS, layoutSmartCard } from "../smart-cards/layout.js";
 import "../layout/inset-panels.js";
 
 const { INSET_PANEL_MIN_PX } = globalThis.SahasInsetPanels;
@@ -68,19 +68,97 @@ const rowsFrom = (items) => (Array.isArray(items) && items.length
  * reader's eye returns to the left margin on every line and a panel there
  * interrupts every one of them.
  */
-function panelBox(share, section) {
+function panelBox(share, section, card) {
   const blockW = Math.max(INSET_PANEL_MIN_PX, Number(section?.width_px) || 200);
   const blockH = Math.max(INSET_PANEL_MIN_PX, Number(section?.height_px) || 200);
   // Width first: a chart needs measure more than it needs depth, so the share
   // is spent on width up to two-thirds of the block and the rest on height.
-  const width = Math.max(INSET_PANEL_MIN_PX, Math.round(blockW * Math.min(0.66, Math.sqrt(share))));
-  const height = Math.max(INSET_PANEL_MIN_PX, Math.round((blockH * share) / (width / blockW)));
+  const width = Math.min(Math.max(INSET_PANEL_MIN_PX,
+    Math.round(blockW * Math.min(0.66, Math.sqrt(share)))), blockW - 2);
+  const shareHeight = Math.min(
+    Math.max(INSET_PANEL_MIN_PX, Math.round((blockH * share) / (width / blockW))),
+    Math.round(blockH * 0.8),
+  );
+
+  // A CHART TAKES THE ROOM ITS READINGS NEED, NOT THE ROOM ITS SHARE ASKED FOR.
+  //
+  // The share alone decided the rectangle, so "a quarter of the block" reserved
+  // a quarter whether the chart held three readings or twelve. Photographed on
+  // a real 307x296 anchor: three bars filling the top third of the panel and
+  // the rest of it dead white - with the story set clear of every pixel of it,
+  // because to the compositor a panel is an obstacle whether or not there is
+  // ink in it. A panel that reserves room it does not use is a hole in the
+  // page, and the copy is what pays for it.
+  //
+  // The share is now a CEILING rather than a measurement: the chart is solved
+  // at the width it is about to get, and the panel is cut to what came back.
+  // It can only ever give room BACK to the story, never take more.
+  const height = Math.min(shareHeight, neededHeight(card, width, shareHeight) || shareHeight);
+
   return {
-    width: Math.min(width, blockW - 2),
-    height: Math.min(height, Math.round(blockH * 0.8)),
-    x: Math.max(0, blockW - Math.min(width, blockW - 2) - 2),
+    width,
+    height: Math.max(INSET_PANEL_MIN_PX, height),
+    x: Math.max(0, blockW - width - 2),
     y: Math.round(blockH * 0.3),
   };
+}
+
+/**
+ * What this chart is actually tall enough to need, at that width.
+ *
+ * Solved against a generous height so the type is not driven down by a box it
+ * is about to be cut to - `solveFont()` takes the largest candidate that fits,
+ * so asking with the share's own height would answer "exactly the share".
+ * Returns 0 when the chart cannot be solved at all, and the caller keeps the
+ * share it asked for.
+ */
+function neededHeight(card, width, ceiling) {
+  if (!card) return 0;
+  try {
+    const solved = layoutSmartCard('chart', card, { width, height: ceiling });
+    const content = Number(solved?.geometry?.contentHeight) || 0;
+    if (!content) return 0;
+    // Everything the panel carries that is NOT the plot: the card's own rule
+    // and its inset (contentBox is the rectangle the card was solved inside,
+    // so the difference is the furniture), and the standfirst above it.
+    const box = Number(solved?.contentBox?.height) || ceiling;
+    const furniture = Math.max(0, ceiling - box);
+    const subtitle = Number(solved?.subtitle?.height) || 0;
+    return Math.ceil(content + furniture + subtitle);
+  } catch (error) {
+    // A chart this dialog cannot solve is not a reason to refuse the placement;
+    // the share it asked for is a perfectly good answer.
+    return 0;
+  }
+}
+
+/**
+ * The ink ONE READING prints in.
+ *
+ * A chart used to print in a single ink chosen for the whole chart, with only
+ * a pie tinting its slices apart - so three bars measuring three different
+ * things were three identical black bars. The desk asked for a colour per bar
+ * and that is what this is.
+ *
+ * "Chart's own" is first and is the default, because it is what every stored
+ * chart means today: the chart's ink flat for a bar, and the pie's own tints
+ * for a slice. Choosing it again CLEARS the reading's colour rather than
+ * pinning it - the difference between a choice and a state, the same rule the
+ * ink palette already follows for Black and White.
+ */
+function rowInkMarkup(row, index) {
+  const swatch = (label, value, hex, on) => `<button type="button" class="chart-row-ink${on ? " is-on" : ""}"
+    data-row-ink="${index}" data-row-ink-value="${escapeHtml(value)}"
+    title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}"
+    ><i style="${hex ? `background:${escapeHtml(hex)}` : ""}"></i></button>`;
+  const chosen = String(row.ink || "");
+  return `<span class="chart-row-inks">
+    ${swatch("The chart's own ink", "", "", !chosen)}
+    ${CHART_INKS.map((entry) => {
+      const value = entry.key === "black" ? "#111111" : entry.hex;
+      return swatch(entry.label, value, entry.hex || "#111111", chosen === value);
+    }).join("")}
+  </span>`;
 }
 
 function markup() {
@@ -116,6 +194,7 @@ function markup() {
             <div class="chart-row" data-row="${i}">
               <input type="text" class="chart-row-label" value="${escapeHtml(row.label)}" placeholder="नाव" aria-label="Label" />
               <input type="text" inputmode="decimal" class="chart-row-value" value="${escapeHtml(row.value)}" placeholder="०" aria-label="Value" />
+              ${rowInkMarkup(row, i)}
               <button type="button" class="chart-row-x" data-chart-drop="${i}" title="Take this reading out">−</button>
             </div>`).join("")}
         </div>
@@ -156,9 +235,13 @@ function paint() {
 /** What the desk has typed, read off the form rather than tracked per keystroke. */
 function harvest() {
   if (!host) return;
-  const rows = [...host.querySelectorAll(".chart-row")].map((element) => ({
+  const rows = [...host.querySelectorAll(".chart-row")].map((element, i) => ({
     label: element.querySelector(".chart-row-label")?.value ?? "",
     value: element.querySelector(".chart-row-value")?.value ?? "",
+    // Read back off the form's own state, not off `state.rows` - the rows are
+    // rebuilt on every paint and the index is the only thing that survives.
+    ink: element.querySelector(".chart-row-ink.is-on")?.dataset.rowInkValue
+      ?? state.rows[i]?.ink ?? "",
   }));
   if (rows.length) state.rows = rows;
   state.subtitle = host.querySelector("#chartSubtitle")?.value ?? state.subtitle;
@@ -169,7 +252,13 @@ function harvest() {
 /** The card payload, or null when there is not one usable reading in it. */
 function payload() {
   const items = state.rows
-    .map((row) => ({ label: String(row.label).trim(), value: Number(String(row.value).replace(/[^\d.-]/g, "")) }))
+    .map((row) => {
+      const entry = { label: String(row.label).trim(), value: Number(String(row.value).replace(/[^\d.-]/g, "")) };
+      // Absent means "the chart's own", so an uncoloured reading carries no
+      // key at all rather than an empty one.
+      if (row.ink) entry.ink = String(row.ink);
+      return entry;
+    })
     .filter((row) => row.label && Number.isFinite(row.value));
   if (!items.length) return null;
   return {
@@ -241,7 +330,7 @@ function apply() {
     onPatch({ smartCardKey: "chart", smartCardData: card, insetPanels: panels }, "chart-dialog");
   } else {
     const share = ROOM.find((r) => r.key === state.room)?.share || 0.5;
-    const box = panelBox(share, section);
+    const box = panelBox(share, section, card);
     const kept = state.panelIndex >= 0 ? (view.insetPanels || [])[state.panelIndex] : null;
     panels.push({
       id: kept?.id || `panel-${Date.now().toString(36)}`,
@@ -299,6 +388,17 @@ export function bindChartDialog() {
 
     const ink = target.closest("[data-chart-ink]");
     if (ink) { harvest(); state.ink = ink.dataset.chartInk; paint(); return; }
+
+    // One reading's own colour. Harvest FIRST, so the row's typed label and
+    // number survive the repaint, then set the ink on that row by index.
+    const rowInk = target.closest("[data-row-ink]");
+    if (rowInk) {
+      harvest();
+      const index = Number(rowInk.dataset.rowInk);
+      if (state.rows[index]) state.rows[index].ink = rowInk.dataset.rowInkValue || "";
+      paint();
+      return;
+    }
 
     if (target.closest("[data-chart-add]")) {
       harvest(); state.rows.push({ label: "", value: "" }); paint();

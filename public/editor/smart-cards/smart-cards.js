@@ -556,6 +556,12 @@ function advertMarkup(data, layout) {
 // Drawn from layoutSmartCard()'s resolved geometry and nothing else, so the
 // bar a desk sees is the bar the press file draws. Every number is already in
 // block pixels by the time it gets here.
+//
+// EVERY READING CARRIES ITS OWN `ink`, resolved once by rowInk() in the solver
+// - so this file never decides a colour and cannot disagree with the plate
+// about one. `--chart-ink` remains on the container for the parts that belong
+// to the CHART rather than to a reading: the plot's connecting line, and the
+// fallback for anything drawn without an item.
 
 function chartMarkup(data, layout) {
   const g = layout.geometry;
@@ -567,7 +573,7 @@ function chartMarkup(data, layout) {
   if (g.chartType === "stat") {
     const cells = layout.items.map((item) => `
       <div class="smart-chart-stat" style="width:${g.columnWidth}px;height:${g.bandHeight}px">
-        <b style="font-size:${g.figurePx}px;line-height:${g.figureLine}px">${escapeHtml(item.valueText)}</b>
+        <b style="font-size:${g.figurePx}px;line-height:${g.figureLine}px;color:${item.ink}">${escapeHtml(item.valueText)}</b>
         <span style="font-size:${layout.fontPx}px;line-height:${g.lineHeightPx}px">${linesMarkup(item.captionLines)}</span>
       </div>`).join("");
     return `<div class="smart-chart smart-chart-stats" style="--chart-ink:${g.ink}">${cells}</div>${source}`;
@@ -604,10 +610,10 @@ function chartMarkup(data, layout) {
       ? `<polyline points="${path}" fill="none" stroke="${g.ink}" stroke-width="${g.lineWidth}" stroke-linejoin="round" stroke-linecap="round"/>`
       : "";
     const dots = layout.items.map((item) =>
-      `<circle cx="${item.x.toFixed(2)}" cy="${item.y.toFixed(2)}" r="${g.dotRadius}" fill="${g.ink}"/>`).join("");
+      `<circle cx="${item.x.toFixed(2)}" cy="${item.y.toFixed(2)}" r="${g.dotRadius}" fill="${item.ink}"/>`).join("");
     const labels = layout.items.map((item) => `
       <text x="${item.x.toFixed(2)}" y="${(item.y - g.valueBand * 0.35).toFixed(2)}" text-anchor="middle"
-            font-size="${layout.fontPx}" font-weight="700" fill="${g.ink}">${escapeHtml(item.valueText)}</text>
+            font-size="${layout.fontPx}" font-weight="700" fill="${item.ink}">${escapeHtml(item.valueText)}</text>
       <text x="${item.x.toFixed(2)}" y="${(g.valueBand + g.plotHeight + g.labelBand * 0.75).toFixed(2)}" text-anchor="middle"
             font-size="${layout.fontPx}" fill="#111">${escapeHtml(item.label)}</text>`).join("");
     return `<div class="smart-chart smart-chart-plot">
@@ -619,7 +625,7 @@ function chartMarkup(data, layout) {
     <div class="smart-chart-row" style="height:${g.rowHeight}px;font-size:${layout.fontPx}px;line-height:${g.lineHeightPx}px">
       <span class="smart-chart-label" style="width:${g.labelWidth}px">${escapeHtml(item.label)}</span>
       <span class="smart-chart-track" style="width:${g.trackWidth}px">
-        <i style="width:${item.barWidth}px;height:${Math.max(2, g.lineHeightPx * 0.62)}px"></i>
+        <i style="width:${item.barWidth}px;height:${Math.max(2, g.lineHeightPx * 0.62)}px;background:${item.ink}"></i>
       </span>
       <b class="smart-chart-value" style="width:${g.valueWidth}px">${escapeHtml(item.valueText)}</b>
     </div>`).join("");

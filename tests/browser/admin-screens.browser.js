@@ -133,7 +133,7 @@ const check = (name, ok, detail = '') => {
     }
     await fresh.waitForSelector('.edition-row', { timeout: 20000 });
     const ed = await fresh.evaluate(() => document.querySelector('.edition-row')?.dataset.editionId);
-    await fresh.locator(`.edition-row[data-edition-id="${ed}"] button`).click();
+    await fresh.locator(`.edition-row[data-edition-id="${ed}"] .edition-open`).click();
     await fresh.waitForSelector('#canvasSurface', { timeout: 30000 }).catch(() => {});
     await fresh.waitForTimeout(3500);
     check('a failed templates fetch throws nothing at the desk', freshErrors.length === 0,

@@ -108,6 +108,30 @@ CREATE TABLE IF NOT EXISTS news_items (
 );
 
 ALTER TABLE news_items ADD COLUMN IF NOT EXISTS reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
+
+-- A FILING OUTLIVES THE EDITION IT WAS PLACED IN.
+--
+-- The CREATE TABLE above has declared this ON DELETE SET NULL for as long as
+-- it has existed, and the live database carries it as NO ACTION - the clause
+-- arrived after that database was created, and schema.sql is never run at
+-- boot. Nothing noticed until an edition could be deleted at all: the first
+-- delete of an edition that had ever carried a reporter's story answered 500,
+-- blamed on a constraint the schema file says is not there.
+--
+-- Guarded on the CURRENT rule rather than on the constraint's existence, so
+-- re-running it is free and a database that already agrees is left alone.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conname = 'news_items_newspaper_id_fkey'
+       AND confdeltype <> 'n'
+  ) THEN
+    ALTER TABLE news_items DROP CONSTRAINT news_items_newspaper_id_fkey;
+    ALTER TABLE news_items ADD CONSTRAINT news_items_newspaper_id_fkey
+      FOREIGN KEY (newspaper_id) REFERENCES newspapers(id) ON DELETE SET NULL;
+  END IF;
+END $$;
 ALTER TABLE news_items ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ;
 ALTER TABLE news_items ADD COLUMN IF NOT EXISTS review_note TEXT;
 

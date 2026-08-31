@@ -152,6 +152,66 @@ Starting an edition also:
 
 Asking for more pages adds them at their proper rung. Asking for fewer never removes a page — there may be work on it.
 
+### Deleting an edition, and the question that names what goes
+
+There was no way to delete one. This newsroom's own database reached **221
+editions across 13 dates** — mis-typed dates, interrupted starts, fixtures
+named `ZZ …` — and the only way to be rid of one was to open psql. A desk
+cannot be asked to write SQL to tidy up after a typo, and an archive nobody can
+prune is one nobody can find anything in.
+
+`DELETE /api/newspapers/:id`, desk-only, with the door on every edition row.
+
+It is a **hard** delete, deliberately. There is no `archived` column and adding
+one would put a filter on every list query in the product for a state nothing
+else understands — and worse, a "deleted" edition would go on occupying its
+date, so `POST /start` (idempotent per date) would keep opening a paper the
+desk can neither see nor replace. The protection is at the front instead.
+
+**One refusal, and it is about the READER.** An edition with a public e-paper
+release is a promise already made to whoever holds the link, so it is a 409
+naming the thing to do first — remove the public copy — rather than a wall.
+Everything else, including a paper that went to press, is the desk's own to
+remove: a newspaper's archive is theirs to keep and theirs to prune.
+
+**The question names the edition, not the id.** "Delete edition 59386?" asks
+about a number nobody knows the contents of, so the honest answer is always No
+and a desk learns to dismiss the question — the fault this codebase already
+fixed once, for a scoped AI overwrite that named three fields when one was
+changing. It names the date as the masthead sets it, the page count, how many
+blocks carry copy, that it cannot be undone, and that reporters' filings are
+not affected.
+
+**The rows cascade; the FILES do not.** A press PDF, a Scribus project and any
+e-paper derivative left on disk after the row has gone are unreachable bytes
+nobody can account for, so they go first — and if that fails the edition stays,
+because an edition with orphaned files is recoverable and orphaned files with
+no edition are not.
+
+**And `schema.sql` disagreed with the database.** `news_items.newspaper_id` has
+been declared `ON DELETE SET NULL` for as long as that file has existed; the
+live database carries it as **NO ACTION**, because the clause arrived after this
+database was created and `schema.sql` is never run at boot. Nothing could
+notice until an edition could be deleted at all — the first delete of an edition
+that had ever carried a reporter's story answered **500**, blamed on a
+constraint the schema file says is not there. Every foreign key in the database
+was swept against its declared rule; this was the only one that mattered here.
+
+Fixed in three places on purpose: a guarded migration in `schema.sql` (guarded
+on the *current* rule, so re-running is free), applied to the dev database by
+hand, **and** the delete detaches filings explicitly inside its own transaction
+— because `schema.sql` is never run at boot, another environment may still
+carry either state, and a 500 on a destructive route is the worst kind of
+surprise. A filing belongs to the reporter who wrote it, not to the edition
+somebody placed it in.
+
+```bash
+node tests/browser/edition-delete.browser.js
+```
+
+It makes its own 2099-dated fixture and removes it even when it crashes, or the
+next run finds yesterday's and the database grows the way it grew to 221.
+
 ### Publishing the public e-paper
 
 The newsroom edition is mutable; a released web issue is not. E-paper release

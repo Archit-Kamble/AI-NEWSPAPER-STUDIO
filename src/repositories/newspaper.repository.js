@@ -101,6 +101,69 @@ async function findAll() {
 // An e-paper release is deliberately separate from the newsroom / press
 // status. A draft can be frozen as a web proof, while only an explicitly
 // selected release is reachable from the public canonical URL.
+/**
+ * Everything a delete would destroy, so a desk is asked about an EDITION and
+ * not about an id. The fill is counted exactly as findAll() counts it - two
+ * definitions of "is there anything in this" is how a screen comes to say one
+ * thing while the confirmation says another.
+ */
+async function contentSummary(id) {
+  const { rows } = await pool.query(
+    `SELECT n.id, n.name, n.publication_date, n.status,
+            n.epaper_released_at, n.epaper_selected,
+            COUNT(DISTINCT p.id)::int AS page_count,
+            COUNT(DISTINCT s.id) FILTER (
+              WHERE COALESCE(s.headline, '') <> ''
+                 OR COALESCE(s.body, '') <> ''
+                 OR COALESCE(s.image_url, '') <> ''
+            )::int AS filled_block_count,
+            COUNT(DISTINCT s.id)::int AS block_count
+       FROM newspapers n
+       LEFT JOIN pages p ON p.newspaper_id = n.id
+       LEFT JOIN page_sections s ON s.page_id = p.id
+      WHERE n.id = $1
+      GROUP BY n.id`,
+    [id],
+  );
+  return rows[0] || null;
+}
+
+/**
+ * The row itself. Every table that hangs off an edition cascades from here -
+ * pages -> page_sections -> section_images, publication_files, the layouts,
+ * the history and the composition runs - which is why the delete is one
+ * statement and not a walk.
+ *
+ * `news_items` is the exception and it is DETACHED rather than cascaded: a
+ * reporter's filing belongs to the reporter who wrote it, not to the edition
+ * somebody placed it in, and it stays in their queue to be used again.
+ *
+ * That detach is written out here rather than left to the constraint, and the
+ * reason is a measurement. `schema.sql` has declared this foreign key
+ * `ON DELETE SET NULL` since it was written; the live database carries it as
+ * NO ACTION (`confdeltype = 'a'`), because schema.sql is never run at boot and
+ * that clause arrived after this database was created. So the very first
+ * delete of an edition that had ever carried a reporter's filing answered
+ * **500**, from a constraint the schema file says does not exist. The
+ * migration below fixes the declared state; this statement is what makes the
+ * route behave the same on a database where nobody has applied it yet.
+ */
+async function remove(id) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('UPDATE news_items SET newspaper_id = NULL WHERE newspaper_id = $1', [id]);
+    const { rows } = await client.query('DELETE FROM newspapers WHERE id = $1 RETURNING id', [id]);
+    await client.query('COMMIT');
+    return rows[0] || null;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function findEpaperReleases() {
   const { rows } = await pool.query(
     `SELECT n.id, n.name, n.publication_date, n.district, n.status,
@@ -348,4 +411,4 @@ async function setHouseStyle(id, { bodyFamily, displayFamily, columnRules, apply
   return { newspaper: rows[0], restyled, kept };
 }
 
-module.exports = { create, claimDate, findAll, setHouseStyle, findEpaperReleases, findPublicEpaper, selectPublicEpaper, recordEpaperRelease, clearEpaperRelease, findById, findByDate, findAllByDate, findPrevious, update };
+module.exports = { create, claimDate, findAll, contentSummary, remove, setHouseStyle, findEpaperReleases, findPublicEpaper, selectPublicEpaper, recordEpaperRelease, clearEpaperRelease, findById, findByDate, findAllByDate, findPrevious, update };

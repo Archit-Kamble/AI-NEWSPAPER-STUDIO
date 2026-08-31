@@ -5090,9 +5090,27 @@ body.print-view .mono-forme-warning { display: none; }
   border-radius: 7px;
   font: inherit;
 }
+/* Destructive, and it says so before it is pressed. The one control in this
+   product that removes a whole edition. */
+.btn-danger {
+  padding: 6px 12px;
+  background: #fff;
+  color: #b3261e;
+  border: 1px solid #e3b9b6;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.btn-danger:hover:not(:disabled) {
+  background: #b3261e;
+  color: #fff;
+  border-color: #b3261e;
+}
+.btn-danger:disabled { opacity: 0.6; cursor: default; }
+
 .edition-row {
   display: grid;
-  grid-template-columns: minmax(160px, 1.1fr) minmax(160px, 1.4fr) 90px auto auto;
+  grid-template-columns: minmax(160px, 1.1fr) minmax(160px, 1.4fr) 90px auto auto auto;
   gap: var(--s3);
   align-items: center;
   padding: 12px var(--s3);

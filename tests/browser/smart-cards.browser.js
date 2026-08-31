@@ -169,7 +169,7 @@ const FIXTURES = {
     const when = await page.evaluate((ed) => fetch(`/api/newspapers/${ed}`).then((r) => r.json())
       .then((n) => String(n.publication_date).slice(0, 10)), ED);
     await page.fill('#editionSearch', when); await page.waitForTimeout(700);
-    await page.locator(`.edition-row[data-edition-id="${ED}"] button`).click();
+    await page.locator(`.edition-row[data-edition-id="${ED}"] .edition-open`).click();
     await page.waitForSelector('#canvasSurface', { timeout: 20000 });
     await page.evaluate((ed) => { window.__ed = ed; }, ED);
     await page.waitForTimeout(3500);

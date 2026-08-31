@@ -7667,3 +7667,45 @@ records a third row pushing a picture handle out of the viewport.
 
 `npm test` 1063/1063. `tests/browser/press-panel.browser.js` 17/17, leaving
 every page on the stage and forme it found them.
+
+## What a space is worth — and the ear nobody charged for — 31 Aug 2026
+
+Branch `advert-rate-card`. The fifth "a server with no door", and the only one
+that was costing the customer money.
+
+`src/layout/rateCard.js` is a complete, tested pricing model — column-cm times a
+position rate, plus a colour surcharge that reads the page's own forme. Its
+route existed. **Zero client references.**
+
+### Opening the door found the door was miscalibrated
+
+`positionOf()` recognised the ear by **right of centre**, above a hard-coded
+`marginYPx + 420`.
+
+- This paper's ear is on the **left**: `MASTHEAD_ADVERT.col` is 0, and
+  `geometry.js` reserves it from *"the matter's left edge"* in as many words.
+- The real nameplate band ends at **144**, not 440.
+
+So `front-ear` (₹900/col-cm), the dearest rate in the card, could never apply.
+
+**Measured on edition 54470's real front page:** the ear priced as `front-page`
+— 22.4 col-cm × ₹600 + 35% colour = **₹18,144**, where the card says 22.4 × ₹900
++ 35% = **₹27,216**. A shortfall of **₹9,072 on every front-page ear**.
+
+Loosening the side test alone would have been *worse*: 440px of band contains
+the lead (y=184), which would then have sold as an ear. The band now comes from
+`regionsFor()`, and the side test is gone — the nameplate band is reserved
+furniture, so sitting in it is the whole test, and it holds whichever corner a
+paper sells.
+
+### The test agreed with the bug
+
+`tests/production.test.js` asserted `front-ear` for a synthetic block at
+`x=450, y=164` — right of centre, below the real band. Fixture and rule wrong in
+the same direction, agreeing with each other. It is built from
+`getTemplate('front')`'s own ear now, and asserts the lead beside it is not one.
+
+### Verified
+
+`npm test` green. `tests/browser/advert-rate.browser.js` 10/10 — the ear reads
+**₹27,216**, the lead ₹33,696, one request on open and none on reopen.

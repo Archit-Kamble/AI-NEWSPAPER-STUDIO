@@ -62,14 +62,50 @@ test('text that already fits is not split at all', () => {
 test('an advert is priced by column-centimetre, and position dominates', () => {
   // Five columns wide, 248 px tall = 124 mm = 12.4 cm.
   const block = { x_px: 450, y_px: 164, width_px: 190, height_px: 248 };
-  const ear = quote(block, { page_number: 1, prints_colour: true }, { totalPages: 8 });
+  const front = quote(block, { page_number: 1, prints_colour: true }, { totalPages: 8 });
   const inside = quote({ ...block, x_px: 20 }, { page_number: 5, prints_colour: false }, { totalPages: 8 });
 
-  assert.equal(ear.columns, 5);
-  assert.equal(ear.heightCm, 12.4);
-  assert.equal(ear.position, 'front-ear');
-  assert.equal(ear.columnCm, 62);
-  assert.ok(ear.total > inside.total * 5, `ear ${ear.total} vs inside ${inside.total}`);
+  assert.equal(front.columns, 5);
+  assert.equal(front.heightCm, 12.4);
+  assert.equal(front.columnCm, 62);
+  assert.ok(front.total > inside.total * 3, `front ${front.total} vs inside ${inside.total}`);
+});
+
+// THE FIXTURE THIS TEST USED TO CARRY WAS NOT AN EAR, AND NEITHER WAS THE RULE.
+//
+// It priced `{x_px: 450, y_px: 164}` as `front-ear`, and that passed because
+// positionOf() asked for a block RIGHT of centre above a hard-coded
+// `marginYPx + 420`. This paper's ear is on the LEFT (`MASTHEAD_ADVERT.col`
+// is 0; geometry.js reserves it from "the matter's left edge"), and the real
+// nameplate band ends at 144, not 440. So the fixture and the rule were wrong
+// in the same direction and agreed with each other - which is the only way a
+// test like that can pass.
+//
+// Measured on edition 54470's real front page: the ear priced as an ordinary
+// front-page block, Rs 18,144 where the card says Rs 27,216. The paper
+// undercharged Rs 9,072 on the dearest space it sells.
+test('the ear is the block in the nameplate band, wherever the paper sells it', () => {
+  const { getTemplate } = require('../src/layout/templates');
+  const { geometryOf, regionsFor } = require('../src/layout/geometry');
+  const ear = getTemplate('front').sections.find((s) => s.key === 'masthead-advert');
+  assert.ok(ear, 'the front template still carries a sold corner');
+
+  const asBlock = { x_px: ear.x, y_px: ear.y, width_px: ear.width, height_px: ear.height };
+  const priced = quote(asBlock, { page_number: 1, prints_colour: true }, { totalPages: 4 });
+  assert.equal(priced.position, 'front-ear', 'the real ear prices as the ear');
+  assert.equal(priced.perColumnCm, 900);
+
+  // And nothing below the band is one - the lead sits inside the OLD 440px
+  // band and would have been sold as an ear if the side test alone had been
+  // loosened.
+  const band = regionsFor(geometryOf({}), 'front', 1).header.bottom;
+  assert.ok(Number(ear.y) + Number(ear.height) <= band, 'the ear is inside the nameplate band');
+  const lead = getTemplate('front').sections.find((s) => s.key === 'lead');
+  const leadPriced = quote(
+    { x_px: lead.x, y_px: lead.y, width_px: lead.width, height_px: lead.height },
+    { page_number: 1, prints_colour: true }, { totalPages: 4 },
+  );
+  assert.equal(leadPriced.position, 'front-page', 'the lead is not an ear');
 });
 
 test('colour is charged for, mono is not', () => {

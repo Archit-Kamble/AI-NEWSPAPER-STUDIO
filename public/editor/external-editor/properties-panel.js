@@ -149,6 +149,74 @@ function columnsNote(section, view) {
     : `Auto sets this block in ${auto} columns. A column is aimed at the 59 mm a printed page uses, and never made too narrow to set a word in.`) + fitted + cap;
 }
 
+/**
+ * WHAT THIS SPACE IS WORTH.
+ *
+ * `src/layout/rateCard.js` prices a block the way every rate card in the trade
+ * does - column-centimetres times a rate that depends on where on the paper it
+ * sits - and `GET /pages/:pageId/sections/:sectionKey/rate` has served it since
+ * it was written. NOTHING in the browser had ever asked. So an advert desk that
+ * quotes a dozen times a day did it with a calculator, beside software that
+ * already knew the block's width in columns and its height in millimetres
+ * exactly.
+ *
+ * A <details> rather than a readout, and fetched only when it is opened: the
+ * price is a question a desk asks about SOME blocks on some days, and a request
+ * per block selection is a request per click for an answer nobody wanted.
+ */
+function rateMarkup(section, page) {
+  const pageId = page?.id;
+  if (!pageId || !section?.section_key) return "";
+  return `
+    <details class="prop-rate" data-rate-page="${pageId}" data-rate-key="${escapeHtml(section.section_key)}">
+      <summary>What this space is worth</summary>
+      <div class="prop-rate-body"><p class="muted">…</p></div>
+    </details>`;
+}
+
+const RUPEES = (n) => `₹${Number(n || 0).toLocaleString("en-IN")}`;
+
+function rateBodyMarkup(rate) {
+  return `
+    <p class="prop-rate-total"><strong>${RUPEES(rate.total)}</strong></p>
+    <dl class="prop-rate-lines">
+      <dt>Position</dt><dd>${escapeHtml(rate.positionName || rate.position)}</dd>
+      <dt>Size</dt><dd>${rate.columns} col × ${rate.heightCm} cm = <strong>${rate.columnCm}</strong> col-cm</dd>
+      <dt>Rate</dt><dd>${RUPEES(rate.perColumnCm)} per column-cm</dd>
+      <dt>Base</dt><dd>${RUPEES(rate.base)}</dd>
+      ${rate.colour
+        ? `<dt>Colour</dt><dd>+ ${RUPEES(rate.colourSurcharge)}</dd>`
+        : `<dt>Colour</dt><dd>none — this page prints black only</dd>`}
+    </dl>
+    <p class="muted ext-note">Sold by the column-centimetre, from the block the designer drew — there is no separate "ad size" for anyone to key in wrongly. Position is most of the price. Whether colour is charged follows the page's own forme.</p>`;
+}
+
+function bindRateDisclosure() {
+  const box = document.querySelector(".prop-rate");
+  if (!box || box.dataset.bound === "1") return;
+  box.dataset.bound = "1";
+  box.addEventListener("toggle", async () => {
+    if (!box.open || box.dataset.loaded === "1") return;
+    const body = box.querySelector(".prop-rate-body");
+    body.innerHTML = '<p class="muted">Working it out…</p>';
+    try {
+      const response = await fetch(
+        `/api/pages/${box.dataset.ratePage}/sections/${encodeURIComponent(box.dataset.rateKey)}/rate`,
+      );
+      if (!response.ok) throw new Error(`rate: HTTP ${response.status}`);
+      const rate = await response.json();
+      body.innerHTML = rateBodyMarkup(rate);
+      box.dataset.loaded = "1";
+    } catch (error) {
+      // Never cached on failure - the templates cache learned that lesson the
+      // hard way, and a price that stays "unavailable" for the rest of the
+      // session because one request blipped is worse than asking again.
+      console.error(error);
+      body.innerHTML = '<p class="muted">That could not be worked out just now. Close this and open it again.</p>';
+    }
+  });
+}
+
 function blockPropertiesMarkup(section, view, page) {
   const border = String(view.borderStyle || section.border_style || "none");
   const ruleWidth = borderWidthPx(view.borderWidthPx ?? section.border_width_px);
@@ -172,6 +240,7 @@ function blockPropertiesMarkup(section, view, page) {
       <div class="form-group"><label>Size</label><p class="prop-readout">${section.width_px} × ${section.height_px} px</p></div>
       ${page?.template_key ? `<div class="form-group"><label>Layout</label><p class="prop-readout">${escapeHtml(page.template_key)}</p></div>` : ""}
     </div>
+    ${rateMarkup(section, page)}
     <p class="muted ext-note">A block's position and size come from the page's layout template, not from this panel - see the small page map below for where it sits.</p>
 
     <div class="prop-section">
@@ -647,6 +716,7 @@ function bindImageControls() {
 }
 
 function bindBlockControls() {
+  bindRateDisclosure();
   if (!boundHandlers) return;
   bindBorderButtons(boundHandlers);
   bindPanelControls(boundHandlers, boundSection, boundView);

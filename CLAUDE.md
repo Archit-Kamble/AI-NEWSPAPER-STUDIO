@@ -2412,6 +2412,107 @@ a vertical bar chart has to set those sideways or abbreviate them.
 `{ kind: 'bar' }`, which the print model draws as a `fill` and Scribus as the
 same polygon it already lays a block's ground down with.
 
+### A chart's readings each pick their own ink
+
+A chart printed from one ink chosen for the whole chart, with only a pie tinting
+its slices apart — so a bar chart could not distinguish its own bars by anything
+but length. `rowInk()` resolves one ink **per reading** and every branch (bar,
+pie, line, dots, figures) carries it on the item, so no renderer decides a
+colour and none can disagree with the plate about one.
+
+- **Absent means the chart's own**, so every stored chart is unchanged to the
+  byte: flat ink for a bar, the pie's own tints for a slice. The dialog's first
+  swatch is "the chart's own" and choosing it **clears** the reading's colour
+  rather than pinning it — the difference between a choice and a state, which is
+  the rule the ink palette already follows for Black and White.
+- **The palette is a server boundary**, not trust placed in the dialog. A
+  reading's ink is interpolated into the canvas's style attribute and into a
+  `.sla`, so `sanitiseCardInks()` refuses a foreign colour at
+  `pageSection.service.js`, where the catalogue is already awaited for the
+  block's own tint. Verified through the real route: blue kept, magenta dropped,
+  black kept by name, absent left absent.
+- `--chart-ink` stays on the container for what belongs to the **chart** rather
+  than to a reading — the plot's connecting line.
+
+### A chart takes the room its readings need, not the room its share asked for
+
+The share alone decided the panel, so "a quarter of the block" reserved a
+quarter whether the chart held three readings or twelve — and to the compositor
+a panel is an obstacle whether or not there is ink in it, so the copy was set
+clear of white space. Photographed on a real 307×296 anchor: three bars filling
+the top third and the rest dead white.
+
+The solver has always known the real height — it is what `solveFont()` fits
+against — and never said it out loud. It publishes `contentHeight` now, and the
+share became a **ceiling**: the chart is solved at the width it is about to get
+and the panel is cut to what comes back. It can only ever give room **back**.
+
+| a quarter of 307×296 → a 154×148 panel | needs | handed back |
+|---|---|---|
+| 2 readings | 70 px | **62 px** |
+| 3 readings | 94 px | **38 px** |
+| 4 readings | 118 px | 14 px |
+
+### A card is set in the face it was measured in
+
+`print-model.js` hard-coded `family: 'serif'` for **every** smart-card line, and
+`layoutSmartCard()` measures a chart, the weather panel and the market table in
+`'sans'`. Those cards were fitted in one face and printed in another — measured
+across a chart's own strings, the plate sets them **5–17% narrower** than the box
+they were fitted to, worst on Devanagari digits (16.7%), which is exactly what a
+value column is made of. The walk states the face per line now; the print model
+and Scribus read it. सुविचार states it per **line** rather than per card, because
+it sets its quote in serif and its credit in sans.
+
+**And a card may be set in another of the paper's faces.** Every one of the
+ninety-odd measurements in `layout.js` names `'serif'` or `'sans'` — which are
+typeface **keys**, not roles — so a card could only ever be the paper's own two.
+The substitution is made in `faceOf()` rather than at those ninety call sites,
+installed for the length of **one** solve and cleared in a `finally`: a solve
+that throws cannot leave the next card set in the face this one chose.
+
+- **Both keys resolve to the chosen face.** A card set half in Mukta and half in
+  Sahas Sans reads as a mistake rather than as a style.
+- **It is measured in it, not painted in it.** Different faces measure to
+  different widths and can resolve a different size — Tiro fits 28 px where the
+  serif fits 24.
+- **A strict key match, never `typefaceOf()`.** That function *classifies* a CSS
+  family name and answers "sans" for anything containing the word, which made
+  **"Comic Sans" a legal card face**. Caught by the test that asks it.
+
+### A panel is adjusted the way a picture is
+
+An inset panel — the fact box, the pull quote, the cross-head, the separator and
+the chart — is a rectangle the compositor sets the copy clear of, which is
+exactly what a photograph is to it: `compose.js`'s obstacle set does not know
+which is which. But a picture could be dragged and sized on the page since the
+Block Editor was built, and a panel could only ever be moved by typing four
+numbers into Properties.
+
+`renderPanelFrames()`/`bindPanelFrames()` mirror the picture frames beside them:
+the same eight handles, the same `resizeRect()`, the same live reflow while the
+pointer is down. The frame draws **no ink** — the panel's own ground, rule and
+type come from `insetPanelsMarkup()` underneath, because exactly one thing may
+decide what a panel looks like.
+
+- **It commits on pointerup, once.** Nothing is written while the rectangle
+  moves; the draft is updated locally and the block recomposed, which is what
+  makes the copy reflow before anything is saved. A press that never moved is a
+  **selection** and writes nothing, or every click would leave a save and a
+  history step behind it.
+- **A backtick in a comment inside a template literal** took the whole
+  application down again — `node --check` passes it, Chrome answers *"Unexpected
+  identifier"* and nothing renders. Second time in this codebase.
+- **A leftover fixture panel became a real fault the moment panels could be
+  clicked.** `visual-pass.browser.js` added one to a real block and never took
+  it away; harmless while panels were inert, and then it intercepted the clicks
+  `editor-parity.browser.js` makes on that same block. A net that writes into a
+  real block must put it back — a panel like anything else.
+
+```bash
+node tests/browser/chart-panel.browser.js            # defaults to 2099 / anchor
+```
+
 ### A panel inside a block, and a picture across two
 
 **`page_sections.inset_panels`** is the चौकट — a fact box or pull quote set

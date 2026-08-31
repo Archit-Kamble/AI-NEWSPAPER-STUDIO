@@ -7858,3 +7858,61 @@ Browser: `roles.browser.js` **37/37**, `workspace.browser.js` **224/224**,
 `sampadak@esahas.com` and `editor@esahas.com` were created through the real
 owner API so the customer can sign in immediately. Their initial passwords were
 handed over separately and should be changed on first sign-in.
+
+## Group 1 — charts and Smart Cards as objects — 31 Aug 2026
+
+Branch `chart-objects`. The customer sent a 92-second screen recording with
+thirteen numbered problems and asked for them in three or four groups, one
+group at a time, each on its own branch. This is the first group: items 1, 2, 4
+and 10 — everything about a chart or a card as an object on the page.
+
+The recording could not be played, so its frames were extracted (Chrome, over a
+loopback server — there is no ffmpeg on this machine) and read. The last frame
+shows the fault plainly: a quarter-block chart panel on a 307×296 anchor with
+three bars in the top third, the rest dead white, and all three bars the same
+black.
+
+### What was measured, and what it cost
+
+| | before | after |
+|---|---|---|
+| bars distinguishable by colour | 1 ink for the whole chart | one per reading |
+| a 3-reading chart in a quarter of 307×296 | 148 px reserved | **110 px** — 38 px back to the story |
+| a card's face on the plate | always `serif` | the face it was **measured** in |
+| chart text: measured vs printed width | **5–17% apart** | identical |
+| moving a panel | four numbers in Properties | drag and eight handles |
+
+### Three faults found underneath the four asked for
+
+- **The plate set every smart-card line in `serif`** while the solver measures
+  a chart, the weather panel and the market table in `sans`. Those cards were
+  fitted in one face and printed in another, and had been since the export walk
+  was written. This had to be fixed before a font-family control could honestly
+  be offered.
+- **`typefaceOf()` classifies rather than matches**, so "Comic Sans" was a legal
+  card face until the test asked.
+- **`visual-pass.browser.js` left a panel on a real block** every run. Invisible
+  while panels were inert; it broke `editor-parity` the moment they became
+  objects.
+
+And one self-inflicted: a backtick in a comment **inside a template literal**
+took the whole application down. Second time in this codebase, now commented as
+such.
+
+### Verified
+
+`npm test` **1079/1080** — the one failure is `currentNewsWriting.test.js`'s
+"check the sources first", the pre-existing RSS timing flake (19/19 alone).
+New: `tests/chartInk.test.js` (5), `tests/cardFace.test.js` (5).
+
+Browser: `chart-panel.browser.js` **15/15** (new), `editor-parity` 70/70,
+`visual-pass` 46/46, `workspace` 224/224, `body-editing` 35/35, `smart-cards`
+27/27. No page errors anywhere.
+
+### The remaining groups
+
+| group | items | branch |
+|---|---|---|
+| 2. block surface: bugs + styling | 6, 7, 8, 12, 13 | `block-surface` |
+| 3. writing: carry-over + write-empty-blocks | 5, 3, 9 | `writing-flow` |
+| 4. e-paper for the public | 11 | `epaper-public` |

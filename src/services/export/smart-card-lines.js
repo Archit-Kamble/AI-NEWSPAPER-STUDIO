@@ -40,6 +40,27 @@ function smartCardLines(key, data, frame, cardLayout) {
   if (layout.fitState === 'EMPTY') return [];
 
   const out = [];
+  // THE FACE THIS CARD WAS MEASURED IN.
+  //
+  // print-model.js set EVERY card line in 'serif', and layoutSmartCard()
+  // measures most of them in 'sans' - so the card was fitted in one face and
+  // printed in another. Measured across a chart's own strings, the plate sets
+  // them 5-17% narrower than the box they were fitted to, worst on Devanagari
+  // digits (16.7%), which is exactly what a value column is made of. That is
+  // the two-surface fault this codebase guards hardest against, and it had
+  // been true of every card since the walk was written.
+  //
+  // A card names the face it measures in, once, here - and `line()` carries it
+  // out so every writer sets what the solver measured. Serif is the default
+  // because that is what most cards measure their reading matter in, and what
+  // this walk has always emitted.
+  const CARD_FACES = {
+    chart: 'sans', havaman: 'sans', market: 'sans',
+  };
+  // A face the DESK chose for this card wins over the card's own default -
+  // layout.js solved every measurement in it, so the plate has to set it or
+  // the card is fitted in one face and printed in another all over again.
+  const face = layout.family || CARD_FACES[String(key)] || 'serif';
   const contentX = Number(layout.contentBox?.x) || 0;
   const contentY = Number(layout.contentBox?.y) || 0;
   const contentWidth = Number(layout.contentBox?.width) || Number(frame.width) || 0;
@@ -142,6 +163,10 @@ function smartCardLines(key, data, frame, cardLayout) {
     out.push({
       text, x: contentX + x, y: contentY + y, width, fontPx, align, height: height || fontPx * ratio,
       ink: style.ink || null, bold: Boolean(style.bold),
+      // The card's own face, unless this particular line says otherwise - a
+      // सुविचार sets its quote in serif and its credit in sans, so a card is
+      // not always one face throughout.
+      family: style.family || face,
     });
   };
 
@@ -419,7 +444,7 @@ function smartCardLines(key, data, frame, cardLayout) {
         g.lineHeightPx, { bold: true });
       if (g.creditText && g.inlineCredit) {
         line(g.creditText, g.quoteInlineWidth + g.creditGap, top,
-          g.creditInlineWidth, g.creditFontPx, 0, g.lineHeightPx, { ink: '#6a5559' });
+          g.creditInlineWidth, g.creditFontPx, 0, g.lineHeightPx, { ink: '#6a5559', family: 'sans' });
       }
       return out;
     }
@@ -439,7 +464,7 @@ function smartCardLines(key, data, frame, cardLayout) {
       bar((contentWidth - g.ruleWidth) / 2, y - 0.35, g.ruleWidth, 0.7, '#8a1428');
       y += g.ruleGap;
       creditLines.forEach((text) => {
-        line(text, g.sideInset, y, g.measureWidth, g.creditFontPx, 1, g.creditLineHeightPx, { ink: '#6a5559' });
+        line(text, g.sideInset, y, g.measureWidth, g.creditFontPx, 1, g.creditLineHeightPx, { ink: '#6a5559', family: 'sans' });
         y += g.creditLineHeightPx;
       });
     }

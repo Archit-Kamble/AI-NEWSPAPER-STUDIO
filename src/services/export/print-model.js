@@ -368,7 +368,12 @@ function cardItems(key, data, frame, originX, originY, mono = false) {
     items.push(textItem(
       { x: originX + mm(line.x), y: originY + mm(line.y), width: mm(line.width), height: mm(line.height) },
       [run(line.text, {
-        family: 'serif', weight: line.bold ? 700 : 400, bold: Boolean(line.bold),
+        // THE FACE THE CARD WAS MEASURED IN, stated by the walk. This was a
+        // hard-coded 'serif' while layoutSmartCard() measures a chart, the
+        // weather panel and the market table in 'sans' - so those cards were
+        // fitted in one face and printed in another, 5-17% narrower on the
+        // plate than the box they were fitted to.
+        family: line.family || 'serif', weight: line.bold ? 700 : 400, bold: Boolean(line.bold),
         fontPx: line.fontPx, ink: line.ink || null,
       })],
       ALIGN[line.align] || 'left',

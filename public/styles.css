@@ -7459,3 +7459,10 @@ body.print-view .page-imprint {
   background-image: linear-gradient(45deg, transparent 45%, #bbb 45%, #bbb 55%, transparent 55%);
 }
 .chart-row-ink.is-on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+/* Which of the paper's faces a card is SET in. Beside the ink row, because
+   they are the two things about a chart that are not its numbers. */
+.chart-face {
+  padding: 3px 10px; border: 1px solid #cfcfcf; border-radius: 999px;
+  background: #fff; font-size: 12px; cursor: pointer; color: #333;
+}
+.chart-face.is-on { background: var(--accent); border-color: var(--accent); color: #fff; }

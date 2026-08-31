@@ -35,8 +35,15 @@ function sanitiseCardInks(card, palette) {
     if (String(value).toLowerCase() === 'black' || String(value) === '#111111') return 'black';
     return palette.sanitiseInk(value);
   };
+  // The face a card is SET in, checked against the one typeface catalogue -
+  // the same boundary `displayFamily` already crosses, and for the same reason:
+  // it reaches a renderer's style attribute and a .sla's font name.
+  const family = card.family && TYPEFACES.some((face) => face.key === card.family)
+    ? card.family : undefined;
+
   return {
     ...card,
+    family,
     ink: card.ink ? (legal(card.ink) || undefined) : card.ink,
     items: card.items.map((item) => {
       if (!item || typeof item !== 'object') return item;

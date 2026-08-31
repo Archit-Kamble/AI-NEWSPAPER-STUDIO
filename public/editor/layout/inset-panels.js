@@ -197,6 +197,10 @@
     if (!items.length) return null;
     return {
       chartType: clean(raw.chartType) || 'bar',
+      // The face the card is set in. Shape only here, like the inks above -
+      // which faces exist is decided at the service, where the catalogue is
+      // already required.
+      ...(clean(raw.family) ? { family: clean(raw.family) } : {}),
       subtitle: clean(raw.subtitle),
       unit: clean(raw.unit),
       source: clean(raw.source),

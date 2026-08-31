@@ -95,6 +95,10 @@ import { INKS, sanitiseInk } from '../layout/inks.js';
 // (its CJS branch is guarded on `typeof module`), so importing it for its
 // side effect installs `SahasPublicationType` in both Node and the browser.
 import '../layout/publication-type.js';
+// The paper's faces, for `family` on a card. Same dual CJS/global shape as
+// publication-type.js above, so importing it for its side effect installs
+// `SahasTypefaces` in both Node and the browser.
+import '../layout/typefaces.js';
 
 const RUNNING_BODY_PX = (globalThis.SahasPublicationType
   && globalThis.SahasPublicationType.DEFAULT_BODY_FONT_PX) || 6.4;
@@ -395,13 +399,30 @@ const empty = (key) => ({ key, fitState: 'EMPTY', fontPx: 0, geometry: null, vio
  * pattern compose.js's own `measure()` already uses, so a Smart Card and an
  * ordinary article agree about what a Marathi run costs.
  */
+// WHICH FACE THIS CARD IS SET IN.
+//
+// Every one of the ninety-odd measurements below names 'serif' or 'sans' - and
+// those are typeface KEYS in layout/typefaces.js, not roles, so a card could
+// only ever be set in the paper's own two faces. A desk that changed the
+// block's family watched every card on the page ignore it.
+//
+// The substitution is made HERE rather than at the ninety call sites, so a
+// card's own measurement code is untouched and cannot drift: `faceOf()` is
+// the one place a named face becomes a real one. It is installed for the
+// length of ONE `layoutSmartCard()` call and cleared in a `finally`, so
+// nothing outside a solve can see it and a solve that throws cannot leave it
+// behind.
+let FACE_SUBSTITUTION = null;
+const faceOf = (family) => FACE_SUBSTITUTION?.[family] || family;
+
 function measure(text, fontPx, family, weight) {
-  const base = isShaperReady() ? shapeWidthPx(text, fontPx, family, weight) : null;
-  return base !== null ? base : hmtxWidth(text, fontPx, family, weight);
+  const face = faceOf(family);
+  const base = isShaperReady() ? shapeWidthPx(text, fontPx, face, weight) : null;
+  return base !== null ? base : hmtxWidth(text, fontPx, face, weight);
 }
 
 function lineHeightFor(fontPx, family = 'serif', weight = 400) {
-  return minLineHeightFor(family, weight) * LEADING_MULTIPLIER * fontPx;
+  return minLineHeightFor(faceOf(family), weight) * LEADING_MULTIPLIER * fontPx;
 }
 
 /**
@@ -2575,6 +2596,37 @@ export function layoutSmartCard(key, data, frame) {
   const fn = LAYOUTS[normalKey];
   if (!fn) return empty(String(key || ''));
 
+  // A CARD MAY BE SET IN THE PAPER'S OTHER FACES.
+  //
+  // Every measurement in this file names 'serif' or 'sans', which are typeface
+  // KEYS rather than roles - so a card was set in the paper's own two faces
+  // whatever the block around it was set in. `family` names one of the
+  // catalogue's faces and BOTH keys resolve to it: a card set half in Mukta and
+  // half in Sahas Sans reads as a mistake rather than as a style, and a card is
+  // one piece of furniture.
+  //
+  // An unrecognised name resolves to itself, so `typefaceOf` answers the
+  // paper's serif and nothing can reach a renderer as an unknown face. Absent
+  // means unchanged, which is what every stored card means today.
+  // A STRICT KEY MATCH, not `typefaceOf()`. That function CLASSIFIES a CSS
+  // family name - it answers "sans" for anything containing the word, which is
+  // right for reading a stylesheet's font stack and wrong here: it made
+  // "Comic Sans" a legal card face. What a card may name is one of the paper's
+  // own faces, by key, and nothing else.
+  const faces = globalThis.SahasTypefaces;
+  const chosen = faces?.TYPEFACES.some((face) => face.key === data?.family) ? String(data.family) : null;
+  FACE_SUBSTITUTION = chosen && chosen !== 'serif' ? { serif: chosen, sans: chosen } : null;
+  try {
+    return solveCard(normalKey, fn, data, frame, chosen);
+  } finally {
+    // Cleared whatever happened, so a solve that throws cannot leave the next
+    // card set in the face this one chose.
+    FACE_SUBSTITUTION = null;
+  }
+}
+
+function solveCard(normalKey, fn, data, frame, chosenFamily) {
+
   const clamped = clampFrame(frame);
   const { artwork, content, band, borderBox, headRule: markRule } = cardArtworkFor(normalKey, clamped);
   const frameFor = (width) => ({
@@ -2756,6 +2808,14 @@ export function layoutSmartCard(key, data, frame) {
     artwork: sized,
     contentBox,
     headRule,
+    // WHICH FACE THIS CARD WAS SET IN, so every surface draws what was
+    // measured rather than deciding for itself. The canvas puts it on the
+    // card's own element; the export walk states it per line and the plate
+    // reads it there. Null when the card is in the paper's own faces, which
+    // is every stored card today.
+    family: chosenFamily && chosenFamily !== 'serif' ? chosenFamily : null,
+    familyCss: chosenFamily && chosenFamily !== 'serif'
+      ? (globalThis.SahasTypefaces?.publicationFamily(chosenFamily)?.css || null) : null,
     // The rectangle this card's own rule follows: the BLOCK's own edge, so the
     // four sides are the same rule at the same distance from the paper's grid
     // whatever furniture the card puts inside itself. Null when the card is

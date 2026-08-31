@@ -725,7 +725,12 @@ export function smartCardMarkup(key, data, frame) {
     ? `<i class="smart-card-head-rule" style="left:${layout.headRule.x}px;top:${layout.headRule.y}px;width:${layout.headRule.width}px"></i>`
     : "";
   const cls = `smart-card smart-card-${escapeHtml(key)}${layout.fitState === "OVERSET" ? " is-overset" : ""}`;
-  return `<div class="${cls}" data-fit-state="${escapeHtml(layout.fitState)}">${rule}${headRule}${titleRules}${artwork}<div class="smart-card-content" style="${contentStyle}">${subtitle}${inside}</div></div>`;
+  // THE FACE THE CARD WAS SOLVED IN. Every measurement in layout.js names a
+  // real typeface, so drawing the card in a different one would set it to a
+  // measure it was never fitted to - which is the fault this file exists to
+  // prevent. Absent unless the desk chose a face, so no stored card moves.
+  const face = layout.familyCss ? `font-family:${layout.familyCss};` : "";
+  return `<div class="${cls}" style="${face}" data-fit-state="${escapeHtml(layout.fitState)}">${rule}${headRule}${titleRules}${artwork}<div class="smart-card-content" style="${contentStyle}">${subtitle}${inside}</div></div>`;
 }
 
 /**

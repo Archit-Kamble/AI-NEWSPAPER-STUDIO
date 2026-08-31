@@ -452,7 +452,13 @@ function smartCardFrames({ key, data, frame, xMm, yMm, ownPage, cardLayout, fami
       xMm: xMm + mm(line.x), yMm: yMm + mm(line.y),
       widthMm: mm(line.width), heightMm: mm(line.height),
       runs: [{
-        text: line.text, family, weight: line.bold ? 700 : weight, bold: Boolean(line.bold),
+        // THE FACE THE CARD WAS MEASURED IN, stated by the walk. The caller's
+        // `family` was used for every card line while layoutSmartCard()
+        // measures a chart, the weather panel and the market table in 'sans' -
+        // so those cards were fitted in one face and set on the plate in
+        // another, 5-17% narrower than the box they were fitted to.
+        text: line.text, family: line.family || family,
+        weight: line.bold ? 700 : weight, bold: Boolean(line.bold),
         italic: false, underline: false, fontPx: line.fontPx, ink: line.ink || null,
       }],
       align: line.align, ownPage,

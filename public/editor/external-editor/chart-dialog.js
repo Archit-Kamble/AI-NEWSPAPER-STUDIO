@@ -32,8 +32,12 @@
 import { escapeHtml } from "../format.js";
 import { CHART_INKS, layoutSmartCard } from "../smart-cards/layout.js";
 import "../layout/inset-panels.js";
+import "../layout/typefaces.js";
 
 const { INSET_PANEL_MIN_PX } = globalThis.SahasInsetPanels;
+// The paper's faces, from the one catalogue - never a second list of these
+// keys here, which is the drift this project has been bitten by twice.
+const { TYPEFACES } = globalThis.SahasTypefaces;
 
 const TYPES = Object.freeze([
   { key: "bar", label: "Bars", note: "A row per reading, ranked. The clearest chart on newsprint." },
@@ -57,7 +61,12 @@ let host = null;
 let state = null;
 
 const rowsFrom = (items) => (Array.isArray(items) && items.length
-  ? items.map((item) => ({ label: String(item.label ?? ""), value: String(item.value ?? "") }))
+  ? items.map((item) => ({
+    label: String(item.label ?? ""), value: String(item.value ?? ""),
+    // Carried through a re-open, or editing a chart's standfirst would quietly
+    // strip the colour off every bar.
+    ink: String(item.ink ?? ""),
+  }))
   : [{ label: "", value: "" }]);
 
 /**
@@ -208,6 +217,13 @@ function markup() {
           <label>Source <input type="text" id="chartSource" value="${escapeHtml(source)}" placeholder="स्रोत : साहस वार्ता" /></label>
         </div>
         <div class="chart-inks">
+          <span>Set in</span>
+          ${[{ key: "", label: "The paper's own", short: "Default" }, ...TYPEFACES.filter((f) => f.role === "text")]
+            .map((f) => `<button type="button" class="chart-face${(state.family || "") === f.key ? " is-on" : ""}"
+              data-chart-face="${escapeHtml(f.key)}" title="${escapeHtml(f.note || f.label)}"
+              >${escapeHtml(f.short || f.label)}</button>`).join("")}
+        </div>
+        <div class="chart-inks">
           <span>Printed in</span>
           ${CHART_INKS.map((entry) => `<button type="button" class="chart-ink${
             (entry.key === "black" ? "#111111" : entry.hex) === ink ? " is-on" : ""}"
@@ -263,6 +279,9 @@ function payload() {
   if (!items.length) return null;
   return {
     chartType: state.type,
+    // Absent unless the desk chose one - absent means the paper's own faces,
+    // which is what every stored card means today.
+    ...(state.family ? { family: state.family } : {}),
     subtitle: state.subtitle.trim(),
     unit: state.unit.trim(),
     source: state.source.trim(),
@@ -295,6 +314,7 @@ export function openChartDialog({ view, section, onPatch, chartType }) {
   state = {
     type: chartType || existingCard?.chartType || "bar",
     ink: existingCard?.ink || "#c8102e",
+    family: existingCard?.family || "",
     room: blockCard ? "block" : panelIndex >= 0 ? "half" : "block",
     rows: rowsFrom(existingCard?.items),
     subtitle: existingCard?.subtitle || "",
@@ -391,6 +411,9 @@ export function bindChartDialog() {
 
     // One reading's own colour. Harvest FIRST, so the row's typed label and
     // number survive the repaint, then set the ink on that row by index.
+    const face = target.closest("[data-chart-face]");
+    if (face) { harvest(); state.family = face.dataset.chartFace; paint(); return; }
+
     const rowInk = target.closest("[data-row-ink]");
     if (rowInk) {
       harvest();

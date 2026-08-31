@@ -30,6 +30,10 @@ function mapArticle(article, page) {
   return { ...article, ...box };
 }
 
+// What a newly added block is called until the desk names it. Named once so
+// the check below and the block that carries it cannot drift apart.
+const NEW_BLOCK_TITLE = 'New news block';
+
 function manualId() {
   const token = globalThis.crypto?.randomUUID?.().replace(/-/g, '')
     || `${Date.now()}${Math.random().toString(36).slice(2)}`;
@@ -148,7 +152,7 @@ export async function openEpaperMapEditor(edition, { onSaved } = {}) {
     render();
   });
   root.querySelector('[data-map-add]').addEventListener('click', () => {
-    const article = { id: manualId(), sectionKey: '', headline: 'New news block', manual: true, x: Math.round(selectedPage.width * .12), y: Math.round(selectedPage.height * .12), width: Math.round(selectedPage.width * .42), height: Math.round(selectedPage.height * .18) };
+    const article = { id: manualId(), sectionKey: '', headline: NEW_BLOCK_TITLE, manual: true, x: Math.round(selectedPage.width * .12), y: Math.round(selectedPage.height * .12), width: Math.round(selectedPage.width * .42), height: Math.round(selectedPage.height * .18) };
     selectedPage.articles.push(article);
     selectedId = article.id;
     render();
@@ -164,8 +168,16 @@ export async function openEpaperMapEditor(edition, { onSaved } = {}) {
   });
   root.querySelector('[data-map-save]').addEventListener('click', async (event) => {
     const button = event.currentTarget;
-    const manualWithoutTitle = selectedPage.articles.find((article) => article.manual && !String(article.headline || '').trim());
-    if (manualWithoutTitle) return window.alert('Give each manually added news block a title before saving.');
+    // THE PLACEHOLDER IS NOT A TITLE.
+    //
+    // This checked for an EMPTY headline, and a new block is created carrying
+    // the words "New news block" - which is not empty, so ten of them saved
+    // straight through to the public reader and printed as ten identical
+    // stories with nothing under them. Measured on this newsroom's own
+    // released issue. A title nobody typed is the same as no title.
+    const untitled = selectedPage.articles.find((article) => article.manual
+      && (!String(article.headline || '').trim() || String(article.headline).trim() === NEW_BLOCK_TITLE));
+    if (untitled) return window.alert('Give each manually added news block its own title before saving — "' + NEW_BLOCK_TITLE + '" is the placeholder, not a headline.');
     button.disabled = true;
     button.textContent = 'Saving PNG cards…';
     const payload = {

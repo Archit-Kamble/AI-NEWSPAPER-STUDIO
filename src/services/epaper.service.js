@@ -344,13 +344,59 @@ function pageViewer(page) {
   </section>`;
 }
 
+/**
+ * The public reader.
+ *
+ * THE NAMEPLATE CARRIES THE LION, so the header does not carry it twice.
+ * `.reader-lion-mark` was a 42px circle cropped out of the nameplate image
+ * itself (background-position 56%) - the same lion, smaller, with a red sliver
+ * of the वा of वार्ता caught in its edge, sitting beside the real one. That is
+ * the desk's "lion logo in top is not right", and the answer is the one this
+ * project already reached for the RNI: the artwork sets the mark, and setting
+ * it a second time is not a mark but a mistake.
+ *
+ * NOTHING HERE EXPLAINS ITSELF IN AN HTML COMMENT. Everything between the
+ * backticks below is downloaded by every reader, so the reasoning lives out
+ * here in the source where it costs them nothing - and a comment inside a
+ * template literal cannot carry a backtick anyway, which has taken this
+ * application down three times.
+ */
 function renderHtml(snapshot) {
   const { edition: meta, pages } = snapshot;
   const when = dateText(meta);
   const title = `${meta.title} — ${when}`;
   const cover = pages[0]?.imageUrl || LOGO_URL;
   const pageButtons = pages.map((page) => `<button type="button" data-page-button="${page.number}" ${page.number === 1 ? 'aria-current="page"' : ''}>${devanagari(page.number)}</button>`).join('');
-  const transcript = pages.map((page) => `<section class="transcript-page"><h2>पृष्ठ ${devanagari(page.number)}</h2>${page.articles.map((item) => articleTranscript(item, page.number)).join('')}</section>`).join('');
+  // THE READER SEES ONE PAGE, SO THEY READ ONE PAGE'S STORIES.
+  //
+  // Every page's stories were printed under every page: a reader looking at
+  // page one scrolled down and found the whole paper's text, in order, with no
+  // way to tell which of it was on the sheet above. The desk's report was
+  // exactly that - "it should only show that page's news below". Each page's
+  // transcript is hidden with the page it belongs to and shown with it, by the
+  // same navigation that moves the sheet.
+  //
+  // AND A MANUALLY MAPPED BLOCK IS NOT A STORY. The Map blocks tool draws a
+  // rectangle over a page somebody ELSE designed - an uploaded PDF - so there
+  // is no newsroom copy behind it and there never will be. Printing it as an
+  // article gave the public a headline with nothing under it and a button
+  // offering to share it: measured on this newsroom's own released issue, TEN
+  // of them, every one reading "New news block". It stays a hotspot on the page
+  // image, which is exactly what it is.
+  //
+  // A NEWSROOM BLOCK KEEPS ITS ENTRY whether or not it carries a body yet -
+  // its headline was set by a sub-editor and printed on the sheet, and a reader
+  // searching for it must find it. `manual` is the discriminator because it is
+  // the true one: it says where the block CAME FROM, and no amount of reading
+  // the headline could tell the two apart.
+  const transcript = pages.map((page) => {
+    const readable = page.articles.filter((item) => !item.manual);
+    const body = readable.length
+      ? readable.map((item) => articleTranscript(item, page.number)).join('')
+      : `<p class="transcript-none">This page was published as a finished PDF, so its text is not carried separately. Tap a block on the page above to open its share card.</p>`;
+    return `<section class="transcript-page" data-transcript-page="${page.number}" ${page.number === 1 ? '' : 'hidden'}>
+      <h2>पृष्ठ ${devanagari(page.number)}</h2>${body}</section>`;
+  }).join('');
 
   return `<!doctype html>
 <html lang="mr">
@@ -367,7 +413,7 @@ function renderHtml(snapshot) {
 </head>
 <body class="epaper-reader">
 <header class="reader-header">
-  <a class="reader-brand" href="/epaper" aria-label="${escapeHtml(meta.title)} public e-paper"><img src="${LOGO_URL}" alt="${escapeHtml(meta.title)}"><span class="reader-lion-mark" role="img" aria-label="Sahas Varta lion mark"></span></a>
+  <a class="reader-brand" href="/epaper" aria-label="${escapeHtml(meta.title)} public e-paper"><img src="${LOGO_URL}" alt="${escapeHtml(meta.title)}"></a>
   <div class="reader-meta"><strong>${escapeHtml(when)}</strong><span>${escapeHtml(meta.district)} · ${escapeHtml(meta.volumeLine)}</span></div>
   <div class="reader-downloads">
     ${meta.pdfUrl ? `<a class="reader-pdf" href="${escapeHtml(meta.pdfUrl)}" download>${icon('download')}<span>Whole newspaper PDF</span></a>` : ''}
@@ -377,7 +423,7 @@ function renderHtml(snapshot) {
 <main>
   <div class="epaper-stage" data-page-stage tabindex="0" aria-live="polite">${pages.map(pageViewer).join('')}</div>
   <p class="reader-tip">Tap a news block to open its clear PNG card. Swipe left or right to change page.</p>
-  <section class="epaper-transcript" aria-label="Readable edition text"><div class="transcript-intro"><h2>Stories in this edition</h2><p>The full searchable text remains available below the printed pages.</p></div>${transcript}</section>
+  <section class="epaper-transcript" aria-label="Readable edition text"><div class="transcript-intro"><h2>Stories on this page</h2><p>The readable text of the page above.</p></div>${transcript}</section>
 </main>
 <div class="epaper-toast" role="status" aria-live="polite" hidden></div>
 <script src="/epaper-reader.js" defer></script>

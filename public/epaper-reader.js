@@ -35,6 +35,10 @@
   // ------------------------------------------------------------ page turn ---
   const pages = [...document.querySelectorAll('[data-page]')];
   const buttons = [...document.querySelectorAll('[data-page-button]')];
+  // THE TEXT FOLLOWS THE SHEET. Every page's stories used to be printed under
+  // every page, so a reader looking at page one scrolled down into the whole
+  // paper with no way to tell which of it was on the sheet above.
+  const transcripts = [...document.querySelectorAll('[data-transcript-page]')];
   const stage = document.querySelector('[data-page-stage]');
   let current = 0;
 
@@ -42,6 +46,7 @@
     if (!pages.length) return;
     current = Math.max(0, Math.min(pages.length - 1, index));
     pages.forEach((page, i) => { page.hidden = i !== current; });
+    transcripts.forEach((section, i) => { section.hidden = i !== current; });
     buttons.forEach((button, i) => {
       if (i === current) button.setAttribute('aria-current', 'page');
       else button.removeAttribute('aria-current');

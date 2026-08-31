@@ -60,7 +60,15 @@ test('reader HTML carries mobile page navigation, PNG story affordances, PDF and
   assert.match(html, /Facebook/);
   assert.match(html, /LinkedIn/);
   assert.doesNotMatch(html, />All editions</);
-  assert.match(html, /reader-lion-mark/);
+  // THE NAMEPLATE CARRIES THE LION, so the header does not carry it twice.
+  // This asserted the presence of a second, cropped copy of the same mark - a
+  // 42px circle taken out of the nameplate image at background-position 56%,
+  // with a red sliver of the वा of वार्ता caught in its edge, sitting beside the
+  // real one. The desk's report was "lion logo in top is not right", and the
+  // answer is the one this project already reached for the RNI: the artwork
+  // sets the mark, and setting it a second time is not a mark but a mistake.
+  assert.doesNotMatch(html, /reader-lion-mark/);
+  assert.match(html, /class="reader-brand"/, 'the real nameplate is still the header');
 });
 
 test('published asset paths reject traversal, manifests and non-PNG files before lookup', async () => {

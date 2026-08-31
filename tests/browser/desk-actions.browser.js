@@ -114,9 +114,41 @@ const say = (ok, name, detail = '') => {
     say(chrome.filled && chrome.label === '0', 'a written block does not print its own key over the story', JSON.stringify(chrome));
     say(chrome.flags === '1', 'and its warning marks are never hidden with it');
     say(!chrome.emptyKey || chrome.emptyLabel === '1', 'an empty block still says what it is waiting for', String(chrome.emptyKey));
+    // AND IT STAYS GONE UNDER THE POINTER. Hover and selection used to bring
+    // the chrome back, on the reasoning that those are the moments a desk asks
+    // what a block IS. They are the two moments it must be gone: the pointer
+    // is on the block for the whole time a desk works on it and a block being
+    // edited is selected throughout, so "ANCHOR" sat over the headline on the
+    // one screen where the copy matters most. The Block Editor's own header
+    // still names the selected block - a read-out in the chrome, not a word
+    // laid over the story.
     await page.hover(`.newspaper-section[data-section-key="${KEY}"]`); await page.waitForTimeout(500);
-    say(await page.evaluate((k) => getComputedStyle(document.querySelector(`.newspaper-section[data-section-key="${k}"] .section-label`)).opacity, KEY) === '1',
-      'and the key comes back when the desk asks for it');
+    const onHover = await page.evaluate((k) => getComputedStyle(document.querySelector(`.newspaper-section[data-section-key="${k}"] .section-label`)).opacity, KEY);
+    say(onHover === '0', 'and it stays off while the pointer is on the block', `opacity ${onHover}`);
+    await page.evaluate((k) => document.querySelector(`.newspaper-section[data-section-key="${k}"]`)?.click(), KEY);
+    await page.waitForTimeout(900);
+    const onSelect = await page.evaluate((k) => {
+      const sec = document.querySelector(`.newspaper-section[data-section-key="${k}"]`);
+      return { active: sec.classList.contains('active'), label: getComputedStyle(sec.querySelector('.section-label')).opacity };
+    }, KEY);
+    say(onSelect.active && onSelect.label === '0', 'and off while the block is selected and being written',
+      JSON.stringify(onSelect));
+    // The two that keep it are the block saying something the copy cannot: a
+    // standing feature is USEFULLY named, and an overflowing block is telling
+    // the desk it does not print.
+    const kept = await page.evaluate(() => {
+      const one = document.querySelector('.newspaper-section.filled.holds-card, .newspaper-section.filled.overflowing');
+      if (!one) return null;
+      const badge = one.querySelector('.section-status-badge');
+      return { key: one.dataset.sectionKey, badge: badge ? getComputedStyle(badge).opacity : null };
+    });
+    say(!kept || kept.badge === '1', 'a card or an overflowing block still speaks up', JSON.stringify(kept));
+    // Put the selection back the way this section found it: the next check
+    // asks what an UNCHOSEN block draws, and the hover toolbar is gated on
+    // `.active`, so a block left selected here fails it three checks later.
+    await page.keyboard.press('Escape');
+    await page.mouse.move(4, 4);
+    await page.waitForTimeout(600);
 
     // ---- Story / Image / Clear may not appear under the pointer ------------
     const toolbarDisplay = (k) => page.evaluate((key) => getComputedStyle(

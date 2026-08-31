@@ -81,10 +81,22 @@ const check = (name, ok, detail = '') => {
       await page.waitForTimeout(300);
     }
 
-    // AND THE FIELD MUST BE REACHABLE. Measured on a 1512x950 window, the
-    // headline field sits ~1890px down the document - two screens below the
-    // fold. Selecting the flow brings its field to the desk; re-selecting the
-    // same flow must move nothing, or the viewport creeps while they work.
+    // AND THE DESK MUST BE ABLE TO SEE WHAT THEY ARE TYPING INTO - which is
+    // the OBJECT, and only failing that the field two screens below it.
+    //
+    // This check used to require the FIELD specifically: the headline field
+    // sits ~1890px down a 1512x950 window, so selecting the flow dragged the
+    // viewport down to it. That was right when the field was the only place a
+    // headline could be typed, and it is not any more - the composed page
+    // draws a caret and the band is edited in place, so a desk who selected
+    // the headline BY CLICKING IT is already looking at the thing they are
+    // about to type into. Hauling them to a second copy of it is the desk's
+    // own report: "after clicking on heading or subheading it makes scroll or
+    // redirect ... it usually happens on the FIRST click".
+    //
+    // So the invariant is what it always was - the desk can reach it - and
+    // the frame satisfies it as honestly as the field does. Both halves are
+    // held: something is in view, and a band already in view moves nothing.
     const revealKey = keys[0];
     await page.evaluate((k) => document.querySelector(`.newspaper-section[data-section-key="${k}"]`)?.click(), revealKey);
     await page.waitForTimeout(1500);
@@ -100,14 +112,47 @@ const check = (name, ok, detail = '') => {
       const r = document.getElementById('edHeadlineFrame').getBoundingClientRect();
       return { x: r.left + 10, y: r.top + r.height / 2 };
     });
+    const beforeBand = await page.evaluate(() => Math.round(window.scrollY));
     await page.mouse.click(band.x, band.y);
     await page.waitForTimeout(1800);
-    const onScreen = await page.evaluate(() => {
-      const b = document.getElementById('edStoryHeadline').getBoundingClientRect();
-      return b.top < window.innerHeight && b.bottom > 0;
+    const reachable = await page.evaluate(() => {
+      const seen = (el) => {
+        if (!el) return false;
+        const b = el.getBoundingClientRect();
+        return b.height > 0 && b.top < window.innerHeight && b.bottom > 0;
+      };
+      return {
+        field: seen(document.getElementById('edStoryHeadline')),
+        frame: seen(document.getElementById('edHeadlineFrame')),
+      };
     });
-    check('selecting the headline brings its field within reach', !offBefore || onScreen,
-      offBefore ? `was off screen, now ${onScreen ? 'on' : 'still off'}` : 'was already in view');
+    check('the desk can see what they are about to type into',
+      !offBefore || reachable.field || reachable.frame,
+      offBefore ? `field ${reachable.field ? 'in view' : 'off'}, band ${reachable.frame ? 'in view' : 'off'}`
+        : 'was already in view');
+
+    // ITEM 6 ITSELF, AND IT IS PINNED ON THE BAND RATHER THAN ON A PIXEL
+    // BUDGET. The band was in view when it was pressed, so pressing it must
+    // leave the desk looking at it. Measured on this same block, same probe:
+    //
+    //     before   the click moved the page 540px and took the band with it,
+    //              frame top 456 -> -84: clean off the top of the screen
+    //     after    8px on the first selection and 0px on every one after,
+    //              frame still in view
+    //
+    // The 8px is a one-off settle - no scrollIntoView, no focus, no change in
+    // document height, and it does not repeat or accumulate over ten
+    // alternating headline/subheading selections. So the movement bound is
+    // loose enough to allow it and nowhere near loose enough to allow the
+    // fault, and the band check is what actually holds the rule.
+    const afterBand = await page.evaluate(() => Math.round(window.scrollY));
+    const bandStillSeen = await page.evaluate(() => {
+      const r = document.getElementById('edHeadlineFrame')?.getBoundingClientRect();
+      return !!r && r.top < window.innerHeight && r.bottom > 0;
+    });
+    check('and the band the desk pressed is still in front of them',
+      bandStillSeen && Math.abs(afterBand - beforeBand) <= 12,
+      `${afterBand - beforeBand}px, band ${bandStillSeen ? 'in view' : 'scrolled away'}`);
 
     const steadyBefore = await page.evaluate(() => Math.round(window.scrollY));
     await page.mouse.click(band.x, band.y);

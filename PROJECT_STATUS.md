@@ -7916,3 +7916,71 @@ Browser: `chart-panel.browser.js` **15/15** (new), `editor-parity` 70/70,
 | 2. block surface: bugs + styling | 6, 7, 8, 12, 13 | `block-surface` |
 | 3. writing: carry-over + write-empty-blocks | 5, 3, 9 | `writing-flow` |
 | 4. e-paper for the public | 11 | `epaper-public` |
+
+## Group 2 — the block's own surface — 31 Aug 2026
+
+Branch `block-surface`, on top of `chart-objects`. Items 6, 7, 8, 12 and 13 of
+the customer's thirteen.
+
+### What changed
+
+| item | |
+|---|---|
+| 12 | a reporter's draft is theirs — **743** of them left the desk's queue |
+| 8 | the block's kind label stays gone once it carries copy |
+| 6 | the viewport no longer jumps on the first click — **826 px → 0** |
+| 7 | a desk says what a block is FOR, and fills it in the same press |
+| 13 | 7 inks, 8 grounds, screens behind the display bands, and a table |
+
+### Measured
+
+- **743 drafts** out of the review queue. It was not only noise: the
+  Take-from-Reporter picker reads the same list, so a sub-editor could put a
+  story on page one its author never submitted.
+- **826 px → 0 px** of viewport movement on click-body-then-headline.
+- A briefs block became the पंचांग and came back with a real Smart Card and 96
+  characters in it, in one press.
+- A 3×3 table solves its columns to the content box exactly (204.0 of 204.0),
+  and every cell, the head rule and the row hairlines reach the plate.
+
+### Faults found underneath the five asked for
+
+- **`colourFor` held a one-entry colour map**, so every palette ink but the
+  paper's red reached the press file as `SahasAuto3` — a real colour with a name
+  that says nothing, in a file a designer opens by hand.
+- **`deck`, not `subheading`** — naming the column rather than the compositor's
+  own band key drew one screen where two were asked for.
+- **A structural page replace clears the draft**, and the Block Editor draws
+  "No block selected" without one — so choosing a feature made the panel the
+  desk was working in disappear.
+- **The table renderer read through a null geometry.** `smartCardRobust` caught
+  it on the first run; an EMPTY card takes the whole page canvas down, not one
+  block.
+
+Two tests were pinned to a palette of four and five and legitimately failed when
+it grew. They read the catalogue now: what they exist to hold is that the
+toolbar offers the paper's own inks *and nothing else*, which is a question
+about both lists.
+
+### Verified
+
+`npm test` **1086/1086**, fail 0. New `tests/blockSurface.test.js` 6/6.
+
+Browser: `workspace` 224/224, `editor-controls` 86/86, `device-bar` 65/65,
+`body-editing` 35/35, `smart-cards` 27/27, `chart-panel` 15/15, `admin-screens`
+18/18. No page errors anywhere.
+
+### One thing to know
+
+While probing the purpose control I selected the wrong block on the **test**
+edition 2099 (`block-1`, which overlaps `brief-two`) and filled it with a
+horoscope, replacing what it held. That is a fixture block on a fixture
+edition — not the documented showcase, which is edition 56077 — and no net
+targets it. Said here rather than left to be discovered.
+
+### Remaining
+
+| group | items | branch |
+|---|---|---|
+| 3. writing: carry-over + write-empty-blocks | 5, 3, 9 | `writing-flow` |
+| 4. e-paper for the public | 11 | `epaper-public` |

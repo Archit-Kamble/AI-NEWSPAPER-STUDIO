@@ -2513,6 +2513,134 @@ decide what a panel looks like.
 node tests/browser/chart-panel.browser.js            # defaults to 2099 / anchor
 ```
 
+### A reporter's draft is their own
+
+`draft` and `pending` are the two states a reporter may save into: a draft is a
+story still being written, `pending` is the act of handing it to the desk.
+`listNews()` made no distinction, so every unfinished sentence anybody had ever
+saved sat in the desk's review queue — **743 of them** on this newsroom's
+database.
+
+It is not only noise. The Take-from-Reporter picker reads this same list, so a
+sub-editor could place a story on page one that its author had never submitted.
+
+A reporter sees their **own** drafts, which is their inbox and the whole point
+of a draft. Everybody else sees what was filed. An explicit `?status=draft` is
+still honoured — a desk that asks for drafts by name is not being surprised by
+them.
+
+### The block's label does not come back on hover or on selection
+
+`.filled` fades the kind icon, the key and the status pill, and two exceptions
+brought them back: `:hover` and `.active`. Those were written on the reasoning
+that hovering or selecting is when a desk asks what a block IS. Measured against
+how a block is actually used they are the two moments the label must be gone —
+the pointer is on the block for the whole time a desk works on it, and a block
+being edited is selected throughout. So on the one screen where the copy matters
+most, "ANCHOR" sat over the headline the entire time.
+
+Two blocks keep it, and both are the block saying something the copy cannot:
+
+- **a card block** (`.holds-card`) — what a standing feature is *called* is the
+  useful thing about it, and a card draws its own nameplate anyway;
+- **an overflowing block** keeps its badge, because that is the block saying it
+  does not print. Same reason `.section-flags` is not in the fading list at all.
+
+### The viewport does not jump on the first click
+
+The desk's report: *"after clicking on heading or subheading it makes scroll or
+redirect — it usually happens on the FIRST click, so if I click body then
+heading it redirects, but heading then heading does not."* That is
+`refreshStoryEditor`'s field reveal exactly: it fires on a **change** of
+selection, so the second click on the same object does nothing.
+
+The reveal was written when the field below was the only place a headline could
+be typed. It is not any more — the composed page draws a caret and the headline
+and deck are edited in place. So the question is not "is the field off-screen"
+but **"can the desk see the object at all"**: if the band's own frame is on
+screen, nothing moves. No flag threaded through the store; the page is the
+evidence. Measured: **826 px of movement → 0**.
+
+### A desk says what a block is FOR
+
+`feature_key` was written only by the layout/template path, and this file
+recorded it as read-only to the desk. That is right for a template and wrong for
+a newsroom — *"we cannot make this block rashi or lead or anchor"*. A page is
+made up by a person, and which box carries the horoscope this morning is their
+decision.
+
+`PATCH /api/pages/:pageId/sections/:sectionKey/purpose` takes `blockType`,
+`featureKey` and `fill`. Properties carries both lists, from the catalogues that
+already own them (`BLOCK_KINDS`, and the paper's own features over
+`GET /api/features`) — never a second list of those keys.
+
+- **Naming a feature implies the kind**, on the route as well as in the panel: a
+  block carrying the almanac is a feature block whatever anybody typed.
+- **"Fill it now" builds that feature for the edition's date and writes it in** —
+  `fillEdition` gained `onlySectionKey`, because rebuilding every standing box on
+  the paper to fill the one a desk is looking at is a bill and a wait for work
+  they did not ask for.
+- Neither column is copy, so this does not travel through autosave and needs no
+  fingerprint; nothing a desk has written can be lost by setting a purpose.
+- **A structural page replace hands back new section objects AND clears the
+  draft**, and `currentView()` returns null without one — so the Block Editor
+  rebuilt with no section and drew its "No block selected" state. The desk chose
+  a feature and watched the panel they were working in disappear. It re-selects
+  through `selectSection()`, the app's own path, which rebuilds the draft.
+
+Verified end to end: an ordinary briefs block became the पंचांग and came back
+with a real Smart Card and 96 characters in it.
+
+### A longer palette, and it still separates onto four plates
+
+Seven inks and eight grounds. Every one is a **process** colour in the `.sla`
+(`Spot="0"`), so a longer palette is not a longer press run — what the palette
+is for is stopping a colour mixed in a browser reaching a plate, and a longer
+list of named, separated inks does that exactly as well as a short one.
+
+`scribus.service.js`'s `colourFor()` held a **one-entry** map (`#c8102e` →
+`SahasRed`), so every other palette ink fell through to the auto-register and
+reached the plate as `SahasAuto3` — a real colour with a name that says nothing,
+in a file a designer opens by hand. It asks `inkSeparation`/`tintSeparation`
+now. The auto-register stays underneath for what the palette genuinely does not
+name: a pie's tints are computed shades, not catalogue entries.
+
+### A screen behind a display band
+
+The desk asked for background colours behind the headline and the subheading. A
+printed paper's answer is not a solid panel but a **screen** — a few per cent of
+an ink, with the type left in its own colour. `reverse` cannot do it: a screen
+light enough to read black Devanagari through is not light enough to read white
+through, so a treatment that did both would be two treatments.
+
+`HEADLINE_STYLES` in `inks.js` is the one table, read by the Properties control,
+the canvas and the press model. The band is drawn exactly like the reverse panel
+— ink behind type that has already been placed, so no line moves.
+
+**`deck`, not `subheading`.** That is the compositor's own key for the band
+(`BAND_CLASS` in `compose/render.js`). Naming the column drew the screen behind
+the headline and silently nothing behind the deck — one screen where two were
+asked for, and only driving it showed that.
+
+### A table, on the same terms as the chart
+
+Nine kinds of structured box and not one was a table — the commonest piece of
+furniture in a district daily after the story itself. It is a **card**, not a new
+kind of thing, and that is the whole design: it then lives in a whole block or a
+panel with no second implementation, the panel drag sizes it, all four exports
+already walk it, and the fit is decided by the one solver.
+
+- **A column is as wide as its widest cell, and every column is then scaled to
+  the measure TOGETHER** — so the proportions are the content's and the total is
+  exactly the content box. Scaling them independently is how a table comes to
+  have one column of air beside one that clips.
+- **`contentHeight` is stated**, so a table panel is cut to the rows it holds.
+- **The grid is as tall as its ROWS, not as tall as the panel.** At `height:100%`
+  the source line was pushed to the foot with a hand's width of white above it.
+- An **EMPTY** card carries no geometry at all, and reading through it takes the
+  whole page canvas down rather than one block. `tests/smartCardRobust.test.js`
+  caught that on the first run this renderer was in the registry.
+
 ### A panel inside a block, and a picture across two
 
 **`page_sections.inset_panels`** is the चौकट — a fact box or pull quote set

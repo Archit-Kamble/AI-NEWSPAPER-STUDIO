@@ -2825,6 +2825,46 @@ before and `offsetX`/`offsetY` are zero. Every surface that DRAWS a card adds
 those two; a surface that only measures one ignores them. An inset panel inside
 a card block is fixed by the same change, because it is in the same list.
 
+### A picture from a link, and the one route that fetches an address
+
+Insert → *Picture from a link…*. It ends in the **same** `sectionImage.add()` an
+uploaded picture does, so the corridor snap, the default frame, the runaround
+and all four exports work on it without knowing where it came from. What differs
+is only how the bytes arrived — and that is the whole of the risk.
+
+**A server-side fetch is not a browser fetch.** The browser that typed the URL is
+outside; this server is inside. `http://localhost:3000/api/…` reaches the
+newsroom's own API with the server's own network position, and
+`http://169.254.169.254/` reaches a cloud provider's metadata service and the
+credentials in it. `src/services/pictureLink.service.js` is where that is made
+safe, and none of it is optional:
+
+- **The resolved address decides, never the hostname.** A hostname resolves
+  wherever its owner likes, and `internal.example.com` pointing at `127.0.0.1`
+  is the ordinary way this is written. **Every** address a name answers with is
+  checked, not just the first — one public and one loopback is still a way in.
+  Loopback, link-local, the private ranges, carrier-grade NAT, and their IPv6
+  forms including an IPv4 address wearing an IPv6 coat.
+- **Redirects are followed by hand**, because every hop goes through that check
+  again: a public URL that redirects to `169.254.169.254` is the same attack
+  with one more step in it.
+- **The bytes decide, not the remote server's `Content-Type`.** That header is
+  that server's claim exactly as an upload's mimetype is the caller's, and this
+  codebase has already had stored XSS from trusting one. It runs the **same**
+  `looksLikeImage()` an upload runs, and the extension comes from this paper's
+  own type map — never from the URL, because a name the request can choose is
+  how a picture becomes an HTML page.
+- **Bounded**: 12 s, three redirects, and a 12 MB ceiling enforced on what
+  actually arrived rather than on a `Content-Length` nobody has to send honestly.
+
+**A refusal is the server's own sentence** — not a public address, not a
+picture, too large. A generic line written in the browser would throw away the
+only thing the desk can act on.
+
+**`external-editor.js` forwards a FIXED list of callbacks.** A handler the
+workspace supplies and that list does not name simply never arrives: the control
+draws perfectly and does nothing. Found by pressing the button.
+
 ### A generated picture is proposed, never placed
 
 `POST /api/pages/:pageId/sections/:sectionKey/images/propose` returns

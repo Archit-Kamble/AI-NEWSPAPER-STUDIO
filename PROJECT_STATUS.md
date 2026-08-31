@@ -8129,3 +8129,59 @@ its reason beside it.
 
 Each branch is stacked on the one before it, so they merge in that order with
 no conflicts. None is merged to `main`.
+
+## The last item — a picture from a link — 31 Aug 2026
+
+Branch `picture-link`, on top of `epaper-public`. This finishes **item 9**, whose
+"picture link" half was flagged and deferred when Group 3 landed.
+
+Insert → *Picture from a link…* ends in the same `sectionImage.add()` an upload
+does, so everything downstream works on it unchanged. What differs is that the
+**server** fetches it — which makes this the most dangerous route in the
+product, and most of the work is why it is safe.
+
+### What it refuses, verified through the real API
+
+| link | |
+|---|---|
+| `http://localhost:PORT/api/newspapers` | not on the public internet |
+| `http://127.0.0.1/epaper` | not on the public internet |
+| `http://169.254.169.254/latest/meta-data/` | not on the public internet |
+| `http://192.168.1.1/…`, `http://10.0.0.1/…` | not on the public internet |
+| `file:///etc/passwd` | must be http:// or https:// |
+| `https://example.com/` (a web page) | not a JPEG, PNG, GIF, WebP, BMP or TIFF |
+| malformed / empty | not a web address |
+
+…and nothing is left on the block in any of those cases. A real public PNG is
+fetched, checked against its own signature, stored under a UUID with this
+paper's extension, and placed at its own proportions.
+
+### Found by pressing the button
+
+`external-editor.js` forwards a **fixed list** of callbacks, so a handler the
+workspace supplies and that list does not name never arrives. The menu entry
+drew perfectly and did nothing.
+
+### Verified
+
+`npm test` **1100/1100**, fail 0. New `tests/pictureLink.test.js` 4/4.
+`device-bar` 65/65, `workspace` 224/224.
+
+### Housekeeping
+
+Three test pictures this work fetched were removed, along with their now-orphan
+`media_assets` rows (1294–1296), each checked unreferenced first. 48 other
+missing-file rows in this dev database pre-date this session and were left
+alone.
+
+### All thirteen items
+
+| group | items | branch |
+|---|---|---|
+| 1 | 1, 2, 4, 10 | `chart-objects` |
+| 2 | 6, 7, 8, 12, 13 | `block-surface` |
+| 3 | 5, 3, 9 (part) | `writing-flow` |
+| 4 | 11 | `epaper-public` |
+| — | 9 (picture link) | `picture-link` |
+
+Stacked in that order; `picture-link` contains all of it. None merged to `main`.

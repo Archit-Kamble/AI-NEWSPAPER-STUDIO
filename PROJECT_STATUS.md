@@ -7984,3 +7984,81 @@ targets it. Said here rather than left to be discovered.
 |---|---|---|
 | 3. writing: carry-over + write-empty-blocks | 5, 3, 9 | `writing-flow` |
 | 4. e-paper for the public | 11 | `epaper-public` |
+
+## Group 3 — the writing flow — 31 Aug 2026
+
+Branch `writing-flow`, on top of `block-surface`. Items 5, 3 and 9.
+
+### Item 5 — carry over
+
+Two faults, and the first is why the button looked broken.
+
+**It refused whenever the copy fit.** Measured on edition 54470's front page:
+every one of the five article blocks answered *"All of this story already fits
+— there is nothing to carry"*. Running a story across two legs is ordinary
+make-up, not an overflow repair. A story that fits is now split at its last
+paragraph — the tail, which is what a jump carries.
+
+**And the jump could be split but not written.** `carryOver()` has produced the
+jump line and the pick-up since it was written; a story briefed for one block
+and then split leaves the second leg nearly empty. `POST …/write-across` briefs
+one call for the pair.
+
+Verified end to end, page 2 → page 4:
+
+```
+LEG 1  headline + deck + body, ending  (उर्वरित पान ४ वर)
+LEG 2  body alone, opening             (पान २ वरून)        linked: true
+```
+
+The reservoir overshot by 35 characters on the first real run and the split
+refused; the pair is measured again with the display type the model actually
+wrote, and the copy cut at a sentence boundary for free.
+
+### Item 3 — a chart from the same call
+
+`writeChart` adds the story's own figures to the proposal and lands them as a
+quarter panel, cut to the rows they need, placed by the Chart dialog's own rule.
+The model is asked for the figures and never the presentation.
+
+### Item 9 — the Newsdesk Run
+
+| | |
+|---|---|
+| pages shown | every page, including "nothing free" ones |
+| where local is | country → state → district → city, from Settings, changeable per run |
+| what each story gets | headline, subheading, think-it-through, chart + type |
+
+`places.js` carries every state and all 36 of Maharashtra's districts; the city
+is free text. Selecting Karnataka turns the district into a free-text box rather
+than offering Satara under it.
+
+### Faults found on the way
+
+- **A settings save that never mentioned the coverage wiped it.** Every caller
+  written before it existed sends none. Found by watching the panel say
+  "Chasing: Maharashtra" where it should have said Satara.
+- **`planningFit`'s extra room went into the wrong function** on the first
+  attempt and 500'd — caught immediately by driving the route.
+- My own test read a Response body twice.
+
+### Verified
+
+`npm test` **1091/1091**, fail 0. New `tests/writingFlow.test.js` 5/5.
+Browser: `workspace` 224/224, `story-continuation` 19/19, `roles` 37/37,
+`admin-screens` 18/18.
+
+### One thing I could not test live
+
+**Every AI provider's daily quota is used up** — DeepSeek, Gemini, Sarvam and
+Groq all refused mid-session, which CLAUDE.md already records as an account
+matter for this feature. So the write-across path was proven with a real call
+(4136 characters briefed for a 4101-character pair), and the cross-page split
+was then proven deterministically with known copy. The two halves are verified,
+but not in one live AI run.
+
+### Remaining
+
+| group | items | branch |
+|---|---|---|
+| 4. e-paper for the public | 11 | `epaper-public` |

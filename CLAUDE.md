@@ -1551,6 +1551,95 @@ a feature, an advert or another continuation all refuse the move. A placed
 picture is allowed because an empty landing may already carry its photograph;
 its exclusion is included when the landing capacity is measured.
 
+### Carry over is about the PAGE, not only about the overflow
+
+It refused with *"All of this story already fits — there is nothing to carry"*
+whenever the copy did not overrun its block, which is most of the time:
+measured on a real front page, every one of the five article blocks was
+refused. That is the desk's report that the button does not work, and it is not
+a bug in the split — it is the wrong question. Running a story across two legs
+is ordinary make-up: a paper starts its lead on page one and finishes it on
+page three because that is how a front page is built.
+
+A story that fits is split **deliberately**, at its last paragraph — which is
+what a jump carries, the tail of the story — and at its last sentence when
+there is only one paragraph. A single sentence still refuses: a jump line and a
+pick-up line either side of half a sentence is not a continuation, it is a mess.
+
+### And the jump could be SPLIT but not WRITTEN
+
+`carryOver()` has produced the jump line, the pick-up line and the link between
+the two blocks since it was written. What was missing was the writing: a story
+briefed for one block and then split leaves the second leg nearly empty.
+
+```
+POST /api/pages/:pageId/sections/:sectionKey/write-across
+```
+
+One AI call, briefed for the pair — the landing's own room is measured by the
+same engine and added to the source's reservoir. The **settle trim is skipped**,
+because here the overflow is not a failure, it is the second leg; trimming would
+hand the split a story that only ever filled block one. Nothing is left
+unmeasured: `carryOver()` measures both blocks before it writes either.
+
+- **Trimmed to the pair, for free.** The reservoir overshoots on purpose and
+  nothing had cut it — measured on the first real run, 4136 characters for 4101
+  of room, and the split refused by 35. `roomsFor()` measures the pair again
+  with the display type the model actually wrote (the source's room cannot be
+  known before that) and the copy is cut at a sentence boundary.
+- Verified end to end across two pages: leg one carries headline, deck and body
+  and ends `(उर्वरित पान ४ वर)`; leg two carries body alone and opens
+  `(पान २ वरून)`. The repeated headline on leg two is deliberate for a **jump** —
+  a reader turning the page has to know what they are picking up — and is
+  omitted for a same-page continuation, which is the printed convention.
+
+### A chart of the story's own figures, from the call that writes it
+
+The numbers a chart plots are the numbers the story is about, so asking for them
+separately is two charges for one piece of reading. `writeChart` adds `chart` to
+the proposal; it lands as **a quarter of the block**, cut to the rows it holds,
+placed by the Chart dialog's own `panelBox` rather than a second copy of it.
+
+- **The model is asked for the FIGURES and never the presentation.** The shape
+  is the desk's, chosen before the call and changeable afterwards.
+- **Figures the story STATES, never invented ones.** A chart is a claim in the
+  paper's own voice, and a fabricated number in one is not a typo. An empty list
+  is the right answer when the story has no figures, and the brief says so.
+- The key is **always** in the schema and dropped when the desk did not ask —
+  a model told to omit a key answers less reliably than one told to fill it,
+  and dropping it is the only way the drop is guaranteed rather than hoped for.
+
+### Where the local news is
+
+The Newsdesk Run could only ever ask about the paper's own place of publication,
+so a desk who wanted a Sangli story on page three had no way to say so — a
+district daily's local news is a **named** district, and a query for सातारा
+finds different stories from one for सांगली.
+
+`public/editor/layout/places.js` is the catalogue: country → state → district →
+city, biggest to smallest. It opens on what the owner set in Settings
+(`publication_settings.coverage_*`) and a desk may change it **for one run**,
+because "where this paper covers" is a standing decision and "what we are
+chasing tonight" is not.
+
+- **A catalogue, not a free-text box.** The place reaches a search query, and a
+  misspelt district returns nothing while looking exactly like a district with
+  no news today. Every state, all 36 of Maharashtra's districts, and a
+  free-text **city** — there is no defensible list of every taluka, and a wrong
+  one is worse than none.
+- **Every page is listed in the brief**, including the ones with nothing free.
+  The report was that it "shows only the first 2 pages"; it showed every page
+  that had an empty block, and a list that silently omits a page is
+  indistinguishable from one that has lost it.
+- **The same things a single block can be asked for.** One run makes up a whole
+  paper and could ask for less than the panel that writes one block: headline,
+  subheading, think-it-through and the chart are all offered, and every one ends
+  in the same `storyWriter.write()`.
+- **A settings save that never mentions the coverage leaves it alone.** Treating
+  absent as "clear it" wiped the district and the run opened on the whole state
+  — found by watching the panel say *"Chasing: Maharashtra"* where it should
+  have said Satara. Every caller written before the coverage existed sends none.
+
 ### And it can be SEEN, and put back
 
 `page_sections.continued_from_section_id` has recorded which two blocks are one
@@ -3813,6 +3902,14 @@ CREATE INDEX IF NOT EXISTS newspapers_publication_date_idx ON newspapers (public
 -- none is, because this database has been found in BOTH states. A login is
 -- looked up by role on every staff listing, so that column is indexed too.
 CREATE INDEX IF NOT EXISTS users_role_idx ON users (role);
+
+-- WHERE THIS PAPER COVERS. Not printed anywhere - it is what the Newsdesk Run
+-- opens on, so a district daily asks about its own district rather than about
+-- the town its office is in. Checked against public/editor/layout/places.js.
+ALTER TABLE publication_settings ADD COLUMN IF NOT EXISTS coverage_country VARCHAR(8) NOT NULL DEFAULT 'IN';
+ALTER TABLE publication_settings ADD COLUMN IF NOT EXISTS coverage_state VARCHAR(8) NOT NULL DEFAULT 'MH';
+ALTER TABLE publication_settings ADD COLUMN IF NOT EXISTS coverage_district VARCHAR(80) NOT NULL DEFAULT 'Satara';
+ALTER TABLE publication_settings ADD COLUMN IF NOT EXISTS coverage_city VARCHAR(80) NOT NULL DEFAULT '';
 ```
 
 **The session table is deliberately NOT in this list.** `user_sessions` is

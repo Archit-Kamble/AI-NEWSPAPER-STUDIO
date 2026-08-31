@@ -857,12 +857,26 @@ body {
   opacity: 0;
   transition: opacity 120ms ease;
 }
-.newspaper-section.filled:hover .section-type-icon,
-.newspaper-section.filled:hover .section-label,
-.newspaper-section.filled:hover .section-status-badge,
-.newspaper-section.filled.active .section-type-icon,
-.newspaper-section.filled.active .section-label,
-.newspaper-section.filled.active .section-status-badge {
+/* AND IT DOES NOT COME BACK ON HOVER OR ON SELECTION.
+   Those two exceptions were written on the reasoning that hovering or
+   selecting a block is when a desk is asking what it IS. Measured against how
+   the block is actually used, they are the two moments the label must be gone:
+   the pointer is on the block for the whole time a desk is working on it, and
+   a block being edited is SELECTED throughout - so on the one screen where the
+   copy matters most, "ANCHOR" sat over the headline the whole time. The desk's
+   report: "even in editing view, if even 1 character is filled in a block it
+   should not show lead, anchor like that".
+   The Block Editor's own header still names the selected block, beside its
+   size and its status. That is a read-out in the chrome, not a word laid over
+   the story. */
+.newspaper-section.filled.holds-card .section-type-icon,
+.newspaper-section.filled.holds-card .section-label,
+.newspaper-section.filled.holds-card .section-status-badge,
+/* An OVERFLOWING block keeps its badge whatever else is true of it: that is
+   the block saying it does not print, and a warning that hides itself once
+   there is copy to warn about is no warning - the same reason `.section-flags`
+   is not in the fading list at all. */
+.newspaper-section.filled.overflowing .section-status-badge {
   opacity: 1;
 }
 /* `.section-flags` is deliberately NOT in that list. The reporter/AI/overflow/
@@ -4763,6 +4777,15 @@ body.print-view .newspaper-canvas {
    laid behind type that was already placed, so it sits UNDER the composed line
    spans and moves nothing. */
 .section-headline-reverse {
+  position: absolute;
+  display: block;
+  z-index: 0;
+}
+/* A SCREEN BEHIND A DISPLAY BAND - the same ink laid down lightly, with the
+   type left in its own colour. Drawn exactly like the reverse panel above and
+   at the same depth: ink behind type that has already been placed, so no line
+   moves and the composition is untouched. */
+.section-band-screen {
   position: absolute;
   display: block;
   z-index: 0;

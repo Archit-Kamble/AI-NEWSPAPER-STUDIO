@@ -42,7 +42,7 @@ let modules = null;
 
 async function ensureComposeReady() {
   if (!modules) {
-    const [metrics, shaper, adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry, accent, compose, columnRules] =
+    const [metrics, shaper, adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry, accent, compose, columnRules, inks] =
       await Promise.all([
         import('../../../public/editor/compose/font-metrics.js'),
         import('../../../public/editor/compose/shaper.js'),
@@ -55,8 +55,11 @@ async function ensureComposeReady() {
         import('../../../public/editor/compose/accent.js'),
         import('../../../public/editor/compose/compose.js'),
         import('../../../public/editor/canvas/column-rules.js'),
+        // The paper's own palette: which display bands a treatment lays a
+        // ground behind, and what a screen of an ink looks like.
+        import('../../../public/editor/layout/inks.js'),
       ]);
-    modules = { metrics, shaper, adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry, accent, compose, columnRules };
+    modules = { metrics, shaper, adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry, accent, compose, columnRules, inks };
   }
   await Promise.all([modules.metrics.ensureFontsLoaded(), modules.shaper.ensureShaperReady()]);
   modules.shaper.requireShaperReady();
@@ -208,6 +211,26 @@ async function blockItems(section, { mono = false } = {}) {
       height: mm(headlineBand.height + REVERSE_BLEED_PX * 2),
       ink: ACCENT_INK,
     });
+  }
+
+  // AND A SCREEN BEHIND A DISPLAY BAND, from the same catalogue the canvas
+  // reads. The type is left in its own colour - a screen is an ink laid down
+  // lightly, not a panel knocked out of - so unlike the reverse above there is
+  // nothing to do to the runs below.
+  const { groundedBands, screenOf } = modules.inks || {};
+  if (groundedBands) {
+    for (const key of groundedBands(section.headline_style)) {
+      const band = bands[key];
+      if (!band?.lines?.length) continue;
+      items.push({
+        kind: 'fill',
+        x: x0 + mm(composition.content.left),
+        y: y0 + mm(band.top - REVERSE_BLEED_PX),
+        width: mm(composition.content.measure),
+        height: mm(band.height + REVERSE_BLEED_PX * 2),
+        ink: screenOf(section.accent_color || ACCENT_INK),
+      });
+    }
   }
 
   for (const [key, band] of Object.entries(bands)) {

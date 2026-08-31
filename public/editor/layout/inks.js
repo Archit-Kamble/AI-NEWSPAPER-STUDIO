@@ -23,11 +23,25 @@
  * Black carries no hex, deliberately - it is the ABSENCE of a mark, so
  * choosing it clears the ink rather than adding a fourth one.
  */
+// SEVEN INKS, NOT FOUR. The desk asked for more colours for a character, a
+// word or a line, and there is no press reason to refuse: every one of these
+// is defined in the .sla as a PROCESS colour (Spot="0"), so it separates onto
+// the four plates the paper already prints from - it is not a fifth plate and
+// costs the press nothing. What the palette is for is stopping a colour mixed
+// in a browser reaching a plate, and a longer list of named, separated inks
+// does that exactly as well as a short one.
+//
+// Each is dark enough to hold small Devanagari on newsprint. A pale ink is not
+// on this list on purpose: it is a TINT, it belongs behind type rather than in
+// it, and it is in the table below.
 export const INKS = [
   { key: 'black', label: 'Black', hex: null, scribus: 'Black' },
   { key: 'red', label: 'Red', hex: '#c8102e', scribus: 'SahasRed' },
   { key: 'blue', label: 'Blue', hex: '#17458f', scribus: 'SahasBlue' },
   { key: 'green', label: 'Green', hex: '#0a7a3f', scribus: 'SahasGreen' },
+  { key: 'orange', label: 'Orange', hex: '#d2601a', scribus: 'SahasOrange' },
+  { key: 'purple', label: 'Purple', hex: '#5b2a86', scribus: 'SahasPurple' },
+  { key: 'teal', label: 'Teal', hex: '#0f6d78', scribus: 'SahasTeal' },
 ];
 
 /**
@@ -45,6 +59,13 @@ export const TINTS = [
   { key: 'cream', label: 'Cream', hex: '#fbf3e9', scribus: 'SahasTintCream' },
   { key: 'pink', label: 'Pink', hex: '#fdf1f3', scribus: 'SahasTintPink' },
   { key: 'blue', label: 'Blue', hex: '#eef3fb', scribus: 'SahasTintBlue' },
+  // Three more grounds, asked for by the desk. Every one is a few per cent of
+  // one ink - heavier than this and the copy loses its contrast on newsprint,
+  // which is the rule the five above were chosen against and is not relaxed
+  // because the list got longer.
+  { key: 'mint', label: 'Mint', hex: '#eef7f0', scribus: 'SahasTintMint' },
+  { key: 'lilac', label: 'Lilac', hex: '#f3eefa', scribus: 'SahasTintLilac' },
+  { key: 'sand', label: 'Sand', hex: '#f8f2e7', scribus: 'SahasTintSand' },
 ];
 
 // A colour that has been through the DOM comes back as `rgb(200, 16, 46)`,
@@ -83,4 +104,54 @@ export function inkSeparation(hex) {
 
 export function tintSeparation(hex) {
   return lookup(TINT_BY_HEX, hex)?.scribus || 'None';
+}
+
+// HOW THE HEADLINE BAND IS TREATED - one catalogue, read by the Properties
+// control, by the canvas renderer and by the press model, so no surface can
+// invent a treatment or draw one differently.
+//
+// `reverse` was the only ground a display band could have: white type out of a
+// solid ink. The desk asked for background colours behind the headline and the
+// subheading, and a printed paper's answer to that is not a solid panel - it is
+// a SCREEN, a few per cent of an ink, with the type left in its own colour.
+// That is what `band` is, and it is why the type is untouched: a screen light
+// enough to read black Devanagari through is not light enough to read white
+// through, so a treatment that did both would be two treatments.
+export const HEADLINE_STYLES = [
+  { key: 'plain', label: 'Plain', grounds: [] },
+  { key: 'accent', label: 'Accent word', grounds: [] },
+  { key: 'reverse', label: 'Reversed', grounds: [], reverse: true },
+  // `deck`, not `subheading`: that is the compositor's own key for the band
+  // (BAND_CLASS in compose/render.js). Naming the COLUMN here drew the screen
+  // behind the headline and silently nothing behind the deck - measured, one
+  // screen where two were asked for.
+  { key: 'band', label: 'Screen behind the headline', grounds: ['headline'] },
+  { key: 'band-deck', label: 'Screen behind the deck', grounds: ['deck'] },
+  { key: 'band-both', label: 'Screen behind both', grounds: ['headline', 'deck'] },
+];
+
+export const HEADLINE_STYLE_KEYS = HEADLINE_STYLES.map((entry) => entry.key);
+
+/** Which display bands this treatment lays a ground behind. */
+export function groundedBands(style) {
+  return HEADLINE_STYLES.find((entry) => entry.key === style)?.grounds || [];
+}
+
+/**
+ * An ink at a few per cent - what a printer calls a screen.
+ *
+ * Mixed toward white rather than given its own catalogue entry, because a
+ * screen is a percentage OF an ink and not a colour in its own right: the desk
+ * chooses the accent, and this is that accent laid down lightly. 0.12 is the
+ * same order as the TINTS above, which were chosen against the rule that
+ * anything heavier costs the copy its contrast on newsprint.
+ */
+export function screenOf(hex, share = 0.12) {
+  const value = parseInt(String(hex || '#111111').replace('#', ''), 16);
+  if (!Number.isFinite(value)) return '#f2f2f4';
+  const mix = (channel) => Math.round(255 - (255 - channel) * share);
+  const r = mix((value >> 16) & 0xff);
+  const g = mix((value >> 8) & 0xff);
+  const b = mix(value & 0xff);
+  return `#${[r, g, b].map((c) => c.toString(16).padStart(2, '0')).join('')}`;
 }

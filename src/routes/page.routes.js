@@ -64,6 +64,10 @@ router.post('/pages/:pageId/sections/:sectionKey/fill', pageSectionController.fi
 router.post('/pages/:pageId/sections/:sectionKey/carry-over', pageSectionController.carryOver);
 router.post('/pages/:pageId/sections/:sectionKey/reunite', pageSectionController.reunite);
 router.post('/pages/:pageId/sections/:sectionKey/fit', pageSectionController.fitApply);
+// WHAT THIS BLOCK IS FOR. A write, so `deskWrites` on the mount already guards
+// it - it is here beside the other sectionKey-addressed production actions
+// because that is what it is: a decision about the block, made on the block.
+router.patch('/pages/:pageId/sections/:sectionKey/purpose', pageSectionController.purpose);
 
 // GET is left open by deskWrites above (it guards writes only), so these two
 // - desk-internal production tools, not the finished public edition - repeat

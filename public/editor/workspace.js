@@ -573,6 +573,70 @@ async function removeSectionImage(imageId) {
 // Smart cards use the existing, classified daily-feature service. The only
 // client-side calculation is the selected block's available character budget;
 // it is the same grid used by the Space panel and press preflight.
+/**
+ * WHAT THIS BLOCK IS FOR - its kind, its standing feature, and filling it.
+ *
+ * A route of its own rather than a field on the draft: `block_type` and
+ * `feature_key` were the layout's alone (page.repository.js's saveLayout),
+ * neither is copy, and nothing a desk has written can be lost by setting one.
+ * So it does not travel through autosave and needs no fingerprint.
+ *
+ * The answer carries the whole page, so the canvas is TOLD rather than asked -
+ * the shape every other production action on a block already uses.
+ */
+async function setBlockPurpose(body) {
+  const page = store.getCurrentPage();
+  const key = store.getState().selectedSectionKey;
+  if (!page || !key) return;
+  try {
+    const response = await fetch(`/api/pages/${page.id}/sections/${encodeURIComponent(key)}/purpose`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      showNotice(result.error || "That block's purpose could not be changed.");
+      return;
+    }
+    // A STRUCTURAL REPLACE HANDS BACK NEW SECTION OBJECTS, so the panel has to
+    // be pointed at the new one. Without this the Block Editor rebuilt with no
+    // section at all and drew its "No block selected" state - the desk chose a
+    // feature and watched the whole panel they were working in disappear.
+    // A STRUCTURAL REPLACE HANDS BACK NEW SECTION OBJECTS AND CLEARS THE DRAFT,
+    // and `currentView()` returns null without one - so the Block Editor
+    // rebuilt with no section and drew its "No block selected" state. The desk
+    // chose a feature and watched the panel they were working in disappear.
+    //
+    // selectSection() is the app's own selection path and builds the draft
+    // from the fresh row, which is exactly what is wanted here: the block is
+    // the same block, with a new purpose on it. Re-selected from nothing first,
+    // because selectSection() treats "already selected" as a request to select
+    // the block OBJECT and would not rebuild the draft.
+    if (result.page) {
+      store.replacePage(result.page, { structural: true });
+      if (key) {
+        store.clearSelection();
+        selectSection(key);
+      }
+    }
+    renderSidePanels();
+    const filled = result.filled;
+    if (filled) {
+      // Say what happened, where the desk is looking. A feature that could not
+      // be built explains itself rather than leaving an unchanged block.
+      const done = filled.filled?.[0];
+      const missed = filled.skipped?.[0];
+      if (done) showNotice(`Written into this block - ${done.chars} characters of ${done.feature}.`);
+      else showNotice(missed?.reason || filled.notes?.[0] || "Nothing could be built for this block today.");
+    } else if (body.featureKey) {
+      showNotice("This block now carries that standing feature. Press \u201cFill it now\u201d to write today\u2019s in.");
+    }
+  } catch (error) {
+    showNotice("That block's purpose could not be changed.");
+  }
+}
+
 async function requestSmartCard({
   key, variant, manualText = "", destination = "selected",
   imageUrl = "", wantsArtwork = false, advertStyle = "",
@@ -2356,6 +2420,8 @@ function renderSidePanels() {
     onRemoveBackground: removeImageBackground,
     onRequestSmartCard: requestSmartCard,
     onPlaceSmartCardInNewBlock: placeSmartCardInNewBlock,
+    onPurpose: setBlockPurpose,
+    onRefresh: () => renderSidePanels(),
     onPickBlock: () => {
       selectFirstSection();
       scrollTo("workspaceTop");

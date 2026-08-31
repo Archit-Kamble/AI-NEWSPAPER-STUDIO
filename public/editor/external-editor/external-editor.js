@@ -147,7 +147,16 @@ function renderToolsRail(section, view, callbacks) {
     ${pageMapMarkup(callbacks.getPage?.(), callbacks.getNewspaper?.(), section.section_key)}
   `;
 
-  bindPropertiesPanel({ getSelectedImage: callbacks.getSelectedImage, onPatchImage: callbacks.onPatchImage, onPatch: callbacks.onPatch });
+  bindPropertiesPanel({
+    getSelectedImage: callbacks.getSelectedImage,
+    onPatchImage: callbacks.onPatchImage,
+    onPatch: callbacks.onPatch,
+    // What this block is FOR is not a field on the block's draft - it is two
+    // columns the layout used to own alone, so it has a route of its own and
+    // does not travel through autosave.
+    onPurpose: callbacks.onPurpose,
+    onRefresh: callbacks.onRefresh,
+  });
   bindTypographyPanel(callbacks.getView, callbacks.onPatch);
   bindStoryDetails(callbacks.onPatch);
   bindHistoryPanel(historyHandlers(callbacks));

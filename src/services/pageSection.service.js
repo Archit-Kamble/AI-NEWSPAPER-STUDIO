@@ -9,6 +9,9 @@ const reviewInvalidation = require('./reviewInvalidation.service');
 const { BORDER_KEYS, BORDER_WIDTHS } = require('../../public/editor/layout/borders');
 const { panelOf } = require('../../public/editor/layout/inset-panels');
 const { TYPEFACES } = require('../../public/editor/layout/typefaces');
+const { BLOCK_KINDS } = require('../../public/editor/layout/block-kinds');
+const features = require('../features');
+const editionFeatures = require('./editionFeatures.service');
 
 /**
  * A CHART'S READINGS MAY NAME THEIR OWN INKS, AND THIS IS WHERE THAT IS CHECKED.
@@ -207,8 +210,12 @@ async function saveSection(pageId, sectionKey, body) {
       return { error: `The rule must be between ${BORDER_WIDTHS[0].pt} and ${BORDER_WIDTHS[3].pt} points.` };
     }
   }
-  if (supplied(body.headlineStyle) && !['plain', 'accent', 'reverse'].includes(body.headlineStyle)) {
-    return { error: 'The headline treatment must be plain, accent or reverse.' };
+  if (supplied(body.headlineStyle) && !palette.HEADLINE_STYLE_KEYS.includes(body.headlineStyle)) {
+    // Named from the catalogue rather than listed here: this sentence said
+    // "plain, accent or reverse" for as long as those were the only three, and
+    // a refusal that names a shorter list than the control offers is a refusal
+    // nobody can act on.
+    return { error: `The headline treatment must be one of: ${palette.HEADLINE_STYLE_KEYS.join(', ')}.` };
   }
   if (supplied(body.marginPx)
       && (!Number.isFinite(Number(body.marginPx)) || Number(body.marginPx) < 1 || Number(body.marginPx) > 60)) {
@@ -341,4 +348,58 @@ async function rateFor(pageId, sectionKey) {
   return quote(section, section, { totalPages: pages.length, newspaper });
 }
 
-module.exports = { saveSection, createSection, deleteSection, moveSection, snapGeometry, rateFor };
+/**
+ * WHAT THIS BLOCK IS, AND WHAT IT CARRIES - one decision, one call.
+ *
+ * The desk's report: "we cannot make this block rashi or lead or anchor, so add
+ * a feature so we can make a block anything we want to, and with the fill
+ * feature it will add all at once."
+ *
+ * Two columns and one optional action:
+ *
+ *   blockType   what kind of work this frame wants (BLOCK_KINDS) - an article,
+ *               briefs, a photograph, advertising space, a standing feature.
+ *               The worklist and the block's own heading both read it.
+ *   featureKey  WHICH standing feature, when it is one. This was the layout's
+ *               to decide and nobody else's; a page is made up by a person, and
+ *               which box carries the horoscope this morning is their call.
+ *   fill        build that feature for this edition's date and put it in, now.
+ *
+ * Naming a feature implies the kind, because a block carrying the horoscope is
+ * a feature block whatever anybody typed - and a desk should not have to say
+ * one thing twice for it to be true.
+ */
+async function setPurpose(pageId, sectionKey, body = {}) {
+  const page = await pageRepository.findById(pageId);
+  if (!page) return { notFound: true };
+
+  const clearing = body.featureKey === null || body.featureKey === '';
+  let featureKey = null;
+  if (!clearing && body.featureKey !== undefined) {
+    const declared = features.list().find((entry) => entry.key === body.featureKey);
+    if (!declared) return { error: 'That is not one of this paper\'s standing features.' };
+    featureKey = declared.key;
+  }
+
+  let blockType = body.blockType;
+  if (blockType !== undefined && blockType !== null && !Object.hasOwn(BLOCK_KINDS, blockType)) {
+    return { error: 'That is not a kind of block.' };
+  }
+  if (featureKey) blockType = 'feature';
+
+  const updated = await pageRepository.setPurpose(pageId, sectionKey, { blockType, featureKey });
+  if (!updated) return { notFound: true };
+
+  let filled = null;
+  if (body.fill && featureKey) {
+    filled = await editionFeatures.fillEdition(page.newspaper_id, {
+      tier: body.tier,
+      onlySectionKey: sectionKey,
+    });
+  }
+
+  return { section: updated, filled, page: await pageRepository.findById(pageId) };
+}
+
+module.exports = {
+  setPurpose, saveSection, createSection, deleteSection, moveSection, snapGeometry, rateFor };

@@ -44,6 +44,26 @@ async function createNews({ body, files, sessionUser }) {
   return { item };
 }
 
+/**
+ * A DRAFT IS THE REPORTER'S OWN, AND NOBODY ELSE'S.
+ *
+ * `draft` and `pending` are the two states a reporter may save into
+ * (REPORTER_STATUSES above): a draft is a story still being written, and
+ * `pending` is the act of handing it to the desk. This list made no
+ * distinction, so every unfinished sentence a reporter had ever saved sat in
+ * the desk's review queue beside the stories that had actually been filed -
+ * measured on this newsroom's database, and the desk's report was exactly
+ * that.
+ *
+ * It is not only noise. The Take-from-Reporter picker reads this same list, so
+ * a sub-editor could place a story into page one that its author had never
+ * submitted, and the reporter would find their unfinished copy in print.
+ *
+ * So: a reporter sees their OWN drafts, which is their inbox and the whole
+ * point of a draft. Everybody else sees what has been filed. An explicit
+ * `?status=draft` is still honoured - the query is a question about a state,
+ * and a desk that asks for drafts by name is not being surprised by them.
+ */
 async function listNews(query, sessionUser) {
   const filter = {};
   if (query.status) filter.status = query.status;
@@ -51,7 +71,10 @@ async function listNews(query, sessionUser) {
   // A reporter's byline is not authorization. Their session id is the sole
   // source of their inbox, so changing ?reporterId cannot expose a colleague.
   if (isReporter(sessionUser)) filter.created_by = sessionUser.id;
-  else if (query.reporterId) filter.created_by = parseInt(query.reporterId, 10);
+  else {
+    if (query.reporterId) filter.created_by = parseInt(query.reporterId, 10);
+    if (!query.status) filter.excludeStatuses = ['draft'];
+  }
   return newsRepository.findAll(filter);
 }
 

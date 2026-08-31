@@ -14,6 +14,9 @@
 
 import { escapeHtml } from '../format.js';
 import { textWithMarks, plainText } from '../layout/rich-text.js';
+// Which display bands a treatment lays a ground behind, and what a screen of
+// an ink looks like - one catalogue, shared with the press model.
+import { groundedBands, screenOf } from '../layout/inks.js';
 import { presentationRanges, renderPresentation } from '../layout/editorial-presentation.js';
 import { publicationFamily } from './font-metrics.js';
 import { headlineSegments } from './accent.js';
@@ -168,6 +171,27 @@ export function composedMarkup(composition, view, { datelinePrefix = '' } = {}) 
       `<i class="section-headline-reverse" style="left:${left.toFixed(2)}px;top:${(band.top - REVERSE_BLEED).toFixed(2)}px;`
       + `width:${width.toFixed(2)}px;height:${(band.height + REVERSE_BLEED * 2).toFixed(2)}px;`
       + `background:${escapeHtml(view.accentColor || '#111111')}"></i>`,
+    );
+  }
+
+  // A SCREEN BEHIND A DISPLAY BAND. The same ink laid down lightly, with the
+  // type left in its own colour - which is what a printed paper does behind a
+  // standfirst, and what `reverse` cannot do because a screen light enough to
+  // read black through is not light enough to read white through.
+  //
+  // Drawn exactly like the reverse panel above: ink behind type that has
+  // already been placed, so no line moves and nothing about the composition
+  // changes. Which bands get one comes from the one catalogue, so the press
+  // model cannot disagree about it.
+  for (const key of groundedBands(view.headlineStyle)) {
+    const band = composition.bands?.[key];
+    if (!band?.lines?.length) continue;
+    pieces.push(
+      `<i class="section-band-screen" style="left:${composition.content.left.toFixed(2)}px;`
+      + `top:${(band.top - REVERSE_BLEED).toFixed(2)}px;`
+      + `width:${composition.content.measure.toFixed(2)}px;`
+      + `height:${(band.height + REVERSE_BLEED * 2).toFixed(2)}px;`
+      + `background:${escapeHtml(screenOf(view.accentColor || '#c8102e'))}"></i>`,
     );
   }
 

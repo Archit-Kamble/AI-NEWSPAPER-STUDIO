@@ -85,7 +85,17 @@ function toCopy(result, maxBodyChars) {
  * Returns what was filled and what was not, with the reason - a box that could
  * not be filled is reported, never quietly left looking finished.
  */
-async function fillEdition(newspaperId, { tier } = {}) {
+/**
+ * `onlySectionKey` fills ONE block rather than the whole edition.
+ *
+ * "Fill features" has always been the morning's bulk action, and it is still
+ * exactly that. But a desk who has just said "this block is the horoscope"
+ * wants to see the horoscope in it - the report was "make it anything I want
+ * and with the fill feature it will add all at once" - and rebuilding every
+ * standing box on the paper to fill the one they are looking at is a bill and
+ * a wait for work they did not ask for.
+ */
+async function fillEdition(newspaperId, { tier, onlySectionKey } = {}) {
   const { rows: papers } = await pool.query(
     'SELECT id, publication_date FROM newspapers WHERE id = $1',
     [newspaperId],
@@ -98,12 +108,19 @@ async function fillEdition(newspaperId, { tier } = {}) {
        FROM page_sections ps
        JOIN pages p ON p.id = ps.page_id
       WHERE p.newspaper_id = $1 AND ps.feature_key IS NOT NULL
+        AND ($2::text IS NULL OR ps.section_key = $2)
       ORDER BY p.page_number, ps.z_index`,
-    [newspaperId],
+    [newspaperId, onlySectionKey || null],
   );
 
   if (!blocks.length) {
-    return { filled: [], skipped: [], notes: ['No block on this edition is marked as a feature.'] };
+    return {
+      filled: [],
+      skipped: [],
+      notes: [onlySectionKey
+        ? 'This block is not set to carry a standing feature.'
+        : 'No block on this edition is marked as a feature.'],
+    };
   }
 
   // The horoscope's twelve entries have to fit the box they are going into, so

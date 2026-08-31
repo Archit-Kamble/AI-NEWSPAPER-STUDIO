@@ -89,8 +89,23 @@ let documentColours = new Map();
 function colourFor(hex, fallback = 'Black') {
   if (!hex) return fallback;
   const key = String(hex).toLowerCase();
-  const named = { '#c8102e': 'SahasRed' }[key];
-  if (named) return named;
+  // THE PALETTE NAMES ITS OWN COLOURS. This was a one-entry map holding the
+  // paper's red, so every other palette ink fell through to the auto-register
+  // below and reached the plate as "SahasAuto3" - a real colour with a name
+  // that says nothing, in a file a designer opens by hand. inks.js already
+  // states the Scribus name beside every ink and tint (`inkSeparation` /
+  // `tintSeparation`), and asking it is the one-catalogue answer.
+  //
+  // The auto-register stays underneath for what the palette genuinely does not
+  // name: a pie's TINTS of an ink are computed shades, not catalogue entries.
+  const palette = richTextModule;
+  if (palette) {
+    const named = palette.inkSeparation(key);
+    if (named && named !== 'Black') return named;
+    const ground = palette.tintSeparation(key);
+    if (ground && ground !== 'None') return ground;
+  }
+  if (key === '#c8102e') return 'SahasRed';
   if (!documentColours.has(key)) {
     const value = parseInt(key.replace('#', ''), 16);
     if (!Number.isFinite(value)) return fallback;
@@ -125,6 +140,17 @@ const COLOURS = `
   <COLOR NAME="SahasTintCream" CMYK="#00081204" Spot="0" Register="0"/>
   <COLOR NAME="SahasTintPink" CMYK="#000c0a02" Spot="0" Register="0"/>
   <COLOR NAME="SahasTintBlue" CMYK="#0d080004" Spot="0" Register="0"/>
+  <!-- The three inks and three grounds the palette gained when the desk asked
+       for more colours. Every one is a PROCESS colour (Spot="0"), separating
+       onto the four plates the paper already prints from - a longer palette is
+       not a longer press run. CMYK computed from the same hex the browser
+       draws, the same naive way the six above were. -->
+  <COLOR NAME="SahasOrange" CMYK="#008adf2d" Spot="0" Register="0"/>
+  <COLOR NAME="SahasPurple" CMYK="#52af0079" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTeal" CMYK="#df170087" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintMint" CMYK="#09000708" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintLilac" CMYK="#070c0005" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintSand" CMYK="#00061107" Spot="0" Register="0"/>
   <COLOR NAME="None" CMYK="#00000000" Spot="0" Register="0"/>`;
 
 // The four faces the publication actually ships (public/assets/fonts/, the

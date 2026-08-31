@@ -127,7 +127,24 @@ async function rate(req, res) {
   res.json(quote);
 }
 
+/**
+ * What this block is for, and - if asked - the feature put into it now.
+ *
+ * Addressed by `sectionKey` like every other production action on a block
+ * (write, fill, carry-over, fit, rate), because that is how a block is
+ * addressed once it is on a page.
+ */
+async function purpose(req, res) {
+  const result = await pageSectionService.setPurpose(
+    parseInt(req.params.pageId, 10), req.params.sectionKey, req.body || {},
+  );
+  if (result.notFound) return res.status(404).json({ error: 'Block not found.' });
+  if (result.error) return res.status(400).json(result);
+  res.json(result);
+}
+
 module.exports = {
+  purpose,
   update, create, remove, move,
   write, fill, carryOver, reunite, fitPreview, fitApply, rate,
 };

@@ -567,6 +567,13 @@ export function sectionClassName(view, { selected = false, dirty = false, overfl
     // newspaper draws.
     atFootEdge ? "at-foot-edge" : "",
     filled ? "filled" : "",
+    // A CARD BLOCK KEEPS ITS NAME. Everything else that carries a word of copy
+    // loses the "LEAD"/"ANCHOR" label for good (see the .filled rule in
+    // styles.css) - but a Smart Card block is standing furniture, and what it
+    // is called IS the useful thing about it: पंचांग, राशिभविष्य, सुडोकू. A
+    // card also draws its own nameplate, so the label is the desk's word for
+    // the frame rather than a second title over the story.
+    view.smartCardKey && view.smartCardData ? "holds-card" : "",
     selected ? "active" : "",
     dirty ? "unsaved" : "",
     overflowing ? "overflowing" : "",

@@ -589,7 +589,34 @@ async function setOverlays(pageId, overlays) {
   return rows[0] ? hydrate(rows[0]) : null;
 }
 
+/**
+ * WHAT A BLOCK IS FOR - its kind, and which standing feature it carries.
+ *
+ * `feature_key` was written only by the layout/template path, and CLAUDE.md
+ * recorded it as read-only to the desk: the layout decided what a frame was
+ * reserved for, and nobody else could. That is right for a template and wrong
+ * for a newsroom - the desk's report was "we cannot make this block rashi or
+ * lead or anchor". A page is made up by a person, and which box carries the
+ * horoscope this morning is their decision, not the template's.
+ *
+ * Only these two columns, and neither of them is copy: a purpose is not a
+ * story, so nothing a desk has written can be lost by setting one.
+ */
+async function setPurpose(pageId, sectionKey, { blockType, featureKey }) {
+  const { rows } = await pool.query(
+    `UPDATE page_sections
+        SET block_type = COALESCE($3, block_type),
+            feature_key = $4,
+            updated_at = CURRENT_TIMESTAMP
+      WHERE page_id = $1 AND section_key = $2
+      RETURNING id, section_key, block_type, feature_key`,
+    [pageId, sectionKey, blockType || null, featureKey || null],
+  );
+  return rows[0] || null;
+}
+
 module.exports = {
+  setPurpose,
   setOverlays,
   create,
   createInTransaction,

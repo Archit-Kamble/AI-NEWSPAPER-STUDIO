@@ -14,10 +14,13 @@
 // content of this panel for those three, not an apology for missing one.
 
 import { escapeHtml } from "../format.js";
-import { TINTS } from "../layout/inks.js";
+import { TINTS, HEADLINE_STYLES as HEADLINE_STYLE_TABLE } from "../layout/inks.js";
 import { composeSection, measureColumns, maxLegibleColumns } from "../compose/section-adapter.js";
 import { PART_LABEL } from "./typography-panel.js";
 import { statusOf, statusLabel } from "../status/section-status.js";
+// What kind of work a frame wants, from the one catalogue the worklist and the
+// block's own heading already read - never a second list of these keys here.
+import { BLOCK_KINDS } from "../layout/block-kinds.js";
 // The Layer control reuses the EXACT arithmetic the Story panel's "Bring
 // forward"/"Send back" buttons already use - not a second copy of
 // "z-index plus or minus one, floored at zero".
@@ -78,11 +81,10 @@ const COLUMN_COUNTS = [
 // `reverse` sets the whole headline in white out of a solid panel - the
 // treatment a Marathi daily gives a lead. Both are drawn, never composed, so
 // neither moves a line (compose/render.js).
-const HEADLINE_STYLES = [
-  ["plain", "Plain"],
-  ["accent", "Accent word"],
-  ["reverse", "Reversed"],
-];
+// From the one catalogue (layout/inks.js), never a second list of these keys -
+// the service validates against the same table, so a treatment offered here
+// and refused there is not possible.
+const HEADLINE_STYLES = HEADLINE_STYLE_TABLE.map((entry) => [entry.key, entry.label]);
 
 // How deep an initial letter is set. Two is the shallowest that reads as a
 // drop cap rather than as a mistake; four is as deep as a newspaper column
@@ -217,6 +219,62 @@ function bindRateDisclosure() {
   });
 }
 
+// WHAT THIS BLOCK IS, AND WHAT IT CARRIES.
+//
+// "Block type" was a READ-OUT: the template said what a frame was for and
+// nobody else could. That is right for a template and wrong for a newsroom -
+// the desk's report was "we cannot make this block rashi or lead or anchor".
+// A page is made up by a person, and which box carries the horoscope this
+// morning is their decision.
+//
+// Two lists, from the two catalogues that already own them - BLOCK_KINDS for
+// the kind of work a frame wants, and the paper's own standing features for
+// which one it carries. Neither is restated here: a second list of these keys
+// is the drift this project has been bitten by twice.
+//
+// Naming a feature implies the kind, so the two cannot fall out of step, and
+// the service says so as well as this panel - a control is a courtesy, the
+// rule lives on the route.
+// The paper's own standing features, fetched once. Only a good answer is
+// cached, so one blip does not empty the picker for the rest of the session -
+// the rule the templates and geometry caches had to learn the hard way.
+let FEATURES = [];
+export async function loadFeatureCatalogue() {
+  if (FEATURES.length) return FEATURES;
+  try {
+    const response = await fetch("/api/features");
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const list = await response.json();
+    if (Array.isArray(list)) FEATURES = list;
+  } catch (error) {
+    console.error("Feature catalogue failed:", error);
+  }
+  return FEATURES;
+}
+
+function purposeMarkup(section, view) {
+  const kind = String(view.blockType || section.block_type || "article");
+  const feature = String(section.feature_key || "");
+  const kinds = Object.entries(BLOCK_KINDS)
+    .map(([key, entry]) => `<option value="${escapeHtml(key)}"${key === kind ? " selected" : ""}>`
+      + `${escapeHtml(entry.label)} — ${escapeHtml(entry.work)}</option>`).join("");
+  const featureOptions = [`<option value=""${feature ? "" : " selected"}>Not a standing feature</option>`]
+    .concat(FEATURES.map((entry) => `<option value="${escapeHtml(entry.key)}"${entry.key === feature ? " selected" : ""}>`
+      + `${escapeHtml(entry.name || entry.key)}</option>`)).join("");
+  return `
+    <div class="form-group prop-purpose">
+      <label for="propBlockKind">What this block is</label>
+      <select id="propBlockKind" data-purpose-kind>${kinds}</select>
+    </div>
+    <div class="form-group prop-purpose">
+      <label for="propBlockFeature">Standing feature</label>
+      <select id="propBlockFeature" data-purpose-feature>${featureOptions}</select>
+      <button type="button" class="layout-btn" data-purpose-fill${feature ? "" : " disabled"}
+        title="Build this feature for the edition's date and put it in this block">Fill it now</button>
+      <small class="muted">Naming a feature makes this a feature block. "Fill it now" builds today's and writes it in.</small>
+    </div>`;
+}
+
 function blockPropertiesMarkup(section, view, page) {
   const border = String(view.borderStyle || section.border_style || "none");
   const ruleWidth = borderWidthPx(view.borderWidthPx ?? section.border_width_px);
@@ -227,7 +285,7 @@ function blockPropertiesMarkup(section, view, page) {
   const dropCapLines = Math.max(0, Number(view.dropCapLines ?? section.drop_cap_lines ?? 0) || 0);
   return `
     <div class="field-grid">
-      <div class="form-group"><label>Block type</label><p class="prop-readout">${escapeHtml(section.block_type || "article")}</p></div>
+      ${purposeMarkup(section, view)}
       <!-- DERIVED, like every other surface that says this. view.status is
            the stored column and it is NULL until a desk explicitly sets one,
            so reading it raw reported "empty" on every block nobody had
@@ -715,8 +773,47 @@ function bindImageControls() {
   bindLayerButtons(boundHandlers);
 }
 
+/**
+ * What this block is for - the kind, the feature, and filling it now.
+ *
+ * Bound at the DOCUMENT, not to the selects: this panel is rewritten on every
+ * repaint, so an element-bound listener is on a detached node from the next
+ * one. That is the #edSpaceGroup trap this codebase has already been bitten by
+ * twice, and it is found the same way both times - by pressing the control and
+ * watching nothing happen.
+ */
+let purposeBound = false;
+function bindPurposeControls(handlers) {
+  loadFeatureCatalogue().then((list) => {
+    // The picker is drawn before the catalogue can have arrived on the very
+    // first paint, so one repaint once it is here - and only then, or every
+    // block selection would redraw the panel a second time for nothing.
+    if (list.length && !document.querySelector("[data-purpose-feature] option[value]:not([value=''])")) {
+      handlers?.onRefresh?.();
+    }
+  });
+  if (purposeBound) return;
+  purposeBound = true;
+
+  document.addEventListener("change", (event) => {
+    const kind = event.target.closest?.("[data-purpose-kind]");
+    if (kind) { handlers?.onPurpose?.({ blockType: kind.value }); return; }
+    const feature = event.target.closest?.("[data-purpose-feature]");
+    if (feature) handlers?.onPurpose?.({ featureKey: feature.value || null });
+  });
+
+  document.addEventListener("click", (event) => {
+    const fill = event.target.closest?.("[data-purpose-fill]");
+    if (!fill || fill.disabled) return;
+    const chosen = document.querySelector("[data-purpose-feature]")?.value || "";
+    if (!chosen) return;
+    handlers?.onPurpose?.({ featureKey: chosen, fill: true });
+  });
+}
+
 function bindBlockControls() {
   bindRateDisclosure();
+  bindPurposeControls(boundHandlers);
   if (!boundHandlers) return;
   bindBorderButtons(boundHandlers);
   bindPanelControls(boundHandlers, boundSection, boundView);

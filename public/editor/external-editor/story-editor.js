@@ -52,6 +52,20 @@ let selectedTextPart = "body";
 // The flow whose field was last brought into view - see refreshStoryEditor().
 let lastRevealedPart = null;
 
+/**
+ * Is this element actually in the viewport?
+ *
+ * A hidden frame (`display: none`, which is how a band with no geometry is
+ * placed) has a zero box at the origin and would read as "on screen" - so an
+ * element with no size is treated as not visible, which is what it is.
+ */
+function onScreen(element) {
+  if (!element) return false;
+  const box = element.getBoundingClientRect();
+  if (box.width <= 0 || box.height <= 0) return false;
+  return box.bottom > 0 && box.top < window.innerHeight;
+}
+
 const TEXT_SIZE_FIELD = {
   headline: "headlineFontPx",
   subheading: "subheadingFontPx",
@@ -601,13 +615,34 @@ export function refreshStoryEditor(view, section, images, source, selectedPart, 
   // `selectedTextPart` is written by refreshBlockControls() before this runs,
   // so it cannot say whether the selection just CHANGED. This feature keeps
   // its own memory of what it last brought into view.
+  //   * and ONLY WHEN THE OBJECT ITSELF CANNOT BE SEEN.
+  //
+  // This is the desk's report "after clicking on heading or subheading it
+  // makes scroll or redirect - it usually happens on the FIRST click, so if I
+  // click body then heading it redirects, but heading then heading does not."
+  // That is this reveal exactly: it fires on a CHANGE of selection, so the
+  // second click on the same object does nothing.
+  //
+  // The reveal was written when the field below was the only place a headline
+  // could be typed. It is not any more - the composed page draws a caret and
+  // the headline and deck are edited in place on it (beginInlineTextEdit) - so
+  // a desk who selected the headline BY CLICKING IT is already looking at the
+  // thing they are about to type into, and dragging the viewport two screens
+  // down to a second copy of it is the opposite of help.
+  //
+  // So the question is not "is the field off-screen" but "can the desk see the
+  // object at all". If the band's own frame is on screen, nothing moves. That
+  // needs no flag threaded through the store: the page is the evidence.
   const movedTo = selectedPart !== lastRevealedPart;
   lastRevealedPart = selectedPart;
   if (movedTo && (selectedPart === "headline" || selectedPart === "subheading")) {
     const field = document.getElementById(
       selectedPart === "headline" ? "edStoryHeadline" : "edStorySubheading",
     );
-    if (field && !field.contains(document.activeElement)) {
+    const frame = document.getElementById(
+      selectedPart === "headline" ? "edHeadlineFrame" : "edSubheadingFrame",
+    );
+    if (field && !field.contains(document.activeElement) && !onScreen(frame)) {
       const box = field.getBoundingClientRect();
       const offScreen = box.bottom < 0 || box.top > window.innerHeight;
       if (offScreen) field.scrollIntoView({ block: "nearest", behavior: "smooth" });

@@ -61,6 +61,14 @@ async function findAll(filter = {}) {
     conditions.push(`created_by = $${values.length}`);
   }
 
+  // A DRAFT IS NOT A FILING. `excludeStatuses` is how the desk asks for what
+  // has actually been sent to it - see listNews() in news.service.js, which is
+  // where the rule about who may see an unsubmitted draft is stated.
+  if (Array.isArray(filter.excludeStatuses) && filter.excludeStatuses.length) {
+    values.push(filter.excludeStatuses);
+    conditions.push(`status <> ALL($${values.length})`);
+  }
+
   if (conditions.length) {
     query += ` WHERE ` + conditions.join(" AND ");
   }

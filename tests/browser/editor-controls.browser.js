@@ -456,12 +456,19 @@ const BODY = 'सातारा : नगरपालिकेच्या स�
   // ------------------------------------------------------------- the paper's ink ---
   //
   // A colour on WORDS, and it must land on the object that is selected - the
-  // same rule the alignment controls and the marks toolbar already keep. Four
-  // named inks, never a colour wheel: a page is separated into plates.
+  // same rule the alignment controls and the marks toolbar already keep.
+  // NAMED inks, never a colour wheel: a page is separated into plates.
   {
     const draft = () => page.evaluate(async () => (await import('/editor/store.js')).getState().draft);
 
-    say(await page.locator('.ed-quill-ink-btn').count() === 4, 'the toolbar carries the paper\'s four inks and no more');
+    // THE COUNT COMES FROM THE CATALOGUE, not from this file. It was pinned at
+    // four, and the palette legitimately grew to seven when the desk asked for
+    // more colours - so the test failed on a change it was never written to
+    // guard. What it exists to hold is that the toolbar offers the paper's own
+    // inks and NOTHING ELSE, which is a question about both lists.
+    const inkCount = await page.evaluate(async () => (await import('/editor/layout/inks.js')).INKS.length);
+    say(await page.locator('.ed-quill-ink-btn').count() === inkCount,
+      'the toolbar carries the paper\'s inks and no more', `${inkCount} in the catalogue`);
 
     await focusPart('body');
     await selectAllIn('body');
@@ -507,7 +514,9 @@ const BODY = 'सातारा : नगरपालिकेच्या स�
     await page.waitForTimeout(700);
     const blockStyle = () => page.locator(`.newspaper-section[data-section-key="${KEY}"]`).getAttribute('style');
 
-    say(await page.locator('[data-prop-tint] .tint-swatch').count() === 5, 'the block offers the paper\'s tints and white');
+    const tintCount = await page.evaluate(async () => (await import('/editor/layout/inks.js')).TINTS.length);
+    say(await page.locator('[data-prop-tint] .tint-swatch').count() === tintCount,
+      'the block offers the paper\'s tints and white', `${tintCount} in the catalogue`);
     await page.locator('[data-prop-tint] [data-tint="#fbf3e9"]').click();
     await page.waitForTimeout(900);
     // The tint is a VALUE, so it lives in the element's own style - which means

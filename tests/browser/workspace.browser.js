@@ -39,6 +39,52 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
   page.on('console', (m) => m.type() === 'error' && errors.push(`console: ${m.text().slice(0, 160)}`));
   page.on('response', (r) => { if (r.status() >= 400) errors.push(`HTTP ${r.status()} ${r.url().slice(0, 110)}`); });
 
+  // A `page.evaluate` whose function is async - it awaits a fetch, or a dynamic
+  // import - can have its promise collected by V8 while the canvas is
+  // re-rendering underneath it. Playwright reports it as "Resulting promise was
+  // garbage collected" and the net dies mid-run, taking every later check with
+  // it silently. Measured on this machine over six runs of the guides section
+  // BEFORE any of it was wrapped: it crashed 2 times in 6, always in the same
+  // place, on unmodified main. That is the failure this project's own rule
+  // names - "a browser test that crashes is worse than one that fails" - so
+  // EVERY async evaluate on a hot path goes through this one door, and it
+  // retries three times rather than once: the retry is the same shape as the
+  // call it is retrying, so it can be collected in exactly the same way.
+  // The guides section drives the REST API hard while the canvas is
+  // re-rendering from a drag, and that is exactly where the collector bites:
+  // every one of the measured crashes was an async evaluate in that section.
+  // These requests do not need to run inside the page - they only need the
+  // desk's session, which `page.request` already shares with the browser
+  // context. Moving them out leaves NO promise in the page to collect, so the
+  // hazard is removed rather than retried. What must still happen in the page
+  // is the app's own state update, and that is a synchronous call.
+  // A refusal here is a broken harness, not a failing check - a lost session
+  // would otherwise leave every guide in place and be reported as the product
+  // getting the geometry wrong. So it is raised where it happens.
+  const apiCall = async (method, path, data) => {
+    const response = await page.request[method](`${BASE}${path}`, data === undefined ? undefined : { data });
+    if (!response.ok()) throw new Error(`${method.toUpperCase()} ${path} answered ${response.status()}`);
+    return response;
+  };
+  const api = {
+    get: (path) => apiCall('get', path).then((r) => r.json()),
+    post: (path, data) => apiCall('post', path, data).then((r) => r.json()),
+    patch: (path, data) => apiCall('patch', path, data).then((r) => r.json()),
+    del: (path) => apiCall('delete', path),
+  };
+
+  const evalRetry = async (fn, arg) => {
+    let last;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try { return await page.evaluate(fn, arg); } catch (error) {
+        if (!/garbage collected|Execution context was destroyed/i.test(error.message)) throw error;
+        last = error;
+        await page.waitForTimeout(400);
+      }
+    }
+    throw last;
+  };
+
   const block = (key = KEY) => page.locator(`.newspaper-section[data-section-key="${key}"]`);
   const blockText = async (key = KEY) => (await block(key).innerText()).replace(/\s+/g, ' ').trim();
 
@@ -579,7 +625,7 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
     // database - otherwise a stale frame for a deleted row would sit in the
     // DOM for the rest of this run.
     const { pageId } = await fetchImages();
-    await page.evaluate(([pid, key, id]) => fetch(`/api/pages/${pid}/sections/${key}/images/${id}`, { method: 'DELETE' }), [pageId, KEY, added.id]);
+    await api.del(`/api/pages/${pageId}/sections/${KEY}/images/${added.id}`);
     if (otherKey) { await block(otherKey).click(); await page.waitForTimeout(500); }
     await block().click();
     await page.waitForTimeout(1200);
@@ -1037,7 +1083,7 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
 
     // Cleanup.
     const { pageId } = await fetchImages();
-    await page.evaluate(([pid, key, id]) => fetch(`/api/pages/${pid}/sections/${key}/images/${id}`, { method: 'DELETE' }), [pageId, KEY, added.id]);
+    await api.del(`/api/pages/${pageId}/sections/${KEY}/images/${added.id}`);
     if (otherKey) { await block(otherKey).click(); await page.waitForTimeout(500); }
     await block().click();
     await page.waitForTimeout(1200);
@@ -1051,14 +1097,14 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
   // block does not touch KEY's own selection state except at the very end,
   // where it checks a guide never steals an ordinary click.
   {
-    const pageIdOf = () => page.evaluate(async (ed) => (await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json()))[0].id, ED);
-    const fetchGuides = (pid) => page.evaluate((p) => fetch(`/api/pages/${p}/guides`).then((r) => r.json()), pid);
+    const pageIdOf = async () => (await api.get(`/api/newspapers/${ED}/pages`))[0].id;
+    const fetchGuides = (pid) => api.get(`/api/pages/${pid}/guides`);
     const pid = await pageIdOf();
 
     // A clean slate - any guide left by a previous run would confuse the
     // "multiple guides coexist" / "crossing guides" counts below.
     for (const g of await fetchGuides(pid)) {
-      await page.evaluate(([p, id]) => fetch(`/api/pages/${p}/guides/${id}`, { method: 'DELETE' }), [pid, g.id]);
+      await api.del(`/api/pages/${pid}/guides/${g.id}`);
     }
 
     say((await page.locator('#canvasRulerH').count()) === 1, 'a horizontal ruler exists');
@@ -1098,7 +1144,7 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
     // fit/zoom scale happens to be (it varies with how much room the
     // settings rail and Block Editor are taking, which earlier tests in
     // this run have already changed).
-    const newspaperPx = await page.evaluate((ed) => fetch(`/api/newspapers/${ed}`).then((r) => r.json()), ED);
+    const newspaperPx = await api.get(`/api/newspapers/${ED}`);
     const scale = pageBox.height / Number(newspaperPx.page_height_px);
 
     const createRequests = [];
@@ -1232,7 +1278,7 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
 
     // Cleanup.
     for (const g of await fetchGuides(pid)) {
-      await page.evaluate(([p, id]) => fetch(`/api/pages/${p}/guides/${id}`, { method: 'DELETE' }), [pid, g.id]);
+      await api.del(`/api/pages/${pid}/guides/${g.id}`);
     }
   }
 
@@ -1261,8 +1307,8 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
   // the final persisted position always lands on a legal grid/baseline
   // value, exactly as it did before this stage.
   {
-    const pageIdOf = () => page.evaluate(async (ed) => (await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json()))[0].id, ED);
-    const fetchGuides = (pid) => page.evaluate((p) => fetch(`/api/pages/${p}/guides`).then((r) => r.json()), pid);
+    const pageIdOf = async () => (await api.get(`/api/newspapers/${ED}/pages`))[0].id;
+    const fetchGuides = (pid) => api.get(`/api/pages/${pid}/guides`);
     // Guide mutations below go straight to the REST API (not the ruler-drag
     // UI, already covered in the previous block) so each subtest can place a
     // guide at an exact page pixel - but the running app only learns about a
@@ -1273,39 +1319,32 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
     // same page-guides.js function the app itself calls on every real
         // mutation, so the test drives the app into a state it could reach
     // through ordinary use, not a fabricated one.
-    const evalRetry = async (fn, arg) => {
-      try { return await page.evaluate(fn, arg); } catch (error) {
-        if (!/garbage collected|Execution context was destroyed/i.test(error.message)) throw error;
-        await page.waitForTimeout(400);
-        return page.evaluate(fn, arg);
-      }
-    };
-    await evalRetry(async () => { window.__sahasStore = await import('/editor/store.js'); });
+    // Both modules are imported ONCE, here, while nothing is being dragged and
+    // the canvas is still - so the one unavoidable async evaluate in this
+    // section is made where the collector has nothing to race.
+    await evalRetry(async () => {
+      window.__sahasStore = await import('/editor/store.js');
+      window.__sahasGuides = await import('/editor/canvas/page-guides.js');
+    });
 
-    // Same shape, same hazard as restoreGeometry below - this one runs after
-    // every guide create and delete, so it is on the hot path too.
-    const syncGuides = (pid) => evalRetry(async (p) => {
-      const mod = window.__sahasGuides || await import('/editor/canvas/page-guides.js');
-      window.__sahasGuides = mod;
-      const guides = await fetch(`/api/pages/${p}/guides`).then((r) => r.json());
-      mod.renderGuides(guides);
-    }, pid);
+    // The app only learns about a guide through page-guides.js's own
+    // renderGuides - the exact call it makes on every real mutation. The read
+    // happens out here; only the render happens in the page, synchronously.
+    const syncGuides = async (pid) => {
+      const guides = await api.get(`/api/pages/${pid}/guides`);
+      await page.evaluate((list) => window.__sahasGuides.renderGuides(list), guides);
+    };
     const createGuide = async (pid, orientation, positionPx) => {
-      const list = await page.evaluate(
-        ([p, o, pos]) => fetch(`/api/pages/${p}/guides`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orientation: o, positionPx: pos }),
-        }).then((r) => r.json()),
-        [pid, orientation, positionPx],
-      );
+      const list = await api.post(`/api/pages/${pid}/guides`, { orientation, positionPx });
       await syncGuides(pid);
       return list[list.length - 1];
     };
     const deleteGuide = async (pid, id) => {
-      await page.evaluate(([p, gid]) => fetch(`/api/pages/${p}/guides/${gid}`, { method: 'DELETE' }), [pid, id]);
+      await api.del(`/api/pages/${pid}/guides/${id}`);
       await syncGuides(pid);
     };
     const fetchSection = async (key) => {
-      const pages = await page.evaluate((ed) => fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json()), ED);
+      const pages = await api.get(`/api/newspapers/${ED}/pages`);
       return pages[0].sections.find((s) => s.section_key === key);
     };
     // Like the guide sync above: a raw PATCH updates the database, but the
@@ -1324,23 +1363,22 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
     // drag, while the canvas is re-rendering) has no import in it at all; and
     // the call is retried once, because an execution context torn down mid-
     // evaluate is a race, not a failure.
-    const restoreGeometry = (pid, key, rect) => evalRetry(
-      async ([p, k, r]) => {
-        const updated = await fetch(`/api/pages/${p}/sections/${encodeURIComponent(k)}/geometry`, {
-          method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(r),
-        }).then((res) => res.json());
-        (window.__sahasStore || await import('/editor/store.js')).replacePage(updated, { structural: true });
-      },
-      [pid, key, rect],
-    );
+    // This one runs after EVERY drag, while the canvas is re-rendering, and it
+    // was the measured crash site. The PATCH is made from out here and only
+    // store.js's own replacePage - the exact call moveSection() makes with the
+    // PATCH response - happens in the page, synchronously.
+    const restoreGeometry = async (pid, key, rect) => {
+      const updated = await api.patch(`/api/pages/${pid}/sections/${encodeURIComponent(key)}/geometry`, rect);
+      await page.evaluate((u) => window.__sahasStore.replacePage(u, { structural: true }), updated);
+    };
 
     const pid = await pageIdOf();
     for (const g of await fetchGuides(pid)) await deleteGuide(pid, g.id);
 
     const before = await fetchSection(KEY);
     const original = { x: Number(before.x_px), y: Number(before.y_px), width: Number(before.width_px), height: Number(before.height_px) };
-    const newspaperPx = await page.evaluate((ed) => fetch(`/api/newspapers/${ed}`).then((r) => r.json()), ED);
-    const geometry = await page.evaluate(() => fetch('/api/geometry').then((r) => r.json()));
+    const newspaperPx = await api.get(`/api/newspapers/${ED}`);
+    const geometry = await api.get('/api/geometry');
 
     // At "fit" zoom the page renders at under 30% scale (194px wide for a
     // 660px page), where a 4px snap threshold is under 2 screen px - too
@@ -1521,7 +1559,13 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
     // right edge on the next column boundary (~39px away), then the guide,
     // 4px further on, pulls it the rest of the way while dragging - the left
     // edge, under no handle, must not move at all.
+    // The canvas re-renders on the guide sync just above, and a click
+    // dispatched while the block's own node is being replaced under it is
+    // retried by Playwright until it times out - measured once here, as a
+    // 30s locator.click failure that killed the run at check 172. Every other
+    // scrollIntoViewIfNeeded on this path already settles first.
     await block().scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
     await block().click();
     await page.waitForTimeout(400);
     await dragHandleToMidway('e', 34, 0);

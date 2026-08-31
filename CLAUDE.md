@@ -5181,6 +5181,36 @@ error and says that later checks did not run, so a partial run cannot resemble a
 green one. After that hardening the whole net completed **222/222 three
 consecutive times**, with no browser errors or crashes.
 
+**Three consecutive runs is not a measurement of a one-in-three fault, and
+that hardening was not the fix.** Measured properly — six runs of the net on
+unmodified `main` — it still crashed **2 times in 6**, always in the guides
+section, always the same "Resulting promise was garbage collected". So the last
+52 checks only ran two runs in three, on the branch everything is verified
+against. Retrying harder is not the answer either: the retry is the same shape
+as the call it retries and can be collected the same way (three attempts took
+it to 1 in 7, not 0).
+
+**The hazard is REMOVED rather than retried.** Only an `evaluate` whose
+function is `async` — one awaiting a `fetch` or a dynamic `import` — leaves a
+promise in the page for the collector to take. None of those calls needed to
+run in the page at all: they were REST calls, and `page.request` already shares
+the browser context's session. They are made from Node now, and what genuinely
+must happen in the page — `store.js`'s `replacePage`, `page-guides.js`'s
+`renderGuides`, the exact two calls the app itself makes — happens
+**synchronously**, with the modules parked on `window` by one async evaluate
+made at setup while the canvas is still. **0 crashes in 9 consecutive runs**,
+224/224 every time.
+
+A refusal from that door is raised where it happens (`apiCall` checks
+`response.ok()`): a lost session would otherwise leave every guide in place and
+be reported as the product getting the geometry wrong.
+
+One click in that section also had to settle. The canvas re-renders on the
+guide sync above it, and a click dispatched while the block's own node is being
+replaced under it is retried by Playwright until it times out — measured once,
+as a 30s `locator.click` failure that killed a run at check 172. Every other
+`scrollIntoViewIfNeeded` on that path already waited; this one did not.
+
 The dev database is full of test fixtures — 221 editions across 13 dates, named `साहस`, `ZZ …`, `8/3/2026 Edition`. Tests that create an edition must remove it in `t.after(...)`. `POST /api/newspapers` is **not** idempotent; only `POST /api/newspapers/start` is, and only that one is wired to a button.
 
 ### Housekeeping every session

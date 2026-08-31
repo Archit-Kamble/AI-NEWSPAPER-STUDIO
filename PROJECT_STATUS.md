@@ -7709,3 +7709,59 @@ the same direction, agreeing with each other. It is built from
 
 `npm test` green. `tests/browser/advert-rate.browser.js` 10/10 — the ear reads
 **₹27,216**, the lead ₹33,696, one request on open and none on reopen.
+
+## The five overnight branches, merged — 31 Aug 2026
+
+`desk-navigation`, `edition-delete`, `story-continuation`,
+`page-production-state` and `advert-rate-card` are on `main`. Each was merged
+with `--no-ff`, so every one is still a readable unit in the history.
+
+Only `PROJECT_STATUS.md` conflicted, four times, and always the same way: two
+branches appending their own section at the end of the file. Both sides were
+kept, in order. Nothing in `CLAUDE.md`, the sources or the tests conflicted —
+each branch had written into a different anchor on purpose.
+
+### What was verified before the merge was pushed
+
+| | |
+|---|---|
+| `npm test` | **1068/1068**, fail 0 |
+| `navigation.browser.js` | 19/19 |
+| `edition-delete.browser.js` | 11/11 |
+| `story-continuation.browser.js` | 19/19 |
+| `press-panel.browser.js` | 17/17 |
+| `advert-rate.browser.js` | 10/10 |
+| `admin-screens.browser.js` | 18/18 |
+| `workspace.browser.js` | **224/224** |
+
+No page exceptions in any of them.
+
+### The regression net was flaky, and it was flaky BEFORE this work
+
+The first run of `workspace.browser.js` on the merged tree crashed at check
+172 of 224. That is the failure this project's own rule names — *a browser test
+that crashes is worse than one that fails* — so it was measured rather than
+re-run until it went green:
+
+| | crashes |
+|---|---|
+| pre-merge `main`, as it was | **2 in 6 runs** |
+| merged, as it was | 2 in 5 runs |
+| merged, `evalRetry` given three attempts | 1 in 7 runs |
+| merged, hazard removed | **0 in 9 runs** |
+
+So the flake is **pre-existing and unrelated to the branches** — the same rate,
+the same section, the same error. It is fixed here because it is what made the
+verification ambiguous in the first place: at one crash in three, the last 52
+checks of the net only ran two runs in three, on the branch everything else is
+verified against.
+
+The fix is in the harness only, and it removes the hazard rather than retrying
+it — see CLAUDE.md's testing section. `page.request` makes the guides section's
+REST calls from Node, so there is no promise left in the page to collect; the
+two calls that genuinely must run in the page (`replacePage`, `renderGuides`)
+are synchronous.
+
+### Where the branches stand
+
+Merged and deleted. `main` is pushed.

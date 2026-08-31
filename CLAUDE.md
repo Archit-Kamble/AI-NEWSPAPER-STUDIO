@@ -318,8 +318,65 @@ Public access is gated in three places:
 - the whole-paper download uses `GET /epaper/:id/pdf`, which performs the same
   status check instead of exposing the raw upload URL in public markup.
 
-The public reader header intentionally carries the real SAHAS nameplate plus a
-cropped lion mark and does **not** carry an “All editions” navigation control.
+### The e-paper is the one page the public sees, so it is read as one
+
+Everything below was found by opening this newsroom's own released issue at
+430px and looking at it. None of it is visible from the code.
+
+**Ten stories reading "New news block", with nothing under them.** The Map
+blocks tool draws a rectangle over a page somebody *else* designed — an uploaded
+PDF — so there is no newsroom copy behind it and there never will be. Those
+blocks were printed as articles: a headline, no story, and a button offering to
+share it. The map editor's own "give each block a title" check asked whether the
+headline was **empty**, and a new block is created carrying the words "New news
+block", which is not.
+
+- **A manually mapped block is a hotspot, not a story.** It keeps its tappable
+  region on the page image — that is what the tool is for — and is not printed
+  as an article. `manual` is the discriminator because it is the *true* one: it
+  says where the block came from, and no amount of reading the headline could
+  tell the two apart. A newsroom block keeps its entry whether or not it carries
+  a body yet, because its headline was set by a sub-editor and printed on the
+  sheet.
+- **The placeholder is not a title.** The save refuses the untouched wording,
+  and the block that carries it reads the same constant so the two cannot drift.
+
+**The reader sees one page, so it reads one page's stories.** Every page's text
+was printed under every page: a reader on page one scrolled into the whole paper
+with no way to tell which of it was on the sheet above. Each transcript is
+hidden and shown with its own sheet, by the same navigation that moves it —
+every page still in the document, so the text stays searchable and indexable.
+
+**The nameplate carries the lion, so the header does not carry it twice.**
+`.reader-lion-mark` was a 42 px circle cropped out of the nameplate image itself
+(`background-position: 56%`) — the same lion, smaller, with a red sliver of the
+वा of वार्ता caught in its edge, beside the real one. Same answer as the RNI: the
+artwork sets the mark, and setting it a second time is not a mark but a mistake.
+
+**And the news starts near the top.** The header gave the nameplate a whole row
+at its natural height and the date another below it, so at 430 px the reader met
+the same nameplate twice within four hundred pixels:
+
+| | before | after |
+|---|---|---|
+| where the newspaper begins | 370 px of a 900 px screen | **131 px** |
+
+**Nothing in the reader explains itself in an HTML comment.** Everything between
+the template literal's backticks is downloaded by every reader, so the reasoning
+lives in the source above it — and a comment inside a template literal cannot
+carry a backtick anyway, which has taken this application down three times.
+
+```bash
+node tests/browser/epaper-public.browser.js    # driven at 430px, like a phone
+```
+
+It reports honestly and exits 0 when no issue is released, rather than
+publishing one: releasing an edition is not something a test should do by
+accident.
+
+The public reader header carries the real SAHAS nameplate and does **not**
+carry an “All editions” navigation control, nor a second cropped copy of the
+lion — see the section above for why that went.
 Sharing is constrained by the receiving platforms: WhatsApp Send and Facebook
 web share can open their own URLs directly; a website cannot post into WhatsApp
 Status, Instagram Story/Post or Facebook Story, nor select an app inside the

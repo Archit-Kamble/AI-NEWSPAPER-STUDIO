@@ -8062,3 +8062,70 @@ but not in one live AI run.
 | group | items | branch |
 |---|---|---|
 | 4. e-paper for the public | 11 | `epaper-public` |
+
+## Group 4 — the e-paper for the public — 31 Aug 2026
+
+Branch `epaper-public`, on top of `writing-flow`. Item 11, the last of the
+thirteen.
+
+Everything here was found by opening this newsroom's **own released issue** at
+430px — the width of the phone a reader following a WhatsApp link is holding —
+and looking at it. None of it is visible from the code.
+
+### What a reader was actually being shown
+
+| | |
+|---|---|
+| ten entries reading **"New news block"** | each with a share button and no story |
+| every page's text under every page | no way to tell which was on the sheet above |
+| the lion, twice | the second a bad crop of the first |
+| 370px of a 900px screen | spent on furniture before a word of news |
+
+### The two halves of the "New news block" fault
+
+The Map blocks tool draws a rectangle over a page somebody **else** designed, so
+there is no newsroom copy behind it. Those were printed as articles.
+
+- **A manually mapped block is a hotspot, not a story.** It keeps its region;
+  it is not printed. `manual` is the discriminator because it says where the
+  block came from — no amount of reading the headline could tell them apart.
+- **The placeholder is not a title.** The editor's own check asked whether the
+  headline was *empty*, and a new block is created carrying "New news block".
+
+### Measured
+
+| | before | after |
+|---|---|---|
+| the newspaper begins at | 370px | **131px** |
+| stories with nothing under them | 10 | **0** |
+| lion marks in the header | 2 | **1** |
+| pages of text shown at once | all 4 | **1, the one being read** |
+| hotspots on page one | 10 | 10 — unchanged, they are the point |
+
+### Also
+
+A **backtick in a comment inside a template literal** took the public reader
+down to a 500 — the third time in this codebase. The reasoning now lives in the
+source above the template, where it belongs anyway: everything between those
+backticks is downloaded by every reader.
+
+`tests/epaper.test.js` asserted the cropped lion was *present*. Inverted, with
+its reason beside it.
+
+### Verified
+
+`npm test` **1096/1096**, fail 0. New `tests/epaperPublic.test.js` 5/5 and
+`tests/browser/epaper-public.browser.js` 13/13, driven at 430px.
+`workspace` 224/224, `admin-screens` 18/18.
+
+### All four groups
+
+| group | items | branch | state |
+|---|---|---|---|
+| 1. charts & Smart Cards as objects | 1, 2, 4, 10 | `chart-objects` | pushed |
+| 2. the block's own surface | 6, 7, 8, 12, 13 | `block-surface` | pushed |
+| 3. the writing flow | 5, 3, 9 | `writing-flow` | pushed |
+| 4. the e-paper for the public | 11 | `epaper-public` | pushed |
+
+Each branch is stacked on the one before it, so they merge in that order with
+no conflicts. None is merged to `main`.

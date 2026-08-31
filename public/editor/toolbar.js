@@ -24,7 +24,11 @@ function button(id, icon, label, { disabled = false, primary = false, active = f
   return `<button id="${id}" class="${classes}" ${disabled ? "disabled" : ""} ${title ? `title="${title}"` : ""}>${ICONS[icon]}<span>${label}</span></button>`;
 }
 
-export function renderToolbar({ newspaper, hasSelection, storyPickerOpen, handlers }) {
+// `can` is what the SERVER said this person may do (/api/auth/me), threaded in
+// rather than worked out here. Releasing the paper to readers is the Sampadak's
+// (src/auth/roles.js), so an editor is not shown a Publish button that answers
+// 403 - a control that cannot act is not offered.
+export function renderToolbar({ newspaper, hasSelection, storyPickerOpen, handlers, can = {} }) {
   const container = document.getElementById("toolbar");
   if (!container) return;
 
@@ -79,12 +83,12 @@ export function renderToolbar({ newspaper, hasSelection, storyPickerOpen, handle
         </div>
       </details>
       ${button("tbAI", "ai", "AI Compose", { title: "Plan AI composition from approved newsroom copy" })}
-      ${button("tbPublish", "publish", "Publish", { primary: true })}
+      ${can.publish ? button("tbPublish", "publish", "Publish", { primary: true }) : ""}
     </div>
   `;
 
   document.getElementById("tbSave").addEventListener("click", handlers.onSave);
-  document.getElementById("tbPublish").addEventListener("click", handlers.onPublish);
+  document.getElementById("tbPublish")?.addEventListener("click", handlers.onPublish);
   document.getElementById("tbFromReporter").addEventListener("click", handlers.onToggleStoryPicker);
   document.getElementById("tbUndo").addEventListener("click", handlers.onUndo);
   document.getElementById("tbRedo").addEventListener("click", handlers.onRedo);

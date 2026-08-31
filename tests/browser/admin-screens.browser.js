@@ -1,7 +1,7 @@
 // THE OWNER'S OWN SCREENS, WHICH NO NET COVERED.
 //
 // Every browser net in this repository drives the workspace. The five screens
-// behind the ☰ - Past Newspapers, Past News, Reporters, Settings, E-paper -
+// behind the ☰ - Past Newspapers, Past News, Staff, Settings, E-paper -
 // had none, and that is where this found a review queue of 1972 filings drawn
 // one card at a time into the live document with no way to search it.
 //
@@ -58,7 +58,7 @@ const check = (name, ok, detail = '') => {
     // --- every screen actually lands on itself ------------------------------
     for (const [id, expected] of [
       ['pastNewsBtn', 'REPORTER NEWS REVIEW'],
-      ['reportersBtn', 'Reporters'],
+      ['reportersBtn', 'Staff'],
       ['settingsBtn', 'General settings'],
       ['epaperBtn', 'E-paper'],
       ['pastBtn', 'आजचा अंक'],

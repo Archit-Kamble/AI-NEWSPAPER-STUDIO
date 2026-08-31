@@ -2,7 +2,7 @@ const express = require('express');
 const { guardIdParams } = require('../middleware/params');
 const { asyncController, asyncRoute } = require('../middleware/asyncRoute');
 const { publicationUpload } = require('../middleware/upload');
-const { requireDesk } = require('../middleware/auth');
+const { requireDesk, requirePublish, requireOwnerDelete } = require('../middleware/auth');
 
 // Wrapped so a rejected handler reaches the error middleware instead of
 // crashing the process - see src/middleware/asyncRoute.js. This router used
@@ -37,10 +37,12 @@ router.get('/', requireDesk, newspaperController.list);
 router.get('/latest', requireDesk, newspaperController.latest);
 router.get('/:id', requireDesk, newspaperController.getOne);
 router.patch('/:id', newspaperController.update);
-// Removing an edition is a WRITE, so `deskWrites` already guards it - and it
-// says requireDesk anyway, because CLAUDE.md records that assumption biting
-// this migration twice and this is the most destructive route in the file.
-router.delete('/:id', requireDesk, newspaperController.remove);
+// Removing an edition is the OWNER's, and only the owner's. It is the most
+// destructive route in this file - a hard delete, by design, because a
+// "deleted" edition would go on occupying its date - and an archive is the
+// paper's own record. `deskWrites` already guards it as a write; this says
+// which desk.
+router.delete('/:id', requireOwnerDelete, newspaperController.remove);
 // The paper's own type and its column rules - one decision for the edition,
 // not one per block. A write, so deskWrites already guards it.
 router.patch('/:id/house-style', newspaperController.houseStyle);
@@ -67,12 +69,20 @@ router.get('/:id/printed-pages', requireDesk, newspaperController.printedPages);
 // The owner list/preview is desk-only. The public site has one canonical
 // selected issue at /epaper, not an enumerable id route.
 router.get('/:id/epaper', requireDesk, newspaperController.epaper);
-router.post('/:id/publish', newspaperController.publishEpaper);
-router.post('/:id/publish-current', newspaperController.publishCurrentEpaper);
-router.post('/:id/epaper/pdf', publicationUpload.single('printPdf'), newspaperController.publishUploadedEpaperPdf);
-router.patch('/:id/epaper/map', newspaperController.updateEpaperMap);
-router.post('/:id/epaper/select', newspaperController.selectEpaper);
-router.delete('/:id/epaper', newspaperController.unpublishEpaper);
+// RELEASING THE PAPER IS THE SAMPADAK'S. These six are the moment an edition
+// stops being the newsroom's and becomes the reader's - and a released issue is
+// a promise already made to whoever holds the link, which is why deleting an
+// edition that has one is refused rather than allowed. `deskWrites` covers them
+// as writes; only these say who.
+//
+// The map editor is in this list deliberately: it rewrites a LIVE release's own
+// manifest, so it changes what a reader sees without going through a release.
+router.post('/:id/publish', requirePublish, newspaperController.publishEpaper);
+router.post('/:id/publish-current', requirePublish, newspaperController.publishCurrentEpaper);
+router.post('/:id/epaper/pdf', requirePublish, publicationUpload.single('printPdf'), newspaperController.publishUploadedEpaperPdf);
+router.patch('/:id/epaper/map', requirePublish, newspaperController.updateEpaperMap);
+router.post('/:id/epaper/select', requirePublish, newspaperController.selectEpaper);
+router.delete('/:id/epaper', requirePublish, newspaperController.unpublishEpaper);
 
 // GET is left open by deskWrites above (it guards writes only), so these five
 // - desk-internal production state, not the finished public edition - repeat

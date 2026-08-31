@@ -7384,3 +7384,58 @@ body.print-view .page-imprint {
 }
 .newsdesk-empty { padding: 8px 12px; border-top: 1px solid #eee; font-size: 0.78rem; }
 .newsdesk-empty ul { margin: 6px 0 0; padding-left: 18px; }
+
+/* WHO SOMEBODY IS, ON EVERY ROW THEY APPEAR ON.
+   One pill per role, in the paper's own accent for the two that answer for what
+   prints and a quiet grey for the two that do not - so an owner scanning a list
+   of logins reads the authority before the name. The keys are src/auth/roles.js's
+   own; a role with no rule here still draws the base pill rather than nothing. */
+.role-pill {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+  border: 1px solid #d3d3d3;
+  background: #f2f2f2;
+  color: #444;
+  white-space: nowrap;
+}
+.role-pill.role-admin { background: var(--accent); border-color: var(--accent); color: #fff; }
+.role-pill.role-chief_editor { background: #fdecef; border-color: var(--accent); color: var(--accent); }
+.role-pill.role-editor { background: #eef2fb; border-color: #b9c6e6; color: #33508f; }
+.role-pill.role-reporter { background: #f2f2f2; border-color: #d3d3d3; color: #555; }
+
+/* An owner hands a role out perhaps twice a year, so what each one MEANS sits
+   on the screen rather than in anybody's memory - closed by default, because it
+   is reference and not the work. */
+.role-legend { margin: 0 0 14px; font-size: 13px; }
+.role-legend summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+.role-legend ul { margin: 10px 0 0; padding-left: 0; list-style: none; display: grid; gap: 8px; }
+.role-legend li { line-height: 1.5; color: #444; }
+
+.role-filter { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.role-filter button {
+  padding: 4px 12px;
+  border: 1px solid #d6d6d6;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  color: #444;
+}
+.role-filter button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* The chosen role's own description, under the picker. It is the sentence that
+   tells the owner what they are about to grant.
+
+   `:not([hidden])` IS LOAD-BEARING. The other three notes are hidden with the
+   `hidden` attribute, which the browser implements as a UA-sheet
+   `display: none` - and any author rule setting `display` beats it. Written as
+   a bare `.role-note { display: block }` this printed ALL FOUR descriptions at
+   once, under a picker showing one role: the markup was right, the attribute
+   was set, and the stylesheet quietly undid it. Found in a screenshot, not by
+   the net that had just checked the same screen. */
+.role-note:not([hidden]) { display: block; margin-top: 6px; color: #666; line-height: 1.5; }

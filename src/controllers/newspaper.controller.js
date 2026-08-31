@@ -19,9 +19,14 @@ const newsdesk = require('../services/newsdesk');
 const newsdeskWriter = require('../services/newsdesk/writer');
 const pageRepository = require('../repositories/page.repository');
 const pressReadiness = require('../services/pressReadiness.service');
-const { currentUser, DESK_ROLES } = require('../middleware/auth');
+const { currentUser } = require('../middleware/auth');
+const { can } = require('../auth/roles');
 
-const isDesk = (req) => DESK_ROLES.includes(currentUser(req)?.role);
+// Whether a PRIVATE e-paper asset may be served to this caller - a desk
+// previewing a release nobody has selected yet. `can(..., 'makeUp')` rather
+// than a role list, because src/auth/roles.js is the only place that says who
+// the desk is.
+const isDesk = (req) => can(currentUser(req), 'makeUp');
 
 async function create(req, res) {
   const newspaper = await newspaperService.createNewspaper(req.body, req.session.user);

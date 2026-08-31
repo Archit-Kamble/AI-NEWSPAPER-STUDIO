@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS users (
   id SERIAL PRIMARY KEY,
-  role VARCHAR(20) NOT NULL CHECK (role IN ('admin', 'reporter')),
+  role VARCHAR(20) NOT NULL CHECK (role IN ('admin', 'chief_editor', 'editor', 'reporter')),
   name VARCHAR(120) NOT NULL,
   email VARCHAR(255) UNIQUE NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
@@ -15,6 +15,48 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS beat VARCHAR(120);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS notes TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS blocked_at TIMESTAMPTZ;
+
+-- FOUR ROLES, NOT TWO. The CREATE TABLE above says ('admin','reporter'), and
+-- src/middleware/auth.js has tested every request against
+-- ['admin','editor','chief_editor'] since the auth boundary was added - so two
+-- of the roles the code already knew about could never be stored.
+--
+-- Guarded on the CURRENT state, so re-running is free, and written to cope
+-- with BOTH states this database has been found in. schema.sql is never run at
+-- boot, so the live database had no CHECK on users at all while this file
+-- declared one - exactly the drift that made the first delete of an edition
+-- answer 500 on a foreign key the schema said was ON DELETE SET NULL. A
+-- constraint that exists in one environment and not another is a rule the
+-- product cannot rely on, so this both drops the narrow one and adds the real
+-- one where it is missing.
+DO $$
+DECLARE
+  narrow TEXT;
+BEGIN
+  SELECT conname INTO narrow
+    FROM pg_constraint
+   WHERE conrelid = 'users'::regclass
+     AND contype = 'c'
+     AND pg_get_constraintdef(oid) ILIKE '%role%'
+     AND pg_get_constraintdef(oid) NOT ILIKE '%chief_editor%';
+  IF narrow IS NOT NULL THEN
+    EXECUTE format('ALTER TABLE users DROP CONSTRAINT %I', narrow);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conrelid = 'users'::regclass
+       AND contype = 'c'
+       AND pg_get_constraintdef(oid) ILIKE '%chief_editor%'
+  ) THEN
+    ALTER TABLE users ADD CONSTRAINT users_role_check
+      CHECK (role IN ('admin', 'chief_editor', 'editor', 'reporter'));
+  END IF;
+END $$;
+
+-- A login is looked up by email on every sign-in, and by role on every staff
+-- listing. The first is already unique-indexed; the second is not.
+CREATE INDEX IF NOT EXISTS users_role_idx ON users (role);
 
 CREATE TABLE IF NOT EXISTS publication_settings (
   singleton BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton),

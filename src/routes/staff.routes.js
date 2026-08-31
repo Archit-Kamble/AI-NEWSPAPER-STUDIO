@@ -2,7 +2,7 @@ const express = require('express');
 const { guardIdParams } = require('../middleware/params');
 const { asyncController } = require('../middleware/asyncRoute');
 
-const reporterController = asyncController(require('../controllers/reporter.controller'));
+const staffController = asyncController(require('../controllers/staff.controller'));
 const router = express.Router();
 
 // Any :id / :somethingId this router carries is checked before a handler
@@ -11,10 +11,12 @@ const router = express.Router();
 // populates a route's own params only when that route matches.
 guardIdParams(router);
 
-router.get('/', reporterController.list);
-router.post('/', reporterController.create);
-router.get('/:id', reporterController.getOne);
-router.patch('/:id', reporterController.update);
-router.patch('/:id/access', reporterController.access);
+router.get('/', staffController.list);
+// Before '/:id', or "roles" is read as an id.
+router.get('/roles', staffController.roles);
+router.post('/', staffController.create);
+router.get('/:id', staffController.getOne);
+router.patch('/:id', staffController.update);
+router.patch('/:id/access', staffController.access);
 
 module.exports = router;

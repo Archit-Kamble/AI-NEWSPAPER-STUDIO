@@ -102,13 +102,20 @@ export async function leaveWorkspace() {
   }
 }
 
+// What the signed-in person may do, as the SERVER answers it. Not a copy of
+// the rules - src/auth/roles.js is the only statement of those - and not a
+// guess from a role string either, which is what public/admin.js used to make.
+// It decides one thing here: whether the Publish button is drawn.
+let deskCan = {};
+
 export async function renderWorkspace(newspaperId) {
-  let newspaper, pages, reporterNews;
+  let newspaper, pages, reporterNews, me;
   try {
-    [newspaper, pages, reporterNews] = await Promise.all([
+    [newspaper, pages, reporterNews, me] = await Promise.all([
       fetchJson(`/api/newspapers/${newspaperId}`),
       fetchJson(`/api/newspapers/${newspaperId}/pages`),
       fetchJson("/api/news"),
+      fetchJson("/api/auth/me"),
       // The column grid and the px-per-mm scale come from the server; nothing is
       // laid out until they are known.
       loadGeometry(),
@@ -124,6 +131,7 @@ export async function renderWorkspace(newspaperId) {
       ensureShaperReady(),
     ]);
     requireShaperReady();
+    deskCan = me?.user?.can || {};
 
     // The paper's standing furniture, and this edition's volume and issue number
     // worked out from its date. Fetched before the first paint so page one is
@@ -1365,6 +1373,7 @@ function renderShell() {
     handlers: { onSave: saveNow, onPublish: openPublish, onToggleStoryPicker: toggleStoryPicker, onUndo: undo, onRedo: redo,
       onPreflight: runPreflight, onPressFile: downloadPressFile, onExport: downloadExport,
         onCompose: planComposition },
+    can: deskCan,
   });
 
   document.getElementById("sidebarBackdrop").addEventListener("click", () => store.setStoryPickerOpen(false));

@@ -2,16 +2,22 @@ import { renderWorkspace, leaveWorkspace } from "./editor/workspace.js";
 import { startNavigation, navigate, stopNavigation } from "./admin/navigation.js";
 import { renderEditions } from "./admin/editions.js";
 import { renderEpapers } from "./admin/epapers.js";
-import { renderReporterManagement } from "./admin/reporters.js";
+import { renderReporterManagement } from "./admin/staff.js";
 import { renderGeneralSettings } from "./admin/settings.js";
 import { escapeHtml } from "./editor/format.js";
 
 const app = document.getElementById("app");
 
-// Who makes up the paper, as src/middleware/auth.js defines it. The one place
-// this list appears on the client, and it decides only which screen opens -
-// every actual permission is checked on the server, which is where it belongs.
-const DESK_ROLES = ["admin", "editor", "chief_editor"];
+// WHAT THIS PERSON MAY DO IS THE SERVER'S ANSWER, NOT A COPY OF ITS RULES.
+//
+// This file used to carry `DESK_ROLES = ["admin", "editor", "chief_editor"]` -
+// a second statement of a rule whose first statement is src/auth/roles.js, and
+// a second catalogue is the failure this project has been bitten by twice. Both
+// /api/auth/login and /api/auth/me now answer with `user.can`, so the browser
+// has no rules in it at all: it hides a control it is told `false` for, and the
+// server checks the same table again when the request arrives. Hiding is a
+// courtesy to the desk; it is never the guard.
+const can = (capability) => Boolean(currentUser?.can?.[capability]);
 
 let currentUser = null;
 let currentLanguage = "mr";
@@ -48,8 +54,11 @@ async function init() {
   const res = await fetch("/api/auth/me");
   const data = await res.json();
   currentUser = data.user;
+  // `role === "admin"` here would have sent an editor or a Sampadak to the
+  // REPORTER dashboard on every page load and reload - the login path already
+  // asked the right question, so the two disagreed about the same account.
   if (!currentUser) renderLogin();
-  else if (currentUser.role === "admin") renderAdminDashboard();
+  else if (can("makeUp")) renderAdminDashboard();
   else renderReporterDashboard();
 }
 
@@ -97,7 +106,7 @@ function renderLogin() {
     const data = await response.json();
     if (response.ok) {
       currentUser = data.user;
-      if (DESK_ROLES.includes(data.user?.role)) renderAdminDashboard();
+      if (can("makeUp")) renderAdminDashboard();
       else renderReporterDashboard();
     } else {
       alert(data.error);
@@ -268,6 +277,15 @@ ${new Date(newsItem.created_at || newsItem.createdAt).toLocaleDateString()}
   });
 }
 
+// A screen this person cannot reach is not drawn as a disabled button - it is
+// not there at all. That is the opposite of the rule this product follows for
+// a DEVICE ("a device must be removable, and the way out lives beside the way
+// in", where off is disabled rather than hidden), and deliberately so: a device
+// is something the desk might want, while a screen they have no authority for
+// is not a thing they can turn on. Showing it would only teach them to press it.
+const sidebarButton = (id, label, capability, extra = "") =>
+  (can(capability) ? `<button class="sidebar-btn ${extra}" id="${id}">${label}</button>` : "");
+
 async function renderAdminDashboard() {
   app.innerHTML = `
     <div class="main-layout">
@@ -276,18 +294,18 @@ async function renderAdminDashboard() {
           <button class="hamburger-btn" id="appSidebarToggle" title="Menu">&#9776;</button>
           SAHAS
         </div>
-        <div class="header-center">Hi Admin</div>
+        <div class="header-center">Hi ${escapeHtml(currentUser?.name || "")}${currentUser?.roleLabel ? ` <span class="role-pill role-${escapeHtml(currentUser.role)}">${escapeHtml(currentUser.roleLabel)}</span>` : ""}</div>
         <div class="header-right"><button id="logoutBtn">Logout</button></div>
       </div>
       <div class="container">
         <div class="sidebar-app-backdrop" id="sidebarAppBackdrop"></div>
         <aside class="sidebar">
-          <button class="sidebar-btn sidebar-btn--primary" id="newEditionBtn">+ New Edition</button>
-          <button class="sidebar-btn" id="pastBtn">Past Newspapers</button>
-          <button class="sidebar-btn" id="pastNewsBtn">Past News</button>
-          <button class="sidebar-btn" id="reportersBtn">Reporters</button>
-          <button class="sidebar-btn" id="settingsBtn">Settings</button>
-          <button class="sidebar-btn" id="epaperBtn">E-paper</button>
+          ${sidebarButton("newEditionBtn", "+ New Edition", "makeUp", "sidebar-btn--primary")}
+          ${sidebarButton("pastBtn", "Past Newspapers", "makeUp")}
+          ${sidebarButton("pastNewsBtn", "Past News", "reviewCopy")}
+          ${sidebarButton("reportersBtn", "Staff", "manageStaff")}
+          ${sidebarButton("settingsBtn", "Settings", "settings")}
+          ${sidebarButton("epaperBtn", "E-paper", "publish")}
           <button class="sidebar-btn logout" id="logoutBtn2">Logout</button>
         </aside>
         <main class="content" id="content"></main>
@@ -316,20 +334,28 @@ async function renderAdminDashboard() {
   // never moved, so the sidebar said the desk was on the first screen whatever
   // screen they were actually on.
   const SCREENS = {
-    "past-newspapers": { button: "pastBtn", render: () => showPastNewspapers() },
-    "new-edition": { button: "newEditionBtn", render: () => showPastNewspapers({ openCreator: true }) },
-    "past-news": { button: "pastNewsBtn", render: showPastNews },
-    reporters: { button: "reportersBtn", render: showReporters },
-    settings: { button: "settingsBtn", render: showSettings },
-    epaper: { button: "epaperBtn", render: () => renderEpapers(
+    "past-newspapers": { button: "pastBtn", needs: "makeUp", render: () => showPastNewspapers() },
+    "new-edition": { button: "newEditionBtn", needs: "makeUp", render: () => showPastNewspapers({ openCreator: true }) },
+    "past-news": { button: "pastNewsBtn", needs: "reviewCopy", render: showPastNews },
+    reporters: { button: "reportersBtn", needs: "manageStaff", render: showReporters },
+    settings: { button: "settingsBtn", needs: "settings", render: showSettings },
+    epaper: { button: "epaperBtn", needs: "publish", render: () => renderEpapers(
       document.getElementById("content"),
       { rightPanel: document.getElementById("rightPanel") },
     ) },
     // Handled before `render` is reached - an edition is a screen with an id
     // rather than a screen with a panel. It lights Past Newspapers because
     // that is the list it came out of.
-    edition: { button: "pastBtn", render: () => {} },
+    edition: { button: "pastBtn", needs: "makeUp", render: () => {} },
   };
+
+  // An address is reachable only if the screen exists AND this person holds the
+  // capability it needs. Without the second half, an editor typing
+  // `#!/settings` painted the owner's settings screen - every field of which
+  // then answered 403, so the desk was shown a form that could not be saved
+  // and no sentence saying why. A screen nobody can use is not a screen.
+  const reachable = (screen) =>
+    Object.prototype.hasOwnProperty.call(SCREENS, screen) && can(SCREENS[screen].needs);
 
   for (const [screen, entry] of Object.entries(SCREENS)) {
     if (screen === "edition") continue;
@@ -338,14 +364,14 @@ async function renderAdminDashboard() {
 
   await startNavigation(paintDeskScreen, {
     home: { screen: "past-newspapers" },
-    // An address this desk has no screen for is not followed - a typed or
-    // stale hash lands on the dashboard rather than on a blank panel.
-    allow: (view) => Object.prototype.hasOwnProperty.call(SCREENS, view.screen),
+    // An address this desk has no screen for - or no authority for - is not
+    // followed: a typed or stale hash lands on the dashboard rather than on a
+    // blank panel or a form that will refuse every save.
+    allow: (view) => reachable(view.screen),
   });
 
   async function paintDeskScreen(view, { stale } = {}) {
-    const screen = Object.prototype.hasOwnProperty.call(SCREENS, view.screen)
-      ? view.screen : "past-newspapers";
+    const screen = reachable(view.screen) ? view.screen : "past-newspapers";
     // Leaving an open edition flushes whatever the desk was in the middle of
     // typing. Autosave is on a timer, so between the last keystroke and the
     // next tick the only copy of a sentence is in the draft - and Back is now
@@ -427,7 +453,7 @@ async function showPastNewspapers({ openCreator = false } = {}) {
   // The editions panel lives in its own module (CLAUDE.md: do not grow admin.js).
   // It owns today's edition card, the page ladder preview and the recent list;
   // opening one is still the dashboard's job, which is what onOpen is for.
-  await renderEditions(content, { onOpen: (id) => editNewspaper(id), openCreator });
+  await renderEditions(content, { onOpen: (id) => editNewspaper(id), openCreator, mayDelete: can("deleteEdition") });
 }
 
 async function showPastNews() {

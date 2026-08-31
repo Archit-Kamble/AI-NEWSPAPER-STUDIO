@@ -98,7 +98,13 @@ function fillOf(edition) {
   return { blocks, filled, percent: blocks ? Math.round((filled / blocks) * 100) : 0 };
 }
 
-function editionRowHtml(edition, today) {
+// `mayDelete` is passed in rather than looked up. Deleting an edition is the
+// owner's alone (src/auth/roles.js), and this renderer is fed what it may draw
+// the same way grid.js is fed its geometry and masthead.js its identity - the
+// renderers in this product do not reach for state. The server refuses the
+// route regardless; hiding the door is so a desk is not offered one that
+// answers 403.
+function editionRowHtml(edition, today, mayDelete) {
   const fill = fillOf(edition);
   const iso = String(edition.publication_date || '').slice(0, 10);
   const empty = fill.filled === 0;
@@ -119,8 +125,8 @@ function editionRowHtml(edition, today) {
       </div>
       <span class="status-pill ${escapeHtml(edition.status || 'draft')}">${escapeHtml(edition.status || 'draft')}</span>
       <button class="btn-secondary edition-open" data-edition-id="${edition.id}">Open</button>
-      <button class="btn-danger edition-delete" data-edition-id="${edition.id}"
-              title="Delete this edition and everything on its pages">Delete</button>
+      ${mayDelete ? `<button class="btn-danger edition-delete" data-edition-id="${edition.id}"
+              title="Delete this edition and everything on its pages">Delete</button>` : ''}
     </div>`;
 }
 
@@ -151,7 +157,7 @@ function deletionQuestion(edition) {
  * `onOpen(id)` opens an edition in the workspace - the panel never navigates by
  * itself, so the dashboard stays in charge of what the screen shows.
  */
-export async function renderEditions(host, { onOpen, openCreator: startOpen = false } = {}) {
+export async function renderEditions(host, { onOpen, openCreator: startOpen = false, mayDelete = false } = {}) {
   const today = todayIso();
   let editions;
   try {
@@ -248,7 +254,7 @@ export async function renderEditions(host, { onOpen, openCreator: startOpen = fa
     const shown = showAll || q ? matched : matched.slice(0, RECENT_LIMIT);
     const target = host.querySelector('#editionList');
     target.innerHTML = shown.length
-      ? shown.map((e) => editionRowHtml(e, today)).join('')
+      ? shown.map((e) => editionRowHtml(e, today, mayDelete)).join('')
       : '<p class="muted">No edition matches that.</p>';
     target.querySelectorAll('.edition-open').forEach((button) => {
       button.addEventListener('click', () => onOpen(Number(button.dataset.editionId)));

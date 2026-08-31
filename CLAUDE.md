@@ -3578,6 +3578,12 @@ ALTER TABLE newspapers    ADD COLUMN IF NOT EXISTS column_rules BOOLEAN NOT NULL
 -- The archive is indexed by date, so the database should be too: five queries
 -- filter or order on this column and two of them run every morning.
 CREATE INDEX IF NOT EXISTS newspapers_publication_date_idx ON newspapers (publication_date DESC);
+
+-- FOUR ROLES, not two. The guarded DO block is in schema.sql beside the users
+-- table - it drops a narrow role CHECK if one is there and adds the real one if
+-- none is, because this database has been found in BOTH states. A login is
+-- looked up by role on every staff listing, so that column is indexed too.
+CREATE INDEX IF NOT EXISTS users_role_idx ON users (role);
 ```
 
 **The session table is deliberately NOT in this list.** `user_sessions` is
@@ -4248,6 +4254,139 @@ Newspaper → Page → Editorial Block (page_section) → Story (news_item) → 
 ```
 
 Each editorial block (`page_sections` row) currently carries: headline, subheading, body, images (via a linked `news_item_id`), reporter, category, location, tags, font sizes, and `ai_notes`. A block can be filled either by writing directly into it or by linking a reporter's submitted story (`news_item_id`), which auto-fills the block's fields — this is deliberate (see Reporter Workflow below), not a duplication bug.
+
+## Four roles, and a capability table rather than a ladder
+
+There were two, `admin` and `reporter`, and the gap between them was the whole
+paper: anybody who could move a block on page one could also pass a reporter's
+copy, release the public e-paper and delete an edition.
+
+**Two of the four were ALREADY WRITTEN DOWN and could not exist.**
+`DESK_ROLES = ['admin', 'editor', 'chief_editor']` had been in
+`src/middleware/auth.js` (and mirrored in `public/admin.js`) since the auth
+boundary was added, while `users.role` carried
+`CHECK (role IN ('admin','reporter'))` — so every request was tested against two
+roles the database refused to store. It is the same half-wired shape this
+codebase has already found three times: `drop_cap` BOOLEAN, `list_style`,
+`letter_spacing_px`.
+
+**Sampadak is stored as `chief_editor`.** संपादक is the Marathi for the editor
+who answers for what the paper prints, which is exactly the rung that constant
+already named. A third spelling of one rung is the duplicated-catalogue failure
+this project has been bitten by twice. One key stored; the desk reads the label.
+
+`src/auth/roles.js` is the one statement of the rule:
+
+| | owner | Sampadak | Editor | Reporter |
+|---|---|---|---|---|
+| | `admin` | `chief_editor` | `editor` | `reporter` |
+| make up the paper | ✓ | ✓ | ✓ | |
+| pass a reporter's copy | ✓ | ✓ | | |
+| publish the e-paper | ✓ | ✓ | | |
+| add / block a login | ✓ | | | |
+| change the settings | ✓ | | | |
+| delete an edition | ✓ | | | |
+
+**A capability table, not a rank ladder.** A ladder reads well and cannot say
+the true thing about a newsroom: filing copy is the reporter's job and *not* the
+owner's superpower, so `admin > reporter` would quietly hand the owner a
+reporter's inbox and every rule in `news.service.js` that keys off it. Each
+capability names its own roles, and a role not listed does not have it.
+
+**An unknown capability is FALSE, never true.** A typo in a route guard must
+close the door, not open it — `can(user, 'no-such-thing')` is `false`, and a
+permissive default would make a misspelt guard grant everybody the thing it was
+written to protect. `tests/roles.test.js` holds it, along with the property that
+the owner holds *every* capability: one added later without listing `admin`
+would take the paper's administration away from its owner silently.
+
+### The role is read back from the database, per request
+
+A session carries a copy of the user row as it was at sign-in. So an owner who
+demoted a Sampadak at 6pm was leaving them their approval and publish authority
+until they happened to sign out — the same hole `is_active` was already read
+live to close, one field along. `guard()` fetches the row anyway; using the role
+on it costs nothing. Measured both ways in `tests/roles.test.js`: blocking an
+account ends the session it already had, and a demotion takes effect on the very
+next request.
+
+### The browser is TOLD what it may do; it holds no copy of the rules
+
+`public/admin.js` used to carry its own `DESK_ROLES` list. `/api/auth/login` and
+`/api/auth/me` now answer with `user.can`, so the client has no rules in it at
+all: it hides a control it is told `false` for, and the server checks the same
+table again when the request arrives. **Hiding is a courtesy; the guard is on
+the route.**
+
+- **`init()` asked `role === "admin"`**, so an editor or a Sampadak *reloading
+  the page* was handed the REPORTER dashboard while the login path gave them the
+  desk — the two disagreed about the same account.
+- **A screen is refused by ADDRESS too.** An editor typing `#!/settings` used to
+  paint the owner's settings form, every field of which then answered 403 — a
+  form that cannot be saved and no sentence saying why. `allow` now asks whether
+  the person holds the screen's capability, not merely whether it exists.
+- A screen somebody has no authority for is **not drawn at all**, unlike a
+  *device*, whose "off" is disabled rather than hidden ("a device must be
+  removable, and the way out lives beside the way in"). A device is something
+  the desk might want; a screen they cannot use is not a thing they can turn on,
+  and showing it only teaches them to press it.
+
+### `/api/reporters` became `/api/staff`, because it stopped being about reporters
+
+`user.repository.js` said `WHERE u.role = 'reporter'` in five places, so an
+editor or a Sampadak would have been an account nothing in the product could
+show, edit or block. A route named for one of the four roles it manages is the
+fault this file already states as *every control names the object it acts on*.
+The old chain moved with it: `reporter.{service,controller,routes}.js` →
+`staff.*`, `public/admin/reporters.js` → `staff.js`.
+
+The role catalogue is **served** (`GET /api/staff/roles`), not restated in a
+`<select>` — the same reason the templates and the ink palette are.
+
+### An owner cannot lock the paper's administration away
+
+Only an owner can hand a login back out, so the moment the last active owner
+stops being one there is no way back except psql. Three refusals, each by name:
+blocking your own login, changing your own role, and demoting or blocking the
+last active owner. It is the shape this codebase already refused in the login
+throttle — keyed on the account alone, the guard becomes the attack.
+
+### A `display` rule beats the `hidden` attribute
+
+The role picker writes `hidden` on the three descriptions it is not showing, and
+`.role-note { display: block }` printed **all four at once** under a picker
+showing one. The markup was right and the attribute was set; the stylesheet
+quietly undid it. `:not([hidden])` is load-bearing there.
+
+**Found in a screenshot, by a net that had just checked the same screen** — it
+counted the legend's four items and the DOM's four notes, both correct. Only a
+*visibility* check (`offsetParent !== null`) can see this class of fault, and
+`roles.browser.js` now makes one.
+
+### And that net reported a crash as a pass
+
+Its `finally` printed the tally and called `process.exit(fail ? 1 : 0)`, so a
+click that timed out mid-sweep exited **0** with a green count and took every
+later check with it — while the outer `catch` never ran, because `finally` had
+already exited. The exact fault this file names one line at a time: *a browser
+test that crashes is worse than one that fails.* A thrown error is now recorded
+and reported before the exit.
+
+```bash
+node tests/browser/roles.browser.js            # defaults to edition 2099
+```
+
+It makes its own three logins through the real owner API and removes them from
+the crash path as well as the success path.
+
+### Schema
+
+`users.role`'s CHECK is widened to the four. **The live database had no check
+constraint on `users` at all** while `schema.sql` declared one — the same drift
+that made the first delete of an edition answer 500 on a foreign key the schema
+file said was `ON DELETE SET NULL`. The migration is guarded on the *current*
+state and copes with both, so re-running is free; `schema.sql` is never run at
+boot, so it must be applied by hand.
 
 ## Reporter workflow
 

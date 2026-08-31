@@ -30,7 +30,7 @@ test('the owner can manage reporter identity, review filings, and block access w
   try {
     await ensureOwner();
     const owner = await signIn(port);
-    const created = await owner('/api/reporters', {
+    const created = await owner('/api/staff', {
       method: 'POST', body: JSON.stringify({
         name: 'Asha Reporter', email, password: 'safe-pass-123', phone: '9000000000', district: 'Satara', beat: 'Civic', notes: 'Morning desk',
       }),
@@ -51,7 +51,7 @@ test('the owner can manage reporter identity, review filings, and block access w
     assert.equal(story.reporter_name, 'Asha Reporter', 'the session owns the byline');
     assert.equal((await reporterSession(`/api/news/${storyId}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'approved' }) })).status, 403);
 
-    const profileResponse = await owner(`/api/reporters/${reporterId}`);
+    const profileResponse = await owner(`/api/staff/${reporterId}`);
     assert.equal(profileResponse.status, 200);
     const profile = await profileResponse.json();
     assert.equal(profile.reporter.beat, 'Civic');
@@ -61,13 +61,13 @@ test('the owner can manage reporter identity, review filings, and block access w
     assert.equal(reviewed.status, 200);
     assert.equal((await reviewed.json()).review_note, 'Please confirm the ward number.');
 
-    const blocked = await owner(`/api/reporters/${reporterId}/access`, { method: 'PATCH', body: JSON.stringify({ active: false }) });
+    const blocked = await owner(`/api/staff/${reporterId}/access`, { method: 'PATCH', body: JSON.stringify({ active: false }) });
     assert.equal(blocked.status, 200);
     assert.equal((await reporterSession('/api/news')).status, 403, 'a live session is checked against the current access state');
     const blockedLogin = await fetch(`http://127.0.0.1:${port}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'safe-pass-123' }) });
     assert.equal(blockedLogin.status, 403);
 
-    assert.equal((await owner(`/api/reporters/${reporterId}/access`, { method: 'PATCH', body: JSON.stringify({ active: true }) })).status, 200);
+    assert.equal((await owner(`/api/staff/${reporterId}/access`, { method: 'PATCH', body: JSON.stringify({ active: true }) })).status, 200);
     const restoredSession = await signIn(port, { email, password: 'safe-pass-123', role: 'reporter' });
     assert.equal((await restoredSession('/api/news')).status, 200);
   } finally {

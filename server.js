@@ -20,7 +20,7 @@ const newspaperRoutes = require('./src/routes/newspaper.routes');
 const pageRoutes = require('./src/routes/page.routes');
 const authRoutes = require('./src/routes/auth.routes');
 const featureRoutes = require('./src/routes/feature.routes');
-const reporterRoutes = require('./src/routes/reporter.routes');
+const staffRoutes = require('./src/routes/staff.routes');
 const settingsRoutes = require('./src/routes/settings.routes');
 const newspaperController = require('./src/controllers/newspaper.controller');
 const { hydratePublicationIdentity } = require('./src/services/settings.service');
@@ -120,9 +120,14 @@ function createApp(options = {}) {
   app.use("/api/auth", authRoutes);
 
   // Owner-only identity and publication setup. These routes intentionally sit
-  // outside the deskWrites mount: reporter profile/contact data is private and
-  // cannot become public merely because GET is normally read-only.
-  app.use('/api/reporters', requireAdmin, reporterRoutes);
+  // outside the deskWrites mount: a colleague's profile and contact details are
+  // private and cannot become public merely because GET is normally read-only.
+  //
+  // It is `/api/staff`, not `/api/reporters`, because it stopped being about
+  // reporters: an owner adds and blocks editors and Sampadaks here too, and a
+  // route named for one of the four roles it manages is the fault this project
+  // states as "every control names the object it acts on".
+  app.use('/api/staff', requireAdmin, staffRoutes);
   app.use('/api/settings', requireAdmin, settingsRoutes);
 
   // News API

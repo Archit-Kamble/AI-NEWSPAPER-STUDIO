@@ -7765,3 +7765,96 @@ are synchronous.
 ### Where the branches stand
 
 Merged and deleted. `main` is pushed.
+
+## Four roles, and who may do what — 31 Aug 2026
+
+The customer asked for editor and Sampadak logins beside the existing owner and
+reporter, with adding/blocking a login and deleting an edition kept to the
+owner, and approving a reporter's copy and publishing the paper given to the
+Sampadak.
+
+### Two of the four already existed in the code and could not exist in the database
+
+`DESK_ROLES = ['admin', 'editor', 'chief_editor']` had been in
+`src/middleware/auth.js` and mirrored in `public/admin.js` since the auth
+boundary was added, while `users.role` carried
+`CHECK (role IN ('admin','reporter'))`. Every request was being tested against
+two roles the schema refused to store — the `drop_cap` / `list_style` /
+`letter_spacing_px` shape, a fourth time.
+
+And the live database had **no check constraint on `users` at all**, while
+`schema.sql` declared one. Same drift as the `news_items` foreign key. The
+migration is guarded on the current state and handles both.
+
+### What was built
+
+- `src/auth/roles.js` — the one statement of the rule. A **capability table**,
+  not a rank ladder: a ladder cannot say that filing copy is the reporter's job
+  and not the owner's superpower.
+- `guard(capability)` in `src/middleware/auth.js` — one door, reading the role
+  **back from the database** per request, so a demotion or a block takes effect
+  on the very next request rather than at the next sign-in.
+- `/api/auth/me` and `/login` answer with `user.can`, so the browser holds no
+  copy of the rules; `public/admin.js`'s own `DESK_ROLES` list is gone.
+- `/api/reporters` → `/api/staff`, and the whole chain with it
+  (`reporter.{service,controller,routes}.js` → `staff.*`,
+  `public/admin/reporters.js` → `staff.js`). The repository said
+  `WHERE u.role = 'reporter'` in five places.
+- Sampadak is stored as **`chief_editor`** — the key that constant already used.
+  One key per rung; the desk reads the label.
+
+### Measured, through the real routes
+
+| | owner | sampadak | editor | reporter |
+|---|---|---|---|---|
+| `GET /api/newspapers` | 200 | 200 | 200 | **403** |
+| `PATCH /api/news/:id/status` | 200 | 200 | **403** | **403** |
+| `POST /:id/publish-current` | past the guard | past the guard | **403** | **403** |
+| `GET /api/staff` | 200 | **403** | **403** | **403** |
+| `GET /api/settings/general` | 200 | **403** | **403** | **403** |
+| `DELETE /api/newspapers/:id` | 200 | **403** | **403** | **403** |
+
+### Three lockout refusals, each by name
+
+Blocking your own login, changing your own role, and demoting or blocking the
+last active owner. Only an owner can hand a login back out, so without these an
+owner could lock the paper's own administration away with no way back but psql.
+
+### Two faults found by looking rather than by reading
+
+- **`.role-note { display: block }` beat the `hidden` attribute**, so the role
+  picker printed all four descriptions at once under a picker showing one. The
+  markup was right and the attribute was set. Found in a screenshot, by a net
+  that had just checked the same screen and counted the DOM correctly. Only a
+  visibility check sees it.
+- **`roles.browser.js` reported a crash as a pass** — its `finally` exited 0 on
+  a green check count before the outer `catch` could run, so a timed-out click
+  swallowed every later check silently.
+
+### Verified
+
+`npm test` **1069/1070** — the one failure is `currentNewsWriting.test.js`'s
+"check the sources first", the pre-existing load-dependent flake (it makes a
+real RSS call; under full-suite load it times out and retries, so the assertion
+counts 2 calls where it expects 1). 19/19 when that file is run alone, and it
+fails the same way on unmodified main.
+
+Browser: `roles.browser.js` **37/37**, `workspace.browser.js` **224/224**,
+`admin-screens` 18/18, `navigation` 19/19, `edition-delete` 11/11,
+`story-picker` 14/14. No page exceptions anywhere.
+
+### Two judgment calls, stated rather than hidden
+
+- **Passing a page for press and uploading the final press files stay at desk
+  level** (any of owner/Sampadak/editor). "Publish the newspaper" was read as
+  the public e-paper release, which is what the Publish button means in this
+  product; press sign-off is a different act with its own panel. Moving it is
+  one line in the capability table.
+- **An editor keeps full make-up authority** — pages, blocks, pictures, the AI,
+  the Newsdesk Run — and is refused only approval and publication.
+
+### Seeded
+
+`sampadak@esahas.com` and `editor@esahas.com` were created through the real
+owner API so the customer can sign in immediately. Their initial passwords were
+handed over separately and should be changed on first sign-in.

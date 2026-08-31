@@ -21,12 +21,27 @@
 
 import { escapeHtml, closeOnEscape } from "./format.js";
 import { tagList, NEWS_TAGS, DESK_FRESHNESS, DEMAND_LEVELS } from "./layout/news-tags.js";
+// Where this paper covers, from the one place catalogue - never a second list
+// of these names, and never a free-text box for a district: a misspelt one
+// returns nothing and looks exactly like a district with no news today.
+import { COUNTRIES, STATES, districtsOf, placeQuery, placeOf, DEFAULT_PLACE } from "./layout/places.js";
 
 const PANEL_ID = "newsdeskPanel";
 
 /** The state of one open run. Never global - a panel closed is a run abandoned. */
-function newRun({ newspaperId, byPage, blocks }) {
-  return { newspaperId, byPage, blocks, brief: defaultBrief(byPage), plan: null, batch: null, dropped: new Set() };
+function newRun({ newspaperId, byPage, blocks, place }) {
+  return {
+    newspaperId, byPage, blocks,
+    brief: defaultBrief(byPage),
+    // What the owner set in Settings, sanitised - changing it here is for THIS
+    // run only, because "where this paper covers" is a standing decision and
+    // "what we are chasing tonight" is not.
+    place: placeOf(place || DEFAULT_PLACE),
+    // The same things a single block can be asked for. Defaults match the AI
+    // panel's, so a desk who changes nothing gets what they already know.
+    asks: { writeHeadline: true, writeSubheading: true, reason: false, writeChart: false, chartType: "bar" },
+    plan: null, batch: null, dropped: new Set(),
+  };
 }
 
 /**
@@ -79,8 +94,20 @@ function briefMarkup(run) {
     .map((w) => `<option value="${w.key}"${w.key === run.brief.freshness ? " selected" : ""}>${escapeHtml(w.name)}</option>`)
     .join("");
 
+  // EVERY PAGE OF THE PAPER IS LISTED, including the ones with nothing free.
+  //
+  // The desk's report was that this "shows only the first 2 pages". It showed
+  // every page that had an empty block - which on their edition was two - and
+  // a list that silently omits a page is indistinguishable from a list that
+  // has lost one. A page with nothing to fill now says so, in one line, and a
+  // desk can see the whole paper at a glance and know nothing is hidden.
   const pages = run.brief.pages.map((page, pageIndex) => {
     const free = Number(run.byPage[page.page] || 0);
+    if (!free) {
+      return `<section class="newsdesk-page is-full">
+        <h4>Page ${page.page} <span class="muted">nothing free — every block is written, sold or standing furniture</span></h4>
+      </section>`;
+    }
     const asked = page.wants.reduce((sum, want) => sum + Number(want.count || 0), 0);
     // Asking for fewer than the page has free is an ordinary decision - a desk
     // may be holding blocks for reporter copy - so this states the arithmetic
@@ -104,6 +131,48 @@ function briefMarkup(run) {
         <select id="newsdeskFreshness">${freshness}</select>
       </label>
     </div>
+    <!-- WHERE "LOCAL" IS, biggest to smallest.
+         A district daily's local news is a named district, and a query for
+         सातारा finds different stories from one for सांगली - so the run could
+         only ever ask about the paper's own place of publication, and a desk
+         who wanted a Sangli story on page three had no way to say so.
+         It opens on what the owner set in Settings, and changing it here is
+         for this run only: "where this paper covers" is a standing decision
+         and "what we are chasing tonight" is not. -->
+    <fieldset class="newsdesk-place">
+      <legend>Where the local news is</legend>
+      <label>Country
+        <select id="newsdeskCountry">${COUNTRIES.map((c) => `<option value="${c.key}"${c.key === run.place.country ? " selected" : ""}>${escapeHtml(c.name)} — ${escapeHtml(c.marathi)}</option>`).join("")}</select>
+      </label>
+      <label>State
+        <select id="newsdeskState">${STATES.map((st) => `<option value="${st.key}"${st.key === run.place.state ? " selected" : ""}>${escapeHtml(st.name)} — ${escapeHtml(st.marathi)}</option>`).join("")}</select>
+      </label>
+      <label>District
+        ${districtsOf(run.place.state)
+          ? `<select id="newsdeskDistrict"><option value="">Anywhere in the state</option>${districtsOf(run.place.state).map((d) => `<option value="${escapeHtml(d)}"${d === run.place.district ? " selected" : ""}>${escapeHtml(d)}</option>`).join("")}</select>`
+          : `<input type="text" id="newsdeskDistrict" value="${escapeHtml(run.place.district)}" placeholder="District">`}
+      </label>
+      <label>City or taluka
+        <input type="text" id="newsdeskCity" value="${escapeHtml(run.place.city)}" placeholder="Optional — Vaduj, Karad…">
+      </label>
+      <p class="muted">Chasing: <strong>${escapeHtml(placeQuery(run.place) || "nowhere in particular")}</strong></p>
+    </fieldset>
+    <!-- THE SAME THINGS A SINGLE BLOCK CAN BE ASKED FOR. "Write empty blocks"
+         is the most powerful button in this product - one run makes up a whole
+         paper - and it could ask for less than the panel that writes one
+         block. Every option here ends in the same storyWriter.write(). -->
+    <fieldset class="newsdesk-asks">
+      <legend>What each story gets</legend>
+      <label class="toggle"><input type="checkbox" id="newsdeskHeadline" checked> A headline</label>
+      <label class="toggle"><input type="checkbox" id="newsdeskSubheading" checked> A subheading</label>
+      <label class="toggle"><input type="checkbox" id="newsdeskReason"> Think it through first</label>
+      <label class="toggle"><input type="checkbox" id="newsdeskChart"> Chart of its figures</label>
+      <select id="newsdeskChartType" aria-label="Which chart">
+        <option value="bar">Bars</option><option value="pie">Pie</option>
+        <option value="line">Line</option><option value="dots">Dots</option>
+        <option value="stat">Figures</option>
+      </select>
+    </fieldset>
     ${pages}
     <p class="muted ext-note"><strong>Required</strong> means leave the block empty rather than fill it
        with a weak story. <strong>Preferred</strong> means fill it if there is something worth printing.
@@ -228,14 +297,14 @@ function copyMarkup(run) {
  * a run spans the whole edition and `patchDraft` only reaches the page the desk
  * happens to be looking at.
  */
-export function openNewsdeskPanel({ newspaperId, byPage, blocks, commissioned = 0, onDone, onWriteCommissioned, notice }) {
+export function openNewsdeskPanel({ newspaperId, byPage, blocks, place, commissioned = 0, onDone, onWriteCommissioned, notice }) {
   document.getElementById(PANEL_ID)?.remove();
   const panel = document.createElement("aside");
   panel.id = PANEL_ID;
   panel.className = "preflight-panel worklist-panel newsdesk-panel";
   document.body.appendChild(panel);
 
-  const run = newRun({ newspaperId, byPage, blocks });
+  const run = newRun({ newspaperId, byPage, blocks, place });
   run.commissioned = commissioned;
   let busy = false;
 
@@ -261,6 +330,38 @@ export function openNewsdeskPanel({ newspaperId, byPage, blocks, commissioned = 
     panel.querySelector("#newsdeskFreshness")?.addEventListener("change", (event) => {
       run.brief.freshness = event.target.value;
     });
+
+    // WHERE "LOCAL" IS. Changing the state redraws the district list, because
+    // a district belongs to a state and offering Satara under Kerala is how a
+    // query comes back empty for a reason nobody can see.
+    panel.querySelector("#newsdeskCountry")?.addEventListener("change", (event) => {
+      run.place = placeOf({ ...run.place, country: event.target.value });
+      render("brief");
+    });
+    panel.querySelector("#newsdeskState")?.addEventListener("change", (event) => {
+      run.place = placeOf({ ...run.place, state: event.target.value, district: "" });
+      render("brief");
+    });
+    panel.querySelector("#newsdeskDistrict")?.addEventListener("change", (event) => {
+      run.place = placeOf({ ...run.place, district: event.target.value });
+      render("brief");
+    });
+    panel.querySelector("#newsdeskCity")?.addEventListener("change", (event) => {
+      run.place = placeOf({ ...run.place, city: event.target.value });
+      render("brief");
+    });
+
+    // What each story gets. Read off the form rather than tracked per press,
+    // for the same reason the chart dialog harvests: the panel is rewritten on
+    // every render and a value held in a detached node is a value lost.
+    const ask = (id, key) => panel.querySelector(id)?.addEventListener("change", (event) => {
+      run.asks[key] = event.target.type === "checkbox" ? event.target.checked : event.target.value;
+    });
+    ask("#newsdeskHeadline", "writeHeadline");
+    ask("#newsdeskSubheading", "writeSubheading");
+    ask("#newsdeskReason", "reason");
+    ask("#newsdeskChart", "writeChart");
+    ask("#newsdeskChartType", "chartType");
     panel.querySelectorAll("[data-want-tag]").forEach((select) => select.addEventListener("change", (event) => {
       const [p, w] = event.target.dataset.wantTag.split(":").map(Number);
       run.brief.pages[p].wants[w].tagKey = event.target.value;
@@ -335,7 +436,14 @@ export function openNewsdeskPanel({ newspaperId, byPage, blocks, commissioned = 
     if (busy) return;
     const done = working("#newsdeskResearch", "Searching the news…");
     try {
-      run.plan = await post(`/api/newspapers/${run.newspaperId}/newsdesk/plan`, { brief: run.brief });
+      run.plan = await post(`/api/newspapers/${run.newspaperId}/newsdesk/plan`, {
+        brief: run.brief,
+        // Where "local" is for THIS run. The planner's `local` tag requires the
+        // open web because a district story is on it or nowhere, and the query
+        // it searches with is this.
+        place: run.place,
+        placeQuery: placeQuery(run.place),
+      });
       run.dropped = new Set();
       if (!run.plan.stories.length) {
         say("Nothing worth printing was found for that brief. Try a longer window, or fewer required categories.");
@@ -353,7 +461,13 @@ export function openNewsdeskPanel({ newspaperId, byPage, blocks, commissioned = 
     if (!keeping.length) return;
     const done = working("#newsdeskWrite", `Writing ${keeping.length}…`);
     try {
-      run.batch = await post(`/api/newspapers/${run.newspaperId}/newsdesk/write`, { stories: keeping });
+      run.batch = await post(`/api/newspapers/${run.newspaperId}/newsdesk/write`, {
+        stories: keeping,
+        // The same things a single block can be asked for. One run makes up a
+        // whole paper, and it could ask for less than the panel that writes
+        // one block - every one of these ends in the same storyWriter.write().
+        asks: run.asks,
+      });
       render("copy");
     } catch (error) {
       say(error.message);

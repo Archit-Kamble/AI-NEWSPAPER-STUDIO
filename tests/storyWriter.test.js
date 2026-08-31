@@ -111,17 +111,34 @@ test('nothing is written without a subject', async () => {
   assert.match(result.error, /what the story is about/i);
 });
 
-test('the schema allows exactly the three things a block holds, plus the reading', () => {
+test('the schema allows exactly the three things a block holds, plus the two it may be asked for', () => {
   // `understanding` is the model's own reading of the REQUEST - one line
   // saying what it took the seed to mean. It is never printed and never
   // reaches the block; it exists so a fluent story that says the opposite of
-  // the seed is visible before the desk accepts it. It is OPTIONAL, so a
-  // request that did not ask to reason is answered exactly as before.
+  // the seed is visible before the desk accepts it.
+  //
+  // `chart` is the story's own figures, asked for in the same call that writes
+  // it because the numbers a chart plots are the numbers the story is about.
+  //
+  // BOTH ARE OPTIONAL AND BOTH ARE ALWAYS IN THE SCHEMA. A model told to omit
+  // a key answers less reliably than one told to fill it, so the key is always
+  // offered and `write()` DROPS what the desk did not ask for - which is also
+  // the only way the drop is guaranteed rather than hoped for.
   assert.deepEqual(Object.keys(writer.STORY_SCHEMA.properties).sort(),
-    ['body', 'headline', 'subheading', 'understanding']);
+    ['body', 'chart', 'headline', 'subheading', 'understanding']);
   assert.equal(writer.STORY_SCHEMA.additionalProperties, false, 'no extra keys may come back');
   assert.deepEqual(writer.STORY_SCHEMA.required.sort(), ['body', 'headline', 'subheading'],
-    'the reading is never required - only the three things a block prints');
+    'neither is ever required - only the three things a block prints');
+
+  // A chart is a claim in the paper's own voice, so its shape is closed: a
+  // label and a number per reading, and nothing else may come back inside it.
+  const chart = writer.STORY_SCHEMA.properties.chart;
+  assert.equal(chart.additionalProperties, false);
+  assert.deepEqual(chart.required, ['items']);
+  const reading = chart.properties.items.items;
+  assert.equal(reading.additionalProperties, false);
+  assert.deepEqual(Object.keys(reading.properties).sort(), ['label', 'value']);
+  assert.equal(reading.properties.value.type, 'number');
 });
 
 test('the writer never writes to the database', () => {

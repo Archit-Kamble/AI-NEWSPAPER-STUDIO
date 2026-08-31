@@ -97,7 +97,16 @@ function notesFor(story) {
  * @returns {{results, written, failed}} results in plan order - a desk reads a
  *   page from the top, and the workers finish out of order.
  */
-async function writePlan(stories = [], { onProgress, signal, tier = WRITER_TIER, concurrency = CONCURRENCY } = {}) {
+async function writePlan(stories = [], {
+  onProgress, signal, tier = WRITER_TIER, concurrency = CONCURRENCY,
+  // THE SAME THINGS A SINGLE BLOCK CAN BE ASKED FOR. This run makes up a whole
+  // paper and could ask for less than the panel that writes one block - so
+  // every option there is offered here, and every one of them ends in the same
+  // storyWriter.write(). Defaults match that panel's, so a desk who changes
+  // nothing gets exactly what this did before.
+  writeHeadline = true, writeSubheading = true, reason = false,
+  writeChart = false, chartType = 'bar',
+} = {}) {
   const results = await mapLimit(stories, concurrency, async (story) => {
     const result = await storyWriter.write(story.pageId, story.sectionKey, {
       seed: seedFor(story),
@@ -105,6 +114,11 @@ async function writePlan(stories = [], { onProgress, signal, tier = WRITER_TIER,
       tier,
       maxProviders: MAX_PROVIDERS,
       providedContext: packetFor(story),
+      writeHeadline,
+      writeSubheading,
+      reason,
+      writeChart,
+      chartType,
     });
 
     if (result.error) {

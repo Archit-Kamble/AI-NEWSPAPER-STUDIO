@@ -84,6 +84,11 @@ async function ensureComposeReady() {
 
 // What the model must return, and nothing else. `strict` keeps the providers
 // that support schema-constrained decoding from wandering.
+// The chart kinds the card solver can actually draw. Named from that module's
+// own vocabulary rather than restated - a shape this file offered and the
+// renderer did not know would draw nothing at all.
+const CHART_KINDS = new Set(['bar', 'stat', 'pie', 'line', 'dots']);
+
 const STORY_SCHEMA = {
   type: 'object',
   additionalProperties: false,
@@ -102,6 +107,43 @@ const STORY_SCHEMA = {
     // accepts, which is the cheapest possible guard against the one failure a
     // fluent model makes that a sub-editor cannot see coming.
     understanding: { type: 'string', description: 'One short line: what you understood the request to be asking for. State the subject, what happened to them, and where. Do not write the story here.' },
+    // A CHART OF THE STORY'S OWN FIGURES, when the desk asks for one.
+    //
+    // Requested with the copy rather than in a second call: the numbers a
+    // chart plots are the numbers the story is about, and asking twice is two
+    // charges for one piece of reading. The key is always in the schema - a
+    // model told to omit a key answers less reliably than one told to fill it,
+    // which is the same reason the headline and deck are always required - and
+    // `write()` drops it when the desk did not ask, which is also the only way
+    // the drop is guaranteed rather than hoped for.
+    //
+    // FIGURES THE STORY STATES, never invented ones: a chart is a claim in the
+    // paper's own voice, and a fabricated number in one is not a typo. An
+    // empty list is the right answer when the story has no figures in it, and
+    // the brief says so.
+    chart: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['items'],
+      description: 'Figures the story itself states, as a chart. Empty when the story states none.',
+      properties: {
+        unit: { type: 'string', description: 'What the numbers are counted in, if anything. May be empty.' },
+        source: { type: 'string', description: 'Where the figures came from, as it would be printed. May be empty.' },
+        items: {
+          type: 'array',
+          description: 'One reading per row. Only figures the story states.',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['label', 'value'],
+            properties: {
+              label: { type: 'string', description: 'What this reading is of.' },
+              value: { type: 'number', description: 'The figure itself.' },
+            },
+          },
+        },
+      },
+    },
   },
 };
 
@@ -258,7 +300,7 @@ const {
 // for more than a single response can carry.
 const RESERVOIR_CAP_CHARS = 6000;
 
-async function planningFit(section, images, { writeHeadline = true, writeSubheading = true } = {}) {
+async function planningFit(section, images, { writeHeadline = true, writeSubheading = true, extraBodyChars = 0 } = {}) {
   const cols = (await measure(section, images)).cols || 1;
 
   // A block the desk asked for WITHOUT a headline, or without a deck, has that
@@ -311,6 +353,17 @@ async function planningFit(section, images, { writeHeadline = true, writeSubhead
     body: '',
   });
 
+  // A STORY WRITTEN ACROSS TWO BLOCKS IS BRIEFED FOR BOTH OF THEM.
+  //
+  // `extraBodyChars` is the room the SECOND leg has, measured by the same
+  // engine and handed in by the caller, so ONE call produces one story long
+  // enough to run across the pair. It is added to the RESERVOIR - what the
+  // model is asked to produce - and never to `guaranteedChars`, which is
+  // write()'s check that this block has any room for copy at all and is a
+  // question about this block alone. Zero for every existing caller, so
+  // nothing that does not ask changes by a character.
+  const extra = Math.max(0, Math.round(Number(extraBodyChars) || 0));
+
   return {
     ...bound,
     headlineChars: measuredHeadlineLimit(probe, cols),
@@ -319,11 +372,14 @@ async function planningFit(section, images, { writeHeadline = true, writeSubhead
     // reservoir can never be the smaller of the two.
     reservoirChars: Math.min(
       RESERVOIR_CAP_CHARS,
-      Math.max(bound.bodyCharBudget, open.bodyCharCeiling || open.bodyCharBudget),
+      Math.max(bound.bodyCharBudget, open.bodyCharCeiling || open.bodyCharBudget) + extra,
     ),
     // What the block certainly holds, for the one check write() makes before
     // spending anything.
     guaranteedChars: bound.bodyCharBudget,
+    // And what the pair holds, which is what the brief's own target quotes.
+    bodyCharBudget: bound.bodyCharBudget + extra,
+    extraBodyChars: extra,
     cols,
   };
 }
@@ -436,7 +492,12 @@ function verifiedContextBlock(verifiedContext) {
  */
 function briefFor({
   seed, notes, fit, section, language, isLead, verifiedContext, accentStyle,
-  writeHeadline = true, writeSubheading = true, reason = false,
+  writeHeadline = true, writeSubheading = true,
+  // A CHART OF THE STORY'S OWN FIGURES, from the same call that writes it -
+  // the numbers a chart plots are the numbers the story is about, so asking
+  // twice is two charges for one piece of reading. Off by default, so nothing
+  // that does not ask changes.
+  writeChart = false, chartType = 'bar', reason = false,
 }) {
   const languageName = LANGUAGE_NAMES[language] || LANGUAGE_NAMES.Marathi;
   // Measured in the headline's and the deck's OWN type where a composition
@@ -472,6 +533,18 @@ function briefFor({
     '    complete story. Keep paragraphs short.',
     '  * Never repeat yourself, and never invent a fact to make it longer.',
     '    Copy that runs out of real material stops; it does not stretch.',
+    // A CHART IS A CLAIM IN THE PAPER'S OWN VOICE, so its figures are the
+    // story's own and never invented ones. An empty list is the right answer
+    // when the story states no figures, and saying so is what stops a model
+    // filling a box because a box was offered.
+    writeChart
+      ? '  * ALSO fill `chart` with the figures THIS STORY STATES - one reading'
+        + ' per row, the label being what the figure is of. Use only numbers'
+        + ' that appear in your own copy: a chart prints over this paper\'s'
+        + ' masthead and a figure nobody said is not a typo. If the story'
+        + ' states no figures, return an empty `items` list - an empty chart is'
+        + ' the right answer and no chart will be drawn.'
+      : null,
     // THE READING COMES FIRST, and it is about the seed rather than the story.
     // A desk typed "rohit pawar admit in candi hospital" and got a story about
     // him OPENING a hospital: fluent, well fitted, and the opposite of what was
@@ -768,6 +841,10 @@ async function write(pageId, sectionKey, {
   // that is already set, a caption panel. Both default to true, so nothing that
   // does not ask changes at all.
   writeHeadline = true, writeSubheading = true,
+  // A CHART OF THE STORY'S OWN FIGURES, from the same call that writes it -
+  // the numbers a chart plots are the numbers the story is about, so asking
+  // twice is two charges for one piece of reading. Off by default.
+  writeChart = false, chartType = 'bar',
   // TWO THINGS THE DESK CAN ASK FOR, both off by default so nothing that does
   // not ask changes at all.
   //
@@ -799,6 +876,12 @@ async function write(pageId, sectionKey, {
   // How deep the provider chain may go for THIS call. A batch caps it; the
   // desk's own single-block button does not. See ai/index.js.
   maxProviders,
+  // ROOM IN A SECOND BLOCK, when this story is being written to run across two
+  // of them. Measured by the caller with the same engine and added to this
+  // block's own budget, so ONE call produces one story long enough for the
+  // pair - and the split afterwards is the ordinary carry-over that already
+  // writes the jump line and the pick-up. Zero for every existing caller.
+  extraBodyChars = 0,
 } = {}) {
   const clean = String(seed || '').trim();
   if (!clean) return { error: 'Say what the story is about first — a few words is enough.' };
@@ -851,7 +934,7 @@ async function write(pageId, sectionKey, {
 
   // Planned with the headline and deck reserved, so the body is asked for the
   // room it will actually have rather than the room an empty block has.
-  const fit = await planningFit(section, images, { writeHeadline, writeSubheading });
+  const fit = await planningFit(section, images, { writeHeadline, writeSubheading, extraBodyChars });
   if (!fit.guaranteedChars) {
     return { error: 'This block has no room for copy — it is filled by its pictures, or it is too small.' };
   }
@@ -864,6 +947,8 @@ async function write(pageId, sectionKey, {
   const callTier = reason ? (NEXT_TIER[String(tier || 'basic')] || 'plus') : tier;
   const result = await ai.askForJson(
     briefFor({
+      writeChart,
+      chartType,
       seed: clean,
       notes: String(notes || '').trim(),
       fit,
@@ -909,6 +994,33 @@ async function write(pageId, sectionKey, {
     if (read) proposal.understanding = read;
   }
 
+  // A CHART OF THE STORY'S OWN FIGURES, and only when the desk asked for one.
+  //
+  // Dropped rather than never requested: the key is always in the schema
+  // because a model told to omit one answers less reliably than a model told
+  // to fill it, and dropping it here is the only way the drop is GUARANTEED
+  // rather than hoped for. Same argument, and the same shape, as
+  // writeHeadline/writeSubheading.
+  //
+  // A chart with no readings is not a chart: a story that states no figures
+  // should not gain an empty box, so an empty list is simply nothing.
+  if (writeChart) {
+    const raw = result.data.chart;
+    const items = (Array.isArray(raw?.items) ? raw.items : [])
+      .map((row) => ({ label: String(row?.label ?? '').trim(), value: Number(row?.value) }))
+      .filter((row) => row.label && Number.isFinite(row.value));
+    if (items.length) {
+      proposal.chart = {
+        // The desk's chosen shape, checked against the card's own kinds - the
+        // model is asked for the FIGURES and never for the presentation.
+        chartType: CHART_KINDS.has(String(chartType)) ? String(chartType) : 'bar',
+        unit: String(raw.unit || '').trim(),
+        source: String(raw.source || '').trim(),
+        items,
+      };
+    }
+  }
+
   // A character range in the first brief improves the odds; it cannot prove a
   // headline fills, because shaped Marathi words break at different widths.
   // When it misses, ask for alternatives and let the same exact compositor
@@ -937,18 +1049,44 @@ async function write(pageId, sectionKey, {
   // characters depending only on what is written into it, so a count can
   // never answer "does this fit" and a block with a cut-out photograph on it
   // cannot be answered by a count at all. See copyFit.service.js.
-  const settle = await copyFit.settleToFit({
-    section,
-    images,
-    proposal,
-    language: language || section.language,
-    verifiedContext,
-    tier,
-    // The bounded paid repairs this is allowed to spend, and only in the
-    // direction a repair is the only remedy - see settleToFit().
-    askForMore: (brief) => ai.askForJson(brief, ADDITIONS_SCHEMA, { tier }),
-    resizeBriefFor,
-  });
+  // A STORY WRITTEN FOR TWO BLOCKS IS SUPPOSED TO OVERRUN THE FIRST ONE.
+  //
+  // settleToFit() composes the copy against THIS block and trims what will not
+  // fit - which is exactly right for a single block and exactly wrong here:
+  // the overflow is not a failure, it is the second leg. Trimming it would
+  // hand the split a story that only ever filled block one, and the desk would
+  // watch their continuation arrive empty.
+  //
+  // Nothing is left unmeasured by skipping it. carryOver() measures BOTH
+  // blocks before it writes either, refuses in as many words when the tail is
+  // more than the landing can hold, and never truncates - so the pair is
+  // checked by the code that actually places it.
+  const settle = extraBodyChars > 0
+    ? {
+      body: proposal.body,
+      // The SAME `over` settleToFit() builds - the byline and the dateline are
+      // part of the block that was measured, and leaving them out measures a
+      // block one whole body line shorter than the one that prints.
+      fit: await copyFit.measureFit(section, images, {
+        headline: proposal.headline,
+        subheading: proposal.subheading,
+        body: proposal.body,
+        ...(proposal.author !== undefined ? { author: proposal.author } : {}),
+        ...(proposal.location !== undefined ? { location: proposal.location } : {}),
+      }),
+    }
+    : await copyFit.settleToFit({
+      section,
+      images,
+      proposal,
+      language: language || section.language,
+      verifiedContext,
+      tier,
+      // The bounded paid repairs this is allowed to spend, and only in the
+      // direction a repair is the only remedy - see settleToFit().
+      askForMore: (brief) => ai.askForJson(brief, ADDITIONS_SCHEMA, { tier }),
+      resizeBriefFor,
+    });
   proposal.body = settle.body;
 
   return {

@@ -72,6 +72,18 @@ CREATE TABLE IF NOT EXISTS publication_settings (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- WHERE THIS PAPER COVERS, so the Newsdesk Run opens on it rather than on the
+-- place of publication alone. A district daily's local news is a named
+-- district, and a query for सातारा finds different stories from one for सांगली
+-- - so the desk can say which, and the owner sets what "here" means once.
+-- See public/editor/layout/places.js for the catalogue these are checked
+-- against; the city is deliberately free text (there is no defensible list of
+-- every taluka, and a wrong one is worse than none).
+ALTER TABLE publication_settings ADD COLUMN IF NOT EXISTS coverage_country VARCHAR(8) NOT NULL DEFAULT 'IN';
+ALTER TABLE publication_settings ADD COLUMN IF NOT EXISTS coverage_state VARCHAR(8) NOT NULL DEFAULT 'MH';
+ALTER TABLE publication_settings ADD COLUMN IF NOT EXISTS coverage_district VARCHAR(80) NOT NULL DEFAULT 'Satara';
+ALTER TABLE publication_settings ADD COLUMN IF NOT EXISTS coverage_city VARCHAR(80) NOT NULL DEFAULT '';
+
 CREATE TABLE IF NOT EXISTS newspapers (
   id SERIAL PRIMARY KEY,
   name VARCHAR(200) NOT NULL,

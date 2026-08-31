@@ -64,12 +64,26 @@ function tagsIn(brief) {
  * @param {number} newspaperId
  * @param {{pages: [{page, wants: [{tagKey, count, demand}]}], freshness: string}} brief
  */
-async function planEdition(newspaperId, brief = {}, { callBudget } = {}) {
+async function planEdition(newspaperId, brief = {}, { callBudget, place: chosen, placeQuery } = {}) {
   const paper = await newspaperRepository.findById(newspaperId);
   if (!paper) return { error: 'That edition does not exist.', status: 404 };
 
   const identity = await paperIdentity();
-  const place = identity.placeOfPublication || '';
+  // WHERE "LOCAL" IS FOR THIS RUN.
+  //
+  // It was the paper's own place of publication and nothing else, so a desk
+  // who wanted a Sangli story on page three had no way to say so - a district
+  // daily's local news is a NAMED district, and a query for सातारा finds
+  // different stories from one for सांगली. The desk's choice wins where they
+  // made one; the paper's own place is what it falls back to, which is exactly
+  // what every existing caller gets.
+  //
+  // Checked against the one place catalogue on the way in: this reaches a
+  // search query, and a misspelt district returns nothing while looking
+  // exactly like a district with no news today.
+  const { placeOf, placeQuery: queryFor } = await import('../../../public/editor/layout/places.js');
+  const asked = chosen ? placeOf(chosen) : null;
+  const place = String(placeQuery || (asked ? queryFor(asked) : '') || identity.placeOfPublication || '').trim();
 
   // 1 — which blocks are open, and how they rank. Free.
   const pages = await pageRepository.findByNewspaper(newspaperId);

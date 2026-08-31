@@ -1,6 +1,8 @@
 const pageSectionService = require('../services/pageSection.service');
 const storyWriter = require('../services/storyWriter.service');
 const jump = require('../services/jump.service');
+const copyFit = require('../services/copyFit.service');
+const pageRepository = require('../repositories/page.repository');
 const fit = require('../services/fit.service');
 
 async function update(req, res) {
@@ -59,6 +61,10 @@ async function write(req, res) {
       searchWeb: req.body?.searchWeb === true,
       writeHeadline: req.body?.writeHeadline !== false,
       writeSubheading: req.body?.writeSubheading !== false,
+      // A chart of the story's own figures, from the same call. Only ever TRUE
+      // on request, so nothing that does not ask changes.
+      writeChart: req.body?.writeChart === true,
+      chartType: req.body?.chartType,
     },
   );
   if (result.error) return res.status(result.unconfigured ? 503 : 400).json(result);
@@ -143,7 +149,108 @@ async function purpose(req, res) {
   res.json(result);
 }
 
+/**
+ * ONE STORY, WRITTEN ACROSS TWO BLOCKS.
+ *
+ * The desk's report: "select one block then select another block in the next
+ * page, and the APIs call for both blocks - the 1st with heading, subheading
+ * and body, the 2nd with only body and an appropriate start, and the 1st with
+ * an appropriate ending like continue in page 3."
+ *
+ * That is a jump, and this product already writes one correctly - carryOver()
+ * has produced the jump line, the pick-up line and the link between the two
+ * blocks since it was written. What was missing was the WRITING: a story
+ * briefed for one block and then split leaves the second leg nearly empty.
+ *
+ * So this is one AI call, briefed for the pair: the landing block's own room is
+ * measured by the same engine and added to the source's, and the settle trim is
+ * skipped because here the overflow is not a failure - it is the second leg.
+ * Nothing is left unmeasured: the SPLIT measures both blocks before it writes
+ * either, and refuses in as many words when the tail is more than the landing
+ * can hold.
+ *
+ * It returns a PROPOSAL, like every other thing the AI writes. Nothing reaches
+ * the database here.
+ */
+async function writeAcross(req, res) {
+  const pageId = parseInt(req.params.pageId, 10);
+  const toPageId = parseInt(req.body?.toPageId, 10);
+  const toSectionKey = String(req.body?.toSectionKey || '');
+  if (!Number.isInteger(toPageId) || !toSectionKey) {
+    return res.status(400).json({ error: 'Choose the block the story carries on into.' });
+  }
+
+  const source = await pageRepository.findById(pageId);
+  if (!source) return res.status(404).json({ error: 'Block not found.' });
+  const landing = await jump.landingRoom(toPageId, toSectionKey, { fromPageNumber: source.page_number });
+  if (!landing) return res.status(404).json({ error: 'That continuation block does not exist.' });
+  if (Number(landing.target.newspaper_id) !== Number(source.newspaper_id)) {
+    return res.status(400).json({ error: 'A story cannot continue into a different edition.' });
+  }
+  if (Number(landing.target.id) === Number(req.body?.fromSectionId)) {
+    return res.status(400).json({ error: 'A story cannot continue into itself.' });
+  }
+  if (landing.room < 40) {
+    return res.status(400).json({ error: 'That block is too small to hold a continuation and its pick-up line.' });
+  }
+
+  const result = await storyWriter.write(pageId, req.params.sectionKey, {
+    seed: req.body?.seed,
+    notes: req.body?.notes,
+    tier: req.body?.tier,
+    language: req.body?.language,
+    lookUp: req.body?.lookUp === true,
+    reason: req.body?.reason === true,
+    searchWeb: req.body?.searchWeb === true,
+    writeHeadline: req.body?.writeHeadline !== false,
+    writeSubheading: req.body?.writeSubheading !== false,
+    extraBodyChars: landing.room,
+  });
+  if (result.error) return res.status(result.unconfigured ? 503 : 400).json(result);
+
+  // TRIMMED TO THE PAIR, FOR FREE.
+  //
+  // The reservoir overshoots on purpose - missing long is repaired by a
+  // deterministic cut and missing short costs a paid call - and here nothing
+  // had cut it, because the settle trim was skipped so the second leg would
+  // have something to hold. Measured on the first real run: the story came
+  // back 4136 characters for 4101 of room, and the split refused by 35.
+  //
+  // So the pair is measured again with the display type the model actually
+  // wrote (the source's room could not be known before that) and the copy is
+  // cut at a sentence boundary to fit. No provider call, and never a truncation
+  // mid-sentence - the same rule trimToFit() follows for one block.
+  const rooms = await jump.roomsFor(pageId, req.params.sectionKey, {
+    toPageId, toSectionKey,
+    headline: result.proposal.headline,
+    subheading: result.proposal.subheading,
+  });
+  if (rooms && result.proposal.body.length > rooms.total) {
+    const sentences = copyFit.splitSentences(result.proposal.body);
+    let kept = [];
+    for (const sentence of sentences) {
+      const candidate = copyFit.joinSentences([...kept, sentence]);
+      if (candidate.length > rooms.total) break;
+      kept = [...kept, sentence];
+    }
+    if (kept.length) result.proposal.body = copyFit.joinSentences(kept);
+  }
+
+  res.json({
+    ...result,
+    // Where the second leg goes, so the desk's own Accept can carry it over
+    // through the route that already writes both lines and links the pair.
+    across: {
+      toPageId,
+      toSectionKey,
+      pageNumber: landing.pageNumber,
+      room: landing.room,
+    },
+  });
+}
+
 module.exports = {
+  writeAcross,
   purpose,
   update, create, remove, move,
   write, fill, carryOver, reunite, fitPreview, fitApply, rate,

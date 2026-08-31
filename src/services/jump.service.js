@@ -86,6 +86,31 @@ function splitAt(text, limit) {
 }
 
 /**
+ * Where a story that FITS is split, when the desk asks for it anyway.
+ *
+ * The tail of the story, which is what a jump carries: the last paragraph, or
+ * the last sentence when the story is one paragraph. Deliberately not a share
+ * of the length - a jump that begins mid-thought reads as a printing fault,
+ * and a paragraph is the unit a reader picks up again at.
+ */
+function splitTail(text) {
+  const clean = String(text || '').trim();
+  const paragraph = clean.lastIndexOf('\n\n');
+  if (paragraph > 0) {
+    return { head: clean.slice(0, paragraph).trim(), tail: clean.slice(paragraph).trim() };
+  }
+  // One paragraph: the last sentence that is not the whole of it.
+  const marks = ['. ', '.\n', '? ', '! '];
+  let cut = -1;
+  for (const mark of marks) {
+    const at = clean.slice(0, -1).lastIndexOf(mark);
+    if (at > cut) cut = at;
+  }
+  if (cut <= 0) return { head: clean, tail: '' };
+  return { head: clean.slice(0, cut + 1).trim(), tail: clean.slice(cut + 1).trim() };
+}
+
+/**
  * Finds where the rest of a story could go: the first block on a later page
  * with nothing in it. Returning null is a real answer - it means the edition
  * has no room and the desk has to make some.
@@ -159,8 +184,31 @@ async function carryOver(pageId, sectionKey, { toPageId, toSectionKey } = {}) {
     return { error: 'This block is too small to hold a first part and a jump line.' };
   }
 
-  const { head, tail } = splitAt(source.body.trim(), room);
-  if (!tail) return { error: 'All of this story already fits — there is nothing to carry.' };
+  // A DESK CARRIES A STORY OVER BECAUSE OF THE PAGE, NOT ONLY BECAUSE OF THE
+  // OVERFLOW.
+  //
+  // This refused with "All of this story already fits — there is nothing to
+  // carry" whenever the copy did not overrun its block, which is most of the
+  // time: measured on a real front page, every one of the five article blocks
+  // was refused. That is the desk's report that the button does not work, and
+  // it is not a bug in the split - it is the wrong question. Running a story
+  // across two legs is ordinary make-up: a paper starts its lead on page one
+  // and finishes it on page three because that is how a front page is built,
+  // not because the first leg overflowed.
+  //
+  // So a story that fits is split DELIBERATELY, at its last paragraph - which
+  // is what a jump takes, the tail of the story - and at its last sentence
+  // when there is only one paragraph. A single sentence still refuses, because
+  // a jump line and a pick-up line either side of half a sentence is not a
+  // continuation, it is a mess.
+  let { head, tail } = splitAt(source.body.trim(), room);
+  if (!tail) {
+    const deliberate = splitTail(source.body.trim());
+    if (!deliberate.tail) {
+      return { error: 'This story is a single sentence — there is nothing to carry into a second block.' };
+    }
+    ({ head, tail } = deliberate);
+  }
 
   // The landing block gets no say in how much text arrives - `room` above is
   // sized against the SOURCE's own capacity alone, so a short story leaving a
@@ -268,4 +316,65 @@ async function reunite(pageId, sectionKey) {
   return { ok: true, reunited: parts.length };
 }
 
-module.exports = { carryOver, reunite, splitAt, carryLine, pickUpLine, findLanding };
+/**
+ * THE ROOM A LANDING BLOCK HAS FOR A CONTINUATION.
+ *
+ * Measured with no headline, because a second leg does not carry one: a
+ * same-page continuation sets none at all, and a jump's repeated headline is
+ * written by carryOver() itself out of the source. Reserving rows for one here
+ * would under-report the room and brief a story short.
+ *
+ * Exported so a caller writing a story ACROSS two blocks can size its brief for
+ * both of them with the same numbers the split will use.
+ */
+async function landingRoom(pageId, sectionKey, { fromPageNumber } = {}) {
+  const target = await sectionWithPage(pageId, sectionKey);
+  if (!target) return null;
+  const samePage = Number(fromPageNumber) === Number(target.page_number);
+  const pickUp = samePage ? '' : pickUpLine(fromPageNumber);
+  const budget = await budgetFor({ ...target, headline: '', subheading: '' });
+  return {
+    target,
+    pageNumber: target.page_number,
+    // The pick-up line is printed, so it is paid for out of the landing's room
+    // exactly as the jump line is paid for out of the source's.
+    room: Math.max(0, budget - pickUp.length - 1),
+  };
+}
+
+/**
+ * THE ROOM THE PAIR HAS, measured with the display type the story will carry.
+ *
+ * The landing block's room can be measured before anything is written - a
+ * second leg carries no headline of its own. The SOURCE's cannot: its room
+ * depends on the headline and deck that do not exist until the model has
+ * written them. So this is asked twice - once to size the brief, and once
+ * afterwards with the real display type, which is the number the copy is
+ * actually trimmed to.
+ *
+ * Both figures are net of the printed lines: the jump line is paid for out of
+ * the source's room and the pick-up out of the landing's, exactly as
+ * carryOver() pays for them.
+ */
+async function roomsFor(pageId, sectionKey, { toPageId, toSectionKey, headline, subheading } = {}) {
+  const source = await sectionWithPage(pageId, sectionKey);
+  const target = await sectionWithPage(toPageId, toSectionKey);
+  if (!source || !target) return null;
+
+  const samePage = Number(target.page_id) === Number(source.page_id);
+  const carry = samePage ? '' : carryLine(target.page_number);
+  const pickUp = samePage ? '' : pickUpLine(source.page_number);
+
+  const sourceBudget = await budgetFor({
+    ...source,
+    headline: headline ?? source.headline,
+    subheading: subheading ?? source.subheading,
+  });
+  const targetBudget = await budgetFor({ ...target, headline: '', subheading: '' });
+
+  const sourceRoom = Math.max(0, sourceBudget - carry.length - 1);
+  const landingRoom = Math.max(0, targetBudget - pickUp.length - 1);
+  return { sourceRoom, landingRoom, total: sourceRoom + landingRoom, pageNumber: target.page_number, samePage };
+}
+
+module.exports = { carryOver, reunite, splitAt, carryLine, pickUpLine, findLanding, landingRoom, roomsFor };

@@ -68,6 +68,11 @@ router.post('/pages/:pageId/sections/:sectionKey/fit', pageSectionController.fit
 // it - it is here beside the other sectionKey-addressed production actions
 // because that is what it is: a decision about the block, made on the block.
 router.patch('/pages/:pageId/sections/:sectionKey/purpose', pageSectionController.purpose);
+// ONE STORY, WRITTEN ACROSS TWO BLOCKS - the jump this product could already
+// SPLIT correctly and could not WRITE. Briefed for the pair in one call; the
+// split afterwards is the ordinary carry-over. A proposal, like everything the
+// AI writes: nothing reaches the database here.
+router.post('/pages/:pageId/sections/:sectionKey/write-across', pageSectionController.writeAcross);
 
 // GET is left open by deskWrites above (it guards writes only), so these two
 // - desk-internal production tools, not the finished public edition - repeat

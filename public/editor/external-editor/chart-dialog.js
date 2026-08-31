@@ -77,7 +77,7 @@ const rowsFrom = (items) => (Array.isArray(items) && items.length
  * reader's eye returns to the left margin on every line and a panel there
  * interrupts every one of them.
  */
-function panelBox(share, section, card) {
+export function panelBox(share, section, card) {
   const blockW = Math.max(INSET_PANEL_MIN_PX, Number(section?.width_px) || 200);
   const blockH = Math.max(INSET_PANEL_MIN_PX, Number(section?.height_px) || 200);
   // Width first: a chart needs measure more than it needs depth, so the share

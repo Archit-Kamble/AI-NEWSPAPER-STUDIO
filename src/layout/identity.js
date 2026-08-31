@@ -143,6 +143,17 @@ function applyPublicationSettings(settings = {}) {
   identity.website = visibleWebsite(settings.public_website) || editableIdentityDefaults.website;
   identity.epaper = identity.website ? `${identity.website.replace(/\/$/, '')}/epaper` : editableIdentityDefaults.epaper;
   identity.timezone = String(settings.timezone || editableIdentityDefaults.timezone).trim();
+  // THE GROUND THIS PAPER COVERS - country, state, district, city. Not part of
+  // the masthead and never printed: it is what the Newsdesk Run opens on, so a
+  // district daily asks about its own district rather than about the place its
+  // office happens to be in. Carried on the identity because that is the one
+  // record every surface already reads.
+  identity.coverage = {
+    country: String(settings.coverage_country || 'IN'),
+    state: String(settings.coverage_state || 'MH'),
+    district: String(settings.coverage_district || ''),
+    city: String(settings.coverage_city || ''),
+  };
   return identity;
 }
 

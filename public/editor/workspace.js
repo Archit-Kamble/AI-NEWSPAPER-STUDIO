@@ -2120,9 +2120,19 @@ async function writeEmptyBlocks() {
   if (!Object.keys(byPage).length) return writeCommissionedBlocks();
 
   const { openNewsdeskPanel } = await import("./newsdesk-panel.js");
+  // Every page of the paper, so the brief can say "nothing free" rather than
+  // silently omitting one - a list that drops a page is indistinguishable from
+  // a list that has lost one.
+  for (const page of state.pages || []) {
+    if (!(page.page_number in byPage)) byPage[page.page_number] = 0;
+  }
+
   openNewsdeskPanel({
     newspaperId: newspaper.id,
     byPage,
+    // What the owner set in Settings as the ground this paper covers. The run
+    // opens on it and the desk may change it for this run only.
+    place: getIdentity()?.coverage || null,
     commissioned,
     notice: showNotice,
     // A block carrying a headline somebody typed is a story the desk has

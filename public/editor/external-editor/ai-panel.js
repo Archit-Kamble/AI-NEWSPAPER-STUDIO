@@ -20,6 +20,9 @@ import { escapeHtml } from "../format.js";
 import { buildFlowMap, flowAscii, flowFit, flowImageFromRow } from "../layout/text-flow.js";
 import { plainText } from "../layout/rich-text.js";
 import { composeSection, bodyFill } from "../compose/section-adapter.js";
+// The one rule a chart panel is placed by - a corner rectangle for its share,
+// cut to the rows the readings actually need. Never a second copy of it.
+import { panelBox as chartPanelBox } from "./chart-dialog.js";
 
 export const AI_ACTIONS = [
   { id: "aiGenerateLayout", label: "Generate Layout", intent: "layout" },
@@ -209,6 +212,26 @@ export function aiPanelMarkup(view) {
       <div class="ai-parts">
         <label class="toggle"><input type="checkbox" id="edAiWriteHeadline" checked> Write a headline</label>
         <label class="toggle"><input type="checkbox" id="edAiWriteSubheading" checked> Write a subheading</label>
+      </div>
+      <!-- A CHART OF THE STORY'S OWN FIGURES, from the same call that writes it.
+           The numbers a chart plots are the numbers the story is about, so
+           asking for them in a second call is two charges for one piece of
+           reading. The model is asked for the FIGURES and never for the
+           presentation: the shape is the desk's, chosen here and changeable
+           afterwards through the Chart dialog like any other chart.
+           It lands as a QUARTER of the block - a corner panel with the copy
+           running round it - and cut to the rows it actually holds, which is
+           the rule every chart panel follows. -->
+      <div class="ai-toggles ai-chart-ask">
+        <label class="toggle"><input type="checkbox" id="edAiWriteChart"> Chart of its figures</label>
+        <select id="edAiChartType" aria-label="Which chart">
+          <option value="bar">Bars</option>
+          <option value="pie">Pie</option>
+          <option value="line">Line</option>
+          <option value="dots">Dots</option>
+          <option value="stat">Figures</option>
+        </select>
+        <small class="muted">Only figures the story itself states. No figures, no chart.</small>
       </div>
       <!-- TWO THINGS THE DESK CAN ASK FOR BEFORE A WORD IS WRITTEN.
            A desk typed "rohit pawar admit in candi hospital" and got a fluent,
@@ -465,6 +488,20 @@ function understandingNote(result) {
   if (!line) return "";
   return `<p class="ai-understanding"><strong>Understood as:</strong> ${escapeHtml(line)}
     <span class="muted">— if this is not what you meant, discard and say it differently.</span></p>`;
+}
+
+/**
+ * WHERE A WRITTEN CHART GOES: a quarter of the block, cut to its own rows.
+ *
+ * The same two rules the Chart dialog places one by, and deliberately not a
+ * second copy of them - `panelBox` there is the one that computes the corner
+ * rectangle and asks the solver how tall the readings actually are. A chart
+ * reserving room it does not use is a hole in the page, and the copy is what
+ * pays for it.
+ */
+function chartPanelFor(card, section) {
+  const box = chartPanelBox(0.25, section, card);
+  return { id: `panel-${Date.now().toString(36)}`, kind: "chart", ...box, card };
 }
 
 // A proposal was measured on the persisted block. Typography, columns or a
@@ -740,6 +777,8 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, g
             language: view?.language,
             writeHeadline: document.getElementById("edAiWriteHeadline")?.checked !== false,
             writeSubheading: document.getElementById("edAiWriteSubheading")?.checked !== false,
+            writeChart: document.getElementById("edAiWriteChart")?.checked === true,
+            chartType: document.getElementById("edAiChartType")?.value || "bar",
             lookUp: document.getElementById("edAiLookUp")?.checked === true,
             searchWeb: document.getElementById("edAiSearchWeb")?.checked === true,
             reason: document.getElementById("edAiReason")?.checked === true,
@@ -782,10 +821,29 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, g
         // editable draft as typed copy and is marked for review.
         // `understanding` is the model's reading of the REQUEST, not part of
         // the story - it is shown to the desk and dropped here.
-        const { understanding, ...copy } = result.proposal;
-        onPatch({ ...copy, aiGenerated: true, status: "needs_review" }, "ai-panel");
+        const { understanding, chart, ...copy } = result.proposal;
+        // THE CHART GOES IN AS A PANEL, not as a field on the block.
+        //
+        // A quarter of the block - a corner panel with the copy running round
+        // it, which is what the desk asked for - and cut to the rows it
+        // actually holds, because a panel that reserves room it does not use is
+        // a hole in the page. Both of those are chartPanelFor()'s job, which is
+        // the same rule the Chart dialog places one by; the shape stays the
+        // desk's to change there afterwards.
+        const panels = chart
+          ? [...(getView()?.insetPanels || []).filter((panel) => panel?.kind !== "chart"),
+            chartPanelFor(chart, getSection())]
+          : undefined;
+        onPatch({
+          ...copy,
+          ...(panels ? { insetPanels: panels } : {}),
+          aiGenerated: true,
+          status: "needs_review",
+        }, "ai-panel");
         host.hidden = true;
-        onNotify("Written into the block. Check every fact before it prints.");
+        onNotify(chart
+          ? `Written into the block, with a chart of ${chart.items.length} figures. Check every fact before it prints.`
+          : "Written into the block. Check every fact before it prints.");
       });
       document.getElementById("aiDiscardStory")?.addEventListener("click", () => { host.hidden = true; });
     } finally {

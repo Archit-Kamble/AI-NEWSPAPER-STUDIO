@@ -315,6 +315,11 @@ async function compositionApply(req, res) {
 async function newsdeskPlan(req, res) {
   const result = await newsdesk.planEdition(Number(req.params.id), req.body?.brief || {}, {
     callBudget: req.body?.callBudget,
+    // WHERE "LOCAL" IS for this run. A district daily's local news is a named
+    // district, and the run could only ever ask about the paper's own place of
+    // publication - so a desk who wanted a Sangli story had no way to say so.
+    place: req.body?.place,
+    placeQuery: req.body?.placeQuery,
   });
   if (result.error) return res.status(result.status || 400).json(result);
   res.json(result);
@@ -327,7 +332,16 @@ async function newsdeskWrite(req, res) {
   // open. Re-proving it here would need the plan back; what this must not do
   // is trust a page id from the browser, so the block is looked up by page and
   // key on the way in.
-  const result = await newsdeskWriter.writePlan(stories);
+  // The same things a single block can be asked for. One run makes up a whole
+  // paper and could ask for less than the panel that writes one block.
+  const asks = req.body?.asks || {};
+  const result = await newsdeskWriter.writePlan(stories, {
+    writeHeadline: asks.writeHeadline !== false,
+    writeSubheading: asks.writeSubheading !== false,
+    reason: asks.reason === true,
+    writeChart: asks.writeChart === true,
+    chartType: asks.chartType,
+  });
   res.json(result);
 }
 

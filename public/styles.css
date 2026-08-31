@@ -903,6 +903,13 @@ body {
 .flag-ai {
   color: #7b4fd6;
 }
+/* Two blocks, one story. The same ink both ways round - it is one fact about
+   a pair, like the column rule between them, and two colours would read as
+   two different things happening. */
+.flag-continues,
+.flag-continued {
+  color: #1f7a63;
+}
 .flag-unsaved {
   border-radius: 50%;
   background: #e8a33d;

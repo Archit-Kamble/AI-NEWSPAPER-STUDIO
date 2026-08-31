@@ -7573,3 +7573,47 @@ made it two, Playwright's strict mode refused, and the net died at check 0 of
 branch that caused it. This is the failure CLAUDE.md already names: *"a browser
 test that crashes is worse than one that fails"*, and *read the last line, not
 the first*.
+
+## A story carried over can be seen, and put back — 30 Aug 2026
+
+Branch `story-continuation`.
+
+`page_sections.continued_from_section_id` has recorded which two blocks are one
+story since carry-over was written, and **nothing under `public/` had ever read
+the column** — swept, not one file mentioned it. So once a desk split a story:
+
+- nothing on either block said the two were one story, and
+- there was no way to undo it. `reunite()` has existed as long as `carryOver()`
+  has, with its own route and its own tests, reachable from no control at all.
+
+That is this project's own rule broken — *"a device must be removable, and the
+way out lives beside the way in"* — and it is not one a desk can undo by hand.
+
+### What landed
+
+`public/editor/layout/continuations.js` — the one answer to *what continues this
+block* and *what does this block continue*, told the edition once and read by
+whoever draws or acts on a block. The `grid.js` / `masthead.js` shape, chosen
+because **the renderers in this product are fed and do not reach for the store**
+(checked: only `workspace.js` imports `store.js`).
+
+- a jump mark in `.section-flags`, both ways round, same ink
+- **Reunite** beside Carry over, disabled rather than hidden, its title naming
+  where the rest of the story is
+
+### Two faults found by driving it
+
+1. **A backtick inside a template literal.** The toolbar markup is a template
+   literal; a comment written as `` `reunite()` `` closed the string.
+   `node --check` passed it, Chrome answered *"Unexpected identifier 'reunite'"*
+   and the whole application rendered nothing.
+2. **Ordering.** `reloadPages()` set the catalogue AFTER `store.replacePage()`,
+   which publishes the PAGE topic **synchronously** and repaints the canvas — so
+   the catalogue was one paint behind and the jump mark stayed on a block whose
+   legs the database had already released.
+
+### Verified
+
+`npm test` 1060/1060. `tests/browser/story-continuation.browser.js` 19/19 — it
+borrows an **empty** editorial block, writes its own copy, and restores it from
+the crash path as well as the success path.

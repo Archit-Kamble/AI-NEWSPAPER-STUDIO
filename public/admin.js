@@ -1,4 +1,5 @@
-import { renderWorkspace } from "./editor/workspace.js";
+import { renderWorkspace, leaveWorkspace } from "./editor/workspace.js";
+import { startNavigation, navigate, stopNavigation } from "./admin/navigation.js";
 import { renderEditions } from "./admin/editions.js";
 import { renderEpapers } from "./admin/epapers.js";
 import { renderReporterManagement } from "./admin/reporters.js";
@@ -118,7 +119,7 @@ async function renderReporterDashboard() {
       <div class="container">
         <div class="sidebar-app-backdrop" id="sidebarAppBackdrop"></div>
         <aside class="sidebar">
-          <button class="sidebar-btn active" id="createBtn">Create News</button>
+          <button class="sidebar-btn" id="createBtn">Create News</button>
           <button class="sidebar-btn" id="draftBtn">My Drafts</button>
           <button class="sidebar-btn" id="submittedBtn">Submitted</button>
           <button class="sidebar-btn" id="approvedBtn">Approved</button>
@@ -136,40 +137,57 @@ async function renderReporterDashboard() {
 
   const logout = () => {
     currentUser = null;
+    stopNavigation();
     renderLogin();
   };
   document.getElementById("logoutBtn").addEventListener("click", logout);
   document.getElementById("logoutBtn2").addEventListener("click", logout);
 
-  document.getElementById("createBtn").addEventListener("click", () => {
-    editingDraftId = null;
-    showReporterCreateNews();
-  });
-  document
-    .getElementById("draftBtn")
-    .addEventListener("click", () =>
-      showReporterNewsList("draft", "My Drafts"),
-    );
-  document
-    .getElementById("submittedBtn")
-    .addEventListener("click", () =>
-      showReporterNewsList("pending", "Submitted"),
-    );
-  document
-    .getElementById("approvedBtn")
-    .addEventListener("click", () =>
-      showReporterNewsList("approved", "Approved"),
-    );
-  document
-    .getElementById("rejectedBtn")
-    .addEventListener("click", () =>
-      showReporterNewsList("rejected", "Rejected"),
-    );
-  document
-    .getElementById("profileBtn")
-    .addEventListener("click", showReporterProfile);
+  // A reporter's screens are addressed exactly as the desk's are, so their
+  // Back button behaves the same way. A filing queue is `#!/news/pending`;
+  // the status is the id because that is what makes one queue a different
+  // screen from another.
+  const SCREENS = {
+    // Editing a draft IS the create screen with a draft in it, so the draft
+    // is the address's id. Without that the bar said `#!/news/draft` while an
+    // edit form was on screen, and a reload came back to the wrong thing.
+    create: { button: "createBtn", render: (view) => {
+      editingDraftId = view.id ? Number(view.id) : null;
+      return showReporterCreateNews();
+    } },
+    news: { button: null, render: (view) => {
+      const queues = {
+        draft: ["draftBtn", "My Drafts"],
+        pending: ["submittedBtn", "Submitted"],
+        approved: ["approvedBtn", "Approved"],
+        rejected: ["rejectedBtn", "Rejected"],
+      };
+      const [, title] = queues[view.id] || queues.draft;
+      return showReporterNewsList(queues[view.id] ? view.id : "draft", title);
+    } },
+    profile: { button: "profileBtn", render: showReporterProfile },
+  };
+  const QUEUE_BUTTONS = { draftBtn: "draft", submittedBtn: "pending", approvedBtn: "approved", rejectedBtn: "rejected" };
 
-  showReporterCreateNews();
+  document.getElementById("createBtn").addEventListener("click", () => navigate({ screen: "create" }));
+  document.getElementById("profileBtn").addEventListener("click", () => navigate({ screen: "profile" }));
+  for (const [button, status] of Object.entries(QUEUE_BUTTONS)) {
+    document.getElementById(button).addEventListener("click", () => navigate({ screen: "news", id: status }));
+  }
+
+  await startNavigation(async (view, { stale } = {}) => {
+    const screen = Object.prototype.hasOwnProperty.call(SCREENS, view.screen) ? view.screen : "create";
+    if (stale?.()) return;
+    document.querySelectorAll(".sidebar-btn").forEach((b) => b.classList.remove("active"));
+    const lit = screen === "news"
+      ? Object.keys(QUEUE_BUTTONS).find((b) => QUEUE_BUTTONS[b] === view.id) || "draftBtn"
+      : SCREENS[screen].button;
+    document.getElementById(lit)?.classList.add("active");
+    await SCREENS[screen].render(view);
+  }, {
+    home: { screen: "create" },
+    allow: (view) => Object.prototype.hasOwnProperty.call(SCREENS, view.screen),
+  });
 }
 
 function showReporterProfile() {
@@ -243,12 +261,8 @@ ${new Date(newsItem.created_at || newsItem.createdAt).toLocaleDateString()}
     `;
     item.style.cursor = "pointer";
     item.addEventListener("click", () => {
-      if (status === "draft") {
-        editingDraftId = newsItem.id;
-        showReporterCreateNews();
-      } else {
-        renderReporterNewsDetails(newsItem);
-      }
+      if (status === "draft") navigate({ screen: "create", id: newsItem.id });
+      else renderReporterNewsDetails(newsItem);
     });
     list.appendChild(item);
   });
@@ -268,7 +282,8 @@ async function renderAdminDashboard() {
       <div class="container">
         <div class="sidebar-app-backdrop" id="sidebarAppBackdrop"></div>
         <aside class="sidebar">
-          <button class="sidebar-btn active" id="pastBtn">Past Newspapers</button>
+          <button class="sidebar-btn sidebar-btn--primary" id="newEditionBtn">+ New Edition</button>
+          <button class="sidebar-btn" id="pastBtn">Past Newspapers</button>
           <button class="sidebar-btn" id="pastNewsBtn">Past News</button>
           <button class="sidebar-btn" id="reportersBtn">Reporters</button>
           <button class="sidebar-btn" id="settingsBtn">Settings</button>
@@ -285,40 +300,84 @@ async function renderAdminDashboard() {
 
   const logout = () => {
     currentUser = null;
+    // The login page is not one of the desk's screens, so routing stops and
+    // the address is cleared - otherwise signing out leaves `#!/edition/54470`
+    // in the bar and Back walks a signed-out browser through screens it can no
+    // longer load.
+    stopNavigation();
     renderLogin();
   };
   document.getElementById("logoutBtn").addEventListener("click", logout);
   document.getElementById("logoutBtn2").addEventListener("click", logout);
 
-  const goDashboard = (fn) => () => {
+  // Every screen this desk can reach, by the name it is addressed by. The
+  // sidebar button is named beside it so exactly one of them can be lit -
+  // `active` used to be hard-coded onto "Past Newspapers" in the markup and
+  // never moved, so the sidebar said the desk was on the first screen whatever
+  // screen they were actually on.
+  const SCREENS = {
+    "past-newspapers": { button: "pastBtn", render: () => showPastNewspapers() },
+    "new-edition": { button: "newEditionBtn", render: () => showPastNewspapers({ openCreator: true }) },
+    "past-news": { button: "pastNewsBtn", render: showPastNews },
+    reporters: { button: "reportersBtn", render: showReporters },
+    settings: { button: "settingsBtn", render: showSettings },
+    epaper: { button: "epaperBtn", render: () => renderEpapers(
+      document.getElementById("content"),
+      { rightPanel: document.getElementById("rightPanel") },
+    ) },
+    // Handled before `render` is reached - an edition is a screen with an id
+    // rather than a screen with a panel. It lights Past Newspapers because
+    // that is the list it came out of.
+    edition: { button: "pastBtn", render: () => {} },
+  };
+
+  for (const [screen, entry] of Object.entries(SCREENS)) {
+    if (screen === "edition") continue;
+    document.getElementById(entry.button)?.addEventListener("click", () => navigate({ screen }));
+  }
+
+  await startNavigation(paintDeskScreen, {
+    home: { screen: "past-newspapers" },
+    // An address this desk has no screen for is not followed - a typed or
+    // stale hash lands on the dashboard rather than on a blank panel.
+    allow: (view) => Object.prototype.hasOwnProperty.call(SCREENS, view.screen),
+  });
+
+  async function paintDeskScreen(view, { stale } = {}) {
+    const screen = Object.prototype.hasOwnProperty.call(SCREENS, view.screen)
+      ? view.screen : "past-newspapers";
+    // Leaving an open edition flushes whatever the desk was in the middle of
+    // typing. Autosave is on a timer, so between the last keystroke and the
+    // next tick the only copy of a sentence is in the draft - and Back is now
+    // one keypress away from here.
+    if (document.querySelector(".workspace-shell")) await leaveWorkspace();
+    if (stale?.()) return;
+
+    document.querySelectorAll(".sidebar-btn").forEach((b) => b.classList.remove("active"));
+    document.getElementById(SCREENS[screen].button)?.classList.add("active");
+
+    if (screen === "edition") {
+      const id = Number(view.id);
+      if (!Number.isInteger(id) || id <= 0) {
+        await navigate({ screen: "past-newspapers" }, { replace: true });
+        return;
+      }
+      document.querySelector(".container")?.classList.add("container--workspace");
+      closeAppSidebar();
+      const rightPanel = document.getElementById("rightPanel");
+      if (rightPanel) { rightPanel.innerHTML = ""; rightPanel.style.display = "none"; }
+      await renderWorkspace(id);
+      return;
+    }
+
     document.querySelector(".container")?.classList.remove("container--workspace");
     const rightPanel = document.getElementById("rightPanel");
     if (rightPanel) rightPanel.style.display = "";
-    fn();
-  };
-  document
-    .getElementById("pastBtn")
-    .addEventListener("click", goDashboard(showPastNewspapers));
-  document
-    .getElementById("pastNewsBtn")
-    .addEventListener("click", goDashboard(showPastNews));
-  document
-    .getElementById("reportersBtn")
-    .addEventListener("click", goDashboard(showReporters));
-  document
-    .getElementById("settingsBtn")
-    .addEventListener("click", goDashboard(showSettings));
-  document
-    .getElementById("epaperBtn")
-    .addEventListener("click", goDashboard(() => renderEpapers(
-      document.getElementById("content"),
-      { rightPanel: document.getElementById("rightPanel") },
-    )));
-
-  showPastNewspapers();
+    await SCREENS[screen].render(view);
+  }
 }
 
-async function showPastNewspapers() {
+async function showPastNewspapers({ openCreator = false } = {}) {
   const content = document.getElementById("content");
   const rightPanel = document.getElementById("rightPanel");
 
@@ -368,7 +427,7 @@ async function showPastNewspapers() {
   // The editions panel lives in its own module (CLAUDE.md: do not grow admin.js).
   // It owns today's edition card, the page ladder preview and the recent list;
   // opening one is still the dashboard's job, which is what onOpen is for.
-  await renderEditions(content, { onOpen: (id) => editNewspaper(id) });
+  await renderEditions(content, { onOpen: (id) => editNewspaper(id), openCreator });
 }
 
 async function showPastNews() {
@@ -681,10 +740,7 @@ async function saveNews(status) {
     alert(status === "draft" ? "Saved as draft" : "Submitted for approval");
     editingDraftId = null;
     selectedReporterImages = [];
-    showReporterNewsList(
-      status === "draft" ? "draft" : "pending",
-      status === "draft" ? "My Drafts" : "Submitted",
-    );
+    await navigate({ screen: "news", id: status === "draft" ? "draft" : "pending" });
   } catch (error) {
     console.error("News save error:", error);
     alert(error.message || "Unable to save news. Please try again.");
@@ -727,13 +783,12 @@ function renderReporterNewsDetails(newsItem) {
   });
 }
 
+// Opening an edition is an ADDRESS, not a function call - which is what lets
+// Back leave it again, and what lets a reload come back to it. The painting
+// itself lives in paintDeskScreen, so there is one place that knows how the
+// workspace is put on screen and taken off it.
 async function editNewspaper(newspaperId) {
-  document.querySelector(".container")?.classList.add("container--workspace");
-  closeAppSidebar();
-  const rightPanel = document.getElementById("rightPanel");
-  rightPanel.innerHTML = "";
-  rightPanel.style.display = "none";
-  await renderWorkspace(newspaperId);
+  await navigate({ screen: "edition", id: newspaperId });
 }
 
 init();

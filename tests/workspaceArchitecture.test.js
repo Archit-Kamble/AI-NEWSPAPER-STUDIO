@@ -20,7 +20,12 @@ const read = (relPath) => fs.readFileSync(path.join(PUBLIC_DIR, relPath), 'utf8'
 
 test('admin.js does not define its own renderWorkspace - it only imports the real one', () => {
   const source = read('admin.js');
-  assert.match(source, /import\s*\{\s*renderWorkspace\s*\}\s*from\s*["']\.\/editor\/workspace\.js["']/);
+  // The invariant is WHERE renderWorkspace comes from, not what else travels
+  // with it. Pinned to the exact import list this failed the day admin.js
+  // legitimately also imported `leaveWorkspace` from the same module - a
+  // source-shaped assertion breaking on a change it was never written to
+  // catch. The line below is the one that actually holds the rule.
+  assert.match(source, /import\s*\{[^}]*\brenderWorkspace\b[^}]*\}\s*from\s*["']\.\/editor\/workspace\.js["']/);
   assert.doesNotMatch(source, /function\s+renderWorkspace\s*\(/);
 });
 

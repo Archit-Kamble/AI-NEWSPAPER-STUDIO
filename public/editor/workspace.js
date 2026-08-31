@@ -77,6 +77,29 @@ async function fetchJson(url, options) {
   return response.json();
 }
 
+/**
+ * Leaving the edition - by the Back button, by the sidebar, or by signing out.
+ *
+ * The workspace is the one screen in this product that holds work which is
+ * not yet in the database: autosave is on a timer, so between the last
+ * keystroke and the next tick the only copy of a sentence is in the draft.
+ * Navigating away used to be impossible (there was nowhere to navigate TO),
+ * and now that Back goes back through the desk it is one keypress. So the
+ * pending save is FLUSHED rather than cancelled - a desk who leaves a block
+ * mid-sentence keeps the sentence.
+ *
+ * It is deliberately tolerant: a failed flush is reported and does not stop
+ * the desk leaving. Trapping somebody on a screen because a save failed is
+ * worse than the save failing, and the block is still in the draft.
+ */
+export async function leaveWorkspace() {
+  try {
+    await autosave.flush();
+  } catch (error) {
+    console.error('The open block could not be saved on the way out:', error);
+  }
+}
+
 export async function renderWorkspace(newspaperId) {
   let newspaper, pages, reporterNews;
   try {
@@ -2392,6 +2415,13 @@ async function removeSelectedImages() {
 
 function bindKeyboardShortcuts() {
   document.addEventListener("keydown", (event) => {
+    // Bound once, at the document, and therefore still bound after the desk
+    // has left the edition - which was harmless only while there was nowhere
+    // to leave TO. Now that Back walks the desk's own screens, Ctrl+Z on the
+    // Reporters screen would reach the workspace's undo stack and Delete
+    // would reach a block nobody can see. The shell being on the page is what
+    // says this screen is the workspace's; the same test the panels use.
+    if (!document.querySelector(".workspace-shell")) return;
     const typing = isTypingTarget(event.target);
     const primary = event.ctrlKey || event.metaKey;
 

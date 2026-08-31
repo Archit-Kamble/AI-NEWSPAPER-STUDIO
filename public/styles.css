@@ -105,7 +105,19 @@ body {
   grid-template-rows: auto 1fr;
   min-height: 100vh;
 }
+/* THE WAY OUT OF A SCREEN IS ALWAYS ON THE SCREEN.
+   The document scrolls - that is this product's one scroll rule, and the
+   workspace is a long document (toolbar, page, Block Editor, panels). So the
+   header scrolled away with it, taking the menu button and Logout with it: a
+   desk two thousand pixels down an edition had no way to reach another screen
+   without scrolling all the way back up first. The bar is 60px and the rest of
+   the layout is already measured from that same 60 (`.sidebar`, the backdrop
+   and `.container`'s min-height all start there), so making it stick costs the
+   page nothing it was not already reserving. */
 .header {
+  position: sticky;
+  top: 0;
+  z-index: 400;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -230,6 +242,23 @@ body {
   margin-top: auto;
   color: var(--accent);
   border-left-color: var(--accent);
+}
+/* Starting the day's paper is the first thing a desk does and it was the one
+   action with no way in from the menu - it lived only as a button part-way
+   down the dashboard, under today's card. It sits above Past Newspapers
+   because that is the order the work happens in. */
+.sidebar-btn--primary {
+  background: var(--accent);
+  color: white;
+  font-weight: 600;
+  border-left-color: var(--accent);
+}
+.sidebar-btn--primary:hover {
+  filter: brightness(1.1);
+}
+.sidebar-btn--primary.active {
+  background: var(--accent);
+  color: white;
 }
 
 .content {

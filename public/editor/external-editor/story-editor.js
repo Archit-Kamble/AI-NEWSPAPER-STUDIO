@@ -397,7 +397,7 @@ function focusAddedPanel(panelId, onSelectPart) {
   }));
 }
 
-export function bindStoryEditor({ onPatch, getBudget, getSection, getView, getImages, onPatchImage, onRemoveImage, onSelectImage, onSelectPart, onToggleImageSelection, onAddOverlay, getSelectedImageId }) {
+export function bindStoryEditor({ onPatch, getBudget, getSection, getView, getImages, onPatchImage, onRemoveImage, onSelectImage, onSelectPart, onToggleImageSelection, onAddOverlay, onPictureLink, getSelectedImageId }) {
   budgetOf = getBudget;
 
   // THE DEVICE BAR - every device this paper can set, on one row on the editor.
@@ -408,6 +408,7 @@ export function bindStoryEditor({ onPatch, getBudget, getSection, getView, getIm
     getView, getSection,
     onPatch,
     onAddOverlay,
+    onPictureLink,
     // These three do not get a second implementation. Each presses the control
     // that already exists and is already bound, so there is exactly one code
     // path per action however a desk reaches it.

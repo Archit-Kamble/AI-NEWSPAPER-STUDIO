@@ -1,5 +1,6 @@
 const newsImage = require('../services/newsImage.service');
 const service = require('../services/sectionImage.service');
+const pictureLink = require('../services/pictureLink.service');
 
 const notFound = (res) => res.status(404).json({ error: 'Not found' });
 
@@ -11,6 +12,32 @@ async function list(req, res) {
 
 async function add(req, res) {
   const images = await service.add(req.params.pageId, req.params.sectionId, req.body, req.session?.user?.id);
+  if (!images) return notFound(res);
+  res.status(201).json(images);
+}
+
+/**
+ * A PICTURE FROM A LINK, placed on this block.
+ *
+ * The desk has the URL - a wire photograph, an agency link, something sent by
+ * email - and had no way to give it to a block short of downloading it by hand
+ * and uploading it again.
+ *
+ * It ends in the SAME `service.add()` an uploaded picture does, so the corridor
+ * snap, the default frame, the runaround and the exports all work on it without
+ * knowing where it came from. What is different is only how the bytes arrived,
+ * and pictureLink.service.js is where that is made safe: this is the one route
+ * that makes the SERVER fetch an address somebody typed.
+ */
+async function addFromLink(req, res) {
+  const fetched = await pictureLink.fetchPicture(req.body?.link);
+  if (fetched.error) return res.status(400).json({ error: fetched.error });
+
+  const images = await service.add(
+    req.params.pageId, req.params.sectionId,
+    { ...fetched.picture, ...(req.body?.caption ? { caption: req.body.caption } : {}) },
+    req.session?.user?.id,
+  );
   if (!images) return notFound(res);
   res.status(201).json(images);
 }
@@ -55,4 +82,5 @@ async function propose(req, res) {
 }
 
 module.exports = {
+  addFromLink,
   propose, list, add, move, remove, cutout };

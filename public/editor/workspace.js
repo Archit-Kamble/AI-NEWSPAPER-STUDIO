@@ -318,6 +318,50 @@ function redrawCompose() {
   refreshExternalEditor(section, view, currentStory(), "images", store.getSelectedPart(), store.getSelectedImageIds());
 }
 
+/**
+ * A PICTURE FROM A LINK, on the selected block.
+ *
+ * The desk has the URL - a wire photograph, an agency link, something sent by
+ * email - and had no way to give it to a block short of downloading it by hand
+ * and uploading it again.
+ *
+ * The SERVER fetches it, not this browser: the bytes have to be checked against
+ * the format's own signature and stored under a name this paper chooses, which
+ * is the same hardening an upload goes through, and a browser fetch could do
+ * neither. src/services/pictureLink.service.js is where that is made safe.
+ */
+async function addPictureFromLink() {
+  const page = store.getCurrentPage();
+  const key = store.getState().selectedSectionKey;
+  if (!page || !key) return showNotice("Select the block the picture goes on first.");
+
+  const link = window.prompt("Paste the picture's web address.\n\nIt is fetched, checked and stored by this paper - the link itself is never printed.");
+  if (!link) return;
+
+  showNotice("Fetching the picture…");
+  try {
+    const response = await fetch(`/api/pages/${page.id}/sections/${encodeURIComponent(key)}/images/from-link`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ link }),
+    });
+    const result = await response.json().catch(() => ({}));
+    // A REFUSAL IS THE SERVER'S OWN SENTENCE. It names what was wrong - not a
+    // public address, not a picture, too large - and a generic line written
+    // here would throw away the only thing the desk can act on.
+    if (!response.ok) return showNotice(result.error || "That picture could not be added.");
+    // The answer carries the block's whole image list, exactly as an uploaded
+    // picture's does, so this ends where addSectionImage() ends.
+    if (Array.isArray(result)) {
+      sectionImages = result;
+      redrawCompose();
+    }
+    showNotice("Picture placed. Drag it where the story wants it.");
+  } catch (error) {
+    showNotice("That picture could not be added.");
+  }
+}
+
 async function addSectionImage(file) {
   const page = store.getCurrentPage();
   const key = store.getState().selectedSectionKey;
@@ -2376,6 +2420,7 @@ function renderSidePanels() {
     // block's bottom edge - see addOverlay(). Nothing in the product could
     // create one of these before.
     onAddOverlay: () => pickImage(addOverlay),
+    onPictureLink: addPictureFromLink,
     onChooseStory: chooseStory,
     onSave: saveNow,
     onReturnToPage: saveAndReturn,

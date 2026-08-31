@@ -340,6 +340,11 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
     onSelectPart: callbacks.onSelectPart,
     onToggleImageSelection: callbacks.onToggleImageSelection,
     onAddOverlay: callbacks.onAddOverlay,
+    // A picture from a link. Forwarded like every other handler: this object is
+    // a fixed list, so a callback the workspace supplies and this does not name
+    // simply never arrives - the control drew perfectly and did nothing, which
+    // is the fault this folder has been bitten by more than once.
+    onPictureLink: callbacks.onPictureLink,
     getSelectedImageId: () => callbacks.getSelectedImage?.()?.id ?? null,
   });
   bindAiPanel(

@@ -41,6 +41,10 @@ router.patch('/pages/:pageId/sections/:sectionId/geometry', pageSectionControlle
 // the character grid in public/editor/layout/text-flow.js is computed from.
 router.get('/pages/:pageId/sections/:sectionId/images', requireDesk, sectionImageController.list);
 router.post('/pages/:pageId/sections/:sectionId/images', sectionImageController.add);
+// A PICTURE FROM A LINK - the same placement an uploaded one gets, with the
+// bytes fetched by this server instead of posted to it. A write, so deskWrites
+// guards it; pictureLink.service.js is where the fetch is made safe.
+router.post('/pages/:pageId/sections/:sectionId/images/from-link', sectionImageController.addFromLink);
 router.patch('/pages/:pageId/sections/:sectionId/images/:imageId', sectionImageController.move);
 router.delete('/pages/:pageId/sections/:sectionId/images/:imageId', sectionImageController.remove);
 router.post('/pages/:pageId/sections/:sectionId/images/:imageId/cutout', sectionImageController.cutout);

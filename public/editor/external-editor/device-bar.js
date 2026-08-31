@@ -102,9 +102,15 @@ const MENUS = {
     // room and its ink before it can draw anything, and that is three
     // questions - so it is the Chart button's dialog, and this menu would be a
     // second, worse way in that produced an empty rectangle.
-    ...INSET_PANEL_KINDS.filter((k) => k.key !== "chart" && k.key !== "ornament")
+    ...INSET_PANEL_KINDS.filter((k) => k.key !== "chart" && k.key !== "table" && k.key !== "ornament")
       .map((k) => ({ value: `panel:${k.key}`, label: k.label })),
     { value: "overlay", label: "Picture across blocks" },
+    // A PICTURE FROM A LINK. The desk has the URL - a wire photograph, an
+    // agency link, something sent by email - and had no way to give it to a
+    // block short of downloading it by hand and uploading it again. It ends in
+    // the same placement an uploaded picture gets; only the way the bytes
+    // arrive is different.
+    { value: "picture-link", label: "Picture from a link…" },
     { value: "drop-panel", label: "Remove the last panel", danger: true, disabled: !panelCount(view) },
   ],
 };
@@ -479,6 +485,7 @@ function applyChoice(device, value, handlers, patch) {
     }
     case "insert": {
       if (value === "overlay") return handlers.onAddOverlay?.();
+      if (value === "picture-link") return handlers.onPictureLink?.();
       if (value === "drop-panel") {
         const existing = Array.isArray(view.insetPanels) ? view.insetPanels : [];
         return patch({ insetPanels: existing.slice(0, -1) });

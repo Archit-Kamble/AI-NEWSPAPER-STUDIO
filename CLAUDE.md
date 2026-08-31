@@ -5000,6 +5000,62 @@ Workspace → Save → Generate Scribus → Editor adjusts → Export CMYK PDF �
 
 Don't redesign this workflow when it lands. `POST /api/newspapers/:id/final-files` already accepts a `.sla` Scribus project and/or a final CMYK PDF and marks the edition `finalised` — this is the upload/archive tail end of that pipeline, already working.
 
+### A page has a STAGE and a FORME, and neither had a control
+
+`signoff.service.js` has done page sign-off properly since it was written:
+three stages (`making_up` → `subbed` → `passed`), a refusal to pass a page
+while `pressReadiness.assessPage()` still finds blockers on it, and a row in
+`edition_history` naming who passed what and when — because on the day
+something goes wrong in print the first question is always *"who passed it"*,
+and the answer has to exist.
+
+**Nothing in the browser could reach it.** `PATCH /pages/:id/state` appeared
+nowhere under `public/`, and neither did `GET /newspapers/:id/status`, which
+returns the whole per-page picture. So every page in this database sat at its
+`making_up` default — and since `pressReadiness` blocks on `PAGE_NOT_PASSED`,
+**the press package, the press-final e-paper and the CMYK press export were all
+gated on a readiness no control could produce.** Measured on edition 54470:
+four pages, all `making_up`, `readyForPress: false`, `waitingOn: [1,2,3,4]`.
+
+`PATCH /pages/:id/colour` is the same fault one step along. `prints_colour`
+decides the page's **forme** — the canvas greys a mono page's photographs and
+`separateToK()` sends its type, tints, rules and charts to one plate — and the
+column is `NOT NULL DEFAULT TRUE`. So every page of every edition asks the
+press for four plates, and nothing could say otherwise. For a district daily
+that is wrong on most of the paper.
+
+`public/editor/press-panel.js` is the door, opened by the **Preflight** button
+that already existed. Three reasons it lives there and not on a toolbar row:
+
+- Preflight is the check that **gates** passing, so the finding and the action
+  belong on one panel — the way out beside the way in.
+- `if (!report.findings.length) return` meant a **clean** edition drew no panel
+  at all, which is precisely the moment a desk wants to pass its pages.
+- `.canvas-toolbar-row` is `flex-wrap: wrap`, so a control added there becomes
+  *height* when the window narrows. A third row once pushed a picture handle to
+  y=1015, out of the viewport, where it stopped being draggable at all.
+
+**The row says what the SERVER says.** The first version disabled "Passed for
+press" whenever the page carried a preflight error. That guess is wrong in both
+directions — measured on page 2 of 54470: **zero preflight errors and nine
+blockers** (a missing standing feature, four editorial destinations with no
+story in them, generated copy nobody had reviewed). A control that says a page
+is ready when the server will refuse it is worse than no control. `/status`
+already carries `readiness.blockers` keyed to their own page, so the row lists
+those and a refusal repeats them rather than answering "no".
+
+**`passed_by` is NOT who passed it.** It is `u.name` joined on
+`state_changed_by`, so it survives a pull-back and names whoever moved the page
+*last*. `whenPassed()` gates on the STATE for that reason;
+`tests/pressPanelContract.test.js` holds it, because the field's name invites
+exactly the bug it would cause — "Passed by Admin" printed on a page sitting at
+"Being made up". The `signoff_fingerprint` *is* cleared, and that is what press
+readiness actually reads.
+
+```bash
+node tests/browser/press-panel.browser.js            # defaults to 54470
+```
+
 ## Engineering rules
 
 - **The overflow diagnosis started from desk-selected baseline `52c9556`.** Fix

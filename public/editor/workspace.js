@@ -50,6 +50,7 @@ import { applyStoredLayout, bindResizers, setEditorCollapsed, getSizes } from ".
 import { showPublicationFiles } from "./publication.js";
 import { loadAiStatus, getAiTier, retrievalStatusMarkup } from "./external-editor/ai-panel.js";
 import { renderWorklist } from "./worklist-panel.js";
+import { renderPressPanel } from "./press-panel.js";
 import * as store from "./store.js";
 import * as history from "./history/history.js";
 import * as autosave from "./autosave/autosave.js";
@@ -1624,42 +1625,34 @@ async function runPreflight() {
   );
 }
 
+/**
+ * The preflight findings AND where the edition stands, on one panel.
+ *
+ * It used to be findings alone, and `if (!report.findings.length) return`
+ * meant a CLEAN edition drew no panel at all - which is precisely the moment a
+ * desk wants to pass its pages. Passing them had no control anywhere in the
+ * product (see press-panel.js for what that cost), and preflight is the check
+ * that gates it, so the finding and the action are one panel.
+ */
 function renderPreflight(report) {
-  document.getElementById("preflightPanel")?.remove();
-  if (!report.findings.length) return;
-
-  const order = { error: 0, warning: 1, note: 2 };
-  const rows = [...report.findings]
-    .sort((a, b) => order[a.level] - order[b.level] || a.pageNumber - b.pageNumber)
-    .map(
-      (finding) => `
-        <li class="preflight-row preflight-${finding.level}"
-            data-page="${finding.pageNumber}" data-section="${escapeHtml(finding.sectionKey)}">
-          <span class="preflight-where">p${finding.pageNumber} · ${escapeHtml(finding.sectionKey)}</span>
-          <span class="preflight-what">${escapeHtml(finding.message)}</span>
-        </li>`,
-    )
-    .join("");
-
-  const panel = document.createElement("aside");
-  panel.id = "preflightPanel";
-  panel.className = "preflight-panel";
-  panel.innerHTML = `
-    <header>
-      <strong>Preflight — ${report.passed ? "clean" : `${report.counts.error} to fix`}</strong>
-      <button type="button" id="preflightClose" aria-label="Close">×</button>
-    </header>
-    <ul>${rows}</ul>`;
-  document.body.appendChild(panel);
-
-  document.getElementById("preflightClose").addEventListener("click", closeOnEscape(() => panel.remove()));
-  panel.querySelectorAll(".preflight-row").forEach((row) => {
-    row.addEventListener("click", () => {
-      const page = store.getState().pages.find((p) => Number(p.page_number) === Number(row.dataset.page));
+  return renderPressPanel(store.getState().newspaper?.id, {
+    report,
+    pages: store.getState().pages,
+    onNotice: showNotice,
+    onOpenFinding: (pageNumber, sectionKey) => {
+      const page = store.getState().pages.find((p) => Number(p.page_number) === Number(pageNumber));
       if (page) store.setCurrentPage(page.id);
-      const key = row.dataset.section.split(" / ")[0];
+      const key = String(sectionKey || "").split(" / ")[0];
       if (store.getSection(key)) selectSection(key);
-    });
+    },
+    // The forme decides whether the canvas greys this page's photographs, so
+    // the page on screen is repainted from the row that has just changed - and
+    // the fresh rows go back to the panel, whose own button label is read off
+    // `prints_colour`.
+    onPagesChanged: async () => {
+      await reloadPages();
+      return store.getState().pages;
+    },
   });
 }
 

@@ -16,6 +16,7 @@ import {
 } from "./typography-panel.js";
 import { bindDeviceBar } from "./device-bar.js";
 import { bindChartDialog, openChartDialog } from "./chart-dialog.js";
+import { openTableDialog, bindTableDialog } from "./table-dialog.js";
 import {
   blockFrameMarkup, mountFrame, refreshFrame, copyFromFrame,
   renderPictures, selectPictureFrame,
@@ -453,8 +454,16 @@ export function bindStoryEditor({ onPatch, getBudget, getSection, getView, getIm
       section: getSection?.() || {},
       onPatch,
     }),
+    // Same shape as the chart: a table asks how much room it takes and what is
+    // in it before it can draw anything. See table-dialog.js.
+    onTable: () => openTableDialog({
+      view: getView?.() || {},
+      section: getSection?.() || {},
+      onPatch,
+    }),
   });
   bindChartDialog();
+  bindTableDialog();
 
   const headline = document.getElementById("edStoryHeadline");
   const subheading = document.getElementById("edStorySubheading");

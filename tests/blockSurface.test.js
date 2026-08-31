@@ -184,3 +184,82 @@ test('a display band may carry a screen, and it names the compositor\'s own band
   const channels = [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
   assert.ok(channels.every((c) => c > 200), `${screen} is too heavy to set type on`);
 });
+
+test('a table is a card, so it lives in a block or a panel with no second implementation', async () => {
+  const [{ ensureFontsLoaded }, { ensureShaperReady }, layout] = await Promise.all([
+    import('../public/editor/compose/font-metrics.js'),
+    import('../public/editor/compose/shaper.js'),
+    import('../public/editor/smart-cards/layout.js'),
+  ]);
+  await Promise.all([ensureFontsLoaded(), ensureShaperReady()]);
+  const { smartCardLines } = require('../src/services/export/smart-card-lines');
+  const cards = await import('../public/editor/smart-cards/smart-cards.js');
+
+  const card = {
+    columns: ['गाव', 'मते', 'टक्के'],
+    rows: [['सातारा', '१२०००', '४२'], ['वडूज', '८५००', '३०'], ['पुसेगाव', '७९००', '२८']],
+    source: 'स्रोत : निवडणूक विभाग',
+  };
+  const frame = { width: 220, height: 160 };
+  const solved = layout.layoutSmartCard('table', card, frame);
+  assert.equal(solved.fitState, 'FITS');
+  assert.equal(solved.items.length, 3);
+  assert.equal(solved.geometry.columns, 3);
+
+  // EVERY COLUMN IS MEASURED FROM ITS OWN CONTENT AND THEY ARE SCALED TOGETHER,
+  // so the proportions are the content's and the total is exactly the frame.
+  // Scaling them independently is how a table comes to have one column of air
+  // beside one that clips.
+  // Against the card's own CONTENT box, not the frame: a table is ruled
+  // (CARD_BORDERS), and a ruled card sets its type inside its own rule.
+  const total = solved.geometry.widths.reduce((sum, w) => sum + w, 0);
+  const contentWidth = solved.contentBox.width;
+  assert.ok(Math.abs(total - contentWidth) < 0.5, `columns total ${total}, content box ${contentWidth}`);
+  assert.ok(contentWidth < frame.width, 'and that box is inside the rule, not on it');
+  assert.ok(solved.geometry.widths.every((w) => w > 0));
+  // And it says how tall it really is, so a panel can be cut to it - the same
+  // rule the chart follows.
+  assert.ok(solved.geometry.contentHeight > 0);
+  assert.ok(solved.geometry.contentHeight <= frame.height);
+
+  // THE PLATE DRAWS WHAT THE CANVAS DRAWS. Every cell reaches the export walk,
+  // in the face the solver measured it in.
+  const lines = smartCardLines('table', card, frame, layout);
+  const texts = lines.filter((l) => !l.kind && l.text).map((l) => l.text);
+  for (const cell of ['गाव', 'सातारा', '१२०००', 'टक्के', 'स्रोत : निवडणूक विभाग']) {
+    assert.ok(texts.includes(cell), `"${cell}" never reaches the plate`);
+  }
+  assert.ok(lines.filter((l) => !l.kind && l.text).every((l) => l.family === 'sans'));
+  // The head rule and the row hairlines are ink, and they are emitted.
+  assert.ok(lines.filter((l) => l.kind === 'bar').length >= 3, 'the rules reach the plate');
+
+  // A CARD SAYS WHAT IT HOLDS, for everything that measures a block by its copy.
+  const prose = cards.smartCardText('table', card);
+  assert.match(prose, /सातारा/);
+  assert.match(prose, /गाव/);
+
+  // And a malformed one draws nothing rather than throwing - an EMPTY card
+  // carries no geometry at all, and reading through it takes the whole page
+  // canvas down rather than one block.
+  assert.equal(layout.layoutSmartCard('table', { rows: [] }, frame).fitState, 'EMPTY');
+  assert.doesNotThrow(() => cards.smartCardMarkup('table', { rows: [] }, frame));
+  assert.doesNotThrow(() => cards.smartCardMarkup('table', 'not a card', frame));
+});
+
+test('a table panel is sanitised on its own terms - a grid, not a list of readings', () => {
+  const { panelOf } = require('../public/editor/layout/inset-panels');
+  const frame = { width: 300, height: 300 };
+  const panel = panelOf({
+    id: 't', kind: 'table', x: 10, y: 10, width: 120, height: 90,
+    card: { columns: ['a', 'b'], rows: [['1', '2'], ['3', '4']], source: 's' },
+  }, frame);
+  assert.equal(panel.kind, 'table');
+  assert.deepEqual(panel.card.columns, ['a', 'b']);
+  assert.equal(panel.card.rows.length, 2);
+
+  // A table panel with no grid in it is refused, exactly as a chart panel with
+  // no readings is: the card IS the panel, and without one there is nothing to
+  // draw but a rectangle the copy is set clear of for no reason.
+  assert.equal(panelOf({ id: 't', kind: 'table', width: 120, height: 90 }, frame), null);
+  assert.equal(panelOf({ id: 't', kind: 'table', width: 120, height: 90, card: { rows: [] } }, frame), null);
+});

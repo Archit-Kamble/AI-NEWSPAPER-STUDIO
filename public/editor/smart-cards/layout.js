@@ -183,6 +183,7 @@ export const CARD_BORDERS = Object.freeze({
   havaman: { ink: '#8a1428', weightPx: 0.6 },
   market: { ink: '#8a1428', weightPx: 0.6 },
   sudoku: { ink: '#8a1428', weightPx: 0.6 },
+  table: { ink: '#8a1428', weightPx: 0.6 },
   advert: { ink: '#202024', weightPx: 1.2 },
   tender: { ink: '#202024', weightPx: 0.8 },
 });
@@ -2562,6 +2563,119 @@ function layoutAdvert(data, frame) {
 
 // ------------------------------------------------------------------ router ---
 
+// ------------------------------------------------------------------ table ---
+//
+// A PLAIN TABLE - rows and columns of the desk's own figures.
+//
+// This product could set nine kinds of structured box and not one of them was
+// a table, which is the commonest piece of furniture in a district daily after
+// the story itself: a result, a rate, a fixture list, a ward-by-ward count. A
+// desk's only option was to type it as prose and let the compositor break it
+// wherever the measure ran out.
+//
+// It is a CARD, not a new kind of thing, for the same reason the chart is: it
+// then lives in a whole block or in a panel with no second implementation, the
+// panel drag sizes it, the exports already walk it, and the fit is decided by
+// the one solver. Everything below is the ordinary card contract - measure,
+// solveFont, geometry out - and nothing about the compositor changes.
+
+const TABLE_CELL_PAD_PX = 3;
+const TABLE_RULE_PX = 0.5;
+// A column narrower than this cannot hold one Marathi akshara and a hair, so
+// the type comes down rather than the column being set unreadable. The same
+// argument MIN_COLUMN_EM makes for body copy, at a table's own scale.
+const TABLE_MIN_COLUMN_EM = 2.5;
+
+function tableRows(data) {
+  const rows = Array.isArray(data?.rows) ? data.rows : [];
+  return rows
+    .map((row) => (Array.isArray(row) ? row.map((cell) => String(cell ?? '').trim()) : []))
+    .filter((row) => row.some((cell) => cell !== ''));
+}
+
+function layoutTable(data, frame) {
+  const heads = (Array.isArray(data?.columns) ? data.columns : []).map((c) => String(c ?? '').trim());
+  const body = tableRows(data);
+  if (!heads.length && !body.length) return empty('table');
+
+  const columns = Math.max(heads.length, ...body.map((row) => row.length), 1);
+  const source = String(data?.source || '');
+  const showHead = heads.some((h) => h !== '');
+  const ink = chartInk(data);
+  // Every row the same length, so a short one does not shift the column under
+  // it - a table is a grid, and a ragged row is a different table.
+  const grid = body.map((row) => Array.from({ length: columns }, (_, i) => row[i] || ''));
+  const headRow = Array.from({ length: columns }, (_, i) => heads[i] || '');
+
+  const solved = solveFont(frame.innerHeight, (fontPx) => {
+    const lineHeightPx = lineHeightFor(fontPx, 'sans', 400);
+    const sourceHeight = source ? lineHeightPx : 0;
+    const rowHeight = lineHeightPx + TABLE_CELL_PAD_PX;
+
+    // A COLUMN IS AS WIDE AS ITS WIDEST CELL, then every column is scaled to
+    // the measure together - so the proportions are the content's and the
+    // total is always exactly the frame. Scaling them independently is how a
+    // table comes to have one column of air beside one that clips.
+    const natural = Array.from({ length: columns }, (_, i) => Math.max(
+      showHead ? measure(headRow[i], fontPx, 'sans', 700) : 0,
+      ...grid.map((row) => measure(row[i], fontPx, 'sans', 400)),
+      fontPx,
+    ) + TABLE_CELL_PAD_PX * 2);
+    const total = natural.reduce((sum, w) => sum + w, 0) || 1;
+    const widths = natural.map((w) => (w / total) * frame.innerWidth);
+
+    const minColumn = fontPx * TABLE_MIN_COLUMN_EM;
+    let hardOverset = widths.some((w) => w < minColumn);
+
+    const x = [];
+    let at = 0;
+    for (const w of widths) { x.push(at); at += w; }
+
+    const cellOf = (text, i, weight) => {
+      const fitted = measureAtomic(text, fontPx, 'sans', weight, widths[i] - TABLE_CELL_PAD_PX * 2);
+      if (fitted.hardOverset) hardOverset = true;
+      return fitted.line;
+    };
+
+    const items = grid.map((row, r) => ({
+      cells: row.map((text, i) => cellOf(text, i, 400)),
+      y: (showHead ? rowHeight : 0) + r * rowHeight,
+      height: rowHeight,
+    }));
+
+    return {
+      height: (showHead ? rowHeight : 0) + items.length * rowHeight + sourceHeight,
+      hardOverset, items, columns, widths, x, rowHeight, lineHeightPx, sourceHeight, source,
+      head: showHead ? headRow.map((text, i) => cellOf(text, i, 700)) : null,
+      showHead,
+    };
+  });
+
+  return {
+    key: 'table',
+    fitState: solved.fitState,
+    fontPx: solved.fontPx,
+    geometry: {
+      columns: solved.columns,
+      widths: solved.widths,
+      x: solved.x,
+      rowHeight: solved.rowHeight,
+      lineHeightPx: solved.lineHeightPx,
+      headHeight: solved.showHead ? solved.rowHeight : 0,
+      showHead: solved.showHead,
+      head: solved.head,
+      pad: TABLE_CELL_PAD_PX,
+      rulePx: TABLE_RULE_PX,
+      ink,
+      sourceHeight: solved.sourceHeight,
+      source: solved.source,
+      contentHeight: solved.height || 0,
+    },
+    items: solved.items,
+    violations: solved.fitState === 'OVERSET' ? ['SMART_CARD_OVERSET'] : [],
+  };
+}
+
 const LAYOUTS = {
   sudoku: layoutSudoku,
   'sudoku-solution': layoutSudoku,
@@ -2574,6 +2688,7 @@ const LAYOUTS = {
   tender: layoutTender,
   advert: layoutAdvert,
   chart: layoutChart,
+  table: layoutTable,
 };
 
 /**
@@ -2860,6 +2975,11 @@ export const SMART_CARD_BLOCK_SIZE = Object.freeze({
   // and leave 6.7px of slack instead of 27. The extra sat INSIDE the almanac's
   // own double ring and read as a sixth, empty row - photographed on the page.
   panchang: { width: 148, height: 205 },
+  // A TABLE IS AS WIDE AS ITS COLUMNS NEED AND AS DEEP AS ITS ROWS - neither
+  // is knowable before the desk types it, so this is the frame a printed
+  // results or rates table usually gets: half the measure, a few rows deep.
+  // The panel drag sizes it from there, which is the point of it being a card.
+  table: { width: 268, height: 160 },
   rashi: { width: 307, height: 620 },
   // ONE LINE TALL, AND THE WIDTH OF THE PAGE.
   //

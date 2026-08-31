@@ -521,9 +521,13 @@ export function insetPanelsMarkup(section, view) {
     // same solve a whole-block chart uses, given the panel's own rectangle as
     // its frame - so moving a chart between a block and a panel changes its
     // size and nothing else about it.
-    if (panel.kind === 'chart') {
-      const card = smartCardMarkup('chart', panel.card, { width: panel.width, height: panel.height, padding: 0 });
-      return `<span class="section-inset-panel section-inset-chart"
+    // A CHART OR A TABLE PANEL DRAWS A CARD, not lines of type. The same
+    // renderer and the same solve a whole-block one uses, given the panel's own
+    // rectangle as its frame - so moving either between a block and a panel
+    // changes its size and nothing else about it.
+    if (panel.kind === 'chart' || panel.kind === 'table') {
+      const card = smartCardMarkup(panel.kind, panel.card, { width: panel.width, height: panel.height, padding: 0 });
+      return `<span class="section-inset-panel section-inset-${escapeHtml(panel.kind)}"
                     data-panel-id="${escapeHtml(panel.id)}"
                     style="left:${panel.x}px;top:${panel.y}px;width:${panel.width}px;height:${panel.height}px${
                       panel.tint ? `;background:${escapeHtml(panel.tint)}` : ""}">${card || ""}</span>`;

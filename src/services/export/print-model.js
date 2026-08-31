@@ -471,14 +471,14 @@ function blockDecorations(section, composition) {
     const py = y0 + mm(panel.y);
     const rule = mm(0.71);
     const { edges, family: panelFace, ground } = panelStyle(panel.kind);
-    // A CHART PANEL DRAWS A CARD. The same walk a whole-block chart goes
-    // through, given the panel's own rectangle - so a chart in a panel and a
-    // chart in a block reach the plate as the same polygons in the same ink.
-    if (panel.kind === 'chart') {
+    // A CHART OR TABLE PANEL DRAWS A CARD. The same walk a whole-block one goes
+    // through, given the panel's own rectangle - so either in a panel and
+    // either in a block reach the plate as the same items in the same ink.
+    if (panel.kind === 'chart' || panel.kind === 'table') {
       if (panel.tint) {
         items.push({ kind: 'fill', x: px, y: py, width: mm(panel.width), height: mm(panel.height), ink: panel.tint });
       }
-      items.push(...cardItems('chart', panel.card,
+      items.push(...cardItems(panel.kind, panel.card,
         { width: panel.width, height: panel.height, padding: 0 }, px, py));
       continue;
     }

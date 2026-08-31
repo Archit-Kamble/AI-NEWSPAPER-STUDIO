@@ -55,7 +55,7 @@ function smartCardLines(key, data, frame, cardLayout) {
   // because that is what most cards measure their reading matter in, and what
   // this walk has always emitted.
   const CARD_FACES = {
-    chart: 'sans', havaman: 'sans', market: 'sans',
+    chart: 'sans', havaman: 'sans', market: 'sans', table: 'sans',
   };
   // A face the DESK chose for this card wins over the card's own default -
   // layout.js solved every measurement in it, so the plate has to set it or
@@ -268,6 +268,28 @@ function smartCardLines(key, data, frame, cardLayout) {
         y += g.rowHeight;
       });
     }
+    if (g.source) line(g.source, 0, y, contentWidth, layout.fontPx * 0.85, 0);
+    return out;
+  }
+
+  if (key === 'table') {
+    // The same resolved geometry the canvas places, in the same order: the
+    // head, its rule, then a row and its hairline. Nothing is measured here -
+    // every cell was fitted to its own column by the solver.
+    const g = layout.geometry;
+    let y = subtitleOffsetPx;
+    if (g.showHead) {
+      (g.head || []).forEach((text, i) =>
+        line(text, g.x[i] + g.pad, y, Math.max(0, g.widths[i] - g.pad * 2), layout.fontPx, 0, g.lineHeightPx, { bold: true }));
+      bar(0, y + g.rowHeight - g.rulePx, contentWidth, g.rulePx, g.ink);
+      y += g.rowHeight;
+    }
+    layout.items.forEach((row, r) => {
+      row.cells.forEach((text, i) =>
+        line(text, g.x[i] + g.pad, y, Math.max(0, g.widths[i] - g.pad * 2), layout.fontPx, 0, g.lineHeightPx));
+      if (r < layout.items.length - 1) bar(0, y + g.rowHeight - g.rulePx, contentWidth, g.rulePx, '#cfcfcf');
+      y += g.rowHeight;
+    });
     if (g.source) line(g.source, 0, y, contentWidth, layout.fontPx * 0.85, 0);
     return out;
   }

@@ -632,6 +632,53 @@ function chartMarkup(data, layout) {
   return `<div class="smart-chart smart-chart-bars" style="--chart-ink:${g.ink}">${rows}</div>${source}`;
 }
 
+// -------------------------------------------------------------------- table ---
+//
+// Drawn from layoutSmartCard()'s resolved geometry and nothing else - the
+// columns are already measured and scaled to the frame, and every cell is
+// already fitted to its own column, so this places what came back and decides
+// nothing. A cell is `white-space: nowrap` for the reason every resolved line
+// in this file is: it was fitted at a width, and letting the browser re-break
+// it would draw a table the solver never measured.
+
+function tableMarkup(data, layout) {
+  // THE GEOMETRY FIRST. An EMPTY card carries none at all, and reading through
+  // it takes the whole page canvas down rather than one block - which is what
+  // tests/smartCardRobust.test.js exists to catch and did, on the first run
+  // this renderer was in the registry.
+  const g = layout.geometry;
+  if (!g) return "";
+  if (!layout.items?.length && !g.showHead) return "";
+  const source = g.source
+    ? `<p class="smart-chart-source" style="font-size:${layout.fontPx * 0.85}px">${escapeHtml(g.source)}</p>`
+    : "";
+
+  const cell = (text, i, bold) => `<span class="smart-table-cell" style="left:${g.x[i]}px;`
+    + `width:${g.widths[i]}px;padding:0 ${g.pad}px;font-size:${layout.fontPx}px;`
+    + `line-height:${g.lineHeightPx}px;${bold ? "font-weight:700;" : ""}">${escapeHtml(text)}</span>`;
+
+  const head = g.showHead
+    ? `<div class="smart-table-row is-head" style="top:0;height:${g.rowHeight}px">`
+      + (g.head || []).map((text, i) => cell(text, i, true)).join("")
+      + `<i class="smart-table-rule" style="top:${g.rowHeight - g.rulePx}px;height:${g.rulePx}px;background:${g.ink}"></i></div>`
+    : "";
+
+  const rows = layout.items.map((row, r) => `
+    <div class="smart-table-row" style="top:${row.y}px;height:${row.height}px">
+      ${row.cells.map((text, i) => cell(text, i, false)).join("")}
+      ${r < layout.items.length - 1
+        ? `<i class="smart-table-rule is-hair" style="top:${row.height - g.rulePx}px;height:${g.rulePx}px"></i>` : ""}
+    </div>`).join("");
+
+  // THE TABLE IS AS TALL AS ITS ROWS, not as tall as the panel. At 100% the
+  // source line was pushed to the foot of the frame with a hand's width of
+  // white above it - photographed on a real 268px panel - because the source
+  // is a block-flow paragraph AFTER the grid, and the grid was claiming the
+  // whole rectangle. The solver already knows this number.
+  const gridHeight = g.headHeight + layout.items.length * g.rowHeight;
+  return `<div class="smart-table" style="height:${gridHeight}px">${head}${rows}</div>${source}`;
+}
+
 // ------------------------------------------------------------------ router ---
 
 const RENDERERS = {
@@ -646,6 +693,7 @@ const RENDERERS = {
   market: marketMarkup,
   tender: tenderMarkup,
   chart: chartMarkup,
+  table: tableMarkup,
 };
 
 /** Whether this key has a renderer at all. */
@@ -759,6 +807,21 @@ export function smartCardText(key, data) {
     const grid = isGrid(data.grid) ? data.grid : isGrid(data.solution) ? data.solution : null;
     if (!grid) return "";
     return grid.map((row) => row.map((n) => (Number(n) > 0 ? devanagari(n) : "·")).join(" ")).join("\n");
+  }
+
+  if (key === "table") {
+    // What the card SAYS, for everything that measures a block by its copy -
+    // the worklist, preflight, the fit action and the character grid all read
+    // body text. A rendering of the data and never its source: the columns are
+    // drawn from data.columns/data.rows and could not be parsed back out of
+    // these lines, which is exactly the rule the sudoku above states.
+    const heads = Array.isArray(data.columns) ? data.columns.map((c) => String(c ?? "")) : [];
+    const rows = Array.isArray(data.rows) ? data.rows : [];
+    return [heads.filter(Boolean).join(" · ")]
+      .concat(rows.map((row) => (Array.isArray(row) ? row.map((c) => String(c ?? "")).join(" · ") : "")))
+      .concat(data.source ? [String(data.source)] : [])
+      .filter(Boolean)
+      .join("\n");
   }
 
   if (key === "chart") {

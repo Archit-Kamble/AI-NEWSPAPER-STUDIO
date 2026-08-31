@@ -57,6 +57,10 @@
     // exactly as a photograph is. `card` holds the payload; `title` and
     // `lines` are unused for this kind.
     { key: 'chart', label: 'Chart', note: 'A chart set inside the story, with the copy running round it.' },
+    // A TABLE, on the same terms as the chart above and for the same reasons:
+    // it carries a `card` payload, it is solved by the one card solver, and to
+    // the compositor it is a rectangle the copy runs round.
+    { key: 'table', label: 'Table', note: 'Rows and columns set inside the story, with the copy running round them.' },
   ]);
 
   /**
@@ -194,6 +198,23 @@
         return row;
       })
       .filter((entry) => entry.label && Number.isFinite(entry.value));
+    // A TABLE'S PAYLOAD IS ITS GRID, not a list of readings - so a card with
+    // rows and columns is kept on those terms and never judged by `items`,
+    // which it does not have.
+    const columns = (Array.isArray(raw.columns) ? raw.columns : []).map((c) => clean(c));
+    const rows = (Array.isArray(raw.rows) ? raw.rows : [])
+      .map((row) => (Array.isArray(row) ? row.map((cell) => clean(cell)) : []))
+      .filter((row) => row.some((cell) => cell !== ''));
+    if (rows.length || columns.some((c) => c !== '')) {
+      return {
+        columns,
+        rows,
+        source: clean(raw.source),
+        ink: clean(raw.ink),
+        ...(clean(raw.family) ? { family: clean(raw.family) } : {}),
+      };
+    }
+
     if (!items.length) return null;
     return {
       chartType: clean(raw.chartType) || 'bar',
@@ -246,7 +267,9 @@
     // a single space for a line, and `clean()` trims, so the space died on
     // the way in. The kind decides, as it already does for a chart.
     const card = cardOf(raw.card);
-    if (kind === 'chart') {
+    if (kind === 'chart' || kind === 'table') {
+      // Both carry a `card` and no lines of their own, so the card IS the
+      // panel: without one there is nothing to draw and the panel is refused.
       if (!card) return null;
     } else if (kind !== 'ornament' && !title && !lines.length) return null;
     return {
@@ -284,9 +307,10 @@
    * same lines - the caption's lesson, one file earlier.
    */
   function panelLayout(panel, bodyFontPx = 6.4) {
-    // A chart panel has no lines of its own - the card fills the rectangle and
-    // solves its own type against it, exactly as it does in a whole block.
-    if (panel.kind === 'chart') {
+    // A chart or table panel has no lines of its own - the card fills the
+    // rectangle and solves its own type against it, exactly as it does in a
+    // whole block.
+    if (panel.kind === 'chart' || panel.kind === 'table') {
       return { inset: 0, titlePx: 0, linePx: 0, lineHeight: 1, lines: [], usedHeight: panel.height };
     }
     // A cross-head's type sits ON the measure, not inside a box, so it takes

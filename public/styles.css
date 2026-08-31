@@ -7572,3 +7572,23 @@ body.print-view .page-imprint {
 .panel-handle-s { left: 50%; bottom: -6px; transform: translateX(-50%); cursor: ns-resize; }
 .panel-handle-e { right: -6px; top: 50%; transform: translateY(-50%); cursor: ew-resize; }
 .panel-handle-w { left: -6px; top: 50%; transform: translateY(-50%); cursor: ew-resize; }
+
+/* A PLAIN TABLE - rows and columns of the desk's own figures, and the
+   commonest piece of furniture in a district daily after the story itself.
+   Placed from the solver's own geometry: every column is measured and scaled
+   to the frame and every cell fitted to its column, so nothing here decides a
+   width. `nowrap` for the reason every resolved line in this product carries
+   it - the cell was fitted AT a width, and letting the browser re-break it
+   would draw a table the solver never measured. */
+.smart-table { position: relative; width: 100%; }
+.smart-table-row { position: absolute; left: 0; right: 0; }
+.smart-table-cell {
+  position: absolute;
+  top: 0;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+.smart-table-rule { position: absolute; left: 0; right: 0; display: block; }
+.smart-table-rule.is-hair { background: #cfcfcf; }

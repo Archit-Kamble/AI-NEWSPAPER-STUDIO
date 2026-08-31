@@ -82,6 +82,13 @@ const MENUS = {
     ...CHARTS.map((c) => ({ value: c.key, label: c.label })),
     { value: "remove", label: "Remove the chart", danger: true, disabled: !hasChart(view) },
   ],
+  // A device must be removable, and the way out lives beside the way in - so
+  // the menu carries the removal, disabled rather than hidden when there is
+  // nothing to remove.
+  table: (view) => [
+    { value: "open", label: hasTable(view) ? "Edit this table…" : "Add a table…" },
+    { value: "remove", label: "Remove the table", danger: true, disabled: !hasTable(view) },
+  ],
   // The Separator was one fixed ornament and one press. A printed paper has a
   // small vocabulary of them and uses different ones for different jobs, so
   // this offers that vocabulary - and, since it is a menu now, the way to take
@@ -103,6 +110,8 @@ const MENUS = {
 };
 
 /** Is there a chart on this block at all - in the block itself, or in a panel? */
+const hasTable = (view) => view?.smartCardKey === "table"
+  || (Array.isArray(view?.insetPanels) && view.insetPanels.some((p) => p?.kind === "table"));
 const hasChart = (view) => view?.smartCardKey === "chart"
   || (Array.isArray(view?.insetPanels) && view.insetPanels.some((p) => p?.kind === "chart"));
 
@@ -201,6 +210,7 @@ export function deviceBarMarkup() {
         ${button("insert", "❏", "Insert", "A fact box, pull quote, cross-head, separator — or a picture laid across two blocks")}
         ${button("rule", "═", "Separator", "A decorative rule across the measure, between two parts of the story")}
         ${button("chart", "▮", "Chart", "Bars, a pie, a line, dots or plain figures")}
+        ${button("table", "▦", "Table", "Rows and columns - a result, a rate, a fixture list")}
       </span>
       <span class="dev-group">
         ${button("caption", "❝", "Caption", "Write the line under the picture")}
@@ -444,6 +454,18 @@ function applyChoice(device, value, handlers, patch) {
       }
       return handlers.onChart?.(value);
     }
+    // A TABLE asks the same two questions a chart does before it can draw
+    // anything - how much room, and what is in it - so it opens its own dialog
+    // rather than writing a guess into the block. See table-dialog.js.
+    case "table": {
+      if (value === "remove") {
+        return patch({
+          insetPanels: (Array.isArray(view.insetPanels) ? view.insetPanels : []).filter((p) => p?.kind !== "table"),
+          ...(view.smartCardKey === "table" ? { smartCardKey: null, smartCardData: null } : {}),
+        });
+      }
+      return handlers.onTable?.();
+    }
     // A SEPARATOR, of a chosen kind - or none. It only ever added before, so
     // pressing it twice put two on the block and nothing took either off.
     case "rule": {
@@ -511,6 +533,7 @@ export function refreshDeviceBar(view = {}, composition = null) {
     // looking at the bar is asking "is there a chart here", not "which of the
     // two places is it stored in".
     chart: hasChart(view),
+    table: hasTable(view),
     rule: hasOrnament(view),
     justify: view.textAlign === "justify",
     "justify-all": view.textAlign === "justify-all",

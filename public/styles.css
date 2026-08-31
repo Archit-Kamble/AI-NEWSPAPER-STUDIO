@@ -7466,3 +7466,86 @@ body.print-view .page-imprint {
   background: #fff; font-size: 12px; cursor: pointer; color: #333;
 }
 .chart-face.is-on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* A PANEL IS ADJUSTED THE WAY A PICTURE IS.
+   `inset_panels` - the fact box, the pull quote, the cross-head, the separator
+   and the chart - are rectangles the compositor sets the copy clear of, which
+   is exactly what a photograph is to it. A picture could be dragged and sized
+   on the page since the Block Editor was built; a panel could only ever be
+   moved by typing four numbers into the Properties panel. Same eight handles,
+   same behaviour, so the two devices that are one thing to the engine are one
+   thing to the desk.
+
+   The frame draws NO ink of its own beyond its outline - the panel's own
+   appearance comes from the canonical layer underneath, which is the one panel
+   renderer. Two things drawing a panel is the drift this project guards
+   against. */
+.frame-panels {
+  /* Like .frame-pictures: the layer never swallows a click, only the frames
+     on it do, or the copy underneath could not be typed into at all. */
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+.panel-frame {
+  position: absolute;
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+  /* Transparent: the panel's own ground, rule and type are drawn beneath. */
+  background: transparent;
+}
+.panel-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px dashed transparent;
+  pointer-events: none;
+}
+.panel-frame:hover::after { border-color: #c9c9d2; }
+.panel-frame.is-selected::after { border: 2px solid var(--accent); border-style: solid; }
+.panel-frame.is-dragging { cursor: grabbing; }
+
+/* What kind of panel this is, so a desk can tell a fact box from a chart
+   without opening anything. Outside the frame's own top edge, because a panel
+   is often only a few lines deep and a label inside it would sit on the words
+   it is naming - the selection chip learnt the same lesson. */
+.panel-frame-label {
+  position: absolute;
+  left: 0;
+  bottom: 100%;
+  margin-bottom: 2px;
+  padding: 1px 6px;
+  border-radius: 3px 3px 0 0;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  line-height: 1.5;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+}
+.panel-frame:hover .panel-frame-label,
+.panel-frame.is-selected .panel-frame-label { opacity: 1; }
+
+.panel-handle {
+  position: absolute;
+  width: 13px;
+  height: 13px;
+  border: 2px solid var(--accent);
+  border-radius: 3px;
+  background: white;
+  opacity: 0;
+  touch-action: none;
+}
+.panel-frame:hover .panel-handle,
+.panel-frame.is-selected .panel-handle { opacity: 1; }
+.panel-handle-nw { left: -6px; top: -6px; cursor: nwse-resize; }
+.panel-handle-ne { right: -6px; top: -6px; cursor: nesw-resize; }
+.panel-handle-sw { left: -6px; bottom: -6px; cursor: nesw-resize; }
+.panel-handle-se { right: -6px; bottom: -6px; cursor: nwse-resize; }
+.panel-handle-n { left: 50%; top: -6px; transform: translateX(-50%); cursor: ns-resize; }
+.panel-handle-s { left: 50%; bottom: -6px; transform: translateX(-50%); cursor: ns-resize; }
+.panel-handle-e { right: -6px; top: 50%; transform: translateY(-50%); cursor: ew-resize; }
+.panel-handle-w { left: -6px; top: 50%; transform: translateY(-50%); cursor: ew-resize; }

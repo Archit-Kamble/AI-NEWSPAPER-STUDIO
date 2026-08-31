@@ -278,6 +278,36 @@ const say = (ok, what, detail = '') => {
   // dependency this file's own comment forty lines up warns about, repeated
   // here.
   const panelBlock = 'anchor';
+  // AND IT IS PUT BACK. This added a panel to a real block and never took it
+  // away, so every run left one more piece of furniture on edition 40294's
+  // anchor. It was invisible for as long as a panel could not be clicked;
+  // the moment panels became draggable objects the leftover started
+  // intercepting the clicks editor-parity.browser.js makes on the same block,
+  // and that net failed on debris rather than on the product. The rule this
+  // file's own header states - a net that writes into a real block must put it
+  // back, crash path included - applies to a panel like anything else.
+  const panelWas = await page.evaluate(async ([ed, key]) => {
+    const pages = await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json());
+    const pg = pages.find((p) => p.sections.some((s) => s.section_key === key));
+    return pg.sections.find((x) => x.section_key === key)?.inset_panels ?? null;
+  }, [ED, panelBlock]).catch(() => null);
+  const restorePanelBlock = putBack;
+  putBack = async () => {
+    await restorePanelBlock();
+    await page.evaluate(async ([ed, key, was]) => {
+      const pages = await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json());
+      const pg = pages.find((p) => p.sections.some((s) => s.section_key === key));
+      const s = pg.sections.find((x) => x.section_key === key);
+      await fetch(`/api/pages/${pg.id}/sections/${key}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          headline: s.headline || '', subheading: s.subheading || '', body: s.body || '',
+          insetPanels: was || [],
+        }),
+      });
+    }, [ED, panelBlock, panelWas]).catch(() => {});
+  };
+
   await page.evaluate(async ([ed, key]) => {
     const pages = await fetch(`/api/newspapers/${ed}/pages`).then((r) => r.json());
     const pg = pages.find((p) => p.sections.some((s) => s.section_key === key));

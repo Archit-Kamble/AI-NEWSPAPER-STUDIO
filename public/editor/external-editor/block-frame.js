@@ -87,6 +87,9 @@ let hooks = {};
 // named it. One field, no drift.
 let state = {
   section: null, view: null, images: [], selectedIds: new Set(), selectedPart: "block",
+  // Which panel's handles are showing. A panel is the same kind of object as a
+  // picture to the compositor, so it gets the same treatment on the page.
+  selectedPanelId: null,
   // The placed lines that painted the canvas. Direct body interaction maps
   // through these exact positions instead of asking browser flow to re-wrap.
   composition: null,
@@ -222,6 +225,20 @@ export function blockFrameMarkup() {
         <!-- Interactive picture frames sit over the canonical text layer. They
              use the same persisted block-pixel geometry as the page canvas. -->
         <div class="frame-pictures" id="edFramePictures"></div>
+
+        <!-- AND THE SAME FOR A PANEL. A chart, a fact box, a pull quote, a
+             cross-head and an ornament are all inset panels - rectangles the
+             compositor sets the copy clear of, exactly as it does a photograph
+             - and every one of them could only be moved by typing four numbers
+             into the Properties panel. They are the same KIND of object as a
+             picture to the engine, so they are the same kind of object to the
+             desk: drag them, size them by their handles, watch the copy reflow
+             round them while the pointer is still down.
+             NO BACKTICKS IN THIS COMMENT: it lives inside a template literal,
+             so one closes the string and takes the whole application down with
+             it - node --check passes it and Chrome does not. This file has
+             been bitten by exactly that once before. -->
+        <div class="frame-panels" id="edFramePanels"></div>
 
         <!-- Transparent hit/selection frames. They do not render a second copy
              of the words; the canonical layer above is the only visual copy. -->
@@ -1484,6 +1501,217 @@ export function renderPictures(images) {
   });
 }
 
+// ------------------------------------------------------------ panel frames ---
+//
+// A PANEL IS THE SAME KIND OF OBJECT AS A PICTURE, so it is handled the same
+// way.
+//
+// `inset_panels` - the चौकट, the pull quote, the cross-head, the ornament and
+// the chart - are rectangles the compositor sets the copy clear of, which is
+// exactly what a photograph is to it (compose.js's obstacle set does not know
+// which is which). But a picture could be dragged and sized on the page since
+// the Block Editor was built, and a panel could only ever be moved by typing
+// four numbers into the Properties panel - so the two devices that are one
+// thing to the engine were two entirely different things to the desk.
+//
+// Everything below mirrors the picture frames above it deliberately: the same
+// eight handles, the same `resizeRect()`, the same screen/logical conversion,
+// the same live reflow while the pointer is down. What differs is only where
+// the answer is written - a panel lives in the draft's `insetPanels`, not in
+// `section_images`.
+
+const PANEL_MIN_PX = 24;   // inset-panels.js's own floor: below this nothing legible fits
+
+/** The panels the draft carries, as an array this file can index into. */
+function draftPanels() {
+  return Array.isArray(state.view?.insetPanels) ? state.view.insetPanels : [];
+}
+
+function panelFrameMarkup(panel) {
+  const handles = RESIZE_HANDLES.map(
+    (corner) => `<span class="panel-handle panel-handle-${corner}" data-panel-size data-corner="${corner}" aria-hidden="true"></span>`,
+  ).join("");
+  // The kind is on the element so a desk can tell a fact box from a chart
+  // without opening anything, and so the label below can name it.
+  return `
+    <div class="panel-frame" data-panel-frame="${escapeHtml(String(panel.id))}" data-kind="${escapeHtml(String(panel.kind || "note"))}">
+      <span class="panel-frame-label">${escapeHtml(panelKindLabel(panel.kind))}</span>
+      ${handles}
+    </div>`;
+}
+
+function panelKindLabel(kind) {
+  const names = { chart: "Chart", note: "Fact box", quote: "Pull quote", crosshead: "Cross-head", ornament: "Separator" };
+  return names[String(kind)] || "Panel";
+}
+
+/**
+ * Draws a frame over each panel, where the draft says it is.
+ *
+ * The panel's INK is drawn by the canonical layer underneath
+ * (insetPanelsMarkup, the one panel renderer) - this is only the handle box,
+ * for the same reason a picture's frame is drawn over the photograph rather
+ * than instead of it: there must be exactly one thing that decides what a
+ * panel looks like, and it is not this file.
+ */
+export function renderPanelFrames() {
+  const host = document.getElementById("edFramePanels");
+  if (!host) return;
+  const scale = pageScale();
+  const kept = new Set();
+
+  for (const panel of draftPanels()) {
+    if (!panel?.id) continue;
+    const id = String(panel.id);
+    kept.add(id);
+    let frame = host.querySelector(`.panel-frame[data-panel-frame="${CSS.escape(id)}"]`);
+    if (!frame) {
+      host.insertAdjacentHTML("beforeend", panelFrameMarkup(panel));
+      frame = host.lastElementChild;
+    }
+    frame.dataset.kind = String(panel.kind || "note");
+    const label = frame.querySelector(".panel-frame-label");
+    if (label) label.textContent = panelKindLabel(panel.kind);
+    // Not while it is being dragged: the pointer owns the rectangle until it
+    // comes up, exactly as it does for a picture.
+    if (!frame.classList.contains("is-dragging")) {
+      frame.setAttribute("style", `position:absolute;left:${(Number(panel.x) || 0) / scale}px;`
+        + `top:${(Number(panel.y) || 0) / scale}px;width:${(Number(panel.width) || 0) / scale}px;`
+        + `height:${(Number(panel.height) || 0) / scale}px`);
+    }
+    frame.classList.toggle("is-selected", state.selectedPanelId === id);
+  }
+
+  host.querySelectorAll(".panel-frame").forEach((frame) => {
+    if (!kept.has(frame.dataset.panelFrame)) frame.remove();
+  });
+}
+
+/**
+ * Drag and size a panel, and reflow the copy while the pointer is down.
+ *
+ * Bound ONCE on the page, so a panel added later needs no binding of its own -
+ * the same rule the picture frames follow, and the reason the device bar's own
+ * listeners are bound at the document.
+ */
+function bindPanelFrames() {
+  const page = document.getElementById("edFramePage");
+  if (!page) return;
+
+  page.addEventListener("pointerdown", (event) => {
+    const frame = event.target.closest?.(".panel-frame");
+    if (!frame) return;
+    endCanonicalBodyEdit({ blur: true });
+    event.preventDefault();
+    event.stopPropagation();
+
+    const id = String(frame.dataset.panelFrame);
+    const panels = draftPanels();
+    const index = panels.findIndex((entry) => String(entry?.id) === id);
+    if (index < 0) return;
+    const original = { ...panels[index] };
+
+    state.selectedPanelId = id;
+    page.querySelectorAll(".panel-frame").forEach((f) => f.classList.toggle("is-selected", f === frame));
+
+    const handle = event.target.closest("[data-panel-size]");
+    const sizing = Boolean(handle);
+    const corner = handle?.dataset.corner || "se";
+    const scale = pageScale();
+    const start = { x: event.clientX, y: event.clientY };
+    const from = {
+      x: parseFloat(frame.style.left) || 0,
+      y: parseFloat(frame.style.top) || 0,
+      width: frame.offsetWidth,
+      height: frame.offsetHeight,
+    };
+    const pageBounds = page.getBoundingClientRect();
+    // The page's SIZE only, in the same local space `frame.style.left/top` are
+    // already in - resizeRect() compares its bounds directly against `from`.
+    const bounds = { x: 0, y: 0, width: pageBounds.width, height: pageBounds.height };
+    let lastLogical = null;
+
+    frame.classList.add("is-dragging");
+
+    const move = (moveEvent) => {
+      const dx = moveEvent.clientX - start.x;
+      const dy = moveEvent.clientY - start.y;
+      const screenRect = sizing
+        ? resizeRect(from, corner, dx, dy, { bounds, preserveAspect: moveEvent.shiftKey })
+        : {
+          // Kept on the block: a panel dragged off it would be clamped back by
+          // panelOf() at the service anyway, and the desk would watch it jump.
+          x: Math.round(Math.max(0, Math.min(bounds.width - from.width, from.x + dx))),
+          y: Math.round(Math.max(0, Math.min(bounds.height - from.height, from.y + dy))),
+          width: from.width,
+          height: from.height,
+        };
+
+      const logical = logicalRectFromScreen(screenRect, scale);
+      // The floor is the panel catalogue's own, applied here so the desk
+      // cannot drag a panel smaller than anything can be set in - the service
+      // would raise it back and the rectangle would jump on save.
+      logical.width = Math.max(PANEL_MIN_PX, logical.width);
+      logical.height = Math.max(PANEL_MIN_PX, logical.height);
+      lastLogical = logical;
+
+      frame.style.left = `${screenRect.x}px`;
+      frame.style.top = `${screenRect.y}px`;
+      frame.style.width = `${screenRect.width}px`;
+      frame.style.height = `${screenRect.height}px`;
+
+      // Local preview only - no network, exactly as a picture drag does it.
+      // Writing the in-progress rectangle into the draft and re-composing is
+      // what makes the copy reflow around the panel WHILE it is being moved,
+      // rather than only after the pointer comes up.
+      previewPanelRect(id, logical);
+    };
+
+    const cleanup = () => {
+      frame.classList.remove("is-dragging");
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", done);
+      window.removeEventListener("pointercancel", cancel);
+    };
+
+    const done = () => {
+      cleanup();
+      const saved = lastLogical;
+      // A press that never moved is a SELECTION, not a placement - committing
+      // one would put a save (and a history step) behind every click.
+      if (!saved) return;
+      hooks.onPatch?.({ insetPanels: draftPanels() }, "panel-frame");
+    };
+
+    const cancel = () => {
+      cleanup();
+      previewPanelRect(id, original);
+    };
+
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", done);
+    window.addEventListener("pointercancel", cancel);
+  });
+}
+
+/**
+ * Writes an in-progress rectangle into the DRAFT and repaints the block.
+ *
+ * Never the server - that is `done()`'s job, once, when the pointer comes up.
+ * The panels array is replaced rather than mutated in place so the draft's own
+ * change detection sees it.
+ */
+function previewPanelRect(id, rect) {
+  if (!state.view) return;
+  state.view.insetPanels = draftPanels().map((panel) => (String(panel?.id) === String(id)
+    ? { ...panel, x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+    : panel));
+  // layoutTextFrames() is what writes the canonical layer's own markup - the
+  // panels included - so this one call both redraws the panel and reflows the
+  // copy round its new rectangle.
+  layoutTextFrames();
+}
+
 // A screen-space rectangle (what resizeRect() and the pointer both work in)
 // converted to the block's own logical pixels - the SAME space state.images
 // rows are stored in (x_px/y_px/width_px/height_px). `scale` is pageScale():
@@ -1733,6 +1961,7 @@ function bindPictureFrames() {
           Number(image.id) === Number(id) ? originalImage : image,
         );
         renderPictures(state.images);
+        renderPanelFrames();
         layoutTextFrames();
       }
     };
@@ -2253,7 +2482,9 @@ export async function mountFrame(section, view, images, callbacks, selectedPart 
   applyBlockSelection();
   updateSelectionLabel();
   renderPictures(state.images);
+  renderPanelFrames();
   bindPictureFrames();
+  bindPanelFrames();
   bindTextFrames();
 
   if (!window.__sahasFrameResize) {
@@ -2264,6 +2495,7 @@ export async function mountFrame(section, view, images, callbacks, selectedPart 
       applyBlockSelection();
       updateSelectionLabel();
       renderPictures(state.images);
+      renderPanelFrames();
     };
     window.addEventListener("resize", relayout);
     // A splitter drag changes the room the page has without changing the
@@ -2305,6 +2537,7 @@ export function refreshFrame(section, view, images, source, selectedPart, select
   applyBlockSelection();
   updateSelectionLabel();
   renderPictures(state.images);
+  renderPanelFrames();
 
   // A block showing a card has nothing for Quill to hold, and pasting the
   // card's flattened text back into a hidden editor would only put it back on
@@ -2325,4 +2558,5 @@ export function refreshFrame(section, view, images, source, selectedPart, select
 export function selectPictureFrame(id) {
   state.selectedIds = new Set([id]);
   renderPictures(state.images);
+  renderPanelFrames();
 }

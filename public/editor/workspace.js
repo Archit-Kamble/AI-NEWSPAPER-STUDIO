@@ -66,7 +66,7 @@ import { smartCardBlockSize } from "./smart-cards/layout.js";
 import { smartCardFrame } from "./canvas/section-thumb.js";
 import { candidatesOn, runBulk } from "./external-editor/bulk-generate.js";
 import { computeAlignment } from "./external-editor/align.js";
-import { escapeHtml, closeOnEscape } from "./format.js";
+import { escapeHtml, closeOnEscape, nameThePanel } from "./format.js";
 import { isContentEdit, isExplicit } from "./status/section-status.js";
 import { buildFlowMap, flowImageFromRow } from "./layout/text-flow.js";
 import { setContinuations, legsOf, legsSentence } from "./layout/continuations.js";
@@ -1543,10 +1543,36 @@ function renderShell() {
         <section class="workspace-external-editor" id="externalEditorPanel"></section>
       </div>
 
+      <!-- A NEWSPAPER IS MADE UP ON A DESK, AND SAYING SO IS MORE HONEST THAN
+           PRETENDING OTHERWISE. Measured at 430px: the workspace reflows with
+           no sideways scroll - which is a real achievement and is why nothing
+           here is a media query hiding a broken layout - but the toolbar wraps
+           to eight rows and the sheet lands 420px down the document at 18%.
+           It works and it is unusable, and a desk who opens it on a phone at
+           the bus stop deserves to be told that in one sentence rather than
+           left pinching at a page they cannot place a block on.
+           The three screens that genuinely DO work on a phone are offered
+           beside it. Shown by CSS alone, so nothing is measured, no listener
+           is bound, and the workspace underneath is untouched and one press
+           away for anyone who means it. -->
+      <div class="narrow-window-note" id="narrowWindowNote">
+        <strong>The layout desk needs a wider screen.</strong>
+        <p>A page is made up by dragging blocks around a sheet, and there is no
+           honest way to do that in this width. Everything below still works,
+           and these do work here:</p>
+        <div class="narrow-window-links">
+          <a href="#!/editions">Past Newspapers</a>
+          <a href="#!/past-news">Past News</a>
+          <a href="/epaper">The e-paper</a>
+        </div>
+        <button type="button" id="narrowWindowDismiss">Open it anyway</button>
+      </div>
+
       <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
-      <aside class="workspace-sidebar-left" id="sidebarLeft">
+      <aside class="workspace-sidebar-left" id="sidebarLeft"
+             role="dialog" aria-modal="false" aria-labelledby="storyDrawerTitle">
         <div class="sidebar-drawer-header">
-          <h3>Story Explorer</h3>
+          <h3 id="storyDrawerTitle">Story Explorer</h3>
           <button class="sidebar-drawer-close" id="sidebarDrawerClose">&times;</button>
         </div>
         <div class="sidebar-panel" id="sidebarPanel"></div>
@@ -1570,7 +1596,29 @@ function renderShell() {
   });
 
   document.getElementById("sidebarBackdrop").addEventListener("click", () => store.setStoryPickerOpen(false));
+  // Dismissing is a decision about THIS SESSION and is not persisted: nothing
+  // in this project keeps a per-desk settings row, and a rule that hid itself
+  // permanently after one press would be a rule a desk could never get back.
+  document.getElementById("narrowWindowDismiss")?.addEventListener("click", () => {
+    document.body.classList.add("narrow-window-accepted");
+  });
+
   document.getElementById("sidebarDrawerClose").addEventListener("click", () => store.setStoryPickerOpen(false));
+  // ESCAPE CLOSES IT, LIKE EVERY OTHER PANEL IN THIS WORKSPACE.
+  //
+  // What's left, Preflight and the Newsdesk panel all close on Escape and hand
+  // focus back - that is the hard half and it was already done. This drawer was
+  // the only one that did not, and it is opened by the control an editor uses
+  // most, so every other panel had taught the desk that Escape works and this
+  // one silently did not. The listener is at the document because the drawer's
+  // own subtree is re-rendered as the desk filters it.
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    if (!store.getState().storyPickerOpen) return;
+    // A dialog on top of the drawer answers Escape first.
+    if (document.querySelector(".sahas-dialog")) return;
+    store.setStoryPickerOpen(false);
+  });
 
   document.getElementById("addBlockBtn").addEventListener("click", addBlock);
   document.getElementById("mastheadEarBtn").addEventListener("click", toggleMastheadEar);
@@ -1588,7 +1636,12 @@ function renderShell() {
     const on = document.body.classList.toggle("print-view");
     event.currentTarget.classList.toggle("active", on);
     event.currentTarget.textContent = on ? "Editing view" : "Print view";
+    // A toggle has to SAY which state it is in, not only look it. The label
+    // already flips, which is the right way to name a way out; nothing
+    // announced it.
+    event.currentTarget.setAttribute("aria-pressed", String(on));
   });
+  document.getElementById("printViewBtn").setAttribute("aria-pressed", "false");
 
   bindPaperControls();
 
@@ -1894,6 +1947,7 @@ function renderCompositionPlan(plan, aiMode) {
   const budget = plan.callBudget; const budgetLine = budget
     ? `Provider-call budget: ${budget.selectedProviderCallCap} (minimum for ${budget.plannedAssignments} planned stories: ${budget.minimumProviderCalls} · exact-fit request ceiling: ${budget.exactFitRequestCeiling}${budget.risk === 'TIGHT' ? ' · TIGHT: not every story is guaranteed its repair attempt' : ''}). Provider retries/fallbacks also spend this cap.` : '';
   panel.innerHTML = `<header><strong>AI composition plan</strong><button type="button" id="compositionClose" aria-label="Close">×</button></header><p>${escapeHtml(plan.writerTransport)} · ${plan.sourceCount} approved sources · snapshot ${escapeHtml(plan.sourceSnapshotHash.slice(0, 12))}</p><p>Editorial composition: ${plan.expected.plannedFrames}/${plan.expected.requiredFrames} planned · coverage ${(plan.expected.editorialCoverageRatio * 100).toFixed(0)}% · area ${(plan.expected.weightedEditorialCoverageRatio * 100).toFixed(0)}%</p><p>${escapeHtml(imageSummary)}</p>${auxiliary ? `<p>${escapeHtml(auxiliary)}</p>` : ''}${budgetLine ? `<p>${escapeHtml(budgetLine)}</p>` : ''}<ul>${rows}</ul><button type="button" class="btn-primary" id="compositionApply">Apply AI Composition</button><p class="composition-note">Apply writes text and source images in one edition transaction using ${escapeHtml(plan.writerTransport)}. Confirmed plan only; changed newsroom copy, image files, or page placement is rejected.</p>`;
+  nameThePanel(panel);
   document.body.appendChild(panel); document.getElementById('compositionClose').addEventListener('click', closeOnEscape(() => panel.remove()));
   document.getElementById('compositionApply').addEventListener('click', async () => {
     const confirmed = await askConfirm({
@@ -1928,6 +1982,7 @@ function renderCompositionResult(result) {
   const callBudgetLine = Number.isFinite(result.providerCallCap)
     ? `<p>Provider calls: ${result.writerCalls || 0} of ${result.providerCallCap} (${result.providerCallsRemaining ?? 0} remaining)${breakdown ? ` · ${escapeHtml(breakdown)}` : ''}</p>` : '';
   panel.innerHTML = `<header><strong>AI composition — ${escapeHtml(result.editorialCompositionState || result.state)}</strong><button type="button" id="compositionClose" aria-label="Close">×</button></header>${review}${content}<p>${escapeHtml(result.writerTransport || 'composition')} · ${result.writerCalls || 0} calls${duration}</p>${callBudgetLine}<p>${escapeHtml(safety)}</p>${imageCoverage ? `<p>${escapeHtml(imageCoverage)}</p>` : ''}${coverage ? `<p>${coverage}</p>` : ''}<ul>${(result.pages || []).map((page) => `<li><strong>p${page.page}</strong> · ${escapeHtml(page.state)}${page.error ? ` · ${escapeHtml(page.error)}` : ''}</li>`).join('')}</ul>`;
+  nameThePanel(panel);
   document.body.appendChild(panel); document.getElementById('compositionClose').addEventListener('click', closeOnEscape(() => panel.remove())); showNotice(`AI composition ${result.state}: ${result.writerCalls} ${result.writerTransport} calls.`);
 }
 
@@ -2393,6 +2448,7 @@ function showBulkProposals(batch, skipped, { fromToday = 0 } = {}) {
     ${todayNote}
     ${skippedNote}
     <p class="ai-proposal-warn">The desk must check every fact before any of this is printed.</p>`;
+  nameThePanel(panel);
   document.body.appendChild(panel);
   document.getElementById("bulkClose").addEventListener("click", closeOnEscape(() => panel.remove()));
 

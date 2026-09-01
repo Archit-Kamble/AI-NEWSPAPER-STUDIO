@@ -56,17 +56,24 @@ body {
   max-width: 400px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
-.login-box h1 {
-  text-align: center;
-  font-size: 2rem;
-  margin: 0 0 var(--s2);
-  color: var(--accent);
+/* THE PAPER'S OWN NAMEPLATE, WHICH IS ARTWORK AND NEVER TYPE.
+   Setting the name in a downloaded font would not be its masthead, it would be
+   a lookalike - identity.js's rule, and it holds on the sign-in screen too. */
+.login-nameplate {
+  display: block;
+  width: 100%;
+  max-width: 300px;
+  margin: 0 auto var(--s3);
 }
-.login-box p {
+.login-standfirst {
   text-align: center;
+  margin: 0 0 var(--s6);
+  font-size: 13px;
+  letter-spacing: .02em;
   color: var(--secondary);
-  margin-bottom: var(--s6);
+  line-height: var(--devanagari-line);
 }
+.login-standfirst span { opacity: .7; }
 .login-box .form-group {
   margin-bottom: var(--s3);
 }
@@ -81,8 +88,48 @@ body {
   border: 1px solid var(--border);
   border-radius: 4px;
 }
+.login-box input {
+  min-height: 42px;
+  font: inherit;
+}
+/* Seeing what you typed is the commonest fix for a password reported as wrong.
+   The button sits INSIDE the field's box rather than beside it, so the field
+   keeps the full width the layout gives it. */
+.password-field { position: relative; }
+.password-field input { padding-inline-end: 62px; }
+.password-reveal {
+  position: absolute;
+  inset-inline-end: var(--s1);
+  inset-block-start: 50%;
+  transform: translateY(-50%);
+  min-height: 32px;
+  padding: 0 var(--s2);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--secondary);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.password-reveal:hover { color: var(--accent); }
+
+/* A refusal is said WHERE THE SIGN-IN WAS ATTEMPTED. It used to arrive as a
+   bottom-centre toast, which on the one screen where a person cannot yet do
+   anything else is an answer they may never find. */
+.login-error {
+  margin: var(--s3) 0 0;
+  padding: var(--s2) var(--s3);
+  font-size: 13px;
+  font-weight: 600;
+  color: #9a1b31;
+  background: #fdf1f3;
+  border-inline-start: 3px solid #9a1b31;
+}
+
 .btn-login {
   width: 100%;
+  min-height: 44px;
   padding: 12px;
   background: var(--accent);
   color: white;
@@ -90,14 +137,10 @@ body {
   border-radius: 4px;
   cursor: pointer;
   font-weight: bold;
+  font-size: 15px;
   margin-top: var(--s4);
 }
-.login-box .version {
-  text-align: center;
-  font-size: 12px;
-  color: var(--secondary);
-  margin-top: var(--s4);
-}
+.btn-login:hover:not(:disabled) { background: #a81932; }
 
 .main-layout {
   display: grid;
@@ -8143,3 +8186,276 @@ textarea:disabled {
 }
 
 .role-pill.role-reporter { background: #e8edf2; color: #405064; }
+
+/* ==========================================================================
+   BATCH 4 — ONE CONVENTION, ACROSS THE WHOLE CHROME
+
+   Four things measured across every screen, all of them the kind that are
+   invisible until somebody uses a keyboard, a phone, or a dark room.
+   ========================================================================== */
+
+/* --- ONE FOCUS RING, NOT TWO, AND NOT NONE ------------------------------- */
+/* Measured before this: `#tbUndo` and `#tbRedo` resolved to
+   `outline-style: none` with NOTHING in its place, while `#printViewBtn` and
+   `#appSidebarToggle` carried the browser's default. So the product did not
+   lack a focus convention - it had two, and one of them was invisible. Three
+   of the first four tab stops in the workspace were unmarked and then rings
+   started appearing.
+
+   `:focus-visible`, not `:focus`, so a mouse press never draws a ring - which
+   is why the rings were being removed one at a time in the first place. */
+:root {
+  --focus-ring: 2px solid var(--accent);
+  --focus-offset: 2px;
+}
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+/* On the dark header and the dark drawer the accent does not read against the
+   ground, so the ring is the paper instead. */
+.header :focus-visible,
+.sidebar :focus-visible {
+  outline: 2px solid white;
+}
+/* Where a control replaced the ring with a coloured border and a soft shadow,
+   the shadow was 12% alpha - present in the DOM and nearly invisible on a
+   white sheet. These keep their border treatment AND take the ring. */
+.story-editor-paper .story-headline-input:focus-visible,
+.story-editor-paper .story-subheading-input:focus-visible,
+.story-editor-paper .story-editor-body:focus-visible,
+.ai-seed-input:focus-visible,
+.story-explorer input:focus-visible,
+.story-explorer select:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 1px;
+}
+
+/* --- NOTHING INTERACTIVE UNDER 12px, AND NOTHING SMALLER THAN A FINGER --- */
+/* Chrome-only measurements, with the newspaper itself excluded - its 6.4px is
+   the publication's 9pt body at 2px/mm and must never be touched: 69
+   interactive labels under 12px and 79 targets under 32x28px. */
+button,
+select,
+input,
+textarea,
+.sidebar-btn,
+.toolbar-btn,
+.layout-btn,
+.btn-secondary,
+.btn-primary,
+.btn-submit,
+.btn-danger {
+  font-size: max(12px, 1em);
+}
+/* The canvas and everything composed is exempt by name, not by accident. */
+.newspaper-canvas button,
+.newspaper-canvas select,
+#edCanonicalContent button,
+.block-frame button,
+.smart-card button { font-size: revert; }
+
+/* --- THE WRITING COLUMN WAS CLIPPING ------------------------------------ */
+/* `.story-editor` reported scrollWidth exceeding clientWidth by 411px with
+   overflow-x: hidden and no text-overflow, so something in there was cut off
+   with nothing to say so. Its children are given a floor of zero, which is
+   what stops a grid or flex item refusing to shrink below its content. */
+.story-editor,
+.story-editor > * { min-width: 0; }
+
+/* ==========================================================================
+   A DARK MODE
+
+   There was none - zero `prefers-color-scheme` rules in any stylesheet, so
+   under a dark operating system the body stayed rgb(255,255,255) with
+   rgb(51,51,51) text. For a product a desk sits in front of at 4am on press
+   night that is worth a decision rather than an omission.
+
+   THE NEWSPAPER ITSELF IS NEVER DARKENED. `.newspaper-canvas` is a sheet of
+   newsprint and a dark one would be a lie about what prints - the desk is
+   judging ink on paper. Only the chrome around it changes, which is exactly
+   the boundary every other rule in this file draws.
+   ========================================================================== */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --primary: #e8e8ea;
+    --secondary: #a8a8b0;
+    --accent: #ff5f74;
+    --border: #34343c;
+    --bg-light: #202027;
+  }
+  body { background: #17171c; color: var(--primary); }
+  .form-section,
+  .login-box,
+  .news-item,
+  .admin-news-card,
+  .edition-row,
+  .content,
+  .right-panel { background: #1d1d23; color: var(--primary); }
+  input, select, textarea { background: #14141a; color: var(--primary); border-color: var(--border); }
+  .empty-state { background: #202027; }
+  .review-note { background: #2a1c20; }
+  .login-error { background: #2a1c20; }
+  .field-warning { color: #d8b866; }
+  .skel { background: linear-gradient(90deg, #202027 0%, #2a2a33 42%, #202027 84%); }
+
+  /* The sheet stays a sheet. */
+  .newspaper-canvas,
+  .newspaper-canvas * { color-scheme: light; }
+  .newspaper-canvas { background: white; }
+}
+
+/* ==========================================================================
+   AND A PRINT SHEET
+
+   There was no `@media print` anywhere, so Ctrl+P on a preflight report or a
+   worklist printed the application around it - the app header, the canvas
+   toolbar and the entire Block Editor all still rendered.
+
+   What a desk prints from these screens is the LIST: the worklist, the
+   preflight findings, the editions, the review queue. So the chrome goes and
+   the content stays.
+   ========================================================================== */
+@media print {
+  .header,
+  .sidebar,
+  .sidebar-app-backdrop,
+  .right-panel,
+  .workspace-toolbar,
+  .canvas-toolbar,
+  .workspace-external-editor,
+  .workspace-tools,
+  .desk-notice,
+  .sahas-dialog-backdrop,
+  .section-hover-toolbar,
+  .empty-state-btn,
+  .story-explorer { display: none !important; }
+
+  body { background: white; color: black; }
+  .container { display: block; min-height: 0; }
+  .content { padding: 0; }
+
+  /* A list that runs over a page break must not break inside a row. */
+  .edition-row,
+  .news-item,
+  .admin-news-card,
+  .worklist-row { break-inside: avoid; }
+
+  /* A link a reader cannot click is a link that should say where it went. */
+  a[href^="http"]::after { content: " (" attr(href) ")"; font-size: 90%; }
+}
+
+/* The Story Explorer's own "show more", matching the editions list and the
+   review queue - the archive is reachable, it is just not all drawn at once. */
+.story-explorer-more {
+  display: block;
+  width: 100%;
+  margin-block-start: var(--s2);
+  padding: var(--s2);
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--secondary);
+  background: var(--bg-light);
+  border: 1px dashed var(--border);
+  cursor: pointer;
+}
+.story-explorer-more:hover { color: var(--primary); border-color: var(--primary); }
+
+/* ==========================================================================
+   PRINT VIEW CLEARS THE DESK BELOW THE SHEET
+
+   `body.print-view` already hides the rulers, the guides, the grid overlay,
+   the section chrome, the hover toolbar, the handles, the selection label and
+   the minimap - everything ON the canvas. Measured with it on, the canvas
+   toolbar and the entire Block Editor were both still rendered, so the mode
+   CLAUDE.md calls "the only honest way to look at a card" still asked a desk
+   to judge the page between a toolbar above it and a writing desk below it.
+
+   THE BLOCK EDITOR GOES; THE TOOLBAR STAYS, AND THAT IS DELIBERATE.
+   The Block Editor sits BELOW the sheet, so hiding it cannot move the sheet -
+   it only gives the page the rest of the screen. The toolbar is above it, and
+   this repository has twice been broken by chrome that moved the composed page
+   vertically: a picture handle landed past the viewport where elementFromPoint
+   returns null, the handle stopped being draggable, and undo had nothing to
+   undo. The toolbar also carries the way OUT of this mode. It stays.
+   ========================================================================== */
+body.print-view .workspace-external-editor { display: none; }
+body.print-view .workspace-top {
+  /* The sheet takes the room the writing desk gave back. */
+  min-height: calc(100vh - 120px);
+}
+/* The way out must not be the one thing that is hard to find in a mode that
+   hides everything else. */
+body.print-view #printViewBtn {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+/* --- The narrow-window note ---------------------------------------------- */
+/* Hidden by default and shown only under the width where making up a page
+   stops being possible. CSS alone: nothing is measured, no listener is bound,
+   and the workspace underneath is untouched. */
+.narrow-window-note { display: none; }
+
+@media (max-width: 900px) {
+  body:not(.narrow-window-accepted) .narrow-window-note {
+    display: block;
+    margin: var(--s4);
+    padding: var(--s5) var(--s4);
+    background: white;
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--accent);
+  }
+  body:not(.narrow-window-accepted) .narrow-window-note strong {
+    display: block;
+    font-size: 17px;
+    margin-block-end: var(--s2);
+  }
+  body:not(.narrow-window-accepted) .narrow-window-note p {
+    margin: 0 0 var(--s4);
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--secondary);
+  }
+  .narrow-window-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s2);
+    margin-block-end: var(--s4);
+  }
+  .narrow-window-links a {
+    padding: var(--s2) var(--s3);
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--primary);
+    text-decoration: none;
+    background: var(--bg-light);
+    border: 1px solid var(--border);
+  }
+  .narrow-window-links a:hover { border-color: var(--accent); color: var(--accent); }
+  #narrowWindowDismiss {
+    min-height: 40px;
+    padding: 0 var(--s4);
+    font: inherit;
+    font-size: 13px;
+    color: var(--secondary);
+    background: none;
+    border: 1px solid var(--border);
+    cursor: pointer;
+  }
+  /* The workspace itself is folded away WITH the note, so the desk is not
+     scrolled past a sheet they were just told they cannot use. Pressing
+     "Open it anyway" brings all of it back. */
+  body:not(.narrow-window-accepted) .workspace-top,
+  body:not(.narrow-window-accepted) .workspace-toolbar { display: none; }
+}
+
+/* The shell takes focus programmatically when an edition opens, purely to move
+   Chrome's sequential-navigation starting point to the top of the document. It
+   is not a stop of its own and must never draw a ring round the whole
+   workspace. */
+.workspace-shell:focus { outline: none; }

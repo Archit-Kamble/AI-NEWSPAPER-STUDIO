@@ -5668,6 +5668,221 @@ readiness actually reads.
 node tests/browser/press-panel.browser.js            # defaults to 54470
 ```
 
+## The interface has a vocabulary now — asking, waiting, failing, and empty
+
+A UI pass over the whole product, driven rather than read: four audit passes
+produced 56 measured findings, and this is what they became. **Every fix is in
+`public/`** — no route, service, repository or schema changed.
+
+### The paper asks its own questions
+
+Forty native dialogs, across nine files, every one titled **“localhost:3000
+says”**. Three things followed from that and only the first is cosmetic:
+
+- **The best writing in the product was delivered by the operating system.**
+  `deletionQuestion()` names the edition by the date as the masthead sets it,
+  the page count, how many blocks carry copy, that it cannot be undone and that
+  reporters' filings survive — and arrived as unstyled OS text with no way to
+  make the destructive button look destructive.
+- **A one-line box was asked to accept a table.** The chart and table paste
+  routes both say *“one reading to a line”* into a `window.prompt`, which
+  renders a single-line `<input>`. Measured: assigning `"a,1\nb,2\nc,3"` leaves
+  `"a,1b,2c,3"` — **the rows weld together**.
+- **An alert freezes the paper.** `alert()` and `confirm()` block the thread
+  that also runs autosave, the compositor and the caret.
+
+`public/ui/dialog.js` is the one answer, and it needed almost nothing new:
+**the two halves already existed on two surfaces and neither had both.**
+
+| | workspace panels | e-paper Map blocks |
+|---|---|---|
+| `role` / `aria-modal` / labelled title | — | ✓ |
+| Escape closes | ✓ | — |
+| Focus restored | ✓ | — |
+| Focus moved in, and trapped | — | — |
+
+So the markup is the map editor's, the behaviour is the panels', and the last
+row is the only genuinely new thing. `askConfirm` / `askPrompt` / `askMessage`
+resolve `{ action, field }` — the field read **before** the node is removed.
+Nothing a caller supplies is ever parsed as HTML.
+
+**A confirmation names the block the desk can SEE.** `Clear "masthead-advert"?`
+named a database key; `blockName()` uses the headline where there is one and
+the slug set as words otherwise.
+
+### …says that it is working
+
+Searched, before this: no spinner, no skeleton, no `aria-busy`, no `<progress>`
+anywhere in the product, and two `@keyframes` in six thousand lines of CSS,
+neither of them a loading state.
+
+- **Three seconds of nothing on the commonest click.** Holding the pages API at
+  3 s and pressing Open: the editions list, unchanged, unchanged, unchanged,
+  then the whole workspace at **3.81 s** — button never disabled, cursor never
+  changed. `renderWorkspaceSkeleton()` paints the **shape** of the workspace so
+  the sheet arrives where the sheet goes; `renderShell()` throws it away whole,
+  so it can never become a second layout to keep in step.
+- **A control stayed pressable during its own job.** Preflight, What's left and
+  Fill features all reported `disabled: false` for the whole of their run.
+  `busyButton` also **gives the control back when the work throws**, and pins
+  the measured width so a row cannot reflow under the pointer.
+
+### …and keeps its failures
+
+Forcing a 500 on preflight showed the desk the word `boom` — the server's own
+error field — with no Retry, no way to dismiss it, gone in about five seconds.
+The one moment a desk most needs to read something carefully was the moment the
+product took it away on a timer. `showFailure` stays until dismissed, carries
+Retry, and is `role="alert"` rather than `role="status"`.
+
+**A refusal is said where the question was asked.** The sign-in screen is the
+sharpest case — a person there cannot do anything else yet — so it is said in
+the form, not in a toast 700 px away.
+
+### Two strings that were untrue
+
+- The **drop-cap note** contradicted itself and the code: *“it is a placeholder
+  … but the production compositor will render it.”* `dropCapOf()` feeds the
+  obstacle set, `render.js` draws it, `print-model.js` carries it and Scribus
+  emits its baseline. It survived from when `drop_cap` was a boolean.
+- **Eleven buttons saying the AI is not connected.** It is connected, works,
+  and is what this product was bought for — and several named features that
+  already run (Improve Headline against the headline repair, Rewrite/Shorten/
+  Expand against Optimize's four scopes). Removed, with the `buildAiRequest()`
+  and `fitBrief()` only they reached.
+
+### The reporter's day, which nothing had ever driven
+
+**R.1 is the one that costs a newsroom a person.** A story was refused, the desk
+wrote down why, the database held it — and the reporter's own screen rendered it
+nowhere. It was a hole in two halves and both were in the browser:
+
+- `news_items` is read with `SELECT *`, so `review_note` **already reached the
+  browser**. The card renders it, and a rejected story opens for correction
+  rather than in a read-only panel.
+- The queue where reviewing actually happens **never asked for a note**.
+  `PATCH /api/news/:id/status` has always accepted `reviewNote`; nothing sent
+  one. Reject asks, in a real textarea, naming the reporter — and is called
+  **Send back**, in the destructive colour, because it was styled exactly like
+  Approve and fired immediately with no undo.
+
+**The reporter's screens are in Marathi** (`public/admin/reporter-strings.js`,
+one catalogue). Desk chrome stays English: an editor works beside Scribus, a
+CMYK profile and English production vocabulary. The reporter's screen is a
+different screen with different people in front of it — district journalists
+writing Marathi copy, and the only surface whose users cannot ask anyone for
+help.
+
+- Validation named a field the form does not have: a native alert reading
+  *“Title required”* over a field labelled **मथळा**, with focus left on `BODY`.
+  It is inline, under the field, in the form's language, and moves the caret.
+- **A picture just chosen can be taken back; one already filed cannot, and the
+  form says so rather than offering a control that would not work.**
+  `news.service.js` keeps `existing.image_urls` when no files are sent and
+  REPLACES the list when any are — so nothing this form can send would remove
+  one. What *is* said is the thing nothing said: adding a picture replaces the
+  others.
+- The upload area was a `<div>` with `tabIndex -1` and no role.
+- Nothing warned about unsaved work; `beforeunload` appeared nowhere.
+- A card read the same line in all four queues — the state was carried entirely
+  by which sidebar button you last pressed.
+
+### Two layout bugs found by driving, not reading
+
+**The phone menu trapped the screen.** `.sidebar` is a drawer at every width,
+brought back by `.sidebar.open { transform }` — and at ≤768 px
+`.sidebar { display: none }` beat it, while the backdrop has its own `display`
+rule and worked. A phone user got a dark overlay with **no menu behind it**, and
+the ways out are the backdrop or Escape; a phone has no Escape. Same fault as
+the `.role-note` bug: a display rule quietly beating a state class.
+
+**The header is 60 px and that number is load-bearing.** `.sidebar` and its
+backdrop are both `top: 60px` and `.container` takes `calc(100vh - 60px)` —
+three rules measuring from a height the header only ever reached *by accident*,
+as 16 px of padding plus a 28 px line. At 430 px the greeting wrapped, the bar
+became **88.6 px**, and the header covered the drawer's **first** item — the one
+a person came for. `elementsFromPoint` named the header as the topmost element
+over it. Stated explicitly now; the desktop is unchanged to the pixel.
+
+### Where the keyboard lands
+
+`document.activeElement` on a fresh load was already `div.ql-editor.ql-blank`,
+so the first Tab landed 486 px down on the headline field and the next
+twenty-one walked the AI panel. Everything a desk commands the paper with is
+**earlier in the document and therefore behind them**.
+
+**Blurring is not enough, and this is the trap the audit itself recorded:**
+`blur()` does not reset Chrome's sequential-focus-navigation starting point.
+Measured — after the blur `activeElement` was `BODY` and the very next Tab
+*still* landed on the headline field, because the browser resumes from where
+focus **was**. `loadBodyIntoQuill()` focuses `.workspace-shell` (`tabindex="-1"`)
+instead, which moves that starting point to the top of the document. Tab now
+walks `tbFromReporter → tbSave → tbPreflight → tbExport → Download → tbAI`.
+
+`document.body` is focusable and is what `activeElement` reports when nobody has
+the caret, so it satisfied every test in that guard and made `stolenFrom`
+non-null in exactly the case the release exists for.
+
+### One convention, across the chrome
+
+- **One focus ring.** `#tbUndo`/`#tbRedo` resolved to `outline-style: none`
+  with **nothing in its place** while `#printViewBtn` carried the browser
+  default — so the product did not lack a focus convention, it had two and one
+  was invisible. `:focus-visible`, defined once, white on the dark header and
+  drawer.
+- **The Story Explorer is capped at 40**, with the same “show N of M” the
+  editions list and review queue use. It was **287 × 105,580 px** holding 1,327
+  cards, writing a megabyte into one panel on the first paint of every edition.
+  Measured after: 3,197 px.
+- **A dark mode**, and **the newspaper is never darkened** — `.newspaper-canvas`
+  is a sheet of newsprint and a dark one would be a lie about what prints.
+- **A print sheet.** `Ctrl+P` printed the application around the report.
+- **Print view clears the desk below the sheet.** The Block Editor is hidden;
+  **the toolbar deliberately stays** — it is above the page, and this repository
+  has twice been broken by chrome that moved the composed page vertically, and
+  it carries the way out of the mode.
+
+### One vocabulary for saying when
+
+Six were on screen at once, two of them in the workspace 500 px apart. Second
+precision on an action performed hundreds of times a day is noise, and
+`M/D/YYYY` is the wrong order for this newsroom. `deskStamp()` in `format.js`:
+today is a time, any other day is the day and the time. `relativeDay()` is
+bounded at a week — it read **“in 26785 days”** on every 2099-dated fixture.
+
+**One script to a line.** An edition row read `४ pages · 3 of 32 blocks filled`.
+The masthead date sets its numerals in Devanagari, which is right; the chrome
+describing it is written in English and counts in Latin.
+
+### A narrow window is told plainly
+
+At 430 px the workspace reflows with no sideways scroll — a real achievement,
+which is why nothing here is a media query hiding a broken layout — but the
+toolbar wraps to eight rows and the sheet lands 420 px down at 18%. It works and
+it is unusable. Below 900 px the desk is told so in one sentence and offered the
+three screens that genuinely do work on a phone; **“Open it anyway”** gives the
+workspace back. CSS alone — nothing measured, no listener bound.
+
+### A backtick inside a template literal, three more times
+
+`node --check` passes it and Chrome answers *“Unexpected identifier”* with the
+whole application rendering nothing. It happened three times in this pass alone,
+every time in an **HTML comment** written inside a template literal. The rule is
+now absolute: **explanation goes in a JS comment above the function, never
+inside the markup.**
+
+### Nets that pinned the mechanism rather than the rule
+
+Three, each updated to hold its invariant with the measurement recorded beside
+it. `admin-screens`' native-dialog listener is **inverted**: nothing may open
+one, so a missed call site now fails the net.
+
+```bash
+node tests/browser/admin-screens.browser.js
+node tests/browser/desk-actions.browser.js
+```
+
+
 ## Engineering rules
 
 - **The overflow diagnosis started from desk-selected baseline `52c9556`.** Fix

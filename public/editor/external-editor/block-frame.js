@@ -2338,7 +2338,15 @@ function displaySizeAt(field) {
 // its caret back afterwards, at the same offset, having never seen the change.
 function loadBodyIntoQuill(html) {
   const active = document.activeElement;
-  const stolenFrom = active && active !== quill.root && !quill.root.contains(active)
+  // Was the caret already IN the story before this ran? If it was, the paste
+  // is not stealing anything and Quill keeps it, exactly as before.
+  const quillHadFocus = active === quill.root || quill.root.contains(active);
+  // `document.body` is focusable and is what `activeElement` reports when
+  // NOBODY has the caret - so it satisfied every test here and made
+  // `stolenFrom` non-null on a fresh load, which is exactly the case the
+  // release below exists for. It is not a field the desk was typing into.
+  const nobody = !active || active === document.body || active === document.documentElement;
+  const stolenFrom = !nobody && active !== quill.root && !quill.root.contains(active)
     && typeof active.focus === "function" ? active : null;
   // Where the caret was in THAT field, so putting the focus back does not
   // collapse it to the start of the line the desk was half way through.
@@ -2348,7 +2356,42 @@ function loadBodyIntoQuill(html) {
 
   quill.clipboard.dangerouslyPasteHTML(html, "silent");
 
-  if (!stolenFrom || document.activeElement === stolenFrom) return;
+  // ON FIRST LOAD THERE IS NOBODY TO HAND IT BACK TO, AND THAT IS ITS OWN BUG.
+  //
+  // Measured on a fresh load with nothing clicked: `document.activeElement` was
+  // already `div.ql-editor.ql-blank`. So the first Tab landed at y=486 on the
+  // headline field, and the next twenty-one stops walked the AI panel and the
+  // Smart Card list. Everything a desk commands the paper with is EARLIER in
+  // the document and therefore behind them - the menu, Logout, Save, Undo,
+  // Redo, Preflight, Press file, Download, Publish, the page pills, Layout,
+  // What's left, Make it fit, Carry over, Guides, Print view. Twenty-two
+  // presses reached none of them.
+  //
+  // Nobody asked for the caret, so nobody keeps it: focus goes back to the
+  // document and Tab starts at the top of the page, which is what the editions
+  // screen already does correctly. Quill's own selection model is untouched -
+  // only the DOM focus is released - so the drawn caret on an unwritten block
+  // still knows where it is.
+  if (!stolenFrom) {
+    if (document.activeElement !== quill.root || quillHadFocus) return;
+    // BLURRING IS NOT ENOUGH, AND THIS IS THE TRAP THE AUDIT ITSELF RECORDED:
+    // `blur()` does not reset Chrome's sequential-focus-navigation starting
+    // point. Measured - after the blur, `document.activeElement` was BODY and
+    // the very next Tab still landed on the headline field 486px down, because
+    // the browser resumes from where the focus was, not from where it is.
+    //
+    // Focusing the workspace shell moves that starting point to the top of the
+    // document, so Tab walks the commands in the order they are drawn: the
+    // menu, Logout, Save, Undo, Redo, Preflight, Press file, Download,
+    // Publish, the page pills. It is `tabindex="-1"`, so it takes focus
+    // programmatically and is never a stop of its own.
+    const shell = document.querySelector(".workspace-shell");
+    if (!shell) { quill.root.blur(); return; }
+    if (!shell.hasAttribute("tabindex")) shell.setAttribute("tabindex", "-1");
+    shell.focus({ preventScroll: true });
+    return;
+  }
+  if (document.activeElement === stolenFrom) return;
   stolenFrom.focus({ preventScroll: true });
   if (!range || !stolenFrom.contains(range.startContainer)) return;
   try {

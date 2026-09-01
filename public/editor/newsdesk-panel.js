@@ -19,7 +19,7 @@
 // stories it is about to print before printing them - and can drop any of them
 // for nothing, because no writing has happened yet.
 
-import { escapeHtml, closeOnEscape } from "./format.js";
+import { escapeHtml, closeOnEscape, nameThePanel } from "./format.js";
 import { tagList, NEWS_TAGS, DESK_FRESHNESS, DEMAND_LEVELS } from "./layout/news-tags.js";
 // Where this paper covers, from the one place catalogue - never a second list
 // of these names, and never a free-text box for a district: a misspelt one
@@ -315,6 +315,9 @@ export function openNewsdeskPanel({ newspaperId, byPage, blocks, place, commissi
     const title = stage === "plan" ? "The plan" : stage === "copy" ? "The copy" : "Plan the edition";
     panel.innerHTML = `<header><strong>${title}</strong>
       <button type="button" id="newsdeskClose" aria-label="Close">×</button></header>${body}`;
+    // The panel walks brief -> plan -> copy and rewrites its own header at each
+    // stage, so it is named again each time.
+    nameThePanel(panel);
     document.getElementById("newsdeskClose")
       .addEventListener("click", closeOnEscape(() => panel.remove()));
     bind(stage);

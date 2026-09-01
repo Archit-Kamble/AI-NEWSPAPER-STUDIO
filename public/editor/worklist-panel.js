@@ -11,7 +11,7 @@
 // row goes to it. It is a panel over the workspace, never another screen
 // (VISION.md: everything happens inside the one workspace).
 
-import { escapeHtml as escapeAttribute, closeOnEscape } from "./format.js";
+import { escapeHtml as escapeAttribute, closeOnEscape, nameThePanel } from "./format.js";
 
 const STATE_LABEL = {
   empty: "empty",
@@ -66,7 +66,7 @@ export function renderWorklist(list, { onGoTo }) {
   panel.className = "preflight-panel worklist-panel";
   panel.innerHTML = `
     <header>
-      <strong>What's left — ${totals.done} of ${totals.blocks} blocks done</strong>
+      <strong id="worklistTitle">What's left — ${totals.done} of ${totals.blocks} blocks done</strong>
       <button type="button" id="worklistClose" aria-label="Close">×</button>
     </header>
     <p class="worklist-summary">
@@ -76,6 +76,7 @@ export function renderWorklist(list, { onGoTo }) {
       ${totals.charactersWanted ? `<br>About ${totals.charactersWanted.toLocaleString()} characters of copy still wanted.` : ""}
     </p>
     <ul>${body}</ul>`;
+  nameThePanel(panel);
   document.body.appendChild(panel);
 
   document.getElementById("worklistClose").addEventListener("click", closeOnEscape(() => panel.remove()));

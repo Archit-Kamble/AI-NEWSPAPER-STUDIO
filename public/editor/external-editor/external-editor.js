@@ -37,7 +37,7 @@
 // of the rail are the same panels, opened beside the page instead of below the
 // fold where nobody found them.
 
-import { escapeHtml } from "../format.js";
+import { escapeHtml, deskStamp } from "../format.js";
 import { showNotice, showFailure } from "../../ui/notice.js";
 import { statusOf, statusLabel, statusClass } from "../status/section-status.js";
 import { blockKind, blockNote } from "../layout/block-kinds.js";
@@ -457,7 +457,7 @@ export function refreshDockSavedAt(section) {
 }
 
 function formatSavedAt(value) {
-  return value ? new Date(value).toLocaleString() : "—";
+  return deskStamp(value);
 }
 
 export function refreshHistoryTab() {

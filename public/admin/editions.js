@@ -80,18 +80,39 @@ export function marathiDate(iso) {
   return `${weekday}, ${devanagari(d)} ${MONTHS[m - 1]} ${devanagari(y)}`;
 }
 
+/**
+ * HOW A DESK SAYS WHEN, AND IT IS NOT AN ARITHMETIC RESULT.
+ *
+ * This was unbounded, so every 2099-dated fixture in the archive read
+ * "in 26785 days" - twelve of them on screen at once. A real archive would
+ * read "412 days ago" where a newsroom says "last March".
+ *
+ * A desk works in today, yesterday, a weekday inside this week, and then a
+ * date. Past that the relative form stops carrying information a person can
+ * use, so it stops being offered and the masthead's own date - already on the
+ * row beside this - is the answer.
+ */
+const RELATIVE_LIMIT_DAYS = 6;
 function relativeDay(iso, today) {
   const day = (value) => {
     const [y, m, d] = String(value || '').slice(0, 10).split('-').map(Number);
     return y ? Date.UTC(y, m - 1, d) : NaN;
   };
-  const diff = Math.round((day(iso) - day(today)) / 86400000);
+  const at = day(iso);
+  const diff = Math.round((at - day(today)) / 86400000);
   if (!Number.isFinite(diff)) return '';
   if (diff === 0) return 'Today';
   if (diff === 1) return 'Tomorrow';
   if (diff === -1) return 'Yesterday';
-  return diff > 0 ? `in ${diff} days` : `${-diff} days ago`;
+  if (Math.abs(diff) <= RELATIVE_LIMIT_DAYS) {
+    const weekday = WEEKDAYS_EN[new Date(at).getUTCDay()];
+    return diff > 0 ? `This ${weekday}` : `Last ${weekday}`;
+  }
+  // Beyond the week the relative form says nothing useful, so it says nothing.
+  return '';
 }
+
+const WEEKDAYS_EN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 // How much of an edition is actually made up. This is the number that tells a
 // desk at a glance whether an edition holds their work or is an empty shell.
@@ -107,6 +128,42 @@ function fillOf(edition) {
 // renderers in this product do not reach for state. The server refuses the
 // route regardless; hiding the door is so a desk is not offered one that
 // answers 403.
+/*
+ * ONE SCRIPT TO A LINE.
+ *
+ * This row read "४ pages · 3 of 32 blocks filled" - Devanagari numerals
+ * against Latin ones inside one sentence, with English words around both. The
+ * masthead date above it sets its numerals in Devanagari, which is right; the
+ * chrome describing the edition is written in English and counts in Latin.
+ *
+ * An edition with no pages also rendered "० pages ·" - a separator with
+ * nothing after it - so the count is omitted rather than printed as a zero.
+ *
+ * (The comment that used to carry this sat inside the row's template literal
+ * as an HTML comment, and its backtick closed the string. Third time in this
+ * codebase; the reasoning lives in JS from here on.)
+ */
+function pageCountLine(edition, fill, empty) {
+  const pages = Number(edition.page_count) || 0;
+  const parts = [];
+  if (pages) parts.push(`${pages} page${pages === 1 ? '' : 's'}`);
+  parts.push(empty
+    ? '<span class="edition-empty">nothing written yet</span>'
+    : `${fill.filled} of ${fill.blocks} blocks filled`);
+  return parts.join(' · ');
+}
+
+/*
+ * OPEN IS THE ROW'S ACTION; DELETE IS NOT ITS PEER.
+ *
+ * They were two buttons of the same size side by side, so Tab through the list
+ * went Open, Delete, Open, Delete - 24 stops for twelve editions, with the
+ * destructive control adjacent to the safe one at every row, and Tab-Tab-Enter
+ * a plausible way to lose an edition. Delete is a quiet mark at the end of the
+ * row now: still one press, still where it was, no longer competing for the
+ * eye, and carrying the edition's own date as its accessible name rather than
+ * the word "Delete" twelve times over.
+ */
 function editionRowHtml(edition, today, mayDelete) {
   const fill = fillOf(edition);
   const iso = String(edition.publication_date || '').slice(0, 10);
@@ -119,17 +176,16 @@ function editionRowHtml(edition, today, mayDelete) {
       </div>
       <div class="edition-row-name">
         ${escapeHtml(edition.name || '')}
-        <small>${devanagari(edition.page_count || 0)} pages ·
-          ${empty ? '<span class="edition-empty">nothing written yet</span>'
-                  : `${fill.filled} of ${fill.blocks} blocks filled`}</small>
+        <small>${pageCountLine(edition, fill, empty)}</small>
       </div>
       <div class="edition-row-fill" title="${fill.percent}% of the blocks have copy in them">
         <span style="width:${fill.percent}%"></span>
       </div>
       <span class="status-pill ${escapeHtml(edition.status || 'draft')}">${escapeHtml(edition.status || 'draft')}</span>
-      <button class="btn-secondary edition-open" data-edition-id="${edition.id}">Open</button>
-      ${mayDelete ? `<button class="btn-danger edition-delete" data-edition-id="${edition.id}"
-              title="Delete this edition and everything on its pages">Delete</button>` : ''}
+      <button class="btn-primary edition-open" data-edition-id="${edition.id}">Open</button>
+      ${mayDelete ? `<button class="edition-delete" data-edition-id="${edition.id}"
+              aria-label="Delete the edition for ${escapeHtml(marathiDate(iso))}"
+              title="Delete this edition and everything on its pages">&#215;</button>` : ''}
     </div>`;
 }
 
@@ -195,11 +251,11 @@ export async function renderEditions(host, { onOpen, openCreator: startOpen = fa
         <div class="edition-today-main">
           <h3>${todays ? escapeHtml(todays.name || 'Today\'s edition') : "Today's edition has not been started"}</h3>
           <p>${todays
-            ? `${devanagari(todays.page_count || 0)} pages · ${fillOf(todays).filled} of ${fillOf(todays).blocks} blocks filled · ${escapeHtml(todays.status)}`
+            ? `${Number(todays.page_count) || 0} pages · ${fillOf(todays).filled} of ${fillOf(todays).blocks} blocks filled · ${escapeHtml(todays.status)}`
             : 'Starting it builds the page ladder, carries the booked adverts forward from the last edition and fills the day&rsquo;s standing features.'}</p>
         </div>
         <div class="edition-today-form">
-          ${todays ? `<p><strong>Current edition:</strong> ${devanagari(todays.page_count || 0)} pages</p>
+          ${todays ? `<p><strong>Current edition:</strong> ${Number(todays.page_count) || 0} pages</p>
             <button class="btn-submit" id="openEditionBtn">Open Edition</button>
             <label>Change pages
               <select id="todayEditionPages">${pageOptions(todays.page_count)}</select>
@@ -453,9 +509,16 @@ export async function renderEditions(host, { onOpen, openCreator: startOpen = fa
   });
 }
 
+/*
+ * The ladder set its ordinals in Devanagari and its page names in English -
+ * "१. Front Page · २. Local News · ३. Feature & Puzzle Page" - two scripts
+ * inside every item. The page names come from src/layout/templates.js and are
+ * English, so the numbering that labels them is too. One script to a line,
+ * the same rule as the row above.
+ */
 function ladderLine(rungs) {
   if (!Array.isArray(rungs) || !rungs.length) return '';
   return `<strong>Page ladder:</strong> ${rungs
-    .map((r) => `${devanagari(r.pageNumber)}. ${escapeHtml(r.templateName || r.templateKey)}`)
+    .map((r) => `${Number(r.pageNumber)}. ${escapeHtml(r.templateName || r.templateKey)}`)
     .join(' &nbsp;·&nbsp; ')}`;
 }

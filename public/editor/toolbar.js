@@ -118,6 +118,17 @@ export function refreshHistoryButtons(canUndo, canRedo) {
 }
 
 // Phase 7's visible half: the editor always knows whether their work is safe.
+//
+// AND THE BUTTON KNOWS TOO. `store.getState().dirty` has existed and been read
+// in four places since autosave was written; the Save button never consulted
+// it, so it looked equally pressable with unsaved copy in the block and with
+// nothing to save at all. A desk cannot tell "my work is in" from "the button
+// is just always like that" - which on press night is the one question they
+// are actually asking.
+//
+// Save stays REACHABLE when there is nothing to save: pressing it is harmless,
+// and a control that vanishes the moment it has done its job is one a desk
+// keeps hunting for. It is quiet instead, and says which state it is in.
 export function refreshSaveIndicator(saveState, dirty, message) {
   const indicator = document.getElementById("saveIndicator");
   if (!indicator) return;
@@ -125,6 +136,14 @@ export function refreshSaveIndicator(saveState, dirty, message) {
   const key = saveState === "idle" && dirty ? "dirty" : saveState;
   indicator.textContent = message || SAVE_LABELS[key] || "";
   indicator.className = `save-indicator state-${key}`;
+
+  const save = document.getElementById("tbSave");
+  if (!save || save.disabled) return;
+  const waiting = key === "dirty" || saveState === "saving";
+  save.classList.toggle("has-work", waiting);
+  save.title = waiting
+    ? "There are changes in this block that are not saved yet"
+    : "Everything in this block is saved";
 }
 
 export function refreshToolbarSelection(hasSelection, storyPickerOpen) {

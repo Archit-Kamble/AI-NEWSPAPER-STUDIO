@@ -133,8 +133,25 @@
 
   // A single tap opens the card. A desktop double-click is a deliberate fast
   // path to the PNG itself, without making the reader first save a screenshot.
+  //
+  // THAT FAST PATH COST EVERY TAP 230 ms, INCLUDING ON A PHONE, WHERE IT
+  // CANNOT BE TAKEN. The delay exists only to find out whether a second click
+  // is coming; a touch screen has no double-click, so on one the wait buys
+  // nothing and is simply the reader's first impression of the paper being a
+  // fifth of a second of nothing happening. This is the one page the public
+  // sees, and most of them see it on a phone.
+  //
+  // `(hover: hover) and (pointer: fine)` is the question actually being asked -
+  // "can this input device double-click" - rather than a guess from the user
+  // agent string or the viewport width. A laptop with a touchscreen answers
+  // yes and keeps the shortcut; a phone answers no and opens at once.
+  const canDoubleClick = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
   const pendingStoryOpen = new WeakMap();
   const scheduleStoryOpen = (opener) => {
+    if (!canDoubleClick) {
+      openDialog(opener.dataset.storyDialog);
+      return;
+    }
     clearTimeout(pendingStoryOpen.get(opener));
     const timer = setTimeout(() => {
       pendingStoryOpen.delete(opener);

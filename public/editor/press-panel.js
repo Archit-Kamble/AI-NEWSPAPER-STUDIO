@@ -31,7 +31,7 @@
 // the finding and the action belong on one panel: the way out beside the way
 // in, which is the rule this product keeps rediscovering.
 
-import { escapeHtml, closeOnEscape } from "./format.js";
+import { escapeHtml, closeOnEscape, deskStamp, nameThePanel } from "./format.js";
 
 const STATES = [
   { key: "making_up", label: "Being made up" },
@@ -46,7 +46,7 @@ function whenPassed(page) {
   const at = new Date(page.state_changed_at);
   if (Number.isNaN(at.getTime())) return "";
   const who = page.passed_by ? escapeHtml(String(page.passed_by)) : "the desk";
-  return `<small class="press-passed">Passed by ${who}, ${at.toLocaleString()}</small>`;
+  return `<small class="press-passed">Passed by ${who}, ${deskStamp(at)}</small>`;
 }
 
 /**
@@ -167,6 +167,10 @@ export async function renderPressPanel(newspaperId, { report, pages, onOpenFindi
       </ul>
       <h4 class="press-findings-heading">Preflight</h4>
       <ul class="press-findings">${findingRows(report)}</ul>`;
+    // Named after every paint: this panel rewrites its own header as pages are
+    // passed, and an aria-labelledby pointing at a heading that has been
+    // replaced names nothing.
+    nameThePanel(panel);
 
     document.getElementById("preflightClose")
       .addEventListener("click", closeOnEscape(() => panel.remove()));

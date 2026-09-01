@@ -9,6 +9,7 @@ import { showNotice, showFailure } from "./ui/notice.js";
 import { emptyStateMarkup } from "./ui/empty.js";
 import { MR, devanagari, reporterDate } from "./admin/reporter-strings.js";
 import { askPrompt } from "./ui/dialog.js";
+import { busyButton } from "./ui/busy.js";
 
 const app = document.getElementById("app");
 
@@ -66,27 +67,74 @@ async function init() {
   else renderReporterDashboard();
 }
 
+/**
+ * THE FIRST THING EVERY USER SEES, AND IT WAS THE LEAST SAHAS-LOOKING PAGE IN
+ * THE PRODUCT.
+ *
+ * It carried a Latin "SAHAS" wordmark set in the browser's default face, the
+ * words "AI Newspaper Publishing System", and "Version 1.0". The registered
+ * nameplate - which the canvas sets, the press file embeds and the public
+ * reader carries - appeared nowhere on it. Neither did the paper's own name.
+ *
+ * Four other things were wrong and are the kind a browser notices before a
+ * person does:
+ *
+ *   * there was no <form>, so Enter did not sign anybody in. The only way in
+ *     was to reach for the mouse.
+ *   * "Username" labelled a field that holds an email address, and the input
+ *     was type="text", so a phone offered the wrong keyboard for it.
+ *   * no `autocomplete`, so no password manager could fill either field.
+ *   * no way to see the password you typed - the commonest reason a correct
+ *     password is reported as wrong.
+ *
+ * The nameplate is the artwork, never type: setting the paper's name in a
+ * downloaded font would not be its masthead, it would be a lookalike. That is
+ * identity.js's own rule and it holds here too.
+ */
 function renderLogin() {
   app.innerHTML = `
     <div class="login-container">
-      <div class="login-box">
-        <h1>SAHAS</h1>
-        <p>AI Newspaper Publishing System</p>
+      <form class="login-box" id="loginForm" novalidate>
+        <img class="login-nameplate" src="/assets/masthead/sahas-nameplate.png"
+             alt="दैनिक साहस वार्ता" />
+        <p class="login-standfirst">वृत्तपत्र निर्मिती कक्ष <span>· Newsroom</span></p>
         <div class="form-group">
-          <label>Username</label>
-          <input id="email" placeholder="admin@esahas.com" />
+          <label for="email">Email address</label>
+          <input id="email" type="email" name="email" autocomplete="username"
+                 inputmode="email" autocapitalize="off" spellcheck="false"
+                 placeholder="you@esahas.com" required />
         </div>
         <div class="form-group">
-          <label>Password</label>
-          <input id="password" type="password" />
+          <label for="password">Password</label>
+          <div class="password-field">
+            <input id="password" type="password" name="password"
+                   autocomplete="current-password" required />
+            <button type="button" class="password-reveal" id="revealPassword"
+                    aria-pressed="false" aria-label="Show the password">Show</button>
+          </div>
         </div>
-        <button class="btn-login" id="loginBtn">Login</button>
-        <p class="version">Version 1.0</p>
-      </div>
+        <p class="login-error" id="loginError" role="alert" hidden></p>
+        <button class="btn-login" id="loginBtn" type="submit">Sign in</button>
+      </form>
     </div>
   `;
 
-  document.getElementById("loginBtn").addEventListener("click", async () => {
+  const reveal = document.getElementById("revealPassword");
+  reveal.addEventListener("click", () => {
+    const field = document.getElementById("password");
+    const shown = field.type === "text";
+    field.type = shown ? "password" : "text";
+    reveal.textContent = shown ? "Show" : "Hide";
+    reveal.setAttribute("aria-pressed", String(!shown));
+    reveal.setAttribute("aria-label", shown ? "Show the password" : "Hide the password");
+    field.focus();
+  });
+
+  // The email field is where a person starts, so that is where the caret goes.
+  document.getElementById("email").focus();
+
+  document.getElementById("loginForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
     const email = document.getElementById("email").value;
     const password = document.getElementById("password").value;
 
@@ -101,20 +149,40 @@ function renderLogin() {
     //
     // The server already knows the role - it reads it off the user row. So it
     // is asked, and its answer is what decides the screen.
-    const response = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
+    // A REFUSED SIGN-IN IS SAID WHERE THE SIGN-IN WAS ATTEMPTED.
+    //
+    // It used to arrive as a bottom-centre toast - the F.2 fault, at its
+    // sharpest: this is the one screen in the product where the person cannot
+    // yet do anything else, so an answer 700px from the button they pressed is
+    // an answer they may not find at all.
+    const slot = document.getElementById("loginError");
+    const button = document.getElementById("loginBtn");
+    slot.hidden = true;
+
+    const outcome = await busyButton(button, "Signing in…", async () => {
+      try {
+        const response = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
+        });
+        return { ok: response.ok, data: await response.json().catch(() => ({})) };
+      } catch {
+        // A dropped connection is not a wrong password, and telling somebody it
+        // is sends them retyping something that was right.
+        return { ok: false, data: { error: "The newsroom could not be reached. Check the connection." } };
+      }
     });
 
-    const data = await response.json();
-    if (response.ok) {
-      currentUser = data.user;
+    if (outcome.ok) {
+      currentUser = outcome.data.user;
       if (can("makeUp")) renderAdminDashboard();
       else renderReporterDashboard();
-    } else {
-      showFailure(data.error || "That sign-in did not work.");
+      return;
     }
+    slot.textContent = outcome.data.error || "That email address and password do not match.";
+    slot.hidden = false;
+    document.getElementById("password").focus();
   });
 }
 

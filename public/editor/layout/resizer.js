@@ -20,6 +20,7 @@ const LIMITS = {
   // screen with room to spare, and a desk that wants more drags the handle -
   // which is remembered.
   canvasHeight: { min: 200, max: 1200, fallback: 380, prop: "--canvas-height" },
+  // ^ that 380 is the FLOOR now, not the answer - see defaultCanvasHeight().
   // The block settings rail, left of the page. Narrow on purpose - it holds
   // read-outs and small fields, not a writing surface - but draggable, because
   // a desk setting type all morning wants it wider than one reading a proof.
@@ -49,12 +50,39 @@ function clamp(key, value) {
   return Math.min(max, Math.max(min, Math.round(value)));
 }
 
+/**
+ * HOW TALL THE SHEET STARTS, ON THIS SCREEN.
+ *
+ * It was a flat 380px on every monitor, and 380 was chosen against a 950px
+ * screen where it is 40% of the height. A newspaper page is 660x1060, so a
+ * fixed height decides the zoom: measured at 1512x950 on a real front page,
+ * the page area is 1166x380, the sheet fits it at 29%, and the sheet is then
+ * 191px wide - 975px of the 1166 standing empty. The waste LOOKS like width
+ * and is really height, because a page has one aspect and the only thing that
+ * can make it bigger is a taller box.
+ *
+ * A fraction of the viewport with both ends pinned:
+ *
+ *   - the floor is the old 380, so no screen gets a smaller sheet than it had;
+ *   - the ceiling stops a tall monitor pushing the Block Editor off the bottom,
+ *     which is the one failure this layout exists to prevent.
+ *
+ * Only consulted when NOTHING IS STORED. A desk who has dragged the splitter
+ * has made a decision, and a decision is not a default - the same rule the
+ * house-style backfill and the placement repair already follow.
+ */
+function defaultCanvasHeight() {
+  const viewport = Number(window.innerHeight) || 0;
+  if (!viewport) return LIMITS.canvasHeight.fallback;
+  return Math.round(Math.min(820, Math.max(LIMITS.canvasHeight.fallback, viewport * 0.58)));
+}
+
 let sizes = {};
 
 export function applyStoredLayout(shell) {
   const stored = readStored();
   sizes = {
-    canvasHeight: clamp("canvasHeight", stored.canvasHeight || LIMITS.canvasHeight.fallback),
+    canvasHeight: clamp("canvasHeight", stored.canvasHeight || defaultCanvasHeight()),
     toolsWidth: clamp("toolsWidth", stored.toolsWidth || LIMITS.toolsWidth.fallback),
     editorCollapsed: stored.editorCollapsed === true,
   };

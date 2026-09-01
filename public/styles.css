@@ -1401,6 +1401,10 @@ body {
    preview and Inspector sit at a comfortable size, the editor dock is below
    them at its natural height, and the browser scrolls the lot. */
 .workspace-shell {
+  /* The floor only. `layout/resizer.js` writes this property inline on every
+     load - from the desk's stored drag, else from the viewport - so THAT is
+     where the default lives and this value is what shows if its script never
+     runs. One place decides; a second number here would simply drift. */
   --canvas-height: 380px;
   --tools-width: 340px;
   background: #f6f6f7;
@@ -1491,7 +1495,17 @@ body {
      grows past the page makes the top of the screen as tall as its own panels
      and puts the writing surface below the fold. It scrolls inside itself
      instead, which is what a format pane does. */
-  max-height: var(--page-area-h, calc(100vh - var(--toolbar-h, 36px)));
+  /* Never taller than the page beside it, AND NEVER VIEWPORT-TALL.
+     The second half is new and it is not a refinement - it is the rule this
+     file states outright: a viewport-tall scroller inside a scrolling document
+     leaves a desk unable to tell which scrollbar they have hold of. The cap
+     used to be the page's height alone, which was safe only because the page
+     was a fixed 380px. Now the page starts from the viewport, so at 1280x900
+     the page area reached 67% of the window and the rail became exactly that
+     scroller - caught by workspace.browser.js's own nested-scroller check,
+     which is what it is for. Shorter than the page is fine; the rule was only
+     ever that it must not be TALLER. */
+  max-height: min(var(--page-area-h, calc(100vh - var(--toolbar-h, 36px))), 66vh);
   min-width: 0;
   display: flex;
   flex-direction: column;

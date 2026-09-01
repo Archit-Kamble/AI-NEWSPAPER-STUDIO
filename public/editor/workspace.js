@@ -1515,6 +1515,14 @@ function renderShell() {
               <button type="button" class="layout-btn" id="writeEmptyBtn"
                       title="Say what tomorrow's paper should be made of, page by page — SAHAS researches the news, plans the edition, and you read the plan before anything is written">Write empty blocks</button>
               <div class="canvas-toolbar-divider"></div>
+              <!-- NAMED, because these two are not about the copy. The row's
+                   own label reads COPY and these are controls for the VIEW -
+                   Guides shows or hides the rulers, Print view takes the
+                   editor's chrome off the sheet - so under that label the row
+                   said something untrue about a third of its own buttons.
+                   Same rule as "every control names the object it acts on",
+                   one level out: so does a group. -->
+              <span class="canvas-toolbar-label">View</span>
               <button type="button" class="layout-btn active" id="guidesToggleBtn"
                       title="Show or hide ruler guides - hiding never deletes them">Guides</button>
               <button type="button" class="layout-btn" id="printViewBtn"

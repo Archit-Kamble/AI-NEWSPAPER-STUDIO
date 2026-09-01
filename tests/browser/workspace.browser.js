@@ -560,10 +560,23 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
     // Drag the top-left handle inward. The OPPOSITE corner (bottom-right)
     // must stay exactly where it was - that is what "resize from a corner"
     // means, versus a resize that also silently repositions the picture.
+    // SCROLLED TO FIRST, and BEFORE the rectangle below is read - both are
+    // viewport coordinates, so a rect taken before the scroll is measured
+    // against a page that has since moved. CLAUDE.md records that stale-rect
+    // comparison in body-editing.browser.js too.
+    await picFrame().scrollIntoViewIfNeeded();
+    await page.waitForTimeout(200);
     const before = await picFrame().boundingBox();
     // 'nw', not 'tl' - image-resize.js names the corners by compass point since the
     // four EDGE handles were added, and n/s/e/w only work that way.
     const tlHandle = picFrame().locator('.pic-handle-nw');
+    // SCROLLED TO FIRST, because the next line takes VIEWPORT coordinates and
+    // drives the mouse at them. A handle below the fold gives a y outside the
+    // window, the press lands on nothing, the drag never happens, and the
+    // failure surfaces three checks later as "Ctrl+Z had nothing to undo" -
+    // which reads as a broken history stack and is not one. CLAUDE.md already
+    // records this exact fault in body-editing.browser.js; it was passing here
+    // on the luck of a short page, and a taller sheet took the luck away.
     const hBox = await tlHandle.boundingBox();
     await page.mouse.move(hBox.x + hBox.width / 2, hBox.y + hBox.height / 2);
     await page.mouse.down();
@@ -1020,6 +1033,13 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
     // 'nw', not 'tl' - image-resize.js names the corners by compass point since the
     // four EDGE handles were added, and n/s/e/w only work that way.
     const tlHandle = picFrame().locator('.pic-handle-nw');
+    // Scrolled to first - same reason as the drag in the picture stage above:
+    // the next line takes VIEWPORT coordinates and drives the mouse at them,
+    // so a handle below the fold makes the press land on nothing. The drag
+    // then never happens and the failure surfaces later as "Ctrl+Z had
+    // nothing to undo", which reads as a broken history stack and is not one.
+    await tlHandle.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(200);
     const hBox = await tlHandle.boundingBox();
     await page.mouse.move(hBox.x + hBox.width / 2, hBox.y + hBox.height / 2);
     await page.mouse.down();

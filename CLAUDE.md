@@ -6029,6 +6029,59 @@ node tests/browser/editor-parity.browser.js   # 70/70
 node tests/browser/device-bar.browser.js      # 65/65
 ```
 
+### A segmented control that fits, and one switch for the prose
+
+Found by measuring the settings rail on a real block at 1512x950 — the brief's
+own priority 2, and the numbers are worse than the brief says.
+
+| | |
+|---|---|
+| the rail's window | **627 px** |
+| what it holds | **2621 px** |
+| Properties alone | **1453 px** — 2.3x the window |
+| of which explanatory prose | **537 px**, in eight paragraphs |
+
+**`.segment` is `flex: 1` and a flex item's automatic minimum size is its
+content**, so six Border buttons in a 340 px rail simply refused to shrink:
+measured, the last two ran **42 px and 38 px past the rail's own right edge**,
+where the rail clips them. That is the stray half-letter sitting against the
+page in a screenshot — visible, and unreadable as anything until it is
+measured. `min-width: 0` is what lets flex do what it was asked to do; the
+labels already wrap. Overflowing elements in the rail: **2 → 0**.
+
+**The notes are one switch, not eight.** `#toolsNotesBtn` in the rail's own
+header, remembered in `localStorage` beside the splitter sizes. Pressed:
+**2621 px → 2033 px**, and it survives a reload *and* being borrowed by the
+Block Editor's dock.
+
+- **Default ON, deliberately.** This product explains itself on purpose, and
+  switching every explanation off for a desk who has never asked would quietly
+  change what the whole newsroom sees on open — a bigger decision than
+  reclaiming 588 px. `workspace.browser.js` asserts one of these notes by name
+  (*"pointing at what actually decides its position"*), which is the product
+  saying the same thing in a test. The switch is additive: nothing moves until
+  a desk presses it. **Flipping one comparison in `bindNotesToggle()` changes
+  the default** if the newsroom would rather have the room than the prose.
+- **The state belongs to the PANEL, not the rail around it.** The dock borrows
+  `#workspaceToolsPanel` and moves it into the Block Editor's right-hand
+  column, so a rule scoped to `.workspace-tools` stops matching the moment a
+  desk presses the Block or Type tab — and every note they had switched off
+  would come straight back in the other column. Verified by pressing it: 0
+  notes in the rail, 0 notes docked.
+
+**Six owner screens swept at 1512x950 and 390x844**, by clicking the real menu
+rather than guessing addresses (four guessed hashes all silently landed on the
+dashboard, which is its own small lesson about auditing by URL): no sideways
+scroll, no overflowing element and no viewport-tall nested scroller on any of
+them, at either width.
+
+**One flake recorded rather than chased.** `editor-controls.browser.js` failed
+*"the headline's marks are stored on the row"* and *"and so is its own
+alignment"* on one run and passed **86/86** on the next with the identical
+tree — and passed at the parent commit, and with the CSS half alone. Three
+passes, one failure, same code. It is the save round-trip at the end of that
+net, not a regression; worth a look if it recurs.
+
 ## Engineering rules
 
 - **The overflow diagnosis started from desk-selected baseline `52c9556`.** Fix

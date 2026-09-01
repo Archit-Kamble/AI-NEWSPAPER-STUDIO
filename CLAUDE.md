@@ -6082,6 +6082,72 @@ tree — and passed at the parent commit, and with the CSS half alone. Three
 passes, one failure, same code. It is the save round-trip at the end of that
 net, not a regression; worth a look if it recurs.
 
+### The phone screens, measured rather than glanced at
+
+Everything here was found by screenshotting a real screen at 390x844 and
+looking at it. The structure was already sound — swept at 1512x950 and 390x844
+by clicking the real menu, all six owner screens have no sideways scroll, no
+overflowing element and no viewport-tall nested scroller. What was wrong was
+what the layout *did* with the controls once it collapsed.
+
+**The delete was the biggest target on the card.** Two columns and six children
+means each child takes a whole cell, and the `×` landed in the `1fr` one:
+
+| | 1512px | 390px |
+|---|---|---|
+| delete | 25 × 24 | **163 × 24** — 6.5× wider |
+| Open | 59 × 36 | 155 × 36 |
+| status pill | 57 × 20 | 163 × 20 |
+
+On the desk it is a deliberately quiet 25 px `×` at the end of the row — **the
+quietness IS the design** for a hard delete with no undo. On a phone it became
+a wide grey bar directly under Open, so the most destructive control on the
+screen was also the easiest to hit by accident — and at 24 px tall it was still
+under the 44 px thumb minimum, which makes it hard to hit *on purpose*. Worst
+of both. Explicit placement now: reading matter in full-width rows, and the
+three controls sharing the last one — pill, Open, then the delete as a 44 px
+square, which is how it reads on the desk.
+
+**Three primary actions were under half a phone screen wide.** The rule that
+makes a primary action full width on a phone already existed and simply missed
+them, so what a desk met was whichever buttons happened to sit in a container
+that stretched: `+ Create Edition` 91%, `Add login` 91%, `Upload PDF` 83% — but
+**`Start Today's Edition` 47%**, `Create Edition` 46% and **`Save settings`
+38%**, the only way to commit that form. Every one was 42 px tall.
+
+Two of them did not move on the first attempt, and each for its own reason —
+found by re-measuring instead of assuming the rule had landed:
+
+- **`Save settings`** stayed 150 px because `.general-settings .btn-submit
+  { width: fit-content }` sits later in the file at the same specificity and
+  beat it outright.
+- **`Start Today's Edition`** stayed 182 px because `width: 100%` was working
+  perfectly — on a flex container that had itself shrunk to 182 px around its
+  only child. The button was full width; its parent was not. **Widening the
+  button could never have fixed that.**
+
+Scoped to the admin screens' own containers, never `.btn-submit` at large: the
+same class is used inside the workspace, where full width would be wrong.
+Verified at 1512 that the desk is unchanged.
+
+**And the delete net was still waiting for `window.confirm`.** It was written
+against the native dialog and never updated when the forty native dialogs
+became `public/ui/dialog.js`, so it sat waiting for a `dialog` event that no
+longer fires: five checks failed, *"CANCEL leaves the edition alone"* **passed
+for the wrong reason** — nothing was deleted because the question was still
+open and unanswered — and the run then crashed 30 s later with the dialog's own
+backdrop intercepting the next click. A net pinned to a mechanism, outliving
+the mechanism. It drives the paper's own dialog now and asserts that nothing
+reaches the operating system, pressing the destructive button **by its class,
+not its words** — naming the sentence would pin the net to wording the desk may
+change. Six other nets still carry a passive `p.on('dialog')` handler; they are
+harmless no-ops, and this was the only one that depended on it.
+
+```bash
+node tests/browser/edition-delete.browser.js   # 12/12
+node tests/browser/admin-screens.browser.js    # 19/19
+```
+
 ## Engineering rules
 
 - **The overflow diagnosis started from desk-selected baseline `52c9556`.** Fix

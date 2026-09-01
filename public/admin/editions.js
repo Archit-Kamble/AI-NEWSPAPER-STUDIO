@@ -17,6 +17,8 @@
 //   * a way to find an older one without scrolling past a hundred rows.
 
 import { escapeHtml } from "../editor/format.js";
+import { askConfirm } from '../ui/dialog.js';
+import { showFailure } from '../ui/notice.js';
 
 const DIGITS = ['०', '१', '२', '३', '४', '५', '६', '७', '८', '९'];
 const WEEKDAYS = ['रविवार', 'सोमवार', 'मंगळवार', 'बुधवार', 'गुरुवार', 'शुक्रवार', 'शनिवार'];
@@ -145,10 +147,17 @@ function deletionQuestion(edition) {
   const what = fill.filled
     ? `${fill.filled} of its ${fill.blocks} blocks have copy in them.`
     : 'Nothing has been written into it.';
-  return `Delete the edition for ${marathiDate(iso)} (${iso})?\n\n`
-    + `${edition.name || 'Unnamed edition'} — ${edition.page_count || 0} pages. ${what}\n\n`
-    + 'Every page, block, story and placed picture on it goes with it, and this cannot be undone. '
-    + "Reporters' own filings are not affected.";
+  // A dialog has a title slot, so the QUESTION goes in it and the consequences
+  // go underneath. Through `window.confirm` all of this arrived as one run of
+  // unstyled OS text under the words "localhost:3000 says", with no way to
+  // emphasise the date and no way to make the destructive button look
+  // destructive - which is the whole reason this sentence was written.
+  return {
+    title: `Delete the edition for ${marathiDate(iso)}?`,
+    body: `${edition.name || 'Unnamed edition'} — ${iso} — ${edition.page_count || 0} pages. ${what}\n`
+      + '\nEvery page, block, story and placed picture on it goes with it, and this cannot be undone. '
+      + "Reporters' own filings are not affected.",
+  };
 }
 
 /**
@@ -268,7 +277,15 @@ export async function renderEditions(host, { onOpen, openCreator: startOpen = fa
   async function removeEdition(id, button) {
     const edition = list.find((e) => Number(e.id) === id);
     if (!edition) return;
-    if (!window.confirm(deletionQuestion(edition))) return;
+    const question = deletionQuestion(edition);
+    const go = await askConfirm({
+      title: question.title,
+      body: question.body,
+      confirm: 'Delete this edition',
+      cancel: 'Keep it',
+      destructive: true,
+    });
+    if (!go) return;
 
     button.disabled = true;
     const was = button.textContent;
@@ -291,7 +308,10 @@ export async function renderEditions(host, { onOpen, openCreator: startOpen = fa
     } catch (error) {
       button.disabled = false;
       button.textContent = was;
-      alert(error.message);
+      // A failure on a destructive route is the worst kind to lose: it used to
+      // be shown for five seconds and then erased itself, carrying whatever
+      // the server said. It stays now, and offers the way to try again.
+      showFailure(error.message, { retry: () => removeEdition(id, button) });
     }
   }
 

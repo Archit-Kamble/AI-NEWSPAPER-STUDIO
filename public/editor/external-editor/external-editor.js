@@ -38,6 +38,7 @@
 // fold where nobody found them.
 
 import { escapeHtml } from "../format.js";
+import { showNotice, showFailure } from "../../ui/notice.js";
 import { statusOf, statusLabel, statusClass } from "../status/section-status.js";
 import { blockKind, blockNote } from "../layout/block-kinds.js";
 import { pictureControlsMarkup, renderPictureControls, bindPictureControls, selectPicture } from "./picture-controls.js";
@@ -61,7 +62,6 @@ export const GROUPS = [
   { key: "card", label: "Smart cards" },
 ];
 
-let notifyTimer = null;
 let activeCallbacks = null;
 
 function group(key, label, body, note = "") {
@@ -391,40 +391,15 @@ function bindDockToggle(callbacks) {
  * Block Editor's own strip is still written too - it is that header's status
  * line and belongs there - but nothing depends on it being legible any more.
  */
-function noticeHost() {
-  let host = document.getElementById("deskNotice");
-  if (!host) {
-    host = document.createElement("div");
-    host.id = "deskNotice";
-    host.className = "desk-notice";
-    host.setAttribute("role", "status");
-    host.setAttribute("aria-live", "polite");
-    document.body.appendChild(host);
-  }
-  return host;
-}
-
-function showNotice(message) {
-  const text = String(message ?? "");
-  // The Block Editor's own header line, unchanged.
-  const strip = document.getElementById("edNotice");
-  if (strip) strip.textContent = text;
-
-  const host = noticeHost();
-  host.textContent = text;
-  host.classList.toggle("is-shown", Boolean(text));
-  clearTimeout(notifyTimer);
-  if (!text) return;
-  // A long sentence is a sentence a desk has to read - it gets longer on
-  // screen. Four seconds is fine for "Saved"; "There is no empty block on a
-  // later page to carry this into." is not read in four seconds.
-  const ms = Math.min(12000, 3500 + text.length * 45);
-  notifyTimer = setTimeout(() => {
-    if (host.textContent !== text) return;
-    host.classList.remove("is-shown");
-    if (strip && strip.textContent === text) strip.textContent = "";
-  }, ms);
-}
+/*
+ * `showNotice` moved to `public/ui/notice.js` and is re-exported from here.
+ *
+ * It had to move because the ADMIN screens need it too and have no business
+ * importing from the Block Editor - and it had to be re-exported because
+ * `workspace.js` and this module's own `notify` already read it from here.
+ * One implementation, every existing caller unchanged. `showFailure` lives
+ * beside it: the half that did not exist, for the answers that must not fade.
+ */
 
 /**
  * Brings one step of the lifecycle into view. Replaces the old tab switch - the
@@ -491,4 +466,4 @@ export function refreshHistoryTab() {
   }
 }
 
-export { showNotice };
+export { showNotice, showFailure };

@@ -30,6 +30,7 @@
 // collects a payload and hands it to the same `onPatch` every other control
 // ends in.
 import { escapeHtml } from "../format.js";
+import { askPrompt, askMessage } from "../../ui/dialog.js";
 import { CHART_INKS, layoutSmartCard } from "../smart-cards/layout.js";
 import "../layout/inset-panels.js";
 import "../layout/typefaces.js";
@@ -341,7 +342,9 @@ function apply() {
   const card = payload();
   const { onPatch, section, view } = state;
   if (!card) {
-    window.alert("A chart needs at least one reading with a name and a number.");
+    // Not awaited: the guard returns either way, and the dialog no longer
+    // blocks the thread the compositor and autosave run on.
+    askMessage({ title: "The chart has no readings", body: "A chart needs at least one reading with a name and a number." });
     return;
   }
   const panels = (Array.isArray(view?.insetPanels) ? view.insetPanels : []).filter((p) => p?.kind !== "chart");
@@ -391,7 +394,7 @@ export function bindChartDialog() {
   if (bound) return;
   bound = true;
 
-  document.addEventListener("click", (event) => {
+  document.addEventListener("click", async (event) => {
     if (!state) return;
     const target = event.target instanceof Element ? event.target : null;
     if (!target) return;
@@ -442,13 +445,25 @@ export function bindChartDialog() {
       // something else) should not retype them one box at a time. One reading
       // to the line, name and number separated by a comma, a tab or a dash,
       // which is what every source this desk actually pastes from produces.
-      const text = window.prompt("One reading to a line — name, then the number.\n\nसातारा, 842\nकोल्हापूर, 1290");
+      // A window.prompt renders a ONE-LINE input, and this asks for a TABLE:
+      // measured, assigning "a,1\nb,2\nc,3" to one leaves "a,1b,2c,3" - the
+      // rows weld together and the desk sees forty characters of what they
+      // pasted. `askPrompt({ multiline: true })` is a real textarea.
+      const text = await askPrompt({
+        title: "Paste the readings",
+        body: "One reading to a line — the name, then the number.",
+        label: "Readings",
+        multiline: true,
+        placeholder: "सातारा, 842\nकोल्हापूर, 1290",
+        help: "Separate the name and the number with a comma, a tab or a dash.",
+        confirm: "Use these readings",
+      });
       if (text == null) return;
       const parsed = text.split(/\n+/).map((line) => {
         const match = /^(.*?)[\s,;\t|–—-]+(-?[\d.,]+)\s*$/.exec(line.trim());
         return match ? { label: match[1].trim(), value: match[2].replace(/,/g, "") } : null;
       }).filter(Boolean);
-      if (!parsed.length) { window.alert("Nothing in that looked like a name and a number."); return; }
+      if (!parsed.length) { await askMessage({ title: "Nothing to read", body: "Nothing in that looked like a name and a number. One reading to a line, with the name and the number separated by a comma, a tab or a dash." }); return; }
       harvest();
       state.rows = parsed;
       paint();

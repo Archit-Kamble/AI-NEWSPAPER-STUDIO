@@ -12,6 +12,7 @@
 // same `onPatch` every other control ends in. Nothing here invents geometry:
 // layoutSmartCard() measures the columns and fits every cell.
 import { escapeHtml } from "../format.js";
+import { askPrompt, askMessage } from "../../ui/dialog.js";
 import { CHART_INKS, layoutSmartCard } from "../smart-cards/layout.js";
 import "../layout/inset-panels.js";
 import "../layout/typefaces.js";
@@ -207,7 +208,8 @@ function apply() {
   const card = payload();
   const { onPatch, section, view } = state;
   if (!card) {
-    window.alert("A table needs at least one row with something in it.");
+    // Not awaited: see chart-dialog.js - the guard returns either way.
+    askMessage({ title: "The table is empty", body: "A table needs at least one row with something in it." });
     return;
   }
   const panels = (Array.isArray(view?.insetPanels) ? view.insetPanels : []).filter((p) => p?.kind !== "table");
@@ -255,7 +257,7 @@ export function bindTableDialog() {
   if (bound) return;
   bound = true;
 
-  document.addEventListener("click", (event) => {
+  document.addEventListener("click", async (event) => {
     if (!state) return;
     const target = event.target instanceof Element ? event.target : null;
     if (!target) return;
@@ -309,7 +311,17 @@ export function bindTableDialog() {
       // A desk with a table already in hand - an agency return, a spreadsheet
       // block - should not retype it cell by cell. One row to the line, cells
       // separated by a tab or a comma, which is what both of those produce.
-      const text = window.prompt("One row to the line. Separate the cells with a tab or a comma.\n\nThe first line is the heading row.");
+      // The same one-line box asked to take a table - see chart-dialog.js.
+      const text = await askPrompt({
+        title: "Paste the table",
+        body: "One row to the line. The first line is the heading row.",
+        label: "Rows",
+        multiline: true,
+        rows: 9,
+        placeholder: "जिल्हा\tपाऊस\tटक्के\nसातारा\t842\t96",
+        help: "Separate the cells with a tab or a comma.",
+        confirm: "Use this table",
+      });
       if (!text) return;
       const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
       if (!lines.length) return;

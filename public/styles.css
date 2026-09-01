@@ -7593,3 +7593,200 @@ body.print-view .page-imprint {
 }
 .smart-table-rule { position: absolute; left: 0; right: 0; display: block; }
 .smart-table-rule.is-hair { background: #cfcfcf; }
+
+/* ============ The paper's own dialog ============
+   Replaces `window.alert` / `confirm` / `prompt`, which titled forty of this
+   product's questions "localhost:3000 says" and rendered its most carefully
+   written sentence - the edition deletion question - as unstyled OS text with
+   no way to make the destructive button look destructive.
+
+   Everything here comes off the existing scale (--s1..--s6) and the existing
+   inks (--accent, --border, --primary, --secondary). A dialog is not a place to
+   start a second design language. */
+.sahas-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2400;
+  display: grid;
+  place-items: center;
+  padding: var(--s4);
+  background: rgba(27, 23, 20, .55);
+}
+.sahas-dialog {
+  width: 100%;
+  max-height: calc(100dvh - var(--s6));
+  overflow: auto;
+  padding: var(--s5);
+  border-radius: 10px;
+  background: white;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .34);
+}
+.sahas-dialog-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s3);
+  margin-bottom: var(--s3);
+}
+.sahas-dialog-head h2 {
+  margin: 0;
+  font-size: 1.18rem;
+  line-height: 1.25;
+  color: var(--primary);
+}
+/* The way out lives beside the way in - the rule this product already follows
+   for a device. A dialog a desk can only leave by answering it is a trap. */
+.sahas-dialog-close {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--secondary);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.sahas-dialog-close:hover { background: var(--bg-light); color: var(--primary); }
+.sahas-dialog-body { color: var(--primary); }
+.sahas-dialog-line { margin: 0 0 var(--s2); line-height: 1.5; }
+.sahas-dialog-line:empty { margin-bottom: var(--s3); }
+.sahas-dialog-field { display: grid; gap: var(--s1); margin-top: var(--s4); }
+.sahas-dialog-field > span { font-size: .82rem; font-weight: 700; color: var(--primary); }
+.sahas-dialog-field input,
+.sahas-dialog-field textarea {
+  width: 100%;
+  min-height: 40px;
+  padding: var(--s2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+  /* A pasted table keeps its rows. The whole reason this field exists. */
+  white-space: pre-wrap;
+  resize: vertical;
+}
+.sahas-dialog-help { margin: var(--s1) 0 0; color: var(--secondary); font-size: .82rem; line-height: 1.45; }
+.sahas-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin-top: var(--s5);
+}
+/* Primary-first in the DOM, so focus and screen readers meet it first;
+   reversed on screen, because a desk's eye ends at the right. */
+.sahas-dialog-actions { flex-direction: row-reverse; }
+.sahas-dialog-btn {
+  min-height: 40px;
+  padding: var(--s2) var(--s4);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: white;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.sahas-dialog-btn.is-primary { border-color: var(--accent); background: var(--accent); color: white; }
+/* A destructive action looks like what it does. Reject and Delete were peers of
+   Approve and Open on every screen this audit drove. */
+.sahas-dialog-btn.is-destructive { border-color: #a3122b; background: #a3122b; color: white; }
+.sahas-dialog-btn.is-quiet:hover { background: var(--bg-light); }
+.sahas-dialog-btn:focus-visible,
+.sahas-dialog-close:focus-visible,
+.sahas-dialog-field input:focus-visible,
+.sahas-dialog-field textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .sahas-dialog { animation: sahas-dialog-in 120ms ease-out; }
+}
+@keyframes sahas-dialog-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ============ Busy, and failed ============
+   A control that is working says so and cannot be pressed again; a region being
+   rebuilt says so to a screen reader. Both are new: before this the product had
+   no spinner, no skeleton and no `aria-busy` anywhere. */
+.is-busy { cursor: progress; opacity: .78; }
+.is-busy::after {
+  content: "";
+  display: inline-block;
+  width: .68em;
+  height: .68em;
+  margin-left: var(--s2);
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  vertical-align: -1px;
+  animation: sahas-spin 640ms linear infinite;
+}
+@keyframes sahas-spin { to { transform: rotate(360deg); } }
+/* The one piece of motion this product had none of - so it yields, like every
+   other, to a desk who has asked for less of it. */
+@media (prefers-reduced-motion: reduce) {
+  .is-busy::after { animation-duration: 2.4s; }
+}
+[aria-busy="true"].is-loading { position: relative; min-height: 60px; }
+[aria-busy="true"].is-loading::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(90deg, transparent, rgba(255, 255, 255, .62), transparent),
+    var(--bg-light);
+  background-size: 220px 100%;
+  background-repeat: no-repeat;
+  animation: sahas-sheen 1.15s ease-in-out infinite;
+}
+@keyframes sahas-sheen { from { background-position: -220px 0; } to { background-position: calc(100% + 220px) 0; } }
+@media (prefers-reduced-motion: reduce) {
+  [aria-busy="true"].is-loading::before { animation: none; background: var(--bg-light); }
+}
+
+/* A FAILURE STAYS. It used to fade to nothing after about five seconds,
+   carrying the server's raw error field and no way to try again. */
+.desk-notice.is-failure {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  border-left: 4px solid #ff6b7f;
+  background: #2a1418;
+}
+.desk-notice-text { flex: 1 1 auto; }
+.desk-notice-btn {
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: var(--s1) var(--s3);
+  border: 1px solid rgba(255, 255, 255, .5);
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.desk-notice-btn:hover { background: rgba(255, 255, 255, .14); }
+.desk-notice-close {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: inherit;
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: .78;
+}
+.desk-notice-close:hover { opacity: 1; background: rgba(255, 255, 255, .14); }
+.desk-notice-btn:focus-visible,
+.desk-notice-close:focus-visible { outline: 2px solid white; outline-offset: 1px; }

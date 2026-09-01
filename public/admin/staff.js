@@ -11,6 +11,8 @@
 // drifts, and this product has been bitten by that twice - the drifted template
 // keys, and `object-fit: cover` against `contain`.
 import { escapeHtml } from '../editor/format.js';
+import { askConfirm, askPrompt } from '../ui/dialog.js';
+import { showFailure } from '../ui/notice.js';
 
 let ROLES = [];
 const roleLabel = (key) => ROLES.find((r) => r.key === key)?.label || key || '';
@@ -137,7 +139,7 @@ function renderReporterForm(host, { rightPanel, reporter = null, onSaved }) {
     button.disabled = true;
     const response = await fetch(reporter ? `/api/staff/${reporter.id}` : '/api/staff', { method: reporter ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const result = await response.json().catch(() => ({}));
-    if (!response.ok) { button.disabled = false; return window.alert(result.error || 'That login could not be saved.'); }
+    if (!response.ok) { button.disabled = false; return showFailure(result.error || 'That login could not be saved.'); }
     onSaved();
   });
 }
@@ -159,25 +161,46 @@ async function renderReporterProfile(host, id, { rightPanel, onBack }) {
   host.querySelector('[data-edit-reporter]').addEventListener('click', () => renderReporterForm(host, { rightPanel, reporter, onSaved: () => renderReporterProfile(host, id, { rightPanel, onBack }) }));
   host.querySelector('[data-reporter-access]').addEventListener('click', async () => {
     const active = !reporter.is_active;
-    if (!window.confirm(active
-      ? `Restore ${reporter.name}'s login as ${roleLabel(reporter.role)}?`
-      : `Block ${reporter.name} (${roleLabel(reporter.role)})? Their work stays exactly where it is, and they cannot sign in - an open session included, from their next request.`)) return;
+    const go = active
+      ? await askConfirm({ title: `Restore ${reporter.name}'s login?`,
+          body: `They sign in again as ${roleLabel(reporter.role)}.`,
+          confirm: 'Restore the login', cancel: 'Leave it blocked' })
+      : await askConfirm({ title: `Block ${reporter.name}?`,
+          body: `${roleLabel(reporter.role)}. Their work stays exactly where it is, and they cannot sign in — an open session included, from their next request.`,
+          confirm: 'Block this login', cancel: 'Keep it active', destructive: true });
+    if (!go) return;
     const save = await fetch(`/api/staff/${id}/access`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active }) });
     // The server refuses two blocks by name - your own login, and the paper's
     // last owner - so its sentence is what the owner needs to read, not a
     // generic one written here.
     const outcome = await save.json().catch(() => ({}));
-    if (!save.ok) return window.alert(outcome.error || 'That login could not be changed.');
+    if (!save.ok) return showFailure(outcome.error || 'That login could not be changed.');
     renderReporterProfile(host, id, { rightPanel, onBack });
   });
   host.querySelectorAll('[data-review-story]').forEach((button) => button.addEventListener('click', async () => {
     const status = button.dataset.reviewStatus;
-    const reviewNote = status === 'rejected' ? window.prompt('Tell the reporter what needs correction (optional):', '') : '';
+    // A note to a journalist about their own work, typed into a box that
+    // showed about forty characters of it. It is a real field now - and the
+    // question says plainly that the reporter reads it, which a prompt box
+    // could not.
+    const reviewNote = status === 'rejected'
+      ? await askPrompt({
+          title: `Send ${reporter.name} back this story`,
+          body: 'They see this note against the story. Say what needs correcting.',
+          label: 'Note to the reporter',
+          multiline: true,
+          rows: 5,
+          placeholder: 'The dateline is wrong, and paragraph two needs a source.',
+          help: 'Optional — but a rejection with no reason is one nobody can act on.',
+          confirm: 'Send it back',
+          cancel: 'Leave it pending',
+        })
+      : '';
     if (reviewNote === null) return;
     button.disabled = true;
     const save = await fetch(`/api/news/${button.dataset.reviewStory}/status`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status, reviewNote }) });
     const outcome = await save.json().catch(() => ({}));
-    if (!save.ok) { button.disabled = false; return window.alert(outcome.error || 'That review could not be saved.'); }
+    if (!save.ok) { button.disabled = false; return showFailure(outcome.error || 'That review could not be saved.'); }
     renderReporterProfile(host, id, { rightPanel, onBack });
   }));
 }

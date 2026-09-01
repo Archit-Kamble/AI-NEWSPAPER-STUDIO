@@ -16,6 +16,7 @@
 //
 // This is the only module that talks to the section API and the only one that
 // subscribes to the store on behalf of the views. Views never import each other.
+import { askPrompt } from "../ui/dialog.js";
 
 import { renderCanvas, refreshSection, refreshSelection, refreshGuides, refreshColumnRules } from "./canvas/canvas.js";
 import { renderMiniMap, configure as configureCanvasView, applyTransform } from "./canvas/canvas-view.js";
@@ -335,7 +336,13 @@ async function addPictureFromLink() {
   const key = store.getState().selectedSectionKey;
   if (!page || !key) return showNotice("Select the block the picture goes on first.");
 
-  const link = window.prompt("Paste the picture's web address.\n\nIt is fetched, checked and stored by this paper - the link itself is never printed.");
+  const link = await askPrompt({
+    title: "Add a picture from a link",
+    label: "Picture address",
+    placeholder: "https://…",
+    help: "It is fetched, checked and stored by this paper — the link itself is never printed.",
+    confirm: "Fetch the picture",
+  });
   if (!link) return;
 
   showNotice("Fetching the picture…");

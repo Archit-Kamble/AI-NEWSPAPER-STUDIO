@@ -8843,3 +8843,45 @@ body.print-view #printViewBtn {
   .reporter-form button { min-height: 44px; }
   .reporter-form textarea { min-height: min(42vh, 340px); }
 }
+
+/* ===========================================================================
+   THE SETTINGS RAIL'S NOTES, AND A SEGMENTED CONTROL THAT FITS
+
+   Measured on a real block at 1512x950: the rail is a 627px window holding
+   2621px of panels. Properties alone is 1453px - 2.3x the window - and 537px
+   of Properties is eight paragraphs explaining its own controls.
+   =========================================================================== */
+.tools-notes-toggle {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 999px;
+  background: white;
+  font: inherit;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--secondary, #666);
+  cursor: pointer;
+}
+.tools-notes-toggle:hover { background: var(--bg-light, #f5f5f5); }
+.tools-notes-toggle[aria-pressed="true"] {
+  background: var(--accent, #c41e3a);
+  border-color: var(--accent, #c41e3a);
+  color: white;
+}
+/* SHOWN by default - see the note in workspace.js's bindNotesToggle(). The
+   switch is additive: a desk who wants the 537px back presses Notes once and
+   it is remembered. */
+.workspace-tools-body:not(.show-notes) .ext-note { display: none; }
+
+/* A SEGMENTED CONTROL MAY BE NARROWER THAN ITS LABELS.
+   `.segment` is `flex: 1` and a flex item's automatic minimum size is its
+   content, so six buttons in a 340px rail simply refused to shrink: measured,
+   the Border control's last two ran 42px and 38px PAST the rail's own right
+   edge, where the rail clips them - which is the stray half-letter visible
+   against the page in a screenshot. `min-width: 0` is what lets flex do the
+   thing it was asked to do; the labels already wrap. */
+.segment { min-width: 0; }
+.segmented { flex-wrap: wrap; }

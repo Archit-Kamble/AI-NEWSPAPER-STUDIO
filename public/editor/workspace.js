@@ -1426,6 +1426,21 @@ function renderShell() {
           <div class="workspace-tools-head">
             <h3>Block settings</h3>
             <span class="workspace-tools-block" id="toolsBlockName">No block open</span>
+            <!-- THE EXPLANATIONS ARE 37% OF THIS RAIL.
+                 Measured on a real block: the rail is a 627px window holding
+                 2621px, Properties alone is 1453px of that, and 537px of
+                 Properties is eight paragraphs of prose explaining its own
+                 controls. They are good paragraphs - this product explains
+                 itself deliberately - but a note that pushes the control it
+                 describes out of the window is competing with the thing it
+                 explains.
+                 One switch, not eight, and it is remembered: a desk learning
+                 the paper turns them on, a desk who knows it leaves them off
+                 and gets the room back. Nothing is deleted and nothing is
+                 more than one press away. -->
+            <button type="button" class="tools-notes-toggle" id="toolsNotesBtn"
+                    aria-pressed="false"
+                    title="Show or hide the notes that explain each control">Notes</button>
           </div>
           <div class="workspace-tools-body" id="workspaceToolsPanel"></div>
         </aside>
@@ -1825,8 +1840,59 @@ function bindPaperControls() {
   // Fit mode is derived from the container, so it has to be recomputed whenever
   // the container changes size - a window resize or a splitter drag.
   measureToolbar();
+  bindNotesToggle();
   window.addEventListener("resize", onWorkspaceResized);
   window.addEventListener("workspace-resized", onWorkspaceResized);
+}
+
+// Whether the settings rail shows the notes that explain its controls. Kept in
+// localStorage beside the splitter sizes, and for the same reason: it is a
+// decision about this desk's screen, not about the edition, so it must not
+// have to be made again every morning.
+const NOTES_KEY = "sahas.workspace.showNotes";
+
+function bindNotesToggle() {
+  const button = document.getElementById("toolsNotesBtn");
+  // THE PANEL, NOT THE RAIL AROUND IT. The dock borrows this element and moves
+  // it into the Block Editor's right-hand column (assist-dock.js), so a rule
+  // scoped to `.workspace-tools` stops matching the moment a desk presses the
+  // Block or Type tab - and every note the desk had switched off would come
+  // straight back in the other column. The state belongs to the panel, so it
+  // travels with it. The element itself survives re-renders; only its
+  // innerHTML is rewritten.
+  const rail = document.getElementById("workspaceToolsPanel");
+  if (!button || !rail) return;
+  // DEFAULT ON, and that is deliberate rather than timid. This product
+  // explains itself on purpose, and switching every explanation off for a desk
+  // who has never asked would quietly change what the whole newsroom sees on
+  // open - a bigger decision than reclaiming 537px, and not one to take
+  // unattended. workspace.browser.js asserts one of these notes by name
+  // ("pointing at what actually decides its position"), which is the product
+  // saying the same thing.
+  // So the switch is purely additive: nothing moves until a desk presses it,
+  // and once pressed it is remembered. Flipping this one comparison is all it
+  // would take to change the default if the newsroom would rather have the
+  // room than the prose.
+  let on = true;
+  try {
+    on = localStorage.getItem(NOTES_KEY) !== "0";
+  } catch {
+    // A blocked or full storage quota must never keep the editor from opening.
+  }
+  const paint = () => {
+    rail.classList.toggle("show-notes", on);
+    button.setAttribute("aria-pressed", on ? "true" : "false");
+  };
+  paint();
+  button.addEventListener("click", () => {
+    on = !on;
+    try {
+      localStorage.setItem(NOTES_KEY, on ? "1" : "0");
+    } catch {
+      // Same: the switch still works for this session.
+    }
+    paint();
+  });
 }
 
 // Both the page canvas and the live preview are scaled to their containers, so

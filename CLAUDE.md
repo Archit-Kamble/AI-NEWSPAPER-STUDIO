@@ -5834,8 +5834,23 @@ non-null in exactly the case the release exists for.
   editions list and review queue use. It was **287 × 105,580 px** holding 1,327
   cards, writing a megabyte into one panel on the first paint of every edition.
   Measured after: 3,197 px.
-- **A dark mode**, and **the newspaper is never darkened** — `.newspaper-canvas`
-  is a sheet of newsprint and a dark one would be a lie about what prints.
+- **A dark mode**, built from the SURFACES rather than by flipping the ink
+  tokens — which is how the first attempt put white `SAHAS` on a light header.
+  `--primary` is an ink in forty rules and a background in six; those six are a
+  dark surface white type sits on and are now `--ink-on-dark`, because an ink
+  flips in a dark room and a dark surface does not. Every remaining light
+  surface was found by **asking the running page** which of its elements paint a
+  light ground, per screen, with the newspaper excluded by name.
+- **The layout desk stays in the light, and that is a decision.** Dark chrome
+  round a white canvas is what every layout tool does and it was tried: the
+  toolbar, the tools rail, the page map and the Block Editor's panels all went
+  dark cleanly. The tail stopped it — the rulers, the minimap, the guides, the
+  status badges are **instruments for judging the sheet**, calibrated against
+  white paper, and re-inking them one at a time is how a desk ends up with an
+  overset badge they cannot see on press night. `.workspace-shell` resets the
+  custom properties and they inherit down: one rule instead of fifty, and
+  anything added to the workspace later is light by default. Measured: the shell
+  paints `rgb(246,246,247)` in both rooms.
 - **A print sheet.** `Ctrl+P` printed the application around the report.
 - **Print view clears the desk below the sheet.** The Block Editor is hidden;
   **the toolbar deliberately stays** — it is above the page, and this repository

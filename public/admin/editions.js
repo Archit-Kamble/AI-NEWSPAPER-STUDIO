@@ -172,7 +172,7 @@ function editionRowHtml(edition, today, mayDelete) {
     <div class="edition-row${iso === today ? ' edition-row--today' : ''}" data-edition-id="${edition.id}">
       <div class="edition-row-date">
         <strong>${escapeHtml(marathiDate(iso))}</strong>
-        <small>${escapeHtml(iso)} · ${escapeHtml(relativeDay(iso, today))}</small>
+        <small>${[iso, relativeDay(iso, today)].filter(Boolean).map(escapeHtml).join(' · ')}</small>
       </div>
       <div class="edition-row-name">
         ${escapeHtml(edition.name || '')}
@@ -182,7 +182,7 @@ function editionRowHtml(edition, today, mayDelete) {
         <span style="width:${fill.percent}%"></span>
       </div>
       <span class="status-pill ${escapeHtml(edition.status || 'draft')}">${escapeHtml(edition.status || 'draft')}</span>
-      <button class="btn-primary edition-open" data-edition-id="${edition.id}">Open</button>
+      <button class="btn-secondary edition-open" data-edition-id="${edition.id}">Open</button>
       ${mayDelete ? `<button class="edition-delete" data-edition-id="${edition.id}"
               aria-label="Delete the edition for ${escapeHtml(marathiDate(iso))}"
               title="Delete this edition and everything on its pages">&#215;</button>` : ''}

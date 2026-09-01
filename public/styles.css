@@ -25,6 +25,14 @@
   --s4: 16px;
   --s5: 24px;
   --s6: 32px;
+
+  /* `--primary` is an INK - it is `color:` in forty rules and `background:` in
+     six. Those six are a dark SURFACE that white type sits on (the header, the
+     drawer, an active pill), and they are a different decision: an ink flips
+     in a dark room and a dark surface does not. Conflating them is what put
+     white "SAHAS" on a light header the first time this stylesheet was given a
+     dark mode. */
+  --ink-on-dark: #333;
 }
 
 * {
@@ -181,7 +189,7 @@ body {
   gap: var(--s3);
   height: 60px;
   padding: 0 var(--s4);
-  background: var(--primary);
+  background: var(--ink-on-dark);
   color: white;
   border-bottom: 2px solid var(--accent);
 }
@@ -1880,7 +1888,7 @@ body.print-view .canvas-view-controls {
   background: #f7f7f8;
 }
 .page-pill.active {
-  background: var(--primary);
+  background: var(--ink-on-dark);
   color: white;
   border-color: var(--primary);
 }
@@ -1916,7 +1924,7 @@ body.print-view .canvas-view-controls {
   color: #74747e;
 }
 .canvas-toolbar .layout-btn.active {
-  background: var(--primary);
+  background: var(--ink-on-dark);
   color: white;
   border-color: var(--primary);
 }
@@ -2380,7 +2388,7 @@ body.print-view .page-guides {
   cursor: pointer;
 }
 .ext-chip.active {
-  background: var(--primary);
+  background: var(--ink-on-dark);
   border-color: var(--primary);
   color: white;
 }
@@ -8159,7 +8167,7 @@ textarea:disabled {
   line-height: 1;
   font-size: 15px;
   color: white;
-  background: var(--primary);
+  background: var(--ink-on-dark);
   border: 2px solid white;
   border-radius: 50%;
   cursor: pointer;
@@ -8278,31 +8286,146 @@ textarea,
    ========================================================================== */
 @media (prefers-color-scheme: dark) {
   :root {
+    /* Only the INKS and the SURFACES move. `--ink-on-dark` deliberately does
+       not: the header and the drawer are a dark surface in both rooms, and
+       white type sits on them either way. Flipping it the first time this was
+       written put white "SAHAS" on a light header. */
     --primary: #e8e8ea;
-    --secondary: #a8a8b0;
+    --secondary: #a6a6b0;
     --accent: #ff5f74;
     --border: #34343c;
-    --bg-light: #202027;
+    --bg-light: #23232a;
+    --ink-on-dark: #101014;
+
+    /* The surfaces this stylesheet paints white by name. */
+    --paper: #1c1c22;
+    --paper-raised: #24242c;
   }
-  body { background: #17171c; color: var(--primary); }
+
+  body { background: #131318; color: var(--primary); }
+
+  /* Everything that says `background: white` in the light room. Listed rather
+     than swept, so a surface that should stay white - the newsprint below -
+     can never be caught by accident. */
   .form-section,
   .login-box,
   .news-item,
   .admin-news-card,
   .edition-row,
   .content,
-  .right-panel { background: #1d1d23; color: var(--primary); }
-  input, select, textarea { background: #14141a; color: var(--primary); border-color: var(--border); }
-  .empty-state { background: #202027; }
-  .review-note { background: #2a1c20; }
+  .right-panel,
+  .sahas-dialog,
+  .workspace-toolbar,
+  .canvas-toolbar,
+  .worklist-panel,
+  .preflight-panel,
+  .press-panel,
+  .newsdesk-panel,
+  .story-editor,
+  .ext-editor-panel,
+  .workspace-tools,
+  .narrow-window-note { background: var(--paper); color: var(--primary); }
+
+  /* Found by asking the running page which elements paint a light ground in a
+     dark room, rather than by guessing at selectors - the newspaper itself
+     excluded by name. */
+  .dashboard-card,
+  .dashboard-stat,
+  .news-item:hover,
+  .empty-state,
+  .upload-area,
+  .story-explorer-more { background: var(--paper-raised); color: var(--primary); }
+
+  /* Swept per screen the same way - review queue, Staff, Settings and the
+     workspace itself, each asked which of its elements still paint light. */
+  .workspace-shell,
+  .reporter-list,
+  .settings-form section,
+  .form-section section,
+  .staff-form { background: var(--paper); color: var(--primary); }
+  .toolbar-btn,
+  .layout-btn,
+  .page-pill,
+  .ext-chip { background: var(--paper-raised); color: var(--primary); border-color: var(--border); }
+  .toolbar-btn:hover:not(:disabled),
+  .layout-btn:hover:not(:disabled) { background: #2e2e38; }
+
+  /* THE LAYOUT DESK STAYS IN THE LIGHT, AND THAT IS A DECISION.
+     Dark chrome around a white canvas is what every layout tool does, and it
+     was tried here: the toolbar, the tools rail, the page map and the Block
+     Editor's own panels all went dark cleanly. The tail is what stopped it -
+     the canvas rulers, the minimap, the guides, the block status badges, the
+     selection chrome. Every one of those is an INSTRUMENT FOR JUDGING THE
+     SHEET, calibrated against white paper: a ruler's tick marks, a minimap's
+     block fills and an overset badge are all read against the newsprint they
+     sit beside, and re-inking them one at a time in a room this stylesheet
+     cannot measure is how a desk ends up with a badge they cannot see on
+     press night.
+     So the sheet keeps its work surface. The custom properties are reset on
+     the shell and inherit down, which is one rule rather than fifty, and it
+     cannot drift: anything added to the workspace later is light by default
+     exactly as it is today. The screens a desk reads at 4am - the editions
+     list, the review queue, Staff, Settings, the sign-in page - are the ones
+     that go dark, and they are complete. */
+  .workspace-shell {
+    --primary: #333;
+    --secondary: #666;
+    --accent: #c41e3a;
+    --border: #ddd;
+    --bg-light: #f5f5f5;
+    --paper: #ffffff;
+    --paper-raised: #ffffff;
+    --ink-on-dark: #333;
+    color-scheme: light;
+    /* The exact ground the shell paints in the light room, so the two are the
+       same screen and not one a shade brighter. */
+    background: #f6f6f7;
+    color: #333;
+  }
+
+  .edition-row-fill { background: #2e2e38; }
+  .edition-row-fill span { background: var(--accent); }
+  .edition-delete { background: var(--paper-raised); color: var(--secondary); border-color: var(--border); }
+  .edition-delete:hover { color: white; background: #9a1b31; }
+  .status-pill.finalised { color: #7fc79b; background: #1a2620; }
+
+  input, select, textarea, .sahas-dialog-btn.is-quiet {
+    background: #15151a;
+    color: var(--primary);
+    border-color: var(--border);
+  }
+  .btn-secondary, .empty-state-btn, .password-reveal {
+    background: var(--paper-raised);
+    color: var(--primary);
+    border-color: var(--border);
+  }
+  .status-pill { background: #2c2c35; color: var(--primary); }
+  .status-pill.approved { color: #7fc79b; background: #1a2620; }
+  .status-pill.pending  { color: #d8b866; background: #2c2618; }
+  .status-pill.rejected { color: #ff8a9c; background: #331a1f; }
+  .status-pill.draft    { color: #9fb3c8; background: #1e242c; }
+
+  .review-note,
   .login-error { background: #2a1c20; }
   .field-warning { color: #d8b866; }
-  .skel { background: linear-gradient(90deg, #202027 0%, #2a2a33 42%, #202027 84%); }
+  .field-error { color: #ff8a9c; }
+  .reporter-form .is-invalid { background: #2a1c20; }
+  .skel { background: linear-gradient(90deg, #23232a 0%, #2e2e38 42%, #23232a 84%); }
+  .sahas-dialog-backdrop { background: rgba(0, 0, 0, .62); }
 
-  /* The sheet stays a sheet. */
+  /* THE NEWSPAPER IS NEVER DARKENED, AND THAT IS THE WHOLE BOUNDARY.
+     `.newspaper-canvas` is a sheet of newsprint. A dark one would be a lie
+     about what prints, and the desk is judging ink on paper. `color-scheme`
+     is stated as well as the background so a form control drawn inside the
+     canvas does not come back in the browser's dark palette. */
   .newspaper-canvas,
-  .newspaper-canvas * { color-scheme: light; }
-  .newspaper-canvas { background: white; }
+  .newspaper-page,
+  .canvas-surface,
+  #edCanonicalContent {
+    background: white;
+    color: #111;
+    color-scheme: light;
+  }
 }
 
 /* ==========================================================================

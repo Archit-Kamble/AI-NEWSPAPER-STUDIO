@@ -22,8 +22,29 @@ const check=(n,ok,d='')=>{ok?pass++:fail++;console.log(`${ok?'PASS':'FAIL'}  ${n
   const b = await chromium.launch({ executablePath:'/usr/bin/google-chrome' });
   const p = await b.newPage({ viewport:{width:1512,height:950} });
   const errors=[]; p.on('pageerror',e=>errors.push(e.message.slice(0,140)));
-  let question=null, answer=true;
-  p.on('dialog', async d=>{ question=d.message(); answer ? await d.accept() : await d.dismiss(); });
+  // THE QUESTION IS THE PAPER'S OWN NOW, NOT THE OPERATING SYSTEM'S.
+  //
+  // This net was written against `window.confirm` and never updated when the
+  // forty native dialogs became `public/ui/dialog.js`. So it sat waiting for a
+  // 'dialog' event that no longer fires: five checks failed, "CANCEL leaves
+  // the edition alone" PASSED for the wrong reason (nothing was deleted
+  // because the question was still open and unanswered), and the run then
+  // crashed 30s later with the dialog's own backdrop intercepting the next
+  // click. A net pinned to a mechanism, outliving the mechanism.
+  //
+  // Nothing may reach the operating system any more, so that is asserted
+  // rather than handled - the same inversion admin-screens.browser.js makes.
+  let nativeDialog=null;
+  p.on('dialog', async d=>{ nativeDialog=d.message(); await d.dismiss(); });
+  // The close button is a lone "×" line inside the dialog, so it lands between
+  // the title and the first sentence and becomes whatever a check reports as
+  // its detail. Dropped, or the net's own output lies about what the desk read.
+  const askedText = async () => (await p.locator('.sahas-dialog').innerText())
+    .split('\n').filter((line) => line.trim() && line.trim() !== '×').join('\n');
+  const answerWith = async (selector) => {
+    await p.locator(selector).first().click();
+    await p.waitForSelector('.sahas-dialog', { state:'detached', timeout:8000 });
+  };
   try {
     await p.goto(BASE,{waitUntil:'networkidle'});
     if (await p.locator('#email').count()) { await p.fill('#email','admin@esahas.com'); await p.fill('#password','admin123'); await p.click('#loginBtn'); }
@@ -53,20 +74,25 @@ const check=(n,ok,d='')=>{ok?pass++:fail++;console.log(`${ok?'PASS':'FAIL'}  ${n
     check('and it has a Delete button', await row.locator('.edition-delete').count()===1);
 
     // --- CANCEL must not delete -------------------------------------------
-    answer = false;
     await row.locator('.edition-delete').click();
-    await p.waitForTimeout(900);
-    check('it asks before it deletes', !!question && /Delete the edition/.test(question));
-    check('  and the question names the DATE, not the id', !!question && question.includes('2099-03-14'), (question||'').split('\n')[0]);
-    check('  and says what is in it', !!question && /blocks|written into it/.test(question),
-      (question||'').split('\n').filter(Boolean)[1] || '');
-    check('  and says it cannot be undone', !!question && /cannot be undone/.test(question));
-    check("  and says reporters' filings are safe", !!question && /filings are not affected/i.test(question));
+    await p.waitForSelector('.sahas-dialog', { timeout:8000 });
+    const question = await askedText();
+    check('it asks before it deletes', /Delete the edition/.test(question));
+    check('  and it does not do it through the operating system', nativeDialog===null, String(nativeDialog));
+    check('  and the question names the DATE, not the id', question.includes('2099-03-14'), question.split('\n')[0]);
+    check('  and says what is in it', /blocks|written into it/.test(question),
+      question.split('\n').filter(Boolean)[1] || '');
+    check('  and says it cannot be undone', /cannot be undone/.test(question));
+    check("  and says reporters' filings are safe", /filings are not affected/i.test(question));
+    await answerWith('.sahas-dialog-btn.is-quiet');
     check('CANCEL leaves the edition alone', await p.locator(`.edition-row[data-edition-id="${ID}"]`).count()===1);
 
     // --- accepting really removes it --------------------------------------
-    answer = true; question = null;
     await p.locator(`.edition-row[data-edition-id="${ID}"] .edition-delete`).click();
+    await p.waitForSelector('.sahas-dialog', { timeout:8000 });
+    // The destructive button, by its own class - naming it by its words would
+    // pin this net to a sentence the desk may reword.
+    await answerWith('.sahas-dialog-btn.is-destructive');
     await p.waitForTimeout(2500);
     check('accepting removes the row', await p.locator(`.edition-row[data-edition-id="${ID}"]`).count()===0);
     check('  and the desk keeps its search', await p.inputValue('#editionSearch')==='2099-03-14',

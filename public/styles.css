@@ -5422,11 +5422,44 @@ body.print-view .mono-forme-warning { display: none; }
   .editions-list-heading .btn-submit,
   .edition-creator-heading .btn-secondary { width: 100%; }
   .edition-creator-fields { grid-template-columns: 1fr; }
+  /* THE DELETE WAS THE BIGGEST TARGET ON THE CARD.
+     Two columns and six children means each one takes a whole cell, and the
+     `x` landed in the 1fr one. Measured on a real dashboard:
+
+                          1512px      390px
+       delete             25 x 24    163 x 24     6.5x wider
+       Open               59 x 36    155 x 36
+
+     On the desk it is a deliberately quiet 25px `x` at the end of the row -
+     the quietness IS the design for a hard delete with no undo. On a phone it
+     became a wide grey bar sitting directly under Open, so the most
+     destructive control on the screen was also the easiest one to hit by
+     accident - and at 24px tall it was still under the 44px thumb minimum,
+     which makes it hard to hit on PURPOSE. Worst of both.
+
+     Explicit placement instead: the reading matter takes full-width rows, and
+     the three controls share the last one - the pill at the start, then Open,
+     then the delete as a 44px square at the end, the way it reads on the
+     desk. */
   .edition-row {
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 1fr auto auto;
   }
+  .edition-row-date,
+  .edition-row-name,
   .edition-row-fill {
     grid-column: 1 / -1;
+  }
+  .edition-row .status-pill { grid-column: 1; justify-self: start; }
+  .edition-row .edition-open {
+    grid-column: 2;
+    min-height: 44px;
+    padding-inline: var(--s4, 16px);
+  }
+  .edition-row .edition-delete {
+    grid-column: 3;
+    justify-self: end;
+    width: 44px;
+    height: 44px;
   }
 }
 

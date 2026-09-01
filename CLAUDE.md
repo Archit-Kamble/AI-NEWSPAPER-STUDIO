@@ -5898,6 +5898,137 @@ node tests/browser/desk-actions.browser.js
 ```
 
 
+### The panel a desk asked for comes to THEM
+
+Six reports from the desk in one message, and four of them have one cause: the
+panel is on the page, and reaching it means scrolling somewhere else. All of it
+was measured by driving the running app at 1512×950 and 390×844; none of it is
+visible in the source.
+
+**The block's own page was drawn under the AI column.** `.block-frame` is a grid
+whose implicit column is sized by its widest child — and its widest child is the
+**device bar**, 1406 px of controls that scroll inside themselves, in a 978 px
+host. So `justify-items: center` centred every *other* child on 1406 rather than
+on 978:
+
+| | host right | page right | the AI column starts |
+|---|---|---|---|
+| top-advert | 1016 | **1226** | 1058 |
+| masthead-advert | 1016 | **1192** | 1058 |
+| brief-one | 1016 | **1160** | 1058 |
+
+168 px of the page sat underneath the AI panel. The page was never mis-*sized* —
+`layoutPage()` fits it to the host and 970 ≤ 978 — it was mis-**placed** by a
+track nothing had bounded. `grid-template-columns: minmax(0, 1fr)`, which is the
+fix `.smart-card-tender-copy` already carries for the same reason: an `auto`
+track sizes to a `nowrap` line's whole min-content width. `.device-bar` needs
+`min-width: 0` beside it, or the track is bounded and the bar overflows instead
+of scrolling.
+
+#### The assist column is a DOCK, not a stack
+
+`public/editor/external-editor/assist-dock.js`. It drew AI, Layout and Smart
+cards one under the other — **1519 px of column against a 950 px viewport** —
+and the four panels a desk reaches for most were not in it at all: Properties,
+Typography, Story details and History live in the settings rail, capped to the
+page's own height, which measured **a 462 px window holding 2866 px of panels**.
+
+One strip of tabs, one panel under it: **1519 px → 486–733 px**.
+
+- **Nothing here is a second copy of a panel, and that is the whole design.** A
+  tab does not re-render a panel; it **moves the panel's own element** into this
+  column and moves it back on the way out. Every listener a panel bound is bound
+  to its own nodes and survives the move, so there is no re-binding, no second
+  state, and no way for the docked copy and the real one to drift — which is the
+  failure this project has been bitten by more than once.
+- **`releaseDockedPanels()` runs before the container's innerHTML is rewritten.**
+  The rail's host (`#workspaceToolsPanel`) lives *outside* `#externalEditorPanel`,
+  so while it is docked it is inside the element about to be wiped — and the wipe
+  would destroy the rail's only panel host and leave the rail permanently empty,
+  a far worse fault than the one this module fixes.
+- **A panel's home is remembered, not named.** The rail's host has a stable home;
+  the picture controls do not — they are written *into* the story column by
+  `pictureControlsMarkup()`, so their element is a new one after every render and
+  their home is whichever parent that render gave them. Naming a fixed socket was
+  tried and is wrong: "home" would be a place they had never been, and the first
+  tab switch would move them permanently out of the story column.
+- **The strip scrolls, it does not wrap**, for the reason the device bar's own
+  header states: a wrapping strip's height is a function of its contents, and its
+  contents change as a desk works.
+
+**A picture brings its own controls.** Selecting one opens the Picture tab, so
+crop, wrap, rotate, order and Remove background arrive beside the block instead
+of 1200 px down the page. Deliberately **not** called on deselection — switching
+a desk away from a panel they did not ask to leave is the viewport-throwing
+fault this repository has already fixed twice.
+
+**The rail chains its scroll.** `overscroll-behavior: contain` stopped the wheel
+dead at the end of that 462 px window with the rest of the desk still below the
+fold. `contain` is for a surface that scrolls independently of the document; this
+one is a column of the page.
+
+**Two nets take the route a desk takes** now the cards panel is behind a tab.
+Nothing about the card changed; the route to it did.
+
+#### A card being prepared says so, in the shape of a card
+
+The button disabled itself and changed its own words, and that was all. The
+share/gold panel fetches a live market feed, so it is the card that keeps a desk
+waiting longest — in front of a screen that looked as though nothing had
+happened. `busyButton` on the control, a skeleton where the card will be under
+the same sheen every other loading surface uses, and **both taken away by a
+refusal**: a skeleton left standing is a card the desk goes on waiting for.
+
+#### Save is red when there is something to save
+
+It was `#tbSave:not(:disabled)` — the paper's accent for the whole time a block
+was open, whether or not a character had been typed. Autosave is real and the
+writing panel says so in as many words, so a permanently-red Save is a warning
+that is always on; and it put **three** accent-red controls in one eyeline
+(Save, Publish, "Back to page") when only one of them is irreversible and public.
+
+`toolbar.js` has toggled **`.has-work`** on that button since the save states
+were written and **nothing in the stylesheet read it** — the dirty signal the
+product already computed could not be seen, and the signal that could be seen
+meant nothing. That is the `drop_cap` / `list_style` / `letter_spacing_px` shape
+— a mechanism with no surface — arriving in the CSS instead of the schema.
+
+Nine toolbar controls became three groups, hairline-separated, **in the order
+they already stood**: the block you are on, the edition on its way out, the whole
+paper. No button moves — a bar a desk presses all day is muscle memory, and
+grouping is something you can see without having to relearn where anything is.
+
+#### The reporter's screens on a phone
+
+Driven at 390×844 as a real touch device. The layout already holds — no sideways
+scroll on any of the six screens, 16 px fields so iOS does not zoom on focus,
+56 px drawer rows — so this is the last hand's width, not a rescue.
+
+- **The two actions were mismatched and the wrong way round.** "Save as a draft"
+  drew **150×45 in the paper's accent**; "send it to the editors" — what the
+  whole screen is for — drew **356×40 plain**. Both full width and a thumb tall
+  now, the emphasis follows the meaning, and Send is placed under the thumb
+  because on a phone the lower a control sits the harder it is to reach.
+- **A news story is not a comment box.** The body field was **100 px** — about
+  four lines of Devanagari — on the one field a reporter lives in. `min(42vh,
+  340px)`, bounded in vh so it never eats a small screen whole.
+- **A thumb is about 44 px and five fields were 36**, while the drawer rows were
+  already 56 — so the screen was comfortable to navigate and fiddly to fill in,
+  which is backwards for a form.
+
+**One fault found in my own CSS by measuring it rather than reading it:** the
+44 px minimum listed `textarea` again at equal specificity and overwrote the
+taller rule three lines above, taking the body field **100 px → 54 px** — smaller
+than before the rule meant to grow it. Two of my own rules cancelling each other
+out, which is the exact hazard the design rules already warn about.
+
+```bash
+node tests/browser/workspace.browser.js       # 224/224
+node tests/browser/smart-cards.browser.js     # 27/27
+node tests/browser/editor-parity.browser.js   # 70/70
+node tests/browser/device-bar.browser.js      # 65/65
+```
+
 ## Engineering rules
 
 - **The overflow diagnosis started from desk-selected baseline `52c9556`.** Fix

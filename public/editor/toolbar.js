@@ -42,6 +42,12 @@ export function renderToolbar({ newspaper, hasSelection, storyPickerOpen, handle
       <span class="save-indicator" id="saveIndicator"></span>
     </div>
     <div class="toolbar-actions">
+      <!-- Three groups, hairline-separated, in the order the buttons already
+           stood: the block you are on, the edition on its way out, the whole
+           paper. Nothing is reordered - a bar a desk presses all day is
+           muscle memory, and grouping is a thing you can see without having
+           to relearn where anything is. -->
+      <div class="toolbar-group">
       ${button("tbFromReporter", "search", "From Reporter", {
         disabled: !hasSelection,
         active: storyPickerOpen,
@@ -50,6 +56,9 @@ export function renderToolbar({ newspaper, hasSelection, storyPickerOpen, handle
       ${button("tbSave", "save", "Save", { disabled: !hasSelection })}
       ${button("tbUndo", "undo", "Undo", { disabled: true })}
       ${button("tbRedo", "redo", "Redo", { disabled: true })}
+      </div>
+
+      <div class="toolbar-group">
       ${button("tbPreflight", "preview", "Preflight", {
         title: "Check the edition before it goes to the plate",
       })}
@@ -83,8 +92,12 @@ export function renderToolbar({ newspaper, hasSelection, storyPickerOpen, handle
           </button>
         </div>
       </details>
+      </div>
+
+      <div class="toolbar-group">
       ${button("tbAI", "ai", "AI Compose", { title: "Plan AI composition from approved newsroom copy" })}
       ${can.publish ? button("tbPublish", "publish", "Publish", { primary: true }) : ""}
+      </div>
     </div>
   `;
 

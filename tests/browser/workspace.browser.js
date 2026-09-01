@@ -1768,6 +1768,14 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
       };
     }, [ED, KEY]);
 
+    // THE CARDS PANEL IS BEHIND A TAB NOW (assist-dock.js). The assist column
+    // was a stack of three panels always drawn - 1519px of column against a
+    // 950px viewport - and it is one panel at a time under a strip of buttons,
+    // which is what lets the picture controls and the settings panels reach
+    // the desk without a scroll. Nothing about the card changed; the route to
+    // it did, so this net takes the route a desk takes.
+    await page.locator('[data-assist-tab="cards"]').click();
+    await page.waitForTimeout(200);
     await page.locator('[data-smart-card="sudoku"]').click();
     // INTO THE BLOCK THAT IS OPEN, which is what this whole section is about:
     // the card, its headline and the block's own composition sharing one

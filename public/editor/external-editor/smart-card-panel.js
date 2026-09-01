@@ -9,6 +9,7 @@
 // like on the page.
 
 import { escapeHtml } from "../format.js";
+import { busyButton } from "../../ui/busy.js";
 import { smartCardMarkup, canRenderSmartCard, smartCardFitState, SMART_CARD_OVERSET_NOTE } from "../smart-cards/smart-cards.js";
 import { ADVERT_STYLES, ADVERT_SAMPLE, ADVERT_DESIGN_REQUEST } from "../smart-cards/advert-styles.js";
 
@@ -317,10 +318,36 @@ export function bindSmartCard(requestCard, onPatch, onNotify, onPlaceInNewBlock)
     onNotify("Card removed. The block's copy is editable again.");
   });
 
-  generate?.addEventListener("click", async () => {
-    generate.disabled = true;
-    const label = generate.textContent;
-    generate.textContent = "Measuring this block…";
+  // A CARD BEING PREPARED SAYS SO, IN THE SHAPE OF THE CARD.
+  //
+  // The button disabled itself and changed its own words, and that was all -
+  // no spinner, nothing where the card was about to appear. The desk's report
+  // names the worst case exactly: the share/gold panel fetches a live market
+  // feed, so it is the card that keeps a desk waiting longest, and it kept them
+  // waiting in front of a screen that looked as though nothing had happened.
+  //
+  // Two things now: the button carries the product's one busy state
+  // (`busyButton`, a spinner and a pinned width so the row cannot reflow under
+  // the pointer), and the proposal host draws a SKELETON of a card - a
+  // nameplate bar, rows, a footer - under the same sheen every other loading
+  // surface in this product uses. A skeleton in the shape of the answer is
+  // what makes a wait read as progress rather than as a stall.
+  const preparingMarkup = () => `
+    <div class="smart-card-preparing" aria-hidden="true">
+      <span class="skel skel-title"></span>
+      <span class="skel skel-row"></span>
+      <span class="skel skel-row"></span>
+      <span class="skel skel-row skel-short"></span>
+      <span class="skel skel-foot"></span>
+    </div>`;
+
+  generate?.addEventListener("click", () => busyButton(generate, "Measuring this block…", async () => {
+    const host = document.getElementById("smartCardProposal");
+    if (host) {
+      host.hidden = false;
+      host.setAttribute("aria-busy", "true");
+      host.innerHTML = preparingMarkup();
+    }
     try {
       const result = await requestCard?.({
         key,
@@ -335,10 +362,12 @@ export function bindSmartCard(requestCard, onPatch, onNotify, onPlaceInNewBlock)
         // block it is going into, or the one it is about to bring with it.
         destination,
       });
-      if (result?.error) return onNotify(result.error);
-      if (!result?.proposal) return onNotify("No verified content is available for this card on this date.");
-      const host = document.getElementById("smartCardProposal");
-      host.hidden = false;
+      // A refusal takes the skeleton away with it - a skeleton left standing is
+      // a card the desk goes on waiting for.
+      const clear = () => { if (host) { host.hidden = true; host.innerHTML = ""; host.removeAttribute("aria-busy"); } };
+      if (result?.error) { clear(); return onNotify(result.error); }
+      if (!result?.proposal) { clear(); return onNotify("No verified content is available for this card on this date."); }
+      host.removeAttribute("aria-busy");
       host.innerHTML = proposalMarkup(result);
       document.getElementById("smartCardAccept")?.addEventListener("click", async () => {
         const payload = {
@@ -371,9 +400,10 @@ export function bindSmartCard(requestCard, onPatch, onNotify, onPlaceInNewBlock)
         host.hidden = true;
         host.innerHTML = "";
       });
-    } finally {
-      generate.disabled = false;
-      generate.textContent = label;
+    } catch (error) {
+      const host2 = document.getElementById("smartCardProposal");
+      if (host2) { host2.hidden = true; host2.innerHTML = ""; host2.removeAttribute("aria-busy"); }
+      throw error;
     }
-  });
+  }));
 }

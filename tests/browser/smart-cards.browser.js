@@ -268,6 +268,10 @@ const FIXTURES = {
     say(await page.evaluate(() => document.querySelector('[data-card-destination].is-selected')?.dataset.cardDestination) === 'new',
       'and its default is a new block, sized for the card');
 
+    // Behind a tab now - see assist-dock.js, and the same note in
+    // workspace.browser.js. The card is unchanged; the route to it is one press.
+    await page.locator('[data-assist-tab="cards"]').click();
+    await page.waitForTimeout(200);
     await page.locator('[data-smart-card="panchang"]').click();
     await page.waitForTimeout(400);
     await page.locator('#smartCardGenerate').click();

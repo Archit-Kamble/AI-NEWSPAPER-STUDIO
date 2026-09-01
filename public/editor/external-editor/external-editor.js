@@ -52,6 +52,7 @@ import { pageMapMarkup, bindPageMap } from "./page-map.js";
 import { storyEditorMarkup, bindStoryEditor, refreshStoryEditor, refreshStoryCount, refreshStoryStats, selectPictureFrame } from "./story-editor.js";
 import { smartCardMarkup, bindSmartCard } from "./smart-card-panel.js";
 import { storyDetailsMarkup, bindStoryDetails, refreshStoryDetails } from "./story-details-panel.js";
+import { assistDockMarkup, bindAssistDock, applyAssistTab, releaseDockedPanels, revealPicturePanel } from "./assist-dock.js";
 
 // The panels of the desk, in the order they are read: write on the left, the
 // help beside it on the right.
@@ -196,6 +197,12 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
   const container = document.getElementById("externalEditorPanel");
   if (!container) return;
 
+  // The settings rail's panel host lives OUTSIDE this container, and the dock
+  // may currently be holding it (see assist-dock.js). Rewriting the container
+  // with it still docked would destroy the rail's only host and leave the rail
+  // permanently empty. Put everything home before the wipe.
+  releaseDockedPanels();
+
   activeCallbacks = callbacks;
   renderToolsRail(section, view, callbacks);
 
@@ -296,6 +303,7 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
            is briefed with - the two are one thought, and a proposal is judged
            against the copy beside it rather than a screen below it. -->
       <aside class="ext-assist-col">
+        ${assistDockMarkup(Boolean((section.images || []).length))}
         ${group("ai", "AI", aiPanelMarkup(view), "assists — you accept every change")}
 
         ${group("space", "Layout", `<div id="edSpaceGroup">${spacePanelMarkup(section, view, callbacks.getImages?.() || [])}</div>`)}
@@ -321,7 +329,7 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
     onRemoveSelectedImages: callbacks.onRemoveSelectedImages,
   });
   renderPictureControls(callbacks.getImages?.() || [], undefined, section);
-  bindPicturesPanel({ ...callbacks, onSelectImage: (id) => { selectPicture(id); selectPictureFrame(id); } });
+  bindPicturesPanel({ ...callbacks, onSelectImage: (id) => { selectPicture(id); selectPictureFrame(id); revealPicturePanel(); } });
   bindSmartCard(callbacks.onRequestSmartCard, callbacks.onPatch, notify, callbacks.onPlaceSmartCardInNewBlock);
   bindStorySource(callbacks);
   // The writing surface. Every keystroke goes down the same channel as the
@@ -336,7 +344,7 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
     getImages: callbacks.getImages,
     onPatchImage: callbacks.onPatchImage,
     onRemoveImage: callbacks.onRemoveImage,
-    onSelectImage: (id) => { selectPicture(id); selectPictureFrame(id); },
+    onSelectImage: (id) => { selectPicture(id); selectPictureFrame(id); revealPicturePanel(); },
     onSelectPart: callbacks.onSelectPart,
     onToggleImageSelection: callbacks.onToggleImageSelection,
     onAddOverlay: callbacks.onAddOverlay,
@@ -352,8 +360,14 @@ export function renderExternalEditor(section, view, story, reporterNews, callbac
     callbacks.getImages, callbacks.getPage, callbacks.onSave,
   );
   bindDockToggle(callbacks);
+  bindAssistDock();
+  // Re-applied on every render: the container's innerHTML has just been
+  // rewritten, so the picture controls are a fresh element in the story column
+  // and the tab that was open has to claim them again.
+  applyAssistTab();
   // Typography, Story details, History and the small layout are bound by
-  // renderToolsRail - they live beside the page now, not in this dock.
+  // renderToolsRail - the dock BORROWS those panels when a tab asks for one,
+  // and gives them back; it never renders a second copy.
 
   document.getElementById("edCancel").addEventListener("click", callbacks.onCancel);
   document.getElementById("edSaveNow")?.addEventListener("click", callbacks.onSave);

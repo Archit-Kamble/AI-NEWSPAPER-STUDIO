@@ -1498,7 +1498,16 @@ body {
   background: white;
   border-right: 1px solid #ececed;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  /* CHAINS TO THE PAGE, deliberately, and this is a correction.
+     It was `contain`, which stops the scroll dead at the rail's own end. The
+     rail is capped to the height of the page beside it - measured, a 462px
+     window holding 2866px of panels - so a desk reaching the foot of the
+     Properties panel found the wheel simply stop working, with the rest of the
+     desk still below the fold. `contain` is for a surface that scrolls
+     independently of the document; this one is a column of the page. Reaching
+     its end now carries on down the page, which is the gesture every scroll
+     wheel already means. */
+  overscroll-behavior-y: auto;
 }
 .workspace-tools-head {
   position: sticky;
@@ -1664,13 +1673,60 @@ body.resizing-y * {
   border-color: #ededef;
   cursor: not-allowed;
 }
-.toolbar-btn#tbSave:not(:disabled) {
+/* SAVE IS RED WHEN THERE IS SOMETHING TO SAVE, AND ONLY THEN.
+   It was `#tbSave:not(:disabled)` - the paper's accent on the button for the
+   whole time a block was open, whether or not a character had been typed. Two
+   things wrong with that, and they compound:
+
+   - Autosave is real and the writing panel says so in as many words ("Changes
+     save automatically"), so a permanently-red Save is a warning that is
+     always on, which is a warning nobody reads.
+   - It put THREE accent-red controls in one eyeline - Save, Publish, and
+     "Back to page" on the bar below - and only one of them is irreversible and
+     public. A page with three shouts has none.
+
+   `toolbar.js` has toggled `.has-work` on this button since the save states
+   were written, and NOTHING IN THIS STYLESHEET READ IT: the dirty signal the
+   product already computed could not be seen, and the signal that could be
+   seen meant nothing. That is the half-wired shape this codebase has found in
+   `drop_cap`, `list_style` and `letter_spacing_px` - a mechanism with no
+   surface - arriving this time in the CSS instead of the schema. */
+.toolbar-btn#tbSave.has-work:not(:disabled) {
   border-color: var(--accent);
   color: var(--accent);
   background: #fff5f6;
 }
-.toolbar-btn#tbSave:not(:disabled):hover {
+.toolbar-btn#tbSave.has-work:not(:disabled):hover {
   background: #ffe9eb;
+}
+
+/* NINE CONTROLS ARE NOT ONE LIST.
+   They were set out edge to edge with an even 8px between every pair, so the
+   bar read as a wall and nothing said that Undo belongs with Save while Press
+   file does not. Three groups, in the order they already stood - no button
+   moves, because a toolbar a desk uses all day is muscle memory:
+
+     the block you are on   From Reporter · Save · Undo · Redo
+     the edition, outward   Preflight · Press file · Download
+     the whole paper        AI Compose · Publish
+
+   A hairline, not a gap: a gap large enough to group is a gap large enough to
+   push the last button off the row at a narrow window, and this bar already
+   wraps rather than widening the document. */
+.toolbar-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.toolbar-group + .toolbar-group {
+  margin-left: 5px;
+  padding-left: 10px;
+  border-left: 1px solid #e4e4e7;
+}
+/* Wrapped, a vertical rule at the start of a new row separates nothing from
+   nothing - it draws a stray tick against the left edge. */
+@media (max-width: 1180px) {
+  .toolbar-group + .toolbar-group { margin-left: 0; padding-left: 0; border-left: 0; }
 }
 .toolbar-btn.active {
   background: #f0f0f2;
@@ -5933,7 +5989,43 @@ body.print-view .page-imprint {
    the left or right edge of a column - which is why a photograph could never be
    put where the desk wanted it. */
 .block-frame {
-  position: relative; display: grid; justify-items: center; gap: var(--s2); }
+  position: relative;
+  display: grid;
+  /* THE COLUMN MAY NOT BE SIZED BY THE WIDEST CHILD.
+     An implicit `auto` column is as wide as the largest thing in it, and the
+     largest thing in it is the DEVICE BAR - a strip of twenty-five controls
+     that is 1406px wide and scrolls inside itself. So on a 978px host the
+     column came out 1406px, and `justify-items: center` then centred every
+     other child on 1406 rather than on 978. Measured, with the anchor block
+     open at 1512x950:
+
+                        host right   page right   AI panel starts
+       top-advert          1016         1226           1058
+       masthead-advert     1016         1192           1058
+       brief-one           1016         1160           1058
+
+     - so the block's own page was drawn 210px past its column and 168px of it
+     sat UNDERNEATH the AI panel, which is the desk's report that a
+     horizontally long block "is overlapping and going under side AI assist
+     block". The page was never mis-sized: `layoutPage()` fits it to the host
+     and 970 <= 978. It was mis-PLACED, by a grid column nothing had bounded.
+
+     `minmax(0, 1fr)` is the bound - the column is the container, never the
+     contents - and it is the same fix `.smart-card-tender-copy` already
+     carries for the same reason: a nowrap line's min-content width is the
+     whole line, and an auto track sizes to it. */
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  gap: var(--s2);
+}
+/* And the bar has to be ALLOWED to be narrower than its buttons, or the track
+   above simply overflows instead of scrolling. A flex/grid item's automatic
+   minimum size is its content, so `overflow-x: auto` on the rail inside does
+   nothing until the bar itself may shrink. */
+.device-bar { min-width: 0; max-width: 100%; }
+/* The page can never be wider than the column it is placed in, whatever
+   `layoutPage()` computes from a rectangle it measured a frame earlier. */
+.frame-page, .frame-writing-surface, .frame-toolbar { max-width: 100%; }
 .frame-page {
   position: relative;
   background: white;
@@ -8582,3 +8674,158 @@ body.print-view #printViewBtn {
    is not a stop of its own and must never draw a ring round the whole
    workspace. */
 .workspace-shell:focus { outline: none; }
+
+/* ===========================================================================
+   THE ASSIST COLUMN AS A DOCK  (assist-dock.js)
+
+   The column was a stack of three panels always drawn - measured at 1512x950
+   on a real front page, 1519px of column against a 950px viewport - and the
+   four panels a desk reaches for most were not in it at all. One strip, one
+   panel under it.
+
+   The strip SCROLLS, it does not wrap, for the reason the device bar states in
+   its own header: a wrapping strip's height is a function of its contents, and
+   its contents change as a desk works, so the whole column below it moves
+   under the cursor.
+   =========================================================================== */
+.assist-dock {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 1px;
+  min-width: 0;
+  padding: 3px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  background: var(--bg-light, #f5f5f5);
+  border: 1px solid var(--border, #ddd);
+  border-radius: 6px;
+}
+.assist-tab {
+  flex: 0 0 auto;
+  padding: 5px 7px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--secondary, #666);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.assist-tab:hover:not(:disabled) { background: rgba(0, 0, 0, 0.05); color: var(--primary, #333); }
+.assist-tab[aria-selected="true"] {
+  background: white;
+  border-color: var(--border, #ddd);
+  color: var(--accent, #c41e3a);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+.assist-tab:disabled { opacity: 0.4; cursor: not-allowed; }
+/* The rail's panels are BORROWED by this column, and the separator says so -
+   pressing one of these takes a panel out of the settings rail beside the page
+   and puts it here until another tab is chosen. */
+.assist-tab.is-rail:first-of-type { margin-left: 4px; }
+.assist-dock .assist-tab.is-rail:nth-of-type(5) {
+  margin-left: 5px;
+  border-left: 1px solid var(--border, #ddd);
+  padding-left: 9px;
+  border-radius: 0 4px 4px 0;
+}
+
+/* A panel that has been moved in here is a panel of THIS column: it takes the
+   width it is given and drops the rail's own capped-and-scrolling behaviour,
+   because the reason for that cap - never being taller than the page beside it
+   - is a fact about the rail's position, not about the panel. */
+.is-docked {
+  max-height: none;
+  overflow: visible;
+  min-width: 0;
+  width: 100%;
+}
+.workspace-tools-body.is-docked { padding: 0; }
+.picture-controls.is-docked:empty::after {
+  content: "Select a picture on the block and its controls appear here.";
+  display: block;
+  padding: var(--s3);
+  color: var(--secondary, #666);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+/* The rail must never look broken while it has lent a panel out. */
+.workspace-tools:not(:has(.workspace-tools-body))::after {
+  content: "These settings are open in the Block Editor's right-hand column.";
+  display: block;
+  padding: var(--s3);
+  color: var(--secondary, #666);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+/* ===========================================================================
+   THE REPORTER'S SCREENS ON A PHONE
+
+   This is the one surface in the product whose people are certainly on one: a
+   district reporter files from where the story is, not from a desk. Driven at
+   390x844 as a real touch device - the layout already holds (no sideways
+   scroll on any of the six screens, 16px fields so iOS does not zoom on focus,
+   56px drawer rows), so nothing here is a rescue. It is the last hand's width,
+   and all of it was measured rather than assumed.
+   =========================================================================== */
+@media (max-width: 768px) {
+  /* THE TWO ACTIONS WERE MISMATCHED, AND THE WRONG WAY ROUND.
+     Measured: "save as a draft" drew 150x45 in the paper's accent, and "send
+     it to the editors" - the act the whole screen exists for - drew 356x40
+     with a plain outline. So the smaller, quieter button was the one that
+     finishes the job, and the shouting one was the one that does not.
+     Both full width, both a thumb tall, and the emphasis follows the meaning.
+     Send is placed FIRST for the same reason: on a phone the lower a control
+     sits the harder it is to reach, and the reporter came here to file. */
+  .reporter-form .form-actions {
+    display: flex;
+    flex-direction: column-reverse;
+    gap: var(--s3);
+  }
+  .reporter-form .form-actions > button {
+    width: 100%;
+    min-height: 48px;
+    font-size: 1rem;
+  }
+  .reporter-form .form-actions > .btn-secondary {
+    /* The filing button. It keeps the outlined shape - a solid second red
+       beside the draft's would be two shouts again - but it is the heavier of
+       the two and it is the one under the thumb. */
+    border-width: 2px;
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  /* A NEWS STORY IS NOT A COMMENT BOX. The body was 100px - about four lines
+     of Devanagari - on the one field a reporter spends all their time in.
+     Bounded in vh rather than px so it never eats a small screen whole. */
+  .reporter-form textarea { min-height: min(42vh, 340px); }
+
+  /* A THUMB IS ABOUT 44px, AND FIVE FIELDS WERE 36.
+     The drawer rows were already 56 and the fields were not, so the screen was
+     comfortable to navigate and fiddly to fill in - which is backwards for a
+     form. The hamburger measured 34 and is the control every other screen is
+     reached through. */
+  /* NOT the textarea - it has a taller minimum three rules up, and listing it
+     here again at equal specificity simply overwrote it. Measured doing
+     exactly that: the body field went 100px -> 54px, SMALLER than before the
+     rule meant to grow it. Two of my own rules cancelling each other out. */
+  .reporter-form input,
+  .reporter-form select { min-height: 44px; }
+  .hamburger-btn { min-width: 44px; min-height: 44px; }
+  .app-header .logout, .app-header button { min-height: 44px; }
+}
+
+/* Not a width query: a stylus or a touchscreen on a wide window wants the same
+   room, and a mouse on a narrow one does not need it. */
+@media (pointer: coarse) {
+  .reporter-form input,
+  .reporter-form select,
+  .reporter-form button { min-height: 44px; }
+  .reporter-form textarea { min-height: min(42vh, 340px); }
+}

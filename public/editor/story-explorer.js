@@ -1,3 +1,4 @@
+import { emptyStateMarkup } from "../ui/empty.js";
 import { formatDate, escapeHtml } from "./format.js";
 
 function uniqueValues(items, key) {
@@ -41,7 +42,10 @@ function renderCards(reporterNews, filters, selectedId, onSelectCard) {
   const matches = reporterNews.filter((story) => matchesFilters(story, filters));
 
   if (!matches.length) {
-    results.innerHTML = `<p class="muted">No stories match these filters.</p>`;
+    results.innerHTML = emptyStateMarkup({
+      title: 'No filed story matches these filters.',
+      body: 'Widen the search, or clear the status and category filters above.',
+    });
     return;
   }
 

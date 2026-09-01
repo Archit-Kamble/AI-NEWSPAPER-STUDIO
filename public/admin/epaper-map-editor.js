@@ -1,3 +1,6 @@
+import { askConfirm, askMessage } from '../ui/dialog.js';
+import { showFailure } from '../ui/notice.js';
+import { busyButton } from '../ui/busy.js';
 import { escapeHtml } from '../editor/format.js';
 
 const MIN_BLOCK = 8;
@@ -51,7 +54,7 @@ export async function openEpaperMapEditor(edition, { onSaved } = {}) {
     response = await fetch(`/api/newspapers/${edition.id}/epaper`);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
   } catch (error) {
-    window.alert('This released e-paper map could not be opened.');
+    showFailure('This released e-paper map could not be opened.');
     return;
   }
   const snapshot = await response.json();
@@ -158,10 +161,17 @@ export async function openEpaperMapEditor(edition, { onSaved } = {}) {
     render();
     inspector.querySelector('[data-map-title]')?.focus();
   });
-  root.querySelector('[data-map-delete]').addEventListener('click', () => {
+  root.querySelector('[data-map-delete]').addEventListener('click', async () => {
     if (!selectedId) return;
     const article = chosen();
-    if (!window.confirm(`Remove “${article?.headline || 'this block'}” from this released e-paper map?`)) return;
+    const ok = await askConfirm({
+      title: `Remove “${article?.headline || 'this block'}” from this map?`,
+      body: 'The reader stops being able to tap that part of the page. Nothing on the sheet itself changes.',
+      confirm: 'Remove the block',
+      cancel: 'Keep it',
+      destructive: true,
+    });
+    if (!ok) return;
     selectedPage.articles = selectedPage.articles.filter((item) => String(item.id) !== String(selectedId));
     selectedId = selectedPage.articles[0]?.id || null;
     render();
@@ -177,26 +187,30 @@ export async function openEpaperMapEditor(edition, { onSaved } = {}) {
     // released issue. A title nobody typed is the same as no title.
     const untitled = selectedPage.articles.find((article) => article.manual
       && (!String(article.headline || '').trim() || String(article.headline).trim() === NEW_BLOCK_TITLE));
-    if (untitled) return window.alert('Give each manually added news block its own title before saving — "' + NEW_BLOCK_TITLE + '" is the placeholder, not a headline.');
-    button.disabled = true;
-    button.textContent = 'Saving PNG cards…';
+    if (untitled) {
+      askMessage({
+        title: 'One block still has no title',
+        body: `“${NEW_BLOCK_TITLE}” is the wording a new block is created with, not a headline.`
+          + '\n\nGive each block you added its own title, or the reader meets a story with nothing under it.',
+        ok: 'Back to the map',
+      });
+      return;
+    }
     const payload = {
       pageNumber: selectedPage.number,
       mapRevision: Number(snapshot.edition?.mapRevision) || 0,
       articles: selectedPage.articles.map(({ id, headline, x, y, width, height }) => ({ id, headline, x, y, width, height })),
     };
-    const save = await fetch(`/api/newspapers/${edition.id}/epaper/map`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    const result = await save.json().catch(() => ({}));
-    if (!save.ok) {
-      button.disabled = false;
-      button.textContent = 'Save map';
-      return window.alert(result.error || 'The e-paper map could not be saved.');
+    const { ok: saved, result } = await busyButton(button, 'Saving PNG cards…', async () => {
+      const save = await fetch(`/api/newspapers/${edition.id}/epaper/map`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      return { ok: save.ok, result: await save.json().catch(() => ({})) };
+    });
+    if (!saved) {
+      return showFailure(result.error || 'The e-paper map could not be saved.', { retry: () => button.click() });
     }
     selectedPage.articles = (result.page.articles || []).map((article) => mapArticle(article, selectedPage));
     snapshot.edition.mapRevision = result.mapRevision;
     selectedId = selectedPage.articles.find((article) => String(article.id) === String(selectedId))?.id || selectedPage.articles[0]?.id || null;
-    button.disabled = false;
-    button.textContent = 'Save map';
     render();
     onSaved?.();
   });

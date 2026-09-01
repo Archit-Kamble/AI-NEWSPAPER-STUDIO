@@ -1,3 +1,4 @@
+import { askConfirm } from "../../ui/dialog.js";
 // The AI panel. AI ASSISTS - it never owns, and it never writes.
 //
 // Two actions are real and go to the server-side story writer: "Write this
@@ -10,79 +11,36 @@
 // the headline, the subheading, or the body - so a desk that wants a better
 // headline keeps the story it already has.
 //
-// Everything under "More AI actions" is still a stub: it builds and displays
-// the exact request an integration would send, and is marked `is-placeholder`
-// in the markup so nothing there pretends to work.
-//
 // Replacing copy somebody has already written asks first (confirmReplacement).
 
 import { escapeHtml } from "../format.js";
-import { buildFlowMap, flowAscii, flowFit, flowImageFromRow } from "../layout/text-flow.js";
 import { plainText } from "../layout/rich-text.js";
 import { composeSection, bodyFill } from "../compose/section-adapter.js";
 // The one rule a chart panel is placed by - a corner rectangle for its share,
 // cut to the rows the readings actually need. Never a second copy of it.
 import { panelBox as chartPanelBox } from "./chart-dialog.js";
 
-export const AI_ACTIONS = [
-  { id: "aiGenerateLayout", label: "Generate Layout", intent: "layout" },
-  { id: "aiRewrite", label: "Rewrite", intent: "rewrite" },
-  { id: "aiImproveHeadline", label: "Improve Headline", intent: "headline" },
-  { id: "aiGenerateCaption", label: "Generate Caption", intent: "caption" },
-  { id: "aiSummarize", label: "Summarize", intent: "summarize" },
-  { id: "aiTranslate", label: "Translate", intent: "translate" },
-  { id: "aiExpand", label: "Expand", intent: "expand" },
-  { id: "aiShorten", label: "Shorten", intent: "shorten" },
-  { id: "aiSeo", label: "SEO", intent: "seo" },
-  { id: "aiPullQuote", label: "Pull Quote", intent: "pull-quote" },
-  { id: "aiImagePrompt", label: "Image Prompt", intent: "image-prompt" },
-];
-
-export function buildAiRequest(intent, view) {
-  return {
-    intent,
-    sectionKey: view.sectionKey,
-    prompt: view.aiNotes || "",
-    language: view.language || null,
-    story: {
-      headline: view.headline,
-      subheading: view.subheading,
-      body: view.body,
-      caption: view.caption,
-    },
-  };
-}
-
-// Step 6 of the flow, and the heart of it.
-//
-// This preview is for the unfinished, explicitly marked "More AI actions"
-// only. It remains a helpful schematic for a person reading a future request,
-// but it is never a fit decision: Write and Fill go to the server's exact
-// compositor, which measures real shaped lines, columns and picture runaround.
-export function fitBrief(section, view, images = []) {
-  const map = buildFlowMap(section, view, images.map(flowImageFromRow));
-  const fit = flowFit(map);
-
-  return {
-    sectionKey: view.sectionKey,
-    blockPx: { width: Number(section?.width_px) || 0, height: Number(section?.height_px) || 0 },
-    blockMm: {
-      width: Math.round((Number(section?.width_px) || 0) / 2),
-      height: Math.round((Number(section?.height_px) || 0) / 2),
-    },
-    grid: { cols: map.cols, rows: map.rows, cellWidthPx: map.cellWidth, cellHeightPx: map.cellHeight },
-    // The map, exactly as a compositor would sketch it.
-    map: flowAscii(map),
-    legend: { H: "headline", S: "subheading", T: "body text", I: "image" },
-    bodyCharBudget: map.bodyCharBudget,
-    bodyWordBudget: map.bodyWordBudget,
-    charsUsed: fit.used,
-    charsRemaining: fit.remaining,
-    overflowing: fit.overflowing,
-    bodyFontPx: view.bodyFontPx,
-    language: view.language || "Marathi",
-  };
-}
+/*
+ * ELEVEN BUTTONS THAT SAID THE AI WAS NOT CONNECTED HAVE BEEN REMOVED.
+ *
+ * Generate Layout, Rewrite, Improve Headline, Generate Caption, Summarize,
+ * Translate, Expand, Shorten, SEO, Pull Quote, Image Prompt. All eleven were
+ * marked `is-placeholder`, and pressing one produced two different sentences
+ * for one state: “Improve Headline: AI is not connected yet.” and
+ * “‘Improve Headline’ is stubbed — the request below was built but not sent.”
+ *
+ * The AI in this product IS connected, works, and is the thing it was bought
+ * for. Several of these named features that already run:
+ *
+ *   Improve Headline  -> the headline repair and its HEADLINE_COULD_FILL offer
+ *   Rewrite / Shorten / Expand -> Optimize with these details, and its four scopes
+ *   Generate Caption  -> the Pictures panel's own caption field
+ *
+ * So a desk who opened this drawer first concluded the opposite of the truth
+ * about the whole feature, and was pointed away from the working control that
+ * does the thing they asked for. A button that cannot act is not offered -
+ * this file's own rule, applied to itself.
+ */
 
 // How hard the model should think. Three tiers rather than three models,
 // because the provider that writes this paper's Marathi ships exactly one chat
@@ -312,16 +270,6 @@ export function aiPanelMarkup(view) {
     </div>
     <section class="ai-proposal" id="aiFillProposal" hidden></section>
     <section class="ai-proposal" id="aiOptimizeProposal" hidden></section>
-    <details class="ext-more">
-      <summary>More AI actions</summary>
-      <div class="ext-editor-toolbar">
-        ${AI_ACTIONS.map(
-          (a) => `<button type="button" class="ext-editor-btn is-placeholder" id="${a.id}" data-ai-intent="${a.intent}">${a.label}</button>`,
-        ).join("")}
-      </div>
-      <label class="preview-label">Request preview</label>
-      <pre class="ai-request" id="edAiRequest">Choose an action to see the request that would be sent.</pre>
-    </details>
     <p class="muted ext-note" id="edAiStatus">${escapeHtml(aiStatusLine())}</p>
   `;
 }
@@ -646,7 +594,7 @@ export function proposalCannotPrint(fit = {}) {
  * lost - so this only speaks when there is something to lose, which is what
  * keeps it worth reading when it does.
  */
-function confirmReplacement(view, scope = "block") {
+async function confirmReplacement(view, scope = "block") {
   const has = (value) => Boolean(plainText(value || "").trim());
   if (!view || (!has(view.body) && !has(view.headline))) return true;
 
@@ -662,7 +610,13 @@ function confirmReplacement(view, scope = "block") {
     subheading: "the subheading",
     body: "the body",
   }[scope] || "the headline, subheading and body";
-  return window.confirm(`${what}\n\nReplace ${losing} with the AI's version?`);
+  return askConfirm({
+    title: `Replace ${losing} with the AI's version?`,
+    body: `${what}\n\nUndo puts it back.`,
+    confirm: `Replace ${losing}`,
+    cancel: "Keep what is there",
+    destructive: true,
+  });
 }
 
 /**
@@ -801,7 +755,7 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, g
 
       host.hidden = false;
       host.innerHTML = proposalMarkup(result);
-      document.getElementById("aiAcceptStory")?.addEventListener("click", () => {
+      document.getElementById("aiAcceptStory")?.addEventListener("click", async () => {
         if (proposalCannotPrint(result.fit)) {
           return onNotify("This proposal does not meet the block's exact print fit. Discard it and write again.");
         }
@@ -816,7 +770,7 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, g
         // written - or a reporter has filed - it is destruction, and one click
         // away from it is not enough. Accepting is explicit; replacing written
         // copy is explicit twice.
-        if (!confirmReplacement(getView())) return;
+        if (!(await confirmReplacement(getView()))) return;
         // A proposal becomes a draft, never a saved story: it lands in the same
         // editable draft as typed copy and is marked for review.
         // `understanding` is the model's reading of the REQUEST, not part of
@@ -856,23 +810,6 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, g
     onPatch({ aiNotes: event.target.value }, "ai-panel");
   });
 
-  const runStub = (label, intent) => {
-    const view = getView();
-    const section = getSection();
-    const images = getImages ? getImages() : [];
-    // The tier rides with the request, so the preview shows exactly what would
-    // be sent - including how hard the model was asked to think.
-    const request = {
-      ...buildAiRequest(intent, view),
-      tier: getAiTier(),
-      fit: section ? fitBrief(section, view, images) : null,
-    };
-    const preview = document.getElementById("edAiRequest");
-    if (preview) preview.textContent = JSON.stringify(request, null, 2);
-    const status = document.getElementById("edAiStatus");
-    if (status) status.textContent = `"${label}" is stubbed - the request below was built but not sent.`;
-    onNotify(`${label}: AI is not connected yet.`);
-  };
 
   // Fill remaining area. The first of these that is real: it goes to the same
   // server-side story writer "Write this block" uses, briefed with the block's
@@ -990,14 +927,14 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, g
       if (!optimizeHost) return;
       optimizeHost.hidden = false;
       optimizeHost.innerHTML = optimizeProposalMarkup(result, scope, patch, fit);
-      document.getElementById("aiAcceptOptimize")?.addEventListener("click", () => {
+      document.getElementById("aiAcceptOptimize")?.addEventListener("click", async () => {
         if (fit.cannotPrint) {
           return onNotify("That does not fit this block as it stands. Discard it and try again.");
         }
         // Only the chosen object is being replaced, so only that object's own
         // copy is at risk - confirmReplacement() is asked about the block, and
         // a scope that touches nothing written needs no question.
-        if (scopeReplacesCopy(scope, view) && !confirmReplacement(view, scope)) return;
+        if (scopeReplacesCopy(scope, view) && !(await confirmReplacement(view, scope))) return;
         onPatch({ ...patch, aiGenerated: true, status: "needs_review" }, "ai-panel");
         optimizeHost.hidden = true;
         onNotify(`${SCOPE_LABEL[scope]} rewritten. Check every fact before it prints.`);
@@ -1011,9 +948,6 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, g
     }
   });
 
-  AI_ACTIONS.forEach((action) => {
-    document.getElementById(action.id)?.addEventListener("click", () => runStub(action.label, action.intent));
-  });
 }
 
 // What the fill button is about to do, in the desk's own words. Overset and

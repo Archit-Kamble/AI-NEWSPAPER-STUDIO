@@ -114,6 +114,20 @@ body {
    the layout is already measured from that same 60 (`.sidebar`, the backdrop
    and `.container`'s min-height all start there), so making it stick costs the
    page nothing it was not already reserving. */
+/* THE HEADER IS 60px, AND THAT NUMBER IS LOAD-BEARING.
+   `.sidebar` and `.sidebar-app-backdrop` are both `top: 60px`, and
+   `.container` takes `min-height: calc(100vh - 60px)` - three rules measuring
+   from a height this one only ever reached by accident, as 16px of padding
+   plus a 28px line.
+   At 430px the centre greeting wrapped to two lines and the bar became 88.6px,
+   so the header covered the top 28px of the drawer underneath it and ate its
+   FIRST menu item - which on both dashboards is the one a person came for
+   ("बातमी लिहा", "+ New Edition"). Measured with elementsFromPoint: the header
+   was the topmost element over that button, at z-index 400 against the
+   drawer's 300.
+   Stating the height keeps the number the rest of the layout already assumes
+   true at every width, and costs the desktop nothing - 0 + 60 is exactly the
+   16 + 28 + 16 it was resolving to. The centre truncates instead of wrapping. */
 .header {
   position: sticky;
   top: 0;
@@ -121,10 +135,27 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--s4) var(--s4);
+  gap: var(--s3);
+  height: 60px;
+  padding: 0 var(--s4);
   background: var(--primary);
   color: white;
   border-bottom: 2px solid var(--accent);
+}
+.header-left,
+.header-right { flex: 0 0 auto; }
+.header-center {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* On a phone the name goes and the ROLE stays: which of the four roles you are
+   signed in as changes what every screen will let you do, and a name you
+   already know does not. */
+@media (max-width: 560px) {
+  .header-center { font-size: 0; }
+  .header-center .role-pill { font-size: 0.75rem; }
 }
 .header-left {
   display: flex;
@@ -1274,21 +1305,31 @@ body {
 
 }
 
-@media (max-width: 1200px) {
-  .container {
-    grid-template-columns: 1fr;
-  }
-  .right-panel {
-    display: none;
-  }
-}
+/* The second declaration of the rule above (`.right-panel` folded away) used
+   to live here at `max-width: 1200px`, twenty pixels from the 1180px one at
+   the top of this file - two declarations of one decision that already
+   disagreed, which is the duplicated-catalogue failure this project has been
+   bitten by three times. The 1180px rule is the one that survives. */
 
 @media (max-width: 768px) {
   .container {
     grid-template-columns: 1fr;
   }
+  /* THE MENU USED TO SET `display: none` HERE, AND IT TRAPPED THE SCREEN.
+     `.sidebar` is a drawer at every width - fixed, translated off to the left,
+     brought back by `.sidebar.open { transform: translateX(0) }`. A display
+     rule beats a transform, so at 768px and below pressing the hamburger set
+     `.open`, raised the full-screen backdrop (which has its own `display`
+     rule and therefore worked), and left the menu hidden behind it. Measured:
+     `.open` set, computed display still `none`, the first menu button not
+     hit-testable, and the backdrop up anyway. A phone user got a dark overlay
+     with no menu behind it, and the documented ways out are tapping the
+     backdrop or pressing Escape - and a phone has no Escape.
+     This is the same fault as the `.role-note` bug fixed earlier this year: a
+     display rule quietly beating a state class. The drawer simply takes the
+     width it needs on a small screen instead. */
   .sidebar {
-    display: none;
+    width: min(86vw, 300px);
   }
   .form-row {
     grid-template-columns: 1fr;
@@ -7790,3 +7831,315 @@ body.print-view .page-imprint {
 .desk-notice-close:hover { opacity: 1; background: rgba(255, 255, 255, .14); }
 .desk-notice-btn:focus-visible,
 .desk-notice-close:focus-visible { outline: 2px solid white; outline-offset: 1px; }
+
+/* ==========================================================================
+   BATCH 1 — WHAT THE PRODUCT SHOWS WHILE IT WORKS, AND WHEN IT HAS NOTHING
+
+   Three states that had never been designed, measured on the running app:
+
+     * A DISABLED CONTROL LOOKED PRESSABLE. Across the 8 disabled buttons on a
+       live workspace: `opacity: 1` on every one, `pointer-events: auto` on
+       every one, several still carrying `cursor: pointer`. Disabled Undo and
+       Redo were signalled by one thing only - a #c6c6cc grey, which is a
+       1.70:1 contrast failure. So the two states were "grey text" and "less
+       grey text", and the pointer said both were live.
+     * A LIST THAT MATCHED NOTHING said so in `.muted`, quieter than the row
+       above it, with no way back out of the state.
+     * NOTHING SAID A REGION WAS BEING REBUILT. There was no skeleton anywhere
+       in six thousand lines of stylesheet, and no `aria-busy` in the product.
+
+   Every animation here is guarded by prefers-reduced-motion at the foot.
+   ========================================================================== */
+
+/* --- A disabled control is disabled, and says so with more than a grey ---- */
+button:disabled,
+button[aria-disabled="true"],
+select:disabled,
+input:disabled,
+textarea:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+/* Never `pointer-events: none` on a disabled control: it kills the tooltip and
+   the cursor that are the only two things telling the desk WHY it is off. */
+
+/* --- A control that is working says so, and cannot be pressed again ------- */
+.is-busy {
+  position: relative;
+  cursor: progress;
+  /* The label was swapped for a working one, so the button must not also fade
+     to 55% - it is the most legible thing on the screen at that moment. */
+  opacity: 1;
+}
+.is-busy::after {
+  content: "";
+  position: absolute;
+  inset-inline-end: var(--s2);
+  inset-block-start: 50%;
+  width: 11px;
+  height: 11px;
+  margin-block-start: -6px;
+  border: 2px solid currentColor;
+  border-block-start-color: transparent;
+  border-radius: 50%;
+  opacity: .85;
+  animation: sahas-spin .62s linear infinite;
+}
+@keyframes sahas-spin { to { transform: rotate(360deg); } }
+
+/* --- A region being rebuilt ---------------------------------------------- */
+[aria-busy="true"] { cursor: progress; }
+
+.skel {
+  display: block;
+  background: linear-gradient(
+    90deg,
+    var(--bg-light) 0%,
+    #ececee 42%,
+    var(--bg-light) 84%
+  );
+  background-size: 220% 100%;
+  animation: sahas-sheen 1.25s ease-in-out infinite;
+}
+@keyframes sahas-sheen {
+  from { background-position: 120% 0; }
+  to   { background-position: -60% 0; }
+}
+.skel-pill  { width: 84px;  height: 26px; }
+.skel-pill.wide { width: 148px; }
+.skel-line  { width: 100%;  height: 12px; margin-block-end: var(--s2); }
+.skel-line.short { width: 62%; }
+.skel-block { width: 100%;  height: 132px; margin-block-start: var(--s4); }
+
+/* The workspace's own opening state. Deliberately the SHAPE of the workspace
+   rather than a spinner in the middle of the screen: the desk should see the
+   sheet arriving where the sheet goes. renderShell() throws it away whole, so
+   it can never become a second layout to keep in step - it carries no ids and
+   nothing reads it. */
+.workspace-skeleton { padding: var(--s4); }
+.ws-skel-bar {
+  display: flex;
+  gap: var(--s2);
+  padding-block-end: var(--s3);
+  border-block-end: 1px solid var(--border);
+}
+.ws-skel-body {
+  display: grid;
+  grid-template-columns: minmax(0, 260px) minmax(0, 1fr);
+  gap: var(--s5);
+  padding-block-start: var(--s5);
+}
+.ws-skel-sheet { display: flex; flex-direction: column; align-items: center; gap: var(--s3); }
+.skel-sheet {
+  width: min(100%, 420px);
+  aspect-ratio: 66 / 106;   /* the page's own proportion: 660 x 1060 */
+  border: 1px solid var(--border);
+}
+.ws-skel-say { margin: 0; color: var(--secondary); font-size: 13px; }
+@media (max-width: 900px) {
+  .ws-skel-body { grid-template-columns: minmax(0, 1fr); }
+  .ws-skel-rail { display: none; }
+}
+
+/* --- A list with nothing in it ------------------------------------------- */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s6) var(--s4);
+  border: 1px dashed var(--border);
+  background: var(--bg-light);
+  text-align: center;
+}
+.empty-state-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--primary);
+}
+.empty-state-body {
+  margin: 0;
+  max-width: 46ch;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--secondary);
+}
+.empty-state-btn {
+  margin-block-start: var(--s1);
+  padding: var(--s2) var(--s4);
+  min-height: 32px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--primary);
+  background: white;
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+.empty-state-btn:hover { border-color: var(--primary); }
+
+/* Said to a screen reader, never drawn. */
+.visually-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .is-busy::after { animation-duration: 2.4s; }
+  .skel { animation: none; background: var(--bg-light); }
+}
+
+/* ==========================================================================
+   BATCH 2 — THE REPORTER'S DAY
+
+   The filing loop is where this product hurt, and none of it was visible from
+   the desk's side. Every fault below was found by creating a reporter account
+   and working their day.
+
+   The screens themselves are in Marathi (public/admin/reporter-strings.js).
+   These are district journalists writing Marathi copy; they are the people in
+   this product least likely to be reading English comfortably, and theirs is
+   the only surface whose users cannot ask anyone for help.
+   ========================================================================== */
+
+/* Devanagari needs its ink box, not its line box - the same 1.45 floor the
+   compositor sets body copy with, and for the same reason: a matra above the
+   shirorekha is taller than the line box the browser reserves. */
+[lang="mr"] { line-height: var(--devanagari-line); }
+[lang="mr"] .sidebar-btn,
+[lang="mr"] label,
+[lang="mr"] h2,
+[lang="mr"] h3 { line-height: 1.5; }
+
+/* --- THE NOTE A REPORTER COULD NEVER SEE --------------------------------- */
+/* R.1, and of the whole audit the one that costs a newsroom a person: the
+   story was refused, the desk wrote down why, the database held it, and the
+   reporter's own screen rendered it nowhere. It reads as the desk speaking,
+   so it is set apart from the reporter's own words above it. */
+.review-note {
+  margin-block-start: var(--s3);
+  padding: var(--s2) var(--s3);
+  border-inline-start: 3px solid var(--accent);
+  background: #fdf1f3;
+}
+.review-note-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-block-end: var(--s1);
+}
+.review-note p { margin: 0; font-size: 13.5px; color: var(--primary); }
+
+/* --- A CARD SAYS WHAT STATE IT IS IN ------------------------------------- */
+/* It read the same line in Drafts, Submitted, Approved and Rejected; the
+   state was carried entirely by which sidebar queue you were standing in. */
+.news-item-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s2);
+}
+.news-item-head strong { margin: 0; }
+.news-item-head .status-pill { flex: 0 0 auto; }
+.news-item p { margin: var(--s1) 0 0; }
+
+/* --- THE FORM SAYS WHAT IS WRONG, WHERE IT IS WRONG ---------------------- */
+/* The old validation was a native alert reading "Title required" on a form
+   whose field is labelled मथळा - it named a field the form does not have, in
+   a language the form is not in, and the focus never moved. */
+.field-error,
+.field-warning {
+  margin: var(--s1) 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.field-error { color: #9a1b31; font-weight: 600; }
+.field-warning { color: #8a5b00; }
+.reporter-form .is-invalid {
+  border-color: #9a1b31;
+  background: #fdf1f3;
+}
+.reporter-form .is-invalid:focus-visible { outline-color: #9a1b31; }
+.req { color: var(--accent); font-weight: 700; }
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin-block-start: var(--s4);
+}
+.form-actions button { min-height: 40px; }
+
+/* --- PICTURES ------------------------------------------------------------ */
+/* The upload area was a bare <div> with tabIndex -1 and no role, so it could
+   not be reached from the keyboard at all. It is a real button now. */
+.upload-area {
+  display: block;
+  width: 100%;
+  font: inherit;
+  color: var(--secondary);
+  min-height: 44px;
+}
+.upload-area:hover { border-color: var(--accent); color: var(--primary); }
+
+.image-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin-block-start: var(--s2);
+}
+.image-chip {
+  position: relative;
+  margin: 0;
+  width: 92px;
+}
+.image-chip .draft-thumb {
+  margin: 0;
+  width: 92px;
+  height: 92px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+}
+.image-chip-remove {
+  position: absolute;
+  inset-block-start: -7px;
+  inset-inline-end: -7px;
+  width: 24px;
+  height: 24px;
+  line-height: 1;
+  font-size: 15px;
+  color: white;
+  background: var(--primary);
+  border: 2px solid white;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.image-chip-remove:hover { background: var(--accent); }
+/* A picture the story already carries has no remove button, because nothing
+   this form can send would remove one - news.service.js keeps the existing
+   list when no files are sent and replaces it wholesale when any are. A
+   control that cannot act is not offered. */
+.image-chip.is-filed .draft-thumb { opacity: .82; }
+
+/* --- SEND BACK IS NOT APPROVE ------------------------------------------- */
+/* The two sat stacked in the card at the same size in the same neutral
+   outline, and Reject fired immediately with no undo on that screen - the one
+   destructive act in the queue, styled most like its opposite. */
+.btn-secondary.is-destructive {
+  color: #9a1b31;
+  border-color: #e7bcc5;
+}
+.btn-secondary.is-destructive:hover:not(:disabled) {
+  color: white;
+  background: #9a1b31;
+  border-color: #9a1b31;
+}
+
+.role-pill.role-reporter { background: #e8edf2; color: #405064; }

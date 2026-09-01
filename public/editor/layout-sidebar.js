@@ -1,3 +1,4 @@
+import { askConfirm } from "../ui/dialog.js";
 // The layout picker.
 //
 // A page's layout is chosen once, at the top of the production flow (VISION.md:
@@ -82,19 +83,21 @@ export async function renderLayoutSidebar(page, onSelectTemplate) {
   // The picker is guarded, not disabled: an editor may genuinely need to change
   // a page that already has work on it, and the software's job is to say what
   // that costs rather than to refuse.
-  select.addEventListener("change", () => {
+  select.addEventListener("change", async () => {
     const key = select.value;
     if (key === current) return;
 
     if (filled.length) {
       const name = templates.find((tpl) => tpl.key === key)?.name || key;
       const names = filled.map((s) => s.section_key).join(", ");
-      const ok = window.confirm(
-        `Switch this page to "${name}"?\n\n` +
-          `${filled.length} block${filled.length === 1 ? " is" : "s are"} already filled: ${names}.\n\n` +
-          `Their content is kept, but blocks that are not part of the new layout stay ` +
-          `where they are and may need repositioning.`,
-      );
+      const ok = await askConfirm({
+        title: `Switch this page to “${name}”?`,
+        body: `${filled.length} block${filled.length === 1 ? " is" : "s are"} already filled: ${names}.`
+          + "\n\nTheir copy is kept. Blocks that are not part of the new layout stay where they are"
+          + " and may need repositioning.",
+        confirm: `Switch to ${name}`,
+        cancel: "Keep this layout",
+      });
       // Put the control back on refusal, or it shows a layout the page is not on.
       if (!ok) {
         select.value = current;

@@ -1,3 +1,22 @@
+/*
+ * THE DROP-CAP NOTE THAT USED TO SIT UNDER THE TOGGLES HAS BEEN REMOVED,
+ * BECAUSE IT WAS UNTRUE AND DISAGREED WITH ITSELF. In full:
+ *
+ *   "Drop cap is a placeholder - it is stored and shown in the preview, but
+ *    the production compositor will render it."
+ *
+ * Both halves cannot hold at once, and the first one is the wrong one:
+ * dropCapOf() contributes the cap's own rectangle to the compositor's obstacle
+ * set, render.js draws it, print-model.js carries it, and the Scribus walk
+ * emits its baseline. The sentence survives from when drop_cap was a BOOLEAN
+ * that reached nothing but this panel's own preview paragraph; it became
+ * drop_cap_lines and the note was never taken down with it.
+ *
+ * So a desk reading it was told that a working control does not work - the
+ * only string of its kind on any visible screen. Nothing replaces it: the
+ * control is named, it is in Properties, and a control that works needs no
+ * apology under it.
+ */
 // Part 6: the Typography tab.
 //
 // These are print composition settings, not CSS conveniences - each one maps
@@ -260,7 +279,6 @@ export function typographyPanelMarkup(view, part = "block") {
               `<label class="toggle"><input type="checkbox" id="${t.id}"${view[t.field] ? " checked" : ""} /> ${t.label}</label>`,
           ).join("")}
         </div>
-        <p class="muted ext-note">Drop cap is a placeholder - it is stored and shown in the preview, but the production compositor will render it.</p>
       </div>
       <div class="ext-column">
         <div class="field-grid">

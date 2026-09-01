@@ -1,6 +1,10 @@
 import { escapeHtml } from '../editor/format.js';
 import { marathiDate } from './editions.js';
 import { openEpaperMapEditor } from './epaper-map-editor.js';
+import { askConfirm, askPrompt } from '../ui/dialog.js';
+import { showNotice, showFailure } from '../ui/notice.js';
+import { busyButton } from '../ui/busy.js';
+import { emptyStateMarkup } from '../ui/empty.js';
 
 const devanagariDigits = { '०': '0', '१': '1', '२': '2', '३': '3', '४': '4', '५': '5', '६': '6', '७': '7', '८': '8', '९': '9' };
 
@@ -114,7 +118,7 @@ export async function renderEpapers(host, { rightPanel } = {}) {
     const query = searchText(pdfSearch?.value.trim());
     const matches = uploadEditions.filter((item) => (!date || item.date === date) && (!query || item.search.includes(query)));
     if (!matches.some((item) => Number(item.id) === Number(chosenUploadEdition?.id))) chosenUploadEdition = matches[0] || null;
-    pdfResults.innerHTML = matches.length ? matches.slice(0, 8).map((item) => `<button type="button" class="${Number(item.id) === Number(chosenUploadEdition?.id) ? 'is-selected' : ''}" data-epaper-pdf-candidate="${item.id}"><strong>${escapeHtml(marathiDate(item.date))}</strong><span>${escapeHtml(item.name || 'Newspaper')} · ${Number(item.page_count) || 0} pages</span></button>`).join('') : '<p>No edition matches this date and search.</p>';
+    pdfResults.innerHTML = matches.length ? matches.slice(0, 8).map((item) => `<button type="button" class="${Number(item.id) === Number(chosenUploadEdition?.id) ? 'is-selected' : ''}" data-epaper-pdf-candidate="${item.id}"><strong>${escapeHtml(marathiDate(item.date))}</strong><span>${escapeHtml(item.name || 'Newspaper')} · ${Number(item.page_count) || 0} pages</span></button>`).join('') : emptyStateMarkup({ title: 'No edition matches this date and search.', body: 'Clear the date, or search the edition name instead.' });
     pdfResults.querySelectorAll('[data-epaper-pdf-candidate]').forEach((button) => button.addEventListener('click', () => {
       chosenUploadEdition = uploadEditions.find((item) => Number(item.id) === Number(button.dataset.epaperPdfCandidate)) || null;
       paintUploadEditions();
@@ -126,8 +130,21 @@ export async function renderEpapers(host, { rightPanel } = {}) {
 
   host.querySelector('[data-copy-epaper-url]')?.addEventListener('click', async () => {
     const url = host.querySelector('#epaperPublicUrl').value;
-    try { await navigator.clipboard.writeText(url); window.alert('Public e-paper URL copied.'); }
-    catch { window.prompt('Copy this public e-paper URL:', url); }
+    try {
+      await navigator.clipboard.writeText(url);
+      showNotice('The public e-paper address is on the clipboard.');
+    } catch {
+      // A clipboard the browser refuses is not a failure the desk can retry -
+      // it is a permission. Hand them the address to copy by hand instead.
+      await askPrompt({
+        title: 'The public e-paper address',
+        body: 'This browser would not write to the clipboard. Copy it from here.',
+        label: 'Address',
+        value: url,
+        confirm: 'Done',
+        cancel: 'Close',
+      });
+    }
   });
 
   host.querySelector('[data-epaper-pdf-form]')?.addEventListener('submit', async (event) => {
@@ -135,20 +152,27 @@ export async function renderEpapers(host, { rightPanel } = {}) {
     const form = event.currentTarget;
     const file = form.querySelector('[data-epaper-pdf-file]').files[0];
     const id = Number(chosenUploadEdition?.id);
-    if (!file || !id) return window.alert('Choose both an edition and a PDF.');
     const button = form.querySelector('[data-epaper-pdf-submit]');
+    if (!file || !id) {
+      return showFailure(
+        !id && !file ? 'Choose an edition and a PDF before publishing.'
+          : !id ? 'Choose which edition this PDF is.'
+          : 'Choose the PDF to publish.',
+      );
+    }
     const data = new FormData();
     data.append('printPdf', file);
-    button.disabled = true;
-    button.textContent = 'Building e-paper…';
-    const response = await fetch(`/api/newspapers/${id}/epaper/pdf`, { method: 'POST', body: data });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      button.disabled = false;
-      button.textContent = 'Upload PDF & publish';
-      return window.alert(result.error || 'The PDF could not be published as an e-paper.');
+    const result = await busyButton(button, 'Building e-paper…', async () => {
+      const response = await fetch(`/api/newspapers/${id}/epaper/pdf`, { method: 'POST', body: data });
+      const body = await response.json().catch(() => ({}));
+      return { ok: response.ok, body };
+    });
+    if (!result.ok) {
+      return showFailure(result.body.error || 'The PDF could not be published as an e-paper.', {
+        retry: () => form.requestSubmit(),
+      });
     }
-    window.alert(`Published ${result.pages} PDF pages and mapped ${result.stories} news blocks.`);
+    showNotice(`Published ${result.body.pages} PDF pages and mapped ${result.body.stories} news blocks.`);
     renderEpapers(host, { rightPanel });
   });
 
@@ -161,7 +185,7 @@ export async function renderEpapers(host, { rightPanel } = {}) {
       if (!response.ok) {
         radio.checked = false;
         radio.disabled = false;
-        return window.alert(result.error || 'Could not select this public e-paper.');
+        return showFailure(result.error || 'Could not select this public e-paper.');
       }
       renderEpapers(host, { rightPanel });
     });
@@ -177,15 +201,28 @@ export async function renderEpapers(host, { rightPanel } = {}) {
   host.querySelectorAll('[data-unpublish]').forEach((button) => {
     button.addEventListener('click', async () => {
       const id = Number(button.dataset.unpublish);
-      if (!window.confirm('Remove this edition from the public e-paper? The newsroom edition and final PDF will be kept.')) return;
-      button.disabled = true;
-      button.textContent = 'Removing…';
-      const response = await fetch(`/api/newspapers/${id}/epaper`, { method: 'DELETE' });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        button.disabled = false;
-        button.textContent = 'Delete public copy';
-        return window.alert(result.error || 'Could not remove the public copy.');
+      // Name the ISSUE, not the id. A question about a number is one a desk
+      // learns to dismiss - the same reason the edition deletion question
+      // sets the date as the masthead sets it.
+      const item = editions.find((edition) => Number(edition.id) === id);
+      const named = item ? marathiDate(item.publication_date || item.date || '') : 'this issue';
+      const ok = await askConfirm({
+        title: `Remove the public e-paper for ${named}?`,
+        body: 'Whoever holds the link stops being able to read it.\n\nThe newsroom edition and the final PDF are kept, so it can be released again.',
+        confirm: 'Remove the public copy',
+        cancel: 'Leave it published',
+        destructive: true,
+      });
+      if (!ok) return;
+      const result = await busyButton(button, 'Removing…', async () => {
+        const response = await fetch(`/api/newspapers/${id}/epaper`, { method: 'DELETE' });
+        const body = await response.json().catch(() => ({}));
+        return { ok: response.ok, body };
+      });
+      if (!result.ok) {
+        return showFailure(result.body.error || 'Could not remove the public copy.', {
+          retry: () => button.click(),
+        });
       }
       renderEpapers(host, { rightPanel });
     });

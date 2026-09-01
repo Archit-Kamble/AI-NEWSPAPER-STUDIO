@@ -1,3 +1,6 @@
+import { showNotice, showFailure } from '../ui/notice.js';
+import { busyButton } from '../ui/busy.js';
+
 // The toolbar's Publish action is deliberately one newsroom decision: freeze
 // what the editor can see now. Press files are a separate production concern;
 // optional PDF e-paper releases live in E-paper management.
@@ -35,16 +38,18 @@ export async function showPublicationFiles(newspaperId) {
 
   document.getElementById('confirmPublish')?.addEventListener('click', async (event) => {
     const button = event.currentTarget;
-    button.disabled = true;
-    button.textContent = 'Freezing pages…';
-    const response = await fetch(`/api/newspapers/${newspaperId}/publish-current`, { method: 'POST' });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      button.disabled = false;
-      button.textContent = released ? 'Publish update' : 'Publish e-paper';
-      return alert(result.error || 'The current editor view could not be published.');
+    const outcome = await busyButton(button, 'Freezing pages…', async () => {
+      const response = await fetch(`/api/newspapers/${newspaperId}/publish-current`, { method: 'POST' });
+      const body = await response.json().catch(() => ({}));
+      return { ok: response.ok, body };
+    });
+    if (!outcome.ok) {
+      return showFailure(outcome.body.error || 'The current editor view could not be published.', {
+        retry: () => button.click(),
+      });
     }
-    alert(`Published ${result.pages} pages and mapped ${result.stories} news blocks.${result.selected ? ' It is now the public e-paper.' : ''}`);
+    showNotice(`Published ${outcome.body.pages} pages and mapped ${outcome.body.stories} news blocks.`
+      + `${outcome.body.selected ? ' It is now the public e-paper.' : ''}`);
     close();
   });
 }

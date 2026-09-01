@@ -5,6 +5,10 @@ import { renderEpapers } from "./admin/epapers.js";
 import { renderReporterManagement } from "./admin/staff.js";
 import { renderGeneralSettings } from "./admin/settings.js";
 import { escapeHtml } from "./editor/format.js";
+import { showNotice, showFailure } from "./ui/notice.js";
+import { emptyStateMarkup } from "./ui/empty.js";
+import { MR, devanagari, reporterDate } from "./admin/reporter-strings.js";
+import { askPrompt } from "./ui/dialog.js";
 
 const app = document.getElementById("app");
 
@@ -109,7 +113,7 @@ function renderLogin() {
       if (can("makeUp")) renderAdminDashboard();
       else renderReporterDashboard();
     } else {
-      alert(data.error);
+      showFailure(data.error || "That sign-in did not work.");
     }
   });
 }
@@ -122,19 +126,19 @@ async function renderReporterDashboard() {
           <button class="hamburger-btn" id="appSidebarToggle" title="Menu">&#9776;</button>
           SAHAS
         </div>
-        <div class="header-center">Hi ${escapeHtml(currentUser.name)}</div>
-        <div class="header-right"><button id="logoutBtn">Logout</button></div>
+        <div class="header-center" lang="mr">${MR.greeting}, ${escapeHtml(currentUser.name)} <span class="role-pill role-reporter">${escapeHtml(currentUser.roleLabel || MR.role)}</span></div>
+        <div class="header-right"><button id="logoutBtn" lang="mr">${MR.logout}</button></div>
       </div>
       <div class="container">
         <div class="sidebar-app-backdrop" id="sidebarAppBackdrop"></div>
-        <aside class="sidebar">
-          <button class="sidebar-btn" id="createBtn">Create News</button>
-          <button class="sidebar-btn" id="draftBtn">My Drafts</button>
-          <button class="sidebar-btn" id="submittedBtn">Submitted</button>
-          <button class="sidebar-btn" id="approvedBtn">Approved</button>
-          <button class="sidebar-btn" id="rejectedBtn">Rejected</button>
-          <button class="sidebar-btn" id="profileBtn">Profile</button>
-          <button class="sidebar-btn logout" id="logoutBtn2">Logout</button>
+        <aside class="sidebar" lang="mr">
+          <button class="sidebar-btn" id="createBtn">${MR.create}</button>
+          <button class="sidebar-btn" id="draftBtn">${MR.drafts}</button>
+          <button class="sidebar-btn" id="submittedBtn">${MR.submitted}</button>
+          <button class="sidebar-btn" id="approvedBtn">${MR.approved}</button>
+          <button class="sidebar-btn" id="rejectedBtn">${MR.rejected}</button>
+          <button class="sidebar-btn" id="profileBtn">${MR.profile}</button>
+          <button class="sidebar-btn logout" id="logoutBtn2">${MR.logout}</button>
         </aside>
         <main class="content" id="content"></main>
         <aside class="right-panel" id="rightPanel"></aside>
@@ -165,16 +169,17 @@ async function renderReporterDashboard() {
       return showReporterCreateNews();
     } },
     news: { button: null, render: (view) => {
+      releaseUnsavedGuard();
       const queues = {
-        draft: ["draftBtn", "My Drafts"],
-        pending: ["submittedBtn", "Submitted"],
-        approved: ["approvedBtn", "Approved"],
-        rejected: ["rejectedBtn", "Rejected"],
+        draft: ["draftBtn", MR.drafts],
+        pending: ["submittedBtn", MR.submitted],
+        approved: ["approvedBtn", MR.approved],
+        rejected: ["rejectedBtn", MR.rejected],
       };
       const [, title] = queues[view.id] || queues.draft;
       return showReporterNewsList(queues[view.id] ? view.id : "draft", title);
     } },
-    profile: { button: "profileBtn", render: showReporterProfile },
+    profile: { button: "profileBtn", render: (view) => { releaseUnsavedGuard(); return showReporterProfile(view); } },
   };
   const QUEUE_BUTTONS = { draftBtn: "draft", submittedBtn: "pending", approvedBtn: "approved", rejectedBtn: "rejected" };
 
@@ -238,39 +243,63 @@ async function showReporterNewsList(status, title) {
     return;
   }
 
-  rightPanel.innerHTML = `<h3>${escapeHtml(title)}</h3><p>Click on any news to edit</p>`;
+  rightPanel.innerHTML = `<h3 lang="mr">${escapeHtml(title)}</h3><p lang="mr">${MR.tapToEdit}</p>`;
 
   content.innerHTML = `
-    <div class="form-section">
-      <h2>${title}</h2>
+    <div class="form-section" lang="mr">
+      <h2>${escapeHtml(title)}</h2>
       <div class="news-list" id="newsList"></div>
     </div>
   `;
 
   const list = document.getElementById("newsList");
   if (news.length === 0) {
-    list.innerHTML = "<p>No news in this category</p>";
+    list.innerHTML = emptyStateMarkup({
+      title: status === "draft" ? MR.emptyDrafts : MR.emptyQueue,
+    });
     return;
   }
 
   news.forEach((newsItem) => {
     const item = document.createElement("div");
     item.className = "news-item";
+    // A FILING'S CARD SAYS WHAT STATE IT IS IN.
+    //
+    // Measured before this: a card read the same line in Drafts, Submitted,
+    // Approved and Rejected - the state was carried entirely by which sidebar
+    // queue the reporter happened to be standing in. The desk's own queue
+    // already did better; it shows a pill.
+    //
+    // A rejected filing also carries the note the desk wrote, which is R.1:
+    // the note was stored, the API already returned it (news_items is read
+    // with SELECT *), and this screen rendered it nowhere. So a journalist's
+    // copy was refused and the product could not tell them why.
+    const state = String(newsItem.status || status || "draft");
+    const note = String(newsItem.review_note || newsItem.reviewNote || "").trim();
     item.innerHTML = `
       <div>
-        <strong>${escapeHtml(newsItem.title)}</strong>
+        <div class="news-item-head">
+          <strong>${escapeHtml(newsItem.title)}</strong>
+          <span class="status-pill ${escapeHtml(state)}">${escapeHtml(MR.status[state] || state)}</span>
+        </div>
         <p>${escapeHtml(newsItem.subheading || newsItem.subtitle || "")}</p>
-
-<small>
-${escapeHtml(newsItem.category || "")} •
-${escapeHtml(newsItem.location || "")} •
-${new Date(newsItem.created_at || newsItem.createdAt).toLocaleDateString()}
-</small>
+        <small>
+          ${escapeHtml(newsItem.category || "")} ·
+          ${escapeHtml(newsItem.location || "")} ·
+          ${escapeHtml(reporterDate(newsItem.created_at || newsItem.createdAt))}
+        </small>
+        ${state === "rejected" ? `<div class="review-note">
+          <span class="review-note-label">${MR.whyBack}</span>
+          <p>${note ? escapeHtml(note) : MR.whyBackNone}</p>
+        </div>` : ""}
       </div>
     `;
     item.style.cursor = "pointer";
     item.addEventListener("click", () => {
-      if (status === "draft") navigate({ screen: "create", id: newsItem.id });
+      // A story that came back is a story to correct, so it opens in the form
+      // rather than in a read-only panel. Being told why and then having no
+      // way to act on it is half a loop.
+      if (status === "draft" || state === "rejected") navigate({ screen: "create", id: newsItem.id });
       else renderReporterNewsDetails(newsItem);
     });
     list.appendChild(item);
@@ -464,12 +493,19 @@ async function showPastNews() {
     news = await fetch("/api/news").then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.status))));
   } catch (error) {
     console.error("News review load failed:", error);
-    rightPanel.innerHTML = "<h3>Reporter News</h3>";
+    rightPanel.innerHTML = "<h3>Past News</h3>";
     content.innerHTML = '<div class="form-section"><p>This list could not be loaded. Check the connection and try again.</p></div>';
     return;
   }
+  // ONE SCREEN, ONE NAME.
+  //
+  // The sidebar called it Past News, the heading said REPORTER NEWS REVIEW,
+  // the panel beside it said Reporter News and the address is #!/past-news -
+  // four names for one screen, so a desk could not tell somebody which screen
+  // to open. The sidebar's word wins, because that is the one a person is
+  // reading when they decide to come here.
   rightPanel.innerHTML =
-    "<h3>Reporter News</h3><p>Review every reporter submission and approve it for publication.</p>";
+    "<h3>Past News</h3><p>Every story a reporter has filed. Pass it, or send it back with a reason.</p>";
 
   // A REVIEW QUEUE OF 1966 FILINGS IS NOT A LIST, IT IS A WALL.
   //
@@ -485,13 +521,18 @@ async function showPastNews() {
   // updates its own card instead of rebuilding the screen.
   content.innerHTML = `
     <div class="form-section">
-      <h2>REPORTER NEWS REVIEW</h2>
+      <h2>Past News</h2>
       <div class="news-review-controls">
         <input id="adminNewsSearch" type="search" placeholder="Search by title, reporter or category…">
+        <!-- The queue opens on PENDING. What a desk comes to this screen for
+             is the filings waiting on a decision; it used to open on All
+             statuses with a header reading 1,327 filings, so the twelve that
+             needed an answer were buried in thirteen hundred that did not.
+             All statuses is still one press away. -->
         <select id="adminNewsStatus">
           <option value="">All statuses</option>
           ${[...new Set(news.map((n) => n.status).filter(Boolean))].sort()
-            .map((v) => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("")}
+            .map((v) => `<option value="${escapeHtml(v)}"${v === "pending" ? " selected" : ""}>${escapeHtml(v)}</option>`).join("")}
         </select>
         <span class="muted" id="adminNewsCount"></span>
       </div>
@@ -522,9 +563,9 @@ async function showPastNews() {
     const card = document.createElement("div");
     card.className = "admin-news-card";
     card.dataset.newsId = item.id;
-    card.innerHTML = `<div><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.reporter_name || item.reporterName || "Reporter")} · ${escapeHtml(item.category || "Uncategorised")}</small><p>${escapeHtml(item.description || "No description")}</p></div><div class="status-actions"><span class="status-pill ${escapeHtml(item.status)}">${escapeHtml(item.status)}</span><button class="btn-secondary approve">Approve</button><button class="btn-secondary reject">Reject</button></div>`;
+    card.innerHTML = `<div><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.reporter_name || item.reporterName || "Reporter")} · ${escapeHtml(item.category || "Uncategorised")}</small><p>${escapeHtml(item.description || "No description")}</p></div><div class="status-actions"><span class="status-pill ${escapeHtml(item.status)}">${escapeHtml(item.status)}</span><button class="btn-secondary approve">Approve</button><button class="btn-secondary is-destructive reject">Send back</button></div>`;
 
-    const decide = async (status, button) => {
+    const decide = async (status, button, reviewNote) => {
       const buttons = card.querySelectorAll("button");
       buttons.forEach((b) => { b.disabled = true; });
       const wasLabel = button.textContent;
@@ -536,7 +577,7 @@ async function showPastNews() {
         const response = await fetch(`/api/news/${item.id}/status`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status }),
+          body: JSON.stringify(reviewNote ? { status, reviewNote } : { status }),
         });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(result.error || `The desk could not record that (HTTP ${response.status}).`);
@@ -548,7 +589,7 @@ async function showPastNews() {
         pill.textContent = status;
         if (statusPick.value && statusPick.value !== status) paint();
       } catch (error) {
-        alert(error.message || "That could not be saved. Try again.");
+        showFailure(error.message || "That could not be saved.", { retry: () => button.click() });
       } finally {
         buttons.forEach((b) => { b.disabled = false; });
         button.textContent = wasLabel;
@@ -556,7 +597,39 @@ async function showPastNews() {
     };
 
     card.querySelector(".approve").addEventListener("click", (e) => decide("approved", e.currentTarget));
-    card.querySelector(".reject").addEventListener("click", (e) => decide("rejected", e.currentTarget));
+
+    // REJECTING ASKS FOR THE REASON, ON THE SCREEN WHERE REVIEWING HAPPENS.
+    //
+    // This is the other half of R.1, and the half that made it a hole rather
+    // than an oversight. There were two review surfaces: the owner's Staff
+    // profile page asked for a note, and THIS queue - the one carrying every
+    // filing, where reviewing actually happens - had Approve and Reject and
+    // never asked for a note at all. Pressing Reject fired no dialog of any
+    // kind and the story went back with nothing attached to it.
+    //
+    // PATCH /api/news/:id/status has always accepted `reviewNote`. Nothing
+    // here sent one.
+    //
+    // The two controls also looked identical - the same size, the same
+    // neutral outline, stacked - so the one destructive act in the queue was
+    // styled most like its opposite, fired immediately, and had no undo. It
+    // is called Send back now, because that is what it does to a person, and
+    // it asks.
+    card.querySelector(".reject").addEventListener("click", async (e) => {
+      const button = e.currentTarget;
+      const note = await askPrompt({
+        title: `Send “${item.title}” back to ${item.reporter_name || item.reporterName || "the reporter"}?`,
+        body: "They see this note against the story on their own screen, and it is the only thing"
+          + " telling them what to change. A story sent back with nothing said is one nobody can fix.",
+        label: "What needs correcting",
+        multiline: true,
+        placeholder: "The council figure is from last year — check it against the minutes.",
+        confirm: "Send it back",
+        cancel: "Keep reviewing",
+      });
+      if (note === null) return;
+      decide("rejected", button, note.trim());
+    });
     return card;
   };
 
@@ -578,7 +651,12 @@ async function showPastNews() {
     countLabel.textContent = matches.length === news.length
       ? `${news.length} filings`
       : `${matches.length} of ${news.length} filings`;
-    if (!matches.length) list.innerHTML = "<p class=\"muted\">No filing matches that.</p>";
+    if (!matches.length) {
+      list.innerHTML = emptyStateMarkup({
+        title: "No filing matches that.",
+        body: "Search a reporter's name, a headline or a district — or change the status filter above.",
+      });
+    }
   }
 
   const renarrow = () => { shown = PAGE; paint(); };
@@ -606,52 +684,56 @@ async function showReporterCreateNews() {
   let existingImageUrls = [];
 
   rightPanel.innerHTML = `
-    <h3>${editingDraftId ? "Editing Draft" : "Tips"}</h3>
-    ${
-      editingDraftId
-        ? "<p>All changes will be saved as draft</p>"
-        : "<p>Save as draft and edit later or submit for approval</p>"
-    }
+    <h3 lang="mr">${editingDraftId ? MR.editHeading : MR.tips}</h3>
+    <p lang="mr">${editingDraftId ? MR.tipEditing : MR.tipDraft}</p>
   `;
 
+  // The upload area was a bare <div> with tabIndex -1 and no role, so it could
+  // not be reached from the keyboard at all. It is a button now, which is what
+  // it always behaved as.
   content.innerHTML = `
-    <div class="form-section">
-      <h2>${editingDraftId ? "EDIT NEWS" : "CREATE NEWS"}</h2>
+    <div class="form-section reporter-form" lang="mr">
+      <h2>${editingDraftId ? MR.editHeading : MR.createHeading}</h2>
       <div class="form-group">
-        <label>Heading *</label>
-        <input id="heading" placeholder="Main headline" />
+        <label for="heading">${MR.fieldHeadline} <span class="req" aria-hidden="true">*</span></label>
+        <input id="heading" placeholder="${MR.phHeadline}" aria-describedby="headingError" />
+        <p class="field-error" id="headingError" hidden></p>
       </div>
       <div class="form-group">
-        <label>Subtitle</label>
-        <input id="subtitle" placeholder="Supporting line" />
+        <label for="subtitle">${MR.fieldSubtitle}</label>
+        <input id="subtitle" placeholder="${MR.phSubtitle}" />
       </div>
       <div class="form-group">
-        <label>Description / Context *</label>
-        <textarea id="description" placeholder="Write the story..."></textarea>
+        <label for="description">${MR.fieldStory} <span class="req" aria-hidden="true">*</span></label>
+        <textarea id="description" placeholder="${MR.phStory}" aria-describedby="descriptionError"></textarea>
+        <p class="field-error" id="descriptionError" hidden></p>
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label>Category</label>
-          <input id="category" placeholder="Politics, Local, Sports..." />
+          <label for="category">${MR.fieldCategory}</label>
+          <input id="category" placeholder="${MR.phCategory}" />
         </div>
         <div class="form-group">
-          <label>Location</label>
-          <input id="location" placeholder="City or place" />
+          <label for="location">${MR.fieldLocation}</label>
+          <input id="location" placeholder="${MR.phLocation}" />
         </div>
       </div>
       <div class="form-group">
-        <label>Tags</label>
-        <input id="tags" placeholder="comma, separated, tags" />
+        <label for="tags">${MR.fieldTags}</label>
+        <input id="tags" placeholder="${MR.phTags}" />
       </div>
       <div class="form-group">
-        <label>Upload Images</label>
-        <div class="upload-area" id="uploadArea">+ Select Images (up to 10)</div>
+        <label>${MR.fieldImages}</label>
+        <button type="button" class="upload-area" id="uploadArea">${MR.pickImages}</button>
         <input type="file" id="imageInput" accept="image/*" multiple style="display: none;" />
         <small id="imageCount"></small>
-        <div id="imagePreview"></div>
+        <p class="field-warning" id="imageReplaceWarning" hidden>${MR.imagesReplace}</p>
+        <div id="imagePreview" class="image-preview"></div>
       </div>
-      <button class="btn-submit" id="saveNewsBtn">${editingDraftId ? "Update Draft" : "Save as Draft"}</button>
-      <button class="btn-secondary" id="submitBtn">${editingDraftId ? "Update & Submit" : "Submit for Approval"}</button>
+      <div class="form-actions">
+        <button class="btn-submit" id="saveNewsBtn">${editingDraftId ? MR.updateDraft : MR.saveDraft}</button>
+        <button class="btn-secondary" id="submitBtn">${editingDraftId ? MR.updateSubmit : MR.submit}</button>
+      </div>
     </div>
   `;
 
@@ -659,21 +741,60 @@ async function showReporterCreateNews() {
   const imageInput = document.getElementById("imageInput");
   const uploadArea = document.getElementById("uploadArea");
 
+  // A PICTURE JUST CHOSEN CAN BE TAKEN BACK. ONE ALREADY FILED CANNOT, AND
+  // THE FORM SAYS SO RATHER THAN OFFERING A CONTROL THAT WOULD NOT WORK.
+  //
+  // Measured before this: after attaching one there was no remove control of
+  // any kind on the page. A reporter who picked the wrong photograph off a
+  // phone camera roll could not undo it - the only way out was to abandon the
+  // filing. Each newly chosen thumbnail now carries its own remove button,
+  // named for a screen reader.
+  //
+  // A picture the story ALREADY carries is a different case and deliberately
+  // has no button: news.service.js keeps `existing.image_urls` when no files
+  // are sent and REPLACES the whole list when any are, so nothing this form
+  // can send would remove one. Drawing a remove button there would be a
+  // control that cannot act - the fault this codebase has already fixed twice.
+  //
+  // The replacement itself is the more useful thing to say, and nothing said
+  // it: a reporter adding one photograph to a story that carries three loses
+  // the other two, silently.
   function renderImagePreviewList() {
     imagePreview.innerHTML = "";
-    [
-      ...existingImageUrls,
-      ...selectedReporterImages.map((file) => URL.createObjectURL(file)),
-    ].forEach((url) => {
+    const add = (url, onRemove) => {
+      const figure = document.createElement("figure");
+      figure.className = "image-chip";
       const img = document.createElement("img");
       img.src = url;
       img.className = "draft-thumb";
-      imagePreview.appendChild(img);
+      img.alt = "";
+      figure.append(img);
+      if (onRemove) {
+        const drop = document.createElement("button");
+        drop.type = "button";
+        drop.className = "image-chip-remove";
+        drop.title = MR.removeImage;
+        drop.setAttribute("aria-label", MR.removeImage);
+        drop.textContent = "×";
+        drop.addEventListener("click", () => { onRemove(); renderImagePreviewList(); });
+        figure.append(drop);
+      } else {
+        figure.classList.add("is-filed");
+      }
+      imagePreview.appendChild(figure);
+    };
+    existingImageUrls.forEach((url) => add(url, null));
+    selectedReporterImages.forEach((file, index) => {
+      add(URL.createObjectURL(file), () => {
+        selectedReporterImages = selectedReporterImages.filter((_, i) => i !== index);
+      });
     });
-    const newImageCount = selectedReporterImages.length;
-    document.getElementById("imageCount").textContent = newImageCount
-      ? `${newImageCount} new image${newImageCount === 1 ? "" : "s"} selected`
-      : "";
+    const chosen = selectedReporterImages.length;
+    const note = document.getElementById("imageCount");
+    note.textContent = chosen ? MR.imagesChosen(chosen) : "";
+    // The one thing a reporter has to know before they press save.
+    const warn = document.getElementById("imageReplaceWarning");
+    if (warn) warn.hidden = !(chosen && existingImageUrls.length);
   }
 
   uploadArea.addEventListener("click", () => imageInput.click());
@@ -683,13 +804,17 @@ async function showReporterCreateNews() {
         (file) => `${file.name}-${file.size}-${file.lastModified}`,
       ),
     );
+    let refused = false;
     Array.from(imageInput.files).forEach((file) => {
       const key = `${file.name}-${file.size}-${file.lastModified}`;
-      if (!selectedKeys.has(key) && selectedReporterImages.length < 10) {
-        selectedReporterImages.push(file);
-        selectedKeys.add(key);
-      }
+      if (selectedKeys.has(key)) return;
+      // Silently dropping the eleventh file leaves a reporter believing it was
+      // attached. The limit is stated instead.
+      if (selectedReporterImages.length + existingImageUrls.length >= 10) { refused = true; return; }
+      selectedReporterImages.push(file);
+      selectedKeys.add(key);
     });
+    if (refused) showFailure(MR.imageLimit);
     // Clear the native input so the reporter can add more images in another selection.
     imageInput.value = "";
     renderImagePreviewList();
@@ -724,12 +849,84 @@ async function showReporterCreateNews() {
   document
     .getElementById("submitBtn")
     .addEventListener("click", () => saveNews("pending"));
+
+  // NOTHING WARNED ABOUT LEAVING UNSAVED WORK.
+  //
+  // `beforeunload` appeared nowhere under public/. The workspace at least has
+  // autosave; this form has neither that nor a guard, so a closed tab took the
+  // story with it. The listener is removed on a successful save, so a reporter
+  // who has just filed is never asked.
+  reporterFormDirty = false;
+  ["heading", "subtitle", "description", "category", "location", "tags"].forEach((id) => {
+    document.getElementById(id)?.addEventListener("input", () => { reporterFormDirty = true; });
+  });
+  armUnsavedGuard();
+}
+
+// The guard is module-level so saveNews() can stand it down, and so a second
+// render of the form cannot leave two of them armed.
+let reporterFormDirty = false;
+function onBeforeUnload(event) {
+  if (!reporterFormDirty) return undefined;
+  event.preventDefault();
+  // Browsers ignore the string and show their own sentence. Returning one is
+  // still what arms the prompt in older engines.
+  event.returnValue = MR.unsaved;
+  return MR.unsaved;
+}
+function armUnsavedGuard() {
+  window.removeEventListener("beforeunload", onBeforeUnload);
+  window.addEventListener("beforeunload", onBeforeUnload);
+}
+function releaseUnsavedGuard() {
+  reporterFormDirty = false;
+  window.removeEventListener("beforeunload", onBeforeUnload);
+}
+
+/**
+ * THE VALIDATION NAMES THE FIELD THE FORM ACTUALLY HAS.
+ *
+ * Submitting an empty filing used to produce a native alert reading "Title
+ * required". The field is labelled मथळा. Measured alongside it: 0 inline
+ * errors, and `document.activeElement` stayed on BODY - so the reporter was
+ * told something was wrong, told the wrong name for it, and left to find it.
+ *
+ * The message goes UNDER THE FIELD IT IS ABOUT, the field is marked invalid
+ * for a screen reader, and the caret is put in the first one that is empty.
+ */
+function fieldProblem(id, message) {
+  const field = document.getElementById(id);
+  const slot = document.getElementById(`${id}Error`);
+  if (slot) {
+    slot.textContent = message || "";
+    slot.hidden = !message;
+  }
+  if (field) {
+    field.classList.toggle("is-invalid", Boolean(message));
+    field.setAttribute("aria-invalid", message ? "true" : "false");
+  }
+  return field;
+}
+
+function checkReporterForm() {
+  const problems = [
+    ["heading", document.getElementById("heading").value.trim() ? "" : MR.needHeadline],
+    ["description", document.getElementById("description").value.trim() ? "" : MR.needStory],
+  ];
+  problems.forEach(([id, message]) => fieldProblem(id, message));
+  const first = problems.find(([, message]) => message);
+  if (!first) return true;
+  fieldProblem(first[0], first[1])?.focus();
+  return false;
 }
 
 async function saveNews(status) {
   const saveButton = document.getElementById(
     status === "draft" ? "saveNewsBtn" : "submitBtn",
   );
+  // A draft is a story still being written, so it is allowed to be incomplete.
+  // Sending it to the desk is a different act and is checked.
+  if (status !== "draft" && !checkReporterForm()) return;
   saveButton.disabled = true;
   const formData = new FormData();
   formData.append("title", document.getElementById("heading").value);
@@ -763,13 +960,14 @@ async function saveNews(status) {
       throw new Error(result.error || "Unable to save news");
     }
 
-    alert(status === "draft" ? "Saved as draft" : "Submitted for approval");
+    releaseUnsavedGuard();
+    showNotice(status === "draft" ? MR.savedDraft : MR.savedSubmitted);
     editingDraftId = null;
     selectedReporterImages = [];
     await navigate({ screen: "news", id: status === "draft" ? "draft" : "pending" });
   } catch (error) {
     console.error("News save error:", error);
-    alert(error.message || "Unable to save news. Please try again.");
+    showFailure(error.message || MR.saveFailed, { retry: () => saveButton.click() });
   } finally {
     saveButton.disabled = false;
   }

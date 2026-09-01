@@ -19,6 +19,7 @@
 import { escapeHtml } from "../editor/format.js";
 import { askConfirm } from '../ui/dialog.js';
 import { showFailure } from '../ui/notice.js';
+import { emptyStateMarkup } from '../ui/empty.js';
 
 const DIGITS = ['०', '१', '२', '३', '४', '५', '६', '७', '८', '९'];
 const WEEKDAYS = ['रविवार', 'सोमवार', 'मंगळवार', 'बुधवार', 'गुरुवार', 'शुक्रवार', 'शनिवार'];
@@ -264,7 +265,19 @@ export async function renderEditions(host, { onOpen, openCreator: startOpen = fa
     const target = host.querySelector('#editionList');
     target.innerHTML = shown.length
       ? shown.map((e) => editionRowHtml(e, today, mayDelete)).join('')
-      : '<p class="muted">No edition matches that.</p>';
+      : emptyStateMarkup({
+        title: q ? `No edition matches “${query.trim()}”.` : 'No editions yet.',
+        body: q
+          ? 'Search by the date as the masthead sets it, the ISO date, or the edition name.'
+          : 'Start today\'s paper above and it will appear here.',
+        action: q ? { label: 'Clear the search', attr: 'data-clear-edition-search' } : null,
+      });
+    target.querySelector('[data-clear-edition-search]')?.addEventListener('click', () => {
+      const box = host.querySelector('#editionSearch');
+      query = '';
+      if (box) { box.value = ''; box.focus(); }
+      paint();
+    });
     target.querySelectorAll('.edition-open').forEach((button) => {
       button.addEventListener('click', () => onOpen(Number(button.dataset.editionId)));
     });
@@ -341,7 +354,7 @@ export async function renderEditions(host, { onOpen, openCreator: startOpen = fa
       const result = await response.json();
       if (!response.ok) throw new Error(result.code === 'EDITION_RESIZE_HAS_CONTENT' ? `Cannot reduce: ${result.blockers.map((p) => `page ${p.pageNumber} (${p.reasons.join(', ')})`).join('; ')}` : (result.code || 'Could not change page count.'));
       onOpen(todays.id, result);
-    } catch (error) { button.disabled = false; alert(error.message); }
+    } catch (error) { button.disabled = false; showFailure(error.message, { retry: () => button.click() }); }
   });
 
   // One date-aware creator for every edition. It checks the chosen date before
@@ -435,7 +448,7 @@ export async function renderEditions(host, { onOpen, openCreator: startOpen = fa
     } catch (error) {
       creatorSubmit.disabled = false;
       await refreshCreator();
-      alert(error.message);
+      showFailure(error.message, { retry: () => creatorSubmit.click() });
     }
   });
 }

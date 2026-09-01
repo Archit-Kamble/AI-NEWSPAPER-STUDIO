@@ -1,3 +1,4 @@
+import { busyButton } from "../ui/busy.js";
 import { formatDate } from "./format.js";
 
 const ICONS = {
@@ -92,7 +93,11 @@ export function renderToolbar({ newspaper, hasSelection, storyPickerOpen, handle
   document.getElementById("tbFromReporter").addEventListener("click", handlers.onToggleStoryPicker);
   document.getElementById("tbUndo").addEventListener("click", handlers.onUndo);
   document.getElementById("tbRedo").addEventListener("click", handlers.onRedo);
-  document.getElementById("tbPreflight").addEventListener("click", handlers.onPreflight);
+  // A control may not be pressed again while its own job is running. Measured
+  // before this: Preflight reported `disabled: false` for the whole of its run,
+  // so a desk waiting on a slow check fires it three times.
+  const preflight = document.getElementById("tbPreflight");
+  preflight.addEventListener("click", () => busyButton(preflight, "Checking…", () => handlers.onPreflight()));
   document.getElementById("tbExport").addEventListener("click", handlers.onPressFile);
   // Delegated on the menu, which survives - and the menu closes itself, or it
   // would stand open over the page after the download starts.

@@ -192,8 +192,28 @@ const say = (ok, name, detail = '') => {
       'and it is against the viewport, wherever on the one long page the desk is');
     say(/no empty block/i.test(notice.text || ''), 'Carry over says exactly why it refused', JSON.stringify(notice.text));
 
-    const fit = await press('fitBtn', 3200);
-    say(Boolean(fit), 'Make it fit says what it would do', JSON.stringify(fit.slice(0, 110)));
+    // MAKE IT FIT SAYS WHAT IT WOULD DO - AND NOW IT SAYS IT IN THE QUESTION.
+    //
+    // This used to read the desk's notice strip alone, because the proposal
+    // arrived as a toast followed by a native `confirm("...\n\nApply it?")`.
+    // Changing a block's type is a design decision and the sentence describing
+    // it is the whole basis for the answer, so it belongs IN the question
+    // rather than in a message beside it that fades on a timer.
+    //
+    // The rule is the one this check was written for and is unchanged: the
+    // desk is told what the change would be before it happens. Either surface
+    // satisfies it - the dialog when there is something to apply, the notice
+    // when there is not (already fits, or nothing legible would make it fit).
+    const fitNotice = await press('fitBtn', 3200);
+    const fitAsked = await page.evaluate(() => {
+      const d = document.querySelector('.sahas-dialog');
+      if (!d) return '';
+      return `${d.querySelector('h2')?.textContent || ''} ${(d.querySelector('.sahas-dialog-body')?.innerText || '').replace(/\s+/g, ' ')}`.trim();
+    });
+    say(Boolean(fitNotice || fitAsked), 'Make it fit says what it would do',
+      JSON.stringify((fitAsked || fitNotice).slice(0, 110)));
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
     await closeModal();
 
     // `#worklistPanel`, appended to document.body - not `#modalRoot`. The

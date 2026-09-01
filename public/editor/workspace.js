@@ -16,7 +16,8 @@
 //
 // This is the only module that talks to the section API and the only one that
 // subscribes to the store on behalf of the views. Views never import each other.
-import { askPrompt } from "../ui/dialog.js";
+import { askPrompt, askConfirm } from "../ui/dialog.js";
+import { busyButton } from "../ui/busy.js";
 
 import { renderCanvas, refreshSection, refreshSelection, refreshGuides, refreshColumnRules } from "./canvas/canvas.js";
 import { renderMiniMap, configure as configureCanvasView, applyTransform } from "./canvas/canvas-view.js";
@@ -47,6 +48,7 @@ import {
   showNotice,
   focusGroup,
 } from "./external-editor/external-editor.js";
+import { showFailure } from "../ui/notice.js";
 import { applyStoredLayout, bindResizers, setEditorCollapsed, getSizes } from "./layout/resizer.js";
 import { showPublicationFiles } from "./publication.js";
 import { loadAiStatus, getAiTier, retrievalStatusMarkup } from "./external-editor/ai-panel.js";
@@ -109,7 +111,38 @@ export async function leaveWorkspace() {
 // It decides one thing here: whether the Publish button is drawn.
 let deskCan = {};
 
+/**
+ * WHAT THE DESK LOOKS AT WHILE AN EDITION OPENS.
+ *
+ * Measured by holding the pages API at 3 s and pressing Open. Frame by frame
+ * from the click: the editions list, unchanged, unchanged, unchanged - then
+ * the whole workspace at once at 3.81 s. The button was never disabled and the
+ * cursor never changed, so for three seconds the application looked like it
+ * had ignored the click, on the commonest action in the product.
+ *
+ * This is deliberately the SHAPE of the workspace rather than a spinner in the
+ * middle of the screen: a desk should see the sheet arriving where the sheet
+ * goes. It is thrown away wholesale by renderShell(), so it can never be a
+ * second layout to keep in step with the real one - it has no ids, no
+ * controls and nothing reads it.
+ */
+function renderWorkspaceSkeleton() {
+  const content = document.getElementById("content");
+  if (!content) return;
+  content.setAttribute("aria-busy", "true");
+  content.innerHTML = `
+    <div class="workspace-skeleton" role="status" aria-live="polite">
+      <span class="visually-hidden">Opening the edition…</span>
+      <div class="ws-skel-bar"><span class="skel skel-pill"></span><span class="skel skel-pill"></span><span class="skel skel-pill wide"></span></div>
+      <div class="ws-skel-body">
+        <div class="ws-skel-rail"><span class="skel skel-line"></span><span class="skel skel-line"></span><span class="skel skel-line short"></span><span class="skel skel-block"></span></div>
+        <div class="ws-skel-sheet"><span class="skel skel-sheet"></span><p class="ws-skel-say">Opening the edition…</p></div>
+      </div>
+    </div>`;
+}
+
 export async function renderWorkspace(newspaperId) {
+  renderWorkspaceSkeleton();
   let newspaper, pages, reporterNews, me;
   try {
     [newspaper, pages, reporterNews, me] = await Promise.all([
@@ -182,6 +215,7 @@ function renderWorkspaceLoadError(newspaperId, error) {
   console.error("Workspace load failed:", error);
   const content = document.getElementById("content");
   if (!content) return;
+  content.removeAttribute("aria-busy");
   // The shaper failing to load is a real, distinct failure - not a dropped
   // connection - and showing it as one would send a desk retrying something
   // that will not fix itself. Composing a page from approximate widths and
@@ -992,12 +1026,46 @@ async function placeStoryImages(story) {
  * accident yet. Undo still has it either way - this is about the desk knowing
  * it happened, which is the half undo cannot supply.
  */
-function clearSection(sectionKey) {
+/**
+ * WHAT TO CALL A BLOCK IN A QUESTION.
+ *
+ * Captured live before this existed: `Clear "masthead-advert"? Its headline,
+ * story and picture go with it.` The sentence is well written and it names the
+ * block by its DATABASE KEY. What the desk sees is the advert ear on page one.
+ *
+ * So a question names, in order of what identifies the block to the person
+ * looking at it: the headline they wrote, else the slug set as words. The slug
+ * is still recognisable - the canvas chrome prints `MASTHEAD-ADVERT` on the
+ * block itself - it is only no longer punctuation.
+ */
+function blockName(sectionKey, section) {
+  const headline = String(section?.headline || "").trim();
+  if (headline) return `“${headline.length > 60 ? `${headline.slice(0, 57)}…` : headline}”`;
+  const words = String(sectionKey || "block").replace(/[-_]+/g, " ").trim();
+  return `the ${words} block`;
+}
+
+async function clearSection(sectionKey) {
   if (store.getState().selectedSectionKey !== sectionKey) selectSection(sectionKey);
   const draft = store.getDraft();
   if (!draft) return;
   const carries = draft.headline || draft.subheading || draft.body || draft.imageUrl || draft.newsItemId;
-  if (carries && !window.confirm(`Clear "${sectionKey}"? Its headline, story and picture go with it.`)) return;
+  if (carries) {
+    const has = [
+      draft.headline && "its headline",
+      draft.body && "its story",
+      (draft.imageUrl || draft.newsItemId) && "its picture",
+    ].filter(Boolean);
+    const ok = await askConfirm({
+      title: `Clear ${blockName(sectionKey, draft)}?`,
+      body: `${has.join(", ").replace(/, ([^,]*)$/, " and $1")} go with it.\n\nUndo puts it back.`
+        .replace(/^./, (c) => c.toUpperCase()),
+      confirm: "Clear the block",
+      cancel: "Keep it",
+      destructive: true,
+    });
+    if (!ok) return;
+  }
   store.replaceDraft(
     { ...draft, newsItemId: null, headline: "", subheading: "", body: "", caption: "", imageUrl: "", aiGenerated: false, status: "empty" },
     "canvas",
@@ -1088,7 +1156,16 @@ async function deleteBlock(sectionKey) {
   if (!page || !section) return;
 
   const filled = section.headline || section.body || section.image_url || section.news_item_id;
-  if (filled && !window.confirm(`Delete "${sectionKey}"? Its story and image go with it.`)) return;
+  if (filled) {
+    const ok = await askConfirm({
+      title: `Delete ${blockName(sectionKey, section)}?`,
+      body: "The frame goes off the page, and its story and picture go with it.",
+      confirm: "Delete the block",
+      cancel: "Keep it",
+      destructive: true,
+    });
+    if (!ok) return;
+  }
 
   const response = await fetch(`/api/pages/${page.id}/sections/${encodeURIComponent(sectionKey)}`, {
     method: "DELETE",
@@ -1331,6 +1408,7 @@ function openPublish() {
 function renderShell() {
   const content = document.getElementById("content");
   if (!content) return;
+  content.removeAttribute("aria-busy");
 
   content.innerHTML = `
     <div class="workspace-shell">
@@ -1594,14 +1672,14 @@ function bindPaperControls() {
         const moved = result.restyled
           ? `Set in ${blocks(result.restyled)}.`
           : "No block took the new face.";
-        if (window.confirm(
-          `${moved}
-
-${blocks(result.kept)} keep a face of their own and were left alone.`
-          + `
-
-Set every block in this paper to it?`,
-        )) {
+        const applyAll = await askConfirm({
+          title: "Set every block in this paper to that face?",
+          body: `${moved}\n\n${blocks(result.kept)} keep a face of their own and were left alone.`
+            + "\n\nA block someone set by hand is a decision, so it was not moved. Saying yes overrides those too.",
+          confirm: "Set every block",
+          cancel: "Leave those alone",
+        });
+        if (applyAll) {
           await send({ ...patch, applyToAll: true }, { asked: true });
           return;
         }
@@ -1642,7 +1720,8 @@ Set every block in this paper to it?`,
   // as one - the horoscope, the almanac box, दिनविशेष, the thought for the day -
   // for this edition's own date. What lands in them is ordinary copy the desk
   // can rewrite (VISION.md: AI assists, never owns).
-  document.getElementById("fillFeaturesBtn").addEventListener("click", fillFeatures);
+  const fillBtn = document.getElementById("fillFeaturesBtn");
+  fillBtn.addEventListener("click", () => busyButton(fillBtn, "Filling…", fillFeatures));
 
   // Writing the empty blocks of a page. One request per block, two at a time -
   // never the whole page in one request (bulk-generate.js says why).
@@ -1658,7 +1737,8 @@ Set every block in this paper to it?`,
   // What is left. The whole edition's unfinished work on one list, each block
   // with the number of characters it holds - which is the number a sub-editor
   // needs BEFORE writing, not after the copy has already run over.
-  document.getElementById("worklistBtn").addEventListener("click", showWorklist);
+  const worklistBtn = document.getElementById("worklistBtn");
+  worklistBtn.addEventListener("click", () => busyButton(worklistBtn, "Reading…", showWorklist));
 
   // Making a story fit. The third of the three moves a sub-editor has, beside
   // cutting and carrying over: set it a notch tighter. The software knows every
@@ -1739,7 +1819,9 @@ async function runPreflight() {
   showNotice("Checking the edition…");
   const report = await fetch(`/api/newspapers/${newspaper.id}/preflight`)
     .then((r) => r.json()).catch(() => ({ error: "The edition could not be checked. Try again." }));
-  if (!report || report.error) return showNotice(report?.error || "The edition could not be checked.");
+  if (!report || report.error) {
+    return showFailure(report?.error || "The edition could not be checked.", { retry: runPreflight });
+  }
 
   renderPreflight(report);
   showNotice(
@@ -1814,7 +1896,16 @@ function renderCompositionPlan(plan, aiMode) {
   panel.innerHTML = `<header><strong>AI composition plan</strong><button type="button" id="compositionClose" aria-label="Close">×</button></header><p>${escapeHtml(plan.writerTransport)} · ${plan.sourceCount} approved sources · snapshot ${escapeHtml(plan.sourceSnapshotHash.slice(0, 12))}</p><p>Editorial composition: ${plan.expected.plannedFrames}/${plan.expected.requiredFrames} planned · coverage ${(plan.expected.editorialCoverageRatio * 100).toFixed(0)}% · area ${(plan.expected.weightedEditorialCoverageRatio * 100).toFixed(0)}%</p><p>${escapeHtml(imageSummary)}</p>${auxiliary ? `<p>${escapeHtml(auxiliary)}</p>` : ''}${budgetLine ? `<p>${escapeHtml(budgetLine)}</p>` : ''}<ul>${rows}</ul><button type="button" class="btn-primary" id="compositionApply">Apply AI Composition</button><p class="composition-note">Apply writes text and source images in one edition transaction using ${escapeHtml(plan.writerTransport)}. Confirmed plan only; changed newsroom copy, image files, or page placement is rejected.</p>`;
   document.body.appendChild(panel); document.getElementById('compositionClose').addEventListener('click', closeOnEscape(() => panel.remove()));
   document.getElementById('compositionApply').addEventListener('click', async () => {
-    const confirm = window.confirm(`Apply AI composition to ${store.getState().newspaper.publication_date}?\n${plan.expected.plannedFrames} planned frames, ${plan.expected.unresolvedDemand} unresolved, ${plan.expected.resolvedImages}/${plan.expected.requiredImages} required images resolved, ${plan.writerTransport}, provider-call cap ${budget?.selectedProviderCallCap ?? 'unknown'}.`); if (!confirm) return;
+    const confirmed = await askConfirm({
+      title: `Apply this composition to ${store.getState().newspaper.publication_date}?`,
+      body: `${plan.expected.plannedFrames} planned frames · ${plan.expected.unresolvedDemand} unresolved`
+        + `\n${plan.expected.resolvedImages} of ${plan.expected.requiredImages} required images resolved`
+        + `\nWritten by ${plan.writerTransport} · provider-call cap ${budget?.selectedProviderCallCap ?? 'unknown'}`
+        + "\n\nThis writes text and source images into the edition. Every call it makes is billed.",
+      confirm: "Apply the composition",
+      cancel: "Not yet",
+    });
+    if (!confirmed) return;
     const apply = document.getElementById('compositionApply'); apply.disabled = true; apply.textContent = 'Composing…';
     // No maxServiceCalls sent here either - Apply consumes the exact cap the
     // desk already reviewed and confirmed above, bound into the plan token
@@ -1852,7 +1943,9 @@ async function showWorklist() {
 
   const list = await fetch(`/api/newspapers/${newspaper.id}/worklist`)
     .then((r) => r.json()).catch(() => ({ error: "What is left could not be read. Try again." }));
-  if (!list || list.error) return showNotice(list?.error || "What is left could not be read.");
+  if (!list || list.error) {
+    return showFailure(list?.error || "What is left could not be read.", { retry: showWorklist });
+  }
 
   renderWorklist(list, {
     onGoTo: (pageNumber, sectionKey) => {
@@ -1882,7 +1975,13 @@ async function makeItFit() {
   // nothing to apply, and the message says which.
   if (!proposal.fits || proposal.to === undefined) return showNotice(proposal.message);
 
-  if (!window.confirm(`${proposal.message}\n\nApply it?`)) return;
+  const ok = await askConfirm({
+    title: "Set this block's type to make the copy fit?",
+    body: proposal.message,
+    confirm: "Set it tighter",
+    cancel: "Leave the type alone",
+  });
+  if (!ok) return;
 
   const applied = await fetch(path, { method: "POST" }).then((r) => r.json()).catch(() => ({}));
   if (applied.error) return showNotice(applied.error);
@@ -2117,7 +2216,9 @@ async function fillFeatures() {
     body: JSON.stringify({ tier: getAiTier() }),
   });
   const result = await response.json().catch(() => ({}));
-  if (!response.ok) return showNotice(result.error || "The features could not be filled.");
+  if (!response.ok) {
+    return showFailure(result.error || "The features could not be filled.", { retry: fillFeatures });
+  }
 
   // Reload the pages so the filled blocks appear, then say plainly what did and
   // did not run. A box that could not be filled is reported, never left looking

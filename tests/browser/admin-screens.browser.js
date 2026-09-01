@@ -27,8 +27,20 @@ const check = (name, ok, detail = '') => {
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e.message).slice(0, 160)));
 
+  // THE PRODUCT NO LONGER ASKS OR REPORTS THROUGH THE OPERATING SYSTEM.
+  //
+  // This listener used to be how the net read a refusal, because a refusal was
+  // an `alert()` titled "localhost:3000 says". All forty native dialogs were
+  // replaced by the paper's own (public/ui/dialog.js, public/ui/notice.js), so
+  // a native dialog appearing at all is now itself a fault - one call site
+  // missed. It is kept, inverted: nothing may open one.
   let dialog = null;
   page.on('dialog', async (d) => { dialog = d.message(); await d.accept(); });
+  const deskSaid = () => page.evaluate(() => {
+    const host = document.getElementById('deskNotice');
+    if (!host || !host.classList.contains('is-shown')) return '';
+    return (host.innerText || '').replace(/\s+/g, ' ').trim();
+  });
 
   try {
     await page.goto(BASE, { waitUntil: 'networkidle' });
@@ -57,7 +69,12 @@ const check = (name, ok, detail = '') => {
 
     // --- every screen actually lands on itself ------------------------------
     for (const [id, expected] of [
-      ['pastNewsBtn', 'REPORTER NEWS REVIEW'],
+      // ONE SCREEN, ONE NAME. The sidebar said Past News, the heading said
+      // REPORTER NEWS REVIEW, the panel beside it said Reporter News and the
+      // address is #!/past-news - four names for one screen. The heading is
+      // the sidebar's word now, which is the one a person is reading when
+      // they decide to come here.
+      ['pastNewsBtn', 'Past News'],
       ['reportersBtn', 'Staff'],
       ['settingsBtn', 'General settings'],
       ['epaperBtn', 'E-paper'],
@@ -107,7 +124,14 @@ const check = (name, ok, detail = '') => {
     const before = await page.evaluate(() => document.querySelector('.admin-news-card .status-pill').textContent.trim());
     await page.evaluate(() => document.querySelector('.admin-news-card .approve').click());
     await page.waitForTimeout(1200);
-    check('a refused decision tells the desk', Boolean(dialog), dialog || '(silent)');
+    // The rule is unchanged - a refusal must be reported rather than swallowed.
+    // Only where it is said has changed: the desk's own failure strip, which
+    // unlike the alert it replaced stays until it is dismissed and carries
+    // Retry.
+    const refusal = await deskSaid();
+    check('a refused decision tells the desk', /could not record/i.test(refusal), refusal || '(silent)');
+    check('and it does not do it through the operating system', dialog === null, dialog || 'no native dialog');
+    await page.evaluate(() => document.querySelector('.desk-notice-close')?.click());
     check('and the card keeps its real status',
       (await page.evaluate(() => document.querySelector('.admin-news-card .status-pill').textContent.trim())) === before,
       before);

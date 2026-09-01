@@ -5419,8 +5419,29 @@ body.print-view .mono-forme-warning { display: none; }
 @media (max-width: 760px) {
   .editions-list-heading,
   .edition-creator-heading { align-items: stretch; flex-direction: column; }
+  /* A PRIMARY ACTION IS FULL WIDTH ON A PHONE, AND THREE WERE NOT.
+     This rule already existed for two of them and simply missed the rest, so
+     what a desk met was not a design but whichever buttons happened to sit in
+     a container that stretched. Measured at 390px:
+
+       + Create Edition        356px   91%
+       Add login               356px   91%
+       Upload PDF & publish    322px   83%
+       Start Today's Edition   182px   47%   <- the dashboard's whole purpose
+       Create Edition          180px   46%
+       Save settings           150px   38%   <- the only way to commit the form
+
+     Scoped to the admin screens' own containers, never `.btn-submit` at
+     large: the same class is used inside the workspace, where a full-width
+     button would be wrong, and the reporter form already has its own rule.
+     44px because every one of them was 42 - just under the thumb. */
   .editions-list-heading .btn-submit,
   .edition-creator-heading .btn-secondary { width: 100%; }
+  .form-section .btn-submit,
+  .dashboard-card .btn-submit {
+    width: 100%;
+    min-height: 44px;
+  }
   .edition-creator-fields { grid-template-columns: 1fr; }
   /* THE DELETE WAS THE BIGGEST TARGET ON THE CARD.
      Two columns and six children means each one takes a whole cell, and the
@@ -6823,7 +6844,23 @@ body.print-view .page-imprint {
 .reporter-profile-grid { display: grid; grid-template-columns: minmax(240px, .72fr) minmax(0, 1.4fr); gap: var(--s5); }.reporter-profile-grid h3 { margin-top: 0; }.reporter-profile dl { display: grid; grid-template-columns: 110px 1fr; gap: 8px 12px; margin: 0; }.reporter-profile dt { color: var(--secondary); font-weight: 800; }.reporter-profile dd { margin: 0; white-space: pre-wrap; }.reporter-profile-controls { display: flex; flex-wrap: wrap; gap: 8px; margin-top: var(--s4); }.reporter-profile-controls .btn-secondary { width: auto; margin: 0; }.reporter-reject { color: #a60f27 !important; border-color: #e6aab4 !important; }
 .reporter-stories { display: grid; gap: 8px; }.reporter-story { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding: 11px; border: 1px solid #e1ddd8; border-radius: 9px; background: #fff; }.reporter-story h4, .reporter-story p, .reporter-story small { margin: 0; }.reporter-story > div:first-child > p { margin-top: 3px; color: var(--secondary); }.reporter-story small { display: block; margin-top: 5px; color: var(--secondary); }.review-note { margin-top: 7px !important; padding: 7px 8px; border-left: 3px solid #c8a24a; background: #fcfaf3; font-size: .8rem; }.reporter-story-actions { display: flex; flex-wrap: wrap; align-content: flex-start; justify-content: flex-end; gap: 6px; }.reporter-story-actions .btn-secondary { width: auto; margin: 0; padding: 5px 8px; font-size: .76rem; }
 .general-settings { max-width: 860px; }.general-settings section { padding: var(--s4); border: 1px solid #e0dbd5; border-radius: 10px; background: #fbfaf8; }.general-settings section h3 { margin: 0 0 var(--s3); }.settings-saved { margin-left: var(--s2); font-size: .86rem; font-weight: 800; }.settings-saved--ok { color: #218650; }.settings-saved--error { color: #a60f27; }
-@media (max-width: 760px) { .reporter-admin-heading, .settings-heading { display: grid; }.reporter-admin-heading .btn-submit, .reporter-admin-heading .btn-secondary { width: 100%; }.reporter-row { grid-template-columns: 40px minmax(0, 1fr); }.reporter-counts { grid-column: 2; text-align: left; grid-template-columns: repeat(2, max-content); }.reporter-row-actions { grid-column: 2; justify-items: start; grid-auto-flow: column; justify-content: start; }.reporter-profile-grid { grid-template-columns: 1fr; }.reporter-story { grid-template-columns: 1fr; }.reporter-story-actions { justify-content: flex-start; } }
+@media (max-width: 760px) { .reporter-admin-heading, .settings-heading { display: grid; }.reporter-admin-heading .btn-submit, .reporter-admin-heading .btn-secondary { width: 100%; }.reporter-row { grid-template-columns: 40px minmax(0, 1fr); }.reporter-counts { grid-column: 2; text-align: left; grid-template-columns: repeat(2, max-content); }.reporter-row-actions { grid-column: 2; justify-items: start; grid-auto-flow: column; justify-content: start; }.reporter-profile-grid { grid-template-columns: 1fr; }.reporter-story { grid-template-columns: 1fr; }.reporter-story-actions { justify-content: flex-start; }
+  /* TWO PRIMARY ACTIONS THAT THE EARLIER RULE COULD NOT REACH, and each for
+     its own reason - found by measuring rather than by assuming the rule had
+     landed.
+
+     `Save settings` was 150px (38% of a 390px screen) because
+     `.general-settings .btn-submit { width: fit-content; min-width: 150px }`
+     sits LATER in this file at the same specificity, so it beat
+     `.form-section .btn-submit` outright. This block is later still.
+
+     `Start Today's Edition` was 182px because `width: 100%` was already
+     working perfectly - on a FLEX CONTAINER that had itself shrunk to 182px
+     around its only child. The button was full width; its parent was not.
+     Widening the button could never have fixed that. */
+  .general-settings .btn-submit { width: 100%; min-width: 0; }
+  .edition-today-form { width: 100%; }
+  .edition-today-form .btn-submit { width: 100%; } }
 
 /* --- a placed picture's caption ----------------------------------------- */
 

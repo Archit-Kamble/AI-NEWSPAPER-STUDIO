@@ -107,22 +107,51 @@ async function writePlan(stories = [], {
   writeHeadline = true, writeSubheading = true, reason = false,
   writeChart = false, chartType = 'bar',
 } = {}) {
+  // WHAT EACH BLOCK IS ASKED FOR IS THE BLOCK'S OWN DECISION.
+  //
+  // These four used to be one setting for the whole run, so a desk who wanted
+  // a deck on the lead got one on all thirty-one, and a chart of figures was
+  // either on every block or none. A page is not made up that way: the anchor
+  // carries a deck, the fillers do not, and exactly one story that morning has
+  // figures worth plotting.
+  //
+  // The run's own settings are the DEFAULT, so a desk who changes nothing gets
+  // precisely what this did before; a story that carries its own `asks`
+  // overrides them for that block alone. Deliberately resolved per story here
+  // rather than in the controller: `writePlan` is the one place that knows
+  // which block each story is for.
+  const asksFor = (story) => {
+    const own = story && typeof story.asks === 'object' && story.asks ? story.asks : {};
+    const pick = (key, fallback) => (own[key] === undefined ? fallback : own[key]);
+    return {
+      writeHeadline: pick('writeHeadline', writeHeadline) !== false,
+      writeSubheading: pick('writeSubheading', writeSubheading) !== false,
+      reason: pick('reason', reason) === true,
+      writeChart: pick('writeChart', writeChart) === true,
+      chartType: pick('chartType', chartType) || 'bar',
+    };
+  };
+
   const results = await mapLimit(stories, concurrency, async (story) => {
+    const asks = asksFor(story);
     const result = await storyWriter.write(story.pageId, story.sectionKey, {
       seed: seedFor(story),
       notes: notesFor(story),
       tier,
       maxProviders: MAX_PROVIDERS,
       providedContext: packetFor(story),
-      writeHeadline,
-      writeSubheading,
-      reason,
-      writeChart,
-      chartType,
+      ...asks,
     });
 
     if (result.error) {
-      return { page: story.page, sectionKey: story.sectionKey, error: result.error };
+      // THE FAILURE NAMES ITS BLOCK. It used to be caught by `mapLimit`'s own
+      // guard in some paths and come back as a bare `{ error }`, which the
+      // panel then printed as "pundefined/?" - and, worse, a row with no
+      // sectionKey cannot be written again, so the story was unrecoverable.
+      return {
+        page: story.page, sectionKey: story.sectionKey, pageId: story.pageId,
+        error: result.error, story,
+      };
     }
     return {
       page: story.page,
@@ -142,13 +171,38 @@ async function writePlan(stories = [], {
       tagKey: story.tagKey,
       importance: story.importance,
       repeats: story.repeats || null,
+      // The plan row this came from, so the panel can send exactly this story
+      // again when a provider had a bad minute - without the desk paying for a
+      // second research pass to get it back.
+      story,
     };
   }, { onProgress, signal });
 
+  // AND A THROW NAMES ITS BLOCK TOO.
+  //
+  // `mapLimit` catches a thrown error so one bad block cannot take the batch
+  // down, but it cannot know this shape - it returns a bare `{ error }` with
+  // no page and no sectionKey. The panel printed those as "pundefined/?", and
+  // a row with no sectionKey cannot be written again, so that story was
+  // unrecoverable however many calls the desk had already paid for. Backfilled
+  // by index, which is exactly what `mapLimit` guarantees: results in the
+  // order of the input.
+  const named = results.map((row, index) => {
+    if (row && row.sectionKey) return row;
+    const story = stories[index];
+    return {
+      page: story?.page,
+      sectionKey: story?.sectionKey,
+      pageId: story?.pageId,
+      error: (row && row.error) || 'The writer did not answer for this block.',
+      story,
+    };
+  });
+
   return {
-    results,
-    written: results.filter((r) => r && !r.error).length,
-    failed: results.filter((r) => !r || r.error).length,
+    results: named,
+    written: named.filter((r) => r && !r.error).length,
+    failed: named.filter((r) => !r || r.error).length,
   };
 }
 

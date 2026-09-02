@@ -40,8 +40,28 @@ function newRun({ newspaperId, byPage, blocks, place }) {
     // The same things a single block can be asked for. Defaults match the AI
     // panel's, so a desk who changes nothing gets what they already know.
     asks: { writeHeadline: true, writeSubheading: true, reason: false, writeChart: false, chartType: "bar" },
+    // WHAT EACH BLOCK IS ASKED FOR, PER BLOCK.
+    //
+    // `asks` above is the run's default and stays exactly what it was; this is
+    // the desk's override for one row. A page is not made up with one setting:
+    // the anchor carries a deck, the fillers do not, and exactly one story
+    // that morning has figures worth plotting. Keyed by `rowKey(story)`, so a
+    // row that is dropped and put back keeps what it was told.
+    asksByRow: new Map(),
     plan: null, batch: null, dropped: new Set(),
+    // The stories actually sent to be written, so a block whose provider had a
+    // bad minute can be sent again without paying for a second research pass.
+    sent: [],
+    // Placed into the paper so far, across however many passes it took, and
+    // the rows still outstanding.
+    placed: 0,
+    leftOver: [],
   };
+}
+
+/** This row's own asks, falling back to the run's defaults for anything unset. */
+function asksFor(run, story) {
+  return { ...run.asks, ...(run.asksByRow.get(rowKey(story)) || {}) };
 }
 
 /**
@@ -162,7 +182,8 @@ function briefMarkup(run) {
          paper - and it could ask for less than the panel that writes one
          block. Every option here ends in the same storyWriter.write(). -->
     <fieldset class="newsdesk-asks">
-      <legend>What each story gets</legend>
+      <legend>What each story gets by default</legend>
+      <p class="muted">You can change any of these on a story of its own, once the plan comes back.</p>
       <label class="toggle"><input type="checkbox" id="newsdeskHeadline" checked> A headline</label>
       <label class="toggle"><input type="checkbox" id="newsdeskSubheading" checked> A subheading</label>
       <label class="toggle"><input type="checkbox" id="newsdeskReason"> Think it through first</label>
@@ -192,7 +213,7 @@ function sourceLine(story) {
   return `${story.sources.length} source${story.sources.length === 1 ? "" : "s"} · ${escapeHtml(names)}`;
 }
 
-function planRow(story, dropped) {
+function planRow(story, dropped, asks) {
   const off = dropped.has(rowKey(story));
   return `<li class="newsdesk-plan-row${off ? " is-dropped" : ""}">
     <div class="newsdesk-plan-where">
@@ -208,6 +229,7 @@ function planRow(story, dropped) {
     : `<span class="newsdesk-unchecked">⚠ unchecked — you must verify this before it prints</span>`}
       ${story.repeats ? `<span class="newsdesk-repeat">Similar to: ${escapeHtml(story.repeats.headline)}</span>` : ""}
       ${story.disagreements?.length ? `<span class="newsdesk-disagree">Sources disagree on ${story.disagreements.length} point${story.disagreements.length === 1 ? "" : "s"} — the copy will say so</span>` : ""}
+      ${askRow(story, asks)}
       <details><summary>What it will be written from</summary>
         <ul class="newsdesk-facts">${story.facts.map((f) => `<li>${escapeHtml(f)}</li>`).join("")}</ul>
         ${story.doNotClaim?.length ? `<p class="muted">Will not claim: ${story.doNotClaim.map(escapeHtml).join("; ")}</p>` : ""}
@@ -216,6 +238,36 @@ function planRow(story, dropped) {
     </div>
     <button type="button" class="ext-editor-btn" data-plan-drop="${escapeHtml(rowKey(story))}">${off ? "Put back" : "Drop"}</button>
   </li>`;
+}
+
+// WHAT THIS ONE STORY IS ASKED FOR.
+//
+// These four used to be one setting for the whole run, on the brief, so a deck
+// on the lead meant a deck on all thirty-one and a chart was either on every
+// block or on none. A page is not made up that way.
+//
+// Written out in words rather than as initials: a desk should not have to
+// learn that H means headline, and a tooltip is not something anybody reads
+// while working - the same argument the device bar's own header makes.
+//
+// The chart's type only appears once a chart is asked for; a select for a
+// thing that is switched off is a control that cannot act.
+function askRow(story, asks) {
+  const key = escapeHtml(rowKey(story));
+  const box = (field, label, on) => `<label class="toggle newsdesk-ask">
+      <input type="checkbox" data-ask="${field}" data-ask-row="${key}"${on ? " checked" : ""}> ${label}</label>`;
+  return `<div class="newsdesk-ask-row">
+    ${box("writeHeadline", "Headline", asks.writeHeadline !== false)}
+    ${box("writeSubheading", "Subheading", asks.writeSubheading !== false)}
+    ${box("reason", "Think it through", asks.reason === true)}
+    ${box("writeChart", "Chart", asks.writeChart === true)}
+    ${asks.writeChart === true ? `<select data-ask="chartType" data-ask-row="${key}" aria-label="Which chart for this story">
+      ${["bar:Bars", "pie:Pie", "line:Line", "dots:Dots", "stat:Figures"].map((pair) => {
+    const [value, label] = pair.split(":");
+    return `<option value="${value}"${asks.chartType === value ? " selected" : ""}>${label}</option>`;
+  }).join("")}
+    </select>` : ""}
+  </div>`;
 }
 
 const rowKey = (story) => `${story.page}/${story.sectionKey}`;
@@ -244,7 +296,7 @@ function planMarkup(run) {
        ${plan.retrieval.feedsFetched} feeds, grouped into ${plan.stories.length} for
        ${plan.blocksOffered} empty blocks. <strong>Nothing is written yet.</strong></p>
     ${verifyNote}
-    <ul class="newsdesk-plan">${plan.stories.map((s) => planRow(s, run.dropped)).join("")}</ul>
+    <ul class="newsdesk-plan">${plan.stories.map((s) => planRow(s, run.dropped, asksFor(run, s))).join("")}</ul>
     ${emptyNote}
     <div class="newsdesk-actions">
       <button type="button" class="ext-editor-btn" id="newsdeskBack">Change the brief</button>
@@ -287,6 +339,30 @@ function copyMarkup(run) {
     </div>`;
 }
 
+// WHAT IS STILL TO DO, after the paper has taken everything it could.
+//
+// This stage exists because the alternative was losing the stories. A run that
+// placed 4 of 31 used to close and take the other 27 with it, including the
+// research call the desk had already paid for.
+function leftMarkup(run) {
+  const left = run.leftOver || [];
+  const recoverable = left.filter((row) => row && row.story).length;
+  return `
+    <p class="worklist-summary"><strong>${run.placed} block${run.placed === 1 ? "" : "s"} placed</strong>,
+       marked <em>needs review</em>. ${left.length} still to do — nothing here has been lost.</p>
+    <ul class="bulk-list">${left.map((row) => `<li class="bulk-row is-error">
+      <strong>p${row?.page ?? "?"}/${escapeHtml(row?.sectionKey || "?")}</strong>
+      <span class="bulk-headline">${escapeHtml(row?.story?.headlineHint || "")}</span>
+      <span class="muted">${escapeHtml(row?.error || "The paper would not take this block.")}</span>
+    </li>`).join("")}</ul>
+    <p class="muted ext-note">These keep the sources and the facts the plan already found, so writing them
+       again costs one call each and no research.</p>
+    <div class="newsdesk-actions">
+      <button type="button" class="ext-editor-btn ext-editor-btn-primary" id="newsdeskWriteAgain"${recoverable ? "" : " disabled"}>Write ${recoverable} again</button>
+      <button type="button" class="ext-editor-btn" id="newsdeskDone">Leave the rest</button>
+    </div>`;
+}
+
 // --------------------------------------------------------------- the panel ---
 
 /**
@@ -311,8 +387,14 @@ export function openNewsdeskPanel({ newspaperId, byPage, blocks, place, commissi
   const say = (message) => notice?.(message);
 
   function render(stage) {
-    const body = stage === "plan" ? planMarkup(run) : stage === "copy" ? copyMarkup(run) : briefMarkup(run);
-    const title = stage === "plan" ? "The plan" : stage === "copy" ? "The copy" : "Plan the edition";
+    const body = stage === "plan" ? planMarkup(run)
+      : stage === "copy" ? copyMarkup(run)
+        : stage === "left" ? leftMarkup(run)
+          : briefMarkup(run);
+    const title = stage === "plan" ? "The plan"
+      : stage === "copy" ? "The copy"
+        : stage === "left" ? "Still to do"
+          : "Plan the edition";
     panel.innerHTML = `<header><strong>${title}</strong>
       <button type="button" id="newsdeskClose" aria-label="Close">×</button></header>${body}`;
     // The panel walks brief -> plan -> copy and rewrites its own header at each
@@ -326,7 +408,13 @@ export function openNewsdeskPanel({ newspaperId, byPage, blocks, place, commissi
   function bind(stage) {
     if (stage === "brief") return bindBrief();
     if (stage === "plan") return bindPlan();
+    if (stage === "left") return bindLeft();
     return bindCopy();
+  }
+
+  function bindLeft() {
+    panel.querySelector("#newsdeskWriteAgain")?.addEventListener("click", writeAgain);
+    panel.querySelector("#newsdeskDone")?.addEventListener("click", () => panel.remove());
   }
 
   function bindBrief() {
@@ -398,6 +486,23 @@ export function openNewsdeskPanel({ newspaperId, byPage, blocks, place, commissi
   }
 
   function bindPlan() {
+    // A ROW'S OWN ASKS. Only the CHART re-renders, because turning it on adds
+    // the type select beside it; the other three change nothing on screen, so
+    // re-rendering for them would throw away the desk's scroll position half
+    // way down a list of thirty-one.
+    panel.querySelectorAll("[data-ask]").forEach((control) => {
+      control.addEventListener("change", (event) => {
+        const el = event.currentTarget;
+        const key = el.dataset.askRow;
+        const field = el.dataset.ask;
+        const story = run.plan.stories.find((row) => rowKey(row) === key);
+        if (!story) return;
+        const own = { ...(run.asksByRow.get(key) || {}) };
+        own[field] = el.type === "checkbox" ? el.checked : el.value;
+        run.asksByRow.set(key, own);
+        if (field === "writeChart") render("plan");
+      });
+    });
     panel.querySelectorAll("[data-plan-drop]").forEach((button) => button.addEventListener("click", (event) => {
       const key = event.currentTarget.dataset.planDrop;
       if (run.dropped.has(key)) run.dropped.delete(key); else run.dropped.add(key);
@@ -514,8 +619,14 @@ export function openNewsdeskPanel({ newspaperId, byPage, blocks, place, commissi
 
   async function write() {
     if (busy) return;
-    const keeping = run.plan.stories.filter((s) => !run.dropped.has(rowKey(s)));
+    const keeping = run.plan.stories
+      .filter((s) => !run.dropped.has(rowKey(s)))
+      // Each story carries its OWN asks. The run's settings are still sent
+      // below as the default, so a story that overrides nothing is written
+      // exactly as it was before this existed.
+      .map((s) => ({ ...s, asks: asksFor(run, s) }));
     if (!keeping.length) return;
+    run.sent = keeping;
     const done = working("#newsdeskWrite", `Writing ${keeping.length}…`);
     try {
       run.batch = await post(`/api/newspapers/${run.newspaperId}/newsdesk/write`, {
@@ -533,15 +644,78 @@ export function openNewsdeskPanel({ newspaperId, byPage, blocks, place, commissi
     }
   }
 
+  // ACCEPT PLACES EVERY STORY IT HAS, AND KEEPS WHAT IT COULD NOT.
+  //
+  // The desk's report was "it should accept all news to layout but it just
+  // accepts one, then it vanishes all the other news". Two things were true
+  // and they compound:
+  //
+  //   * the rows a provider had failed on were filtered out and then THROWN
+  //     AWAY - `panel.remove()` destroyed the run, so a story the desk had
+  //     already paid a research call for could not be written again without
+  //     paying for the whole research pass a second time;
+  //   * a row the SERVER refused (a block that had gone, a page belonging to
+  //     another edition) was reported as a bare count in a toast that fades,
+  //     next to no way of acting on it.
+  //
+  // So a run whose providers were rate-limited or out of quota - which is the
+  // ordinary case on a metered account, and this project has measured a
+  // 26-block run exhausting every configured provider - placed whatever
+  // happened to succeed and silently lost the rest.
+  //
+  // Nothing about placing changes: the server loops every row it is given and
+  // was verified doing so, 8 of 8. What changes is that the panel STAYS when
+  // there is anything left, showing exactly which blocks are outstanding and
+  // why, with the button that sends those same stories again for one call
+  // each. It closes only when there is nothing left to do.
   async function accept() {
     if (busy) return;
     const done = working("#newsdeskAccept", "Placing…");
     try {
       const stories = run.batch.results.filter((r) => r && !r.error);
       const result = await post(`/api/newspapers/${run.newspaperId}/newsdesk/accept`, { stories });
-      say(`${result.saved} block${result.saved === 1 ? "" : "s"} placed, marked needs review.${result.refused.length ? ` ${result.refused.length} refused.` : ""}`);
-      panel.remove();
+      const refused = new Set((result.refused || []).map((row) => row.sectionKey));
+      // What is still outstanding: a block the writer never answered for, and
+      // a block the server would not take. Both are recoverable and both keep
+      // their own story, so both can be written again.
+      const left = run.batch.results.filter((row) => !row || row.error || refused.has(row.sectionKey));
+      run.placed = (run.placed || 0) + result.saved;
       await onDone?.();
+      if (!left.length) {
+        say(`${result.saved} block${result.saved === 1 ? "" : "s"} placed, marked needs review.`);
+        panel.remove();
+        return;
+      }
+      run.leftOver = left;
+      render("left");
+      say(`${result.saved} placed. ${left.length} still to do — they are still on this panel.`);
+    } catch (error) {
+      say(error.message);
+    } finally {
+      done();
+    }
+  }
+
+  // Writing again the stories that did not come back, and ONLY those.
+  //
+  // Each carries the plan row it came from, so this costs one call per block
+  // and no research at all - the retrieval, the clustering and the desk's own
+  // reading of the plan are all still good.
+  async function writeAgain() {
+    if (busy) return;
+    const stories = (run.leftOver || [])
+      .map((row) => row.story)
+      .filter(Boolean)
+      .map((story) => ({ ...story, asks: asksFor(run, story) }));
+    if (!stories.length) {
+      return say("These blocks cannot be written again from here — research the edition afresh.");
+    }
+    const done = working("#newsdeskWriteAgain", `Writing ${stories.length}…`);
+    try {
+      run.batch = await post(`/api/newspapers/${run.newspaperId}/newsdesk/write`, {
+        stories, asks: run.asks,
+      });
+      render("copy");
     } catch (error) {
       say(error.message);
     } finally {

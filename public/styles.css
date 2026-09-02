@@ -8293,6 +8293,29 @@ button.is-busy:disabled,
   from { background-position: 120% 0; }
   to   { background-position: -60% 0; }
 }
+/* WHAT ONE STORY IS ASKED FOR, on its own row of the plan. These were one
+   setting for the whole run; a page is not made up that way. Wraps rather than
+   scrolls - the panel is narrow and these are four short words, not a bar
+   whose contents change while a desk works. */
+.newsdesk-ask-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2) var(--s3);
+  margin-block-start: var(--s2);
+  padding-block-start: var(--s2);
+  border-block-start: 1px dashed var(--border);
+}
+.newsdesk-ask-row .toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  font-size: .78rem;
+  white-space: nowrap;
+}
+.newsdesk-ask-row select { font-size: .78rem; padding: 2px 4px; }
+
 /* A PROPOSAL BEING WRITTEN. The skeletons stack, so they need to be blocks
    with room between them - `.skel` is `display: block` already, and the pills
    are inline-sized, so they are laid out rather than left to collapse. */

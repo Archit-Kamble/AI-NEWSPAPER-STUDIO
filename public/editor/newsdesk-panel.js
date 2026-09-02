@@ -447,13 +447,44 @@ export function openNewsdeskPanel({ newspaperId, byPage, blocks, place, commissi
   // Restoring a button `render()` has already replaced is a no-op: the
   // `isConnected` check below is what makes releasing in `finally` safe on the
   // success path as well as the failure one.
+  //
+  // It wears the SAME busy vocabulary as every other control in the product
+  // (`ui/busy.js`): the spinner, `aria-busy` for a screen reader, and the
+  // measured width pinned so a row of controls cannot reflow under the
+  // pointer. It cannot simply call `busyButton` - that wraps one promise, and
+  // these three stages release across a `render()` that replaces the button -
+  // so it keeps its own release function and matches the contract by hand.
+  //
+  // This is the longest wait in the product by a distance: the planner is one
+  // Ultra call for a whole newspaper (83s measured on a 26-block brief) and
+  // the writers are one call per block, four at a time. A label alone on a
+  // wait that long reads as a frozen screen.
   function working(id, label) {
     const button = panel.querySelector(id);
-    if (button) { button.disabled = true; button.dataset.was = button.textContent; button.textContent = label; }
+    if (button) {
+      const wasWidth = button.getBoundingClientRect().width;
+      button.disabled = true;
+      button.dataset.was = button.textContent;
+      button.textContent = label;
+      button.setAttribute("aria-busy", "true");
+      button.classList.add("is-busy");
+      if (wasWidth > 0) button.style.minWidth = `${Math.round(wasWidth)}px`;
+    }
+    // The panel's own body is about to be replaced, so it says so too - the
+    // button is at the foot of a long list and a desk reading the plan is not
+    // looking at it.
+    panel.setAttribute("aria-busy", "true");
     busy = true;
     return () => {
       busy = false;
-      if (button && button.isConnected) { button.disabled = false; button.textContent = button.dataset.was; }
+      panel.removeAttribute("aria-busy");
+      if (button && button.isConnected) {
+        button.disabled = false;
+        button.textContent = button.dataset.was;
+        button.removeAttribute("aria-busy");
+        button.classList.remove("is-busy");
+        button.style.minWidth = "";
+      }
     };
   }
 

@@ -8128,39 +8128,35 @@ body.print-view .page-imprint {
    A control that is working says so and cannot be pressed again; a region being
    rebuilt says so to a screen reader. Both are new: before this the product had
    no spinner, no skeleton and no `aria-busy` anywhere. */
-.is-busy { cursor: progress; opacity: .78; }
-.is-busy::after {
-  content: "";
-  display: inline-block;
-  width: .68em;
-  height: .68em;
-  margin-left: var(--s2);
-  border: 2px solid currentColor;
-  border-right-color: transparent;
-  border-radius: 50%;
-  vertical-align: -1px;
-  animation: sahas-spin 640ms linear infinite;
-}
-@keyframes sahas-spin { to { transform: rotate(360deg); } }
-/* The one piece of motion this product had none of - so it yields, like every
-   other, to a desk who has asked for less of it. */
-@media (prefers-reduced-motion: reduce) {
-  .is-busy::after { animation-duration: 2.4s; }
-}
+/* `.is-busy` AND `sahas-spin` ARE DEFINED ONCE, FURTHER DOWN.
+   They used to be declared here as well, at equal specificity, and the two
+   sets merged rather than one simply replacing the other - which is the
+   duplicate-rule fault this stylesheet has already been caught by. Measured in
+   the browser: the spinner survived intact (the later block re-declares the
+   `border` shorthand, which resets all four colours), but an inert
+   `margin-left` from here rode along on an absolutely-positioned element.
+   The region skeleton stays here; its sheen is the shared one. */
 [aria-busy="true"].is-loading { position: relative; min-height: 60px; }
 [aria-busy="true"].is-loading::before {
   content: "";
   position: absolute;
   inset: 0;
   z-index: 1;
+  /* THE SAME TECHNIQUE `.skel` USES, so both can be driven by ONE
+     `sahas-sheen`. They used to have a keyframe name each other's - two
+     `@keyframes sahas-sheen`, so the LAST one won for both, and this overlay
+     (sized in PIXELS, 220px) was animated by the percentage keyframes written
+     for `.skel` (sized 220%). Percentage background-position resolves against
+     `element - background`, so on a 300px region the sheen travelled from 96px
+     to -48px: half the width, and backwards. Sized in per cent it sweeps the
+     way it reads. */
   background:
-    linear-gradient(90deg, transparent, rgba(255, 255, 255, .62), transparent),
+    linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, .68) 42%, transparent 84%),
     var(--bg-light);
-  background-size: 220px 100%;
+  background-size: 220% 100%;
   background-repeat: no-repeat;
-  animation: sahas-sheen 1.15s ease-in-out infinite;
+  animation: sahas-sheen 1.25s ease-in-out infinite;
 }
-@keyframes sahas-sheen { from { background-position: -220px 0; } to { background-position: calc(100% + 220px) 0; } }
 @media (prefers-reduced-motion: reduce) {
   [aria-busy="true"].is-loading::before { animation: none; background: var(--bg-light); }
 }
@@ -8259,7 +8255,25 @@ textarea:disabled {
   opacity: .85;
   animation: sahas-spin .62s linear infinite;
 }
+/* The one definition. */
 @keyframes sahas-spin { to { transform: rotate(360deg); } }
+
+/* A BUSY CONTROL IS NOT A DISABLED ONE, AND MUST NOT READ AS ONE.
+   `button:disabled` above is (0,1,1) and `.is-busy` is (0,1,0), so the
+   disabled rule won BOTH of the properties `.is-busy` sets - and `busyButton`
+   always disables the control while its work runs. Measured: every busy button
+   in this product rendered at 0.55 opacity with a `not-allowed` cursor. So the
+   one control the desk is waiting on was the faintest thing on the screen, and
+   the pointer said "you may never press this" where it meant "this is
+   working". The comment on `.is-busy` states exactly this intent and it had
+   never once taken effect - a rule computed and never rendered, in the
+   stylesheet rather than in the schema. */
+button.is-busy,
+button.is-busy:disabled,
+.is-busy:disabled {
+  opacity: 1;
+  cursor: progress;
+}
 
 /* --- A region being rebuilt ---------------------------------------------- */
 [aria-busy="true"] { cursor: progress; }
@@ -8279,6 +8293,16 @@ textarea:disabled {
   from { background-position: 120% 0; }
   to   { background-position: -60% 0; }
 }
+/* A PROPOSAL BEING WRITTEN. The skeletons stack, so they need to be blocks
+   with room between them - `.skel` is `display: block` already, and the pills
+   are inline-sized, so they are laid out rather than left to collapse. */
+.ai-proposal-waiting {
+  margin: 0 0 var(--s2);
+  color: var(--muted);
+  font-size: .82rem;
+}
+.ai-proposal .skel { border-radius: 3px; }
+.ai-proposal .skel-pill { margin-block-end: var(--s2); }
 .skel-pill  { width: 84px;  height: 26px; }
 .skel-pill.wide { width: 148px; }
 .skel-line  { width: 100%;  height: 12px; margin-block-end: var(--s2); }

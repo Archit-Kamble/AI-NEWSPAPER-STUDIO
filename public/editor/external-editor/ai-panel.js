@@ -1,4 +1,5 @@
 import { askConfirm } from "../../ui/dialog.js";
+import { busyButton } from "../../ui/busy.js";
 // The AI panel. AI ASSISTS - it never owns, and it never writes.
 //
 // Two actions are real and go to the server-side story writer: "Write this
@@ -642,6 +643,40 @@ function renderCandidates(host, candidates) {
     </div>`;
 }
 
+// WHAT A PROPOSAL LOOKS LIKE WHILE IT IS BEING WRITTEN.
+//
+// The three proposal areas were `hidden` until the answer landed, so the
+// longest wait in this product - a provider writing a whole block, then the
+// exact compositor measuring it - showed nothing at all where the answer was
+// about to appear. The busy button says the work started; this says WHERE it
+// is going to arrive, in the shape it will arrive in: a headline, a deck, a
+// column of copy and the fit bar under it.
+//
+// It carries no ids and nothing reads it back - it is replaced whole by
+// `proposalMarkup()` or hidden again on a refusal, so it can never become a
+// second rendering of a proposal to keep in step.
+function waitingMarkup(what) {
+  return `<p class="ai-proposal-waiting" role="status">${escapeHtml(what)}</p>
+    <span class="skel skel-pill wide"></span>
+    <span class="skel skel-line"></span>
+    <span class="skel skel-line"></span>
+    <span class="skel skel-line short"></span>
+    <span class="skel skel-pill"></span>`;
+}
+
+// AND IT IS ALWAYS TAKEN AWAY.
+//
+// Each of these handlers has early returns inside the work - "Choose a block
+// first", a refusal from the provider - and a skeleton left standing after one
+// of them is an answer the desk goes on waiting for. This clears it if, and
+// only if, it is still the waiting shape: a real proposal that has replaced it
+// is left exactly alone.
+function clearWaiting(hostEl) {
+  if (!hostEl || !hostEl.querySelector(".ai-proposal-waiting")) return;
+  hostEl.hidden = true;
+  hostEl.innerHTML = "";
+}
+
 export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, getPage, onSave) {
   const seed = document.getElementById("edAiSeed");
   const write = document.getElementById("aiWriteStory");
@@ -707,11 +742,15 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, g
       return onNotify("Say what the story is about first — a few words is enough.");
     }
 
-    const label = write.textContent;
-    write.disabled = true;
-    write.textContent = "Writing to the measure…";
     if (retrievalHost) { retrievalHost.hidden = true; retrievalHost.innerHTML = ""; }
-    try {
+    host.hidden = false;
+    host.innerHTML = waitingMarkup("Writing this block…");
+    // THE ONE BUSY VOCABULARY. These three controls each hand-rolled the same
+    // four lines - disable, swap the label, and give both back in a `finally`
+    // - which is three copies of `busyButton` that between them had no
+    // spinner, no `aria-busy` and no pinned width, so the row reflowed under
+    // the pointer while the longest call in the product was running.
+    await busyButton(write, "Writing to the measure…", async () => {
       // The server measures the persisted row. Flush live typography/column
       // edits first, then resolve fresh objects after PAGE_SYNC replaces them.
       await onSave?.();
@@ -751,7 +790,13 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, g
         retrievalHost.innerHTML = retrievalStatusMarkup(result.retrieval);
       }
 
-      if (!response.ok || result.error) return onNotify(result.error || "The AI could not write this block.");
+      if (!response.ok || result.error) {
+        // The waiting shape goes with the refusal - a skeleton left standing
+        // is an answer the desk goes on waiting for.
+        host.hidden = true;
+        host.innerHTML = "";
+        return onNotify(result.error || "The AI could not write this block.");
+      }
 
       host.hidden = false;
       host.innerHTML = proposalMarkup(result);
@@ -800,10 +845,8 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, g
           : "Written into the block. Check every fact before it prints.");
       });
       document.getElementById("aiDiscardStory")?.addEventListener("click", () => { host.hidden = true; });
-    } finally {
-      write.disabled = false;
-      write.textContent = label;
-    }
+    });
+    clearWaiting(host);
   });
 
   document.getElementById("edAiPrompt")?.addEventListener("input", (event) => {
@@ -817,10 +860,9 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, g
   const fill = document.getElementById("aiFillRemaining");
   const fillHost = document.getElementById("aiFillProposal");
   fill?.addEventListener("click", async () => {
-    const label = fill.textContent;
-    fill.disabled = true;
-    fill.textContent = "Measuring, then writing…";
-    try {
+    fillHost.hidden = false;
+    fillHost.innerHTML = waitingMarkup("Measuring the block, then writing…");
+    await busyButton(fill, "Measuring, then writing…", async () => {
       await onSave?.();
       const page = getPage?.();
       const section = getSection();
@@ -839,7 +881,11 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, g
         },
       );
       const result = await response.json().catch(() => ({ error: "The AI did not answer." }));
-      if (!response.ok || result.error) return onNotify(result.error || "The AI could not fill this block.");
+      if (!response.ok || result.error) {
+        fillHost.hidden = true;
+        fillHost.innerHTML = "";
+        return onNotify(result.error || "The AI could not fill this block.");
+      }
 
       fillHost.hidden = false;
       fillHost.innerHTML = fillProposalMarkup(result);
@@ -864,10 +910,8 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, g
         fillHost.hidden = true;
         fillHost.innerHTML = "";
       });
-    } finally {
-      fill.disabled = false;
-      fill.textContent = label;
-    }
+    });
+    clearWaiting(fillHost);
   });
 
   // OPTIMIZE - real, and scoped to ONE object.
@@ -881,11 +925,12 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, g
   const optimize = document.getElementById("aiOptimize");
   const optimizeHost = document.getElementById("aiOptimizeProposal");
   optimize?.addEventListener("click", async () => {
-    const label = optimize.textContent;
     const scope = document.getElementById("aiOptimizeScope")?.value || "block";
-    optimize.disabled = true;
-    optimize.textContent = "Writing, then measuring…";
-    try {
+    if (optimizeHost) {
+      optimizeHost.hidden = false;
+      optimizeHost.innerHTML = waitingMarkup(`Rewriting ${SCOPE_LABEL[scope].toLowerCase()}, then measuring…`);
+    }
+    await busyButton(optimize, "Writing, then measuring…", async () => {
       await onSave?.();
       const page = getPage?.();
       const section = getSection();
@@ -919,6 +964,7 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, g
         retrievalHost.innerHTML = retrievalStatusMarkup(result.retrieval);
       }
       if (!response.ok || result.error) {
+        if (optimizeHost) { optimizeHost.hidden = true; optimizeHost.innerHTML = ""; }
         return onNotify(result.error || "The AI could not optimize this block.");
       }
 
@@ -942,10 +988,8 @@ export function bindAiPanel(getView, getSection, onPatch, onNotify, getImages, g
       document.getElementById("aiDiscardOptimize")?.addEventListener("click", () => {
         optimizeHost.hidden = true;
       });
-    } finally {
-      optimize.disabled = false;
-      optimize.textContent = label;
-    }
+    });
+    clearWaiting(optimizeHost);
   });
 
 }

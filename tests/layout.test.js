@@ -388,7 +388,7 @@ test('only Page 2 reserves the legal-imprint band; ordinary pages recover that e
   const g = geometryOf({});
   assert.equal(g.regions.front.footer.imprintHeightPx, 0);
   assert.equal(g.regions.inside.footer.imprintHeightPx, 0);
-  assert.equal(g.regions.insideImprint.footer.imprintHeightPx, 40);
+  assert.equal(g.regions.insideImprint.footer.imprintHeightPx, 56);
   assert.ok(g.regions.inside.content.bottom > g.regions.insideImprint.content.bottom);
 });
 

@@ -31,7 +31,7 @@ test('canonical furniture reserves compact header/footer space with Page-2-only 
   assert.equal(HEADER.folioContentGapPx, PAGE_FURNITURE_GAP_PX);
   assert.equal(FOOTER.footHeightPx, 28);
   assert.equal(FOOTER.contentFooterGapPx, PAGE_FURNITURE_GAP_PX);
-  assert.equal(regionForPage(g, 2).footer.imprintHeightPx, 40);
+  assert.equal(regionForPage(g, 2).footer.imprintHeightPx, 56);
   assert.equal(regionForPage(g, 1).footer.imprintHeightPx, 0);
   assert.equal(regionForPage(g, 3).footer.imprintHeightPx, 0);
 });
@@ -74,13 +74,15 @@ test('footer redistribution preserves ordinary and imprint-page editorial reserv
   const g = geometryOf({});
   assert.equal(regionForPage(g, 1).content.bottom, 1008);
   assert.equal(regionForPage(g, 3).content.bottom, 1008);
-  // Five lines, not four: the two declaration lines, the two English ones and
-  // the standing AI disclosure (identity.js's aiDisclosure). The band grew by
-  // one line and page two's editorial region gave up that line - a disclosure
-  // a band with `overflow: hidden` silently swallowed would be worse than no
-  // disclosure at all.
-  assert.equal(regionForPage(g, 2).content.bottom, 964);
-  assert.equal(regionForPage(g, 2).footer.imprintTop, 968);
+  // SIX lines and two rules, not four lines: each language's declaration
+  // closes with the standing disclosure inside its own box (identity.js's
+  // aiDisclosure / aiDisclosureEnglish, drawn by masthead.js's imprintMarkup).
+  // The band has grown twice, both times for the same reason - it clips, and a
+  // disclosure a band with `overflow: hidden` silently swallowed would be
+  // worse than no disclosure at all - and page two gives up the editorial
+  // height each time.
+  assert.equal(regionForPage(g, 2).content.bottom, 948);
+  assert.equal(regionForPage(g, 2).footer.imprintTop, 952);
   assert.equal(regionForPage(g, 2).footer.footTop, 1012);
 });
 

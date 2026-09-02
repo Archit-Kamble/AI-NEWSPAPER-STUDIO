@@ -6064,21 +6064,50 @@ body.story-fullscreen { overflow: hidden; }
   text-align: justify;
   z-index: 3;
 }
+/* A note under a field, saying what the value it holds actually reaches. The
+   Publication name is the case that needed it: it prints on the nameplate, on
+   every page foot and in the press file, and nothing on the Settings screen
+   said so - so a value typed to try the product out went on printing over the
+   masthead of every edition made afterwards. */
+.field-note {
+  display: block;
+  margin-top: 4px;
+  color: var(--secondary, #666);
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+/* ONE BOX PER LANGUAGE, and the standing disclosure closes each of them.
+   The band used to stack three spans - Marathi, English, then the disclosure
+   centred and bold under a hairline - so page two printed three separate
+   notices where a reader expects one imprint. */
+.page-imprint .imprint-box {
+  display: flex;
+  flex-direction: column;
+  border: 0.5px solid #b8b8be;
+  padding: 1px 2px;
+}
+.page-imprint .imprint-box-en {
+  margin-top: 1px;
+}
 .page-imprint .imprint-en {
   font-family: Arial, sans-serif;
 }
-/* The AI disclosure. Set apart from the declaration above it - it is not part
-   of the Press and Registration of Books Act statement and must not read as
-   though it were - but in the same band, at the same size, because it is the
-   same kind of standing notice to the reader. */
+/* The disclosure closes its own language's paragraph. Bold, so it is not read
+   as another clause of the Press and Registration of Books Act statement above
+   it, and centred so the eye finds it - but inside the same rule, because it
+   is a statement about this newspaper exactly as the declaration is.
+
+   No margin and no padding: the band is exactly six line boxes plus its rules
+   (geometry.js's imprintHeightPx) and it clips, so every pixel spent on air
+   here is taken off the bottom of the disclosure's own descenders. */
 .page-imprint .imprint-ai {
-  /* No margin and no padding: the band is exactly five line boxes tall
-     (geometry.js's imprintHeightPx) and it clips, so every pixel spent on air
-     here is taken off the bottom of the disclosure's own descenders. The
-     hairline is the whole separation, and it costs one pixel. */
-  border-top: 1px solid #d6d6dc;
   font-weight: 700;
   text-align: center;
+}
+body.print-view .page-imprint .imprint-box {
+  border-color: #333;
 }
 body.print-view .page-imprint {
   border-top-color: #333;

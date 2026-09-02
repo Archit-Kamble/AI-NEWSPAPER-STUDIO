@@ -961,8 +961,6 @@ function footerItems(newspaper, page, geometry, identity) {
   // The legal imprint prints ONCE, on its own page. A press file that dropped
   // the AI disclosure would print a paper that does not carry it.
   if (Number(page.page_number) === Number(identity.imprintPage || 2) && region.footer.imprintHeightPx > 0) {
-    const top = mm(region.footer.imprintTop);
-    const height = mm(region.footer.imprintHeightPx);
     // WRAPPED, AND SIZED TO THE BAND IT WAS GIVEN.
     //
     // Two faults, one after the other, both found by rendering page two and
@@ -977,34 +975,73 @@ function footerItems(newspaper, page, geometry, identity) {
     // styles.css sets .page-imprint at 5.2px for the same reason. It steps
     // down from the requested size until every wrapped line has its own room,
     // and never below what a page can be read at.
+    //
+    // TWO BOXES, ONE PER LANGUAGE. The standing disclosure closes each
+    // language's own paragraph rather than standing under both, which is what
+    // the canvas draws (masthead.js's imprintMarkup) - and a press file that
+    // set the imprint in a different shape from the sheet the desk approved
+    // is the two-surface fault this repository guards hardest against.
     const IMPRINT_MIN_PX = 3.6;
     const IMPRINT_LINE = 1.45;
+    const RULE_PX = 0.5;
+    const PAD_PX = 1;
     const bandHeightPx = region.footer.imprintHeightPx;
-    const parts = [
-      { text: identity.imprint, weight: 400, bold: false },
-      { text: identity.imprintEnglish, weight: 400, bold: false },
-      { text: identity.aiDisclosure, weight: 700, bold: true },
-    ].filter((part) => String(part.text || '').trim());
+    const boxes = [
+      [
+        { text: identity.imprint, weight: 400, bold: false },
+        { text: identity.aiDisclosure, weight: 700, bold: true },
+      ],
+      [
+        { text: identity.imprintEnglish, weight: 400, bold: false },
+        { text: identity.aiDisclosureEnglish, weight: 700, bold: true },
+      ],
+    ].map((box) => box.filter((part) => String(part.text || '').trim()))
+      .filter((box) => box.length);
 
+    // The type is SOLVED against the band, exactly as the canvas does it, and
+    // the boxes' own rules and inset are charged for - a size chosen against
+    // the bare line count would set six lines into a band that has room for
+    // six lines minus four rules and four rows of padding.
+    const boxChrome = boxes.length * (RULE_PX * 2 + PAD_PX * 2);
     let fontPx = 5.2;
     let wrapped = [];
     for (; fontPx >= IMPRINT_MIN_PX; fontPx -= 0.2) {
-      wrapped = parts.map((part) => ({
+      wrapped = boxes.map((box) => box.map((part) => ({
         ...part,
-        lines: wrapFurniture(part.text, geometry.matterWidthPx, fontPx, 'sans', part.weight),
-      }));
-      const rows = wrapped.reduce((n, part) => n + part.lines.length, 0);
-      if (rows * fontPx * IMPRINT_LINE <= bandHeightPx) break;
+        lines: wrapFurniture(part.text, geometry.matterWidthPx - (RULE_PX + PAD_PX) * 2, fontPx, 'sans', part.weight),
+      })));
+      const rows = wrapped.reduce((n, box) => n + box.reduce((m, part) => m + part.lines.length, 0), 0);
+      if (rows * fontPx * IMPRINT_LINE + boxChrome <= bandHeightPx) break;
     }
 
-    const rowMm = mm(fontPx * IMPRINT_LINE);
-    let y = top;
-    for (const part of wrapped) {
-      for (const text of part.lines) {
-        items.push(textItem({ x: leftMm, y, width: widthMm, height: rowMm },
-          [run(text, { family: 'sans', weight: part.weight, bold: part.bold, fontPx })], 'center'));
-        y += rowMm;
+    const rowPx = fontPx * IMPRINT_LINE;
+    const rowMm = mm(rowPx);
+    let yPx = region.footer.imprintTop;
+    for (const box of wrapped) {
+      const rows = box.reduce((n, part) => n + part.lines.length, 0);
+      const boxHeightPx = rows * rowPx + PAD_PX * 2 + RULE_PX * 2;
+      // The rule, drawn as four thin fills - the one primitive every writer
+      // already has. A `rule` is what a block border and a column rule are
+      // made of; there is no second geometry here.
+      const t = mm(RULE_PX);
+      const bx = geometry.marginXPx;
+      const bw = geometry.matterWidthPx;
+      for (const edge of [
+        { x: mm(bx), y: mm(yPx), width: mm(bw), height: t },
+        { x: mm(bx), y: mm(yPx + boxHeightPx - RULE_PX), width: mm(bw), height: t },
+        { x: mm(bx), y: mm(yPx), width: t, height: mm(boxHeightPx) },
+        { x: mm(bx + bw - RULE_PX), y: mm(yPx), width: t, height: mm(boxHeightPx) },
+      ]) items.push({ kind: 'rule', ...edge, ink: RULE_INK });
+
+      let y = mm(yPx + RULE_PX + PAD_PX);
+      for (const part of box) {
+        for (const text of part.lines) {
+          items.push(textItem({ x: mm(bx + RULE_PX + PAD_PX), y, width: mm(bw - (RULE_PX + PAD_PX) * 2), height: rowMm },
+            [run(text, { family: 'sans', weight: part.weight, bold: part.bold, fontPx })], 'center'));
+          y += rowMm;
+        }
       }
+      yPx += boxHeightPx + PAD_PX;
     }
   }
 

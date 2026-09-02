@@ -263,11 +263,24 @@ export function imprintMarkup(newspaper, page, geometry) {
   const width = geometry?.matterWidthPx ?? 620;
   const band = footerBand(geometry, page);
 
+  // TWO BOXES, ONE PER LANGUAGE, and the standing disclosure closes each of
+  // them rather than standing under both.
+  //
+  // The band used to be three stacked spans - Marathi, English, and the
+  // disclosure centred and bold under a hairline - so page two carried three
+  // separate notices where a reader expects one imprint. The disclosure is
+  // about this newspaper exactly as the declaration is, and it belongs in the
+  // paragraph that already names the editor responsible for it.
   return `
     <div class="page-imprint" style="left:${left}px;width:${width}px;top:${band.imprintTop}px;height:${band.imprintHeightPx}px;">
-      <span class="imprint-mr">${escapeHtml(identity.imprint || "")}</span>
-      <span class="imprint-en">${escapeHtml(identity.imprintEnglish || "")}</span>
-      <span class="imprint-ai">${escapeHtml(identity.aiDisclosure || "")}</span>
+      <div class="imprint-box">
+        <span class="imprint-mr">${escapeHtml(identity.imprint || "")}</span>
+        <span class="imprint-ai">${escapeHtml(identity.aiDisclosure || "")}</span>
+      </div>
+      <div class="imprint-box imprint-box-en">
+        <span class="imprint-en">${escapeHtml(identity.imprintEnglish || "")}</span>
+        <span class="imprint-ai">${escapeHtml(identity.aiDisclosureEnglish || "")}</span>
+      </div>
     </div>
   `;
 }

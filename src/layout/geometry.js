@@ -116,14 +116,23 @@ const FOOTER = {
   // editorial reservation on every page.
   footHeightPx: 28,
   contentFooterGapPx: PAGE_FURNITURE_GAP_PX,
-  // The legal imprint band, page two only. Five lines of 5.2 px type at the
-  // Devanagari-safe 1.45: two for the Marathi declaration, two for the
-  // English one, and one for the standing AI disclosure (identity.js's
-  // aiDisclosure). It was 32 px - exactly the four declaration lines, with
-  // nothing left over - so the disclosure could not simply be added to the
-  // markup; a band with `overflow: hidden` would have silently swallowed it,
-  // which for a disclosure is the one failure that matters.
-  imprintHeightPx: 40,
+  // The legal imprint band, page two only. SIX lines of 5.2 px type at the
+  // Devanagari-safe 1.45, plus the two boxes drawn round them: the Marathi
+  // declaration takes two lines and closes with the standing disclosure on a
+  // third; the English declaration does the same beneath it.
+  //
+  // It has been resized twice and for the same reason both times. It was 32 px
+  // - exactly the four declaration lines, with nothing left over - so the
+  // disclosure could not simply be added to the markup; a band with
+  // `overflow: hidden` swallows what it cannot fit, which for a disclosure is
+  // the one failure that matters. 40 px bought that fifth line. Boxing each
+  // language and folding the disclosure into it costs a sixth line and the
+  // boxes' own rules and inset, so it is 56.
+  //
+  // Page two is the only page that pays for this, and it pays in editorial
+  // height, which is why the number is stated here rather than being however
+  // much the markup happens to need.
+  imprintHeightPx: 56,
   imprintGapPx: 4,
 };
 

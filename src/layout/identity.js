@@ -98,18 +98,31 @@ const identity = {
     'jurisdiction) Editor SHRIKANT SHIVNATH MULE (Responsible under PRB Act). ' +
     'Contact No. 8409494949, E-mail: sahasvarta@gmail.com',
 
-  // Told once, on the same page as the printer's declaration and in the same
-  // band, because it is the same kind of statement: a standing disclosure the
-  // reader is entitled to and no desk should have to remember to type.
+  // Told once, on the same page as the printer's declaration - and now INSIDE
+  // it, in each language's own paragraph, rather than as a third band of its
+  // own beneath both.
   //
-  // In Marathi, deliberately - like information/conditions.js's refusals, this
-  // is a sentence addressed to a reader of this newspaper, not admin chrome.
-  // It says BOTH halves of what is true here: the copy is drafted with AI, and
-  // a person on the desk passed it before it printed. Saying only the first
-  // would misdescribe a workflow in which nothing reaches the page unaccepted.
+  // It used to stand apart, set centred and bold under a hairline, on the
+  // reasoning that it is not part of the Press and Registration of Books Act
+  // statement and must not read as though it were. True, and the price was
+  // that page two carried three separate notices where a reader expects one
+  // imprint: the desk's report was to put it in the block that already says
+  // who prints this paper, in both languages, boxed.
+  //
+  // ONE SENTENCE, and the Marathi does not use the letters "AI". The English
+  // says "artificial intelligence" because that is what the phrase is in
+  // English; the Marathi says कृत्रिम बुद्धिमत्ता, which is the same words in
+  // its own script, and a Latin abbreviation dropped into a Devanagari
+  // sentence is not a translation.
+  //
+  // It no longer states the second half - that a person on the desk passed it
+  // - because that half is the imprint's own subject: the paragraph it now
+  // sits inside names the editor who is responsible under the Act, one line
+  // above.
   aiDisclosure:
-    'सूचना : या अंकातील मजकूर कृत्रिम बुद्धिमत्तेच्या (AI) साहाय्याने तयार करण्यात आला असून ' +
-    'संपादकीय पथकाच्या तपासणीनंतर प्रसिद्ध करण्यात आला आहे.',
+    'हे वृत्तपत्र कृत्रिम बुद्धिमत्तेच्या साहाय्याने तयार करण्यात आले आहे.',
+  aiDisclosureEnglish:
+    'This newspaper is produced with the help of artificial intelligence.',
 
   // Which page the declaration prints on. The paper puts it on page two.
   imprintPage: 2,

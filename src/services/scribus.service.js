@@ -762,27 +762,45 @@ function footerFrames(newspaper, page, geometry, identity, { pageOffsetMm, ownPa
   if (Number(page.page_number) === Number(identity.imprintPage || 2) && region.footer.imprintHeightPx > 0) {
     const imprintYMm = mm(region.footer.imprintTop) + pageOffsetMm;
     const imprintHeightMm = mm(region.footer.imprintHeightPx);
-    // Two declaration lines and the standing AI disclosure, in the same
-    // proportions the canvas sets them in (masthead.js's imprintMarkup): the
-    // Marathi and English declarations take two of the band's five lines
-    // each, the disclosure the fifth. A press file that dropped the
-    // disclosure would print a paper that does not carry it.
-    const declarationMm = imprintHeightMm * 0.4;
-    parts.push(lineFrame({
-      xMm: leftMm, yMm: imprintYMm, widthMm, heightMm: declarationMm,
-      runs: [{ text: identity.imprint, family: 'sans', weight: 400, bold: false, italic: false, underline: false, fontPx: 9 }],
-      align: 1, ownPage,
-    }));
-    parts.push(lineFrame({
-      xMm: leftMm, yMm: imprintYMm + declarationMm, widthMm, heightMm: declarationMm,
-      runs: [{ text: identity.imprintEnglish, family: 'sans', weight: 400, bold: false, italic: false, underline: false, fontPx: 8 }],
-      align: 1, ownPage,
-    }));
-    parts.push(lineFrame({
-      xMm: leftMm, yMm: imprintYMm + declarationMm * 2, widthMm, heightMm: imprintHeightMm - declarationMm * 2,
-      runs: [{ text: identity.aiDisclosure, family: 'sans', weight: 700, bold: true, italic: false, underline: false, fontPx: 9 }],
-      align: 1, ownPage,
-    }));
+    // TWO BOXES, ONE PER LANGUAGE, in the shape the canvas draws them
+    // (masthead.js's imprintMarkup): each declaration closes with the standing
+    // disclosure in its own language, inside its own rule. A press file that
+    // dropped the disclosure - or set the imprint in a different shape from
+    // the sheet the desk approved - would print a paper that is not the one
+    // that was passed.
+    const RULE_MM = mm(0.5);
+    const halfMm = imprintHeightMm / 2;
+    const boxes = [
+      { body: identity.imprint, note: identity.aiDisclosure, bodyPx: 9 },
+      { body: identity.imprintEnglish, note: identity.aiDisclosureEnglish, bodyPx: 8 },
+    ];
+    boxes.forEach((box, index) => {
+      const yMm = mmRound(imprintYMm + index * halfMm);
+      // The rule, as four thin fills - the same primitive a block border and a
+      // column rule are made of. There is no second geometry for a box.
+      for (const edge of [
+        { x: leftMm, y: yMm, w: widthMm, h: RULE_MM },
+        { x: leftMm, y: mmRound(yMm + halfMm - RULE_MM), w: widthMm, h: RULE_MM },
+        { x: leftMm, y: yMm, w: RULE_MM, h: halfMm },
+        { x: mmRound(leftMm + widthMm - RULE_MM), y: yMm, w: RULE_MM, h: halfMm },
+      ]) {
+        parts.push(fillFrame({
+          xMm: edge.x, yMm: edge.y, widthMm: edge.w, heightMm: edge.h,
+          colour: colourFor('#111111'), ownPage,
+        }));
+      }
+      const inner = mmRound(halfMm - RULE_MM * 2);
+      parts.push(lineFrame({
+        xMm: leftMm, yMm: mmRound(yMm + RULE_MM), widthMm, heightMm: mmRound(inner * 0.66),
+        runs: [{ text: box.body, family: 'sans', weight: 400, bold: false, italic: false, underline: false, fontPx: box.bodyPx }],
+        align: 1, ownPage,
+      }));
+      parts.push(lineFrame({
+        xMm: leftMm, yMm: mmRound(yMm + RULE_MM + inner * 0.66), widthMm, heightMm: mmRound(inner * 0.34),
+        runs: [{ text: box.note, family: 'sans', weight: 700, bold: true, italic: false, underline: false, fontPx: box.bodyPx }],
+        align: 1, ownPage,
+      }));
+    });
   }
 
   return parts.join('');

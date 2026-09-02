@@ -6611,6 +6611,128 @@ pointer. They call `busyButton` now. The newsdesk run's `working()` matches the
 same contract by hand: it cannot call `busyButton`, which wraps one promise,
 because its stages release across a `render()` that replaces the button.
 
+### Five things the desk reported about the Newsdesk Run
+
+**1. "It should accept all news to layout but it just accepts one, then it
+vanishes all the other news."**
+
+The server was never the problem — verified directly against the database, 8
+rows in, 8 blocks written, 0 refused. The PANEL filtered out every row a
+provider had failed on and then called `panel.remove()`, destroying the run. So
+a story the desk had already paid a research call for could not be written
+again without paying for the whole research pass a second time, and a row the
+server refused was a bare count in a toast that fades.
+
+On a metered account that is the ordinary case, not the edge one: this project
+has measured a 26-block run exhausting every configured provider.
+
+The panel now **stays while anything is outstanding** — a *Still to do* stage
+naming each block and why, carrying the stories they came from, and one button
+that writes exactly those again at one call each and **no research**, because
+the retrieval, the clustering and the desk's own reading of the plan are all
+still good. It closes only when there is nothing left.
+
+Two supporting fixes in the writer, both about a failure being recoverable at
+all: a failed row carries its `page`, `sectionKey` and originating story, and a
+**thrown** error is backfilled by index — `mapLimit` catches it so one bad block
+cannot take the batch down, but it cannot know this shape and returned a bare
+`{ error }`. The panel printed those as `pundefined/?` and, worse, a row with no
+`sectionKey` can never be written again.
+
+**2. "The checkboxes need to be on every news block rather than applying all at
+once."**
+
+Right, and for the reason a page is made up: the anchor carries a deck, the
+fillers do not, and exactly one story that morning has figures worth plotting.
+Headline / Subheading / Think it through / Chart are on each plan row, **named
+in words rather than initials** — a desk should not have to learn that H means
+headline — with the chart's type appearing only once a chart is asked for. The
+run's own settings stay the DEFAULT, so a desk who changes nothing gets what
+this did before. Resolved in `writePlan`, which is the one place that knows
+which block each story is for.
+
+**3. "81% of the block's lines are set · 3 lines free at the foot", and the
+subheading not full.**
+
+Neither is the compositor. **The writer was starved.** `EXCERPT_MAX_CHARS` was
+240, chosen when this text's only job was to be LISTED — a pool of candidates a
+planner reads to choose between. It is now also the material a story is
+*written* from.
+
+| across 558 items, 13 real feeds | |
+|---|---|
+| median title+description | 196 chars |
+| p75 / p90 / max | 266 / 459 / 4368 |
+| cut at the 240 cap | **33% of items, 35% of all characters** |
+
+Raised to **700** — keeps all but 10 of 558 whole without letting one
+4368-character outlier fill a packet of six facts: **91,982 → 116,868
+characters of source material, +27%**. A block cannot be filled with facts
+nobody handed the writer, and the alternative to more real material is padding,
+which for a newspaper is inventing. `SOURCE_LIMITED_UNDERFILL` stays exactly
+what it is.
+
+**The planner's prompt does not grow**: `poolBlock()` re-slices every candidate
+to its own `EXCERPT_IN_PROMPT` (180), so the one call carrying 187 candidates
+is unchanged to the character — measured, 77,214 either way. A **title is not
+an excerpt** and the two shared this constant; split, or a title could run to
+700 characters, which is an article in the wrong element.
+
+**The deck was briefed short.** The subheading was asked for at *0.6 to 1.0* of
+its measured line, so a model writing at the bottom of its own brief produced a
+deck at three-fifths of the line. A headline is briefed to fill; there was no
+reason for the line under it to be briefed to a third less. The floor is
+**0.85** — not the headline's 0.95, because a deck prefers ONE line and asking
+for the last few per cent trades a full line for a two-line deck that
+`fitDisplayFlow` then shrinks. The brief only asks; `DECK_MAX_HEADLINE_RATIO`
+and `DECK_MIN_OF_BODY` still decide what is set.
+
+**4 and 5. The story's own photograph, and cutting its background out.**
+
+A district daily's page is a photograph and a story. The run planned the story
+and had nothing to say about the picture, so every block it filled arrived as
+grey type. `pictureFrom()` reads the four places a feed means one:
+`media:content` (largest, because a feed carries several sizes), `media:thumbnail`,
+an image `enclosure`, and last the first `<img>` in the story's own markup.
+
+Measured: **86 of 111** items on this paper's Maharashtra feeds carry one — ABP
+Majha 21/21 and 10/10, TV9 Marathi 45/60, Saamana 10/10, Lokmat none.
+
+One bug found by measuring rather than reading: written as
+`description || content:encoded` this took whichever tag was non-empty and
+stopped. TV9's `<description>` is plain prose and its picture is in
+`<content:encoded>`, so it found a picture on **0 of 60** items while the feed
+carried one on nearly all. Each tag is searched in turn now: 31 of 111 → 86.
+
+**It is an offer, and it is off until a person ticks it.** Where a photograph
+sits decides how the copy sets around it, and whose photograph it is decides
+whether the paper may print it at all. The fetch is the SSRF-guarded route
+every pasted link already goes through — resolves the address, refuses every
+private range, follows redirects by hand, judges the file by its **bytes**. A
+feed is untrusted input and a URL from one is untrusted like the rest of it.
+
+Placed AFTER the copy and only on blocks the paper took — a photograph on a
+block whose story was refused is a picture of nothing — one at a time, because
+the picture route answers with the block's whole image list and two in flight
+on one block would race. A refusal is counted, never thrown: a photograph this
+paper may not fetch must not cost the desk the story it belongs to.
+
+The background cut-out sits beside it, off by default and labelled honestly —
+it suits a portrait, and a scene is better left whole. It is a **second** act
+on the picture just placed, through the same cutout route the Pictures panel
+uses, never a mode the fetch is put into.
+
+```bash
+node tests/browser/newsdesk-run.browser.js
+```
+
+Every newsdesk endpoint in that net is **stubbed**, and half the batch fails on
+purpose: the real planner is one Ultra call for a whole newspaper and the
+writers one call per block, so a net that drove them would be a bill for
+running a test. It holds the run end to end — 16 written of 31, all 16 placed,
+15 kept and named, and writing those again costing one call each with no second
+plan call.
+
 ## Engineering rules
 
 - **The overflow diagnosis started from desk-selected baseline `52c9556`.** Fix

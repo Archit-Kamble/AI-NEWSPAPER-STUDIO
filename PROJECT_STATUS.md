@@ -8357,3 +8357,26 @@ Verified by holding each request open and photographing it.
 editor-parity 70/70, editor-controls 86/86, body-editing 35/35, device-bar
 65/65, desk-actions 27/27, smart-cards 27/27, visual-pass 46/46, admin-screens
 19/19, newsdesk-run 16/16, epaper-public 13, roles 37.
+
+## Five reports on the Newsdesk Run — 2 Sept 2026
+
+| | what it was |
+|---|---|
+| 1 | Accept placed the written stories and then `panel.remove()` **destroyed the failures** — a story already paid for could not be retried without a second research pass. The server was fine: 8 rows in, 8 written, verified directly. |
+| 2 | The four asks were one setting for the whole run. Now per plan row, named in words, with the chart type revealed only when a chart is asked for. |
+| 3 | `EXCERPT_MAX_CHARS` 240 starved the writer — **33% of items cut, 35% of characters thrown away** across 558 real items. Raised to 700: **+27% source material**, planner prompt unchanged (it re-slices to 180). The deck was briefed at 0.6–1.0 of its line; floor raised to 0.85. |
+| 4 | No picture at all. `pictureFrom()` reads media:content / media:thumbnail / enclosure / first `<img>` — **86 of 111** real items carry one. |
+| 5 | Background cut-out offered beside it, off by default, as a second act through the existing cutout route. |
+
+**A bug found by measuring, not reading:** `description || content:encoded`
+took whichever tag was non-empty and stopped. TV9's description is plain prose
+and its picture is in `content:encoded` — 0 of 60 items found a picture while
+the feed carried one on nearly all. Each tag is searched in turn: 31 → 86 of 111.
+
+### Verified
+
+`npm test` 1102/1102. `newsdesk-run` 28/28 (half the batch failing on purpose),
+workspace 224/224, editor-parity 70/70, editor-controls 86/86, device-bar
+65/65, desk-actions 27/27, smart-cards 27/27, visual-pass 46/46, admin-screens
+19/19. The picture path verified end to end against a live TV9 image on a
+throwaway edition, then cleaned up.

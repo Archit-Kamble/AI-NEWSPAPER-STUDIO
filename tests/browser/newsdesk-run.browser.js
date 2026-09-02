@@ -62,27 +62,44 @@ const say = (ok, what, detail = '') => {
       page: 1 + (i % 4), sectionKey: `zz-block-${i}`, rung: 'standard',
       headlineHint: `ZZ net story ${i + 1}`, tagKey: 'national-politics', importance: 5,
       publishers: ['PIB'], verified: true, facts: ['a fact'],
-      sources: [{ id: 's1', publisher: 'PIB', url: 'https://pib.gov.in/x' }],
+      sources: [{
+        id: 's1', publisher: 'PIB', url: 'https://pib.gov.in/x',
+        // Only the FIRST story has a photograph, so this can check that the
+        // offer appears where there is one and says so where there is not.
+        ...(i === 0 ? { imageUrl: 'https://images.example.invalid/a.jpg' } : {}),
+      }],
     }));
     await route.fulfill({ status: 200, contentType: 'application/json',
       body: JSON.stringify({ stories, blocksOffered: STORIES, leftEmpty: [],
         retrieval: { candidates: 187, feedsFetched: 13 } }) });
   });
+  // HALF THE BATCH FAILS, which is the ordinary case on a metered account -
+  // this project has measured a 26-block run exhausting every configured
+  // provider - and it is the case the panel used to throw away.
   await page.route('**/newsdesk/write', async (route) => {
     writeCalls += 1;
     wroteBody = JSON.parse(route.request().postData() || '{}');
-    const results = Array.from({ length: 3 }, (u, i) => ({
-      page: 1, sectionKey: `zz-block-${i}`,
-      proposal: { headline: `ZZ net ${i}`, subheading: 'deck', body: 'copy '.repeat(40) },
-      fit: { fill: { ratio: 0.97 }, acceptable: true, overflowing: false }, retrieval: null,
-    }));
+    const results = wroteBody.stories.map((story, i) => (i % 2 === 0
+      ? {
+        page: story.page, sectionKey: story.sectionKey, pageId: 1, story,
+        proposal: { headline: `ZZ net ${i}`, subheading: 'deck', body: 'copy '.repeat(40) },
+        fit: { fill: { ratio: 0.97 }, acceptable: true, overflowing: false },
+        retrieval: { status: 'verified', sources: story.sources },
+      }
+      : {
+        page: story.page, sectionKey: story.sectionKey, pageId: 1, story,
+        error: 'The provider is out of quota.',
+      }));
     await route.fulfill({ status: 200, contentType: 'application/json',
-      body: JSON.stringify({ results, written: 3, failed: 0 }) });
+      body: JSON.stringify({ results, written: results.filter((r) => !r.error).length,
+        failed: results.filter((r) => r.error).length }) });
   });
+  let acceptedRows = 0;
   await page.route('**/newsdesk/accept', async (route) => {
     acceptCalls += 1;
+    acceptedRows = (JSON.parse(route.request().postData() || '{}').stories || []).length;
     await route.fulfill({ status: 200, contentType: 'application/json',
-      body: JSON.stringify({ saved: 3, refused: [] }) });
+      body: JSON.stringify({ saved: acceptedRows, refused: [] }) });
   });
 
   await page.goto(BASE);
@@ -150,6 +167,26 @@ const say = (ok, what, detail = '') => {
     'the button carries the number of stories the desk is about to pay for', write && write.label);
   say(write && !write.disabled, 'and it is enabled');
 
+  // ---- WHAT EACH BLOCK IS ASKED FOR IS THE BLOCK'S OWN DECISION.
+  //
+  // These four used to be one setting for the whole run, so a deck on the lead
+  // meant a deck on all thirty-one and a chart was either on every block or on
+  // none. A page is not made up that way.
+  const askRows = await page.locator('.newsdesk-ask-row').count();
+  say(askRows === STORIES, 'every story on the plan carries its own asks', `${askRows} rows`);
+  const words = await page.evaluate(() => [...document.querySelectorAll('.newsdesk-ask-row')[0]
+    .querySelectorAll('.toggle')].map((l) => l.textContent.trim()));
+  say(words.length === 4 && words.every((w) => w.length > 2),
+    'named in words, never initials — a desk should not have to learn that H means headline',
+    words.join(' | '));
+
+  await page.locator('.newsdesk-ask-row').nth(1).locator('[data-ask="writeSubheading"]').uncheck();
+  await page.locator('.newsdesk-ask-row').nth(0).locator('[data-ask="writeChart"]').check();
+  await page.waitForTimeout(800);
+  say(await page.locator('.newsdesk-ask-row').nth(0).locator('[data-ask="chartType"]').count() === 1
+    && await page.locator('.newsdesk-ask-row').nth(1).locator('[data-ask="chartType"]').count() === 0,
+    'asking for a chart reveals WHICH chart, on that row alone');
+
   // ---- 2. THE PLAN -> THE COPY. This is the press that did nothing.
   await page.locator('#newsdeskWrite').click();
   await page.waitForTimeout(2500);
@@ -158,11 +195,26 @@ const say = (ok, what, detail = '') => {
     `${writeCalls} POST(s) to /newsdesk/write`);
   say(wroteBody && Array.isArray(wroteBody.stories) && wroteBody.stories.length === STORIES,
     'and it sends the stories the desk kept', `${wroteBody && wroteBody.stories && wroteBody.stories.length} stories`);
+  const asks = (wroteBody.stories || []).map((row) => row.asks || {});
+  say(asks[1] && asks[1].writeSubheading === false && asks[0] && asks[0].writeSubheading === true,
+    'the deck is off on the ONE row the desk turned it off on, and on everywhere else');
+  say(asks[0] && asks[0].writeChart === true && asks[2] && asks[2].writeChart === false,
+    'and the chart is on the ONE row that asked for it');
   const accept = await page.evaluate(() => {
     const b = document.getElementById('newsdeskAccept');
     return b ? { label: b.textContent.trim(), disabled: b.disabled } : null;
   });
   say(Boolean(accept), 'the copy stage is rendered', JSON.stringify(accept));
+
+  // ---- THE STORY'S OWN PHOTOGRAPH, offered where the source carries one.
+  const offers = await page.locator('[data-pic-row]').count();
+  const nones = await page.locator('.newsdesk-nopic').count();
+  say(offers === 1, 'a photograph is offered on the one written story that has one', `${offers} offer(s)`);
+  say(nones > 0, 'and the ones without say so plainly', `${nones} said "no photograph"`);
+  const ticked = await page.locator('[data-pic-row]').first().isChecked();
+  say(ticked === false, 'and nothing is fetched until a person ticks it');
+  say(await page.locator('[data-cut-row]').count() === 1,
+    'with the background cut-out offered beside it, also off');
 
   // ---- 3. THE COPY -> THE PAPER. The same leak killed this one too.
   await page.locator('#newsdeskAccept').click();
@@ -170,8 +222,31 @@ const say = (ok, what, detail = '') => {
   say(acceptCalls === 1,
     'and Accept reaches the server as well — the leak killed this stage too',
     `${acceptCalls} POST(s) to /newsdesk/accept`);
-  say(await page.locator('.newsdesk-panel').count() === 0,
-    'the panel closes once the stories are placed');
+
+  // ---- EVERY WRITTEN STORY IS PLACED, AND THE REST ARE KEPT.
+  //
+  // The desk's report was "it should accept all news to layout but it just
+  // accepts one, then it vanishes all the other news". The panel used to
+  // filter the failures out and then `panel.remove()` the run, so a story the
+  // desk had already paid a research call for could not be written again
+  // without paying for the whole research pass a second time.
+  const written = wroteBody.stories.filter((u, i) => i % 2 === 0).length;
+  say(acceptedRows === written,
+    'every story that was written is placed, not one', `${acceptedRows} sent of ${written} written`);
+  say(await page.locator('.newsdesk-panel').count() === 1,
+    'the panel STAYS while anything is outstanding — the rest do not vanish');
+  const leftRows = await page.locator('.bulk-row.is-error').count();
+  const again = await page.locator('#newsdeskWriteAgain');
+  say(leftRows > 0 && await again.count() === 1,
+    'and it names each one, with a way to write exactly those again',
+    `${leftRows} left · "${(await again.textContent() || '').trim()}"`);
+
+  const before = writeCalls;
+  await again.click();
+  await page.waitForTimeout(2500);
+  say(writeCalls === before + 1 && planCalls === 1,
+    'writing them again costs one call per block and NO second research pass',
+    `${writeCalls} write calls, ${planCalls} plan call`);
 
   say(errors.length === 0, 'no console or page errors anywhere in this run', errors.join(' | ') || '(none)');
   console.log(`\n${pass}/${ran} passed`);

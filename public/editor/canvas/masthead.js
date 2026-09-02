@@ -115,8 +115,8 @@ export function mastheadMarkup(newspaper, page, geometry, { advertWidthPx = 0 } 
         <div class="masthead-ear masthead-ear-left">
           <span class="masthead-place">${escapeHtml(identity.placeOfPublication || "")}</span>
           ${date ? `<span class="masthead-day">${escapeHtml(date.day)}</span>` : ""}
-          ${date ? `<span class="masthead-weekday">${escapeHtml(date.weekday)}</span>` : ""}
           ${date ? `<span class="masthead-monthyear">${escapeHtml(date.monthYear)}</span>` : ""}
+          ${date ? `<span class="masthead-weekday">${escapeHtml(date.weekday)}</span>` : ""}
         </div>
         <div class="masthead-plate">
           <img src="${escapeHtml(identity.nameplateUrl)}" alt="${escapeHtml(identity.title || "")}" />

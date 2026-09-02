@@ -62,22 +62,14 @@ export function renderToolbar({ newspaper, hasSelection, storyPickerOpen, handle
       ${button("tbPreflight", "preview", "Preflight", {
         title: "Check the edition before it goes to the plate",
       })}
-      ${button("tbExport", "export", "Press file", {
-        title: "The Scribus document and its photographs, packaged for the plate",
-      })}
-      <!-- FOUR DESTINATIONS, ONE COMPOSITION. The press package above is the
-           file that goes to the plate and is gated on press readiness; these
-           are the working exports, and they are not - a designer needs the
-           InDesign document while the page is still being made up, and a
-           reporter wants the copy in Word before anybody has signed anything.
-           A <details> rather than a fifth button: the toolbar is already the
-           one constant on this screen and four more buttons would crowd out
-           the ones a desk presses all day. -->
       <details class="toolbar-menu" id="tbDownloadMenu">
         <summary class="toolbar-btn" title="Download this edition in another format">
           <span class="toolbar-btn-label">Download</span>
         </summary>
         <div class="toolbar-menu-panel">
+          <button type="button" data-export="press-package">
+            <b>Press package</b><small>The Scribus document with its photographs, zipped for the plate</small>
+          </button>
           <button type="button" data-export="pdf">
             <b>CMYK print PDF</b><small>Ready for the press — four-plate colour, type embedded</small>
           </button>
@@ -111,13 +103,18 @@ export function renderToolbar({ newspaper, hasSelection, storyPickerOpen, handle
   // so a desk waiting on a slow check fires it three times.
   const preflight = document.getElementById("tbPreflight");
   preflight.addEventListener("click", () => busyButton(preflight, "Checking…", () => handlers.onPreflight()));
-  document.getElementById("tbExport").addEventListener("click", handlers.onPressFile);
   // Delegated on the menu, which survives - and the menu closes itself, or it
   // would stand open over the page after the download starts.
   document.getElementById("tbDownloadMenu")?.addEventListener("click", (event) => {
     const choice = event.target.closest("[data-export]");
     if (!choice) return;
     document.getElementById("tbDownloadMenu").open = false;
+    // The press package is a download like the other four and is now offered
+    // beside them rather than as a button of its own. It keeps its own route
+    // and its own press-readiness gate - what went is the second control
+    // saying "download", not the thing it did. The desk's report was exactly
+    // that: two buttons, one meaning.
+    if (choice.dataset.export === "press-package") return handlers.onPressFile?.();
     handlers.onExport?.(choice.dataset.export);
   });
   document.getElementById("tbAI").addEventListener("click", handlers.onCompose);

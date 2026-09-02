@@ -663,8 +663,8 @@ const MASTHEAD = Object.freeze({
   placePadXPx: 6,
   dayPx: 38,           // .masthead-day, line-height 0.95
   dayLine: 0.95,
-  weekdayPx: 12,
-  monthYearPx: 10,
+  weekdayPx: 10,
+  monthYearPx: 12,
   rniPx: 6,
   metaPx: 8,
   linePx: 1.45,        // --devanagari-line
@@ -806,11 +806,15 @@ function mastheadItems(newspaper, page, geometry, identity, sections) {
     { family: 'sans', weight: 700, bold: true, fontPx: MASTHEAD.dayPx, ink: ACCENT_INK },
     'left', MASTHEAD.dayLine));
   ey += dayH;
-  items.push(furnitureLine(leftPx, ey, earL, date.weekday,
-    { family: 'sans', weight: 700, bold: true, fontPx: MASTHEAD.weekdayPx }));
-  ey += weekdayH;
+  // The date ear reads numeral, month-and-year, weekday - the order the canvas
+  // sets it in (masthead.js). The two halves of one date are kept together and
+  // the weekday follows them; the weight goes with the position, so whatever
+  // completes the numeral is the bold line.
   items.push(furnitureLine(leftPx, ey, earL, date.monthYear,
-    { family: 'sans', weight: 400, fontPx: MASTHEAD.monthYearPx }));
+    { family: 'sans', weight: 700, bold: true, fontPx: MASTHEAD.monthYearPx }));
+  ey += monthH;
+  items.push(furnitureLine(leftPx, ey, earL, date.weekday,
+    { family: 'sans', weight: 400, fontPx: MASTHEAD.weekdayPx }));
 
   // The registered artwork, at its own proportions inside the row - never
   // stretched to fill it, because a stretched nameplate is a different

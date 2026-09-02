@@ -188,6 +188,23 @@ export function applyAssistTab() {
   col.querySelectorAll("[data-assist-tab]").forEach((button) => {
     button.setAttribute("aria-selected", button.dataset.assistTab === active ? "true" : "false");
   });
+
+  // THE SETTINGS COLUMN CLOSES WHILE ITS PANEL IS OVER HERE.
+  //
+  // Moving the rail's one panel into this column left `#workspaceTools` as a
+  // 340px band of nothing beside the sheet - measured, 97px of header inside a
+  // 633px grid row - which is the desk's "block settings leaving a big gap
+  // below, not using full page". Closing the column hands that width to the
+  // page: the canvas host goes 1166px -> 1512px.
+  //
+  // The state is a class rather than a `:has()` selector because `:has()`
+  // cannot be nested inside `:has()` - the rule needed two levels and Chrome
+  // drops such a selector silently.
+  const top = document.querySelector(".workspace-top");
+  const rail = document.getElementById("workspaceTools");
+  if (top && rail) {
+    top.classList.toggle("tools-lent", !rail.querySelector(".workspace-tools-body"));
+  }
 }
 
 export function showAssistTab(key) {

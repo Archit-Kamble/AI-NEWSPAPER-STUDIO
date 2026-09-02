@@ -1617,7 +1617,16 @@ body.resizing-y * {
   justify-content: space-between;
   align-items: center;
   gap: 16px;
-  padding: 0 24px;
+  /* THE BAR HAD NO HEIGHT OF ITS OWN. `padding: 0 24px` meant its 34px was
+     whatever its tallest child happened to be - the buttons at 33px - so the
+     one strip that is on screen every second of a desk's day sat with a
+     pixel of air above and below it and read as a seam rather than as a bar.
+     Measured before: 34px. After: 52px, which is the header's own 60 less a
+     step. Nothing moves for it - `--toolbar-h` is measured live
+     (workspace.js's measureToolbar), and `--page-area-h` comes from the
+     canvas host, so the page and the rail follow rather than being pushed. */
+  padding: 9px 24px;
+  min-height: 52px;
   background: white;
   border-bottom: 1px solid #ececed;
   box-shadow: 0 1px 2px rgba(20, 20, 30, 0.04);
@@ -1631,7 +1640,8 @@ body.resizing-y * {
 }
 .toolbar-brand {
   font-weight: 700;
-  font-size: 1.05rem;
+  font-size: 1.12rem;
+  line-height: 1.25;
   color: var(--primary);
   white-space: nowrap;
   overflow: hidden;
@@ -1641,7 +1651,7 @@ body.resizing-y * {
 .toolbar-brand small {
   display: block;
   font-weight: 500;
-  font-size: 0.72rem;
+  font-size: 0.74rem;
   color: #9a9aa2;
   letter-spacing: 0.02em;
 }
@@ -1661,21 +1671,22 @@ body.resizing-y * {
 .toolbar-btn {
   display: inline-flex;
   align-items: center;
-  gap: var(--s1);
-  padding: 8px var(--s3);
+  gap: 7px;
+  padding: 9px 13px;
+  min-height: 34px;
   background: white;
   color: #45454f;
   border: 1px solid #e4e4e7;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 0.82rem;
+  font-size: 0.85rem;
   font-weight: 600;
   font-family: inherit;
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 .toolbar-btn svg {
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
 }
 .toolbar-btn:hover:not(:disabled) {
@@ -1721,7 +1732,7 @@ body.resizing-y * {
    moves, because a toolbar a desk uses all day is muscle memory:
 
      the block you are on   From Reporter · Save · Undo · Redo
-     the edition, outward   Preflight · Press file · Download
+     the edition, outward   Preflight · Download
      the whole paper        AI Compose · Publish
 
    A hairline, not a gap: a gap large enough to group is a gap large enough to
@@ -4673,11 +4684,16 @@ body.print-view .section-diagnostic {
   line-height: 0.95;
   color: #c8102e;
 }
-.masthead-weekday {
+/* THE EAR READS DOWNWARDS THE WAY A DATE IS SPOKEN: the numeral, the month
+   and year it belongs to, then the day of the week. It used to run numeral,
+   weekday, month-year - so the "2" and "September 2026" that make one date
+   had the word "Tuesday" wedged between them. The weight follows the order:
+   whatever sits directly under the numeral completes it and is set bold. */
+.masthead-monthyear {
   font-size: 12px;
   font-weight: 700;
 }
-.masthead-monthyear {
+.masthead-weekday {
   font-size: 10px;
 }
 .masthead-plate {
@@ -8856,14 +8872,49 @@ body.print-view #printViewBtn {
   font-size: 0.8rem;
   line-height: 1.5;
 }
-/* The rail must never look broken while it has lent a panel out. */
-.workspace-tools:not(:has(.workspace-tools-body))::after {
-  content: "These settings are open in the Block Editor's right-hand column.";
-  display: block;
-  padding: var(--s3);
-  color: var(--secondary, #666);
-  font-size: 0.8rem;
-  line-height: 1.5;
+/* A RAIL THAT HAS LENT ITS PANEL OUT IS NOT A RAIL, IT IS A HOLE.
+
+   The dock MOVES `#workspaceToolsPanel` into the Block Editor's right-hand
+   column - one element, no second copy - which left the 340px settings column
+   standing empty for as long as the desk stayed on the Block, Type, Story or
+   History tab. Measured on a real block: the rail collapsed to 97px of header
+   inside a 633px grid row, so 536px of the widest part of the screen was a
+   blank band carrying one apologetic sentence. That is the desk's "block
+   settings leaving a big gap below, not using full page", and it was this
+   dock's own doing.
+
+   The column closes instead, and the page takes the room: the canvas host goes
+   from 1166px to 1512px, which is 30% more sheet at the same Fit zoom. The
+   signpost is the tab strip itself - the tab that borrowed the panel is the
+   one drawn as selected - and pressing any other tab brings the rail straight
+   back. Nothing is hidden that a desk cannot see the way back to.
+
+   The class is set by `applyAssistTab()` rather than found with `:has()`, and
+   that is not a preference: `:has()` MAY NOT BE NESTED INSIDE `:has()`, so
+   `.workspace-top:has(.workspace-tools:not(:has(...)))` is not an invalid
+   guess the browser corrects - it is a selector Chrome drops entirely, with
+   no warning and no error. Written that way first, and the rail measured 340
+   x 35 with the rule apparently in the stylesheet. */
+.workspace-top.tools-lent {
+  grid-template-columns: 0 0 minmax(0, 1fr);
+}
+.workspace-top.tools-lent > .workspace-tools,
+.workspace-top.tools-lent > .splitter-v {
+  display: none;
+}
+/* Stacked, the rail is a row of its own rather than a column beside the page,
+   so closing it would take the way back off the screen. It keeps the sentence. */
+@media (max-width: 1024px) {
+  .workspace-top.tools-lent { grid-template-columns: minmax(0, 1fr); }
+  .workspace-top.tools-lent > .workspace-tools { display: block; }
+  .workspace-tools:not(:has(.workspace-tools-body))::after {
+    content: "These settings are open in the Block Editor's right-hand column.";
+    display: block;
+    padding: var(--s3);
+    color: var(--secondary, #666);
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
 }
 
 /* ===========================================================================

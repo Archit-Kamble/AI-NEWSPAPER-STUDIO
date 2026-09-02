@@ -1049,12 +1049,14 @@ async function clearSection(sectionKey) {
   if (store.getState().selectedSectionKey !== sectionKey) selectSection(sectionKey);
   const draft = store.getDraft();
   if (!draft) return;
-  const carries = draft.headline || draft.subheading || draft.body || draft.imageUrl || draft.newsItemId;
+  const carries = draft.headline || draft.subheading || draft.body || draft.imageUrl
+    || draft.newsItemId || draft.smartCardKey;
   if (carries) {
     const has = [
       draft.headline && "its headline",
       draft.body && "its story",
       (draft.imageUrl || draft.newsItemId) && "its picture",
+      draft.smartCardKey && "the card in it",
     ].filter(Boolean);
     const ok = await askConfirm({
       title: `Clear ${blockName(sectionKey, draft)}?`,
@@ -1066,8 +1068,21 @@ async function clearSection(sectionKey) {
     });
     if (!ok) return;
   }
+  // THE CARD GOES TOO, AND IT USED NOT TO.
+  //
+  // A Smart Card is what is IN a block (`smart_card_key` + `smart_card_data`),
+  // exactly as a headline and a story are - `feature_key` is the separate,
+  // read-only thing saying what the layout reserved the frame FOR. This
+  // cleared the copy and left the card, so pressing Clear on the almanac or
+  // the rate panel emptied fields nobody could see and redrew the identical
+  // card: the desk's "clearing a smart card block is not happening". It did
+  // not even ask first, because `carries` could not see a card either.
+  //
+  // The payload writes both with `|| null` (section-model.js's
+  // payloadFromDraft), so nulling them here is what reaches the row.
   store.replaceDraft(
-    { ...draft, newsItemId: null, headline: "", subheading: "", body: "", caption: "", imageUrl: "", aiGenerated: false, status: "empty" },
+    { ...draft, newsItemId: null, headline: "", subheading: "", body: "", caption: "", imageUrl: "",
+      smartCardKey: null, smartCardData: null, aiGenerated: false, status: "empty" },
     "canvas",
   );
   history.record(store.getDraft(), { coalesce: false, label: "Cleared section", kind: "clear", images: sectionImages });

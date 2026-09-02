@@ -292,12 +292,46 @@ const say = (ok, what, detail = '') => {
     'and those prompts are never in the printable block');
   parity(s, 'empty block');
 
-  const frameBox = async (id) => page.locator(`#${id}`).boundingBox();
+  // A CLICK POINT IS COMPUTED AFTER SCROLLING, AND INSIDE THE WINDOW.
+  //
+  // `boundingBox()` does not scroll, and `page.mouse.*` takes raw viewport
+  // coordinates - so a frame whose centre lies below the fold is pressed at a
+  // point outside the window, the press lands on nothing, the frame never
+  // opens, and it reads as "the headline is not editable" when the product is
+  // perfectly fine. Measured here: the headline frame's top sits at y=1289 of
+  // a 1300px viewport, so its centre is 39px past the edge and all three
+  // inline-typing checks failed at once. Driven with the scroll, the same
+  // gesture opens the frame and the word reaches the canvas.
+  //
+  // CLAUDE.md already records this exact fault for body-editing.browser.js.
+  // This net had the same bug and was passing on viewport luck, so any change
+  // that moved the composed page down was going to expose it - which is what
+  // the toolbar gaining its own height did.
+  //
+  // The press goes to the centre of the part that is actually VISIBLE, which
+  // is where a desk would press too.
+  const frameBox = async (id) => {
+    const el = page.locator(`#${id}`);
+    if (!(await el.count())) return null;
+    await el.scrollIntoViewIfNeeded().catch(() => {});
+    await page.waitForTimeout(250);
+    return el.boundingBox();
+  };
+  const pressPoint = (box, { atTop = false } = {}) => {
+    const vh = page.viewportSize().height;
+    const top = Math.max(box.y, 0);
+    const bottom = Math.min(box.y + box.height, vh);
+    return {
+      x: box.x + box.width / 2,
+      y: atTop ? Math.min(top + 20, bottom - 2) : (top + bottom) / 2,
+    };
+  };
   const head = await frameBox('edHeadlineFrame');
   say(Boolean(head) && head.height > 10, 'the headline frame can be clicked before a headline exists',
     JSON.stringify(head && { w: Math.round(head.width), h: Math.round(head.height) }));
 
-  await page.mouse.dblclick(head.x + head.width / 2, head.y + head.height / 2);
+  const headAt = pressPoint(head);
+  await page.mouse.dblclick(headAt.x, headAt.y);
   await settle(700);
   await page.keyboard.type('COUNCIL APPROVES THE PLAN', { delay: 30 });
   await page.keyboard.press('Enter');
@@ -314,7 +348,8 @@ const say = (ok, what, detail = '') => {
   // to the object its FIRST press landed on, so this has to open the deck.
   const deckBox = await frameBox('edSubheadingFrame');
   if (deckBox && deckBox.height > 4) {
-    await page.mouse.dblclick(deckBox.x + deckBox.width / 2, deckBox.y + deckBox.height / 2);
+    const deckAt = pressPoint(deckBox);
+    await page.mouse.dblclick(deckAt.x, deckAt.y);
     await settle(700);
     const opened = await page.evaluate(() => {
       const frame = document.getElementById('edSubheadingFrame');
@@ -337,7 +372,8 @@ const say = (ok, what, detail = '') => {
   }
 
   const bodyFrame = await frameBox('edBodyFrame');
-  await page.mouse.dblclick(bodyFrame.x + bodyFrame.width / 2, bodyFrame.y + 20);
+  const bodyAt = pressPoint(bodyFrame, { atTop: true });
+  await page.mouse.dblclick(bodyAt.x, bodyAt.y);
   await settle(800);
   await page.keyboard.type('The council met and passed the water scheme.', { delay: 20 });
   await settle(1600);

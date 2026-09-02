@@ -151,13 +151,33 @@ const say = (ok, what, detail = '') => {
     };
   });
 
-  const lineAt = (i) => page.evaluate((k) => {
-    const nodes = [...document.querySelectorAll('#edCanonicalContent .section-body-line')];
-    const node = nodes[Math.min(k, nodes.length - 1)];
-    const r = node.getBoundingClientRect();
-    return { x: r.left + 24, y: r.top + r.height / 2, left: r.left, right: r.right,
-      top: r.top, bottom: r.bottom, at: Number(node.dataset.at) };
-  }, i);
+  // A CLICK POINT IS COMPUTED AFTER SCROLLING, AND THE LINE IS BROUGHT TO THE
+  // MIDDLE FIRST.
+  //
+  // `getBoundingClientRect()` is viewport-relative and `page.mouse.*` takes raw
+  // viewport coordinates, so a line below the fold is pressed at a point
+  // outside the window: the press lands on nothing and it reads as "the story
+  // will not open" when the product is fine. This net already scrolls the page
+  // once at setup, and that was enough only while nothing moved afterwards -
+  // section 10 scrolls the display band to centre, so by the time section 11
+  // asked for line 4 the story had moved out from under it.
+  //
+  // The scroll happens BEFORE the measurement and before the press, so the
+  // rect, the click and the caret `drawn()` reads back are all in one frame.
+  const lineAt = async (i) => {
+    await page.evaluate((k) => {
+      const nodes = [...document.querySelectorAll('#edCanonicalContent .section-body-line')];
+      nodes[Math.min(k, nodes.length - 1)]?.scrollIntoView({ block: 'center' });
+    }, i);
+    await page.waitForTimeout(250);
+    return page.evaluate((k) => {
+      const nodes = [...document.querySelectorAll('#edCanonicalContent .section-body-line')];
+      const node = nodes[Math.min(k, nodes.length - 1)];
+      const r = node.getBoundingClientRect();
+      return { x: r.left + 24, y: r.top + r.height / 2, left: r.left, right: r.right,
+        top: r.top, bottom: r.bottom, at: Number(node.dataset.at) };
+    }, i);
+  };
 
   await openEdition();
   await keepBlock();

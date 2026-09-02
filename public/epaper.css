@@ -139,9 +139,16 @@ svg { width: 1.25rem; height: 1.25rem; fill: none; stroke: currentColor; stroke-
   .reader-downloads { align-self: end; }
   .reader-downloads a { width: 44px; height: 44px; justify-content: center; padding: 0; }
   .reader-downloads a span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-  .page-navigation { top: 0; height: 54px; padding-inline: 7px; }
-  .page-navigation button { flex-basis: 38px; width: 38px; height: 38px; }
-  .page-numbers { max-width: calc(100vw - 100px); }
+  /* THE PAGE NAVIGATION GOT SMALLER WHERE THE FINGER ARRIVED.
+     Measured on the released issue at 430px: every one of the six controls -
+     the two arrows and one pill per page - drew 38x38, having been 40x40 on
+     the desk. So the narrow breakpoint SHRANK the only navigation the one
+     page the public sees has, exactly where a mouse becomes a thumb.
+     The 44px rule was already in this very block, two lines up, on
+     `.reader-downloads a`; the pager simply went the other way. */
+  .page-navigation { top: 0; height: 56px; padding-inline: 7px; }
+  .page-navigation button { flex-basis: 44px; width: 44px; height: 44px; }
+  .page-numbers { max-width: calc(100vw - 108px); }
   .epaper-stage { margin-top: 12px; padding: 0; }
   .page-image-wrap { width: 100%; box-shadow: none; }
   .page-image { width: 100%; }

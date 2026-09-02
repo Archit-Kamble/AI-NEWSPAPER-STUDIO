@@ -276,20 +276,23 @@ function showReporterProfile() {
   const content = document.getElementById("content");
   const rightPanel = document.getElementById("rightPanel");
   content.innerHTML = `
-    <div class="form-section">
-      <h2>PROFILE</h2>
+    <div class="form-section" lang="mr">
+      <h2>${MR.profile}</h2>
       <div class="profile-info">
         <div class="info-row">
-          <label>Name:</label>
+          <label>${MR.profileName}</label>
           <strong>${escapeHtml(currentUser.name)}</strong>
         </div>
         <div class="info-row">
-          <label>Email:</label>
+          <label>${MR.profileEmail}</label>
           <strong>${escapeHtml(currentUser.email)}</strong>
         </div>
         <div class="info-row">
-          <label>Role:</label>
-          <strong>${escapeHtml(currentUser.role)}</strong>
+          <label>${MR.profileRole}</label>
+          <!-- The LABEL, not the stored key. It printed "reporter" - the value
+               in the database - on a screen written for the person that word
+               describes, and in the one language they are certainly reading. -->
+          <strong>${escapeHtml(MR.role)}</strong>
         </div>
       </div>
     </div>

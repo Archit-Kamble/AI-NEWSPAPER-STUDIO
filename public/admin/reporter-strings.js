@@ -46,6 +46,17 @@ export const MR = {
   rejected: "परत आलेल्या",
   profile: "माझी माहिती",
 
+  // --- the profile screen ---
+  // The one reporter screen the Marathi pass missed. Its heading read
+  // "PROFILE" and its three labels read Name / Email / Role, on a screen whose
+  // own menu button has said माझी माहिती since that pass landed - so the
+  // sidebar and the page it opens disagreed about what the screen is called,
+  // which is the "one screen, one name" fault this file already records for
+  // Past News.
+  profileName: "नाव",
+  profileEmail: "ईमेल",
+  profileRole: "भूमिका",
+
   // --- the writing form ---
   createHeading: "नवी बातमी",
   editHeading: "बातमी दुरुस्त करा",

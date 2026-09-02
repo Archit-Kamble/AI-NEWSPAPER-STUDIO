@@ -8902,7 +8902,15 @@ body.print-view #printViewBtn {
   .reporter-form input,
   .reporter-form select { min-height: 44px; }
   .hamburger-btn { min-width: 44px; min-height: 44px; }
-  .app-header .logout, .app-header button { min-height: 44px; }
+  /* `.header`, NOT `.app-header`. There is no `.app-header` in this product -
+     the bar is `.header` and the logout sits in `.header-right` inside it - so
+     the rule written in the last pass matched nothing at all and the button
+     stayed 39px. A CSS rule aimed at a class that does not exist is the
+     stylesheet's version of "a control that draws perfectly and does nothing",
+     and it fails the same silent way: no error, no warning, and a measurement
+     that has not moved. Found by re-measuring the thing the rule was supposed
+     to have fixed, which is the only way it could have been found. */
+  .header button, .header-right button { min-height: 44px; }
 }
 
 /* Not a width query: a stylus or a touchscreen on a wide window wants the same

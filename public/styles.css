@@ -8419,17 +8419,37 @@ textarea:disabled {
 /* Chrome-only measurements, with the newspaper itself excluded - its 6.4px is
    the publication's 9pt body at 2px/mm and must never be touched: 69
    interactive labels under 12px and 79 targets under 32x28px. */
+/* A FLOOR MAY ONLY EVER RAISE, AND THIS ONE WAS ALSO INFLATING.
+   It read `button, select, input, textarea, .sidebar-btn, .toolbar-btn,
+   .layout-btn, .btn-secondary, .btn-primary, .btn-submit, .btn-danger
+   { font-size: max(12px, 1em) }` - and `1em` in a font-size is the PARENT's
+   size, not the element's own. So naming those classes did two different
+   things at once:
+
+     - against a bare element with no design of its own, it is a real floor;
+     - against a class whose design is SMALLER than its parent's text, it
+       throws the design away and adopts the parent's size.
+
+   Measured on the running desk, this rule against the designed value:
+
+       .toolbar-btn     0.82rem = 13.1px   ->  15.2px    +16%
+       .layout-btn                         ->  15.2px
+
+   Every button on the workspace toolbar and both canvas rows was rendering a
+   sixth larger than it was drawn to be, which is a good part of why that bar
+   reads as a wall. The classes with a higher-specificity size of their own
+   (.segment, .assist-tab, .dev-btn) were untouched, so the effect was uneven
+   as well as unasked for - which is what made it invisible.
+
+   Measured again with the rule off: the smallest interactive label anywhere
+   on the desk is 10.56px and only six control types sit under 12 at all. So
+   the bare element selectors stay - they lose to any class-based design and
+   therefore only ever reach a control nobody sized - and the class list goes.
+   A floor that overrides a design is not a floor. */
 button,
 select,
 input,
-textarea,
-.sidebar-btn,
-.toolbar-btn,
-.layout-btn,
-.btn-secondary,
-.btn-primary,
-.btn-submit,
-.btn-danger {
+textarea {
   font-size: max(12px, 1em);
 }
 /* The canvas and everything composed is exempt by name, not by accident. */

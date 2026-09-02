@@ -64,6 +64,7 @@ function smartCardLines(key, data, frame, cardLayout) {
   const contentX = Number(layout.contentBox?.x) || 0;
   const contentY = Number(layout.contentBox?.y) || 0;
   const contentWidth = Number(layout.contentBox?.width) || Number(frame.width) || 0;
+  const contentHeight = Number(layout.contentBox?.height) || Number(frame.height) || 0;
 
   // Artwork is a first-class neutral item. It therefore reaches Scribus,
   // PDF, IDML and Word from this same walk instead of existing as browser-only
@@ -108,11 +109,34 @@ function smartCardLines(key, data, frame, cardLayout) {
     // one rule at one distance from the paper's grid whatever furniture the
     // card puts inside itself. Every entry in this walk is placed relative to
     // the content box, so the rule is offset back to where it belongs.
+    // IN FRAME SPACE, NOT CONTENT SPACE - and this was the bug.
+    //
+    // `bar()` and `line()` below add `contentX`/`contentY` themselves, so
+    // every ordinary entry in this walk is emitted in the CARD FRAME's own
+    // coordinates. The ring did not go through them: it subtracted the
+    // content box from the border box, which is only correct if the caller
+    // adds the content box back - and the caller adds the frame origin.
+    //
+    // So the ring was drawn one content-box offset too far up and left. On the
+    // almanac, whose nameplate takes the top 40px of the frame, that put the
+    // ring 20mm ABOVE the block on the plate while the canvas drew it on the
+    // block's own edge:
+    //
+    //     canvas   x 2,   y 2,     109 x 134
+    //     export   x 3.6, y -39.2, 103.8 x 91.2
+    //
+    // The desk's report was "the smart card's border is not saving right in
+    // the CMYK files", and it was every ruled card in every export.
+    //
+    // `borderBox` is the frame (0, 0, width, height) for every ruled card, so
+    // it is used exactly as stated. The fallback to `contentBox` is what a
+    // card that states no border box would want, and that one IS in frame
+    // space too.
     const box = layout.borderBox || layout.contentBox || {};
     const w = Number(box.width) || contentWidth;
     const h = Number(box.height) || Number(frame.height) || 0;
-    const dx = (Number(box.x) || 0) - (Number(layout.contentBox?.x) || 0);
-    const dy = (Number(box.y) || 0) - (Number(layout.contentBox?.y) || 0);
+    const dx = Number(box.x) || 0;
+    const dy = Number(box.y) || 0;
     const ring = (offset, weight) => {
       out.push({ kind: 'bar', x: dx + offset, y: dy + offset, width: w - offset * 2, height: weight, ink: border.ink });
       out.push({ kind: 'bar', x: dx + offset, y: dy + h - offset - weight, width: w - offset * 2, height: weight, ink: border.ink });
@@ -128,8 +152,10 @@ function smartCardLines(key, data, frame, cardLayout) {
   if (layout.headRule) {
     out.push({
       kind: 'bar',
-      x: (Number(layout.headRule.x) || 0) - (Number(layout.contentBox?.x) || 0),
-      y: (Number(layout.headRule.y) || 0) - (Number(layout.contentBox?.y) || 0),
+      // Frame space, like the ring above and like every entry `bar()` emits.
+      // Subtracting the content box put this hairline above the block too.
+      x: Number(layout.headRule.x) || 0,
+      y: Number(layout.headRule.y) || 0,
       width: Number(layout.headRule.width) || 0,
       height: HEAD_RULE_PX,
       ink: (cardLayout.CARD_BORDERS[key] || {}).ink || '#8a1428',
@@ -415,10 +441,17 @@ function smartCardLines(key, data, frame, cardLayout) {
     const {
       labelWidth, valueWidth, labelTextWidth, valueTextWidth, cellPadX, cellPadY, lineHeightPx,
     } = layout.geometry;
+    // NO ACCENT BOX ROUND THE TABLE. The walk used to lay an accent rule along
+    // the table's top and down both its sides, and the canvas draws neither:
+    // `.smart-card-panchang .smart-card-table` (styles.css) has row bottom
+    // rules and a `td` left rule and nothing else, because the card's own ring
+    // is already the box. So the plate carried a second box inside the ring
+    // that the sheet the desk approved does not have - and a head rule three
+    // pixels above it, making two red rules where the browser draws one.
+    //
+    // It was invisible until the ring was put back where it belongs: drawn
+    // 20mm out of place, this box was the only ring anything could see.
     let top = subtitleOffsetPx;
-    bar(0, top, contentWidth, 0.6, '#8a1428');
-    bar(0, top, 0.6, layout.items.reduce((sum, item) => sum + item.rowHeight, 0), '#8a1428');
-    bar(contentWidth - 0.6, top, 0.6, layout.items.reduce((sum, item) => sum + item.rowHeight, 0), '#8a1428');
     for (const [index, item] of layout.items.entries()) {
       bar(0, top, labelWidth, item.rowHeight, '#fbf2f3');
       if (index % 2 === 1) bar(labelWidth, top, valueWidth, item.rowHeight, '#fcf8f3');
@@ -431,7 +464,10 @@ function smartCardLines(key, data, frame, cardLayout) {
         line(text, labelWidth + cellPadX, top + cellPadY + i * lineHeightPx,
           valueTextWidth, layout.fontPx, 0, lineHeightPx, { bold: true }));
       top += item.rowHeight;
-      bar(0, top - 0.4, contentWidth, 0.4, '#d8c4c8');
+      // The stylesheet's own ink for a row rule (`.smart-card-table td`), not
+      // a second value: #d8c4c8 here against #d8d8de there is a card ruled in
+      // two inks depending on which surface is looking at it.
+      bar(0, top - 0.4, contentWidth, 0.4, '#d8d8de');
     }
     bar(labelWidth - 0.25, subtitleOffsetPx, 0.5, top - subtitleOffsetPx, '#dec8cc');
     bar(0, top - 0.6, contentWidth, 0.6, '#8a1428');
@@ -767,11 +803,22 @@ function smartCardLines(key, data, frame, cardLayout) {
       const box = rel(g.art);
       out.push({ kind: 'image', file: g.imageUrl, x: box.x, y: box.y, width: box.width, height: box.height });
     }
-    // The चौकट: one rule inside the card's ring.
+    // The चौकट: one rule INSIDE the card's ring, measured against the box the
+    // ring actually left.
+    //
+    // It was measured against the whole FRAME and then drawn through `bar()`,
+    // which adds the content box's own origin - so it was the frame's size
+    // offset by the content box, and its bottom and right edges ran out to
+    // within a fifth of a pixel of the card's own ring. Two hairlines 0.2px
+    // apart is one thick rule at any press resolution, and `no card lays two
+    // rules where a printer draws one` is the test that says so.
+    //
+    // Latent until the ring itself was put back in frame space above: before
+    // that the ring was drawn 20mm out of place, so nothing coincided with it.
     if (g.frameStyle === 'double' && g.frameInk > 0) {
       const inset = g.framePad - g.frameInk;
-      const w = Math.max(0, (Number(frame.width) || contentWidth) - inset * 2);
-      const h = Math.max(0, (Number(frame.height) || 0) - inset * 2);
+      const w = Math.max(0, contentWidth - inset * 2);
+      const h = Math.max(0, contentHeight - inset * 2);
       bar(inset, subtitleOffsetPx + inset, w, g.frameInk, '#202024');
       bar(inset, subtitleOffsetPx + inset + h - g.frameInk, w, g.frameInk, '#202024');
       bar(inset, subtitleOffsetPx + inset, g.frameInk, h, '#202024');

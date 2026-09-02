@@ -27,7 +27,36 @@ const PROVIDERS = { rss };
 // answers are never `verified`. See providers/websearch.js.
 const OPEN_WEB = websearch;
 
-const EXCERPT_MAX_CHARS = 240;
+// HOW MUCH OF THE PUBLISHER'S OWN WORDS IS KEPT.
+//
+// 240 was chosen when this text's only job was to be LISTED - a pool of
+// candidates a planner reads to choose between. It is now also the material a
+// story is WRITTEN from, and at 240 the writer was starved: measured across
+// 558 items on this paper's own configured feeds, the title-plus-description a
+// publisher actually gives runs to a median of 196 characters, p75 266, p90
+// 459 and a maximum of 4368 - so a THIRD of items were being cut, and 35% of
+// all the available characters thrown away.
+//
+// That is the honest half of the desk's "81% of the block's lines are set"
+// report. A block cannot be filled with facts nobody handed the writer, and
+// the alternative to more real material is padding, which for a newspaper is
+// inventing. `SOURCE_LIMITED_UNDERFILL` stays exactly what it is.
+//
+// 700 keeps all but 10 of those 558 items whole - essentially everything a
+// feed really gives - without letting one 4368-character outlier fill a packet
+// of six facts on its own.
+//
+// THE PLANNER'S PROMPT DOES NOT GROW. `poolBlock()` re-slices every candidate
+// to its own EXCERPT_IN_PROMPT (180) before listing it, so the one call that
+// carries 187 candidates is unchanged to the character; what grows is the Fact
+// Packet for the couple of dozen stories the desk actually approved.
+const EXCERPT_MAX_CHARS = 700;
+
+// A HEADLINE IS NOT AN EXCERPT. These shared one constant, so raising the
+// excerpt would have let a title run to 700 characters - and a title that long
+// is an article in the wrong element, which this codebase has already been
+// caught by once (`displayPublisher`'s own PUBLISHER_NAME_MAX).
+const TITLE_MAX_CHARS = 240;
 const MAX_FACTS = 5;
 
 function timeoutMs() {
@@ -268,7 +297,7 @@ function annotate(items, { category, openWeb = false, windowMs } = {}) {
     const source = toSource(item);
     return {
       ...source,
-      title: truncate(item.title, EXCERPT_MAX_CHARS),
+      title: truncate(item.title, TITLE_MAX_CHARS),
       stale: freshness.isStale(source.publishedAt, category, windowMs),
       // An open-web item can never be `verified`, whatever its domain says.
       // Carrying that on the ITEM is what lets one pool hold both kinds and a

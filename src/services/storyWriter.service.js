@@ -507,6 +507,25 @@ function briefFor({
   const headlineChars = fit.headlineChars || headlineLimit(fit.cols);
   const headlineFloor = Math.max(12, Math.round(headlineChars * 0.6));
   const deckChars = fit.deckChars || subheadingLimit(fit.cols);
+  // A DECK FILLS ITS LINE, like a headline fills its measure.
+  //
+  // The floor was 0.6, so a model writing at the bottom of its own brief
+  // produced a deck at three-fifths of the line it was given - and that is
+  // precisely the desk's report that "his subheading is also not full". A
+  // headline is briefed to fill (`headlineFloor`), and there was no reason for
+  // the line under it to be briefed to a third less.
+  //
+  // 0.85 rather than the headline's own bar: a deck PREFERS one line and
+  // yields to more only when one is physically impossible, so asking for the
+  // last few per cent of the measure trades a full line for a two-line deck
+  // that `fitDisplayFlow` then shrinks to hold its one-line role - which is
+  // worse than a slightly short line, and is the "any improvement" fault this
+  // engine already measured its way out of once.
+  //
+  // The brief only ASKS. Nothing here is a guarantee, and the compositor's own
+  // caps - DECK_MAX_HEADLINE_RATIO above and DECK_MIN_OF_BODY below - still
+  // decide what is actually set.
+  const deckFloor = Math.round(deckChars * 0.85);
   // How much to ask for. NOT "the exact space left on the block" - that
   // sentence used to be here and it was not true: the space left cannot be
   // known until the headline and the deck exist, which is after this brief.
@@ -567,7 +586,7 @@ function briefFor({
         + ' for the desk\'s reference only - it will not be printed - and write the'
         + ' body so it stands on its own without one, opening with what the story is.',
     writeSubheading
-      ? `  * The subheading is REQUIRED, and it is ONE LINE: ${Math.round(deckChars * 0.6)} to ${deckChars}`
+      ? `  * The subheading is REQUIRED, and it is ONE FULL LINE: ${deckFloor} to ${deckChars}`
       : '  * This block prints NO SUBHEADING. Fill the field for reference only; it'
         + ' will not be printed.',
     writeSubheading

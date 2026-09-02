@@ -307,6 +307,45 @@ function planMarkup(run) {
 
 // ---------------------------------------------------------------- the copy ---
 
+// THE STORY'S OWN PHOTOGRAPH, offered beside the copy it belongs to.
+//
+// A district daily's page is a photograph and a story. The run planned the
+// story and had nothing to say about the picture, so every block it filled
+// arrived as grey type and a desk went hunting for an image by hand, for
+// thirty-one blocks.
+//
+// The picture is the publisher's own, carried on the source the story was
+// written from - so it is the photograph that ran with this story, not a
+// stock image and not a generated one. Measured across this paper's own
+// Maharashtra feeds: 86 of 111 items carry one.
+//
+// IT IS AN OFFER, AND IT IS OFF UNTIL A PERSON SAYS SO. Where a photograph
+// sits decides how the copy sets around it, and whose photograph it is decides
+// whether the paper may print it at all - so nothing is fetched until the desk
+// ticks the box, and the fetch is the SSRF-guarded one every pasted link
+// already goes through: it resolves the address, refuses every private range,
+// follows redirects by hand and judges the file by its BYTES.
+function pictureOf(result) {
+  const source = (result?.retrieval?.sources || []).find((one) => one && one.imageUrl);
+  if (!source) return null;
+  return { url: source.imageUrl, publisher: source.publisher || source.publisherDomain || 'the source' };
+}
+
+function pictureOffer(result) {
+  const picture = pictureOf(result);
+  const key = `${result.page}/${result.sectionKey}`;
+  if (!picture) {
+    return `<span class="muted newsdesk-nopic">No photograph came with this story.</span>`;
+  }
+  return `<div class="newsdesk-pic">
+    <label class="toggle"><input type="checkbox" data-pic-row="${escapeHtml(key)}"> With its photograph</label>
+    <span class="muted">from ${escapeHtml(picture.publisher)}</span>
+    <a href="${escapeHtml(picture.url)}" target="_blank" rel="noopener noreferrer">see it</a>
+    <label class="toggle"><input type="checkbox" data-cut-row="${escapeHtml(key)}"> Cut the background out</label>
+    <span class="muted newsdesk-cut-note">Suits a portrait; a scene is better left whole.</span>
+  </div>`;
+}
+
 function copyRow(result) {
   if (!result || result.error) {
     return `<li class="bulk-row is-error"><strong>p${result?.page}/${escapeHtml(result?.sectionKey || "?")}</strong>
@@ -323,6 +362,7 @@ function copyRow(result) {
     <strong>p${result.page}/${escapeHtml(result.sectionKey)}</strong>
     <span class="bulk-headline">${escapeHtml(result.proposal.headline)}</span>
     <span class="muted">${pct} — ${state}${result.retrieval?.status === "unverified" ? " · ⚠ unchecked sources" : ""}</span>
+    ${pictureOffer(result)}
   </li>`;
 }
 
@@ -675,25 +715,95 @@ export function openNewsdeskPanel({ newspaperId, byPage, blocks, place, commissi
       const stories = run.batch.results.filter((r) => r && !r.error);
       const result = await post(`/api/newspapers/${run.newspaperId}/newsdesk/accept`, { stories });
       const refused = new Set((result.refused || []).map((row) => row.sectionKey));
+      // THE PHOTOGRAPHS, AFTER THE COPY AND ONLY WHERE THE DESK ASKED.
+      //
+      // After, because a picture belongs to a block that carries its story: a
+      // photograph placed on a block whose copy the paper then refused is a
+      // picture of nothing. Each one goes through the ordinary picture route,
+      // so the corridor snap, the default frame, the runaround and all four
+      // exports work on it exactly as they do on an uploaded photograph -
+      // there is no newsdesk-specific placement anywhere.
+      const pictures = await placePictures(stories.filter((row) => !refused.has(row.sectionKey)));
       // What is still outstanding: a block the writer never answered for, and
       // a block the server would not take. Both are recoverable and both keep
       // their own story, so both can be written again.
       const left = run.batch.results.filter((row) => !row || row.error || refused.has(row.sectionKey));
       run.placed = (run.placed || 0) + result.saved;
       await onDone?.();
+      const picLine = pictures.asked
+        ? ` ${pictures.placed} photograph${pictures.placed === 1 ? "" : "s"} placed${pictures.failed ? `, ${pictures.failed} refused` : ""}.`
+        : "";
       if (!left.length) {
-        say(`${result.saved} block${result.saved === 1 ? "" : "s"} placed, marked needs review.`);
+        say(`${result.saved} block${result.saved === 1 ? "" : "s"} placed, marked needs review.${picLine}`);
         panel.remove();
         return;
       }
       run.leftOver = left;
       render("left");
-      say(`${result.saved} placed. ${left.length} still to do — they are still on this panel.`);
+      say(`${result.saved} placed.${picLine} ${left.length} still to do — they are still on this panel.`);
     } catch (error) {
       say(error.message);
     } finally {
       done();
     }
+  }
+
+  /**
+   * The photographs the desk ticked, placed one at a time.
+   *
+   * ONE AT A TIME on purpose: each fetch reaches out to a publisher's server
+   * and the picture route answers with the block's WHOLE image list, so two in
+   * flight on one block would race and an older answer could replace a newer
+   * one - which is the rule `block-frame.js` already states for picture
+   * patches.
+   *
+   * A refusal is counted and never thrown: a photograph this paper may not
+   * fetch must not cost the desk the story it belongs to. The reason is the
+   * server's own sentence - not a public address, not a picture, too large -
+   * because a line written here would throw away the only thing a desk can act
+   * on.
+   */
+  async function placePictures(rows) {
+    const wanted = rows
+      .map((row) => {
+        const key = `${row.page}/${row.sectionKey}`;
+        const want = panel.querySelector(`[data-pic-row="${CSS.escape(key)}"]`)?.checked;
+        const cut = panel.querySelector(`[data-cut-row="${CSS.escape(key)}"]`)?.checked;
+        const picture = pictureOf(row);
+        return want && picture ? { row, picture, cut } : null;
+      })
+      .filter(Boolean);
+    if (!wanted.length) return { asked: false, placed: 0, failed: 0, why: [] };
+
+    let placed = 0;
+    let failed = 0;
+    const why = [];
+    for (const one of wanted) {
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const images = await post(
+          `/api/pages/${one.row.pageId}/sections/${encodeURIComponent(one.row.sectionKey)}/images/from-link`,
+          { link: one.picture.url },
+        );
+        placed += 1;
+        // The cut-out is a SECOND, separate act on the picture that was just
+        // placed, exactly as the Pictures panel does it - never a mode the
+        // fetch is put into.
+        const added = Array.isArray(images) ? images[images.length - 1] : null;
+        if (one.cut && added?.id) {
+          // eslint-disable-next-line no-await-in-loop
+          await post(
+            `/api/pages/${one.row.pageId}/sections/${encodeURIComponent(one.row.sectionKey)}/images/${added.id}/cutout`,
+            {},
+          ).catch(() => {});
+        }
+      } catch (error) {
+        failed += 1;
+        why.push(`${one.row.sectionKey}: ${error.message}`);
+      }
+    }
+    if (why.length) say(why[0]);
+    return { asked: true, placed, failed, why };
   }
 
   // Writing again the stories that did not come back, and ONLY those.

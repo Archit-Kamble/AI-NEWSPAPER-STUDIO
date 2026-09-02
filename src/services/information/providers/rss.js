@@ -154,6 +154,88 @@ function feedTitle(xml) {
   return cleanText(tag(head, 'title'));
 }
 
+// THE STORY'S OWN PHOTOGRAPH, where the publisher offers one.
+//
+// A district daily's page is a photograph and a story; the run could plan the
+// story and had nothing to say about the picture, so every block it filled
+// arrived as grey type. Measured across the paper's own configured feeds: ABP
+// Majha carries `<media:thumbnail url>` on 21 of 21 items and TV9 Marathi an
+// `<img>` inside the description on 75 across 60 items, while Lokmat carries
+// none - so this finds a picture often, not always, and says nothing when
+// there is none.
+//
+// FOUR PLACES, IN THE ORDER A FEED MEANS THEM:
+//
+//   media:content   the publisher's own asset, and the one that carries a
+//                   width, so the largest is taken rather than the first
+//   media:thumbnail the same thing without a size
+//   enclosure       the RSS 2.0 attachment, image types only
+//   the description's first <img>, which is the last resort because it is
+//                   markup inside text and is as likely to be a tracking pixel
+//                   or a logo as a photograph
+//
+// IT IS A CANDIDATE, NEVER A PLACEMENT. What comes back is a URL and nothing
+// more. Nothing here fetches it: the bytes are only ever pulled by
+// `pictureLink.service.js`, which resolves the address, refuses every private
+// range, follows redirects by hand and judges the file by its BYTES rather
+// than by what the remote server calls it. A feed is untrusted input and a
+// URL from one is untrusted exactly like the rest of the item.
+const IMAGE_EXT = /\.(jpe?g|png|webp|gif|avif)(\?|#|$)/i;
+
+function pictureFrom(block) {
+  const attr = (re) => {
+    const found = re.exec(block);
+    return found ? decodeEntities(found[1]).trim() : '';
+  };
+
+  // media:content, largest first - a feed often carries several sizes.
+  const contents = block.match(/<media:content\b[^>]*>/gi) || [];
+  let best = '';
+  let bestWidth = -1;
+  for (const one of contents) {
+    const url = (/\burl="([^"]*)"/i.exec(one) || [])[1];
+    if (!url) continue;
+    const type = (/\btype="([^"]*)"/i.exec(one) || [])[1] || '';
+    const medium = (/\bmedium="([^"]*)"/i.exec(one) || [])[1] || '';
+    const looksImage = /^image\//i.test(type) || /^image$/i.test(medium)
+      || (!type && !medium && IMAGE_EXT.test(url));
+    if (!looksImage) continue;
+    const width = Number((/\bwidth="(\d+)"/i.exec(one) || [])[1]) || 0;
+    if (width > bestWidth) { best = decodeEntities(url).trim(); bestWidth = width; }
+  }
+  if (best) return best;
+
+  const thumb = attr(/<media:thumbnail\b[^>]*\burl="([^"]*)"/i);
+  if (thumb) return thumb;
+
+  const enclosure = block.match(/<enclosure\b[^>]*>/gi) || [];
+  for (const one of enclosure) {
+    const url = (/\burl="([^"]*)"/i.exec(one) || [])[1];
+    const type = (/\btype="([^"]*)"/i.exec(one) || [])[1] || '';
+    if (url && (/^image\//i.test(type) || (!type && IMAGE_EXT.test(url)))) {
+      return decodeEntities(url).trim();
+    }
+  }
+
+  // The story's own markup. Read from the RAW tag and decoded here, because
+  // `cleanText` strips every tag - by the time the description is text the
+  // picture is already gone.
+  //
+  // EACH TAG IS SEARCHED IN TURN, not just the first one that has any text in
+  // it. Written as `description || content:encoded` this took whichever tag
+  // was non-empty and stopped: measured on TV9 Marathi, whose `<description>`
+  // is plain prose and whose picture is in `<content:encoded>`, that found a
+  // picture on 0 of 60 items while the feed carried one on nearly all of them.
+  for (const name of ['content:encoded', 'description', 'content', 'summary']) {
+    const raw = decodeEntities(unwrapCdata(tag(block, name)));
+    if (!raw) continue;
+    const img = /<img\b[^>]*\bsrc="([^"]*)"/i.exec(raw) || /<img\b[^>]*\bsrc='([^']*)'/i.exec(raw);
+    const found = img ? img[1].trim() : '';
+    if (/^https?:\/\//i.test(found)) return found;
+  }
+  return '';
+}
+
 function parseFeed(xml) {
   if (!looksLikeFeed(xml)) return { error: 'Response was not an RSS or Atom feed', condition: 'malformed' };
 
@@ -181,10 +263,14 @@ function parseFeed(xml) {
     // away as duplicates of one voice.
     const itemSource = cleanText(tag(block, 'source'));
     const sourceUrl = (/<source\b[^>]*url="([^"]*)"/i.exec(block) || [])[1] || '';
+    const imageUrl = pictureFrom(block);
     return {
       title, link, description, publishedAt,
       publisher: itemSource || publisher,
       publisherUrl: sourceUrl || undefined,
+      // Only when the feed offered one. Absent means absent - a block with no
+      // picture must not be handed an empty string that looks like a URL.
+      ...(imageUrl ? { imageUrl } : {}),
     };
   }).filter((item) => item.title || item.link);
 

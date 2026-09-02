@@ -8316,6 +8316,21 @@ button.is-busy:disabled,
 }
 .newsdesk-ask-row select { font-size: .78rem; padding: 2px 4px; }
 
+/* THE STORY'S OWN PHOTOGRAPH, offered beside the copy it belongs to. Off until
+   a person ticks it: where a picture sits decides how the copy sets around it,
+   and whose picture it is decides whether the paper may print it at all. */
+.newsdesk-pic {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px var(--s3);
+  margin-block-start: var(--s2);
+  font-size: .78rem;
+}
+.newsdesk-pic .toggle { display: inline-flex; align-items: center; gap: 4px; margin: 0; }
+.newsdesk-nopic { display: block; margin-block-start: var(--s2); font-size: .78rem; }
+.newsdesk-cut-note { flex-basis: 100%; }
+
 /* A PROPOSAL BEING WRITTEN. The skeletons stack, so they need to be blocks
    with room between them - `.skel` is `display: block` already, and the pills
    are inline-sized, so they are laid out rather than left to collapse. */

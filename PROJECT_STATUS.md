@@ -8231,3 +8231,83 @@ almanac against a print-view screenshot of the same block.
 `publication_name` is data on the Settings screen, not code. It still reads
 **"Sahas Varta Test"** and prints on every masthead, page foot, folio, e-paper
 and press file until somebody changes it there.
+
+## Driving all twelve again — 2 Sept 2026, branch `ui-vocabulary`
+
+Re-verified against the running app rather than re-read. Two faults came out
+of it, both the same shape as faults already recorded here — which is the
+argument for driving rather than reading.
+
+### Two nets computed a click point without scrolling first
+
+`boundingBox()` and `getBoundingClientRect()` are viewport-relative and
+`page.mouse.*` takes raw viewport coordinates, so a frame below the fold is
+pressed **outside the window**: the press lands on nothing and it reads as
+"the headline is not editable" when the product is fine.
+
+| | | |
+|---|---|---|
+| `editor-parity` | headline frame top at **y=1289 of a 1300px viewport** | 67/72 → **70/70** |
+| `body-editing` | section 10's scroll moved the story out from under section 11 | 34/35 → **35/35** |
+
+The toolbar gaining its own height (item 4) is what exposed the first. The
+product was never involved: driven with a scroll, the identical gesture opens
+the frame and the word reaches the canvas.
+
+### The almanac drew two rules where a printer draws one
+
+The last of that family, invisible until the card ring was put back into frame
+space. `tr:last-child td` sets `border-bottom-**COLOR**` — the browser
+recolours the row's own hairline rather than adding one — while the export walk
+drew the grey rule under every row and then laid a heavier accent bar over the
+last. Measured: a 0.4mm grey at y=462.50 under a 0.6mm accent at y=462.40.
+
+`tests/advertStyles.test.js` held this for `advert` and `tender` only; the
+assertion now runs over the other five cards in `tests/smartCards.test.js` and
+fails against the old code with the right diagnosis.
+
+### What each of the twelve was actually checked against
+
+| | |
+|---|---|
+| 1 | the note is on the Settings field; the **value** is still the owner's |
+| 2 | two `.imprint-box`es, each closing with its own language; no "AI" in the Marathi; no third notice |
+| 3 | Clear driven on a real card block — cards **1 → 0**, `smart_card_key` NULL |
+| 4 | toolbar **56px**, buttons 36px, padding of its own |
+| 5 | **13 cards, 0 without a ring at the block edge, 0 near-coincident rule pairs**; CMYK PDF rendered and set beside print view |
+| 6 | every style pressed through the UI, measured in print view; `blockRules()` emits one vertical rule per named edge |
+| 7 | a genuinely new edition: **0 cards, 0 reserved frames, 35 editorial of 42** |
+| 8 | canvas host **1354 → 1700px** docked, and back |
+| 9 | document order and visual order both date → month-year → weekday |
+| 10 | no Press file control; five entries in the Download menu |
+| 11 | `#51615` and `51615` both find it; the second-edition door is there |
+| 12 | **629 characters, 6 detail fields, 1 of 1 picture loaded**; a dead file says so |
+
+A harness must use the API's own vocabulary: verifying 6 cost two wrong runs
+because it invented a `PATCH` for a border. A section is written with **PUT**,
+a full replace; the invented call 404'd silently and the block never moved.
+
+### Verified
+
+`npm test` **1102/1102** (three full runs). All nineteen browser nets green:
+workspace 224/224, editor-parity 70/70, body-editing 35/35, editor-controls
+86/86, device-bar 65/65, desk-actions 27/27, smart-cards 27/27, visual-pass
+46/46, admin-screens 19/19, edition-delete 12/12, story-picker 14/14,
+headline-focus 11/11, navigation 19, press-panel 17, roles 37, epaper-public
+13, story-continuation 19, chart-panel 15, advert-rate 10.
+
+Every edition driven was borrowed and put back: edition 51615 ends with all 32
+blocks at `border_style = none` and all 13 smart cards intact, and the
+throwaway edition made for item 7 was deleted.
+
+### Two flakes recorded rather than chased
+
+- `currentNewsWriting`'s *"check the sources first"* failed once in **four**
+  full-suite runs (`called: 2`, expected 1); 3/3 in isolation and 2 further
+  full runs clean. Nothing in this pass touches the writing pipeline, and one
+  or two calls is inside the settle loop's designed envelope — so the
+  assertion is the fragile half. Not loosened: that would hide a real
+  extra-charge path.
+- `headline-focus.browser.js` reported 8/11 once inside a back-to-back sweep
+  and 11/11 six times after, including the same ordering reproduced on
+  purpose. Its two load-bearing checks passed every run.

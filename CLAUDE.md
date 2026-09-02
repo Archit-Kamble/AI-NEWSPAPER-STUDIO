@@ -6422,6 +6422,103 @@ node tests/browser/desk-actions.browser.js
 node tests/browser/device-bar.browser.js
 ```
 
+### Driving all twelve again, and the two things it turned up
+
+Every one of the twelve was re-verified against the running app rather than
+re-read. Two faults came out of it, and both were the same shape as faults
+this file already records — which is the argument for driving rather than
+reading.
+
+#### A click point is computed after scrolling — in two more nets
+
+`boundingBox()` and `getBoundingClientRect()` are viewport-relative and
+`page.mouse.*` takes raw viewport coordinates, so a frame below the fold is
+pressed at a point **outside the window**: the press lands on nothing, the
+frame never opens, and it reads as *"the headline is not editable"* when the
+product is perfectly fine.
+
+This file already records that fault for `body-editing.browser.js`. Two nets
+still had it and were passing on viewport luck:
+
+| | measured | |
+|---|---|---|
+| `editor-parity` | headline frame's top at **y=1289 of a 1300px viewport** | its centre 39px past the edge — all three inline-typing checks failed at once, 67/72 |
+| `body-editing` | its one setup scroll was enough only while nothing moved after it | section 10 scrolls the display band to centre, so section 11's line 4 had gone, 34/35 |
+
+**The toolbar gaining its own height is what exposed the first**, which is the
+same lesson as the third toolbar row and the fields above the page: *anything
+that moves the composed page down breaks something a desk drags* — here, a
+net's own hand. Driven with the scroll, the identical gesture opens the frame
+and the word reaches the canvas: **70/70** and **35/35**.
+
+Both scroll BEFORE measuring, so the rect, the press and the caret read back
+are all in one frame; and `editor-parity` presses the centre of the part that
+is actually **visible**, which is where a desk would press too.
+
+#### The almanac's last row is ONE rule, in the accent
+
+The last of the "two rules where a printer draws one" family, and the one
+still standing after the card ring was put back into frame space.
+
+`.smart-card-panchang .smart-card-table tr:last-child td` sets
+`border-bottom-**COLOR**`, so the browser **recolours** the hairline that row
+already has — it does not add one. The export walk drew the grey row rule
+under every row (0.4px `#d8d8de`, the base `.smart-card-table td`) and then
+laid a heavier accent bar over the last one. Measured on a real 74×102.5mm
+almanac: a 0.4mm grey at y=462.50 under a 0.6mm accent at y=462.40 — two rules
+**0.1mm apart** where the sheet the desk approved has one, at a weight the
+canvas never used.
+
+It was invisible until the ring itself was fixed: drawn 20mm out of place,
+nothing could coincide with anything.
+
+`tests/advertStyles.test.js` has held this rule for `advert` and `tender`
+since the plate was found drawing a panel box inside the ring; **nothing
+covered the other seven cards.** The same assertion now runs over panchang,
+dinvishesh, havaman, sudoku and rashi in `tests/smartCards.test.js`, and it
+fails against the old code with exactly the right diagnosis.
+
+#### What each of the twelve was checked against
+
+Not "does the code look right" — what a desk would see.
+
+| | how it was verified |
+|---|---|
+| 1 | the Settings field carries the note; **the value is still the owner's to change** |
+| 2 | the canvas draws **two** `.imprint-box`es, each closing with its own language's disclosure; the Marathi never uses the letters "AI"; no third notice |
+| 3 | drove Clear on a real card block — the question reads *"Its story and the card in it go with it"*, cards **1 → 0** on the page and `smart_card_key` NULL in the row |
+| 4 | toolbar **56px** measured, buttons 36px, `9px/9px` padding of its own |
+| 5 | export walk swept over a 4-page edition carrying all nine card kinds: **13 cards, 0 without a complete ring at the block's own edge, 0 near-coincident rule pairs**; then the CMYK PDF rendered and set beside print view |
+| 6 | every style pressed through the UI and measured in **print view**, where the editor's own 1px dashed guide is gone — `rule-left` gives `L=solid R=none T=none B=none`; and `blockRules()` emits one vertical rule per named edge |
+| 7 | a genuinely new edition (`created: true` checked before touching it): **0 cards, 0 frames reserved, 35 editorial frames of 42**, block kinds advert/article/photo only |
+| 8 | canvas host **1354px → 1700px** when the rail's panel is docked, and back to 1354 when it returns |
+| 9 | document order AND visual order both `masthead-day` → `masthead-monthyear` → `masthead-weekday` |
+| 10 | no `Press file` control anywhere on the bar; `press-package, pdf, indesign, scribus, word` in the Download menu |
+| 11 | `#51615` and `51615` both find the row; the number is on the chip; the second-edition door is there |
+| 12 | a filing with real copy: **629 characters in the reader, 6 detail fields, 1 of 1 picture actually loaded** — and a filing whose files are gone says so twice instead of showing broken images |
+
+**A harness must use the API's own vocabulary.** Verifying 6 cost two wrong
+runs because it invented `PATCH /pages/:id/sections/:key` for a border. There
+is no such route — a section is written with **PUT**, a full replace — so the
+call 404'd silently and the block never moved, which reads as the product
+ignoring the control. Same lesson as the showcase sweep, and the way back is
+through the UI, like the way in.
+
+**Two flakes recorded rather than chased**, both measured:
+
+- `tests/currentNewsWriting.test.js`'s *"check the sources first"* failed once
+  in **four** full-suite runs (`called: 2`, expected 1) and passed 3/3 in
+  isolation and in two further full runs. Nothing in this pass touches the
+  writing pipeline. The count varying between one and two calls is inside the
+  settle loop's own designed envelope (`MAX_FILL_CALLS` 2), so **the
+  assertion is what is fragile, not the product** — worth a look if it
+  recurs, but not worth loosening an assertion nobody has explained, because
+  that would hide a real extra-charge path.
+- `headline-focus.browser.js` reported 8/11 once inside a back-to-back sweep
+  and 11/11 on six runs afterwards, including the same ordering reproduced
+  deliberately. Its two load-bearing checks — *0 of 24* keystrokes reaching
+  the story and *24 of 24* reaching the headline — passed on every run.
+
 ## Engineering rules
 
 - **The overflow diagnosis started from desk-selected baseline `52c9556`.** Fix

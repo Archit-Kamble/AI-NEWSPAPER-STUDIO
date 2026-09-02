@@ -425,6 +425,28 @@ export function openNewsdeskPanel({ newspaperId, byPage, blocks, place, commissi
     return data;
   }
 
+  // THE GUARD IS RELEASED IN A `finally`, AND THAT IS THE WHOLE POINT.
+  //
+  // `busy` is set here and cleared only by the function this returns. Each of
+  // the three stages used to call it in its CATCH alone - so a run that
+  // SUCCEEDED left `busy` true for the life of the panel, and the next stage's
+  // `if (busy) return;` swallowed the press.
+  //
+  // The desk's report was "it shows me 31 stories, I click Write 31 stories
+  // and nothing is happening", and that is exactly it: the plan renders, the
+  // button is enabled, and pressing it makes no request, shows no message and
+  // changes nothing on screen. Measured on a stubbed planner - 0 POSTs to
+  // /newsdesk/write. The same leak in write() then killed Place these.
+  //
+  // It is the "a control that draws perfectly and does nothing" fault arriving
+  // through a guard flag rather than through a listener - and it is worse than
+  // the listener kind, because the FIRST press of each button works and only
+  // the second stage is dead, so it looks like the AI failing rather than the
+  // panel.
+  //
+  // Restoring a button `render()` has already replaced is a no-op: the
+  // `isConnected` check below is what makes releasing in `finally` safe on the
+  // success path as well as the failure one.
   function working(id, label) {
     const button = panel.querySelector(id);
     if (button) { button.disabled = true; button.dataset.was = button.textContent; button.textContent = label; }
@@ -454,6 +476,7 @@ export function openNewsdeskPanel({ newspaperId, byPage, blocks, place, commissi
       render("plan");
     } catch (error) {
       say(error.message);
+    } finally {
       done();
     }
   }
@@ -474,6 +497,7 @@ export function openNewsdeskPanel({ newspaperId, byPage, blocks, place, commissi
       render("copy");
     } catch (error) {
       say(error.message);
+    } finally {
       done();
     }
   }
@@ -489,6 +513,7 @@ export function openNewsdeskPanel({ newspaperId, byPage, blocks, place, commissi
       await onDone?.();
     } catch (error) {
       say(error.message);
+    } finally {
       done();
     }
   }

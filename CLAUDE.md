@@ -6733,6 +6733,114 @@ running a test. It holds the run end to end — 16 written of 31, all 16 placed,
 15 kept and named, and writing those again costing one call each with no second
 plan call.
 
+### An ask that is per story by nature may not be set for the whole run
+
+The desk's report: *"even after I said to you every news in it should have
+checkboxes you didn't apply it — if I apply chart of its figures then it will
+going have all news with chart which is wrong totally."*
+
+**The per-story controls existed, worked, and were tested.** What the report
+names is a control one screen EARLIER. The brief carried the same four asks as
+a run-wide default, and it is the one a desk meets first — before the plan
+exists, before the thirty-one stories are known. Measured on a 31-story run:
+one press there came back as **31 of 31 rows carrying a chart**, and the only
+way back was to un-tick thirty of them by hand.
+
+So the fault was never in the per-row controls. It was that **the same decision
+had two homes, and the one you reach first is applied blind.**
+
+The split is by what the setting IS, not by what is convenient:
+
+| | | |
+|---|---|---|
+| a headline, a subheading | a paper-wide **norm** | stays on the brief — asking per story would be thirty-one presses to say the ordinary thing |
+| a chart, thinking it through | **per story by nature** | gone from the brief entirely — exactly one story that morning has figures worth plotting, and a rung more thinking is bought for the lead, not the fillers |
+
+Both still exist in `run.asks` as `false`, so `asksFor()` is unchanged and
+`writer.js`'s own per-story resolution is untouched. **No server change.**
+
+**Applying to every story is not the fault; applying it BLIND is.** So All/None
+is still offered — on the **plan**, where the desk can see the rows it affects
+and un-tick any of them afterwards. `setAllAsks()` writes one entry per row
+into `asksByRow` rather than moving `run.asks`, so that map stays the single
+authority on what a story was asked for and there is no third state to drift.
+
+### And a plan is REVIEWED, page by page
+
+The list was flat — **3848 px in a 1066 px panel**, three and a half screens
+with nothing saying where one page ended and the next began, on the screen
+whose whole job is to be read before thirty-one calls are spent. The brief
+above it has grouped by page since it was written; a paper is made up that way.
+
+- **The strip counts what is asked for**, over the rows being kept, so dropping
+  a story changes what the desk is quoted. Every number is derived through
+  `asksFor()` — never a second copy.
+- **The cost line names what is DEARER.** A rung more thinking and a chart are
+  the two asks that change what a story costs, and a desk about to spend should
+  not have to count checkboxes down three screens to see how many they asked
+  for.
+
+**What was measured and left alone:** toggling a row's chart re-renders the
+plan, and the scroll position survives it — **0 px lost** at row 29 of 31,
+because the panel element itself persists. There was no fault there to fix.
+
+### A review you cannot read is not a review
+
+The copy stage carried the headline, a fill percentage and nothing else, under
+a line reading *"the desk must check every fact before any of this is
+printed"* — so the panel demanded a check it gave nobody the means to make.
+The deck and the story were already in `result.proposal`; they had simply never
+been drawn. They are a collapsed `Read it` now, because sixteen open stories is
+a wall of type and the fill figure beside the headline is what a desk scans
+first.
+
+**And a review has to be actable.** Accept took every written row, so a desk
+who read one and disliked it had no way to keep it out. *Leave out* uses the
+same `dropped` set the plan does — it is the same fact about the same block —
+and a story left out is a **decision, not a failure**: it is not placed, and it
+does not come back in "still to do" as though something had gone wrong with it.
+
+**Two CSS faults only the screenshot showed**, both invisible to the DOM
+measurements that reported no overflow: the review strip fitted three columns
+at `minmax(190px)` so the All/None buttons wrapped under their labels and the
+four rows did not line up; and `.ai-proposal-warn` carries no horizontal
+padding, so the one line on that panel that must be READ began 12 px left of
+everything above it.
+
+**A net addresses a row by its BLOCK, never by its position.** The net indexed
+into `.newsdesk-ask-row` and compared against `stories[n]`, which held only
+while the list was flat and in the planner's own order. Grouping by page
+reorders the DOM — page one's stories come first whatever their place in the
+plan — and the net failed on a row it had itself moved. Both sides key on the
+section key now, so the assertion survives any ordering the review chooses.
+
+#### A tick must survive a re-render of the stage it is on
+
+Caught before it shipped, by asking what *else* reads the copy stage — and it
+would have been the worst kind of fault, because nothing visible goes wrong.
+
+The photograph and cut-out checkboxes were read **off the live DOM** at accept
+time (`panel.querySelector('[data-pic-row=…]').checked`). That was correct
+while nothing on that stage could re-render it. Adding *Leave out* re-renders
+it — so a desk who ticked eight photographs and then left one story out would
+have had **all eight ticks silently reset**, and found out only when the
+edition came up with no pictures in it.
+
+They live in `run.pictures`, keyed by block exactly as `asksByRow` is. It is
+the rule `bindBrief`'s own comment already states: *a value held in a detached
+node is a value lost* — and this is the third place in this panel to learn it.
+
+**The net now ticks a photograph before it drops a row**, so the survival is
+held rather than hoped for. Doing that made the run fetch the picture for real
+and the SSRF guard correctly answered **400** on the stub's deliberately
+unreachable host — which is the guard working, not a fault, so the picture
+routes are stubbed like every other endpoint in that net and the fetch and the
+cut-out are now each asserted to happen exactly once.
+
+```bash
+node tests/browser/newsdesk-run.browser.js            # 43/43
+```
+
 ## Engineering rules
 
 - **The overflow diagnosis started from desk-selected baseline `52c9556`.** Fix

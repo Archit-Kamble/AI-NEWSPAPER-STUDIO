@@ -8316,6 +8316,61 @@ button.is-busy:disabled,
 }
 .newsdesk-ask-row select { font-size: .78rem; padding: 2px 4px; }
 
+/* THE SHAPE OF THE RUN, read before a single call is spent. Four counts and an
+   All/None beside each: applying to every story is not the fault, applying it
+   BLIND is - which is why this is here, on the plan, and not on the brief
+   where the rows it affects do not exist yet. */
+.newsdesk-review {
+  display: grid;
+  /* Wide enough that the longest label and its All/None stay on one line.
+     At 190px it fitted three columns and the buttons wrapped underneath, so
+     the four rows of the strip did not line up with one another. */
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--s2) var(--s3);
+  margin: var(--s3) var(--s3) 0;
+  padding: var(--s3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.newsdesk-review legend { font-size: .82rem; font-weight: 600; padding: 0 4px; }
+.newsdesk-review > p { grid-column: 1 / -1; margin: 0; }
+.newsdesk-review-col {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  font-size: .78rem;
+}
+.newsdesk-review-count { font-variant-numeric: tabular-nums; }
+.newsdesk-review-count strong { font-size: .95rem; }
+.newsdesk-review-label { color: #555; white-space: nowrap; }
+.newsdesk-review-set { display: inline-flex; gap: 4px; margin-inline-start: auto; white-space: nowrap; }
+.newsdesk-review-set .ext-editor-btn { font-size: .72rem; padding: 1px 6px; }
+
+/* A paper is reviewed page by page, because that is how it is made up. The
+   rows carry their own padding, so the section supplies only the heading. */
+.newsdesk-plan-page { padding-inline: 0; }
+.newsdesk-plan-page h4 { padding-inline: var(--s3); }
+
+/* THE COPY STAGE. Six children on a four-column grid, so the story and the
+   photograph take a row of their own underneath the line a desk scans. */
+.newsdesk-panel > .ai-proposal-warn { padding: var(--s2) var(--s3); margin: 0; }
+.newsdesk-panel .bulk-row { align-items: start; }
+.newsdesk-panel .bulk-row .newsdesk-read,
+.newsdesk-panel .bulk-row .newsdesk-pic,
+.newsdesk-panel .bulk-row .newsdesk-nopic { grid-column: 1 / -1; }
+/* Left out, not lost - the desk can put it back, so the row stays where it
+   was rather than vanishing. The same ink the plan's dropped rows use. */
+.bulk-row.is-dropped { opacity: 0.42; }
+.newsdesk-copy-drop { font-size: .72rem; padding: 1px 6px; white-space: nowrap; }
+
+/* Collapsed, because sixteen open stories is a wall of type - but the panel
+   asks the desk to check every fact, and a review it cannot read is not one. */
+.newsdesk-read { grid-column: 1 / -1; margin-block-start: 2px; }
+.newsdesk-read > summary { cursor: pointer; font-size: .76rem; color: #555; }
+.newsdesk-read p { margin: 6px 0 0; font-size: .8rem; line-height: 1.5; max-width: 62ch; }
+.newsdesk-read .newsdesk-read-deck { font-weight: 600; color: #333; }
+
 /* THE STORY'S OWN PHOTOGRAPH, offered beside the copy it belongs to. Off until
    a person ticks it: where a picture sits decides how the copy sets around it,
    and whose picture it is decides whether the paper may print it at all. */

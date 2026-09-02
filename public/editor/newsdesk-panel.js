@@ -52,6 +52,13 @@ function newRun({ newspaperId, byPage, blocks, place }) {
     // The stories actually sent to be written, so a block whose provider had a
     // bad minute can be sent again without paying for a second research pass.
     sent: [],
+    // WHICH STORIES ARE TO CARRY THEIR PHOTOGRAPH, and which of those are to
+    // have its background cut out. Keyed by `rowKey`, exactly as `asksByRow`
+    // is, and for the same reason: these used to be read off the live
+    // checkboxes at accept time, so any re-render of the copy stage silently
+    // wiped every tick the desk had made. A value held in a detached node is a
+    // value lost - the rule bindBrief's own comment states.
+    pictures: new Map(),
     // Placed into the paper so far, across however many passes it took, and
     // the rows still outstanding.
     placed: 0,
@@ -109,6 +116,34 @@ function wantRow(pageIndex, wantIndex, want, free) {
   </li>`;
 }
 
+// WHAT THE BRIEF MAY ASK FOR, AND WHAT IT MAY NOT.
+//
+// This fieldset used to carry four checkboxes: a headline, a subheading,
+// think-it-through, and a chart of its figures. The desk's report was that
+// ticking the chart "will going have all news with chart which is wrong
+// totally", and it was exactly right - measured on a 31-story run, one press
+// here came back as 31 of 31 rows carrying a chart.
+//
+// The per-story controls on the plan were already built and already worked.
+// They could not help, because THIS control is the one a desk meets first -
+// before the plan exists, before the 31 stories are known - so it is applied
+// blind and the only way back is to un-tick thirty of them by hand.
+//
+// The split is by what the setting IS, not by where it is convenient:
+//
+//   a headline, a subheading   a paper-wide NORM. Every story gets a headline;
+//                              asking per story would be thirty-one presses to
+//                              say the ordinary thing. It stays here.
+//   a chart, thinking it through
+//                              per story BY NATURE - exactly one story that
+//                              morning has figures worth plotting, and a rung
+//                              more thinking is bought for the lead, not for
+//                              the fillers. Gone from here entirely.
+//
+// Both still exist in `run.asks` as false, so `asksFor` is unchanged and the
+// server's own defaults are untouched. Applying to every story is not the
+// fault and is still offered - on the PLAN, where the desk can see the rows it
+// is about to affect and un-tick any of them.
 function briefMarkup(run) {
   const freshness = DESK_FRESHNESS
     .map((w) => `<option value="${w.key}"${w.key === run.brief.freshness ? " selected" : ""}>${escapeHtml(w.name)}</option>`)
@@ -177,22 +212,13 @@ function briefMarkup(run) {
       </label>
       <p class="muted">Chasing: <strong>${escapeHtml(placeQuery(run.place) || "nowhere in particular")}</strong></p>
     </fieldset>
-    <!-- THE SAME THINGS A SINGLE BLOCK CAN BE ASKED FOR. "Write empty blocks"
-         is the most powerful button in this product - one run makes up a whole
-         paper - and it could ask for less than the panel that writes one
-         block. Every option here ends in the same storyWriter.write(). -->
     <fieldset class="newsdesk-asks">
-      <legend>What each story gets by default</legend>
-      <p class="muted">You can change any of these on a story of its own, once the plan comes back.</p>
+      <legend>What every story gets</legend>
+      <p class="muted">The paper's own norm. Either can be turned off on a story of its own once the plan comes back.</p>
       <label class="toggle"><input type="checkbox" id="newsdeskHeadline" checked> A headline</label>
       <label class="toggle"><input type="checkbox" id="newsdeskSubheading" checked> A subheading</label>
-      <label class="toggle"><input type="checkbox" id="newsdeskReason"> Think it through first</label>
-      <label class="toggle"><input type="checkbox" id="newsdeskChart"> Chart of its figures</label>
-      <select id="newsdeskChartType" aria-label="Which chart">
-        <option value="bar">Bars</option><option value="pie">Pie</option>
-        <option value="line">Line</option><option value="dots">Dots</option>
-        <option value="stat">Figures</option>
-      </select>
+      <p class="muted ext-note">A chart and thinking-it-through are asked for <strong>on the story</strong>,
+         on the plan — they are not things a whole paper wants.</p>
     </fieldset>
     ${pages}
     <p class="muted ext-note"><strong>Required</strong> means leave the block empty rather than fill it
@@ -272,6 +298,78 @@ function askRow(story, asks) {
 
 const rowKey = (story) => `${story.page}/${story.sectionKey}`;
 
+// THE SHAPE OF THE RUN, BEFORE A CALL IS SPENT.
+//
+// Counted over the rows the paper is actually keeping, so dropping a story
+// changes what the desk is quoted. Every number here is derived from
+// `asksByRow` through `asksFor` - there is no second copy of what a story was
+// asked for, and there must not be.
+function askSummary(run) {
+  const kept = run.plan.stories.filter((story) => !run.dropped.has(rowKey(story)));
+  const count = (field, on) => kept.filter((story) => on(asksFor(run, story)[field])).length;
+  return {
+    total: kept.length,
+    writeHeadline: count("writeHeadline", (v) => v !== false),
+    writeSubheading: count("writeSubheading", (v) => v !== false),
+    reason: count("reason", (v) => v === true),
+    writeChart: count("writeChart", (v) => v === true),
+  };
+}
+
+// APPLYING TO EVERY STORY IS NOT THE FAULT; APPLYING BLIND IS.
+//
+// So this lives on the plan and not on the brief: here the desk can see the
+// thirty-one rows it affects and un-tick any of them afterwards, which is the
+// whole difference from the control this replaces.
+//
+// It writes one entry PER ROW rather than moving `run.asks`, so `asksByRow`
+// stays the single authority on what a story was asked for. A dropped row is
+// left alone - "all" means all the stories the paper is printing.
+function setAllAsks(run, field, value) {
+  for (const story of run.plan.stories) {
+    const key = rowKey(story);
+    if (run.dropped.has(key)) continue;
+    run.asksByRow.set(key, { ...(run.asksByRow.get(key) || {}), [field]: value });
+  }
+}
+
+function reviewMarkup(run) {
+  const summary = askSummary(run);
+  const column = (field, label, count) => `<div class="newsdesk-review-col">
+      <span class="newsdesk-review-count"><strong>${count}</strong> of ${summary.total}</span>
+      <span class="newsdesk-review-label">${label}</span>
+      <span class="newsdesk-review-set">
+        <button type="button" class="ext-editor-btn" data-ask-all="${field}" data-ask-value="1">All</button>
+        <button type="button" class="ext-editor-btn" data-ask-all="${field}" data-ask-value="0">None</button>
+      </span>
+    </div>`;
+  return `<fieldset class="newsdesk-review">
+    <legend>What each story is asked for</legend>
+    ${column("writeHeadline", "a headline", summary.writeHeadline)}
+    ${column("writeSubheading", "a subheading", summary.writeSubheading)}
+    ${column("reason", "thought through first", summary.reason)}
+    ${column("writeChart", "a chart of its figures", summary.writeChart)}
+    <p class="muted ext-note">These set every story the paper is keeping. Each one can still be
+       changed on its own row below.</p>
+  </fieldset>`;
+}
+
+// A PAPER IS REVIEWED PAGE BY PAGE, because that is how it is made up.
+//
+// The list was flat and 3848px long in a 1066px panel - three and a half
+// screens with nothing saying where one page ended and the next began, on the
+// screen whose whole job is to be read before thirty-one calls are spent. The
+// brief above it has grouped by page since it was written.
+function planPages(run) {
+  const groups = new Map();
+  for (const story of run.plan.stories) {
+    const page = Number(story.page);
+    if (!groups.has(page)) groups.set(page, []);
+    groups.get(page).push(story);
+  }
+  return [...groups.entries()].sort((a, b) => a[0] - b[0]);
+}
+
 function planMarkup(run) {
   const plan = run.plan;
   const keeping = plan.stories.filter((s) => !run.dropped.has(rowKey(s)));
@@ -291,17 +389,41 @@ function planMarkup(run) {
         sources before the paper prints.</p>`
     : "";
 
+  const grouped = planPages(run);
+  const pageSections = grouped.map(([page, stories]) => {
+    const on = stories.filter((story) => !run.dropped.has(rowKey(story))).length;
+    const note = on === stories.length
+      ? `${on} stor${on === 1 ? "y" : "ies"}`
+      : `${on} of ${stories.length} — ${stories.length - on} dropped`;
+    return `<section class="newsdesk-page newsdesk-plan-page">
+      <h4>Page ${page} <span class="muted">${note}</span></h4>
+      <ul class="newsdesk-plan">${stories.map((story) => planRow(story, run.dropped, asksFor(run, story))).join("")}</ul>
+    </section>`;
+  }).join("");
+
+  // The two asks that change what a story COSTS are named in the cost line.
+  // A rung more thinking and a chart are the reasons one run is dearer than
+  // another, and a desk about to spend should not have to count checkboxes
+  // down three screens to see how many it has asked for.
+  const summary = askSummary(run);
+  const dearer = [];
+  if (summary.reason) dearer.push(`${summary.reason} thought through first`);
+  if (summary.writeChart) dearer.push(`${summary.writeChart} with a chart`);
+  const costExtras = dearer.length ? ` · ${dearer.join(", ")}` : "";
+
   return `
     <p class="worklist-summary">Found ${plan.retrieval.candidates} stories from
        ${plan.retrieval.feedsFetched} feeds, grouped into ${plan.stories.length} for
-       ${plan.blocksOffered} empty blocks. <strong>Nothing is written yet.</strong></p>
+       ${plan.blocksOffered} empty blocks, across ${grouped.length} page${grouped.length === 1 ? "" : "s"}.
+       <strong>Nothing is written yet.</strong></p>
     ${verifyNote}
-    <ul class="newsdesk-plan">${plan.stories.map((s) => planRow(s, run.dropped, asksFor(run, s))).join("")}</ul>
+    ${reviewMarkup(run)}
+    ${pageSections}
     ${emptyNote}
     <div class="newsdesk-actions">
       <button type="button" class="ext-editor-btn" id="newsdeskBack">Change the brief</button>
       <button type="button" class="ext-editor-btn ext-editor-btn-primary" id="newsdeskWrite"${keeping.length ? "" : " disabled"}>Write ${keeping.length} stor${keeping.length === 1 ? "y" : "ies"}</button>
-      <span class="muted">${keeping.length} call${keeping.length === 1 ? "" : "s"}, four at a time.</span>
+      <span class="muted">${keeping.length} call${keeping.length === 1 ? "" : "s"}, four at a time${costExtras}.</span>
     </div>`;
 }
 
@@ -331,22 +453,46 @@ function pictureOf(result) {
   return { url: source.imageUrl, publisher: source.publisher || source.publisherDomain || 'the source' };
 }
 
-function pictureOffer(result) {
+function pictureOffer(result, chosen) {
   const picture = pictureOf(result);
-  const key = `${result.page}/${result.sectionKey}`;
+  const key = rowKey(result);
   if (!picture) {
     return `<span class="muted newsdesk-nopic">No photograph came with this story.</span>`;
   }
+  const want = chosen.get(key) || {};
   return `<div class="newsdesk-pic">
-    <label class="toggle"><input type="checkbox" data-pic-row="${escapeHtml(key)}"> With its photograph</label>
+    <label class="toggle"><input type="checkbox" data-pic-row="${escapeHtml(key)}"${want.want ? " checked" : ""}> With its photograph</label>
     <span class="muted">from ${escapeHtml(picture.publisher)}</span>
     <a href="${escapeHtml(picture.url)}" target="_blank" rel="noopener noreferrer">see it</a>
-    <label class="toggle"><input type="checkbox" data-cut-row="${escapeHtml(key)}"> Cut the background out</label>
+    <label class="toggle"><input type="checkbox" data-cut-row="${escapeHtml(key)}"${want.cut ? " checked" : ""}> Cut the background out</label>
     <span class="muted newsdesk-cut-note">Suits a portrait; a scene is better left whole.</span>
   </div>`;
 }
 
-function copyRow(result) {
+// A REVIEW YOU CANNOT READ IS NOT A REVIEW.
+//
+// This row carried the headline, the fill percentage and nothing else, under a
+// line reading "the desk must check every fact before any of this is printed"
+// - so the panel demanded a check it gave nobody the means to make. The deck
+// and the story are already in `result.proposal`; they had simply never been
+// drawn.
+//
+// Collapsed, because sixteen open stories is a wall of type and the fill
+// figure beside the headline is what a desk scans first. Paragraphs are split
+// on the authored blank lines, exactly as the compositor reads them.
+function readMarkup(proposal) {
+  const paragraphs = String(proposal?.body || "")
+    .split(/\n{2,}/)
+    .map((one) => one.trim())
+    .filter(Boolean);
+  if (!paragraphs.length && !proposal?.subheading) return "";
+  return `<details class="newsdesk-read"><summary>Read it</summary>
+    ${proposal.subheading ? `<p class="newsdesk-read-deck">${escapeHtml(proposal.subheading)}</p>` : ""}
+    ${paragraphs.map((one) => `<p>${escapeHtml(one)}</p>`).join("")}
+  </details>`;
+}
+
+function copyRow(result, dropped, chosen) {
   if (!result || result.error) {
     return `<li class="bulk-row is-error"><strong>p${result?.page}/${escapeHtml(result?.sectionKey || "?")}</strong>
       <span class="muted">${escapeHtml(result?.error || "The AI did not answer.")}</span></li>`;
@@ -358,24 +504,37 @@ function copyRow(result) {
   const ratio = fit.fill?.ratio;
   const pct = Number.isFinite(ratio) ? `${Math.round(ratio * 100)}% set` : "";
   const state = fit.acceptable ? "fits" : (fit.overflowing ? "runs over" : "short of the foot");
-  return `<li class="bulk-row">
+  const key = rowKey(result);
+  const off = dropped.has(key);
+  return `<li class="bulk-row${off ? " is-dropped" : ""}">
     <strong>p${result.page}/${escapeHtml(result.sectionKey)}</strong>
     <span class="bulk-headline">${escapeHtml(result.proposal.headline)}</span>
     <span class="muted">${pct} — ${state}${result.retrieval?.status === "unverified" ? " · ⚠ unchecked sources" : ""}</span>
-    ${pictureOffer(result)}
+    <button type="button" class="ext-editor-btn newsdesk-copy-drop" data-copy-drop="${escapeHtml(key)}">${off ? "Put back" : "Leave out"}</button>
+    ${readMarkup(result.proposal)}
+    ${pictureOffer(result, chosen)}
   </li>`;
 }
 
+// A story the desk has READ and decided against is not a failure and is not
+// unfinished business - it is a decision. So it leaves by the same `dropped`
+// set the plan uses (it is the same fact about the same block), it is not
+// counted into what Accept places, and it does not reappear in "still to do"
+// as though something had gone wrong with it.
 function copyMarkup(run) {
   const batch = run.batch;
+  const taking = batch.results.filter((row) => row && !row.error && !run.dropped.has(rowKey(row))).length;
+  const left = batch.written - taking;
   return `
     <p class="worklist-summary">Written ${batch.written} of ${batch.written + batch.failed}.
        <strong>Nothing has been saved yet.</strong> Accepting puts each story into its own block
        marked <em>needs review</em>, and leaves the block's design, pictures and treatment alone.</p>
-    <ul class="bulk-list">${batch.results.map(copyRow).join("")}</ul>
-    <p class="ai-proposal-warn">The desk must check every fact before any of this is printed.</p>
+    <p class="ai-proposal-warn">Read each one before you accept it. The desk must check every fact
+       before any of this is printed — nothing here has been verified by this software.</p>
+    <ul class="bulk-list">${batch.results.map((row) => copyRow(row, run.dropped, run.pictures)).join("")}</ul>
     <div class="newsdesk-actions">
-      <button type="button" class="ext-editor-btn ext-editor-btn-primary" id="newsdeskAccept"${batch.written ? "" : " disabled"}>Accept ${batch.written} into the paper</button>
+      <button type="button" class="ext-editor-btn ext-editor-btn-primary" id="newsdeskAccept"${taking ? "" : " disabled"}>Accept ${taking} into the paper</button>
+      ${left ? `<span class="muted">${left} left out.</span>` : ""}
     </div>`;
 }
 
@@ -490,9 +649,6 @@ export function openNewsdeskPanel({ newspaperId, byPage, blocks, place, commissi
     });
     ask("#newsdeskHeadline", "writeHeadline");
     ask("#newsdeskSubheading", "writeSubheading");
-    ask("#newsdeskReason", "reason");
-    ask("#newsdeskChart", "writeChart");
-    ask("#newsdeskChartType", "chartType");
     panel.querySelectorAll("[data-want-tag]").forEach((select) => select.addEventListener("change", (event) => {
       const [p, w] = event.target.dataset.wantTag.split(":").map(Number);
       run.brief.pages[p].wants[w].tagKey = event.target.value;
@@ -543,6 +699,13 @@ export function openNewsdeskPanel({ newspaperId, byPage, blocks, place, commissi
         if (field === "writeChart") render("plan");
       });
     });
+    // ALL / NONE for one ask, over every story the paper is keeping. It
+    // re-renders because every count in the strip above has just moved.
+    panel.querySelectorAll("[data-ask-all]").forEach((button) => button.addEventListener("click", (event) => {
+      const field = event.currentTarget.dataset.askAll;
+      setAllAsks(run, field, event.currentTarget.dataset.askValue === "1");
+      render("plan");
+    }));
     panel.querySelectorAll("[data-plan-drop]").forEach((button) => button.addEventListener("click", (event) => {
       const key = event.currentTarget.dataset.planDrop;
       if (run.dropped.has(key)) run.dropped.delete(key); else run.dropped.add(key);
@@ -553,6 +716,19 @@ export function openNewsdeskPanel({ newspaperId, byPage, blocks, place, commissi
   }
 
   function bindCopy() {
+    const tick = (attribute, field) => panel.querySelectorAll(`[${attribute}]`).forEach((box) => {
+      box.addEventListener("change", (event) => {
+        const key = event.currentTarget.getAttribute(attribute);
+        run.pictures.set(key, { ...(run.pictures.get(key) || {}), [field]: event.currentTarget.checked });
+      });
+    });
+    tick("data-pic-row", "want");
+    tick("data-cut-row", "cut");
+    panel.querySelectorAll("[data-copy-drop]").forEach((button) => button.addEventListener("click", (event) => {
+      const key = event.currentTarget.dataset.copyDrop;
+      if (run.dropped.has(key)) run.dropped.delete(key); else run.dropped.add(key);
+      render("copy");
+    }));
     panel.querySelector("#newsdeskAccept")?.addEventListener("click", accept);
   }
 
@@ -712,7 +888,8 @@ export function openNewsdeskPanel({ newspaperId, byPage, blocks, place, commissi
     if (busy) return;
     const done = working("#newsdeskAccept", "Placing…");
     try {
-      const stories = run.batch.results.filter((r) => r && !r.error);
+      // A story the desk read and left out is neither placed nor outstanding.
+      const stories = run.batch.results.filter((r) => r && !r.error && !run.dropped.has(rowKey(r)));
       const result = await post(`/api/newspapers/${run.newspaperId}/newsdesk/accept`, { stories });
       const refused = new Set((result.refused || []).map((row) => row.sectionKey));
       // THE PHOTOGRAPHS, AFTER THE COPY AND ONLY WHERE THE DESK ASKED.
@@ -727,20 +904,28 @@ export function openNewsdeskPanel({ newspaperId, byPage, blocks, place, commissi
       // What is still outstanding: a block the writer never answered for, and
       // a block the server would not take. Both are recoverable and both keep
       // their own story, so both can be written again.
-      const left = run.batch.results.filter((row) => !row || row.error || refused.has(row.sectionKey));
+      const left = run.batch.results.filter((row) => !row
+        || ((row.error || refused.has(row.sectionKey)) && !run.dropped.has(rowKey(row))));
       run.placed = (run.placed || 0) + result.saved;
       await onDone?.();
       const picLine = pictures.asked
         ? ` ${pictures.placed} photograph${pictures.placed === 1 ? "" : "s"} placed${pictures.failed ? `, ${pictures.failed} refused` : ""}.`
         : "";
+      // What the desk deliberately left out is said too. It is not a failure
+      // and does not belong in "still to do", but a run that silently drops
+      // three stories the desk read and refused is a run that did something
+      // nobody was told about.
+      const leftOut = run.batch.results
+        .filter((row) => row && !row.error && run.dropped.has(rowKey(row))).length;
+      const outLine = leftOut ? ` ${leftOut} left out.` : "";
       if (!left.length) {
-        say(`${result.saved} block${result.saved === 1 ? "" : "s"} placed, marked needs review.${picLine}`);
+        say(`${result.saved} block${result.saved === 1 ? "" : "s"} placed, marked needs review.${picLine}${outLine}`);
         panel.remove();
         return;
       }
       run.leftOver = left;
       render("left");
-      say(`${result.saved} placed.${picLine} ${left.length} still to do — they are still on this panel.`);
+      say(`${result.saved} placed.${picLine}${outLine} ${left.length} still to do — they are still on this panel.`);
     } catch (error) {
       say(error.message);
     } finally {
@@ -766,11 +951,9 @@ export function openNewsdeskPanel({ newspaperId, byPage, blocks, place, commissi
   async function placePictures(rows) {
     const wanted = rows
       .map((row) => {
-        const key = `${row.page}/${row.sectionKey}`;
-        const want = panel.querySelector(`[data-pic-row="${CSS.escape(key)}"]`)?.checked;
-        const cut = panel.querySelector(`[data-cut-row="${CSS.escape(key)}"]`)?.checked;
+        const chosen = run.pictures.get(rowKey(row)) || {};
         const picture = pictureOf(row);
-        return want && picture ? { row, picture, cut } : null;
+        return chosen.want && picture ? { row, picture, cut: chosen.cut === true } : null;
       })
       .filter(Boolean);
     if (!wanted.length) return { asked: false, placed: 0, failed: 0, why: [] };

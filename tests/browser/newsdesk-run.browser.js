@@ -94,6 +94,21 @@ const say = (ok, what, detail = '') => {
       body: JSON.stringify({ results, written: results.filter((r) => !r.error).length,
         failed: results.filter((r) => r.error).length }) });
   });
+  // THE PICTURE ROUTES ARE STUBBED TOO, for the same reason the rest are: this
+  // net ticks a photograph to prove the tick survives a re-render, and the
+  // stub's host is deliberately unreachable - the real from-link route refuses
+  // it with a 400, correctly, which is the SSRF guard doing its job and not
+  // something this net is here to measure.
+  let fromLink = 0; let cutouts = 0;
+  await page.route('**/images/from-link', async (route) => {
+    fromLink += 1;
+    await route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify([{ id: 4242, url: '/uploads/zz.png' }]) });
+  });
+  await page.route('**/images/*/cutout', async (route) => {
+    cutouts += 1;
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+  });
   let acceptedRows = 0;
   await page.route('**/newsdesk/accept', async (route) => {
     acceptCalls += 1;
@@ -130,6 +145,23 @@ const say = (ok, what, detail = '') => {
   say(opened, 'the desk can reach the newsdesk run from the workspace');
   await page.waitForTimeout(2500);
   say(await page.locator('.newsdesk-panel').count() === 1, 'and it opens the brief');
+
+  // ---- THE BRIEF MAY NOT CARRY AN ASK THAT IS PER STORY BY NATURE.
+  //
+  // The desk's report was that ticking "chart of its figures" here "will going
+  // have all news with chart which is wrong totally". Measured on this same
+  // 31-story stub before the fix: one press came back as 31 of 31 rows
+  // carrying a chart. The per-story controls existed and worked; they could
+  // not help, because THIS control is the one a desk meets first - before the
+  // plan exists - so it is applied blind and the only way back is to un-tick
+  // thirty of them by hand.
+  const briefAsks = await page.evaluate(() => [...document.querySelectorAll('.newsdesk-asks label.toggle')]
+    .map((l) => l.textContent.trim()));
+  say(briefAsks.length === 2 && /headline/i.test(briefAsks[0]) && /subheading/i.test(briefAsks[1]),
+    'the brief asks only for the paper-wide NORMS — a headline and a subheading', briefAsks.join(' | '));
+  say(await page.locator('#newsdeskChart').count() === 0
+    && await page.locator('#newsdeskReason').count() === 0,
+    'a chart and thinking-it-through cannot be set for the whole run at all');
 
   // ---- 1. THE BRIEF -> THE PLAN
   await page.locator('#newsdeskResearch').click();
@@ -180,12 +212,52 @@ const say = (ok, what, detail = '') => {
     'named in words, never initials — a desk should not have to learn that H means headline',
     words.join(' | '));
 
-  await page.locator('.newsdesk-ask-row').nth(1).locator('[data-ask="writeSubheading"]').uncheck();
-  await page.locator('.newsdesk-ask-row').nth(0).locator('[data-ask="writeChart"]').check();
+  // ---- A PAPER IS REVIEWED PAGE BY PAGE, because that is how it is made up.
+  // The list was flat and 3848px long in a 1066px panel with nothing saying
+  // where one page ended and the next began.
+  const pageHeads = await page.locator('.newsdesk-plan-page').count();
+  say(pageHeads === 4, 'the plan is grouped by page, like the brief above it', `${pageHeads} pages`);
+
+  // ---- APPLYING TO EVERY STORY IS NOT THE FAULT; APPLYING BLIND IS. So the
+  // All/None lives HERE, where the desk can see the rows it affects and
+  // un-tick any of them afterwards.
+  const chartsOn = () => page.evaluate(() => [...document.querySelectorAll('.newsdesk-plan-row')]
+    .filter((r) => r.querySelector('[data-ask="writeChart"]')?.checked).length);
+  say(await chartsOn() === 0, 'no story starts with a chart', `${await chartsOn()} of ${STORIES}`);
+  await page.locator('[data-ask-all="writeChart"][data-ask-value="1"]').first().click();
+  await page.waitForTimeout(400);
+  say(await chartsOn() === STORIES, 'All sets every story the paper is keeping', `${await chartsOn()}`);
+  await page.locator('[data-ask-all="writeChart"][data-ask-value="0"]').first().click();
+  await page.waitForTimeout(400);
+  say(await chartsOn() === 0, 'and None clears them again', `${await chartsOn()}`);
+  const counts = await page.evaluate(() => [...document.querySelectorAll('.newsdesk-review-col')]
+    .map((c) => c.textContent.replace(/\s+/g, ' ').trim()));
+  say(counts.length === 4 && counts[0].startsWith(`${STORIES} of ${STORIES}`),
+    'and the strip counts what is asked for, over the rows being kept', counts.join(' / '));
+
+  // A ROW IS ADDRESSED BY ITS BLOCK, NEVER BY ITS POSITION.
+  //
+  // These checks used to index into `.newsdesk-ask-row` and compare against
+  // `stories[n]`, which held only while the list was flat and in the planner's
+  // own order. Grouping the plan by page reorders the DOM - p1's stories come
+  // first, whatever their place in the plan - and the net failed on a row it
+  // had itself moved. A block is identified by its key on both sides now, so
+  // the assertion survives any ordering the review chooses.
+  const NO_DECK = 'zz-block-7';
+  const WANTS_CHART = 'zz-block-0';
+  const NO_CHART = 'zz-block-2';
+  const askRow = (key) => page.locator(`.newsdesk-ask-row:has([data-ask-row="1/${key}"]), .newsdesk-ask-row:has([data-ask-row="2/${key}"]), .newsdesk-ask-row:has([data-ask-row="3/${key}"]), .newsdesk-ask-row:has([data-ask-row="4/${key}"])`);
+  await askRow(NO_DECK).locator('[data-ask="writeSubheading"]').uncheck();
+  await askRow(WANTS_CHART).locator('[data-ask="writeChart"]').check();
   await page.waitForTimeout(800);
-  say(await page.locator('.newsdesk-ask-row').nth(0).locator('[data-ask="chartType"]').count() === 1
-    && await page.locator('.newsdesk-ask-row').nth(1).locator('[data-ask="chartType"]').count() === 0,
+  say(await askRow(WANTS_CHART).locator('[data-ask="chartType"]').count() === 1
+    && await askRow(NO_CHART).locator('[data-ask="chartType"]').count() === 0,
     'asking for a chart reveals WHICH chart, on that row alone');
+
+  // The two asks that change what a story COSTS are named where the desk is
+  // about to spend, not counted by hand down three screens of checkboxes.
+  const cost = await page.evaluate(() => document.querySelector('.newsdesk-actions .muted')?.textContent.trim());
+  say(/1 with a chart/.test(cost || ''), 'the cost line names the one story asked for a chart', cost);
 
   // ---- 2. THE PLAN -> THE COPY. This is the press that did nothing.
   await page.locator('#newsdeskWrite').click();
@@ -195,11 +267,15 @@ const say = (ok, what, detail = '') => {
     `${writeCalls} POST(s) to /newsdesk/write`);
   say(wroteBody && Array.isArray(wroteBody.stories) && wroteBody.stories.length === STORIES,
     'and it sends the stories the desk kept', `${wroteBody && wroteBody.stories && wroteBody.stories.length} stories`);
-  const asks = (wroteBody.stories || []).map((row) => row.asks || {});
-  say(asks[1] && asks[1].writeSubheading === false && asks[0] && asks[0].writeSubheading === true,
-    'the deck is off on the ONE row the desk turned it off on, and on everywhere else');
-  say(asks[0] && asks[0].writeChart === true && asks[2] && asks[2].writeChart === false,
-    'and the chart is on the ONE row that asked for it');
+  const asksOf = (key) => (wroteBody.stories || []).find((row) => row.sectionKey === key)?.asks || {};
+  const decksOff = (wroteBody.stories || []).filter((row) => row.asks?.writeSubheading === false).length;
+  say(asksOf(NO_DECK).writeSubheading === false && asksOf(WANTS_CHART).writeSubheading === true && decksOff === 1,
+    'the deck is off on the ONE row the desk turned it off on, and on everywhere else',
+    `${decksOff} row(s) without a deck`);
+  const chartsAsked = (wroteBody.stories || []).filter((row) => row.asks?.writeChart === true).length;
+  say(asksOf(WANTS_CHART).writeChart === true && asksOf(NO_CHART).writeChart !== true && chartsAsked === 1,
+    'and the chart is on the ONE row that asked for it — never on all thirty-one',
+    `${chartsAsked} of ${STORIES} asked for a chart`);
   const accept = await page.evaluate(() => {
     const b = document.getElementById('newsdeskAccept');
     return b ? { label: b.textContent.trim(), disabled: b.disabled } : null;
@@ -216,12 +292,69 @@ const say = (ok, what, detail = '') => {
   say(await page.locator('[data-cut-row]').count() === 1,
     'with the background cut-out offered beside it, also off');
 
+  // ---- A REVIEW YOU CANNOT READ IS NOT A REVIEW.
+  //
+  // This stage carried the headline, a fill percentage and nothing else, under
+  // a line reading "the desk must check every fact before any of this is
+  // printed" - so the panel demanded a check it gave nobody the means to make.
+  // The deck and the story were already in `proposal`; they had never been
+  // drawn.
+  const readable = await page.locator('.newsdesk-read').count();
+  say(readable > 0, 'every written story can be read before it is accepted', `${readable} readable`);
+  const firstRead = await page.evaluate(() => {
+    const d = document.querySelector('.newsdesk-read');
+    if (!d) return null;
+    d.open = true;
+    return {
+      deck: d.querySelector('.newsdesk-read-deck')?.textContent.trim(),
+      paragraphs: d.querySelectorAll('p:not(.newsdesk-read-deck)').length,
+    };
+  });
+  say(firstRead && firstRead.deck === 'deck' && firstRead.paragraphs > 0,
+    'and it carries the deck and the story, not just the headline', JSON.stringify(firstRead));
+
+  // A TICK MUST SURVIVE A RE-RENDER OF THE STAGE IT IS ON.
+  //
+  // The photograph and cut-out checkboxes were read off the LIVE DOM at accept
+  // time, so adding any control that re-renders the copy stage silently wiped
+  // every tick the desk had made. They live in the run's own state now, keyed
+  // by block like the asks beside them - the rule bindBrief's own comment
+  // states: a value held in a detached node is a value lost.
+  await page.locator('[data-pic-row]').first().check();
+  await page.locator('[data-cut-row]').first().check();
+
+  // A story the desk has READ and decided against is a decision, not a
+  // failure: it is not placed, and it does not come back as unfinished
+  // business either. Put back afterwards so the accept count below is the
+  // one this net has always asserted.
+  const acceptLabel = () => page.evaluate(() => document.getElementById('newsdeskAccept')?.textContent.trim());
+  const acceptBefore = await acceptLabel();
+  await page.locator('[data-copy-drop]').first().click();
+  await page.waitForTimeout(400);
+  const acceptDropped = await acceptLabel();
+  say(acceptBefore === 'Accept 16 into the paper' && acceptDropped === 'Accept 15 into the paper',
+    'leaving one out takes it off the count Accept places', `${acceptBefore} -> ${acceptDropped}`);
+  say(await page.locator('.bulk-row.is-dropped').count() === 1,
+    'and the row stays where it was, so the desk can change its mind');
+  await page.locator('[data-copy-drop]').first().click();
+  await page.waitForTimeout(400);
+  say(await acceptLabel() === acceptBefore, 'and putting it back restores it', await acceptLabel());
+  say(await page.locator('[data-pic-row]').first().isChecked()
+    && await page.locator('[data-cut-row]').first().isChecked(),
+    'and the photograph ticked before all that is STILL ticked — a re-render does not wipe it');
+
   // ---- 3. THE COPY -> THE PAPER. The same leak killed this one too.
   await page.locator('#newsdeskAccept').click();
   await page.waitForTimeout(2500);
   say(acceptCalls === 1,
     'and Accept reaches the server as well — the leak killed this stage too',
     `${acceptCalls} POST(s) to /newsdesk/accept`);
+  // The photograph is fetched AFTER the copy and only where the desk ticked -
+  // a picture on a block whose story the paper refused is a picture of
+  // nothing - and the cut-out is a second, separate act on what was placed.
+  say(fromLink === 1 && cutouts === 1,
+    'the one ticked photograph is fetched, and its background cut out after it',
+    `${fromLink} fetch(es), ${cutouts} cut-out(s)`);
 
   // ---- EVERY WRITTEN STORY IS PLACED, AND THE REST ARE KEPT.
   //

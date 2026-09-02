@@ -8380,3 +8380,58 @@ workspace 224/224, editor-parity 70/70, editor-controls 86/86, device-bar
 65/65, desk-actions 27/27, smart-cards 27/27, visual-pass 46/46, admin-screens
 19/19. The picture path verified end to end against a live TV9 image on a
 throwaway edition, then cleaned up.
+
+## The run's asks, and what a review is — 2 Sept 2026
+
+The desk's report on the fix above: *"even after I said to you every news in it
+should have checkboxes you didn't apply it — if I apply chart of its figures
+then it will going have all news with chart which is wrong totally."*
+
+**The per-row controls were built, worked, and were tested. The report names a
+control one screen earlier.** The brief still carried the same four asks as a
+run-wide default, and it is the one a desk meets first — before the plan
+exists. Measured on a 31-story run: one press there came back as **31 of 31**
+rows carrying a chart, and the only way back was thirty un-ticks by hand.
+
+| | measured before | after |
+|---|---|---|
+| tick Chart on the brief | **31 of 31** rows carry it | the control does not exist there |
+| page groupings on the plan | 0 (flat, **3848 px** in a 1066 px panel) | **4** |
+| bulk controls | 0 | 8, on the plan where the rows are visible |
+| cost line | "31 calls, four at a time" | names the charts and the thought-through |
+| words of copy readable before Accept | **0** | the deck and every paragraph |
+| a written story the desk can refuse | none | *Leave out*, and it is not a failure |
+
+**No server change.** `run.asks` keeps all five fields as before, `asksFor()` is
+untouched, and `writer.js` resolves per story exactly as it did.
+
+**Measured and deliberately left alone:** toggling a row's chart re-renders the
+plan and the scroll position survives it — 0 px lost at row 29 of 31. There was
+no fault there, and it was not "fixed".
+
+**Two CSS faults only a screenshot showed**, both invisible to a DOM overflow
+check that reported none: the review strip fitted three columns at
+`minmax(190px)` so its All/None buttons wrapped under their labels; and
+`.ai-proposal-warn` has no horizontal padding, so the line demanding the desk
+check every fact began 12 px left of everything above it.
+
+**A net addresses a row by its block, never its position.** Grouping the plan
+by page reordered the DOM and the net failed on a row it had itself moved. Both
+sides key on the section key now.
+
+**A regression caught before it shipped, by asking what else reads that stage.**
+The photograph and cut-out ticks were read off the LIVE DOM at accept time —
+correct while nothing there could re-render. *Leave out* re-renders it, so a
+desk who ticked eight photographs and then left one story out would have had
+all eight ticks silently reset, and found out when the edition came up with no
+pictures. They live in `run.pictures` now, keyed by block like the asks beside
+them. Ticking a photograph in the net then made it fetch for real and the SSRF
+guard answered 400 on the stub's unreachable host — the guard working — so the
+picture routes are stubbed like every other endpoint, and the fetch and the
+cut-out are each asserted to happen once.
+
+### Verified
+
+`npm test` 1102/1102. `newsdesk-run` 43/43, desk-actions 27/27, workspace
+224/224. Screenshotted at each of the three stages; no console or page errors,
+nothing overflowing either panel.

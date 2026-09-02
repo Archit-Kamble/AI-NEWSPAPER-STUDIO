@@ -16,12 +16,34 @@ function standardPages() {
   }));
 }
 
+// A DESK-MADE PAGE, because a template no longer ships a standing card.
+//
+// The four purposes this machinery exists to keep apart are STANDING_FEATURE,
+// UTILITY, IMAGE_COMPANION and ADVERT, and until the templates stopped
+// reserving frames for the almanac and the Sudoku, the standard four pages
+// exercised all four for free. They now exercise two, so the other two get a
+// page built the way a desk builds one: Properties -> Standing feature on an
+// ordinary block, which is the only path that reaches them any more.
+function deskFeaturePage() {
+  return {
+    id: 9, page_number: 9, template_key: 'local',
+    sections: [
+      { id: '9:almanac', section_key: 'almanac', z_index: 0, block_type: 'feature',
+        story_type: 'SMART_CARD', feature_key: 'panchang', headline: '', body: '', status: 'empty', images: [] },
+      { id: '9:horoscope', section_key: 'horoscope', z_index: 1, block_type: 'feature',
+        story_type: 'SMART_CARD', feature_key: 'rashi', headline: '', body: '', status: 'empty', images: [] },
+      { id: '9:puzzle', section_key: 'puzzle', z_index: 2, block_type: 'feature',
+        story_type: 'SMART_CARD', feature_key: 'sudoku', headline: '', body: '', status: 'empty', images: [] },
+    ],
+  };
+}
+
 test('every standard four-page frame has one explicit canonical owner', () => {
   const manifest = buildEditionContentManifest(standardPages());
-  assert.equal(manifest.physicalFrameCount, 44);
+  assert.equal(manifest.physicalFrameCount, 42);
   assert.deepEqual(manifest.framePurposeCounts, {
-    EDITORIAL_STORY: 33, IMAGE_COMPANION: 2, STANDING_FEATURE: 4,
-    ADVERT: 4, FIXED_FURNITURE: 0, UTILITY: 1, OPTIONAL_RESERVED: 0,
+    EDITORIAL_STORY: 35, IMAGE_COMPANION: 3, STANDING_FEATURE: 0,
+    ADVERT: 4, FIXED_FURNITURE: 0, UTILITY: 0, OPTIONAL_RESERVED: 0,
   });
   assert.equal(manifest.unknownPurposeCount, 0);
   assert.equal(manifest.ambiguousPurposeCount, 0);
@@ -31,9 +53,15 @@ test('every standard four-page frame has one explicit canonical owner', () => {
 test('editorial demand derives from ownership and includes a DATA article without consuming auxiliaries', () => {
   const pages = standardPages();
   const demand = pages.flatMap((page) => eligibleEditorialFrames(page).map((frame) => `${page.page_number}:${frame.section_key}`));
-  assert.equal(demand.length, 33);
+  assert.equal(demand.length, 35);
   assert.ok(demand.includes('3:feature-three'), 'DATA is an occupant recommendation, not a non-editorial purpose');
-  for (const excluded of ['1:lead-pictures','1:lead-side','1:suvichar','1:dinvishesh','1:panchang','2:rashi','3:sudoku','1:top-advert']) assert.equal(demand.includes(excluded), false, excluded);
+  // A picture companion and an advert are still not editorial demand. The
+  // standing cards are simply not on these pages any more.
+  for (const excluded of ['1:lead-pictures','1:lead-side','3:feature-photo','1:top-advert','1:masthead-advert']) assert.equal(demand.includes(excluded), false, excluded);
+  // And a desk-made feature block is excluded on its purpose, exactly as a
+  // template-declared one used to be.
+  const deskDemand = eligibleEditorialFrames(deskFeaturePage()).map((frame) => frame.section_key);
+  assert.deepEqual(deskDemand, [], 'a block a desk named a standing feature is not editorial demand');
 });
 
 test('purpose is invariant to source IDs and DB order', () => {
@@ -58,14 +86,21 @@ test('an orphan image companion is a blocking configuration state', () => {
 });
 
 test('standing features, utility and adverts keep distinct content truth', () => {
-  const pages = standardPages(); const byKey = new Map(pages.flatMap((page) => page.sections.map((section) => [section.section_key, section])));
-  for (const key of ['rashi','panchang','dinvishesh','suvichar']) {
-    const section = byKey.get(key); section.headline = key; section.body = 'मजकूर'; section.smart_card_key = key; section.smart_card_data = { items: [] }; section.status = 'ready';
+  const pages = standardPages();
+  const desk = deskFeaturePage();
+  for (const key of ['almanac', 'horoscope']) {
+    const section = desk.sections.find((s) => s.section_key === key);
+    section.headline = key; section.body = 'मजकूर';
+    section.smart_card_key = key === 'almanac' ? 'panchang' : 'rashi';
+    section.smart_card_data = { items: [] }; section.status = 'ready';
   }
-  const sudoku = byKey.get('sudoku'); sudoku.smart_card_key = 'sudoku'; sudoku.smart_card_data = { grid: Array.from({ length: 9 }, () => Array(9).fill(0)) }; sudoku.status = 'ready';
+  const sudoku = desk.sections.find((s) => s.section_key === 'puzzle');
+  sudoku.smart_card_key = 'sudoku';
+  sudoku.smart_card_data = { grid: Array.from({ length: 9 }, () => Array(9).fill(0)) };
+  sudoku.status = 'ready';
   for (const page of pages) for (const section of page.sections) if (section.block_type === 'advert') section.headline = 'जाहिरात';
-  const manifest = buildEditionContentManifest(pages);
-  assert.equal(manifest.frames.filter((frame) => frame.purpose === PURPOSE.STANDING_FEATURE && frame.contentState === 'FEATURE_READY').length, 4);
+  const manifest = buildEditionContentManifest([...pages, desk]);
+  assert.equal(manifest.frames.filter((frame) => frame.purpose === PURPOSE.STANDING_FEATURE && frame.contentState === 'FEATURE_READY').length, 2);
   assert.equal(manifest.frames.find((frame) => frame.purpose === PURPOSE.UTILITY).contentState, 'UTILITY_READY');
   assert.equal(manifest.frames.filter((frame) => frame.purpose === PURPOSE.ADVERT && frame.contentState === 'ADVERT_PRESENT').length, 4);
 });

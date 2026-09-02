@@ -135,11 +135,18 @@ async function withFeaturesPage(run) {
       method: 'POST',
       body: JSON.stringify({ name: 'editionFeatures test', publicationDate: '2026-01-15' }),
     });
-    // The default four-page paper deliberately distributes its standing cards:
-    // compact services on the front, horoscope on page two and Sudoku on page
-    // three. Build those three real template pages so fillEdition() is tested
-    // against the production arrangement rather than the retired all-in-one
-    // feature page.
+    // NO TEMPLATE RESERVES A FRAME FOR A STANDING CARD ANY MORE - the desk
+    // asked for the ready-made card boxes to come out, so page one no longer
+    // ships the almanac and page two no longer ships the horoscope. Which
+    // means this helper has to do what a desk now does: build the real pages,
+    // then NAME four ordinary blocks as standing features through the route
+    // Properties uses (`PATCH .../purpose`).
+    //
+    // That is a better fixture than the one it replaces, because it exercises
+    // the path that actually reaches `fillEdition` in production instead of a
+    // template default nobody chooses. The tests below therefore look a block
+    // up by its FEATURE KEY rather than by a section key that happened to be
+    // spelled the same as the feature.
     const page = await desk.json(`/api/newspapers/${newspaper.id}/pages`, {
       method: 'POST',
       body: JSON.stringify({ pageNumber: 1, templateKey: 'front' }),
@@ -152,6 +159,15 @@ async function withFeaturesPage(run) {
       method: 'POST',
       body: JSON.stringify({ pageNumber: 3, templateKey: 'features' }),
     });
+    const name = (pageId, sectionKey, featureKey) => desk.json(
+      `/api/pages/${pageId}/sections/${sectionKey}/purpose`,
+      { method: 'PATCH', body: JSON.stringify({ featureKey }) },
+    );
+    await name(page.id, 'report-one', 'panchang');
+    await name(page.id, 'report-two', 'suvichar');
+    await name(localPage.id, 'city-two', 'rashi');
+    await name(puzzlePage.id, 'feature-sidebar', 'sudoku');
+
     await run({ desk, newspaper, page, pages: { front: page, local: localPage, puzzle: puzzlePage } });
   } finally {
     await removeEdition(newspaper?.id);
@@ -166,11 +182,11 @@ test('filling an edition writes the panchang block\'s structured card, not just 
     assert.ok(result.filled.some((f) => f.feature === 'panchang'), JSON.stringify(result));
 
     const { rows } = await pool.query(
-      `SELECT * FROM page_sections WHERE page_id = $1 AND section_key = 'panchang'`,
+      `SELECT * FROM page_sections WHERE page_id = $1 AND feature_key = 'panchang'`,
       [page.id],
     );
     const block = rows[0];
-    assert.ok(block, 'no panchang block found on the features page');
+    assert.ok(block, 'no block on page one was named the almanac');
     assert.equal(block.smart_card_key, 'panchang');
     assert.ok(block.smart_card_data, 'smart_card_data must be set');
     assert.ok(Array.isArray(block.smart_card_data.items) && block.smart_card_data.items.length > 0,
@@ -202,12 +218,12 @@ test('filling twice re-fills the card (a deliberate refill), not left stale from
     await fillEdition(newspaper.id, {});
     // Hand-corrupt the card, as if a desk had cleared it.
     await pool.query(
-      `UPDATE page_sections SET smart_card_key = NULL, smart_card_data = NULL WHERE page_id = $1 AND section_key = 'panchang'`,
+      `UPDATE page_sections SET smart_card_key = NULL, smart_card_data = NULL WHERE page_id = $1 AND feature_key = 'panchang'`,
       [page.id],
     );
     await fillEdition(newspaper.id, {});
     const { rows } = await pool.query(
-      `SELECT smart_card_key FROM page_sections WHERE page_id = $1 AND section_key = 'panchang'`,
+      `SELECT smart_card_key FROM page_sections WHERE page_id = $1 AND feature_key = 'panchang'`,
       [page.id],
     );
     assert.equal(rows[0].smart_card_key, 'panchang');

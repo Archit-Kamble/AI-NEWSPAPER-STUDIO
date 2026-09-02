@@ -4865,6 +4865,16 @@ body.print-view .section-diagnostic {
   border-top: var(--block-rule, 0.71px) solid #111;
   border-bottom: var(--block-rule, 0.71px) solid #111;
 }
+.newspaper-section.ruled-rule-left {
+  border-left: var(--block-rule, 0.71px) solid #111;
+}
+.newspaper-section.ruled-rule-right {
+  border-right: var(--block-rule, 0.71px) solid #111;
+}
+.newspaper-section.ruled-rule-sides {
+  border-left: var(--block-rule, 0.71px) solid #111;
+  border-right: var(--block-rule, 0.71px) solid #111;
+}
 /* A double rule is two lines with a gap of the same weight between them.
    CSS `border-style: double` divides the declared width into exactly that -
    line, gap, line - so the declared width is three times the chosen rule,
@@ -4926,6 +4936,16 @@ body.print-view .newspaper-section.ruled-rule-above {
 body.print-view .newspaper-section.ruled-rule-both {
   border-top: var(--block-rule, 0.71px) solid #111;
   border-bottom: var(--block-rule, 0.71px) solid #111;
+}
+body.print-view .newspaper-section.ruled-rule-left {
+  border-left: var(--block-rule, 0.71px) solid #111;
+}
+body.print-view .newspaper-section.ruled-rule-right {
+  border-right: var(--block-rule, 0.71px) solid #111;
+}
+body.print-view .newspaper-section.ruled-rule-sides {
+  border-left: var(--block-rule, 0.71px) solid #111;
+  border-right: var(--block-rule, 0.71px) solid #111;
 }
 body.print-view .newspaper-section.ruled-rule-double {
   border-bottom: max(3px, calc(var(--block-rule, 0.71px) * 3)) double #111;

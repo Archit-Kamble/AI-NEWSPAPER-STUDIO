@@ -26,6 +26,22 @@
     { key: 'rule', label: 'Rule below', edges: ['bottom'] },
     { key: 'rule-above', label: 'Rule above', edges: ['top'] },
     { key: 'rule-both', label: 'Rules above and below', edges: ['top', 'bottom'] },
+    // THE SIDES, which this catalogue could not say. A rule below separates a
+    // story from the one under it; a rule at the side separates it from the
+    // column beside it, and a printed page rules both - a boxed sidebar set
+    // against the leg it interrupts, a panel closed off down one edge only.
+    // The desk could ask for a whole box or for nothing, so a block needing
+    // one vertical rule had to be boxed and then the three unwanted rules
+    // lived with.
+    //
+    // Nothing else in the chain changes for them, and that is the point of the
+    // catalogue being one list: `borderEdges` already returns whatever a style
+    // names, and print-model.js's RULES table already carries `left` and
+    // `right` geometry it had never been handed. Only the browser's own
+    // classes had to be written, because CSS has no `border-edges`.
+    { key: 'rule-left', label: 'Rule left', edges: ['left'] },
+    { key: 'rule-right', label: 'Rule right', edges: ['right'] },
+    { key: 'rule-sides', label: 'Rules left and right', edges: ['left', 'right'] },
     // A DOUBLE RULE is one rule drawn twice with a gap of its own weight
     // between - the device every printed paper uses to say "this is a section,
     // not another story". It is not a thicker line and must not be drawn as

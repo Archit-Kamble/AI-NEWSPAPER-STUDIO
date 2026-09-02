@@ -219,8 +219,23 @@ const templates = {
   // a lead package across the top under the nameplate with its own picture
   // strip, two heavy stories in the second band, a display advertisement
   // holding the bottom-right quadrant, and the rest of the day's file worked
-  // into three- and four-column reports and briefs beneath. Fourteen items,
-  // every one on the column grid.
+  // into three- and four-column reports and briefs beneath. Every item on the
+  // column grid.
+  //
+  // A TEMPLATE SAYS WHERE A FRAME IS AND WHAT IT IS FOR. It used to also say
+  // that page one carries the thought for the day, the anniversary and the
+  // almanac, and page two the horoscope - four standing cards on every edition
+  // this software has ever made, whether or not the desk wanted them that
+  // morning. The desk's report was exactly that: take the ready-made card
+  // boxes out and let an editor add one when they want it.
+  //
+  // They are not lost, and there was never a third thing to build: the Cards
+  // tab creates the block a card asks for at the size the catalogue gives it,
+  // and Properties -> Standing feature turns any block on the page into one
+  // and fills it for the edition's date. What went is the reservation, not the
+  // card - and the room it freed is news. Page one gains a three-column
+  // report beside the lead package and a lead that runs the full band; page
+  // two gains two city stories where the horoscope's leg was.
   front: {
     key: 'front',
     name: 'Front Page',
@@ -229,7 +244,6 @@ const templates = {
       // These stacks reproduce the desk-approved page exactly. Because every
       // next row is derived from the previous row's foot, all vertical spaces
       // remain the same one-baseline gap used by the column grid.
-      const [suvicharRow, dinvisheshRow, panchangRow] = rows(FRONT[0].y, [32, 64, 136]);
       const [storyRow, reportRow, footRow] = rows(FRONT[1].y, [264, 176, 152]);
       const [anchorRow, topAdvertRow, displayAdvertRow] = rows(FRONT[1].y, [296, 144, 152]);
       return [
@@ -238,19 +252,15 @@ const templates = {
           MASTHEAD_ADVERT.y, MASTHEAD_ADVERT.height,
           { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
 
-        // Band one - the approved lead and daily-service arrangement.
+        // Band one - the lead package, across the whole measure.
         block('lead-pictures', 0, 4, FRONT[0].y, FRONT[0].height,
           { type: 'photo', story: 'PHOTO_FEATURE', priority: 4, purpose: 'IMAGE_COMPANION', requirement: 'REQUIRED_CONTENT', packageOwner: 'lead' }),
-        block('lead', 4, 4, dinvisheshRow.y, FRONT[0].end - dinvisheshRow.y,
+        block('lead', 4, 5, FRONT[0].y, FRONT[0].height,
           { story: 'LEAD', priority: 5, headline: 'accent' }),
-        block('suvichar', 4, 12, suvicharRow.y, suvicharRow.height,
-          { type: 'feature', story: 'SMART_CARD', priority: 2, feature: 'suvichar', purpose: 'STANDING_FEATURE', requirement: 'REQUIRED_CONTENT' }),
-        block('dinvishesh', 13, 3, dinvisheshRow.y, dinvisheshRow.height,
-          { type: 'feature', story: 'SMART_CARD', priority: 2, feature: 'dinvishesh', purpose: 'STANDING_FEATURE', requirement: 'REQUIRED_CONTENT' }),
-        block('lead-side', 8, 5, dinvisheshRow.y, FRONT[0].end - dinvisheshRow.y,
+        block('lead-side', 9, 4, FRONT[0].y, FRONT[0].height,
           { type: 'photo', story: 'PHOTO_FEATURE', priority: 3, purpose: 'IMAGE_COMPANION', requirement: 'REQUIRED_CONTENT', packageOwner: 'lead' }),
-        block('panchang', 13, 3, panchangRow.y, panchangRow.height,
-          { type: 'feature', story: 'SMART_CARD', priority: 2, feature: 'panchang', purpose: 'STANDING_FEATURE', requirement: 'REQUIRED_CONTENT' }),
+        block('front-column', 13, 3, FRONT[0].y, FRONT[0].height,
+          { story: 'STANDARD', priority: 3 }),
 
         // Band two - two heavy stories.
         block('second-lead', 0, 5, storyRow.y, storyRow.height,
@@ -288,13 +298,13 @@ const templates = {
       const band = rows(INSIDE_TOP, [225]);
       const lowerTop = band[0].end + GAP;
       const [top, middle, bottom] = split(lowerTop, INSIDE_BOTTOM, 3);
-      const [rashiRow, rashiFooterRow] = rows(lowerTop, [632, INSIDE_BOTTOM - (lowerTop + 632 + GAP)]);
+      // The left half used to be the horoscope's whole leg with a brief under
+      // it. It is two city stories now - the same depth, carrying news.
+      const [cityTop, cityBottom] = split(lowerTop, INSIDE_BOTTOM, 2);
       return [
         block('banner', 0, 16, band[0].y, band[0].height, { story: 'LEAD', priority: 5 }),
-        block('rashi', 0, 8, rashiRow.y, rashiRow.height,
-          { type: 'feature', story: 'SMART_CARD', priority: 3, feature: 'rashi', purpose: 'STANDING_FEATURE', requirement: 'REQUIRED_CONTENT' }),
-        block('rashi-footer', 0, 8, rashiFooterRow.y, rashiFooterRow.height,
-          { story: 'BRIEF', priority: 2 }),
+        block('city-lead', 0, 8, cityTop.y, cityTop.height, { story: 'SECONDARY', priority: 4 }),
+        block('city-two', 0, 8, cityBottom.y, cityBottom.height, { story: 'STANDARD', priority: 3 }),
         block('right-top', 8, 8, top.y, top.height, { story: 'ANALYSIS', priority: 4 }),
         block('right-middle-left', 8, 4, middle.y, middle.height, { story: 'BRIEF', priority: 2 }),
         block('right-middle-right', 12, 4, middle.y, middle.height, { story: 'BRIEF', priority: 2 }),
@@ -376,25 +386,33 @@ const templates = {
     })(),
   },
 
-  // The feature and puzzle page. The four-page ladder distributes the compact
-  // daily service cards across pages one and two; this page keeps the large,
-  // near-square Sudoku in the middle-right frame where it can print at a
-  // useful solving size. The remaining frames stay ordinary editorial space.
+  // NO TEMPLATE SHIPS A STANDING CARD ANY MORE, and this page is where that
+  // rule was hardest to give up: it existed to hold the Sudoku at a size
+  // somebody could actually solve. But a frame reserved for a card the desk
+  // did not ask for is a frame the desk has to empty before it can use it,
+  // and this page then printed a puzzle on a day nobody wanted one.
+  //
+  // Every card has two doors of its own and neither of them is a template: the
+  // Cards tab BRINGS ITS OWN BLOCK at the size the catalogue says that card
+  // wants (layout.js's SMART_CARD_BLOCK_SIZE - the Sudoku's is square,
+  // because the puzzle is), and Properties -> Standing feature turns any block
+  // into one and fills it. So the cards did not lose a way in; they lost a
+  // frame that was there whether or not they were wanted.
   features: {
     key: 'features',
-    name: 'Feature & Puzzle Page',
-    description: 'Feature stories around a large middle-right Sudoku.',
+    name: 'Feature Page',
+    description: 'A tall picture feature, briefs, a photograph and a sidebar.',
     sections: (() => {
-      const [briefRow, sudokuRow, supportRow, advertRow] = rows(INSIDE_TOP, [176, 336, 160, 248]);
+      const [briefRow, photoRow, supportRow, advertRow] = rows(INSIDE_TOP, [176, 336, 160, 248]);
       const lowerLeftTop = advertRow.y - 56;
       return [
         block('feature-lead', 0, 8, INSIDE_TOP, 632,
           { story: 'PHOTO_FEATURE', priority: 4, headline: 'accent' }),
         block('brief-one', 8, 8, briefRow.y, briefRow.height,
           { story: 'BRIEF', priority: 2 }),
-        block('sudoku', 8, 8, sudokuRow.y, sudokuRow.height,
-          { type: 'feature', story: 'SMART_CARD', priority: 2, feature: 'sudoku', purpose: 'UTILITY', requirement: 'REQUIRED_CONTENT', utility: 'sudoku' }),
-        block('sudoku-support', 8, 8, supportRow.y, supportRow.height,
+        block('feature-photo', 8, 8, photoRow.y, photoRow.height,
+          { type: 'photo', story: 'PHOTO_FEATURE', priority: 3, purpose: 'IMAGE_COMPANION', requirement: 'REQUIRED_CONTENT' }),
+        block('feature-sidebar', 8, 8, supportRow.y, supportRow.height,
           { story: 'SIDEBAR', priority: 2 }),
 
         block('feature-two', 0, 4, lowerLeftTop, INSIDE_BOTTOM - lowerLeftTop, { story: 'OPINION', priority: 3 }),

@@ -73,43 +73,51 @@ test('the desk-approved dense page still carries a full inside-page news file', 
   assert.ok(templates.dense.sections.length >= 12, 'dense layout should hold a real inside page');
 });
 
-test('the default four-page paper fixes each daily Smart Card to its production page', () => {
-  const defaultPages = ladderFor(4).map((rung) => ({
-    pageNumber: rung.pageNumber,
-    sections: templates[rung.templateKey].sections,
-  }));
-  const cards = defaultPages.flatMap((page) => page.sections
+// NO TEMPLATE SHIPS A STANDING CARD, which is the reverse of what this test
+// used to hold. It pinned the four cards page one and two reserved a frame for
+// - the thought for the day, the anniversary, the almanac, the horoscope - and
+// the Sudoku's solving depth on page three, on the reasoning that fixing them
+// to a page is what makes a daily look like a daily.
+//
+// The desk's own report retired that: a frame reserved for a card nobody asked
+// for is a frame they have to empty before they can use it, and the paper then
+// printed a puzzle on a day it did not want one. The cards keep both of their
+// own doors (the Cards tab brings the block the catalogue sizes for that card;
+// Properties -> Standing feature turns any block into one), so what went is
+// the reservation and not the card.
+//
+// The invariant is therefore that a template declares NO featureKey at all,
+// and that the room it freed carries news instead of standing empty.
+test('no template reserves a frame for a standing Smart Card', () => {
+  const reserved = Object.values(templates).flatMap((template) => template.sections
     .filter((section) => section.featureKey)
-    .map((section) => ({ page: page.pageNumber, key: section.featureKey, section })));
+    .map((section) => `${template.key}/${section.key} -> ${section.featureKey}`));
+  assert.deepEqual(reserved, [],
+    'a card is added by the desk, never shipped in a layout');
+});
 
-  assert.deepEqual(cards.map(({ page, key }) => ({ page, key })), [
-    { page: 1, key: 'suvichar' },
-    { page: 1, key: 'dinvishesh' },
-    { page: 1, key: 'panchang' },
-    { page: 2, key: 'rashi' },
-    { page: 3, key: 'sudoku' },
-  ]);
-
+test('the room the standing cards left is news, not white space', () => {
+  // Page one: the lead package runs the whole measure, in four frames.
   const front = templates.front.sections;
-  const suvichar = front.find((section) => section.key === 'suvichar');
-  const dinvishesh = front.find((section) => section.key === 'dinvishesh');
-  const panchang = front.find((section) => section.key === 'panchang');
-  assert.equal(suvichar.height, G.baselinePx * 4, 'Suvichar is a compact one-line strip');
-  assert.equal(suvichar.width > dinvishesh.width, true, 'Suvichar takes the larger share of the row');
-  assert.equal(dinvishesh.y, suvichar.y + suvichar.height + G.baselinePx, 'Dinvishesh starts one baseline below Suvichar');
-  assert.equal(panchang.y, dinvishesh.y + dinvishesh.height + G.baselinePx, 'Panchang starts one baseline below Dinvishesh');
-  assert.equal(panchang.x + panchang.width, G.marginXPx + G.matterWidthPx, 'Panchang is fixed to the right edge');
+  const bandTop = front.find((section) => section.key === 'lead').y;
+  const band = front.filter((section) => section.y === bandTop);
+  assert.equal(band.length, 4, 'four frames across the lead band');
+  const left = Math.min(...band.map((s) => s.x));
+  const right = Math.max(...band.map((s) => s.x + s.width));
+  assert.equal(left, G.marginXPx, 'the band starts at the matter\'s left edge');
+  assert.equal(right, G.marginXPx + G.matterWidthPx, 'and reaches its right edge');
+  assert.ok(front.find((section) => section.key === 'front-column'),
+    'the almanac column is a news column now');
 
-  const rashi = templates.local.sections.find((section) => section.key === 'rashi');
-  assert.equal(rashi.x, G.marginXPx, 'Rashi-bhavishya is fixed to the left half of page two');
-  assert.equal(rashi.width, templates.features.sections.find((section) => section.key === 'feature-lead').width,
-    'the horoscope has a readable half-page measure');
-
-  const sudoku = templates.features.sections.find((section) => section.key === 'sudoku');
-  assert.ok(sudoku.x >= G.marginXPx + G.matterWidthPx / 2, 'Sudoku is in the right half of page three');
-  assert.equal(sudoku.width, templates.features.sections.find((section) => section.key === 'brief-one').width,
-    'Sudoku fills the approved right-hand measure');
-  assert.equal(sudoku.height, 336, 'Sudoku keeps the approved large solving depth');
+  // Page two: the horoscope\'s leg is two city stories of the same depth.
+  const local = templates.local.sections;
+  const cityLead = local.find((section) => section.key === 'city-lead');
+  const cityTwo = local.find((section) => section.key === 'city-two');
+  assert.ok(cityLead && cityTwo, 'the left leg carries two stories');
+  assert.equal(cityLead.x, G.marginXPx);
+  assert.equal(cityLead.width, cityTwo.width);
+  assert.equal(cityTwo.y, cityLead.y + cityLead.height + G.baselinePx,
+    'one baseline between them, like every other pair on the page');
 });
 
 test('a block can be added to a page, moved, and deleted', async () => {

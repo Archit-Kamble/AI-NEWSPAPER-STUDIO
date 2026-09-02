@@ -8185,3 +8185,49 @@ alone.
 | — | 9 (picture link) | `picture-link` |
 
 Stacked in that order; `picture-link` contains all of it. None merged to `main`.
+
+---
+
+## Twelve desk reports, 2 Sept 2026 — branch `ui-vocabulary`
+
+All twelve done. Everything below was found by driving the running app,
+rendering the CMYK PDF and setting the two side by side; none of it is visible
+from the source.
+
+| # | report | what it was |
+|---|---|---|
+| 1 | header/footer say "Sahas Varta Test" | `publication_settings.publication_name`, and the Settings field never said where that value prints |
+| 2 | AI notice should be inside the imprint, boxed, both languages, no "AI" | three notices where a reader expects one imprint; band 40 → 56 px |
+| 3 | clearing a Smart Card block does nothing | `clearSection()` never touched `smart_card_key`/`smart_card_data` |
+| 4 | the navbar should be slightly bigger | it had no height of its own: 34 px, whatever its tallest child was → 52 |
+| 5 | card borders wrong in the CMYK files | the ring was drawn in content space, 20 mm out of place, on every ruled card in every export |
+| 6 | rule left / rule right | added; only the browser's classes were missing — the walk already had the geometry |
+| 7 | remove the ready-made card boxes from the layouts | four card frames reserved on every edition ever made; editorial frames 33 → 35 |
+| 8 | Block settings leaves a big gap below | the assist dock left the 340 px rail empty; canvas host 1166 → 1512 px |
+| 9 | the date reads date / day / month-year | it should read date / month-year / day, and now does on both surfaces |
+| 10 | remove Press file, Download already exists | moved into the Download menu, same route, same readiness gate |
+| 11 | edition number, searchable, several per date | `#id` on the row and in search; **`POST /:id/district-editions` had no door** |
+| 12 | read a filing in full, with its pictures | everything was already in the response the queue fetches |
+
+### The two that were my own
+
+- **8** was the assist dock from the night before: moving the rail's one panel
+  into the Block Editor left its column standing empty.
+- The `:has()` fix for it was written **nested inside another `:has()`**, which
+  Chrome drops silently — the rail measured 340 × 35 with the rule apparently
+  in the stylesheet. And a comment closed twice put bare text in
+  `styles.css`, killing the rule under it. Fourth comment-shaped outage in this
+  repository.
+
+### Verified
+
+`npm test` **1101/1101**. `workspace` 224/224, `device-bar` 65/65,
+`desk-actions` 27/27, `admin-screens` 19/19, `visual-pass` 46/46.
+Item 5 verified by rendering `/export/pdf` for edition 54470 and comparing the
+almanac against a print-view screenshot of the same block.
+
+### Left for the owner
+
+`publication_name` is data on the Settings screen, not code. It still reads
+**"Sahas Varta Test"** and prints on every masthead, page foot, folio, e-paper
+and press file until somebody changes it there.

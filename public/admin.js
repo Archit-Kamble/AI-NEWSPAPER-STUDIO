@@ -4,11 +4,11 @@ import { renderEditions } from "./admin/editions.js";
 import { renderEpapers } from "./admin/epapers.js";
 import { renderReporterManagement } from "./admin/staff.js";
 import { renderGeneralSettings } from "./admin/settings.js";
-import { escapeHtml } from "./editor/format.js";
+import { escapeHtml, deskStamp } from "./editor/format.js";
 import { showNotice, showFailure } from "./ui/notice.js";
 import { emptyStateMarkup } from "./ui/empty.js";
 import { MR, devanagari, reporterDate } from "./admin/reporter-strings.js";
-import { askPrompt } from "./ui/dialog.js";
+import { askPrompt, openDialog } from "./ui/dialog.js";
 import { busyButton } from "./ui/busy.js";
 
 const app = document.getElementById("app");
@@ -556,6 +556,123 @@ async function showPastNewspapers({ openCreator = false } = {}) {
   await renderEditions(content, { onOpen: (id) => editNewspaper(id), openCreator, mayDelete: can("deleteEdition") });
 }
 
+/**
+ * A REPORTER'S FILING, WHOLE - the copy and the pictures they sent with it.
+ *
+ * The review queue showed a title, a byline and the description clamped to two
+ * lines by CSS, and there was NO WAY ANYWHERE IN THE PRODUCT to read the rest
+ * or to see one photograph. A desk was being asked to pass or send back a
+ * story they could not read - which is not a review, it is a coin toss.
+ *
+ * Everything shown here already reached the browser: `/api/news` selects the
+ * whole row, so the body, the pictures, the location, the tags and the note
+ * somebody wrote when they last sent it back have all been sitting in the
+ * response the queue was already fetching. This is a reader for them, not a
+ * request.
+ *
+ * A dialog rather than a screen of its own: the queue is where the decision is
+ * made, and a desk reading three filings in a row should come back to their
+ * place in the list rather than to the top of it.
+ */
+function readFiling(item) {
+  const shots = Array.isArray(item.image_urls) ? item.image_urls.filter(Boolean) : [];
+  const body = document.createElement("div");
+  body.className = "filing-detail";
+
+  const meta = document.createElement("dl");
+  meta.className = "filing-meta";
+  const rows = [
+    ["Reporter", item.reporter_name || item.reporterName || "—"],
+    ["Category", item.category || "—"],
+    ["Place", [item.location, item.city].filter(Boolean).join(", ") || "—"],
+    ["Tags", item.tags || "—"],
+    ["Status", item.status || "—"],
+    ["Filed", item.created_at ? deskStamp(item.created_at) : "—"],
+  ];
+  for (const [label, value] of rows) {
+    const dt = document.createElement("dt");
+    dt.textContent = label;
+    const dd = document.createElement("dd");
+    dd.textContent = String(value);
+    meta.append(dt, dd);
+  }
+  body.append(meta);
+
+  if (item.subheading) {
+    const deck = document.createElement("p");
+    deck.className = "filing-deck";
+    deck.textContent = item.subheading;
+    body.append(deck);
+  }
+
+  // The copy, paragraph by paragraph, as the reporter typed it. `textContent`
+  // per paragraph - a filing is text a reporter wrote, never markup this
+  // screen renders.
+  const copy = document.createElement("div");
+  copy.className = "filing-copy";
+  const paragraphs = String(item.description || "").split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+  if (!paragraphs.length) {
+    const none = document.createElement("p");
+    none.className = "filing-empty";
+    none.textContent = "This filing has no copy in it yet.";
+    copy.append(none);
+  }
+  for (const text of paragraphs) {
+    const p = document.createElement("p");
+    p.textContent = text;
+    copy.append(p);
+  }
+  body.append(copy);
+
+  // THE PICTURES THE REPORTER SENT. Nothing in the product could show one, so
+  // a desk passing a photo story was passing a photograph they had not seen.
+  if (shots.length) {
+    const gallery = document.createElement("div");
+    gallery.className = "filing-shots";
+    for (const url of shots) {
+      const link = document.createElement("a");
+      link.href = url;
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.title = "Open this picture at full size";
+      const img = document.createElement("img");
+      img.src = url;
+      img.alt = `Picture filed with “${item.title || "this story"}”`;
+      img.loading = "lazy";
+      // A PICTURE THAT IS NO LONGER ON THE SERVER SAYS SO.
+      // `image_urls` is a list of paths, and a path outlives the file: an
+      // upload cleared out, an older filing, a fixture. A broken <img> renders
+      // as its own alt text underlined inside a link, which reads as a fault
+      // in this screen rather than as a fact about the filing.
+      img.addEventListener("error", () => {
+        const gone = document.createElement("span");
+        gone.className = "filing-shot-gone";
+        gone.textContent = "This picture is no longer on the server.";
+        link.replaceWith(gone);
+      });
+      link.append(img);
+      gallery.append(link);
+    }
+    body.append(gallery);
+  }
+
+  // The note somebody wrote the last time this was sent back. It is the one
+  // thing on the row that says WHY, and it was stored and never shown here.
+  if (item.review_note) {
+    const note = document.createElement("p");
+    note.className = "filing-note";
+    note.textContent = `Sent back with: ${item.review_note}`;
+    body.append(note);
+  }
+
+  return openDialog({
+    title: item.title || "Filing",
+    body,
+    width: 760,
+    actions: [{ label: "Close", value: "close", quiet: true }],
+  });
+}
+
 async function showPastNews() {
   const content = document.getElementById("content");
   const rightPanel = document.getElementById("rightPanel");
@@ -634,7 +751,9 @@ async function showPastNews() {
     const card = document.createElement("div");
     card.className = "admin-news-card";
     card.dataset.newsId = item.id;
-    card.innerHTML = `<div><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.reporter_name || item.reporterName || "Reporter")} · ${escapeHtml(item.category || "Uncategorised")}</small><p>${escapeHtml(item.description || "No description")}</p></div><div class="status-actions"><span class="status-pill ${escapeHtml(item.status)}">${escapeHtml(item.status)}</span><button class="btn-secondary approve">Approve</button><button class="btn-secondary is-destructive reject">Send back</button></div>`;
+    const shots = Array.isArray(item.image_urls) ? item.image_urls.filter(Boolean) : [];
+    card.innerHTML = `<div><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.reporter_name || item.reporterName || "Reporter")} · ${escapeHtml(item.category || "Uncategorised")}${shots.length ? ` · ${shots.length} picture${shots.length === 1 ? "" : "s"}` : ""}</small><p>${escapeHtml(item.description || "No description")}</p><button type="button" class="btn-link read-full">Read the whole filing${shots.length ? " and its pictures" : ""}</button></div><div class="status-actions"><span class="status-pill ${escapeHtml(item.status)}">${escapeHtml(item.status)}</span><button class="btn-secondary approve">Approve</button><button class="btn-secondary is-destructive reject">Send back</button></div>`;
+    card.querySelector(".read-full").addEventListener("click", () => readFiling(item));
 
     const decide = async (status, button, reviewNote) => {
       const buttons = card.querySelectorAll("button");

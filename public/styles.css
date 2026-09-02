@@ -5377,8 +5377,24 @@ body.print-view .mono-forme-warning { display: none; }
 .edition-creator-options label { display: flex; align-items: center; gap: 7px; font-size: 0.82rem; }
 .edition-existing-note { margin: 0; color: #39724b; font-size: 0.82rem; }
 .edition-existing-note.has-existing-edition { color: #8a5b16; font-weight: 600; }
-.edition-creator-actions { display: flex; justify-content: flex-end; }
+.edition-creator-actions { display: flex; justify-content: flex-end; gap: var(--s2); flex-wrap: wrap; }
 .edition-creator-actions .btn-submit { width: auto; min-width: 180px; }
+/* THE EDITION NUMBER, which the row could not say.
+   A date used to be the handle, and a date stopped being unique the moment one
+   could carry a district edition beside the core paper. Set in the tabular
+   figures the rest of the chrome counts in - the masthead sets Devanagari
+   numerals and this is not the masthead. */
+.edition-number {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--bg-light, #f5f5f5);
+  color: var(--secondary, #666);
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
 .edition-search {
   width: 100%;
   padding: var(--s2) 12px;
@@ -6064,6 +6080,72 @@ body.story-fullscreen { overflow: hidden; }
   text-align: justify;
   z-index: 3;
 }
+/* A REPORTER'S FILING, READ WHOLE.
+   The review queue clamps the description to two lines and the product had no
+   other view of a filing at all - so a desk was deciding on copy they could
+   not read and photographs they could not see. */
+.filing-detail { display: flex; flex-direction: column; gap: var(--s3); }
+.filing-meta {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px var(--s3);
+  margin: 0;
+  padding: var(--s2) var(--s3);
+  border-radius: 8px;
+  background: var(--bg-light, #f5f5f5);
+  font-size: 0.8rem;
+}
+.filing-meta dt { color: var(--secondary, #666); font-weight: 600; }
+.filing-meta dd { margin: 0; }
+.filing-deck { margin: 0; font-size: 1rem; font-weight: 600; line-height: 1.45; }
+.filing-copy { display: flex; flex-direction: column; gap: var(--s2); }
+/* A filing is read, so it is set at a reading measure and a reading size -
+   not at the two clamped lines the queue row gives it. */
+.filing-copy p { margin: 0; max-width: 64ch; line-height: 1.65; }
+.filing-empty { color: var(--secondary, #666); font-style: italic; }
+.filing-shots { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.filing-shots a { display: block; }
+.filing-shots img {
+  display: block;
+  max-width: 220px;
+  max-height: 220px;
+  border-radius: 6px;
+  border: 1px solid var(--border, #ddd);
+}
+.filing-shot-gone {
+  display: block;
+  padding: var(--s2) var(--s3);
+  border: 1px dashed var(--border, #ddd);
+  border-radius: 6px;
+  color: var(--secondary, #666);
+  font-size: 0.78rem;
+}
+.filing-note {
+  margin: 0;
+  padding: var(--s2) var(--s3);
+  border-left: 3px solid var(--accent, #c41e3a);
+  background: #fff5f6;
+  font-size: 0.85rem;
+}
+/* The way into it, on the row. A link rather than a button: it opens
+   something to read, it changes nothing, and it must not compete with the two
+   controls beside it that decide the filing's fate. */
+.btn-link {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent, #c41e3a);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.btn-link:hover { text-decoration-thickness: 2px; }
+
 /* A note under a field, saying what the value it holds actually reaches. The
    Publication name is the case that needed it: it prints on the nameplate, on
    every page foot and in the press file, and nothing on the Settings screen

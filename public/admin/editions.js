@@ -17,7 +17,7 @@
 //   * a way to find an older one without scrolling past a hundred rows.
 
 import { escapeHtml } from "../editor/format.js";
-import { askConfirm } from '../ui/dialog.js';
+import { askConfirm, askPrompt } from '../ui/dialog.js';
 import { showFailure } from '../ui/notice.js';
 import { emptyStateMarkup } from '../ui/empty.js';
 
@@ -175,6 +175,7 @@ function editionRowHtml(edition, today, mayDelete) {
         <small>${[iso, relativeDay(iso, today)].filter(Boolean).map(escapeHtml).join(' · ')}</small>
       </div>
       <div class="edition-row-name">
+        <span class="edition-number" title="Edition number">#${escapeHtml(String(edition.id))}</span>
         ${escapeHtml(edition.name || '')}
         <small>${pageCountLine(edition, fill, empty)}</small>
       </div>
@@ -298,10 +299,11 @@ export async function renderEditions(host, { onOpen, openCreator: startOpen = fa
         <p class="edition-ladder" id="createEditionLadder"></p>
         <div class="edition-creator-actions">
           <button class="btn-submit" id="createEditionSubmit" type="submit">Create Edition</button>
+          <button class="btn-secondary" id="createAnotherEdition" type="button" hidden>Another edition for this date</button>
         </div>
       </form>
 
-      <input class="edition-search" id="editionSearch" placeholder="Search by date or name…">
+      <input class="edition-search" id="editionSearch" placeholder="Search by edition number, date or name…">
       <div id="editionList"></div>
       ${list.length > RECENT_LIMIT
         ? `<button class="btn-secondary edition-more" id="editionMoreBtn">Show all ${list.length} editions</button>`
@@ -313,9 +315,15 @@ export async function renderEditions(host, { onOpen, openCreator: startOpen = fa
 
   const paint = () => {
     const q = query.trim().toLowerCase();
+    // THE EDITION NUMBER IS SEARCHABLE, and with or without its hash.
+    //
+    // A date is how a desk finds yesterday's paper; a NUMBER is how they find
+    // the one somebody named on the telephone - and it is the only handle that
+    // is unique now that a date can carry more than one edition. `#54470`,
+    // `54470` and a bare `470` all reach it.
     const matched = q
       ? list.filter((e) =>
-          `${e.name || ''} ${e.publication_date || ''} ${marathiDate(e.publication_date)}`.toLowerCase().includes(q))
+          `#${e.id} ${e.name || ''} ${e.publication_date || ''} ${marathiDate(e.publication_date)}`.toLowerCase().includes(q.replace(/^#/, '')))
       : list;
     const shown = showAll || q ? matched : matched.slice(0, RECENT_LIMIT);
     const target = host.querySelector('#editionList');
@@ -324,7 +332,7 @@ export async function renderEditions(host, { onOpen, openCreator: startOpen = fa
       : emptyStateMarkup({
         title: q ? `No edition matches “${query.trim()}”.` : 'No editions yet.',
         body: q
-          ? 'Search by the date as the masthead sets it, the ISO date, or the edition name.'
+          ? 'Search by the edition number, the date as the masthead sets it, the ISO date, or the edition name.'
           : 'Start today\'s paper above and it will appear here.',
         action: q ? { label: 'Clear the search', attr: 'data-clear-edition-search' } : null,
       });
@@ -426,6 +434,7 @@ export async function renderEditions(host, { onOpen, openCreator: startOpen = fa
   const creatorExisting = host.querySelector('#createEditionExisting');
   const creatorLadder = host.querySelector('#createEditionLadder');
   const creatorSubmit = host.querySelector('#createEditionSubmit');
+  const anotherBtn = host.querySelector('#createAnotherEdition');
   let ladderRequest = 0;
 
   const refreshCreator = async () => {
@@ -439,6 +448,21 @@ export async function renderEditions(host, { onOpen, openCreator: startOpen = fa
     for (const control of [creatorName, creatorPages, creatorCarry, creatorFeatures]) control.disabled = madeUp;
     if (madeUp) creatorPages.value = String(existing.page_count || defaultPages);
     creatorSubmit.textContent = madeUp ? 'Open Existing Edition' : (existing ? 'Build Its Pages' : 'Create Edition');
+    // A DATE MAY CARRY MORE THAN ONE EDITION, and this is the door to that.
+    //
+    // `POST /start` is idempotent per date on purpose - it is the button a
+    // desk presses every morning, and pressing it twice must open the paper
+    // rather than make a second one. (That promise is why this database was
+    // rescued from 116 editions nobody could tell apart.) But a district
+    // daily genuinely prints several editions of one date: one core, with two
+    // or three pages swapped per district. Lokmat runs about fifteen.
+    //
+    // The server has done this since districtEdition.service.js was written -
+    // routes, page inheritance, a printed-pages merge - AND NOTHING IN THE
+    // BROWSER HAD EVER CALLED IT. That is this codebase's signature fault: a
+    // mechanism with no door. This is the door, and it appears only on a date
+    // that already has an edition, where it is the only thing left to want.
+    anotherBtn.hidden = !madeUp;
     creatorExisting.classList.toggle('has-existing-edition', Boolean(existing));
     creatorExisting.textContent = madeUp
       ? `${selectedDate} already has edition ${existing.id} with ${existing.page_count} pages. It will be opened without changing its blocks.`
@@ -469,6 +493,65 @@ export async function renderEditions(host, { onOpen, openCreator: startOpen = fa
   host.querySelector('#createEditionClose').addEventListener('click', () => { creator.hidden = true; });
   creatorDate.addEventListener('change', refreshCreator);
   creatorPages.addEventListener('change', refreshCreator);
+
+  // ANOTHER EDITION FOR A DATE THAT ALREADY HAS ONE.
+  //
+  // It goes through `POST /:id/district-editions`, which is the route the
+  // server already has for exactly this and the only one that can make a
+  // second edition on an occupied date - `/start` is idempotent there by
+  // design, and `POST /api/newspapers` makes a row with no page ladder that
+  // `/start` would then never reach, because it finds the date's FIRST
+  // edition.
+  //
+  // Every page is its own by default: the service's model is that a child
+  // owns only the pages that differ and serves the rest from its parent, which
+  // is right for a district that swaps two pages, and a desk asking for
+  // "another edition of this date" from this screen is asking for a paper they
+  // can make up in full. The service still refuses a page the parent has not
+  // got, so the request cannot invent a ladder.
+  anotherBtn?.addEventListener('click', async () => {
+    const selectedDate = creatorDate.value || today;
+    const parent = editionForDate(list, selectedDate);
+    if (!parent) return;
+    const answer = await askPrompt({
+      title: `Another edition for ${marathiDate(selectedDate)}?`,
+      body: `${selectedDate} already carries edition #${parent.id}. A second edition of one date is an EDITION OF A PLACE — `
+        + 'a district daily prints one core paper with two or three pages made up differently for each district.\n\n'
+        + 'It starts with its own copy of every page of #' + parent.id + `'s ladder, empty, and it is deleted like any other edition.`,
+      label: 'Which district is this edition for?',
+      placeholder: 'Satara',
+      confirm: 'Create it',
+      cancel: 'Not now',
+    });
+    const district = String(answer?.field || '').trim();
+    if (!answer?.action || !district) return;
+
+    anotherBtn.disabled = true;
+    const was = anotherBtn.textContent;
+    anotherBtn.textContent = 'Creating…';
+    try {
+      const pages = await fetch(`/api/newspapers/${parent.id}/pages`).then((r) => {
+        if (!r.ok) throw new Error(`The parent edition's pages could not be read (HTTP ${r.status}).`);
+        return r.json();
+      });
+      const response = await fetch(`/api/newspapers/${parent.id}/district-editions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          district,
+          localPages: pages.map((page) => Number(page.page_number)),
+          name: `${parent.name || 'Edition'} — ${district}`,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || result.error) throw new Error(result.error || `The edition could not be created (HTTP ${response.status}).`);
+      onOpen(Number(result.edition.id), { created: true, newspaper: result.edition });
+    } catch (error) {
+      anotherBtn.disabled = false;
+      anotherBtn.textContent = was;
+      showFailure(error.message, { retry: () => anotherBtn.click() });
+    }
+  });
 
   creator.addEventListener('submit', async (event) => {
     event.preventDefault();

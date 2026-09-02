@@ -304,7 +304,13 @@ function blockPropertiesMarkup(section, view, page) {
     <div class="prop-section">
       <h5 class="prop-heading">Border</h5>
       <div class="form-group">
-        <div class="segmented" data-prop-border>
+        <!-- A GRID, NOT A SEGMENTED CONTROL. Ten styles is a list, and set out
+             as one row of ten in a 340px rail the labels overlapped into an
+             unreadable band - measured the moment Rule left, Rule right and
+             Rules left and right were added to the catalogue. Two columns,
+             each button wrapping its own label, and every selector the nets
+             press is unchanged. -->
+        <div class="segmented segmented-grid" data-prop-border>
           ${BORDER_STYLES.map(
             (style) => `<button type="button" class="segment${border === style.key ? " active" : ""}" data-border="${style.key}">${style.label}</button>`,
           ).join("")}

@@ -9164,4 +9164,24 @@ body.print-view #printViewBtn {
    against the page in a screenshot. `min-width: 0` is what lets flex do the
    thing it was asked to do; the labels already wrap. */
 .segment { min-width: 0; }
+/* A choice with more than about five options is a LIST, and a segmented
+   control cannot set one out: its items share a row, so each new option takes
+   width from every other and the labels collapse into each other. Ten border
+   styles in a 340px rail did exactly that. Two columns, each button carrying
+   its own wrapped label, and every `[data-border="..."]` selector the browser
+   nets press stays exactly where it was. */
+.segmented-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+.segmented-grid .segment {
+  flex: none;
+  border-radius: 6px;
+  border: 1px solid var(--border, #ddd);
+  padding: 6px 8px;
+  text-align: center;
+  line-height: 1.3;
+  white-space: normal;
+}
 .segmented { flex-wrap: wrap; }

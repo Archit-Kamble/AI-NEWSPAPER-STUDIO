@@ -6243,6 +6243,185 @@ is called, which is the *one screen, one name* fault already recorded for Past
 News. It also printed `currentUser.role` raw — the string `reporter`, the value
 in the database — on a screen written for the person that word describes.
 
+### Twelve things the desk reported, and what each one turned out to be
+
+All of it found by driving the running app, rendering the CMYK PDF and setting
+the two side by side. Four of the twelve were mechanisms this product already
+had and could not reach; two were my own regressions from the night before.
+
+**1. "Why is the header and footer saying Sahas Varta Test?"** Because that is
+what `publication_settings.publication_name` holds, and **nothing on the
+Settings screen said where that value goes**. It is set on the nameplate band,
+on every page foot, on the folio strip inside, in the e-paper and in the press
+file, and each new edition is named after it — so a value typed to try the
+product out went on printing over the masthead of every edition made
+afterwards. The field carries a `.field-note` saying so. The value itself is
+the owner's to change on that screen; nothing in the code decides it.
+
+**2. The AI disclosure is INSIDE the imprint now, boxed, in both languages.**
+It stood apart — centred and bold under a hairline, beneath both declarations —
+so page two printed three separate notices where a reader expects one imprint.
+It closes each language's own paragraph, inside that paragraph's own rule.
+
+- **One sentence, and the Marathi does not use the letters "AI".** A Latin
+  abbreviation dropped into a Devanagari sentence is not a translation;
+  कृत्रिम बुद्धिमत्ता is the same words in its own script. English gets its own
+  sentence (`aiDisclosureEnglish`) rather than the Marathi one with a gloss.
+- It no longer says a person passed the copy. That half is the imprint's own
+  subject — the paragraph it now sits inside names the editor responsible under
+  the Act, one line above.
+- **All three surfaces move together**: the canvas, `print-model.js`'s
+  furniture walk (four `rule` items per box — the primitive a block border is
+  already made of) and the `.sla`. A press file setting the imprint in a
+  different shape from the sheet the desk approved is the fault this repository
+  guards hardest against.
+- The band pays for it: `imprintHeightPx` **40 → 56**, six lines plus two
+  rules, and page two gives up that editorial height (`content.bottom`
+  964 → 948). It clips, so a band that cannot hold the disclosure swallows it
+  in silence.
+
+**3. Clear takes the Smart Card with the block.** `clearSection()` blanked the
+headline, deck, story and picture and **left `smart_card_key`/`smart_card_data`
+alone**, so pressing Clear on the almanac emptied fields nobody could see and
+redrew the identical card. It did not even ask first, because `carries` could
+not see a card either. A card is what is IN a block exactly as a headline is —
+`feature_key` is the separate, read-only thing saying what the layout reserved
+the frame FOR. Verified by pressing it: the question now reads *"Its story and
+the card in it go with it"*, cards **1 → 0**, and Ctrl+Z puts it back.
+
+**4. The toolbar had no height of its own.** `padding: 0 24px` meant its 34 px
+was whatever its tallest child happened to be — the buttons, at 33 px — so the
+one strip on screen every second of a desk's day sat with a pixel of air above
+and below it and read as a seam. **34 px → 52 px** (56 measured with the
+border), buttons 33 → 36, label 13.12 → 13.6 px. Nothing moves for it:
+`--toolbar-h` is measured live by `measureToolbar()`, and `--page-area-h` comes
+from the canvas host, so the page and the rail follow rather than being pushed.
+
+**5. A card's ring is in FRAME space — and this was every ruled card in every
+export.** `bar()` and `line()` add the content box's origin themselves, so
+every ordinary entry in `smart-card-lines.js` is emitted in the CARD FRAME's
+coordinates. The ring did not go through them: it **subtracted** the content
+box from the border box, on the assumption the caller adds it back. The caller
+adds the frame origin.
+
+| the almanac's ring | x | y | size |
+|---|---|---|---|
+| canvas | 2 | 2 | 109 × 134 |
+| export | 3.6 | **−39.2** | 103.8 × **91.2** |
+
+The head rule carried the same subtraction and went with it. Fixing it exposed
+two more, both invisible while the ring was drawn 20 mm out of place and
+nothing could coincide with it:
+
+- **A framed advert's चौकट was measured against the whole frame** and then
+  drawn through `bar()`, so its bottom rule landed **0.2 px** from the card's
+  own ring — one thick rule at any press resolution, and exactly what
+  `no card lays two rules where a printer draws one` exists to catch. It is
+  measured against the content box now, which is the box the ring leaves.
+- **The almanac's table carried an accent rule along its top and down both
+  sides in the export, and the canvas draws neither** — the card's ring is
+  already the box. So the plate printed a second box inside the ring and two
+  red rules three pixels apart under the nameplate.
+- Its row hairline was `#d8c4c8` in the walk against `#d8d8de` in the
+  stylesheet: one card ruled in two inks depending which surface looked.
+
+**6. A block can be ruled down one side.** `rule-left`, `rule-right` and
+`rule-sides` join the catalogue. Nothing else in the chain changed and that is
+the point of `borders.js` being one list: `borderEdges()` already returned
+whatever a style names, and `print-model.js`'s `RULES` table already carried
+`left` and `right` geometry it had never been handed. Only the browser's own
+classes were missing, because CSS has no `border-edges`. Verified per edge in
+print view: `rule-left` rules the left and nothing else.
+
+**Ten styles is a LIST, not a segmented control.** Set out as one row in a
+340 px rail the labels overlapped into an unreadable band. `.segmented-grid`
+is two columns of wrapping buttons, and every `[data-border="…"]` selector the
+four browser nets press is unchanged.
+
+**7. No layout ships a standing card.** The templates reserved four card frames
+on every edition ever made — the thought for the day, the anniversary and the
+almanac on page one, the horoscope on page two — plus the Sudoku's solving
+depth on page three. A frame reserved for a card the desk did not ask for is a
+frame they must empty before they can use it, and the paper printed a puzzle on
+days nobody wanted one.
+
+Both of a card's own doors are untouched: the **Cards tab brings the block** the
+catalogue sizes for that card (`SMART_CARD_BLOCK_SIZE`), and **Properties →
+Standing feature** names any block and fills it for the edition's date. What
+went is the reservation.
+
+The room is news. Page one's lead package runs the whole measure in four frames
+with a three-column report where the almanac stood; page two carries two city
+stories where the horoscope's leg was; page three a picture feature and a
+sidebar. **Editorial frames 33 → 35**, physical frames 44 → 42, standing
+features 4 → 0.
+
+Three tests pinned the old rule and hold the new one. `editionFeatures`'s
+fixture names its four blocks through `PATCH .../purpose`, which is a **better**
+fixture than the template default: it drives the path a desk actually uses.
+
+**8. The settings column closes while its panel is docked.** The assist dock
+MOVES `#workspaceToolsPanel` into the Block Editor's right-hand column — one
+element, no second copy — which left the 340 px settings column standing empty
+for as long as the desk stayed on the Block, Type, Story or History tab.
+Measured: the rail collapsed to **97 px of header inside a 633 px grid row**, so
+536 px of the widest part of the screen was a blank band carrying one
+apologetic sentence. That is "block settings leaving a big gap below, not using
+full page", and it was the dock's own doing. The page takes the width instead:
+canvas host **1166 px → 1512 px**.
+
+**`:has()` MAY NOT BE NESTED INSIDE `:has()`.** Written as
+`.workspace-top:has(.workspace-tools:not(:has(…)))` it is not a selector Chrome
+corrects — it drops it entirely, with no warning, and the rail measured
+340 × 35 with the rule apparently in the stylesheet. The state is a class set
+by `applyAssistTab()`.
+
+**And a comment closed twice put bare text in the stylesheet**, which killed the
+rule under it. Fourth time in this repository that a comment has broken a file;
+the CSS parse check is one loop over the file.
+
+**9. The date ear reads numeral, month-and-year, weekday.** It ran numeral,
+weekday, month-year — so the two halves of one date had the day of the week
+wedged between them. The weight follows the position: whatever completes the
+numeral is the bold line. Canvas and export walk both.
+
+**10. One Download, not two.** The press package is a download like the other
+four and is offered beside them in the same menu; it keeps its own route and
+its own press-readiness gate. What went is the second button saying "download".
+
+**11. An edition has a number, and a date can carry more than one.** The row
+prints `#id` and the search finds it — with or without its hash, and on a
+partial. A date was the only handle a desk had, and a date stops being unique
+the moment one carries two editions.
+
+**"Another edition for this date" goes through `POST /:id/district-editions`**,
+which the server has had since `districtEdition.service.js` was written —
+routes, page inheritance, a printed-pages merge — **and which nothing in the
+browser had ever called.** It is the right route rather than a convenient one:
+`/start` is idempotent per date on purpose (it is the button pressed every
+morning, and it is why this database was rescued from 116 editions nobody could
+tell apart), and `POST /api/newspapers` makes a row with no ladder that
+`/start` would then never reach, because it finds the date's FIRST edition. A
+second edition of one date is an edition of a **place**, which is what a
+district daily prints, so the dialog asks which district and takes its own copy
+of every page of the parent's ladder.
+
+**12. A filing can be read whole.** The review queue clamped the description to
+two lines and the product had **no other view of a filing anywhere**, so a desk
+was passing or sending back copy they could not read and photographs they could
+not see. Everything shown was already in the response the queue fetches —
+`/api/news` selects the whole row, so the body, the pictures, the place, the
+tags and the note somebody wrote last time it was sent back have been arriving
+all along. This is a reader for them, not a request. A picture whose file has
+gone says so rather than rendering as its own alt text inside a link.
+
+```bash
+node tests/browser/admin-screens.browser.js
+node tests/browser/workspace.browser.js
+node tests/browser/desk-actions.browser.js
+node tests/browser/device-bar.browser.js
+```
+
 ## Engineering rules
 
 - **The overflow diagnosis started from desk-selected baseline `52c9556`.** Fix

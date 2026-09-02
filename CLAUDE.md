@@ -6148,6 +6148,101 @@ node tests/browser/edition-delete.browser.js   # 12/12
 node tests/browser/admin-screens.browser.js    # 19/19
 ```
 
+### Four fault classes, hunted rather than stumbled on
+
+A pass aimed at the specific shapes this codebase keeps producing. Two of the
+four turned up nothing, and recording that is the point of the exercise.
+
+**A mechanism computed and never rendered.** Every class name any script under
+`public/` toggles was checked against every stylesheet: **60 classes, 18 with
+no rule** — and 17 of those are Quill's own, styled by the vendor sheet. The
+one that is ours is **`.is-inline-editing`** in `block-frame.js`: added,
+removed, read by no script and styled by no stylesheet. Its sibling
+`.is-semantic-text-editor` carries all the behaviour. Recorded rather than
+removed — it is genuinely dead, and deleting it buys nothing.
+
+**A display rule quietly beating a state class.** There is no global
+`[hidden] { display: none }` in this product; there are **nine hand-written
+ones**, which is the `.role-note` fault patched nine times. Swept the live DOM
+for elements carrying `hidden` that still render — login, all six owner
+screens, the workspace with every dock tab opened: **0**. The nine cover every
+case in play, so the tenth is a latent risk rather than a live bug.
+
+**Two rules of equal specificity cancelling out.** The stylesheet was parsed
+and every selector defined more than once *in the same context* compared:
+**96 such selectors, 58 setting the same property to different values.** Most
+are a stale earlier value the later one correctly replaces. One was a
+regression from this same series of runs — see below.
+
+**A control that draws perfectly and does nothing.** Every visible, enabled
+control was asked, over CDP, for its event listeners. The dashboard has none
+without one; the workspace's apparent ones are all **delegated at the
+document** (the device bar, the assist tabs, the ink swatches), which is the
+pattern this folder deliberately uses and which `device-bar.browser.js` covers
+65/65. No dead control that the existing nets do not already press.
+
+#### A floor may only ever raise, and mine was inflating
+
+The one real find of the sweep, and it is my own from an earlier run:
+
+```css
+button, select, input, textarea, .sidebar-btn, .toolbar-btn, .layout-btn,
+.btn-secondary, .btn-primary, .btn-submit, .btn-danger
+  { font-size: max(12px, 1em); }
+```
+
+**`1em` in a `font-size` is the PARENT's size, not the element's own.** So
+naming those classes did two different things at once: against a bare element
+with no design of its own it is a real floor; against a class whose design is
+*smaller* than its parent's text it throws the design away and adopts the
+parent's. It sits at the end of the file, so it beat every designed value at
+equal specificity.
+
+| | designed | rendered |
+|---|---|---|
+| `.toolbar-btn` | 0.82rem = **13.1 px** | **15.2 px** — +16% |
+
+Every button on the workspace toolbar was a sixth larger than it was drawn to
+be. The classes carrying a higher-specificity size of their own (`.segment`,
+`.assist-tab`, `.dev-btn`) were untouched, so the effect was **uneven as well
+as unasked for** — which is exactly what made it invisible.
+
+Measured again with the rule off: the smallest interactive label on the desk is
+**10.56 px** and only six control types sit under 12 at all. So the bare element
+selectors stay — they lose to any class-based design and therefore only ever
+reach a control nobody sized — and the class list goes. Of the seven classes
+named, only two carried a size of their own.
+
+#### The public reader's navigation shrank where the finger arrived
+
+Measured on the released issue at 430 px: all six controls — two arrows and one
+pill per page — drew **38×38**, having been 40×40 on the desk. The narrow
+breakpoint made the only navigation *the one page the public sees* has
+**smaller**, exactly where a mouse becomes a thumb. The 44 px rule was already
+two lines above it in the same media block, on the download link.
+
+#### A rule aimed at a class that does not exist
+
+The previous run added `.app-header .logout, .app-header button
+{ min-height: 44px }`. **There is no `.app-header` in this product** — the bar
+is `.header` and the logout sits in `.header-right`. So the button stayed 39 px
+and the measurement taken as evidence was of a rule that never applied.
+
+A CSS rule aimed at a class that does not exist is the stylesheet's version of
+*a control that draws perfectly and does nothing*, and it fails the same silent
+way: no error, no warning, and a number that has not moved. Found only by
+re-measuring the thing the rule was supposed to have fixed. Reporter screens
+with a control under 40 px: **6 → 0**.
+
+#### One reporter screen was still in English
+
+The profile page's heading read **`PROFILE`** with labels Name / Email / Role,
+on a screen whose own menu button has read माझी माहिती since the Marathi pass
+landed — so the sidebar and the page it opens disagreed about what the screen
+is called, which is the *one screen, one name* fault already recorded for Past
+News. It also printed `currentUser.role` raw — the string `reporter`, the value
+in the database — on a screen written for the person that word describes.
+
 ## Engineering rules
 
 - **The overflow diagnosis started from desk-selected baseline `52c9556`.** Fix

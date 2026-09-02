@@ -51,8 +51,13 @@ const say = (ok, what, detail = '') => {
   // and `headlineHint` (not pageNumber/headline), `publishers` beside
   // `sources`, `proposal` on a written row, and `written`/`failed` counts.
   let planCalls = 0; let writeCalls = 0; let acceptCalls = 0; let wroteBody = null;
+  // Held long enough to LOOK at the panel mid-flight. This is the longest wait
+  // in the product - the real planner measured 83s on a 26-block brief - and a
+  // label alone on a wait that long reads as a frozen screen.
+  const hold = (ms) => new Promise((r) => setTimeout(r, ms));
   await page.route('**/newsdesk/plan', async (route) => {
     planCalls += 1;
+    await hold(2200);
     const stories = Array.from({ length: STORIES }, (u, i) => ({
       page: 1 + (i % 4), sectionKey: `zz-block-${i}`, rung: 'standard',
       headlineHint: `ZZ net story ${i + 1}`, tagKey: 'national-politics', importance: 5,
@@ -111,8 +116,31 @@ const say = (ok, what, detail = '') => {
 
   // ---- 1. THE BRIEF -> THE PLAN
   await page.locator('#newsdeskResearch').click();
-  await page.waitForTimeout(2500);
+  await page.waitForTimeout(900);
+  // MID-FLIGHT: the run says it is working, in the same vocabulary as every
+  // other control in the product.
+  const midRun = await page.evaluate(() => {
+    const b = document.getElementById('newsdeskResearch');
+    const after = b && getComputedStyle(b, '::after');
+    return b ? {
+      label: b.textContent.trim(), disabled: b.disabled,
+      busy: b.classList.contains('is-busy'), aria: b.getAttribute('aria-busy'),
+      pinned: Boolean(b.style.minWidth),
+      spin: after && after.animationName,
+      panelBusy: document.querySelector('.newsdesk-panel')?.getAttribute('aria-busy'),
+    } : null;
+  });
+  say(midRun && midRun.busy && midRun.disabled && midRun.aria === 'true',
+    'while it researches, the control says so and cannot be pressed again', JSON.stringify(midRun));
+  say(midRun && midRun.spin === 'sahas-spin' && midRun.pinned,
+    'with the shared spinner, and its width pinned so the row cannot reflow', midRun && midRun.spin);
+  say(midRun && midRun.panelBusy === 'true',
+    'and the panel about to be replaced says so too — the button is at the foot of a long list');
+
+  await page.waitForTimeout(2600);
   say(planCalls === 1, 'Research asks the planner exactly once', `${planCalls} call(s)`);
+  const released = await page.evaluate(() => document.querySelector('.newsdesk-panel')?.getAttribute('aria-busy'));
+  say(released === null, 'and the busy state is released when the plan lands', String(released));
   const write = await page.evaluate(() => {
     const b = document.getElementById('newsdeskWrite');
     return b ? { label: b.textContent.trim(), disabled: b.disabled } : null;

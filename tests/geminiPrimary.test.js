@@ -44,8 +44,30 @@ function withEnv(vars, run) {
 }
 
 /** Swaps stub providers in for the length of one test. */
+// THE STUBS ARE THE WHOLE CHAIN, NOT ADDITIONS TO IT.
+//
+// This merged into `ai.PROVIDERS` and left every real provider in place behind
+// the stub. Measured: the chain is deepseek -> gemini -> sarvam -> anthropic ->
+// groq, and on this machine sarvam, deepseek and groq are configured with real
+// keys - so a test that stubbed only `gemini` sent the request to DeepSeek
+// first and, when the stub then answered in the wrong shape, went on to Sarvam
+// and Groq. `npm test` was reaching real providers over the network.
+//
+// Two things followed, and the second is the one that matters:
+//
+//   * the run was NON-DETERMINISTIC - `currentNewsWriting`'s "check the
+//     sources first" failed roughly one run in four on a call count, because
+//     whether a real provider answered decided whether the settle loop then
+//     spent a fill call back through the chain;
+//   * every `npm test` was BILLING the newspaper's own account, on an
+//     account whose free quotas this project has already measured running out
+//     mid-edition.
+//
+// Deleting the unnamed providers is the honest semantics for a unit test:
+// these are the providers that exist. A test that wants a fallback stubs both.
 function withProviders(t, stubs) {
   const saved = { ...ai.PROVIDERS };
+  for (const key of Object.keys(ai.PROVIDERS)) delete ai.PROVIDERS[key];
   for (const [key, stub] of Object.entries(stubs)) {
     ai.PROVIDERS[key] = {
       key, name: key, supportsTiers: true, isConfigured: () => true, configHint: '',

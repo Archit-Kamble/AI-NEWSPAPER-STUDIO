@@ -467,10 +467,22 @@ function smartCardLines(key, data, frame, cardLayout) {
       // The stylesheet's own ink for a row rule (`.smart-card-table td`), not
       // a second value: #d8c4c8 here against #d8d8de there is a card ruled in
       // two inks depending on which surface is looking at it.
-      bar(0, top - 0.4, contentWidth, 0.4, '#d8d8de');
+      //
+      // AND THE LAST ROW'S RULE IS THAT SAME RULE, IN THE ACCENT.
+      // `.smart-card-panchang .smart-card-table tr:last-child td` sets
+      // `border-bottom-COLOR`, so the browser RECOLOURS the hairline the row
+      // already has; it does not add a second one. This walk drew the grey
+      // rule under every row and then laid a heavier accent bar over the last
+      // one - measured on a real 74x102.5mm almanac, a 0.4mm grey at y=462.50
+      // under a 0.6mm accent at y=462.40, two rules 0.1mm apart where the
+      // sheet the desk approved has one, and at 0.6 against the canvas's 0.4.
+      //
+      // Same fault as the advert's चौकट and the table's own accent box, and
+      // the last one still standing: it was invisible while the ring itself
+      // was drawn 20mm out of place, because nothing could coincide with it.
+      bar(0, top - 0.4, contentWidth, 0.4, index === layout.items.length - 1 ? '#8a1428' : '#d8d8de');
     }
     bar(labelWidth - 0.25, subtitleOffsetPx, 0.5, top - subtitleOffsetPx, '#dec8cc');
-    bar(0, top - 0.6, contentWidth, 0.6, '#8a1428');
     return out;
   }
 

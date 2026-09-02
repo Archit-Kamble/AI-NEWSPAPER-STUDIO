@@ -521,3 +521,45 @@ test('a centred दिनविशेष entry keeps the solver\'s line breaks i
   assert.ok(/<span class="smart-card-line"><b class="dinvishesh-symbol[^"]*"[^>]*>◆<\/b>/.test(html),
     'the mark is set into the first line, not laid beside the block of them');
 });
+
+// A CARD LAYS ONE RULE WHERE A PRINTER DRAWS ONE - every card, not just the
+// commercial two.
+//
+// `tests/advertStyles.test.js` has held this for `advert` and `tender` since
+// the plate was found drawing a panel box inside the card's own ring. The
+// same fault was still standing in the almanac and nothing covered it: the
+// walk drew the grey row hairline under EVERY row (`.smart-card-table td`,
+// 0.4px #d8d8de) and then laid a heavier accent bar over the last one - while
+// the canvas merely RECOLOURS that row's own rule
+// (`tr:last-child td { border-bottom-color }`), which adds nothing.
+//
+// Measured on a real 74x102.5mm almanac in the export walk: a 0.4mm grey at
+// y=462.50 under a 0.6mm accent at y=462.40. Two rules 0.1mm apart where the
+// sheet the desk approved has one, at a weight the canvas never used.
+//
+// It was invisible until the card ring was put back into frame space: drawn
+// 20mm out of place, nothing could coincide with anything.
+test('no card lays two rules where a printer draws one', () => {
+  const frame = { width: 268, height: 300, padding: 1 };
+  const cases = [
+    ['panchang', panchangData()],
+    ['dinvishesh', dinvisheshData()],
+    ['havaman', havamanData()],
+    ['sudoku', sudokuData()],
+    ['rashi', rashiData()],
+  ];
+  for (const [key, data] of cases) {
+    const items = smartCardLines(key, data, frame, layout);
+    // Full-width horizontal rules only: a cell rule or a column divider is a
+    // different statement and legitimately sits beside its neighbours.
+    const wide = items
+      .filter((i) => i.kind === 'bar' && i.height <= 2 && i.width >= frame.width * 0.9)
+      .map((i) => ({ y: i.y, h: i.height, ink: i.ink }))
+      .sort((a, b) => a.y - b.y);
+    for (let i = 1; i < wide.length; i += 1) {
+      const gap = wide[i].y - wide[i - 1].y;
+      assert.ok(gap === 0 || gap > 2,
+        `${key}: two rules ${gap.toFixed(2)}px apart (${wide[i - 1].ink} then ${wide[i].ink})`);
+    }
+  }
+});

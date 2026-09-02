@@ -6519,6 +6519,98 @@ through the UI, like the way in.
   deliberately. Its two load-bearing checks — *0 of 24* keystrokes reaching
   the story and *24 of 24* reaching the headline — passed on every run.
 
+### "Write 31 stories" did nothing, and what it cost to find out
+
+The desk's report: the plan comes back with 31 stories, they press
+**Write 31 stories**, and nothing happens.
+
+`busy` is set by `working()` and cleared only by the function it returns — and
+each of the newsdesk run's three stages called that in its **catch alone**. So
+a run that SUCCEEDED left `busy` true for the life of the panel, and the next
+stage's `if (busy) return;` swallowed the press. Reproduced against a stubbed
+planner, so no AI call was spent: **0 POSTs to `/newsdesk/write`**, no message,
+nothing on screen. The same leak in `write()` then killed **Accept**.
+
+It is the *a control that draws perfectly and does nothing* fault arriving
+through a **guard flag** rather than a listener, and it is the worse kind: the
+FIRST press of each button works, so only the next stage is dead and it reads
+as the AI failing rather than as the panel. Released in a `finally` in all
+three. Swept for the same shape: `autosave.js` is the only other guard flag
+under `public/` and it already released in a `finally`.
+
+```bash
+node tests/browser/newsdesk-run.browser.js
+```
+
+Every newsdesk endpoint in that net is **stubbed, deliberately** — the real
+planner is one Ultra call for a whole newspaper and the writers one call per
+block, so a net that drove them would be a bill for running a test.
+
+### `npm test` was reaching real AI providers, and billing for it
+
+Chasing an intermittent failure in `currentNewsWriting` found something worse
+than a flaky assertion. `withProviders(t, stubs)` — **four identical copies**,
+in `aiConditions`, `currentNewsWriting`, `geminiPrimary` and `writingPipeline`
+— MERGED its stubs into `ai.PROVIDERS` and left every real provider in place
+behind them. Measured, the chain is
+**deepseek → gemini → sarvam → anthropic → groq**, and on this machine sarvam,
+deepseek and groq carry real keys.
+
+So a test stubbing only `gemini` sent the request to DeepSeek first and, when
+the stub answered in the wrong shape, went on to Sarvam and Groq.
+
+| | |
+|---|---|
+| non-determinism | whether a real provider answered decided whether the settle loop then spent a fill call back through the chain — the `called: 2` that failed about one full-suite run in four |
+| **cost** | every `npm test` billed the newspaper's own account, on an account whose free quotas this project has already measured running out mid-edition |
+
+The stubs are the whole chain now: unnamed providers are deleted, which is the
+honest semantics for a unit test — *these are the providers that exist*. A test
+that wants a fallback stubs both ends. The same test, before and after:
+**9193ms → 76ms**, identical across three runs.
+
+`tests/ai.test.js` keeps its own older merging copy on purpose: it only runs
+inside `withEnv(NO_KEYS, …)`, which strips the keys, so nothing there can reach
+a provider.
+
+### What the product shows while it is working
+
+Three things, and the third had been written and had never once taken effect.
+
+**One vocabulary, defined once.** `.is-busy`, `@keyframes sahas-spin` and
+`@keyframes sahas-sheen` were each declared **twice** at equal specificity, and
+the two sets merged rather than one replacing the other. Measured: the spinner
+survived (the later block re-declares the `border` shorthand, which resets all
+four colours), but the region skeleton is sized in **pixels** (220px) and was
+being driven by the **percentage** keyframes written for `.skel` (220%) — so on
+a 300px region its sheen ran from 96px to −48px: half the width, and backwards.
+
+**A busy control is not a disabled one.** `button:disabled` is (0,1,1) and
+`.is-busy` is (0,1,0), so the disabled rule won **both** properties `.is-busy`
+sets — and `busyButton` always disables the control while its work runs.
+Measured: every busy button in this product rendered at **0.55 opacity with a
+`not-allowed` cursor**. The one control the desk is waiting on was the faintest
+thing on screen, and the pointer said *you may never press this* where it meant
+*this is working*. `.is-busy`'s own comment states that intent exactly; it had
+never applied. A rule computed and never rendered — in the stylesheet rather
+than in the schema, which is where this codebase has found it three times
+before.
+
+**The answer has a shape while it is being written.** The AI panel's three
+proposal areas were `hidden` until the result landed, so the longest wait in
+the product showed nothing where the answer was about to appear.
+`waitingMarkup()` puts the shape there — a headline, a column of copy, the
+accept bar — carrying no ids and read by nothing, replaced whole by the real
+proposal. `clearWaiting()` covers every early return, because **a skeleton left
+standing is an answer the desk goes on waiting for**.
+
+Write, Fill and Optimize each hand-rolled the same four lines — disable, swap
+the label, give both back — which was three copies of `busyButton` with no
+spinner, no `aria-busy` and no pinned width, so the row reflowed under the
+pointer. They call `busyButton` now. The newsdesk run's `working()` matches the
+same contract by hand: it cannot call `busyButton`, which wraps one promise,
+because its stages release across a `render()` that replaces the button.
+
 ## Engineering rules
 
 - **The overflow diagnosis started from desk-selected baseline `52c9556`.** Fix

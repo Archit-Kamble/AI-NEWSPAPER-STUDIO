@@ -8311,3 +8311,49 @@ throwaway edition made for item 7 was deleted.
 - `headline-focus.browser.js` reported 8/11 once inside a back-to-back sweep
   and 11/11 six times after, including the same ordering reproduced on
   purpose. Its two load-bearing checks passed every run.
+
+## The dead button, and the loading states — 2 Sept 2026
+
+### "Write 31 stories" did nothing
+
+`busy` was set by the newsdesk panel's `working()` and released only in each
+stage's **catch**, so a run that SUCCEEDED left it true for the life of the
+panel and the next stage's `if (busy) return;` swallowed the press. Reproduced
+against a stubbed planner (no AI call spent): **0 POSTs to `/newsdesk/write`**,
+no message, nothing on screen. The same leak then killed Accept.
+
+Released in a `finally` in all three. `tests/browser/newsdesk-run.browser.js`
+holds it and fails against the parent commit with the reported symptom.
+
+### npm test was billing the owner's AI account
+
+`withProviders(t, stubs)` merged into `ai.PROVIDERS` and left the real chain
+(deepseek → gemini → sarvam → anthropic → groq) behind the stub. sarvam,
+deepseek and groq carry real keys on this machine, so four test files were
+reaching real providers over the network: non-deterministic AND paid for.
+
+The stubs are the whole chain now. The previously flaky test: **9193ms → 76ms**,
+identical across three runs; two full-suite runs 1102/1102.
+
+### Loading states
+
+- `.is-busy`, `sahas-spin` and `sahas-sheen` were each defined twice at equal
+  specificity; the region skeleton (sized 220**px**) was being animated by the
+  percentage keyframes written for `.skel` (220**%**), so its sheen ran
+  backwards across half the element.
+- **A busy control rendered at 0.55 opacity with a `not-allowed` cursor**,
+  because `button:disabled` (0,1,1) beat `.is-busy` (0,1,0) and `busyButton`
+  always disables. The rule's own comment states the opposite intent and had
+  never applied.
+- The AI panel's Write / Fill / Optimize now use the shared `busyButton`, and
+  their proposal areas carry a skeleton in the shape of the answer while it is
+  written — taken away by a refusal.
+
+Verified by holding each request open and photographing it.
+
+### Verified
+
+`npm test` 1102/1102 (twice). All browser nets green: workspace 224/224,
+editor-parity 70/70, editor-controls 86/86, body-editing 35/35, device-bar
+65/65, desk-actions 27/27, smart-cards 27/27, visual-pass 46/46, admin-screens
+19/19, newsdesk-run 16/16, epaper-public 13, roles 37.

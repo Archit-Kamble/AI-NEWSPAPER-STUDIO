@@ -478,6 +478,16 @@ async function saveSection(pageId, sectionKey, updates) {
          show_dateline = COALESCE($52, show_dateline),
          headline_locked = COALESCE($53, headline_locked),
          subheading_locked = COALESCE($54, subheading_locked),
+         -- THE PAGE'S OWN LOOK, written onto the block by page-styles.js.
+         --
+         -- NOT coalesced, deliberately, and for the same reason
+         -- background_color is not: NULL is a real state on all three - the
+         -- paper's own rule ink, its own black, and a square corner - so
+         -- COALESCE would make UNDRESSING a block impossible, and undressing
+         -- is exactly what restyling a feature page as a front page has to do.
+         border_ink = $55,
+         headline_ink = $56,
+         border_radius_px = COALESCE($57, border_radius_px),
          updated_at = CURRENT_TIMESTAMP
      WHERE page_id = $1 AND section_key = $2 RETURNING *`,
     [pageId, sectionKey, updates.newsItemId || null, updates.headline || null, updates.headlineFontPx || null,
@@ -523,7 +533,10 @@ async function saveSection(pageId, sectionKey, updates) {
       updates.displayFamily || null,
       typeof updates.showDateline === 'boolean' ? updates.showDateline : null,
       typeof updates.headlineLocked === 'boolean' ? updates.headlineLocked : null,
-      typeof updates.subheadingLocked === 'boolean' ? updates.subheadingLocked : null]
+      typeof updates.subheadingLocked === 'boolean' ? updates.subheadingLocked : null,
+      updates.borderInk || null,
+      updates.headlineInk || null,
+      Number.isFinite(updates.borderRadiusPx) ? updates.borderRadiusPx : null]
   );
   return rows[0] || null;
 }

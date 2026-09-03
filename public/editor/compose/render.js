@@ -222,7 +222,21 @@ export function composedMarkup(composition, view, { datelinePrefix = '' } = {}) 
       // Type out of a reverse band is white, and it is the band's own decision
       // rather than a mark - a desk that inked a word inside it still wins,
       // because that span carries its own colour further down the cascade.
-      const reverseInk = reversed && key === 'headline' ? 'color:#fff;' : '';
+      // A HEADING IN THE BLOCK'S OWN INK.
+      //
+      // The reference paper sets a dressed story's heading in the same hue as
+      // the ground it sits on and the rule around it - that is what
+      // `page-styles.js` calls a hue family, and `headline_ink` is where the
+      // page's theme writes it. NULL is the paper's own black, so a block that
+      // has said nothing draws exactly as it always has.
+      //
+      // The reverse band still wins, and must: type out of a solid panel is
+      // white whatever hue the panel is, and a coloured heading on a coloured
+      // panel would be unreadable. A desk's own inked WORD still beats both,
+      // because that span carries its colour further down the cascade.
+      const displayInk = !reversed && view.headlineInk && (key === 'headline' || key === 'kicker')
+        ? `color:${escapeHtml(view.headlineInk)};` : '';
+      const reverseInk = reversed && key === 'headline' ? 'color:#fff;' : displayInk;
       pieces.push(
         `<span class="section-composed ${className}" style="left:${line.x.toFixed(2)}px;top:${line.y.toFixed(2)}px;`
         + `width:${line.measure.toFixed(2)}px;height:${line.height.toFixed(2)}px;`

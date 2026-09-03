@@ -4853,27 +4853,27 @@ body.print-view .section-diagnostic {
    its own 1.5px and 1px here, so the number a block was composed against and
    the number it was drawn with were two different numbers. */
 .newspaper-section.ruled-box {
-  border: var(--block-rule, 0.71px) solid #111;
+  border: var(--block-rule, 0.71px) solid var(--block-ink, #111);
 }
 .newspaper-section.ruled-rule {
-  border-bottom: var(--block-rule, 0.71px) solid #111;
+  border-bottom: var(--block-rule, 0.71px) solid var(--block-ink, #111);
 }
 .newspaper-section.ruled-rule-above {
-  border-top: var(--block-rule, 0.71px) solid #111;
+  border-top: var(--block-rule, 0.71px) solid var(--block-ink, #111);
 }
 .newspaper-section.ruled-rule-both {
-  border-top: var(--block-rule, 0.71px) solid #111;
-  border-bottom: var(--block-rule, 0.71px) solid #111;
+  border-top: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-bottom: var(--block-rule, 0.71px) solid var(--block-ink, #111);
 }
 .newspaper-section.ruled-rule-left {
-  border-left: var(--block-rule, 0.71px) solid #111;
+  border-left: var(--block-rule, 0.71px) solid var(--block-ink, #111);
 }
 .newspaper-section.ruled-rule-right {
-  border-right: var(--block-rule, 0.71px) solid #111;
+  border-right: var(--block-rule, 0.71px) solid var(--block-ink, #111);
 }
 .newspaper-section.ruled-rule-sides {
-  border-left: var(--block-rule, 0.71px) solid #111;
-  border-right: var(--block-rule, 0.71px) solid #111;
+  border-left: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-right: var(--block-rule, 0.71px) solid var(--block-ink, #111);
 }
 /* A double rule is two lines with a gap of the same weight between them.
    CSS `border-style: double` divides the declared width into exactly that -
@@ -4883,11 +4883,23 @@ body.print-view .section-diagnostic {
    NOT a thicker line and must not be drawn as one: the eye reads two thin
    lines as a boundary and one thick line as emphasis. */
 .newspaper-section.ruled-rule-double {
-  border-bottom: max(3px, calc(var(--block-rule, 0.71px) * 3)) double #111;
+  border-bottom: max(3px, calc(var(--block-rule, 0.71px) * 3)) double var(--block-ink, #111);
 }
 .newspaper-section.ruled-box-double {
-  border: max(3px, calc(var(--block-rule, 0.71px) * 3)) double #111;
+  border: max(3px, calc(var(--block-rule, 0.71px) * 3)) double var(--block-ink, #111);
 }
+/* THE CORNER, where the desk (or the page's theme) asked for one.
+   Only a boxed block can round: a corner needs a rule on both of its edges,
+   which is what `canRound()` says and what canvas.js checks before it writes
+   the property at all. Clamped to half the box by the browser itself, so a
+   `pill` radius on a short block is an end cap rather than an overflow. */
+.newspaper-section.ruled-box,
+.newspaper-section.ruled-box-double {
+  border-radius: var(--block-radius, 0);
+}
+/* A ground has to follow the corner too, or a rounded rule sits on a square
+   block of colour and the two disagree at every corner. */
+.newspaper-section { border-radius: var(--block-radius, 0); }
 
 
 /* ===========================================================================

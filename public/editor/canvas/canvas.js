@@ -19,7 +19,7 @@ import { bindOverlayDrag, overlayHandlesMarkup, setSelectedOverlay } from "./ove
 import { viewOfSection } from "../section-model.js";
 import { computeMetrics } from "../layout/layout-metrics.js";
 import { rulerMarkup, rebuildRulers, bindRulers } from "./ruler.js";
-const { isRuled, borderWidthPx } = globalThis.SahasBorders;
+const { isRuled, borderWidthPx, borderRadiusPx, canRound } = globalThis.SahasBorders;
 const { overlaysOf } = globalThis.SahasPageOverlays;
 import { guideLayerMarkup, renderGuides, bindGuideInteractions, setGuidesVisible } from "./page-guides.js";
 
@@ -289,15 +289,38 @@ function overlayLayerMarkup(page) {
   return `<div class="page-overlay-layer" data-overlay-layer>${items}</div>`;
 }
 
+// THE RULE'S WEIGHT, ITS COLOUR AND ITS CORNER, as three custom properties.
+//
+// The stylesheet's `.ruled-*` rules read all three, so a rule can never be one
+// colour on screen and another on the plate: `print-model.js` reads the same
+// two columns. `--block-ink` falls back to the paper's own rule ink and
+// `--block-radius` to zero, so a block that has said nothing draws exactly as
+// it drew before either column existed.
+//
+// A radius is only offered where the block is BOXED (`canRound`): a corner
+// needs a rule on both of its edges, and rounding a single rule below would
+// bend a line with nothing to meet.
 function blockRuleCss(view) {
   if (!isRuled(view.borderStyle)) return '';
-  return `--block-rule:${borderWidthPx(view.borderWidthPx)}px;`;
+  const radius = canRound(view.borderStyle) ? borderRadiusPx(view.borderRadiusPx) : 0;
+  return `--block-rule:${borderWidthPx(view.borderWidthPx)}px;`
+    + (view.borderInk ? `--block-ink:${view.borderInk};` : '')
+    + (radius ? `--block-radius:${radius}px;` : '');
 }
 
 function applyBlockRule(element, view) {
-  const css = blockRuleCss(view);
-  if (css) element.style.setProperty('--block-rule', `${borderWidthPx(view.borderWidthPx)}px`);
-  else element.style.removeProperty('--block-rule');
+  if (!isRuled(view.borderStyle)) {
+    element.style.removeProperty('--block-rule');
+    element.style.removeProperty('--block-ink');
+    element.style.removeProperty('--block-radius');
+    return;
+  }
+  element.style.setProperty('--block-rule', `${borderWidthPx(view.borderWidthPx)}px`);
+  const radius = canRound(view.borderStyle) ? borderRadiusPx(view.borderRadiusPx) : 0;
+  if (view.borderInk) element.style.setProperty('--block-ink', view.borderInk);
+  else element.style.removeProperty('--block-ink');
+  if (radius) element.style.setProperty('--block-radius', `${radius}px`);
+  else element.style.removeProperty('--block-radius');
 }
 
 export function refreshSection(section, view, { selected = false, dirty = false } = {}) {

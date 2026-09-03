@@ -11,8 +11,21 @@
 // geometry column is in; the conversion is stated here, once, and never
 // silently - CLAUDE.md's own rule about mixing units.
 //
-// There is deliberately NO corner radius. A rounded newspaper block is not a
-// newspaper block; every rule on a printed page meets its neighbour square.
+// A CORNER RADIUS, WHICH THIS FILE ONCE REFUSED OUTRIGHT.
+//
+// It said "a rounded newspaper block is not a newspaper block; every rule on a
+// printed page meets its neighbour square", and for a news page that is still
+// true - which is why `DECORATION` in page-styles.js gives a radius only to
+// the `full` level, a feature page, and leaves the front page square.
+//
+// But it is not true of a printed FEATURE page, and the reference paper's own
+// world page was the evidence: its boxes are rounded. So the radius is a
+// decision the desk (or the page's theme) makes, like the rule's weight, and
+// not something this catalogue forbids on the desk's behalf.
+//
+// Stated in POINTS like the weights beside it, and stored in editor pixels for
+// the same reason. Zero is square, and is the default, so no block that exists
+// today changes.
 (function installBorders(root) {
   const PT_PER_PX = 72 / 25.4 / 2;          // 2 px/mm, 72 pt/inch, 25.4 mm/inch
   const px = (pt) => Number((pt / PT_PER_PX).toFixed(2));
@@ -60,6 +73,34 @@
     { pt: 4, px: px(4), label: '4 pt' },
   ]);
 
+  // A printer's own ladder again. `pill` is deliberately a large number rather
+  // than a keyword: a fully round end is just a radius bigger than half the
+  // box, and every renderer already clamps it to half, so nothing downstream
+  // needs a special case for "circle".
+  const BORDER_RADII = Object.freeze([
+    { pt: 0, px: 0, label: 'Square' },
+    { pt: 3, px: px(3), label: 'Soft' },
+    { pt: 6, px: px(6), label: 'Round' },
+    { pt: 120, px: px(120), label: 'Pill' },
+  ]);
+
+  /**
+   * The stored radius in editor pixels, clamped to the ladder and never
+   * negative. Zero is square and is the ordinary state.
+   *
+   * NOT clamped to half the box here: this function does not know the box.
+   * Every renderer clamps against its own geometry, which is also what makes
+   * `pill` work at any block size.
+   */
+  function borderRadiusPx(value) {
+    const radius = Number(value);
+    if (!Number.isFinite(radius) || radius <= 0) return 0;
+    return Math.min(radius, BORDER_RADII[BORDER_RADII.length - 1].px);
+  }
+
+  /** A radius can only show where there is a rule on both edges of a corner. */
+  const canRound = (key) => isBoxed(key);
+
   const KEYS = BORDER_STYLES.map((style) => style.key);
   const byKey = (key) => BORDER_STYLES.find((style) => style.key === String(key || 'none'))
     || BORDER_STYLES[0];
@@ -91,8 +132,9 @@
   }
 
   const api = Object.freeze({
-    BORDER_STYLES, BORDER_WIDTHS, BORDER_KEYS: KEYS,
+    BORDER_STYLES, BORDER_WIDTHS, BORDER_RADII, BORDER_KEYS: KEYS,
     borderEdges, isBoxed, isRuled, isDouble, borderWidthPx, borderThicknessPx,
+    borderRadiusPx, canRound,
   });
   root.SahasBorders = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

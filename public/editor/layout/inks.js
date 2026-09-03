@@ -66,6 +66,11 @@ export const TINTS = [
   { key: 'mint', label: 'Mint', hex: '#eef7f0', scribus: 'SahasTintMint' },
   { key: 'lilac', label: 'Lilac', hex: '#f3eefa', scribus: 'SahasTintLilac' },
   { key: 'sand', label: 'Sand', hex: '#f8f2e7', scribus: 'SahasTintSand' },
+  // The eighth ground, added so every ink in the table above has a tint of its
+  // own hue to sit on. `page-styles.js` pairs the two into the light-ground /
+  // darker-rule / darker-heading triple a printed feature page is set in, and
+  // teal was the one ink with no ground to pair with.
+  { key: 'teal', label: 'Teal', hex: '#eef6f7', scribus: 'SahasTintTeal' },
 ];
 
 // A colour that has been through the DOM comes back as `rgb(200, 16, 46)`,

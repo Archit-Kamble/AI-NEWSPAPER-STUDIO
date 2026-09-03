@@ -894,3 +894,34 @@ ALTER TABLE page_sections ALTER COLUMN subheading_align TYPE VARCHAR(16);
 -- scanned twice every morning.
 CREATE INDEX IF NOT EXISTS newspapers_publication_date_idx
   ON newspapers (publication_date DESC);
+
+-- HOW A PAGE IS DRESSED, AND WHAT EACH BLOCK ON IT WEARS.
+--
+-- The desk's report was that this software fills a page but does not STYLE
+-- one. Every device it needs already existed - a tint, a rule, a rule's
+-- weight, a headline treatment, an accent ink - and nothing CHOSE them: they
+-- were columns a person set by hand, one block at a time, on thirty-odd
+-- blocks a day.
+--
+-- Four columns, and every one is additive with a default that means "as
+-- before", so not one block in this database changes appearance until
+-- something writes to it.
+--
+--   pages.style_theme          which look the page wears (page-styles.js).
+--                              NULL = nobody has said, which the styler reads
+--                              as "guess it from what is on the page".
+--   page_sections.border_ink   the rule's own colour. NULL = the paper's
+--                              rule ink, which is what every ruled block in
+--                              this table is drawn with today.
+--   page_sections.headline_ink the heading's colour. NULL = black.
+--   page_sections.border_radius_px  0 = square, and square is the default.
+--
+-- `border_ink` and `headline_ink` are NULL-for-unset rather than defaulted to
+-- a colour, which is this schema's own idiom for "the desk has not said"
+-- (headline_align, subheading_align, column_count, display_family). Defaulting
+-- them to a hex would restyle every existing block the moment the renderer
+-- read the column.
+ALTER TABLE pages         ADD COLUMN IF NOT EXISTS style_theme VARCHAR(24);
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS border_ink VARCHAR(20);
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS headline_ink VARCHAR(20);
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS border_radius_px NUMERIC(5,2) NOT NULL DEFAULT 0;

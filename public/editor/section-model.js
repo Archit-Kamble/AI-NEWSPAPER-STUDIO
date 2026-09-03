@@ -87,6 +87,12 @@ export const DRAFT_FIELDS = [
   "backgroundColor",
   "headlineStyle",
   "accentColor",
+  // The page's own look, written onto its blocks by page-styles.js: the rule's
+  // colour, the corner it turns, and the heading's ink. NULL on all three is
+  // "nobody has dressed this block", which is every block that predates them.
+  "borderInk",
+  "headlineInk",
+  "borderRadiusPx",
   // The structured card placed in this block, if any. In the draft like every
   // other editable field, so it travels down the one channel everything else
   // does: draft -> DRAFT event -> canvas -> autosave -> database. A second
@@ -185,6 +191,13 @@ export function draftFromSection(section) {
     backgroundColor: sanitiseTint(section.background_color),
     headlineStyle: section.headline_style || "plain",
     accentColor: sanitiseInk(section.accent_color) || "#c8102e",
+    // Sanitised on the way IN like the tint above and for the same reason:
+    // both are interpolated into the page's style attribute, so a value that
+    // has not been through the palette may never reach a renderer. NULL stays
+    // NULL - it is the paper's own rule ink and its own black.
+    borderInk: sanitiseInk(section.border_ink),
+    headlineInk: sanitiseInk(section.headline_ink),
+    borderRadiusPx: Number(section.border_radius_px) || 0,
     // A card is only a card when both halves are there. A key with no payload
     // is a block that says it holds a sudoku and cannot draw one, so it is
     // read as no card at all and the body text prints instead.
@@ -296,6 +309,9 @@ export function payloadFromDraft(draft) {
     backgroundColor: sanitiseTint(draft.backgroundColor),
     headlineStyle: draft.headlineStyle,
     accentColor: sanitiseInk(draft.accentColor) || "#c8102e",
+    borderInk: sanitiseInk(draft.borderInk),
+    headlineInk: sanitiseInk(draft.headlineInk),
+    borderRadiusPx: Number(draft.borderRadiusPx) || 0,
     smartCardKey: draft.smartCardKey || null,
     smartCardData: draft.smartCardData || null,
   };

@@ -6,7 +6,7 @@ const { quote } = require('../layout/rateCard');
 const reviewInvalidation = require('./reviewInvalidation.service');
 // The one border catalogue, shared with the browser exactly as the character
 // grid, the block kinds, the picture style and the inks are.
-const { BORDER_KEYS, BORDER_WIDTHS } = require('../../public/editor/layout/borders');
+const { BORDER_KEYS, BORDER_WIDTHS, borderRadiusPx: borderRadius } = require('../../public/editor/layout/borders');
 const { panelOf } = require('../../public/editor/layout/inset-panels');
 const { TYPEFACES } = require('../../public/editor/layout/typefaces');
 const { BLOCK_KINDS } = require('../../public/editor/layout/block-kinds');
@@ -175,6 +175,29 @@ async function saveSection(pageId, sectionKey, body) {
   if (supplied(body.accentColor) && accentColor === null) {
     return { error: 'The headline accent must be one of the newspaper palette inks.' };
   }
+  // THE PAGE'S OWN LOOK IS A SERVER BOUNDARY TOO.
+  //
+  // A rule's colour and a heading's ink are both interpolated into the canvas's
+  // style attribute and into a .sla, so neither may be trusted from a browser -
+  // exactly the argument the tint above rests on. Both are cleared by sending
+  // an empty value, which is how a block is UNDRESSED when a page's theme
+  // changes; only a non-empty value that is not in the palette is refused.
+  const borderInk = supplied(body.borderInk) ? palette.sanitiseInk(body.borderInk) : null;
+  const headlineInk = supplied(body.headlineInk) ? palette.sanitiseInk(body.headlineInk) : null;
+  for (const [field, value, given] of [
+    ['borderInk', borderInk, body.borderInk],
+    ['headlineInk', headlineInk, body.headlineInk],
+  ]) {
+    if (supplied(given) && String(given).trim() !== '' && value === null) {
+      return { error: `The ${field === 'borderInk' ? 'rule' : 'heading'} colour must be one of the newspaper palette inks.` };
+    }
+  }
+  if (supplied(body.borderRadiusPx)) {
+    const radius = Number(body.borderRadiusPx);
+    if (!Number.isFinite(radius) || radius < 0) {
+      return { error: 'The corner radius must be a positive number of pixels, or zero for a square corner.' };
+    }
+  }
   // ALIGNMENT IS A CLOSED SET, checked here for the reason the palette is:
   // `text_align` is interpolated into a style attribute by the Typography
   // panel's preview, so arbitrary stored text may not reach a renderer. It had
@@ -307,6 +330,9 @@ async function saveSection(pageId, sectionKey, body) {
     borderWidthPx: body.borderWidthPx,
     borderColor: body.borderColor,
     backgroundColor,
+    borderInk,
+    headlineInk,
+    borderRadiusPx: supplied(body.borderRadiusPx) ? borderRadius(body.borderRadiusPx) : undefined,
     headlineStyle: body.headlineStyle,
     accentColor,
     // What structured card is placed in this block, and its payload. Never

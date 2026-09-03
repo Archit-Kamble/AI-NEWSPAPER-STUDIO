@@ -28,7 +28,7 @@ const HEADER_FOLIO_PX = HEADER.folioHeightPx;
 const { identityFor, dateLine, devanagari } = require('../../layout/identity');
 const { strip } = require('../../layout/plain-text');
 const { captionBox, PLACED_CAPTION_METRICS } = require('../../../public/editor/layout/caption-geometry');
-const { borderEdges, borderWidthPx, isDouble } = require('../../../public/editor/layout/borders');
+const { borderEdges, borderWidthPx, isDouble, isBoxed, borderRadiusPx } = require('../../../public/editor/layout/borders');
 const { panelsOf, panelLayout, panelStyle } = require('../../../public/editor/layout/inset-panels');
 const { overlaysOf } = require('../../../public/editor/layout/page-overlays');
 const { smartCardLines } = require('./smart-card-lines');
@@ -128,6 +128,24 @@ const run = (text, { family = 'sans', weight = 400, bold = false, italic = false
 // -------------------------------------------------------------- one block ---
 
 const ACCENT_INK = '#c8102e';
+
+/**
+ * A DISPLAY BAND'S OWN INK.
+ *
+ * The order is the renderer's, and must stay the renderer's: a reverse band is
+ * white type out of a solid panel whatever hue the panel is, so it beats the
+ * block's heading colour; a desk's own inked WORD beats both and is applied by
+ * the caller before this is consulted.
+ *
+ * `headline_ink` is what a page's theme writes (page-styles.js). NULL is the
+ * paper's own black, which is `null` here - the writers' own default - so a
+ * block nobody dressed emits exactly the runs it always did.
+ */
+function bandInk(section, key, reversed) {
+  if (reversed && key === 'headline') return '#ffffff';
+  if (section?.headline_ink && (key === 'headline' || key === 'kicker')) return section.headline_ink;
+  return null;
+}
 const REVERSE_BLEED_PX = 2;
 
 async function blockItems(section, { mono = false } = {}) {
@@ -187,7 +205,31 @@ async function blockItems(section, { mono = false } = {}) {
         left: { x: x0 + o, y: y0 + o, width: t, height: h - o * 2 },
         right: { x: x0 + w - o - t, y: y0 + o, width: t, height: h - o * 2 },
       };
-      for (const edge of edges) items.push({ kind: 'rule', ...RULES[edge], ink: RULE_INK });
+      // THE RULE TAKES THE BLOCK'S OWN INK, exactly as the canvas does through
+      // --block-ink. NULL is the paper's rule ink, so a block nobody dressed
+      // draws byte for byte as it always did.
+      const ink = section.border_ink || RULE_INK;
+      // A ROUNDED BOX IS ONE STROKED PATH, not four rectangles.
+      //
+      // Four rules cannot round: each is its own rectangle and the corner is
+      // where two of them simply stop. An arc turned into SEGMENTS is a
+      // polygon - the argument `arcPoints()` already rests on for a pie - so a
+      // rounded box is one closed `poly` with a stroke, which all three
+      // writers already draw. Square is still four rules, so nothing that
+      // exists today emits a different shape.
+      const radius = isBoxed(section.border_style) ? borderRadiusPx(section.border_radius_px) : 0;
+      if (radius > 0) {
+        items.push({
+          kind: 'poly', close: true, ink, strokeWidth: t,
+          x: x0 + o, y: y0 + o, width: w - o * 2, height: h - o * 2,
+          points: roundedRectPoints(
+            x0 + o + t / 2, y0 + o + t / 2,
+            w - o * 2 - t, h - o * 2 - t, mm(radius),
+          ),
+        });
+      } else {
+        for (const edge of edges) items.push({ kind: 'rule', ...RULES[edge], ink });
+      }
     }
   }
 
@@ -239,14 +281,14 @@ async function blockItems(section, { mono = false } = {}) {
       const runs = key === 'headline' && headlineSegments
         ? (headlineSegments[index] || []).map((segment) => run(segment.text, {
           family: line.family, weight: line.weight, fontPx: line.fontPx,
-          ink: segment.accent ? ACCENT_INK : (reversed ? '#ffffff' : null),
+          ink: segment.accent ? ACCENT_INK : bandInk(section, key, reversed),
         }))
         : richText.styledRuns(line.text, line.at || 0, band.marks || [], line.fontPx)
           .map((piece) => run(piece.text, {
             family: line.family, weight: piece.bold ? 700 : line.weight,
             bold: Boolean(piece.bold), italic: Boolean(piece.italic), underline: Boolean(piece.underline),
             fontPx: piece.fontPx || line.fontPx,
-            ink: piece.colour || (reversed && key === 'headline' ? '#ffffff' : null),
+            ink: piece.colour || bandInk(section, key, reversed),
           }));
       items.push(lineItem({
         x: x0 + mm(line.x), y: y0 + mm(line.y),
@@ -1141,6 +1183,32 @@ async function pageFurniture(newspaper, page, geometry, identity) {
 }
 
 /** A block's own rules, in the same neutral kinds. */
+/**
+ * A rounded rectangle as a closed point list, clockwise from the top-left
+ * corner, in the same millimetres every other item in this model is stated in.
+ *
+ * The straight edges come free: each corner arc ends exactly where the next
+ * one begins, so the four arcs joined in order ARE the path. The radius is
+ * clamped to half the shorter side, which is what makes a `pill` radius an end
+ * cap rather than a shape that folds through itself - the same clamp a browser
+ * applies to `border-radius`, so the two agree.
+ */
+function roundedRectPoints(x, y, w, h, radius) {
+  // The SAME segmentation a pie's slices are drawn with, so a rounded corner
+  // on the plate is the same polygon the canvas rounds - never a second
+  // approximation of the same arc.
+  const { arcPoints: arcPointsOf } = modules.smartCardLayout;
+  const r = Math.max(0, Math.min(radius, Math.min(w, h) / 2));
+  if (r <= 0) return [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
+  const arc = (cx, cy, from, to) => arcPointsOf(cx, cy, r, from, to);
+  return [
+    ...arc(x + r, y + r, 0.75, 1),
+    ...arc(x + w - r, y + r, 0, 0.25),
+    ...arc(x + w - r, y + h - r, 0.25, 0.5),
+    ...arc(x + r, y + h - r, 0.5, 0.75),
+  ];
+}
+
 function blockRules(section) {
   const edges = borderEdges(section.border_style);
   if (!edges.length) return [];

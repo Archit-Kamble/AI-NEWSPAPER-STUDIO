@@ -925,3 +925,15 @@ ALTER TABLE pages         ADD COLUMN IF NOT EXISTS style_theme VARCHAR(24);
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS border_ink VARCHAR(20);
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS headline_ink VARCHAR(20);
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS border_radius_px NUMERIC(5,2) NOT NULL DEFAULT 0;
+
+-- A BLOCK IS A RECTANGLE, UNTIL A CORNER IS CUT OFF IT.
+--
+-- The desk's report: "our layout blocks are rectangle make them with
+-- different shapes." NULL is a plain rectangle - every block in this
+-- database today - and a named shape cuts one or more corners at 45 degrees.
+-- See public/editor/layout/block-shapes.js for the full argument: this is
+-- deliberately narrower than "any polygon", because a genuinely new outline
+-- would need the compositor's own scanline algorithm to change, and a corner
+-- cut needs only one more OBSTACLE entry - the same vocabulary a photograph
+-- and a चौकट panel already are.
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS frame_shape VARCHAR(20);

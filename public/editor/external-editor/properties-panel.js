@@ -15,6 +15,7 @@
 
 import { escapeHtml } from "../format.js";
 import { TINTS, HEADLINE_STYLES as HEADLINE_STYLE_TABLE } from "../layout/inks.js";
+import { BLOCK_SHAPES } from "../layout/block-shapes.js";
 import { composeSection, measureColumns, maxLegibleColumns } from "../compose/section-adapter.js";
 import { PART_LABEL } from "./typography-panel.js";
 import { statusOf, statusLabel } from "../status/section-status.js";
@@ -279,6 +280,7 @@ function blockPropertiesMarkup(section, view, page) {
   const border = String(view.borderStyle || section.border_style || "none");
   const ruleWidth = borderWidthPx(view.borderWidthPx ?? section.border_width_px);
   const ruleRadius = borderRadiusPx(view.borderRadiusPx ?? section.border_radius_px);
+  const shapeKey = String(view.frameShape ?? section.frame_shape ?? "");
   const tint = view.backgroundColor ?? section.background_color ?? null;
   const headlineStyle = String(view.headlineStyle || section.headline_style || "plain");
   const rawColumns = view.columnCount ?? section.column_count ?? null;
@@ -340,6 +342,24 @@ function blockPropertiesMarkup(section, view, page) {
         </div>
       </div>` : ""}
       <p class="muted ext-note">Nothing is ruled unless you rule it. A rule is specified in points, the way a printer specifies one. A box sets the copy in a little way from its own line, the way a printed panel does, and the page draws no hairline in the gutter beside a block that already has a box.${canRound(border) ? " A rounded or pill corner is a printed feature page's own device - a front or city page keeps its corners square, so a page's theme sets this on purpose and you can still set it by hand." : " Only a full box can take a corner - a single rule has nothing to round."}</p>
+    </div>
+
+    <div class="prop-section">
+      <h5 class="prop-heading">Shape</h5>
+      <div class="form-group">
+        <!-- A CORNER CUT, never a new outline. block-shapes.js's own header
+             says why: a shape a story's copy could not run round would need
+             the compositor's own scanline algorithm to change, and a corner
+             cut needs only one more OBSTACLE - the same vocabulary a picture
+             and a पॅनल already are. So this offers what that budget can prove
+             correct, not "any polygon". -->
+        <div class="segmented segmented-grid" data-prop-shape>
+          ${BLOCK_SHAPES.map(
+            (shape) => `<button type="button" class="segment${(shapeKey || "rectangle") === shape.key ? " active" : ""}" data-shape="${shape.key}">${escapeHtml(shape.label)}</button>`,
+          ).join("")}
+        </div>
+      </div>
+      <p class="muted ext-note">A cut corner is an obstacle to the compositor, exactly like a photograph - the story is composed clear of it, never printed through it. Two cuts on one edge (a chevron, an octagon) are set shallower than one, so they can never meet.</p>
     </div>
 
     <div class="prop-section">
@@ -747,6 +767,14 @@ function bindBorderButtons(handlers) {
   document.querySelectorAll("[data-prop-border-radius] [data-border-radius]").forEach((button) => {
     button.addEventListener("click", () => {
       handlers.onPatch?.({ borderRadiusPx: Number(button.dataset.borderRadius) }, "properties-panel");
+    });
+  });
+  document.querySelectorAll("[data-prop-shape] [data-shape]").forEach((button) => {
+    button.addEventListener("click", () => {
+      // "rectangle" is the plain state and is stored as NULL - the same
+      // pattern White/Black/None already use throughout this catalogue.
+      const key = button.dataset.shape;
+      handlers.onPatch?.({ frameShape: key === "rectangle" ? "" : key }, "properties-panel");
     });
   });
 }

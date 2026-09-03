@@ -42,7 +42,7 @@ let modules = null;
 
 async function ensureComposeReady() {
   if (!modules) {
-    const [metrics, shaper, adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry, accent, compose, columnRules, inks, furniture] =
+    const [metrics, shaper, adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry, accent, compose, columnRules, inks, furniture, blockShapes] =
       await Promise.all([
         import('../../../public/editor/compose/font-metrics.js'),
         import('../../../public/editor/compose/shaper.js'),
@@ -62,8 +62,11 @@ async function ensureComposeReady() {
         // masthead.js reads, so a themed page's running head and foot print
         // exactly what the canvas showed the desk.
         import('../../../public/editor/layout/furniture-styles.js'),
+        // The block-shape catalogue - a block's own cut-corner outline,
+        // traced as one polygon everywhere the block's border is drawn.
+        import('../../../public/editor/layout/block-shapes.js'),
       ]);
-    modules = { metrics, shaper, adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry, accent, compose, columnRules, inks, furniture };
+    modules = { metrics, shaper, adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry, accent, compose, columnRules, inks, furniture, blockShapes };
   }
   await Promise.all([modules.metrics.ensureFontsLoaded(), modules.shaper.ensureShaperReady()]);
   modules.shaper.requireShaperReady();
@@ -170,12 +173,25 @@ async function blockItems(section, { mono = false } = {}) {
 
   // The block's ground goes down FIRST, because every writer here paints in
   // document order and this is what the rest of the block is printed on.
+  //
+  // SHAPED, when the block's own frame is not a rectangle - a filled polygon
+  // is the same `poly` primitive the border above draws stroked, so a cut
+  // corner's ground never bleeds past where its own border sits.
   if (section.background_color) {
-    items.push({
-      kind: 'fill', x: x0, y: y0,
-      width: mm(section.width_px), height: mm(section.height_px),
-      ink: section.background_color,
-    });
+    if (section.frame_shape) {
+      items.push({
+        kind: 'poly', close: true, ink: section.background_color,
+        x: x0, y: y0, width: mm(section.width_px), height: mm(section.height_px),
+        points: modules.blockShapes.shapedRectPoints(section.frame_shape, mm(section.width_px), mm(section.height_px))
+          .map(([px, py]) => [x0 + px, y0 + py]),
+      });
+    } else {
+      items.push({
+        kind: 'fill', x: x0, y: y0,
+        width: mm(section.width_px), height: mm(section.height_px),
+        ink: section.background_color,
+      });
+    }
   }
 
   // THE BLOCK'S OWN RULES, which no export drew.
@@ -189,53 +205,13 @@ async function blockItems(section, { mono = false } = {}) {
   // Drawn after the ground and before the type, which is the order a printer
   // lays them down, and at the width the desk specified rather than at a
   // number written into a stylesheet.
-  const edges = borderEdges(section.border_style);
-  if (edges.length) {
-    const weight = borderWidthPx(section.border_width_px);
-    const w = mm(section.width_px);
-    const h = mm(section.height_px);
-    const t = mm(weight);
-    // A DOUBLE RULE IS DRAWN AS TWO RULES, never as one thicker one. The eye
-    // reads two thin lines as a boundary and one thick line as emphasis, and
-    // those are different statements - which is the whole reason a printer
-    // owns the device. The inner pass is inset by twice the weight: line, gap,
-    // line, and the gap is the same weight as the lines.
-    const passes = isDouble(section.border_style) ? [0, weight * 2] : [0];
-    for (const offset of passes) {
-      const o = mm(offset);
-      const RULES = {
-        top: { x: x0 + o, y: y0 + o, width: w - o * 2, height: t },
-        bottom: { x: x0 + o, y: y0 + h - o - t, width: w - o * 2, height: t },
-        left: { x: x0 + o, y: y0 + o, width: t, height: h - o * 2 },
-        right: { x: x0 + w - o - t, y: y0 + o, width: t, height: h - o * 2 },
-      };
-      // THE RULE TAKES THE BLOCK'S OWN INK, exactly as the canvas does through
-      // --block-ink. NULL is the paper's rule ink, so a block nobody dressed
-      // draws byte for byte as it always did.
-      const ink = section.border_ink || RULE_INK;
-      // A ROUNDED BOX IS ONE STROKED PATH, not four rectangles.
-      //
-      // Four rules cannot round: each is its own rectangle and the corner is
-      // where two of them simply stop. An arc turned into SEGMENTS is a
-      // polygon - the argument `arcPoints()` already rests on for a pie - so a
-      // rounded box is one closed `poly` with a stroke, which all three
-      // writers already draw. Square is still four rules, so nothing that
-      // exists today emits a different shape.
-      const radius = isBoxed(section.border_style) ? borderRadiusPx(section.border_radius_px) : 0;
-      if (radius > 0) {
-        items.push({
-          kind: 'poly', close: true, ink, strokeWidth: t,
-          x: x0 + o, y: y0 + o, width: w - o * 2, height: h - o * 2,
-          points: roundedRectPoints(
-            x0 + o + t / 2, y0 + o + t / 2,
-            w - o * 2 - t, h - o * 2 - t, mm(radius),
-          ),
-        });
-      } else {
-        for (const edge of edges) items.push({ kind: 'rule', ...RULES[edge], ink });
-      }
-    }
-  }
+  // ONE FUNCTION DRAWS A BLOCK'S BORDER, for every writer. blockRules()
+  // below used to be Scribus's own, separate copy of this exact logic, missed
+  // when the block's own ink and its rounded corner were added here - so a
+  // block's border carried its theme colour and its radius in the PDF/IDML
+  // and printed plain black square corners in the .sla. Consolidated rather
+  // than kept in step by hand, which is how it drifted the first time.
+  items.push(...blockRules(section));
 
   const bands = composition.bands || {};
   const headlineBand = bands.headline;
@@ -1270,6 +1246,19 @@ function roundedRectPoints(x, y, w, h, radius) {
   ];
 }
 
+/**
+ * A BLOCK'S OWN BORDER - the one implementation every writer draws from.
+ * PDF and IDML reach it through `blockItems()` above; Scribus calls it
+ * directly. It used to be two copies, and the second never learned the
+ * block's own ink or its rounded corner - the .sla printed square black
+ * borders on a page whose PDF and canvas both showed the desk's own theme.
+ *
+ * THE SHAPE TAKES PRECEDENCE OVER THE RADIUS. A cut corner and a rounded one
+ * both need the border traced as one stroked polygon rather than four
+ * straight rules - `shapedRectPoints()` degrades to the plain rectangle's
+ * four corners when no shape is set, so this is the SAME code path a square
+ * block already took, extended rather than branched.
+ */
 function blockRules(section) {
   const edges = borderEdges(section.border_style);
   if (!edges.length) return [];
@@ -1279,16 +1268,39 @@ function blockRules(section) {
   const w = mm(section.width_px);
   const h = mm(section.height_px);
   const t = mm(weight);
+  const ink = section.border_ink || RULE_INK;
+  const shapeKey = section.frame_shape;
   const out = [];
   for (const offset of isDouble(section.border_style) ? [0, weight * 2] : [0]) {
     const o = mm(offset);
+    if (shapeKey) {
+      // A cut corner traced as one stroked polygon, in the block's own
+      // page-mm coordinates - blockShapes.shapedRectPoints() is LOCAL (0,0 at
+      // the block's own top-left), so every point is offset by x0+o/y0+o,
+      // the same inset a rounded box already applies per double-rule pass.
+      const localW = w - o * 2;
+      const localH = h - o * 2;
+      const points = modules.blockShapes.shapedRectPoints(shapeKey, localW - t, localH - t)
+        .map(([px, py]) => [x0 + o + t / 2 + px, y0 + o + t / 2 + py]);
+      out.push({ kind: 'poly', close: true, ink, strokeWidth: t, x: x0 + o, y: y0 + o, width: localW, height: localH, points });
+      continue;
+    }
+    const radius = isBoxed(section.border_style) ? borderRadiusPx(section.border_radius_px) : 0;
+    if (radius > 0) {
+      out.push({
+        kind: 'poly', close: true, ink, strokeWidth: t,
+        x: x0 + o, y: y0 + o, width: w - o * 2, height: h - o * 2,
+        points: roundedRectPoints(x0 + o + t / 2, y0 + o + t / 2, w - o * 2 - t, h - o * 2 - t, mm(radius)),
+      });
+      continue;
+    }
     const RULES = {
       top: { x: x0 + o, y: y0 + o, width: w - o * 2, height: t },
       bottom: { x: x0 + o, y: y0 + h - o - t, width: w - o * 2, height: t },
       left: { x: x0 + o, y: y0 + o, width: t, height: h - o * 2 },
       right: { x: x0 + w - o - t, y: y0 + o, width: t, height: h - o * 2 },
     };
-    for (const edge of edges) out.push({ kind: 'rule', ...RULES[edge], ink: RULE_INK });
+    for (const edge of edges) out.push({ kind: 'rule', ...RULES[edge], ink });
   }
   return out;
 }

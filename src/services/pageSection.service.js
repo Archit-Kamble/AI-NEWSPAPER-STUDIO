@@ -7,6 +7,7 @@ const reviewInvalidation = require('./reviewInvalidation.service');
 // The one border catalogue, shared with the browser exactly as the character
 // grid, the block kinds, the picture style and the inks are.
 const { BORDER_KEYS, BORDER_WIDTHS, borderRadiusPx: borderRadius } = require('../../public/editor/layout/borders');
+const { BLOCK_SHAPE_KEYS } = require('../../public/editor/layout/block-shapes');
 const { panelOf } = require('../../public/editor/layout/inset-panels');
 const { TYPEFACES } = require('../../public/editor/layout/typefaces');
 const { BLOCK_KINDS } = require('../../public/editor/layout/block-kinds');
@@ -220,6 +221,13 @@ async function saveSection(pageId, sectionKey, body) {
       && !TYPEFACES.some((face) => face.key === body.displayFamily)) {
     return { error: `The headline face must be one of ${TYPEFACES.map((f) => f.key).join(', ')}.` };
   }
+  // THE BLOCK'S OWN SHAPE. Checked here for the reason the border catalogue
+  // is: it decides which obstacle boxes the compositor keeps type clear of
+  // AND what clip-path the canvas draws, so a value that has not been through
+  // this catalogue may reach neither.
+  if (supplied(body.frameShape) && String(body.frameShape).trim() && !BLOCK_SHAPE_KEYS.includes(body.frameShape)) {
+    return { error: `The block shape must be one of ${BLOCK_SHAPE_KEYS.join(', ')}.` };
+  }
   if (supplied(body.borderStyle) && !BORDER_KEYS.includes(body.borderStyle)) {
     return { error: `The border style must be one of ${BORDER_KEYS.join(', ')}.` };
   }
@@ -333,6 +341,7 @@ async function saveSection(pageId, sectionKey, body) {
     borderInk,
     headlineInk,
     borderRadiusPx: supplied(body.borderRadiusPx) ? borderRadius(body.borderRadiusPx) : undefined,
+    frameShape: supplied(body.frameShape) ? (String(body.frameShape).trim() || null) : undefined,
     headlineStyle: body.headlineStyle,
     accentColor,
     // What structured card is placed in this block, and its payload. Never

@@ -11,6 +11,7 @@ import {
 import { columnRulesMarkup } from "./column-rules.js";
 import "../layout/borders.js";
 import "../layout/page-overlays.js";
+import { clipPathFor } from "../layout/block-shapes.js";
 // The overlay layer sets a url and a caption into markup; both are
 // user-supplied, so both are escaped.
 import { escapeHtml } from "../format.js";
@@ -137,7 +138,7 @@ export function renderCanvas(page, newspaper, selection, callbacks = {}) {
                    data-section-key="${section.section_key}"
                    style="left:${section.x_px}px;top:${section.y_px}px;width:${section.width_px}px;height:${section.height_px}px;`
               + `${view.backgroundColor ? `--block-tint:${view.backgroundColor};` : ""}`
-              + `${blockRuleCss(view)}"
+              + `${blockRuleCss(view, section)}"
               >${sectionInnerHtml(section, view, { dirty: selected && dirty, selected })}</div>`;
           })
           .join("")}
@@ -300,15 +301,38 @@ function overlayLayerMarkup(page) {
 // A radius is only offered where the block is BOXED (`canRound`): a corner
 // needs a rule on both of its edges, and rounding a single rule below would
 // bend a line with nothing to meet.
-function blockRuleCss(view) {
-  if (!isRuled(view.borderStyle)) return '';
+// THE BLOCK'S OWN SHAPE, as a clip-path.
+//
+// Safe to clip the WHOLE element - text, ground and rule together - because
+// the compositor already keeps every composed line out of the cut corner
+// (block-shapes.js's cornerObstacles(), fed through section-adapter.js's
+// obstaclesOf() into the same obstacle list a photograph already uses). The
+// clip and the obstacle read the SAME cutPx() from the SAME shape key, so
+// they cannot disagree: a mismatch either way is the one failure that would
+// matter here - either live text clipped away, or an unclipped triangle
+// showing ground the desk did not ask for.
+function shapeClipPath(view, section) {
+  if (!view.frameShape) return '';
+  const width = Number(section?.width_px) || 0;
+  const height = Number(section?.height_px) || 0;
+  if (width <= 0 || height <= 0) return '';
+  return clipPathFor(view.frameShape, width, height);
+}
+
+function blockRuleCss(view, section) {
+  const clip = shapeClipPath(view, section);
+  const clipCss = clip ? `clip-path:${clip};` : '';
+  if (!isRuled(view.borderStyle)) return clipCss;
   const radius = canRound(view.borderStyle) ? borderRadiusPx(view.borderRadiusPx) : 0;
-  return `--block-rule:${borderWidthPx(view.borderWidthPx)}px;`
+  return clipCss + `--block-rule:${borderWidthPx(view.borderWidthPx)}px;`
     + (view.borderInk ? `--block-ink:${view.borderInk};` : '')
     + (radius ? `--block-radius:${radius}px;` : '');
 }
 
-function applyBlockRule(element, view) {
+function applyBlockRule(element, view, section) {
+  const clip = shapeClipPath(view, section);
+  if (clip) element.style.setProperty('clip-path', clip);
+  else element.style.removeProperty('clip-path');
   if (!isRuled(view.borderStyle)) {
     element.style.removeProperty('--block-rule');
     element.style.removeProperty('--block-ink');
@@ -339,7 +363,7 @@ export function refreshSection(section, view, { selected = false, dirty = false 
   applyBlockTint(element, view);
   // The rule's WIDTH is a value too, and travels the same way and for the same
   // reason: a desk pressing "2 pt" must see 2 pt without a reload.
-  applyBlockRule(element, view);
+  applyBlockRule(element, view, section);
   element.innerHTML = sectionInnerHtml(section, view, { dirty, selected });
 }
 

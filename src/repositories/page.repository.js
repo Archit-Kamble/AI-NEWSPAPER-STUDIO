@@ -488,6 +488,10 @@ async function saveSection(pageId, sectionKey, updates) {
          border_ink = $55,
          headline_ink = $56,
          border_radius_px = COALESCE($57, border_radius_px),
+         -- NOT coalesced, like border_ink/headline_ink above: NULL is a real
+         -- state (a plain rectangle) and a desk taking a shape back off a
+         -- block has to be able to reach it.
+         frame_shape = $58,
          updated_at = CURRENT_TIMESTAMP
      WHERE page_id = $1 AND section_key = $2 RETURNING *`,
     [pageId, sectionKey, updates.newsItemId || null, updates.headline || null, updates.headlineFontPx || null,
@@ -536,7 +540,8 @@ async function saveSection(pageId, sectionKey, updates) {
       typeof updates.subheadingLocked === 'boolean' ? updates.subheadingLocked : null,
       updates.borderInk || null,
       updates.headlineInk || null,
-      Number.isFinite(updates.borderRadiusPx) ? updates.borderRadiusPx : null]
+      Number.isFinite(updates.borderRadiusPx) ? updates.borderRadiusPx : null,
+      updates.frameShape || null]
   );
   return rows[0] || null;
 }

@@ -93,6 +93,8 @@ export const DRAFT_FIELDS = [
   "borderInk",
   "headlineInk",
   "borderRadiusPx",
+  // A plain rectangle, until this names one of block-shapes.js's cut corners.
+  "frameShape",
   // The structured card placed in this block, if any. In the draft like every
   // other editable field, so it travels down the one channel everything else
   // does: draft -> DRAFT event -> canvas -> autosave -> database. A second
@@ -198,6 +200,7 @@ export function draftFromSection(section) {
     borderInk: sanitiseInk(section.border_ink),
     headlineInk: sanitiseInk(section.headline_ink),
     borderRadiusPx: Number(section.border_radius_px) || 0,
+    frameShape: section.frame_shape || null,
     // A card is only a card when both halves are there. A key with no payload
     // is a block that says it holds a sudoku and cannot draw one, so it is
     // read as no card at all and the body text prints instead.
@@ -312,6 +315,7 @@ export function payloadFromDraft(draft) {
     borderInk: sanitiseInk(draft.borderInk),
     headlineInk: sanitiseInk(draft.headlineInk),
     borderRadiusPx: Number(draft.borderRadiusPx) || 0,
+    frameShape: draft.frameShape || null,
     smartCardKey: draft.smartCardKey || null,
     smartCardData: draft.smartCardData || null,
   };

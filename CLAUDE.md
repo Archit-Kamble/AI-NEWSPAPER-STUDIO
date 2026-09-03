@@ -4019,6 +4019,13 @@ ALTER TABLE pages         ADD COLUMN IF NOT EXISTS style_theme VARCHAR(24);
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS border_ink VARCHAR(20);
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS headline_ink VARCHAR(20);
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS border_radius_px NUMERIC(5,2) NOT NULL DEFAULT 0;
+
+-- A BLOCK IS A RECTANGLE, UNTIL A CORNER IS CUT OFF IT. NULL is the plain
+-- state - every block today - and a named shape cuts one or more corners.
+-- See public/editor/layout/block-shapes.js: deliberately narrower than "any
+-- polygon", because a genuinely new outline would need the compositor's own
+-- scanline algorithm to change; a corner cut needs only one more OBSTACLE.
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS frame_shape VARCHAR(20);
 ```
 
 **The session table is deliberately NOT in this list.** `user_sessions` is
@@ -7121,6 +7128,88 @@ themed, proving nothing new was introduced by this change.
 
 ```bash
 node --test tests/furnitureStyles.test.js tests/furnitureExport.test.js
+```
+
+## A block is a rectangle, until a corner is cut off it
+
+The desk's last report, and the one asked for last on its own branch
+deliberately: *"our layout blocks are rectangle make them with different
+shapes."*
+
+**This is deliberately narrower than "any polygon", and the narrowness is
+the whole safety argument.** A genuinely new outline - a hexagon, a ribbon
+with a concave notch - would need the compositor's own scanline algorithm to
+understand a new obstacle geometry, which is exactly the "replace the
+compositor" move this file's own Engineering rules already forbid without
+the kind of exhaustive measurement a session's remaining budget cannot
+responsibly spend. A rectangle with one or more corners cut off at 45
+degrees is the shape that budget can prove correct.
+
+### A cut corner is an OBSTACLE, not a new compositor feature
+
+`public/editor/layout/block-shapes.js` is the seventh shared catalogue: 8
+shapes (a plain rectangle plus single-corner notches, two diagonal chevrons,
+and a four-corner octagon), each naming which corners are cut and the depth
+as a share of the block's shorter side. **`fillRow`, `viableIntervals` and the
+balancer do not gain one new line of code.** Each cut corner is pushed into
+`section-adapter.js`'s `obstaclesOf()` as one more entry in the SAME list a
+photograph and a चौकट panel already populate - `exclusion.js` gained one new
+`shape: 'corner'` case, analytic and linear (the excluded width grows from
+zero at the right-angle vertex to the full cut at the hypotenuse), the same
+category of extension the existing `'ellipse'` case already is.
+
+**Verified by real composition, not by geometric assumption.** For all 7
+non-rectangle shapes at 4 real block sizes, every composed body line was
+checked against the exact excluded triangle its corner describes:
+`tests/blockShapes.test.js`'s `'a real composed block never sets a line into
+its own cut corner'` holds zero violations. With a single column forced to
+remove the ambiguity of an auto-column split, a notched corner visibly
+narrows only the lines inside its own depth (196px measure → 186 → 176 → 169)
+and lines below the cut converge back to the full 196px - measured, not
+assumed.
+
+### Two cuts on one edge are set shallower, so they can never meet
+
+`cutPx()` halves the depth whenever two of a shape's own corners share an
+edge (`chevron`, `octagon`) and caps every cut at 45% of the shorter side
+even unshared - both bounds exist because two triangles meeting or crossing
+would make `obstacleIntervals()` describe a shape that is not a simple corner
+cut any more. Held for block sizes down to 4×4px with no crash.
+
+### One catalogue, so the clip and the obstacle cannot disagree
+
+`shapedRectPoints()` and `cornerObstacles()` both call the SAME `cutPx()`.
+This matters because a mismatch either way is the one failure that would
+matter here: a clip smaller than the excluded region crops live text a
+reader would otherwise have seen; a clip larger than it leaves an unclipped
+triangle of ground showing past the border. `canvas.js` turns the polygon
+into a `clip-path` (safe to apply to the WHOLE element - ground, border and
+composed text together - precisely because the compositor already kept every
+line clear of it); `print-model.js` and Scribus turn it into one filled and
+one stroked `poly`, the same primitive a rounded corner already draws
+through, via `arcPoints()`'s segmentation.
+
+### A real gap this work exposed, unrelated to shapes
+
+Consolidating the border code for shapes surfaced that **`blockRules()` -
+the function Scribus's own block walk calls for a border - had never
+received the block's own ink or its rounded corner**, added to the PDF/IDML
+path in the earlier styling work but only ever applied to an *inline copy*
+inside `blockItems()`, never to the separately-exported function Scribus
+actually reads. A block's border carried its theme colour and its radius in
+the PDF and the canvas, and printed square and black in the `.sla`. The two
+copies are one function now; `tests/scribusComposition.test.js`'s pinned
+block walk still passes 55/55, because the consolidation changes *what a
+themed block emits*, never what an undressed one does.
+
+The block's GROUND, by contrast, stays two separate implementations on
+purpose - CLAUDE.md's own rule (`"Scribus shares the FURNITURE, not the
+block walk"`) says the block walk is deliberately kept apart because it is
+tested and a rewrite is not a fix. Scribus's ground fill was themed by hand
+to draw the same shaped polygon, mirrored rather than shared.
+
+```bash
+node --test tests/blockShapes.test.js tests/blockShapesExport.test.js
 ```
 
 ## Engineering rules

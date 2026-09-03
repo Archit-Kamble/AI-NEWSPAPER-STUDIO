@@ -8549,3 +8549,51 @@ disposable 2099 edition, dress a page, and check the PDF/IDML walk AND the
 real `.sla` agree). Screenshotted the reversed banner folio and tinted footer
 on a real edition — see the session's own SendUserFile attachments. Server
 boots clean; no leftover test fixtures.
+
+## Block shapes — 3 Sept 2026, branch feature/block-shapes
+
+Desk report: "our layout blocks are rectangle make them with different
+shapes" — asked for last, on its own branch, deliberately, so a failure here
+cannot touch the rest of the project.
+
+**Deliberately narrower than "any polygon".** A genuinely new outline would
+need the compositor's own scanline algorithm to change; this project's own
+engineering rules already forbid that without exhaustive measurement. A
+rectangle with one or more corners cut at 45° is the shape this budget could
+prove correct.
+
+- `public/editor/layout/block-shapes.js`: 8 shapes (rectangle + 4 single
+  notches + 2 chevrons + octagon). Every cut corner is pushed into
+  `section-adapter.js`'s `obstaclesOf()` as one more entry in the SAME list a
+  photograph and a पॅनल already populate. `exclusion.js` gained one new
+  analytic `shape: 'corner'` case — zero changes to `fillRow`, the balancer,
+  or any scanline code.
+- **Verified by real composition**: for all 7 shapes at 4 block sizes, every
+  composed line checked against its own excluded triangle — 0 violations.
+  With column-splitting forced off to remove ambiguity, a notch visibly
+  narrows only the affected lines (196px→186→176→169, converging back to 196
+  below the cut) — measured, not assumed.
+- Two cuts sharing an edge (chevron, octagon) are set at half depth so they
+  can never meet; every cut capped at 45% of the shorter side. No crash down
+  to 4×4px blocks.
+- One catalogue (`shapedRectPoints`/`cornerObstacles`, same `cutPx()`) so the
+  canvas's `clip-path` and the compositor's exclusion can never disagree.
+- `frame_shape VARCHAR(20)`, nullable, additive — 0 of ~5566 rows affected.
+- **A real, unrelated gap found while touching this code**: `blockRules()`
+  (Scribus's border function) had never received the block's own ink or
+  radius from the earlier styling work — only an *inline copy* inside
+  `blockItems()` had. Consolidated into one function; Scribus's borders now
+  carry theme colour and rounded corners too.
+- Scribus's ground FILL stays a separate, hand-mirrored implementation on
+  purpose (CLAUDE.md: block walk is tested, not shared) — themed to draw the
+  same shaped polygon.
+
+### Verified
+
+`npm test` 1133/1133 (18 new: 8 in `tests/blockShapes.test.js`, 2 in
+`tests/blockShapesExport.test.js`, plus earlier suites). Live-probed against
+a real edition: legal shape saves, foreign shape refused, PDF/IDML model
+produces 2 five-point polygons (fill + stroke) in the right inks, `.sla`
+produces exactly 2 `path=` polygons with `SahasTintMint`/`SahasGreen`.
+Screenshotted an octagon and a notched block with real Marathi copy — corners
+genuinely cut, text correctly clear of them. No leftover fixtures.

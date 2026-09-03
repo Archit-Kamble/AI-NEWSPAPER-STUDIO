@@ -280,6 +280,38 @@ export function obstacleIntervals(image, top, bottom, bodyFontPx) {
     return [{ start: cx - half, end: cx + half }];
   }
 
+  // A CORNER CUT ON THE BLOCK'S OWN FRAME - the same device a rounded corner
+  // is, one step further: instead of softening a corner, this REMOVES it, so
+  // the block reads as a notched, chevron or octagon panel rather than a
+  // plain rectangle. `x/y/width/height` here are the CUT TRIANGLE'S OWN
+  // bounding box (block-shapes.js computes it from the block's real geometry
+  // and the shape's cut depth), never the whole block - exactly how an
+  // ellipse obstacle's box is its own, not a caller's.
+  //
+  // The excluded width grows LINEARLY from the triangle's right-angle vertex
+  // to its hypotenuse - unlike the ellipse above, which samples the band's
+  // centre, this samples the WIDEST cross-section the query band overlaps,
+  // which is the safe direction: type may be asked to clear a hair more
+  // corner than it strictly must, never a hair less.
+  if (shape === 'corner') {
+    const { left, top: boxTop, right, bottom: boxBottom } = box;
+    const h = boxBottom - boxTop;
+    if (h <= 0) return [];
+    const loY = Math.max(top, boxTop);
+    const hiY = Math.min(bottom, boxBottom);
+    if (hiY <= loY) return [];
+    // The fraction of the triangle's own height the WIDER end of the query
+    // overlap reaches - always the end further from the right-angle corner.
+    const corner = image.corner;
+    const nearTop = corner === 'tl' || corner === 'tr';
+    const widestY = nearTop ? hiY : loY;
+    const frac = nearTop ? (widestY - boxTop) / h : (boxBottom - widestY) / h;
+    const cut = (right - left) * Math.max(0, Math.min(1, frac));
+    if (cut <= 0) return [];
+    if (corner === 'tr' || corner === 'br') return [{ start: right - cut, end: right }];
+    return [{ start: left, end: left + cut }];
+  }
+
   if (shape === 'cutout') {
     const envelope = exclusionEnvelope(image.mask);
     // The mask was rasterised over the TRIMMED cutout's own pixels

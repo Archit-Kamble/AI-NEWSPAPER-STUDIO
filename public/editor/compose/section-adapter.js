@@ -31,6 +31,7 @@ const { isBoxed, borderThicknessPx } = globalThis.SahasBorders;
 import '../layout/inset-panels.js';
 const { panelsOf, obstacleFromPanel } = globalThis.SahasInsetPanels;
 import '../layout/page-overlays.js';
+import { cornerObstacles } from '../layout/block-shapes.js';
 const { overlaysOf, overlayObstaclesFor } = globalThis.SahasPageOverlays;
 
 function pick(section, view, camel, snake, fallback) {
@@ -295,6 +296,16 @@ export function obstaclesOf(section, view = {}) {
   out.push(...overlayObstaclesFor(section, overlaysOf({
     overlay_images: section.page_overlays ?? section.pageOverlays,
   })));
+  // THE BLOCK'S OWN CORNERS, when its frame is not a plain rectangle
+  // (block-shapes.js). Coordinates are BLOCK-LOCAL - (0,0) at the block's own
+  // top-left, exactly the space every image obstacle above is already in
+  // (a placed picture's x_px/y_px are an offset within its block, never a
+  // page-absolute position) - so a cut corner needs no translation, only the
+  // block's own width and height.
+  const shapeKey = view?.frameShape ?? section?.frame_shape;
+  if (shapeKey) {
+    out.push(...cornerObstacles(shapeKey, 0, 0, Number(section.width_px) || 0, Number(section.height_px) || 0));
+  }
   return out;
 }
 

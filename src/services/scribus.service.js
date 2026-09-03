@@ -232,6 +232,7 @@ let textFlowModule = null;
 let imageGeometryModule = null;
 let accentModule = null;
 let furnitureModule = null;
+let blockShapesModule = null;
 
 async function ensureComposeReady() {
   if (!metricsModule) metricsModule = await import('../../public/editor/compose/font-metrics.js');
@@ -244,6 +245,7 @@ async function ensureComposeReady() {
   if (!imageGeometryModule) imageGeometryModule = await import('../../public/editor/layout/image-geometry.js');
   if (!accentModule) accentModule = await import('../../public/editor/compose/accent.js');
   if (!furnitureModule) furnitureModule = await import('../../public/editor/layout/furniture-styles.js');
+  if (!blockShapesModule) blockShapesModule = await import('../../public/editor/layout/block-shapes.js');
   await Promise.all([metricsModule.ensureFontsLoaded(), shaperModule.ensureShaperReady()]);
   shaperModule.requireShaperReady();
   return {
@@ -612,11 +614,30 @@ async function blockFrames(section, { pageIndex = 0, pageOffsetMm = 0 } = {}) {
 
   // The block's own ground, first, because a .sla paints in document order and
   // this is what everything else in the block is printed ON.
-  parts.push(fillFrame({
-    xMm: mm(section.x_px), yMm: mm(section.y_px) + pageOffsetMm,
-    widthMm: mm(section.width_px), heightMm: mm(section.height_px),
-    colour: richText.tintSeparation(section.background_color), ownPage: pageIndex,
-  }));
+  //
+  // SHAPED when the block's own frame is not a rectangle - the SAME polygon
+  // canvas.js clips to and print-model.js fills, from the one shared
+  // catalogue (block-shapes.js), so a cut corner's ground is never a square
+  // patch of colour peeking out past its own clipped border.
+  if (section.frame_shape) {
+    const wMm = mm(section.width_px);
+    const hMm = mm(section.height_px);
+    const xMm = mm(section.x_px);
+    const yMm = mm(section.y_px) + pageOffsetMm;
+    const points = blockShapesModule.shapedRectPoints(section.frame_shape, wMm, hMm)
+      .map(([px, py]) => [xMm + px, yMm + py]);
+    parts.push(polyFrame({
+      points, x: xMm, y: yMm, yMm, width: wMm, height: hMm,
+      ink: richTextModule.sanitiseTint(section.background_color) || section.background_color,
+      close: true, strokeWidth: 0, ownPage: pageIndex,
+    }));
+  } else {
+    parts.push(fillFrame({
+      xMm: mm(section.x_px), yMm: mm(section.y_px) + pageOffsetMm,
+      widthMm: mm(section.width_px), heightMm: mm(section.height_px),
+      colour: richText.tintSeparation(section.background_color), ownPage: pageIndex,
+    }));
+  }
 
   parts.push(displayBandFrames(composition, section, accent, richText, {
     xBaseMm: mm(section.x_px), yBaseMm: mm(section.y_px), pageOffsetMm, ownPage: pageIndex,

@@ -4007,6 +4007,18 @@ ALTER TABLE publication_settings ADD COLUMN IF NOT EXISTS coverage_country VARCH
 ALTER TABLE publication_settings ADD COLUMN IF NOT EXISTS coverage_state VARCHAR(8) NOT NULL DEFAULT 'MH';
 ALTER TABLE publication_settings ADD COLUMN IF NOT EXISTS coverage_district VARCHAR(80) NOT NULL DEFAULT 'Satara';
 ALTER TABLE publication_settings ADD COLUMN IF NOT EXISTS coverage_city VARCHAR(80) NOT NULL DEFAULT '';
+
+-- HOW A PAGE IS DRESSED, and what each block on it wears. Every one is
+-- additive with a default that means "as before", so not one block changes
+-- appearance until something writes to it - swept, 0 of 5431 rows carry a
+-- value. border_ink/headline_ink are NULL-for-unset rather than defaulted to a
+-- colour, which is this schema's own idiom for "the desk has not said"
+-- (headline_align, column_count, display_family); defaulting them to a hex
+-- would restyle every existing block the moment a renderer read the column.
+ALTER TABLE pages         ADD COLUMN IF NOT EXISTS style_theme VARCHAR(24);
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS border_ink VARCHAR(20);
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS headline_ink VARCHAR(20);
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS border_radius_px NUMERIC(5,2) NOT NULL DEFAULT 0;
 ```
 
 **The session table is deliberately NOT in this list.** `user_sessions` is
@@ -6839,6 +6851,140 @@ cut-out are now each asserted to happen exactly once.
 
 ```bash
 node tests/browser/newsdesk-run.browser.js            # 43/43
+```
+
+## A page has a LOOK, and the software chooses it
+
+The desk's report: *"still our software not reach automatic styling — it has
+automatic filling but we should have automatic styling also ... every block is
+having different style, a light colour background then same colour but medium
+dark shade border then dark colour heading, some headlines only having
+background colors, having different types of borders ... and for each page like
+Sunday Dhamaal, Sport, Entertainment, Vishwasanchar."*
+
+**Nearly every device it needs already existed**, and NOTHING CHOSE THEM:
+`background_color`, `border_style`, `border_width_px`, `headline_style` and
+`accent_color` were columns a person set by hand, one block at a time, on
+thirty-odd blocks a day. This is the choosing.
+
+Three pages of the reference paper were read on one day, and the pattern is not
+"style every block":
+
+| page | what it does |
+|---|---|
+| 1 — front | **restrained**: white, black type, one or two tinted blocks for emphasis |
+| 7 — city news | **light**: a few tinted blocks, one reverse heading band, a label badge |
+| 12 — विश्वसंचार | **full**: every block tinted, its rule a darker shade of its own ground, its heading darker still |
+
+A front page dressed like a feature page does not read as a front page.
+
+### A hue family is TWO catalogue entries, never a mixed colour
+
+`public/editor/layout/page-styles.js` is the fifth shared catalogue, beside the
+character grid, the block kinds, the picture style, the inks and the borders.
+
+The triple the desk described — light ground, matching rule, matching heading —
+is **one `TINTS` entry and one `INKS` entry**, and that is the whole trick: it
+invents no colour, so `inkSeparation()` names every one of them in a `.sla`
+without knowing this file exists. A darker *shade* of an ink would be a colour
+no press knows: it falls through to Black, and the screen would show a dark
+green heading while the plate printed a black one.
+
+Six families — red/pink, blue/blue, green/mint, purple/lilac, orange/sand,
+teal/teal. `SahasTintTeal` was added to complete the set, and
+`tests/blockSurface.test.js` caught it reaching the `.sla` as an auto-named
+colour before it shipped.
+
+**There is deliberately no black-on-grey family**, and it looks like an
+omission. Black carries no hex in `INKS` (it is the *absence* of a mark) and
+`accent_color` is NOT NULL, so such a family could not store its ink without
+inventing a near-black. Nothing is lost: a grey ground under a black heading is
+what an undressed block already is.
+
+### The theme is the AI's decision; the assignment is not
+
+This is the one part a per-block choice gets wrong, and the desk asked for the
+per-block version explicitly. The split:
+
+| | | |
+|---|---|---|
+| which look each page wears | **semantic** — "page twelve is the world page" | one AI call for the whole edition |
+| which block wears which hue | **a constraint problem** | code, seeing the whole page at once |
+
+**Blocks are written one call each, four at a time, and no call can see its
+neighbours.** So a per-block style choice cannot avoid giving two touching
+stories the same ground — which reads as one story on one ground — and the same
+page would be styled differently every run. Measured on a real page shape:
+**11 touching pairs, 0 sharing a hue.**
+
+`proposeThemes()` may only choose from the catalogue; an invented name is
+discarded and the derived answer stands. And it is never *required*:
+`guessTheme()` reads the same evidence off the page for nothing, so a newsroom
+with no provider configured still gets a dressed paper, and the desk is told
+which of the two happened.
+
+### `styleForPage()` covers the blocks it leaves PLAIN
+
+Restyling a feature page as a front page has to take grounds **off** as well as
+put them on, or the page keeps yesterday's colours under today's theme. So the
+answer covers every dressable block including the bare ones, which also makes
+it idempotent — measured, a second apply reports **0 changing**, and that is
+what makes it safe to press twice.
+
+- **An advert and a Smart Card are never dressed.** An advert is the
+  advertiser's own design and a card draws its own nameplate and rule;
+  dressing either is this software painting over finished work.
+- **On a sober page the LEAD is never tinted.** It is already the biggest thing
+  on the sheet and shouts by size — which is what the reference paper's own
+  front page does, and a ground under it as well makes a front page read as a
+  poster.
+
+### A corner radius is now a decision, not a refusal
+
+`borders.js` said *"there is deliberately NO corner radius; every rule on a
+printed page meets its neighbour square"*. For a news page that is still true,
+which is why only the `full` decoration level gets one — but it is not true of
+a printed feature page, and the reference paper's own world page is the
+evidence. The desk chose to allow it.
+
+**A ROUNDED BOX IS ONE STROKED PATH, not four rectangles.** Four rules cannot
+round: each is its own rectangle and the corner is where two of them stop. It
+reuses `arcPoints()`, the same segmentation a pie's slices are drawn with, so
+the corner on the plate is the same polygon the canvas rounds rather than a
+second approximation of one arc. The radius is clamped to half the shorter
+side — the clamp a browser applies to `border-radius` — so the two agree, and
+a `pill` radius is an end cap rather than a shape that folds through itself.
+
+### Four columns, and every one defaults to "as before"
+
+`pages.style_theme`, `page_sections.border_ink`, `.headline_ink`,
+`.border_radius_px`. All 5431 existing rows carry no new value.
+
+`border_ink` and `headline_ink` are **NOT coalesced** in `saveSection`, for the
+same reason `background_color` is not: NULL is a real state — the paper's own
+rule ink and its own black — so COALESCE would make **undressing impossible**,
+which is exactly what a restyle has to do.
+
+### What driving it found that reading it would not
+
+- **The border stayed black.** `body.print-view` carries its **own copy** of
+  every `.ruled-*` rule, and print view is precisely where a desk judges a
+  page. 11 more hard-coded `#111` had to take `--block-ink`, and the corner had
+  to survive the mode too.
+- **`bindPageTheme is not defined`, thrown on every page turn and swallowed.**
+  The control was called from `selectPage()`, which is at module scope while
+  the function was nested one level in — so the select went on showing the
+  front page's theme over a feature page's sheet. It follows
+  `store.TOPICS.PAGE` now, which is the one place that knows about every way
+  the page changes.
+- **A hand-written `state.pages.find(...)` fell back to `pages[0]`** whenever
+  the ids had not settled. `store.getCurrentPage()` is the store's own
+  accessor and there is no reason to have a second copy of it.
+- **A backtick in a SQL comment inside a template literal** took
+  `page.repository.js` down. Fifth time in this repository.
+
+```bash
+node --test tests/pageStyle.test.js
 ```
 
 ## Engineering rules

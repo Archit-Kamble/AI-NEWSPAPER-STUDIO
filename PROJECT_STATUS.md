@@ -8435,3 +8435,53 @@ cut-out are each asserted to happen once.
 `npm test` 1102/1102. `newsdesk-run` 43/43, desk-actions 27/27, workspace
 224/224. Screenshotted at each of the three stages; no console or page errors,
 nothing overflowing either panel.
+
+## Automatic styling — 3 Sept 2026
+
+The desk's report: the software fills a page but does not STYLE one, and the
+reference paper (Pudhari) gives every block a light ground, a matching darker
+border and a darker heading, with a different look per page — Sunday Dhamaal,
+Sport, Entertainment, Vishwasanchar.
+
+Twelve screenshots of that paper's own 3 Sept edition were read. The pattern is
+not "style every block":
+
+| page | decoration |
+|---|---|
+| 1 front | white, black type, one or two tinted blocks |
+| 7 city | a few tinted blocks, one reverse heading band |
+| 12 विश्वसंचार | every block tinted, rule and heading in its own hue |
+
+**Nearly every device already existed and nothing chose them.** What was built
+is the choosing.
+
+| | |
+|---|---|
+| `public/editor/layout/page-styles.js` | the fifth shared catalogue: 6 hue families (one TINT + one INK each — no invented colour), 10 page themes, 4 decoration levels, and the pure `styleForPage()` |
+| `src/services/pageStyle.service.js` | reads the page, applies through `saveSection` (so the palette boundary holds), and `proposeThemes()` — one AI call per edition |
+| routes | `GET/POST /api/pages/:id/style` (propose / apply), `POST /api/newspapers/:id/dress` |
+| controls | a theme select beside the layout picker; **Dress the paper** in the Paper group |
+| exports | `border_ink` and `headline_ink` carried into the one print model all four exports read; a rounded box is one stroked `poly` via `arcPoints()` |
+
+**Measured:** 11 touching pairs and 0 sharing a hue; front 1/7 dressed, world
+7/7, plain 0/7; a second apply reports 0 changing (idempotent); a real
+16-headline page dressed as a feature gives 16 rounded boxes in 4 hues with the
+headings inked in the export — orange 9 runs, green 5, purple 3, blue 2.
+
+**The AI picks the theme, code assigns the blocks** — the user's explicit
+choice after being shown that a per-block AI style cannot see its neighbours
+and would put two touching stories on one ground. With no provider configured
+`guessTheme()` derives the same answer for nothing, and the desk is told which
+of the two happened.
+
+**Four faults found by driving rather than reading:** the border stayed black
+because `body.print-view` has its own copy of every `.ruled-*` rule (11 more
+`#111`); `bindPageTheme is not defined` thrown on every page turn and swallowed
+(nested scope — it follows `store.TOPICS.PAGE` now); a hand-written page lookup
+silently falling back to `pages[0]`; and a backtick in a SQL comment inside a
+template literal, the fifth time in this repository.
+
+### Verified
+
+`npm test` 1102/1102 before the new file, plus `tests/pageStyle.test.js` 8/8.
+Screenshotted before and after on a real edition.

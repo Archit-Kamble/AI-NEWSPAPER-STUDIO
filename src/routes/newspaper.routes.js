@@ -46,6 +46,8 @@ router.delete('/:id', requireOwnerDelete, newspaperController.remove);
 // The paper's own type and its column rules - one decision for the edition,
 // not one per block. A write, so deskWrites already guards it.
 router.patch('/:id/house-style', newspaperController.houseStyle);
+// The paper's own LOOK, page by page. A write, so deskWrites already guards it.
+router.post('/:id/dress', newspaperController.dress);
 router.post(
   '/:id/final-files',
   asyncRoute(async (req, res, next) => {

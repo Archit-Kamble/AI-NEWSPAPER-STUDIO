@@ -1,3 +1,4 @@
+const pageStyleService = require('../services/pageStyle.service');
 const newspaperService = require('../services/newspaper.service');
 const editionStartService = require('../services/editionStart.service');
 const districtEditionService = require('../services/districtEdition.service');
@@ -478,7 +479,25 @@ async function pressPackage(req, res) {
     .send(zip);
 }
 
+
+// DRESS THE WHOLE PAPER. One AI call picks each page's look from the
+// catalogue; the deterministic styler then assigns every block, seeing the
+// whole page at once - which is what keeps two touching stories off the same
+// ground, and what no per-block choice can do.
+//
+// It falls back to the derived answer with no provider at all, so a newsroom
+// with no AI configured still gets a dressed paper.
+async function dress(req, res) {
+  const result = await pageStyleService.applyToEdition(req.params.id, {
+    themes: req.body?.themes || null,
+    useAi: req.body?.useAi !== false,
+  });
+  if (result?.error) return res.status(400).json(result);
+  res.json(result);
+}
+
 module.exports = {
+  dress,
   houseStyle,
   create, start, resize, ladder, supportedPageCounts, list, latest, getOne, update, remove, saveFinalFiles,
   createDistrictEdition, listDistrictEditions, printedPages,

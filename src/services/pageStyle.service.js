@@ -16,6 +16,7 @@
 const pageRepository = require('../repositories/page.repository');
 const newspaperRepository = require('../repositories/newspaper.repository');
 const pageSectionService = require('./pageSection.service');
+const ai = require('./ai');
 
 let catalogue = null;
 async function styles() {
@@ -127,18 +128,122 @@ async function applyToPage(pageId, { theme } = {}) {
   return { ...proposal, saved, refused };
 }
 
-/** Every page of one edition, each dressed for what it carries. */
-async function applyToEdition(newspaperId, { themes = {} } = {}) {
+/**
+ * WHICH LOOK EACH PAGE SHOULD WEAR - one call for the whole edition.
+ *
+ * This is the ONE decision in dressing a paper that is semantic rather than
+ * geometric: "page twelve is the world page" is a judgement about what is on
+ * it, and a model reading the headlines makes it well. Everything after it -
+ * which block takes which hue, what touches what, how much of the page is
+ * dressed - is a constraint problem that code solves better, and `styleForPage`
+ * solves it seeing the whole page at once, which no per-block call can.
+ *
+ * So it is ONE call for a whole newspaper, not one per block. A per-block
+ * choice cannot avoid giving two touching stories the same ground, because no
+ * block's call can see its neighbours.
+ *
+ * IT MAY ONLY CHOOSE FROM THE CATALOGUE. A theme decides a block's ground and
+ * its rule ink, both of which are interpolated into a style attribute, so a
+ * name the model invents is discarded and the deterministic guess answers
+ * instead - never a colour a model made up.
+ *
+ * And it is never required: `guessTheme()` reads the same evidence off the
+ * page for nothing, so a paper with no AI configured still gets dressed.
+ */
+async function proposeThemes(newspaperId) {
   const id = parseInt(newspaperId, 10);
   const pages = await pageRepository.findByNewspaper(id);
+  const { PAGE_THEMES, sanitiseTheme, guessTheme } = await styles();
+
+  const described = [];
+  for (const summary of pages) {
+    // eslint-disable-next-line no-await-in-loop
+    const page = await pageRepository.findById(summary.id);
+    const headlines = (page.sections || [])
+      .map((section) => String(section.headline || '').trim())
+      .filter(Boolean)
+      .slice(0, 8);
+    described.push({ page: page.page_number, headlines, fallback: guessTheme({ pageNumber: page.page_number, pageCount: pages.length }) });
+  }
+
+  const fallback = Object.fromEntries(described.map((one) => [one.page, one.fallback]));
+  if (!ai.isConfigured()) return { themes: fallback, source: 'derived' };
+
+  const catalogue = PAGE_THEMES
+    .map((theme) => `  ${theme.key} - ${theme.label} (${theme.marathi})`)
+    .join('\n');
+  const listing = described
+    .map((one) => `Page ${one.page}: ${one.headlines.length ? one.headlines.join(' | ') : '(nothing written yet)'}`)
+    .join('\n');
+
+  const prompt = [
+    'You are the chief sub-editor of a Marathi district daily deciding how each page of tomorrow\'s',
+    'paper should LOOK, from what is on it. Choose one theme for each page, from this list only:',
+    '',
+    catalogue,
+    '',
+    'Rules. Page one is always "front". A page whose stories are mostly one subject takes that',
+    'subject\'s theme. A page you cannot place takes "city". Never invent a theme name.',
+    '',
+    'The pages and their headlines:',
+    listing,
+  ].join('\n');
+
+  const schema = {
+    type: 'object',
+    properties: {
+      pages: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: { page: { type: 'integer' }, theme: { type: 'string' } },
+          required: ['page', 'theme'],
+        },
+      },
+    },
+    required: ['pages'],
+  };
+
+  try {
+    const answer = await ai.askForJson(prompt, schema, { tier: 'basic', maxProviders: 3 });
+    const themes = { ...fallback };
+    for (const row of answer?.pages || []) {
+      const theme = sanitiseTheme(row?.theme);
+      // An invented name is DISCARDED and the derived answer stands, rather
+      // than the page going undressed or wearing something nobody named.
+      if (theme && fallback[row.page] !== undefined) themes[row.page] = theme;
+    }
+    return { themes, source: 'ai' };
+  } catch (error) {
+    return { themes: fallback, source: 'derived', why: error.message };
+  }
+}
+
+/** Every page of one edition, each dressed for what it carries. */
+async function applyToEdition(newspaperId, { themes = null, useAi = true } = {}) {
+  const id = parseInt(newspaperId, 10);
+  const pages = await pageRepository.findByNewspaper(id);
+  // The desk's own choice wins outright. Otherwise ask - and `proposeThemes`
+  // falls back to the derived answer on its own, so this never fails for want
+  // of a provider.
+  let chosen = themes;
+  let source = 'desk';
+  if (!chosen) {
+    const proposal = useAi
+      ? await proposeThemes(id)
+      : { themes: null, source: 'derived' };
+    chosen = proposal.themes || {};
+    source = proposal.source;
+  }
   const done = [];
   for (const page of pages) {
     // eslint-disable-next-line no-await-in-loop
-    const result = await applyToPage(page.id, { theme: themes[page.page_number] || themes[String(page.page_number)] });
+    const result = await applyToPage(page.id, { theme: chosen[page.page_number] || chosen[String(page.page_number)] });
     done.push(result);
   }
   return {
     newspaperId: id,
+    source,
     pages: done.length,
     saved: done.reduce((sum, one) => sum + (one.saved || 0), 0),
     dressed: done.reduce((sum, one) => sum + (one.dressed || 0), 0),
@@ -146,4 +251,4 @@ async function applyToEdition(newspaperId, { themes = {} } = {}) {
   };
 }
 
-module.exports = { proposeForPage, applyToPage, applyToEdition };
+module.exports = { proposeForPage, applyToPage, applyToEdition, proposeThemes };

@@ -1379,6 +1379,72 @@ async function saveAndReturn() {
 
 // ------------------------------------------------------------- page/layout ---
 
+// HOW THIS PAGE IS DRESSED.
+//
+// The theme is a property of the PAGE, which is why the control sits beside
+// the layout picker rather than in the Paper group: the paper's faces are one
+// decision for the whole edition, and what page twelve looks like is not.
+//
+// It PROPOSES before it writes. The select fetches the answer, the question
+// names the page, the look and the number of blocks about to move, and only
+// then does anything change - the same shape as the placement repair and the
+// AI proposal. A page already wearing its theme reports nothing to do and asks
+// nothing, which is what makes the control safe to press twice.
+async function bindPageTheme() {
+  const select = document.getElementById("pageThemeSelect");
+  if (!select) return;
+  const { PAGE_THEMES } = await import("./layout/page-styles.js");
+  // The store's OWN accessor, not a second copy of the same lookup. Written by
+  // hand it silently fell back to `pages[0]` whenever the ids had not settled,
+  // so turning to page four re-read page ONE's look and the select showed the
+  // front page's theme over a feature page's sheet.
+  const page = store.getCurrentPage();
+  if (!page) return;
+
+  select.innerHTML = PAGE_THEMES
+    .map((theme) => `<option value="${theme.key}"${theme.key === page.style_theme ? " selected" : ""}>`
+      + `${escapeHtml(theme.label)} — ${escapeHtml(theme.marathi)}</option>`)
+    .join("");
+  // A page nobody has dressed shows what it WOULD be given, rather than
+  // pretending the desk has already chosen: the styler guesses from the page
+  // number and what is on it, and the desk should see that guess before
+  // pressing anything.
+  if (!page.style_theme) {
+    const guess = await fetchJson(`/api/pages/${page.id}/style`).catch(() => null);
+    if (guess?.theme) select.value = guess.theme;
+}
+
+select.onchange = async () => {
+  const theme = select.value;
+  try {
+    const proposal = await fetchJson(`/api/pages/${page.id}/style?theme=${encodeURIComponent(theme)}`);
+    if (!proposal.changing) {
+      showNotice(`Page ${proposal.pageNumber} is already dressed as ${proposal.themeName}.`);
+      return;
+    }
+    const answer = await askConfirm({
+      title: `Dress page ${proposal.pageNumber} as ${proposal.themeName}?`,
+      body: `${proposal.changing} of ${proposal.blocks} block${proposal.blocks === 1 ? "" : "s"} change`
+        + `, and ${proposal.dressed} will carry a ground. Adverts, standing features and Smart Cards`
+        + ` are left alone. Nothing that is written changes — only how it is set.`,
+      confirm: "Dress the page",
+    });
+    if (!answer) { select.value = page.style_theme || theme; return; }
+    const done = await fetchJson(`/api/pages/${page.id}/style`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ theme }),
+    });
+    page.style_theme = done.theme;
+    await reloadPages();
+    showNotice(`Page ${done.pageNumber} dressed as ${done.themeName} — ${done.saved} block${done.saved === 1 ? "" : "s"} set`
+      + `${done.refused?.length ? `, ${done.refused.length} refused` : ""}.`);
+  } catch (error) {
+    showNotice(error.message || "The page could not be dressed.");
+  }
+};
+}
+
 function selectPage(pageId) {
   if (store.getState().dirty) autosave.flush();
   store.setCurrentPage(pageId);
@@ -1516,6 +1582,8 @@ function renderShell() {
                       title="The face every story in this edition is set in — blocks that have chosen their own keep it"></select>
               <select id="paperDisplayFace" class="toolbar-select"
                       title="The face every headline, kicker and deck in this edition is set in"></select>
+              <button type="button" class="layout-btn" id="dressPaperBtn"
+                      title="Give every page of this edition a look — one AI call picks each page's theme">Dress the paper</button>
               <button type="button" class="layout-btn" id="columnRulesBtn"
                       title="The hairlines between neighbouring stories. Off unless this edition asks for them.">Rules</button>
             </div>
@@ -1685,6 +1753,7 @@ function renderShell() {
 
   bindPaperControls();
   bindPageTheme();
+  bindDressPaper();
 
   // Guides ON/OFF. A view toggle, not a data operation - hiding never
   // deletes a guide or touches its stored position (setGuidesVisible only
@@ -1713,67 +1782,49 @@ function renderShell() {
  * that compose a stored row, and any one of them that forgot would measure a
  * block in one face and print it in another.
  */
-// HOW THIS PAGE IS DRESSED.
-//
-// The theme is a property of the PAGE, which is why the control sits beside
-// the layout picker rather than in the Paper group: the paper's faces are one
-// decision for the whole edition, and what page twelve looks like is not.
-//
-// It PROPOSES before it writes. The select fetches the answer, the question
-// names the page, the look and the number of blocks about to move, and only
-// then does anything change - the same shape as the placement repair and the
-// AI proposal. A page already wearing its theme reports nothing to do and asks
-// nothing, which is what makes the control safe to press twice.
-async function bindPageTheme() {
-  const select = document.getElementById("pageThemeSelect");
-  if (!select) return;
-  const { PAGE_THEMES } = await import("./layout/page-styles.js");
-  const state = store.getState();
-  const page = state.pages?.find((one) => one.id === state.currentPageId) || state.pages?.[0];
-  if (!page) return;
 
-  select.innerHTML = PAGE_THEMES
-    .map((theme) => `<option value="${theme.key}"${theme.key === page.style_theme ? " selected" : ""}>`
-      + `${escapeHtml(theme.label)} — ${escapeHtml(theme.marathi)}</option>`)
-    .join("");
-  // A page nobody has dressed shows what it WOULD be given, rather than
-  // pretending the desk has already chosen: the styler guesses from the page
-  // number and what is on it, and the desk should see that guess before
-  // pressing anything.
-  if (!page.style_theme) {
-    const guess = await fetchJson(`/api/pages/${page.id}/style`).catch(() => null);
-    if (guess?.theme) select.value = guess.theme;
-  }
-
-  select.onchange = async () => {
-    const theme = select.value;
+// DRESS THE WHOLE PAPER, which is the one-click the desk asked for.
+//
+// In the Paper group and not beside the page's own theme, because this is a
+// decision for the EDITION - the same rung as the paper's faces and its column
+// rules, which is exactly what this group holds.
+//
+// One AI call names each page's look from the catalogue; the deterministic
+// styler then dresses every block, seeing each whole page at once. With no
+// provider configured it still works - `proposeThemes` derives the same answer
+// from the page number and what is on it - and it says which of the two it
+// did, because "the AI chose this" and "this was worked out" are different
+// claims and a desk should not be told the wrong one.
+function bindDressPaper() {
+  const button = document.getElementById("dressPaperBtn");
+  if (!button) return;
+  button.addEventListener("click", () => busyButton(button, "Dressing…", async () => {
+    const state = store.getState();
+    if (!state.newspaper) return;
+    const answer = await askConfirm({
+      title: "Dress every page of this edition?",
+      body: "Each page is given a look from the paper's own catalogue and every story block on it"
+        + " is set in a matching ground, rule and heading. Adverts, standing features and Smart Cards"
+        + " are left alone, and nothing that is written changes — only how it is set."
+        + " You can change any page afterwards, or set it back to Plain.",
+      confirm: "Dress the paper",
+    });
+    if (!answer) return;
     try {
-      const proposal = await fetchJson(`/api/pages/${page.id}/style?theme=${encodeURIComponent(theme)}`);
-      if (!proposal.changing) {
-        showNotice(`Page ${proposal.pageNumber} is already dressed as ${proposal.themeName}.`);
-        return;
-      }
-      const answer = await askConfirm({
-        title: `Dress page ${proposal.pageNumber} as ${proposal.themeName}?`,
-        body: `${proposal.changing} of ${proposal.blocks} block${proposal.blocks === 1 ? "" : "s"} change`
-          + `, and ${proposal.dressed} will carry a ground. Adverts, standing features and Smart Cards`
-          + ` are left alone. Nothing that is written changes — only how it is set.`,
-        confirm: "Dress the page",
-      });
-      if (!answer) { select.value = page.style_theme || theme; return; }
-      const done = await fetchJson(`/api/pages/${page.id}/style`, {
+      const done = await fetchJson(`/api/newspapers/${state.newspaper.id}/dress`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ theme }),
+        body: JSON.stringify({}),
       });
-      page.style_theme = done.theme;
       await reloadPages();
-      showNotice(`Page ${done.pageNumber} dressed as ${done.themeName} — ${done.saved} block${done.saved === 1 ? "" : "s"} set`
-        + `${done.refused?.length ? `, ${done.refused.length} refused` : ""}.`);
+      await bindPageTheme();
+      showNotice(`${done.pages} page${done.pages === 1 ? "" : "s"} dressed — ${done.dressed} block`
+        + `${done.dressed === 1 ? "" : "s"} given a ground. `
+        + (done.source === "ai" ? "The looks were chosen by AI." : "The looks were worked out from what is on each page."));
     } catch (error) {
-      showNotice(error.message || "The page could not be dressed.");
+      showNotice(error.message || "The paper could not be dressed.");
     }
-  };
+  }));
 }
 
 function bindPaperControls() {
@@ -3055,6 +3106,14 @@ function subscribeViews() {
     if (section) refreshDockSavedAt(section);
   });
 
+  // The theme control follows the page, like every other panel on this screen.
+  //
+  // Calling it from selectPage() was wrong twice over: it is nested one scope
+  // in, so `bindPageTheme is not defined` was thrown on every page turn and
+  // swallowed as an unhandled click-handler error - and even had it resolved,
+  // selectPage is one of several ways the page changes. The store's own topic
+  // is the one place that knows about all of them.
+  store.subscribe(store.TOPICS.PAGE, () => { bindPageTheme(); });
   store.subscribe(store.TOPICS.PAGE, () => {
     renderPageArea();
     renderSidePanels();

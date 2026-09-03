@@ -8515,3 +8515,37 @@ Desk report: "add 20 new colors, 5-10 new border styles."
 `rule-sides-double` / purple, confirmed 4 export rule items, reverted cleanly.
 Server boots clean; properties panel screenshotted with all 15 border buttons
 and the radius group appearing/disappearing correctly with `canRound()`.
+
+## Five folios, five footers — 3 Sept 2026, branch feature/headers-footers
+
+Desk report: "add new header for each page ... then 5 footers and 5 headers
+... with AI apis we will integrate them to generate Pudhari level newspaper
+with one click."
+
+**Page one's nameplate is registered artwork (RNI-numbered) and is not one of
+the five** — offering "5 headers" there would be five claims about the
+paper's legal identity. What varies is the FOLIO every inside page carries.
+
+- `public/editor/layout/furniture-styles.js`: 5 folio styles, 5 footer
+  styles, resolved from the page's own `style_theme` via a deterministic
+  table — **no new schema, no new AI call**. The existing "Dress the page"
+  button already dresses the furniture.
+- Colour is never invented: both read the theme's own leading hue through the
+  same `hueOf()` lookup `page-styles.js` already uses for blocks.
+- The reserved band height (`geometry.js`) is untouched — every style draws
+  inside the identical band; only the rule/tint/title treatment vary.
+- `print-model.js`'s `folioItems()`/`footerItems()` feed the PDF/IDML.
+  **Scribus's own `footerFrames()` is separate, hand-rolled code** (documented
+  reason: the block walk is tested, a rewrite is not a fix) and had to be
+  themed by hand, mirroring the shared walk. Verified against a real `.sla`:
+  sunday theme → `SahasTintSand` / `SahasOrange`, real palette names, not
+  auto-registered.
+
+### Verified
+
+`npm test` 1123/1123 (6 new: 4 in `tests/furnitureStyles.test.js`, 2 real
+end-to-end integration tests in `tests/furnitureExport.test.js` that start a
+disposable 2099 edition, dress a page, and check the PDF/IDML walk AND the
+real `.sla` agree). Screenshotted the reversed banner folio and tinted footer
+on a real edition — see the session's own SendUserFile attachments. Server
+boots clean; no leftover test fixtures.

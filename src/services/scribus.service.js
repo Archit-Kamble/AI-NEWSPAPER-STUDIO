@@ -231,6 +231,7 @@ let smartCardLayoutModule = null;
 let textFlowModule = null;
 let imageGeometryModule = null;
 let accentModule = null;
+let furnitureModule = null;
 
 async function ensureComposeReady() {
   if (!metricsModule) metricsModule = await import('../../public/editor/compose/font-metrics.js');
@@ -242,6 +243,7 @@ async function ensureComposeReady() {
   if (!textFlowModule) textFlowModule = await import('../../public/editor/layout/text-flow.js');
   if (!imageGeometryModule) imageGeometryModule = await import('../../public/editor/layout/image-geometry.js');
   if (!accentModule) accentModule = await import('../../public/editor/compose/accent.js');
+  if (!furnitureModule) furnitureModule = await import('../../public/editor/layout/furniture-styles.js');
   await Promise.all([metricsModule.ensureFontsLoaded(), shaperModule.ensureShaperReady()]);
   shaperModule.requireShaperReady();
   return {
@@ -772,13 +774,40 @@ function footerFrames(newspaper, page, geometry, identity, { pageOffsetMm, ownPa
   const pageLabel = `पृष्ठ ${devanagari(page.page_number)}`;
   const columns = verso ? [pageLabel, dateText, identity.title] : [identity.title, dateText, pageLabel];
 
+  // FIVE FOOTER STYLES, resolved from the page's own theme - the SAME
+  // catalogue print-model.js reads for the PDF/IDML foot and masthead.js
+  // reads for the canvas, so this plate carries the foot the desk approved
+  // rather than a fourth, silently different one. An undressed page resolves
+  // 'classic' (no rule, plain title) and draws byte-for-byte what this
+  // function always drew.
+  const fstyle = furnitureModule.footerStyleForTheme(page.style_theme);
+  const footInk = fstyle.title !== 'plain' ? furnitureModule.furnitureInkForTheme(page.style_theme) : null;
+  const footTint = fstyle.band ? furnitureModule.furnitureTintForTheme(page.style_theme) : null;
+  if (footTint) {
+    parts.push(fillFrame({ xMm: leftMm, yMm: footYMm, widthMm, heightMm: footHeightMm, colour: colourFor(footTint), ownPage }));
+  }
+  if (fstyle.rule) {
+    const weightMm = mm(fstyle.rule.weight);
+    const ruleColour = colourFor(footInk || '#111111');
+    const yAt = fstyle.rule.edge === 'top' ? footYMm : footYMm + footHeightMm - weightMm;
+    const offsets = fstyle.rule.double ? [0, fstyle.rule.edge === 'top' ? weightMm * 2 : -weightMm * 2] : [0];
+    for (const offset of offsets) {
+      parts.push(fillFrame({ xMm: leftMm, yMm: yAt + offset, widthMm, heightMm: weightMm, colour: ruleColour, ownPage }));
+    }
+  }
+
   columns.forEach((text, index) => {
     if (!text) return;
     const weight = index === 1 ? 400 : 700; // the date column is regular; title/page are bold
+    // The paper's own name and its page number carry the theme's ink where
+    // one is asked for - the same two columns pageFootMarkup colours on the
+    // canvas. The date stays neutral either way.
+    const themedColumn = index !== 1 && footInk;
     parts.push(lineFrame({
       xMm: leftMm + index * thirdMm, yMm: footYMm,
       widthMm: thirdMm, heightMm: footHeightMm,
-      runs: [{ text, family: 'sans', weight, bold: false, italic: false, underline: false, fontPx: 18 }],
+      runs: [{ text, family: 'sans', weight, bold: false, italic: false, underline: false, fontPx: 18,
+        colour: themedColumn ? colourFor(footInk) : undefined }],
       align: index, ownPage,
     }));
   });

@@ -7048,6 +7048,81 @@ corner is possible. The note now says which is true.
 node --test tests/paletteExpansion.test.js
 ```
 
+## Five folio styles, five footer styles - and one that cannot exist
+
+The desk's next report: *"add new header for each page ... then 5 footers
+and 5 headers ... with AI apis we will integrate them to generate Pudhari
+level newspaper with one click."*
+
+**Page one's nameplate is not one of these five, and cannot be.**
+`src/layout/identity.js`'s own header states why: the nameplate is
+**registered artwork** tied to the paper's RNI number, read off the printed
+masthead, never redrawn. "5 headers" giving page one five different logo
+arrangements would be five different claims about the paper's legal identity.
+What genuinely varies, page to page, in a printed daily is the **folio** every
+inside page carries - and that is what five styles style.
+
+### No new schema - the folio and footer read the page's own theme
+
+`public/editor/layout/furniture-styles.js` is the sixth shared catalogue.
+`FOLIO_STYLES` and `FOOTER_STYLES` (5 each) name a rule (edge, weight,
+double), a band (tint or a reversed panel), and a title treatment (plain /
+accent / reverse). A deterministic table (`THEME_FOLIO`/`THEME_FOOTER`) maps
+each of the ten page themes to one of each - so **the existing "Dress the
+page" button already dresses the furniture**, with zero new API, zero new
+column, zero new AI call. A page nobody has dressed resolves `plain`/`front`
+and draws exactly what it always drew.
+
+The colour is never invented: `furnitureInkForTheme()`/`furnitureTintForTheme()`
+take the theme's own leading hue - the SAME `hueOf()` lookup `page-styles.js`
+already uses for blocks, so a themed folio's rule is a colour `inkSeparation()`
+can already name in a `.sla`.
+
+### The band never moves
+
+`geometry.js`'s `folioHeightPx`/`footHeightPx` are what `templates.js` reads
+to know where an editorial block may start. This work is not touched by any
+of it: every style draws inside the identical reserved band, and only the
+rule, the tint and the type treatment change. That is what makes it safe to
+add without going near the one piece of geometry every block's position
+depends on.
+
+### The plate has to match the sheet, and Scribus is the one place that could silently disagree
+
+`print-model.js`'s `folioItems()`/`footerItems()` feed the PDF and the IDML
+from one walk - both themed identically to the canvas, verified end to end.
+**Scribus does not read that walk for its footer.** CLAUDE.md already records
+why: "Scribus shares the FURNITURE, not the block walk" - its own
+`footerFrames()` is a separate, hand-rolled function, kept apart deliberately
+because the block walk is tested and a rewrite is not a fix.
+
+So the SAME theming had to be added to Scribus's own function, by hand,
+mirroring `print-model.js` exactly and leaving its (separately tested)
+imprint sub-block untouched. Verified against a real `.sla`: the sunday
+theme's tint appears as `SahasTintSand`, its ink as `SahasOrange` - the real
+palette names, never an auto-registered colour - and an undressed page's `.sla`
+carries the same 8 unrelated auto-named colours whether or not any page is
+themed, proving nothing new was introduced by this change.
+
+### What was measured, driving it rather than reading it
+
+- The `banner` (reversed) folio style needed the title, date AND page-number
+  spans coloured white **on the span itself**, not just the container - a
+  panel with black text on it is unreadable, and the container alone cannot
+  carry that.
+- A double rule's second line has to move **inward** from the band's true
+  edge (mirroring `blockRules()`'s own offset direction), not outward past
+  it - the first version pushed both lines below the band into the content
+  that follows.
+- `'plain'` title styles (e.g. the understated `double-rule` folio) must
+  colour **nothing** - `title !== 'plain'` gates every ink lookup, and a test
+  holds it: a plain style resolved against a real theme must still come back
+  `null`.
+
+```bash
+node --test tests/furnitureStyles.test.js tests/furnitureExport.test.js
+```
+
 ## Engineering rules
 
 - **The overflow diagnosis started from desk-selected baseline `52c9556`.** Fix

@@ -12,6 +12,7 @@
 // right.
 
 import { escapeHtml } from "../format.js";
+import { folioStyleForTheme, footerStyleForTheme, furnitureInkForTheme, furnitureTintForTheme } from "../layout/furniture-styles.js";
 
 let identity = null;
 let loadedFor = null;
@@ -151,6 +152,14 @@ export function mastheadMarkup(newspaper, page, geometry, { advertWidthPx = 0 } 
  * The folio strip inside pages carry: paper, page number, place and date on one
  * ruled line. Page one has the nameplate instead.
  */
+// FIVE FOLIO STYLES, resolved from the page's own theme - the same
+// style_theme column page-styles.js writes when a page is dressed. No new
+// storage, no new API: a page nobody has dressed reads "plain"/"front" and
+// draws exactly the folio it always has.
+//
+// The rule, tint and title ink all come from furniture-styles.js, never
+// invented here - the same catalogue print-model.js reads for the exported
+// plate, so the folio a desk sees is the folio that prints.
 export function folioMarkup(newspaper, page, geometry) {
   if (!identity || !page || Number(page.page_number) === 1) return "";
 
@@ -171,10 +180,33 @@ export function folioMarkup(newspaper, page, geometry) {
   const dateBlock = `<span class="folio-date">${escapeHtml(identity.placeOfPublication || "")} । ${escapeHtml(dateText)}</span>`;
   const title = `<span class="folio-title">${escapeHtml(identity.title || "")}</span>`;
 
+  const theme = page.style_theme;
+  const style = folioStyleForTheme(theme);
+  const ink = style.title !== "plain" ? furnitureInkForTheme(theme) : null;
+  const tint = style.band ? furnitureTintForTheme(theme) : null;
+  const reversed = style.band === "reverse";
+  const css = [
+    `left:${left}px`, `top:${top}px`, `width:${width}px`,
+    style.rule.weight === 0 ? "border-bottom-width:0" : `border-bottom-width:${style.rule.weight}px`,
+    style.rule.double ? "border-bottom-style:double" : "",
+    ink && !reversed ? `border-bottom-color:${ink}` : "",
+    style.band === true && tint ? `background:${tint}` : "",
+    reversed && ink ? `background:${ink};border-bottom-width:0` : "",
+  ].filter(Boolean).join(";");
+  // The title's own ink: the theme's accent for 'accent'/'tinted-band', white
+  // for a reversed banner - set on the SPAN, not merely the container, for the
+  // same reason pageFootMarkup below sets it on its own spans: a colour named
+  // only in a CSS class a desk never presses cannot be judged against what the
+  // .folio-title rule already fixes at #c8102e.
+  const titleInk = reversed ? "#ffffff" : ink;
+  const titleSpan = `<span class="folio-title"${titleInk ? ` style="color:${escapeHtml(titleInk)}"` : ""}>${escapeHtml(identity.title || "")}</span>`;
+  const dateSpan = reversed ? dateBlock.replace('class="folio-date"', 'class="folio-date" style="color:#ffffff"') : dateBlock;
+  const numberSpan = reversed ? number.replace('class="folio-page"', 'class="folio-page" style="color:#ffffff"') : number;
+
   return `
-    <div class="page-folio ${verso ? "folio-verso" : "folio-recto"}"
-         style="left:${left}px;top:${top}px;width:${width}px;">
-      ${verso ? `${number}${dateBlock}${title}` : `${title}${dateBlock}${number}`}
+    <div class="page-folio ${verso ? "folio-verso" : "folio-recto"} folio-style-${style.key}"
+         style="${css}">
+      ${verso ? `${numberSpan}${dateSpan}${titleSpan}` : `${titleSpan}${dateSpan}${numberSpan}`}
     </div>
   `;
 }
@@ -236,12 +268,27 @@ export function pageFootMarkup(newspaper, page, geometry) {
   // on every page did two things: it duplicated a legal statement, and it
   // squeezed the foot into an 8px ruled strip of dense grey type that read as
   // a border under the page rather than as a folio line.
+  // FIVE FOOTER STYLES, resolved from the same theme the folio above reads -
+  // one page, one look, top to bottom. The band's HEIGHT never changes; only
+  // the rule (if any), the tint and the title's ink do.
+  const theme = page.style_theme;
+  const style = footerStyleForTheme(theme);
+  const ink = style.title !== "plain" ? furnitureInkForTheme(theme) : null;
+  const tint = style.band ? furnitureTintForTheme(theme) : null;
+  const ruleCss = style.rule
+    ? `border-${style.rule.edge}-width:${style.rule.weight}px;border-${style.rule.edge}-style:${style.rule.double ? "double" : "solid"};border-${style.rule.edge}-color:${ink || "#111"}`
+    : "";
+  const css = [
+    `left:${left}px`, `top:${band.footTop}px`, `width:${width}px`, `height:${band.footHeightPx}px`,
+    ruleCss, tint ? `background:${tint}` : "",
+  ].filter(Boolean).join(";");
+
   return `
-    <div class="page-foot ${verso ? "foot-verso" : "foot-recto"}"
-         style="left:${left}px;top:${band.footTop}px;width:${width}px;height:${band.footHeightPx}px;">
-      <span class="foot-title">${escapeHtml(identity.title || "")}</span>
+    <div class="page-foot ${verso ? "foot-verso" : "foot-recto"} foot-style-${style.key}"
+         style="${css}">
+      <span class="foot-title"${ink ? ` style="color:${escapeHtml(ink)}"` : ""}>${escapeHtml(identity.title || "")}</span>
       <span class="foot-date">${escapeHtml(dateText)}</span>
-      <span class="foot-page">पृष्ठ ${escapeHtml(devanagari(page.page_number))}</span>
+      <span class="foot-page"${ink ? ` style="color:${escapeHtml(ink)}"` : ""}>पृष्ठ ${escapeHtml(devanagari(page.page_number))}</span>
     </div>
   `;
 }

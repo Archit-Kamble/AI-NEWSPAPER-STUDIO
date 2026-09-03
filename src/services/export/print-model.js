@@ -42,7 +42,7 @@ let modules = null;
 
 async function ensureComposeReady() {
   if (!modules) {
-    const [metrics, shaper, adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry, accent, compose, columnRules, inks] =
+    const [metrics, shaper, adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry, accent, compose, columnRules, inks, furniture] =
       await Promise.all([
         import('../../../public/editor/compose/font-metrics.js'),
         import('../../../public/editor/compose/shaper.js'),
@@ -58,8 +58,12 @@ async function ensureComposeReady() {
         // The paper's own palette: which display bands a treatment lays a
         // ground behind, and what a screen of an ink looks like.
         import('../../../public/editor/layout/inks.js'),
+        // The folio and footer's own five-style catalogue - the same one
+        // masthead.js reads, so a themed page's running head and foot print
+        // exactly what the canvas showed the desk.
+        import('../../../public/editor/layout/furniture-styles.js'),
       ]);
-    modules = { metrics, shaper, adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry, accent, compose, columnRules, inks };
+    modules = { metrics, shaper, adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry, accent, compose, columnRules, inks, furniture };
   }
   await Promise.all([modules.metrics.ensureFontsLoaded(), modules.shaper.ensureShaperReady()]);
   modules.shaper.requireShaperReady();
@@ -924,6 +928,10 @@ function mastheadItems(newspaper, page, geometry, identity, sections) {
  * Verso and recto, the same rule the canvas follows: a reader holding the
  * paper open sees the OUTER edge of each page, so the page number goes there.
  */
+// FIVE FOLIO STYLES, resolved from the page's own theme - the exact catalogue
+// masthead.js reads for the canvas, so the plate prints the folio a desk
+// already approved on screen. A page nobody has dressed resolves 'plain'/
+// 'front' and draws precisely what this function always drew.
 function folioItems(newspaper, page, geometry, identity) {
   if (Number(page.page_number) === 1) return [];
   const region = regionForPage(geometry, page.page_number);
@@ -942,16 +950,44 @@ function folioItems(newspaper, page, geometry, identity) {
   const thirdPx = widthPx / 3;
   const lineY = header.top + bandPx * 0.32;
 
+  const { folioStyleForTheme, furnitureInkForTheme, furnitureTintForTheme } = modules.furniture;
+  const style = folioStyleForTheme(page.style_theme);
+  const reversed = style.band === 'reverse';
+  const themeInk = style.title !== 'plain' ? furnitureInkForTheme(page.style_theme) : null;
+  const titleInk = reversed ? '#ffffff' : (themeInk || ACCENT_INK);
+  const bodyInk = reversed ? '#ffffff' : undefined;
+  const tint = style.band ? furnitureTintForTheme(page.style_theme) : null;
+
   const title = furnitureLine(leftPx + (verso ? thirdPx * 2 : 0), lineY, thirdPx,
-    identity.title, { family: 'sans', weight: 700, bold: true, fontPx: 11, ink: ACCENT_INK },
+    identity.title, { family: 'sans', weight: 700, bold: true, fontPx: 11, ink: titleInk },
     verso ? 'right' : 'left');
   const number = furnitureLine(leftPx + (verso ? 0 : thirdPx * 2), lineY + 2, thirdPx,
-    pageLabel, { family: 'sans', weight: 400, fontPx: 8 }, verso ? 'left' : 'right');
+    pageLabel, { family: 'sans', weight: 400, fontPx: 8, ink: bodyInk }, verso ? 'left' : 'right');
   const middle = furnitureLine(leftPx + thirdPx, lineY + 2, thirdPx,
-    placeAndDate, { family: 'sans', weight: 400, fontPx: 8 }, 'center');
+    placeAndDate, { family: 'sans', weight: 400, fontPx: 8, ink: bodyInk }, 'center');
 
-  return [title, middle, number,
-    ruleItem(leftPx, header.top + bandPx, widthPx)].filter(Boolean);
+  const items = [];
+  // A tint or a reversed panel is drawn FIRST, so the text prints over it -
+  // the same order render.js already uses for a reversed headline band.
+  if (reversed && themeInk) {
+    items.push({ kind: 'fill', x: mm(leftPx), y: mm(header.top), width: mm(widthPx), height: mm(bandPx), ink: themeInk });
+  } else if (style.band === true && tint) {
+    items.push({ kind: 'fill', x: mm(leftPx), y: mm(header.top), width: mm(widthPx), height: mm(bandPx), ink: tint });
+  }
+  items.push(title, middle, number);
+  // No rule at all for a reversed banner - the panel's own edge IS the rule.
+  // A double rule is the same two-offset geometry blockRules() already draws.
+  if (!reversed && style.rule.weight > 0) {
+    const ruleInk = themeInk || RULE_INK;
+    const weight = style.rule.weight;
+    // The double moves INWARD from the band's true edge, mirroring
+    // blockRules()'s own double-rule offsets - the outer line sits exactly
+    // where the single rule always sat, and the inner line is a gap above it,
+    // never past the band into the content that follows.
+    const offsets = style.rule.double ? [0, -weight * 2] : [0];
+    for (const offset of offsets) items.push(ruleItem(leftPx, header.top + bandPx + offset, widthPx, weight, ruleInk));
+  }
+  return items.filter(Boolean);
 }
 
 /**
@@ -975,6 +1011,9 @@ function registrationItems(geometry) {
   }));
 }
 
+// FIVE FOOTER STYLES, resolved the same way the folio above is - one theme,
+// read once, drawn identically top to bottom of the page. The band's height
+// is never touched; only the rule (if any), the tint and the title's ink are.
 function footerItems(newspaper, page, geometry, identity) {
   const items = [];
   const region = regionForPage(geometry, page.page_number);
@@ -991,11 +1030,33 @@ function footerItems(newspaper, page, geometry, identity) {
   const columns = verso ? [pageLabel, dateText, identity.title] : [identity.title, dateText, pageLabel];
   const ALIGN = ['left', 'center', 'right'];
 
+  const { footerStyleForTheme, furnitureInkForTheme, furnitureTintForTheme } = modules.furniture;
+  const fstyle = footerStyleForTheme(page.style_theme);
+  const footInk = fstyle.title !== 'plain' ? furnitureInkForTheme(page.style_theme) : null;
+  const footTint = fstyle.band ? furnitureTintForTheme(page.style_theme) : null;
+  if (footTint) {
+    items.push({ kind: 'fill', x: leftMm, y: footYMm, width: widthMm, height: footHeightMm, ink: footTint });
+  }
+  if (fstyle.rule) {
+    const weight = mm(fstyle.rule.weight);
+    const ruleInk = footInk || RULE_INK;
+    const yAt = fstyle.rule.edge === 'top' ? footYMm : footYMm + footHeightMm - weight;
+    const offsets = fstyle.rule.double ? [0, fstyle.rule.edge === 'top' ? weight * 2 : -weight * 2] : [0];
+    for (const offset of offsets) {
+      items.push({ kind: 'rule', x: leftMm, y: yAt + offset, width: widthMm, height: weight, ink: ruleInk });
+    }
+  }
+
   columns.forEach((text, index) => {
     if (!text) return;
+    // The page's own name and its number carry the theme ink where one is
+    // asked for (the same two spans pageFootMarkup colours on the canvas);
+    // the date in the middle stays neutral either way, exactly as it always
+    // has - a themed foot is not a themed date.
+    const themedColumn = index !== 1 && footInk;
     items.push(textItem(
       { x: leftMm + index * thirdMm, y: footYMm, width: thirdMm, height: footHeightMm },
-      [run(text, { family: 'sans', weight: index === 1 ? 400 : 700, fontPx: 18 })],
+      [run(text, { family: 'sans', weight: index === 1 ? 400 : 700, fontPx: 18, ink: themedColumn ? footInk : null })],
       ALIGN[index],
     ));
   });

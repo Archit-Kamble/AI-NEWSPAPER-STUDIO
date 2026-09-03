@@ -4885,6 +4885,26 @@ body.print-view .section-diagnostic {
 .newspaper-section.ruled-rule-double {
   border-bottom: max(3px, calc(var(--block-rule, 0.71px) * 3)) double var(--block-ink, #111);
 }
+/* FIVE MORE DOUBLE COMBINATIONS, the same DOUBLE math as the two above -
+   three times the chosen rule, floored at 3px - on edge sets a box could not
+   isolate before. */
+.newspaper-section.ruled-rule-above-double {
+  border-top: max(3px, calc(var(--block-rule, 0.71px) * 3)) double var(--block-ink, #111);
+}
+.newspaper-section.ruled-rule-left-double {
+  border-left: max(3px, calc(var(--block-rule, 0.71px) * 3)) double var(--block-ink, #111);
+}
+.newspaper-section.ruled-rule-right-double {
+  border-right: max(3px, calc(var(--block-rule, 0.71px) * 3)) double var(--block-ink, #111);
+}
+.newspaper-section.ruled-rule-sides-double {
+  border-left: max(3px, calc(var(--block-rule, 0.71px) * 3)) double var(--block-ink, #111);
+  border-right: max(3px, calc(var(--block-rule, 0.71px) * 3)) double var(--block-ink, #111);
+}
+.newspaper-section.ruled-rule-both-double {
+  border-top: max(3px, calc(var(--block-rule, 0.71px) * 3)) double var(--block-ink, #111);
+  border-bottom: max(3px, calc(var(--block-rule, 0.71px) * 3)) double var(--block-ink, #111);
+}
 .newspaper-section.ruled-box-double {
   border: max(3px, calc(var(--block-rule, 0.71px) * 3)) double var(--block-ink, #111);
 }
@@ -4960,6 +4980,23 @@ body.print-view .newspaper-section.ruled-rule-sides {
   border-right: var(--block-rule, 0.71px) solid var(--block-ink, #111);
 }
 body.print-view .newspaper-section.ruled-rule-double {
+  border-bottom: max(3px, calc(var(--block-rule, 0.71px) * 3)) double var(--block-ink, #111);
+}
+body.print-view .newspaper-section.ruled-rule-above-double {
+  border-top: max(3px, calc(var(--block-rule, 0.71px) * 3)) double var(--block-ink, #111);
+}
+body.print-view .newspaper-section.ruled-rule-left-double {
+  border-left: max(3px, calc(var(--block-rule, 0.71px) * 3)) double var(--block-ink, #111);
+}
+body.print-view .newspaper-section.ruled-rule-right-double {
+  border-right: max(3px, calc(var(--block-rule, 0.71px) * 3)) double var(--block-ink, #111);
+}
+body.print-view .newspaper-section.ruled-rule-sides-double {
+  border-left: max(3px, calc(var(--block-rule, 0.71px) * 3)) double var(--block-ink, #111);
+  border-right: max(3px, calc(var(--block-rule, 0.71px) * 3)) double var(--block-ink, #111);
+}
+body.print-view .newspaper-section.ruled-rule-both-double {
+  border-top: max(3px, calc(var(--block-rule, 0.71px) * 3)) double var(--block-ink, #111);
   border-bottom: max(3px, calc(var(--block-rule, 0.71px) * 3)) double var(--block-ink, #111);
 }
 body.print-view .newspaper-section.ruled-box-double {

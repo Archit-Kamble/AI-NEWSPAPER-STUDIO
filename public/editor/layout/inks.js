@@ -42,6 +42,31 @@ export const INKS = [
   { key: 'orange', label: 'Orange', hex: '#d2601a', scribus: 'SahasOrange' },
   { key: 'purple', label: 'Purple', hex: '#5b2a86', scribus: 'SahasPurple' },
   { key: 'teal', label: 'Teal', hex: '#0f6d78', scribus: 'SahasTeal' },
+  // THIRTEEN MORE, so a paper of a dozen pages can give each one a look of
+  // its own without two of them wearing the same colour. Every one is a
+  // PROCESS colour in the .sla (Spot="0") exactly as the seven above are, so
+  // a longer palette is not a longer press run - it separates onto the same
+  // four plates. What the palette is for is stopping a colour mixed in a
+  // browser reaching a plate, and a longer list of named, separated inks
+  // does that exactly as well as a short one.
+  //
+  // Each is dark enough to hold small Devanagari on newsprint - checked, not
+  // eyeballed: tests/blockSurface.test.js holds every ink under a Rec. 709
+  // luma of 120 and every tint over 228, which is the rule the originals
+  // were chosen against and is not relaxed because the list got longer.
+  { key: 'maroon', label: 'Maroon', hex: '#8a1c30', scribus: 'SahasMaroon' },
+  { key: 'rose', label: 'Rose', hex: '#b4315f', scribus: 'SahasRose' },
+  { key: 'navy', label: 'Navy', hex: '#16305e', scribus: 'SahasNavy' },
+  { key: 'sky', label: 'Sky', hex: '#1b6fb0', scribus: 'SahasSky' },
+  { key: 'forest', label: 'Forest', hex: '#14562b', scribus: 'SahasForest' },
+  { key: 'olive', label: 'Olive', hex: '#5f6b1e', scribus: 'SahasOlive' },
+  { key: 'amber', label: 'Amber', hex: '#b06a08', scribus: 'SahasAmber' },
+  { key: 'rust', label: 'Rust', hex: '#a3441a', scribus: 'SahasRust' },
+  { key: 'brown', label: 'Brown', hex: '#6b4423', scribus: 'SahasBrown' },
+  { key: 'plum', label: 'Plum', hex: '#7a2455', scribus: 'SahasPlum' },
+  { key: 'violet', label: 'Violet', hex: '#43308f', scribus: 'SahasViolet' },
+  { key: 'slate', label: 'Slate', hex: '#3f4a56', scribus: 'SahasSlate' },
+  { key: 'pine', label: 'Pine', hex: '#0f5c4f', scribus: 'SahasPine' },
 ];
 
 /**
@@ -71,6 +96,21 @@ export const TINTS = [
   // darker-rule / darker-heading triple a printed feature page is set in, and
   // teal was the one ink with no ground to pair with.
   { key: 'teal', label: 'Teal', hex: '#eef6f7', scribus: 'SahasTintTeal' },
+  // A GROUND FOR EVERY INK. `page-styles.js` pairs the two into the light-
+  // ground / darker-rule / darker-heading triple a printed feature page is
+  // set in, so an ink with no ground of its own hue cannot be a hue family.
+  { key: 'maroon', label: 'Maroon', hex: '#f9f0f2', scribus: 'SahasTintMaroon' },
+  { key: 'rose', label: 'Rose', hex: '#fcf0f4', scribus: 'SahasTintRose' },
+  { key: 'navy', label: 'Navy', hex: '#eef1f7', scribus: 'SahasTintNavy' },
+  { key: 'sky', label: 'Sky', hex: '#eef5fb', scribus: 'SahasTintSky' },
+  { key: 'forest', label: 'Forest', hex: '#eef5f0', scribus: 'SahasTintForest' },
+  { key: 'olive', label: 'Olive', hex: '#f5f6ec', scribus: 'SahasTintOlive' },
+  { key: 'amber', label: 'Amber', hex: '#fbf4e8', scribus: 'SahasTintAmber' },
+  { key: 'rust', label: 'Rust', hex: '#fbf1eb', scribus: 'SahasTintRust' },
+  { key: 'brown', label: 'Brown', hex: '#f7f3ee', scribus: 'SahasTintBrown' },
+  { key: 'plum', label: 'Plum', hex: '#f8eff4', scribus: 'SahasTintPlum' },
+  { key: 'violet', label: 'Violet', hex: '#f0eefa', scribus: 'SahasTintViolet' },
+  { key: 'pine', label: 'Pine', hex: '#eef5f3', scribus: 'SahasTintPine' },
 ];
 
 // A colour that has been through the DOM comes back as `rgb(200, 16, 46)`,

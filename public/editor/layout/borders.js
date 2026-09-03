@@ -62,6 +62,17 @@
     // emphasis, which are different statements.
     { key: 'rule-double', label: 'Double rule below', edges: ['bottom'], double: true },
     { key: 'box-double', label: 'Double box', edges: ['top', 'right', 'bottom', 'left'], double: true },
+    // FIVE MORE DOUBLE COMBINATIONS. Nothing here is a new mechanism - a
+    // double rule has always been "the same edge set, drawn twice, with a gap
+    // of its own weight between" (`isDouble` × whatever `edges` names), so
+    // asking for a double rule on a side or on the top is the SAME code path
+    // `rule-double` and `box-double` already run, offered under its own name
+    // rather than left reachable only through a full box.
+    { key: 'rule-above-double', label: 'Double rule above', edges: ['top'], double: true },
+    { key: 'rule-left-double', label: 'Double rule left', edges: ['left'], double: true },
+    { key: 'rule-right-double', label: 'Double rule right', edges: ['right'], double: true },
+    { key: 'rule-sides-double', label: 'Double rules left and right', edges: ['left', 'right'], double: true },
+    { key: 'rule-both-double', label: 'Double rules above and below', edges: ['top', 'bottom'], double: true },
   ]);
 
   // A printer's own ladder. The hairline is what a page rules a gutter with;

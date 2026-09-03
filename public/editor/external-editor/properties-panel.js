@@ -52,7 +52,7 @@ const SHAPES = [
 // service's whitelist was ['none', 'box'], so that button sent a payload the
 // server refused and the page never changed.
 import "../layout/borders.js";
-const { BORDER_STYLES, BORDER_WIDTHS, isRuled, borderWidthPx } = globalThis.SahasBorders;
+const { BORDER_STYLES, BORDER_WIDTHS, BORDER_RADII, isRuled, canRound, borderWidthPx, borderRadiusPx } = globalThis.SahasBorders;
 import "../layout/inset-panels.js";
 const { INSET_PANEL_KINDS, INSET_PANEL_MARKERS, INSET_PANEL_MIN_PX, panelsOf } = globalThis.SahasInsetPanels;
 
@@ -278,6 +278,7 @@ function purposeMarkup(section, view) {
 function blockPropertiesMarkup(section, view, page) {
   const border = String(view.borderStyle || section.border_style || "none");
   const ruleWidth = borderWidthPx(view.borderWidthPx ?? section.border_width_px);
+  const ruleRadius = borderRadiusPx(view.borderRadiusPx ?? section.border_radius_px);
   const tint = view.backgroundColor ?? section.background_color ?? null;
   const headlineStyle = String(view.headlineStyle || section.headline_style || "plain");
   const rawColumns = view.columnCount ?? section.column_count ?? null;
@@ -325,7 +326,20 @@ function blockPropertiesMarkup(section, view, page) {
           ).join("")}
         </div>
       </div>` : ""}
-      <p class="muted ext-note">Nothing is ruled unless you rule it. A rule is specified in points, the way a printer specifies one. A box sets the copy in a little way from its own line, the way a printed panel does, and the page draws no hairline in the gutter beside a block that already has a box. There is no corner radius on purpose - every rule on a printed page meets its neighbour square.</p>
+      ${canRound(border) ? `
+      <div class="form-group">
+        <!-- ONLY OFFERED WHERE THE BLOCK IS BOXED. A corner needs a rule on
+             both of its edges to round - a single rule below has nothing to
+             meet - and canRound() is the one place that says so, the same
+             answer canvas.js checks before it ever writes the CSS property. -->
+        <label>Corner</label>
+        <div class="segmented" data-prop-border-radius>
+          ${BORDER_RADII.map(
+            (radius) => `<button type="button" class="segment${Math.abs(ruleRadius - radius.px) < 0.01 ? " active" : ""}" data-border-radius="${radius.px}">${radius.label}</button>`,
+          ).join("")}
+        </div>
+      </div>` : ""}
+      <p class="muted ext-note">Nothing is ruled unless you rule it. A rule is specified in points, the way a printer specifies one. A box sets the copy in a little way from its own line, the way a printed panel does, and the page draws no hairline in the gutter beside a block that already has a box.${canRound(border) ? " A rounded or pill corner is a printed feature page's own device - a front or city page keeps its corners square, so a page's theme sets this on purpose and you can still set it by hand." : " Only a full box can take a corner - a single rule has nothing to round."}</p>
     </div>
 
     <div class="prop-section">
@@ -728,6 +742,11 @@ function bindBorderButtons(handlers) {
   document.querySelectorAll("[data-prop-border-width] [data-border-width]").forEach((button) => {
     button.addEventListener("click", () => {
       handlers.onPatch?.({ borderWidthPx: Number(button.dataset.borderWidth) }, "properties-panel");
+    });
+  });
+  document.querySelectorAll("[data-prop-border-radius] [data-border-radius]").forEach((button) => {
+    button.addEventListener("click", () => {
+      handlers.onPatch?.({ borderRadiusPx: Number(button.dataset.borderRadius) }, "properties-panel");
     });
   });
 }

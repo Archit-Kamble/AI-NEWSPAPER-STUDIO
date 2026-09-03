@@ -56,17 +56,24 @@ export const HUES = [
   { key: 'purple', label: 'Purple', tint: hexOf(TINTS, 'lilac'), ink: hexOf(INKS, 'purple') },
   { key: 'orange', label: 'Orange', tint: hexOf(TINTS, 'sand'), ink: hexOf(INKS, 'orange') },
   { key: 'teal', label: 'Teal', tint: hexOf(TINTS, 'teal'), ink: hexOf(INKS, 'teal') },
+  // THIRTEEN MORE, paired the same way as the six above - one TINT, one INK,
+  // never a mixed shade. `slate` pairs with the existing grey ground rather
+  // than a new tint of its own: it is a dark blue-grey distinct from black,
+  // and grey is already the neutral ground this palette has.
+  { key: 'maroon', label: 'Maroon', tint: hexOf(TINTS, 'maroon'), ink: hexOf(INKS, 'maroon') },
+  { key: 'rose', label: 'Rose', tint: hexOf(TINTS, 'rose'), ink: hexOf(INKS, 'rose') },
+  { key: 'navy', label: 'Navy', tint: hexOf(TINTS, 'navy'), ink: hexOf(INKS, 'navy') },
+  { key: 'sky', label: 'Sky', tint: hexOf(TINTS, 'sky'), ink: hexOf(INKS, 'sky') },
+  { key: 'forest', label: 'Forest', tint: hexOf(TINTS, 'forest'), ink: hexOf(INKS, 'forest') },
+  { key: 'olive', label: 'Olive', tint: hexOf(TINTS, 'olive'), ink: hexOf(INKS, 'olive') },
+  { key: 'amber', label: 'Amber', tint: hexOf(TINTS, 'amber'), ink: hexOf(INKS, 'amber') },
+  { key: 'rust', label: 'Rust', tint: hexOf(TINTS, 'rust'), ink: hexOf(INKS, 'rust') },
+  { key: 'brown', label: 'Brown', tint: hexOf(TINTS, 'brown'), ink: hexOf(INKS, 'brown') },
+  { key: 'plum', label: 'Plum', tint: hexOf(TINTS, 'plum'), ink: hexOf(INKS, 'plum') },
+  { key: 'violet', label: 'Violet', tint: hexOf(TINTS, 'violet'), ink: hexOf(INKS, 'violet') },
+  { key: 'slate', label: 'Slate', tint: hexOf(TINTS, 'grey'), ink: hexOf(INKS, 'slate') },
+  { key: 'pine', label: 'Pine', tint: hexOf(TINTS, 'pine'), ink: hexOf(INKS, 'pine') },
 ];
-
-// THERE IS DELIBERATELY NO BLACK-ON-GREY FAMILY, and it is worth writing down
-// because it looks like an omission.
-//
-// Black carries no hex in `INKS` - it is the ABSENCE of a mark - and
-// `accent_color` is NOT NULL, so such a family could not store its own ink
-// without inventing a near-black hex that `inkSeparation()` does not know.
-// Nothing is lost: a grey ground under a black heading is what an UNDRESSED
-// block already is, and a grey ground under a reversed heading is
-// `headline_style: 'reverse'`, which this product has always had.
 
 export const HUE_KEYS = HUES.map((hue) => hue.key);
 
@@ -110,15 +117,20 @@ export const DECORATION_KEYS = Object.keys(DECORATION);
  */
 export const PAGE_THEMES = [
   { key: 'plain', label: 'Plain', marathi: 'साधे', decoration: 'none', hues: [] },
-  { key: 'front', label: 'Front page', marathi: 'मुखपृष्ठ', decoration: 'sober', hues: ['red', 'blue'] },
-  { key: 'city', label: 'City news', marathi: 'शहर वृत्त', decoration: 'light', hues: ['red', 'blue', 'teal'] },
-  { key: 'state', label: 'State news', marathi: 'राज्य', decoration: 'light', hues: ['blue', 'green', 'orange'] },
-  { key: 'business', label: 'Business', marathi: 'अर्थकारण', decoration: 'light', hues: ['teal', 'blue', 'green'] },
-  { key: 'sport', label: 'Sport', marathi: 'क्रीडा', decoration: 'full', hues: ['green', 'blue', 'orange', 'teal'] },
-  { key: 'entertainment', label: 'Entertainment', marathi: 'मनोरंजन', decoration: 'full', hues: ['purple', 'red', 'orange', 'blue'] },
-  { key: 'world', label: 'World', marathi: 'विश्वसंचार', decoration: 'full', hues: ['blue', 'teal', 'green', 'purple', 'orange'] },
-  { key: 'feature', label: 'Feature', marathi: 'विशेष', decoration: 'full', hues: ['green', 'orange', 'purple', 'blue', 'teal'] },
-  { key: 'sunday', label: 'Sunday', marathi: 'रविवार धमाल', decoration: 'full', hues: ['orange', 'red', 'purple', 'green', 'teal'] },
+  { key: 'front', label: 'Front page', marathi: 'मुखपृष्ठ', decoration: 'sober', hues: ['red', 'navy'] },
+  { key: 'city', label: 'City news', marathi: 'शहर वृत्त', decoration: 'light', hues: ['red', 'blue', 'slate', 'maroon'] },
+  { key: 'state', label: 'State news', marathi: 'राज्य', decoration: 'light', hues: ['blue', 'green', 'orange', 'navy'] },
+  { key: 'business', label: 'Business', marathi: 'अर्थकारण', decoration: 'light', hues: ['teal', 'olive', 'brown', 'slate'] },
+  // EACH THEME DRAWS ON ITS OWN CORNER OF THE PALETTE, so two full-colour
+  // pages read as two different sections of the paper rather than the same
+  // seven hues shuffled. Sport takes the cool/green half, Entertainment and
+  // Sunday take the warm half, World spans both because it is the widest
+  // subject on the paper, Feature sits between.
+  { key: 'sport', label: 'Sport', marathi: 'क्रीडा', decoration: 'full', hues: ['forest', 'sky', 'green', 'navy', 'teal'] },
+  { key: 'entertainment', label: 'Entertainment', marathi: 'मनोरंजन', decoration: 'full', hues: ['violet', 'rose', 'plum', 'amber', 'purple'] },
+  { key: 'world', label: 'World', marathi: 'विश्वसंचार', decoration: 'full', hues: ['navy', 'teal', 'forest', 'plum', 'rust', 'slate', 'blue'] },
+  { key: 'feature', label: 'Feature', marathi: 'विशेष', decoration: 'full', hues: ['forest', 'amber', 'violet', 'sky', 'olive', 'teal'] },
+  { key: 'sunday', label: 'Sunday', marathi: 'रविवार धमाल', decoration: 'full', hues: ['orange', 'rose', 'plum', 'rust', 'amber', 'maroon'] },
 ];
 
 export const THEME_KEYS = PAGE_THEMES.map((theme) => theme.key);

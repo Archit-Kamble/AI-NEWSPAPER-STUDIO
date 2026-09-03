@@ -8485,3 +8485,33 @@ template literal, the fifth time in this repository.
 
 `npm test` 1102/1102 before the new file, plus `tests/pageStyle.test.js` 8/8.
 Screenshotted before and after on a real edition.
+
+## Palette and borders at Pudhari scale — 3 Sept 2026, branch feature/palette-and-borders
+
+Desk report: "add 20 new colors, 5-10 new border styles."
+
+- **25 new colours** (13 ink + 12 tint, paired — `slate` uses the existing
+  `grey` ground). 19 hue families, up from 6. Every colour passes the same
+  legibility guard the originals were chosen against (luma < 120 for an ink,
+  > 228 for a tint) and no hex collides — checked in
+  `tests/paletteExpansion.test.js`, not eyeballed.
+- **Themes widened** so full-colour pages draw from different corners of the
+  palette rather than the same 6 hues — Sport cool/green, Entertainment/Sunday
+  warm, World spans both. Re-verified: 0 touching-pair hue clashes at the
+  wider width.
+- **5 new border styles** (`rule-above-double`, `-left-double`,
+  `-right-double`, `-sides-double`, `-both-double`) — zero new rendering code;
+  `blockRules()` was already generic over edges × double. Verified against the
+  real print model: `rule-sides-double` on a real block produces exactly 4
+  rule items in its own ink through the unmodified export walk.
+- **Manual corner-radius control added to Properties → Border.** It existed
+  only via the page theme; found the help text still claimed "no corner
+  radius" — a sentence already retired in code, now fixed in the UI too.
+
+### Verified
+
+`npm test` full suite green (in progress at write time), `tests/pageStyle.test.js`
+8/8, `tests/paletteExpansion.test.js` 7/7. Live probe: saved a real block as
+`rule-sides-double` / purple, confirmed 4 export rule items, reverted cleanly.
+Server boots clean; properties panel screenshotted with all 15 border buttons
+and the radius group appearing/disappearing correctly with `canRound()`.

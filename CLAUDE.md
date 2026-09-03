@@ -6987,6 +6987,67 @@ which is exactly what a restyle has to do.
 node --test tests/pageStyle.test.js
 ```
 
+## The palette and the border catalogue, at Pudhari's scale
+
+The first styling pass shipped six hue families and ten border styles. The
+desk's next report was direct: *"we are not reaching Pudhari level ... add 20
+new colors, 5-10 new border styles."*
+
+**Twenty-five new colours, not twenty** — thirteen inks and twelve tints,
+because a hue family is always a pair. `slate` is the one ink with no tint of
+its own; it pairs with the existing `grey` ground, the same way the original
+six families never invented a colour. **19 hue families now**, up from 6.
+
+Every new colour passed the same legibility guard the original seven and eight
+were chosen against, checked rather than eyeballed:
+`tests/paletteExpansion.test.js` holds every ink under a Rec. 709 luma of 120
+and every tint over 228, and holds that no two entries anywhere in either
+table share a hex — a silent collision would make `sanitiseInk`/`sanitiseTint`
+resolve the wrong one, because both are keyed by hex.
+
+**The themes were widened, not just the palette.** Six hues shared across ten
+themes meant two full-colour pages drew from nearly the same set. Now each
+theme has its own corner of the palette — Sport takes the cool/green half,
+Entertainment and Sunday the warm half, World spans both because it is the
+widest subject on the paper. Verified again at the new width: 0 touching
+pairs share a hue, across every full-colour theme.
+
+### Five more border styles, and none of them is a new mechanism
+
+A double rule has always been "the same edge set, drawn twice, with a gap of
+its own weight between" — `blockRules()` in `print-model.js` already read
+`isDouble(style)` against *whatever* `edges` the style named, generically. So
+`rule-double` (bottom) and `box-double` (all four) were never the only shapes
+that mechanism could produce; they were the only ones offered.
+
+`rule-above-double`, `rule-left-double`, `rule-right-double`,
+`rule-sides-double`, `rule-both-double` — five new catalogue entries, zero new
+code in the file that draws them. Verified against the real print model: a
+block set to `rule-sides-double` produces exactly 4 rule items (2 edges × 2
+offsets) in the block's own ink, through the unmodified export walk.
+
+**15 border styles total.** None of the five new ones is boxed, so none of
+them may take a corner radius — `canRound()` already refuses a single rule,
+because a corner needs a rule on both of its edges to round.
+
+### A corner radius can now be set by hand, not only by a page's theme
+
+`properties-panel.js`'s Border section offered no way to round a corner at
+all — the radius only ever arrived through `page-styles.js`'s theme
+assignment. Found while wiring the new styles in: the panel's own help text
+still read *"There is no corner radius on purpose"*, a sentence `borders.js`
+itself had already retired. **Two drifted claims in one control**, and the
+second was the more dangerous one — a desk reading it would believe a real,
+shipped feature does not exist.
+
+The radius control mirrors the rule-weight control exactly (`BORDER_RADII`,
+`data-prop-border-radius`) and is offered only where `canRound()` says a
+corner is possible. The note now says which is true.
+
+```bash
+node --test tests/paletteExpansion.test.js
+```
+
 ## Engineering rules
 
 - **The overflow diagnosis started from desk-selected baseline `52c9556`.** Fix

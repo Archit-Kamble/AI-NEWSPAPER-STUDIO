@@ -152,6 +152,31 @@ const COLOURS = `
   <COLOR NAME="SahasTintLilac" CMYK="#070c0005" Spot="0" Register="0"/>
   <COLOR NAME="SahasTintSand" CMYK="#00061107" Spot="0" Register="0"/>
   <COLOR NAME="SahasTintTeal" CMYK="#09010008" Spot="0" Register="0"/>
+  <COLOR NAME="SahasMaroon" CMYK="#00cba675" Spot="0" Register="0"/>
+  <COLOR NAME="SahasRose" CMYK="#00ba784b" Spot="0" Register="0"/>
+  <COLOR NAME="SahasNavy" CMYK="#c37d00a1" Spot="0" Register="0"/>
+  <COLOR NAME="SahasSky" CMYK="#d85e004f" Spot="0" Register="0"/>
+  <COLOR NAME="SahasForest" CMYK="#c4007fa9" Spot="0" Register="0"/>
+  <COLOR NAME="SahasOlive" CMYK="#1d00b894" Spot="0" Register="0"/>
+  <COLOR NAME="SahasAmber" CMYK="#0065f34f" Spot="0" Register="0"/>
+  <COLOR NAME="SahasRust" CMYK="#0095d65c" Spot="0" Register="0"/>
+  <COLOR NAME="SahasBrown" CMYK="#005dac94" Spot="0" Register="0"/>
+  <COLOR NAME="SahasPlum" CMYK="#00b44d85" Spot="0" Register="0"/>
+  <COLOR NAME="SahasViolet" CMYK="#88a90070" Spot="0" Register="0"/>
+  <COLOR NAME="SahasSlate" CMYK="#442400a9" Spot="0" Register="0"/>
+  <COLOR NAME="SahasPine" CMYK="#d50024a3" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintMaroon" CMYK="#00090706" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintRose" CMYK="#000c0803" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintNavy" CMYK="#09060008" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintSky" CMYK="#0d060004" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintForest" CMYK="#0700050a" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintOlive" CMYK="#01000a09" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintAmber" CMYK="#00071304" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintRust" CMYK="#000a1004" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintBrown" CMYK="#00040908" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintPlum" CMYK="#00090407" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintViolet" CMYK="#0a0c0005" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintPine" CMYK="#0700020a" Spot="0" Register="0"/>
   <COLOR NAME="None" CMYK="#00000000" Spot="0" Register="0"/>`;
 
 // The four faces the publication actually ships (public/assets/fonts/, the

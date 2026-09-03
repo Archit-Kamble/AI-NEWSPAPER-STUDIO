@@ -615,6 +615,21 @@ async function setOverlays(pageId, overlays) {
  * Only these two columns, and neither of them is copy: a purpose is not a
  * story, so nothing a desk has written can be lost by setting one.
  */
+/**
+ * The look this page wears.
+ *
+ * Its own column rather than something derived from the blocks, because a page
+ * with nothing on it yet still has a theme - that is how the styler knows what
+ * to dress the stories in when they arrive.
+ */
+async function setStyleTheme(pageId, theme) {
+  const { rows } = await pool.query(
+    'UPDATE pages SET style_theme = $2 WHERE id = $1 RETURNING id, style_theme',
+    [pageId, theme || null],
+  );
+  return rows[0] || null;
+}
+
 async function setPurpose(pageId, sectionKey, { blockType, featureKey }) {
   const { rows } = await pool.query(
     `UPDATE page_sections
@@ -630,6 +645,7 @@ async function setPurpose(pageId, sectionKey, { blockType, featureKey }) {
 
 module.exports = {
   setPurpose,
+  setStyleTheme,
   setOverlays,
   create,
   createInTransaction,

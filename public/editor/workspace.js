@@ -1480,6 +1480,8 @@ function renderShell() {
               <div id="pageSwitcher" class="page-switcher"></div>
               <div class="canvas-toolbar-divider"></div>
               <div id="layouts" class="layout-switcher"></div>
+              <select id="pageThemeSelect" class="toolbar-select"
+                      title="How this page is dressed - its grounds, its rules and its headings"></select>
               <button type="button" class="layout-btn" id="addBlockBtn" title="Add a block to this page">+ Block</button>
               <button type="button" class="layout-btn danger" id="removeBlockBtn" title="Remove the selected block">− Block</button>
               <!-- THE SOLD CORNER OF PAGE ONE, which had a server and no door.
@@ -1682,6 +1684,7 @@ function renderShell() {
   document.getElementById("printViewBtn").setAttribute("aria-pressed", "false");
 
   bindPaperControls();
+  bindPageTheme();
 
   // Guides ON/OFF. A view toggle, not a data operation - hiding never
   // deletes a guide or touches its stored position (setGuidesVisible only
@@ -1710,6 +1713,69 @@ function renderShell() {
  * that compose a stored row, and any one of them that forgot would measure a
  * block in one face and print it in another.
  */
+// HOW THIS PAGE IS DRESSED.
+//
+// The theme is a property of the PAGE, which is why the control sits beside
+// the layout picker rather than in the Paper group: the paper's faces are one
+// decision for the whole edition, and what page twelve looks like is not.
+//
+// It PROPOSES before it writes. The select fetches the answer, the question
+// names the page, the look and the number of blocks about to move, and only
+// then does anything change - the same shape as the placement repair and the
+// AI proposal. A page already wearing its theme reports nothing to do and asks
+// nothing, which is what makes the control safe to press twice.
+async function bindPageTheme() {
+  const select = document.getElementById("pageThemeSelect");
+  if (!select) return;
+  const { PAGE_THEMES } = await import("./layout/page-styles.js");
+  const state = store.getState();
+  const page = state.pages?.find((one) => one.id === state.currentPageId) || state.pages?.[0];
+  if (!page) return;
+
+  select.innerHTML = PAGE_THEMES
+    .map((theme) => `<option value="${theme.key}"${theme.key === page.style_theme ? " selected" : ""}>`
+      + `${escapeHtml(theme.label)} — ${escapeHtml(theme.marathi)}</option>`)
+    .join("");
+  // A page nobody has dressed shows what it WOULD be given, rather than
+  // pretending the desk has already chosen: the styler guesses from the page
+  // number and what is on it, and the desk should see that guess before
+  // pressing anything.
+  if (!page.style_theme) {
+    const guess = await fetchJson(`/api/pages/${page.id}/style`).catch(() => null);
+    if (guess?.theme) select.value = guess.theme;
+  }
+
+  select.onchange = async () => {
+    const theme = select.value;
+    try {
+      const proposal = await fetchJson(`/api/pages/${page.id}/style?theme=${encodeURIComponent(theme)}`);
+      if (!proposal.changing) {
+        showNotice(`Page ${proposal.pageNumber} is already dressed as ${proposal.themeName}.`);
+        return;
+      }
+      const answer = await askConfirm({
+        title: `Dress page ${proposal.pageNumber} as ${proposal.themeName}?`,
+        body: `${proposal.changing} of ${proposal.blocks} block${proposal.blocks === 1 ? "" : "s"} change`
+          + `, and ${proposal.dressed} will carry a ground. Adverts, standing features and Smart Cards`
+          + ` are left alone. Nothing that is written changes — only how it is set.`,
+        confirm: "Dress the page",
+      });
+      if (!answer) { select.value = page.style_theme || theme; return; }
+      const done = await fetchJson(`/api/pages/${page.id}/style`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ theme }),
+      });
+      page.style_theme = done.theme;
+      await reloadPages();
+      showNotice(`Page ${done.pageNumber} dressed as ${done.themeName} — ${done.saved} block${done.saved === 1 ? "" : "s"} set`
+        + `${done.refused?.length ? `, ${done.refused.length} refused` : ""}.`);
+    } catch (error) {
+      showNotice(error.message || "The page could not be dressed.");
+    }
+  };
+}
+
 function bindPaperControls() {
   const bodySelect = document.getElementById("paperBodyFace");
   const displaySelect = document.getElementById("paperDisplayFace");

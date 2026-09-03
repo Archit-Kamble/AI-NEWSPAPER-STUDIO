@@ -1,5 +1,6 @@
 const pageService = require('../services/page.service');
 const signoffService = require('../services/signoff.service');
+const pageStyleService = require('../services/pageStyle.service');
 
 async function create(req, res) {
   const page = await pageService.createPage(req.params.newspaperId, req.body);
@@ -31,6 +32,29 @@ async function colour(req, res) {
   res.json(page);
 }
 
+// HOW THE PAGE IS DRESSED.
+//
+// Two routes, and only the second writes. `style` (GET) composes the answer and
+// changes nothing, so the desk reads how many blocks are about to move before
+// any of them do - the shape the AI proposal and the placement repair already
+// have. `restyle` (POST) writes it.
+//
+// Desk-only on both. Reading it is reading production data (a GET on a
+// deskWrites router is unauthenticated unless it says otherwise - the trap
+// CLAUDE.md records this migration falling into twice), and writing it changes
+// what the paper prints.
+async function style(req, res) {
+  const result = await pageStyleService.proposeForPage(req.params.pageId, { theme: req.query?.theme });
+  if (result?.error) return res.status(404).json(result);
+  res.json(result);
+}
+
+async function restyle(req, res) {
+  const result = await pageStyleService.applyToPage(req.params.pageId, { theme: req.body?.theme });
+  if (result?.error) return res.status(404).json(result);
+  res.json(result);
+}
+
 // Where the edition stands, and passing a page for press. A page cannot be
 // passed while preflight still finds errors on it.
 async function state(req, res) {
@@ -56,4 +80,6 @@ async function repairStructuralFrames(req, res) {
 }
 
 module.exports = {
+  style,
+  restyle,
   overlays, create, list, update, colour, state, reapplyFixtureGeometry, repairStructuralFrames };

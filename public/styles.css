@@ -4937,33 +4937,41 @@ body.print-view .newspaper-section[style*="--block-tint"] {
   background: var(--block-tint);
 }
 body.print-view .newspaper-section.ruled-box {
-  border: var(--block-rule, 0.71px) solid #111;
+  border: var(--block-rule, 0.71px) solid var(--block-ink, #111);
 }
 body.print-view .newspaper-section.ruled-rule {
-  border-bottom: var(--block-rule, 0.71px) solid #111;
+  border-bottom: var(--block-rule, 0.71px) solid var(--block-ink, #111);
 }
 body.print-view .newspaper-section.ruled-rule-above {
-  border-top: var(--block-rule, 0.71px) solid #111;
+  border-top: var(--block-rule, 0.71px) solid var(--block-ink, #111);
 }
 body.print-view .newspaper-section.ruled-rule-both {
-  border-top: var(--block-rule, 0.71px) solid #111;
-  border-bottom: var(--block-rule, 0.71px) solid #111;
+  border-top: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-bottom: var(--block-rule, 0.71px) solid var(--block-ink, #111);
 }
 body.print-view .newspaper-section.ruled-rule-left {
-  border-left: var(--block-rule, 0.71px) solid #111;
+  border-left: var(--block-rule, 0.71px) solid var(--block-ink, #111);
 }
 body.print-view .newspaper-section.ruled-rule-right {
-  border-right: var(--block-rule, 0.71px) solid #111;
+  border-right: var(--block-rule, 0.71px) solid var(--block-ink, #111);
 }
 body.print-view .newspaper-section.ruled-rule-sides {
-  border-left: var(--block-rule, 0.71px) solid #111;
-  border-right: var(--block-rule, 0.71px) solid #111;
+  border-left: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-right: var(--block-rule, 0.71px) solid var(--block-ink, #111);
 }
 body.print-view .newspaper-section.ruled-rule-double {
-  border-bottom: max(3px, calc(var(--block-rule, 0.71px) * 3)) double #111;
+  border-bottom: max(3px, calc(var(--block-rule, 0.71px) * 3)) double var(--block-ink, #111);
 }
 body.print-view .newspaper-section.ruled-box-double {
-  border: max(3px, calc(var(--block-rule, 0.71px) * 3)) double #111;
+  border: max(3px, calc(var(--block-rule, 0.71px) * 3)) double var(--block-ink, #111);
+}
+/* Print view keeps the corner too. It is the same sheet with the editing
+   chrome taken off, so a rounded block that goes square the moment the desk
+   looks at how it prints would be the two-surface disagreement this codebase
+   guards hardest against - and print view is where a desk JUDGES the page. */
+body.print-view .newspaper-section.ruled-box,
+body.print-view .newspaper-section.ruled-box-double {
+  border-radius: var(--block-radius, 0);
 }
 
 body.print-view .newspaper-section:hover {

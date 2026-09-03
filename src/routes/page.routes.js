@@ -29,6 +29,12 @@ router.patch('/pages/:pageId/colour', pageController.colour);
 // covered by the router's deskWrites - but the read is the page itself.
 router.patch('/pages/:pageId/overlays', pageController.overlays);
 router.patch('/pages/:pageId/state', pageController.state);
+// HOW THE PAGE IS DRESSED. The GET repeats requireDesk deliberately: this
+// router is mounted behind deskWrites, which guards writes ONLY, so a GET that
+// does not say so is production data served to the public - the fault this
+// migration has already been bitten by twice.
+router.get('/pages/:pageId/style', requireDesk, pageController.style);
+router.post('/pages/:pageId/style', requireDesk, pageController.restyle);
 router.post('/test-fixtures/pages/:pageId/reapply-template-geometry', pageController.reapplyFixtureGeometry);
 router.post('/pages/:pageId/repair-structural-frames', pageController.repairStructuralFrames);
 

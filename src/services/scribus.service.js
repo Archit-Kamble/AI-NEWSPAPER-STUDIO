@@ -151,6 +151,7 @@ const COLOURS = `
   <COLOR NAME="SahasTintMint" CMYK="#09000708" Spot="0" Register="0"/>
   <COLOR NAME="SahasTintLilac" CMYK="#070c0005" Spot="0" Register="0"/>
   <COLOR NAME="SahasTintSand" CMYK="#00061107" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintTeal" CMYK="#09010008" Spot="0" Register="0"/>
   <COLOR NAME="None" CMYK="#00000000" Spot="0" Register="0"/>`;
 
 // The four faces the publication actually ships (public/assets/fonts/, the

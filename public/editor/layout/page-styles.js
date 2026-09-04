@@ -143,6 +143,26 @@ export function hueOf(key) {
  * a thin budget is spent in: a front page reaches for its चौकट first, a
  * feature page for its lead.
  *
+ * `heads` NAMES THE ROLES THAT CARRY A HEADLINE SCREEN INSTEAD OF A GROUND.
+ *
+ * The desk described TWO kinds of dressed block, not one: "a light colour
+ * background then same colour but medium dark shade border then dark colour
+ * heading, SOME HEADLINES ONLY HAVING BACKGROUND COLORS". The first was
+ * built; the second is a block with no ground at all and a screen behind its
+ * headline, and it is what stops a dressed page reading as rows of identical
+ * tinted boxes.
+ *
+ * `inks.js` has offered `band` / `band-deck` / `band-both` since the screens
+ * were written and NOTHING HAD EVER CHOSEN ONE - measured, 0 of 5686 blocks
+ * in this newsroom's database, against 5068 plain and 614 accent. Three of
+ * the six treatments the catalogue offers had never been drawn, because a
+ * desk would have had to find them by hand on one block at a time. The same
+ * shape as `list_style` and `drop_cap`, one level up.
+ *
+ * A block never takes both. Two grounds on one block is muddy, and the ground
+ * is the stronger device, so grounds are spent first and heads take what is
+ * left of the same budget.
+ *
  * `share` COUNTS UNITS, NOT BLOCKS. A run of equal blocks in one hue is one
  * decoration a reader perceives, not ten - so a grid run costs one, the same
  * as the single चौकट beside it. Counting rectangles made a ten-cell run cost
@@ -150,13 +170,13 @@ export function hueOf(key) {
  * wants permanently unaffordable.
  */
 export const DECORATION = {
-  none: { share: 0, headlineInk: false, band: 0, radiusPt: 0, rule: 'none', grounds: [] },
+  none: { share: 0, headlineInk: false, band: 0, radiusPt: 0, rule: 'none', grounds: [], heads: [] },
   // A front page. Fewer than one block in six, nothing else touched, corners
   // square: the level that has to still read as a newspaper, not a magazine.
-  sober: { share: 0.15, headlineInk: true, band: 0, radiusPt: 0, rule: 'box', grounds: ['sidebar'] },
-  light: { share: 0.3, headlineInk: true, band: 1, radiusPt: 0, rule: 'box', grounds: ['sidebar', 'grid'] },
+  sober: { share: 0.15, headlineInk: true, band: 0, radiusPt: 0, rule: 'box', grounds: ['sidebar'], heads: [] },
+  light: { share: 0.3, headlineInk: true, band: 1, radiusPt: 0, rule: 'box', grounds: ['sidebar', 'grid'], heads: ['secondary'] },
   // A feature page - about half of it, which is what the reference measures.
-  full: { share: 0.55, headlineInk: true, band: 1, radiusPt: 3, rule: 'box', grounds: ['lead', 'sidebar', 'grid', 'secondary'] },
+  full: { share: 0.55, headlineInk: true, band: 1, radiusPt: 3, rule: 'box', grounds: ['lead', 'sidebar', 'grid', 'secondary'], heads: ['brief'] },
 };
 
 export const DECORATION_KEYS = Object.keys(DECORATION);
@@ -354,9 +374,9 @@ export function styleForPage({ sections = [], theme, geometry, pageNumber, pageC
   // so 1145 tests passed over it.
   const chosen = [];
   const assigned = new Map();
+  const budget = Math.max(1, Math.round(candidates.length * decoration.share));
+  let spent = 0;
   if (hues.length && decoration.share > 0) {
-    const budget = Math.max(1, Math.round(candidates.length * decoration.share));
-    let spent = 0;
     for (const unit of units) {
       // One unit, one unit of budget - see `share` on DECORATION above.
       if (spent && spent + 1 > budget) continue;
@@ -386,6 +406,29 @@ export function styleForPage({ sections = [], theme, geometry, pageNumber, pageC
     }
   }
 
+  // THE HEADLINE SCREENS - a block with no ground and a screen behind its
+  // head, which is the second kind of dressed block the desk described. They
+  // take what is left of the same budget, after the grounds, because a ground
+  // is the stronger device; and a block that took a ground never also takes a
+  // screen.
+  const screened = new Map();
+  if (hues.length && decoration.share > 0 && (decoration.heads || []).length) {
+    // WHAT THE GROUNDS DID NOT SPEND. One budget for the page, grounds first.
+    let left = budget - spent;
+    for (const unit of groundUnits(candidates, roles, decoration.heads)) {
+      if (left <= 0) break;
+      const member = unit.members[0];
+      if (!member || assigned.has(member.section_key)) continue;
+      const taken = new Set();
+      for (const [otherKey, hue] of [...assigned, ...screened]) {
+        const other = candidates.find((s) => s.section_key === otherKey);
+        if (other && touching(member, other, geometry)) taken.add(hue.key);
+      }
+      screened.set(member.section_key, hues.find((one) => !taken.has(one.key)) || hues[0]);
+      left -= 1;
+    }
+  }
+
   // THE REVERSED BAND GOES ON THE LEAD, not on the biggest thing that happens
   // to be tinted. White type out of a solid panel is what a page LEADS with,
   // and the lead is the one block whose role says so - `mayBand`. More than
@@ -407,6 +450,25 @@ export function styleForPage({ sections = [], theme, geometry, pageNumber, pageC
     // never take a ground - that is their role's decision, not the budget's -
     // but the lead still carries the page's band at the strongest level.
     if (!hue) {
+      const screen = screened.get(section.section_key);
+      if (screen && !isBanded) {
+        // NO GROUND, a screen behind the headline, and the rule and the head
+        // in the same ink - the "headlines only having background colors"
+        // block, which is a lighter device than a tint over the whole frame.
+        return {
+          sectionKey: section.section_key,
+          patch: {
+            ...BARE,
+            accentColor: screen.ink,
+            borderInk: screen.ink,
+            headlineInk: decoration.headlineInk ? screen.ink : null,
+            borderStyle: decoration.rule,
+            borderWidthPx: ptToPx(1),
+            borderRadiusPx: ptToPx(decoration.radiusPt),
+            headlineStyle: 'band',
+          },
+        };
+      }
       if (!isBanded || !hues.length) return { sectionKey: section.section_key, patch: { ...BARE } };
       const lead = hues[0];
       return {

@@ -223,3 +223,52 @@ test('a run and the block beside it never wear the same hue', () => {
     }
   }
 });
+
+// THE SECOND KIND OF DRESSED BLOCK.
+//
+// The desk described two, not one: "a light colour background then same
+// colour but medium dark shade border then dark colour heading, SOME
+// HEADLINES ONLY HAVING BACKGROUND COLORS". `inks.js` has offered the screens
+// (`band`, `band-deck`, `band-both`) since they were written and nothing had
+// ever chosen one - 0 of 5686 blocks in this newsroom's database, against
+// 5068 plain. Three of six treatments the catalogue offers had never been
+// drawn, because a desk would have had to find them by hand on one block at a
+// time. The same shape as `list_style` and `drop_cap`, one level up.
+test('a screened headline is a block with NO ground, never both', () => {
+  const page = [
+    article('anchor', 20, 180, 307, 296),
+    article('second-lead', 333, 180, 307, 144),
+    article('shoulder', 333, 332, 307, 144),
+    ...GRID_KEYS.map((k, i) => article(k, 20 + (i % 4) * 156, 484 + Math.floor(i / 4) * 184, 150, 176)),
+    article('foot', 20, 852, 307, 152),
+  ];
+  for (const theme of ['front', 'city', 'sunday', 'sport', 'world']) {
+    const out = styles.styleForPage({ sections: page, theme, geometry: GEO });
+    for (const one of out) {
+      // TWO GROUNDS ON ONE BLOCK IS MUDDY, and the tint is the stronger
+      // device - so a block that took one never also takes a screen.
+      assert.ok(!(one.patch.backgroundColor && one.patch.headlineStyle === 'band'),
+        `${theme}/${one.sectionKey} carries both a ground and a screened headline`);
+      if (one.patch.headlineStyle === 'band') {
+        assert.ok(one.patch.headlineInk, `${theme}/${one.sectionKey}: a screen with no ink to screen`);
+      }
+    }
+  }
+});
+
+test('a front page carries no screened headlines, and a busy city page does', () => {
+  const page = [
+    article('anchor', 20, 180, 307, 296),
+    article('second-lead', 333, 180, 307, 144),
+    article('shoulder', 333, 332, 307, 144),
+    ...GRID_KEYS.map((k, i) => article(k, 20 + (i % 4) * 156, 484 + Math.floor(i / 4) * 184, 150, 176)),
+    article('foot', 20, 852, 307, 152),
+  ];
+  const screened = (theme) => styles.styleForPage({ sections: page, theme, geometry: GEO })
+    .filter((one) => one.patch.headlineStyle === 'band');
+  // A front page stays restrained: `sober` names no roles for a screen at all.
+  assert.strictEqual(screened('front').length, 0,
+    'a front page should carry no screened headlines');
+  assert.ok(screened('city').length >= 1,
+    'a city page should reach the second device - it is what stops a dressed page reading as rows of identical tinted boxes');
+});

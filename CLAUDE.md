@@ -6989,6 +6989,36 @@ touching pairs, **0 clashes, 0 partial or multi-hue runs**.
 with exactly that diagnosis, and its clash test uses a fixture with a run
 touching both a sidebar and the lead — the case the old fixture could not see.
 
+### There are TWO kinds of dressed block, and only one was built
+
+The desk described both: *"a light colour background then same colour but
+medium dark shade border then dark colour heading, **some headlines only having
+background colors**"*. The first was built. The second is a block with **no
+ground at all** and a screen behind its headline, and it is what stops a
+dressed page reading as rows of identical tinted boxes.
+
+`inks.js` has offered `band` / `band-deck` / `band-both` since the screens were
+written and **nothing had ever chosen one**: measured across this newsroom's
+whole database, **0 of 5686 blocks**, against 5068 plain and 614 accent. Three
+of the six treatments the catalogue offers had never been drawn, because a desk
+would have had to find them by hand on one block at a time. The same shape as
+`list_style` and `drop_cap`, one level up.
+
+`DECORATION.heads` names the roles that take one, mirroring `grounds`:
+
+| | grounds | heads |
+|---|---|---|
+| `sober` | sidebar | — a front page stays restrained |
+| `light` | sidebar, grid | **secondary** |
+| `full` | lead, sidebar, grid, secondary | **brief** |
+
+- **A block never takes both.** Two grounds on one block is muddy, and the tint
+  is the stronger device — so grounds are spent first and heads take what is
+  left of **the same** budget.
+- Measured on this paper's own page four: 9 grounded, **3 screened**, 3 plain,
+  1 reversed. The plate draws each screen at its own headline band — `#f8e2e6`
+  for red, `#e3e9f2` for navy — and Scribus builds unchanged.
+
 ### The page says which section it is
 
 The desk asked for it by name: *"look pudhari header it like monday fun or

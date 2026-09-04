@@ -8737,3 +8737,19 @@ understated `double-rule` whose title is plain. **A folio style says how the
 folio is ruled; whether a page names its section is the theme's business.**
 
 `npm test` **1149/1149**.
+
+### Stage 3 — the second kind of dressed block
+
+The desk described two kinds and only one was built: a tinted block, **and a
+block with no ground whose headline alone carries a colour**. `inks.js` has
+offered the screens since they were written and **0 of 5686 blocks in the
+database had ever used one** — three of six treatments never drawn, because
+nothing chose them.
+
+`DECORATION.heads` names the roles that take a screen, mirroring `grounds`, and
+spends what the grounds left of the same budget. A block never takes both: two
+grounds on one block is muddy, and the tint is the stronger device.
+
+Measured on page four: **9 grounded, 3 screened, 3 plain, 1 reversed** — real
+variety rather than rows of identical boxes. Canvas, PDF/IDML and `.sla` all
+draw it. `npm test` **1151/1151**.

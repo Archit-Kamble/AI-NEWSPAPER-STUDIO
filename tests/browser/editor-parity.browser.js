@@ -178,6 +178,20 @@ const say = (ok, what, detail = '') => {
       borderColor: canvas ? getComputedStyle(canvas).borderTopColor : null,
       borderWidth: canvas ? getComputedStyle(canvas).borderTopWidth : null,
       borderRadius: canvas ? getComputedStyle(canvas).borderTopLeftRadius : null,
+      // headline_ink (the headline/kicker's own text colour) and accent_color
+      // (the fill behind a reversed/screened band, and the accent word) - two
+      // more mechanism-with-no-surface columns found the same audit turned up
+      // border_ink. Read off the headline span's own computed colour so a
+      // plain-treatment change is actually observed on the glyphs, not just
+      // on a class name.
+      headlineColor: (() => {
+        const span = canvas?.querySelector('.section-headline');
+        return span ? getComputedStyle(span).color : null;
+      })(),
+      reverseBg: (() => {
+        const panel = canvas?.querySelector('.section-headline-reverse');
+        return panel ? getComputedStyle(panel).backgroundColor : null;
+      })(),
       pic: box ? {
         x: Math.round(box.x), y: Math.round(box.y), w: Math.round(box.width), h: Math.round(box.height),
         src: pic.getAttribute('src'), fit: getComputedStyle(pic).objectFit, tr: getComputedStyle(pic).transform,
@@ -538,6 +552,30 @@ const say = (ok, what, detail = '') => {
     (b, a) => a.borderColor !== b.borderColor);
   await press('[data-prop-border] [data-border="none"]', 'Border → none takes the rule off',
     (b, a) => a.border !== b.border || JSON.stringify(a.c) !== JSON.stringify(b.c));
+
+  // HEADLINE COLOUR AND ACCENT COLOUR - the headline's own text ink, and the
+  // separate object that fills a reversed/screened band. Composed lines must
+  // not move for either (JSON.stringify(a.c) === JSON.stringify(b.c) is the
+  // implicit pass here - parity() below checks it, and neither comparator
+  // needs to).
+  await press('[data-prop-headline-ink] .tint-swatch:not(.active):not(:first-child)', 'Headline colour paints the headline\'s own text',
+    (b, a) => a.headlineColor !== b.headlineColor);
+  await press('[data-prop-headline-ink] .tint-swatch:first-child', 'Headline colour → Black clears back to the paper\'s own ink',
+    (b, a) => a.headlineColor !== b.headlineColor);
+  // accent_color is NOT NULL at the server (a real default, never an
+  // "unset" state) - so unlike Rule/Headline colour, this row must offer NO
+  // clearing entry at all. A stray data-accent-color="" button would send a
+  // value the server's own COALESCE silently ignores, which is a control
+  // that draws and does nothing - the other documented shape of this fault.
+  say(await page.locator('[data-prop-accent-color] [data-accent-color=""]').count() === 0,
+    'Accent colour offers no Black/clear entry - accent_color has no unset state to clear to');
+  // Accent colour's own visible effect needs the reversed band to exist.
+  await press('[data-prop-headline-style] [data-headline-style="reverse"]', 'Headline treatment → reversed (for the accent colour check below)',
+    (b, a) => a.reverse && !b.reverse);
+  await press('[data-prop-accent-color] .tint-swatch:not(.active)', 'Accent colour fills the reversed band',
+    (b, a) => a.reverseBg !== b.reverseBg);
+  await press('[data-prop-headline-style] [data-headline-style="plain"]', 'Headline treatment → plain (leaving the accent-colour check)',
+    (b, a) => !a.reverse && b.reverse);
   await press('[data-prop-tint] .tint-swatch:not([data-tint=""])', 'Ground lays a tint', (b, a) => a.ground !== b.ground);
   await press('[data-prop-tint] .tint-swatch[data-tint=""]', 'Ground clears back to paper', (b, a) => a.ground !== b.ground);
   // The COUNT is what this control sets. Whether the copy visibly re-splits

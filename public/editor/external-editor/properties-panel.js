@@ -289,6 +289,15 @@ function blockPropertiesMarkup(section, view, page) {
   const shapeKey = String(view.frameShape ?? section.frame_shape ?? "");
   const tint = view.backgroundColor ?? section.background_color ?? null;
   const headlineStyle = String(view.headlineStyle || section.headline_style || "plain");
+  // NULL is "the desk has not said" - the same idiom ruleInk already reads as.
+  // headline_ink is the headline's (and kicker's) own TEXT colour when the
+  // treatment is not reversed; accent_color is a DIFFERENT object - the fill
+  // behind a reversed or screened band, and the colour of the accent word
+  // under the 'accent' treatment (render.js: headlineLineHtml, and the
+  // reverse-panel/band-screen pieces just above it). Two objects, two
+  // controls - the rule this file already states for every other pair.
+  const headInk = "headlineInk" in view ? view.headlineInk : (section.headline_ink ?? null);
+  const accent = ("accentColor" in view ? view.accentColor : section.accent_color) || "#c8102e";
   const rawColumns = view.columnCount ?? section.column_count ?? null;
   const columns = Number.isInteger(Number(rawColumns)) && Number(rawColumns) >= 1 ? Number(rawColumns) : null;
   const dropCapLines = Math.max(0, Number(view.dropCapLines ?? section.drop_cap_lines ?? 0) || 0);
@@ -468,6 +477,42 @@ function blockPropertiesMarkup(section, view, page) {
         </div>
       </div>
       <p class="muted ext-note">Reversed sets the headline in white out of a solid band, in the block's accent colour. The band is drawn behind type that has already been placed, so it never changes where a line breaks.</p>
+      <!-- HEADLINE COLOUR - the same mechanism-with-no-surface gap Rule
+           colour was. headline_ink has been read since render.js's own
+           headlineLineHtml existed (the headline AND the kicker's own text
+           colour, when the treatment is not reversed) but nothing sent it.
+           Same "Black clears" rule as Rule colour: Black carries no hex, so
+           choosing it stores NULL, which is what render.js's own fallback
+           already paints. -->
+      <div class="form-group">
+        <label>Headline colour</label>
+        <div class="tint-swatches" data-prop-headline-ink>
+          ${INKS.map(
+            (ink) => `<button type="button" class="tint-swatch${(headInk || null) === ink.hex ? " active" : ""}"
+              data-headline-ink="${ink.hex || ""}" title="${escapeHtml(ink.label)}"
+              style="--tint:${ink.hex || "#111111"}">${ink.hex ? "<i></i>" : "<i class=\"tint-swatch-none\"></i>"}</button>`,
+          ).join("")}
+        </div>
+      </div>
+      <!-- ACCENT COLOUR - a DIFFERENT object from Headline colour, and the
+           two must not be merged into one control: this is the fill behind
+           a reversed or screened band, and the accent WORD's own colour
+           under the 'accent' treatment - never the headline's own running
+           text. accent_color is NOT NULL with a real default (#c8102e), so
+           there is no "unset" state to clear back to - every swatch here is
+           a real ink, Black included as an actual choice rather than a
+           clearing gesture. -->
+      <div class="form-group">
+        <label>Accent colour</label>
+        <div class="tint-swatches" data-prop-accent-color>
+          ${INKS.filter((ink) => ink.hex).map(
+            (ink) => `<button type="button" class="tint-swatch${accent === ink.hex ? " active" : ""}"
+              data-accent-color="${ink.hex}" title="${escapeHtml(ink.label)}"
+              style="--tint:${ink.hex}"><i></i></button>`,
+          ).join("")}
+        </div>
+      </div>
+      <p class="muted ext-note">Accent colour is the fill behind a reversed or screened headline, and the colour of the accent word under the Accent treatment - not the running headline text.</p>
     </div>
   `;
 }
@@ -810,6 +855,20 @@ function bindBorderButtons(handlers) {
       // "" is Black, and Black is the absence of an ink (inks.js) - the same
       // "Black clears" rule the marks toolbar's own ink picker already uses.
       handlers.onPatch?.({ borderInk: button.dataset.borderInk || null }, "properties-panel");
+    });
+  });
+  document.querySelectorAll("[data-prop-headline-ink] [data-headline-ink]").forEach((button) => {
+    button.addEventListener("click", () => {
+      handlers.onPatch?.({ headlineInk: button.dataset.headlineInk || null }, "properties-panel");
+    });
+  });
+  document.querySelectorAll("[data-prop-accent-color] [data-accent-color]").forEach((button) => {
+    button.addEventListener("click", () => {
+      // NEVER null. accent_color is NOT NULL with a real default at the
+      // server - COALESCE(..., accent_color) there means a null/absent value
+      // is silently ignored, not cleared, so every swatch here sends a real
+      // hex (the filter above already dropped Black, which has none).
+      handlers.onPatch?.({ accentColor: button.dataset.accentColor }, "properties-panel");
     });
   });
   document.querySelectorAll("[data-prop-shape] [data-shape]").forEach((button) => {

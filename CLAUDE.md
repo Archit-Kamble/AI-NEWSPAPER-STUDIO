@@ -2548,6 +2548,49 @@ whatever is active — the same "one rung up, not just different" shape this
 file already uses for the body-size ladder — fixes it without touching the
 product.
 
+### The audit the border-colour fix asked for: two more siblings, same shape
+
+*"check everything missing as like this"* — a systematic sweep of every
+desk-settable `page_sections`/`pages`/`newspapers` column against every
+control that could set it, the same audit that found `border_ink`. Most
+columns have one; two did not, both direct siblings of `border_ink` in the
+exact same family the desk originally described — *"a light colour
+background then same colour but medium dark shade border then dark colour
+heading"*:
+
+- **`headline_ink`** — the headline's (and kicker's) own text colour, read
+  by `render.js`'s `headlineLineHtml` since it was written. Same shape,
+  same fix: a swatch row, the palette's full-strength `INKS`, Black clears
+  to NULL.
+- **`accent_color`** — a **different object**, and the two must not be
+  merged into one control. It fills a reversed or screened band and colours
+  the accent word under the `accent` treatment — never the headline's own
+  running text. It is `NOT NULL` with a real default (`#c8102e`), unlike
+  `border_ink`/`headline_ink`, so there is **no unset state to clear back
+  to**: the swatch row offers every real ink and deliberately no Black/clear
+  entry, because sending one would hit the repository's own
+  `COALESCE(..., accent_color)` and silently do nothing — a control that
+  draws and does nothing, the other documented shape of this fault.
+
+Both verified against the real render: Headline colour on a plain,
+unmarked headline (navy text, screenshotted), Accent colour against the
+reversed band it fills (purple panel, screenshotted) — not just against a
+class name toggling.
+
+**Two more columns were checked and are not bugs.** `border_color` is
+fully wired for writing (validated, round-tripped through the draft) but
+read by **nothing** — no renderer, no export walk — a fully superseded
+duplicate of `border_ink` from before that column existed. Building a
+control for it would be the anti-pattern in the other direction: a control
+that would draw and do nothing, since the compositor ignores the value.
+Left alone rather than wired up. `letter_spacing_px` is the one already on
+record as **deliberately** unreachable — see "The paper does not track
+Devanagari" above.
+
+`tests/browser/editor-parity.browser.js` presses both new controls,
+including the accent-colour-fills-the-reversed-band check specifically
+(not just that a class toggled).
+
 ### A rule's weight is named, not stated in points
 
 The desk asked for it by name: *"add border width also as small normal medium

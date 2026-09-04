@@ -822,13 +822,18 @@ function footerFrames(newspaper, page, geometry, identity, { pageOffsetMm, ownPa
   const fstyle = furnitureModule.footerStyleForTheme(page.style_theme);
   const footInk = fstyle.title !== 'plain' ? furnitureModule.furnitureInkForTheme(page.style_theme) : null;
   const footTint = fstyle.band ? furnitureModule.furnitureTintForTheme(page.style_theme) : null;
+  // THE FOOT KEEPS ITS CLEARANCE - the same measured rule the canvas and the
+  // shared print model both hold: paint at the bottom of the reserved band,
+  // white above it, never the band filled edge to edge into the last block.
+  const footStripMm = Math.min(footHeightMm, mm(20));
+  const footPaintY = footYMm + (footHeightMm - footStripMm);
   if (footTint) {
-    parts.push(fillFrame({ xMm: leftMm, yMm: footYMm, widthMm, heightMm: footHeightMm, colour: colourFor(footTint), ownPage }));
+    parts.push(fillFrame({ xMm: leftMm, yMm: footPaintY, widthMm, heightMm: footStripMm, colour: colourFor(footTint), ownPage }));
   }
   if (fstyle.rule) {
     const weightMm = mm(fstyle.rule.weight);
     const ruleColour = colourFor(footInk || '#111111');
-    const yAt = fstyle.rule.edge === 'top' ? footYMm : footYMm + footHeightMm - weightMm;
+    const yAt = fstyle.rule.edge === 'top' ? footPaintY : footYMm + footHeightMm - weightMm;
     const offsets = fstyle.rule.double ? [0, fstyle.rule.edge === 'top' ? weightMm * 2 : -weightMm * 2] : [0];
     for (const offset of offsets) {
       parts.push(fillFrame({ xMm: leftMm, yMm: yAt + offset, widthMm, heightMm: weightMm, colour: ruleColour, ownPage }));

@@ -4755,6 +4755,23 @@ body.print-view .section-diagnostic {
   color: #c8102e;
   line-height: var(--devanagari-line);
 }
+/* A FOLIO CHIP - a small solid box with reversed type, the device the
+   reference paper sets its brand and its page number in. Never a band across
+   the measure: see masthead.js's folioMarkup for the measurement that says
+   so. Padding is the chip's own, so the row's height stays the folio's. */
+.page-folio .folio-chip {
+  padding: 1px 5px;
+  border-radius: 1px;
+  align-self: center;
+  line-height: 1.35;
+}
+/* A CHIP HUGS ITS TEXT. It is a grid item, so without this it stretches to
+   fill its whole 1fr column and reads as a bar across a third of the page -
+   which is the band this device exists to replace. `justify-self` is the
+   grid axis; the `text-align` rules below stay for the plain, un-chipped
+   styles that really are full-width cells. */
+.page-folio > .folio-chip:first-child { justify-self: start; }
+.page-folio > .folio-chip:last-child { justify-self: end; }
 .folio-date,
 .folio-page {
   font-size: 8px;

@@ -103,15 +103,33 @@ export function hueOf(key) {
  * a statement about the KIND of page - a feature page rounds its boxes, a
  * front page does not - and never about which colour the box is.
  */
+// HOW MUCH OF A PAGE IS DRESSED - measured off the reference, not chosen.
+//
+// The desk's report was that this "looks very saturated", and the cause was
+// quantity, not hue: `full` dressed EVERY block. Measuring the reference
+// paper's own pages (tinted area as a share of the tint-or-white area, its
+// photographs excluded) says otherwise:
+//
+//   Sports page          45% tinted
+//   विश्वसंचार page       50% tinted
+//   आपले जग (ordinary)   27% tinted
+//
+// So even the most decorated page in that paper is about HALF white. A page
+// where every block carries a ground has no plain copy left to make the
+// dressed blocks mean anything - which is exactly what "saturated" describes.
+//
+// `share` is a share of the page's dressable BLOCKS rather than of its area,
+// so these sit a little under the measured area figures: the blocks a styler
+// dresses first are the larger ones, and a smaller count of them covers a
+// larger share of the sheet.
 export const DECORATION = {
-  none: { share: 0, headlineInk: false, band: 0, radiusPt: 0, rule: 'none' },
-  // A front page. Two blocks in ten carry a ground, nothing else is touched,
-  // and the corners are square: this is the level that has to still read as a
-  // newspaper rather than as a magazine.
-  sober: { share: 0.2, headlineInk: true, band: 0, radiusPt: 0, rule: 'box' },
-  light: { share: 0.45, headlineInk: true, band: 1, radiusPt: 0, rule: 'box' },
-  // Every story on its own ground, which is what a feature page is.
-  full: { share: 1, headlineInk: true, band: 1, radiusPt: 3, rule: 'box' },
+  none: { share: 0, headlineInk: false, band: 0, radiusPt: 0, rule: 'none', sparesLead: true },
+  // A front page. Fewer than one block in six, nothing else touched, corners
+  // square: the level that has to still read as a newspaper, not a magazine.
+  sober: { share: 0.15, headlineInk: true, band: 0, radiusPt: 0, rule: 'box', sparesLead: true },
+  light: { share: 0.3, headlineInk: true, band: 1, radiusPt: 0, rule: 'box', sparesLead: true },
+  // A feature page - about half of it, which is what the reference measures.
+  full: { share: 0.55, headlineInk: true, band: 1, radiusPt: 3, rule: 'box', sparesLead: false },
 };
 
 export const DECORATION_KEYS = Object.keys(DECORATION);
@@ -294,9 +312,15 @@ export function styleForPage({ sections = [], theme, geometry, pageNumber, pageC
     // thing on the sheet and shouts by SIZE; a ground under it as well makes a
     // front page read as a poster. Measured on the reference paper's own front
     // page: the lead is black on white and the tinted blocks are the secondary
-    // stories beside it. On a feature page every story is dressed, lead
-    // included, so there is nothing to skip.
-    const pool = decoration.share >= 1 ? byWeight : byWeight.slice(1);
+    // stories beside it. On its FEATURE pages the lead does carry a ground -
+    // its Sports page leads on a pale blue-grey - so this is a property of the
+    // decoration level, stated.
+    //
+    // It used to be inferred as `share >= 1`, which was the same answer only
+    // while `full` dressed literally every block. Once the budget was measured
+    // down to 0.55 that inference silently started sparing the lead on feature
+    // pages too, which is not what the reference does.
+    const pool = decoration.sparesLead ? byWeight.slice(1) : byWeight;
     chosen = pool.slice(0, want);
   }
 

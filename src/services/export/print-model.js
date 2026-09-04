@@ -25,6 +25,11 @@
 const { geometryOf, pxToMm, regionForPage, HEADER } = require('../../layout/geometry');
 /** The folio strip's own declared height, from the one page-region model. */
 const HEADER_FOLIO_PX = HEADER.folioHeightPx;
+// The chip row the folio actually draws in, inside the band geometry.js
+// reserves - masthead.js's own FOLIO_CHIP_PX, measured off the reference at
+// this page's 2 px/mm. The reserved REGION is untouched either side of it.
+const FOLIO_CHIP_PX = 19;
+const FOOT_STRIP_PX = 20;
 const { identityFor, dateLine, devanagari } = require('../../layout/identity');
 const { strip } = require('../../layout/plain-text');
 const { captionBox, PLACED_CAPTION_METRICS } = require('../../../public/editor/layout/caption-geometry');
@@ -943,12 +948,31 @@ function folioItems(newspaper, page, geometry, identity) {
     placeAndDate, { family: 'sans', weight: 400, fontPx: 8, ink: bodyInk }, 'center');
 
   const items = [];
-  // A tint or a reversed panel is drawn FIRST, so the text prints over it -
-  // the same order render.js already uses for a reversed headline band.
+  // THE FOLIO PAINTS A CHIP ROW, NOT THE WHOLE BAND - the same measurement
+  // masthead.js's folioMarkup carries, mirrored here so the plate prints the
+  // folio the desk approved. Filling the reserved band edge to edge ran the
+  // ink straight into the first block's rule; the reference paper leaves five
+  // rows of white there, and its brand and page number are small solid CHIPS
+  // rather than a band across the measure.
+  const chipPx = Math.min(FOLIO_CHIP_PX, bandPx);
   if (reversed && themeInk) {
-    items.push({ kind: 'fill', x: mm(leftPx), y: mm(header.top), width: mm(widthPx), height: mm(bandPx), ink: themeInk });
+    // Chips, not a band: one behind the title, one behind the page number.
+    // Each is sized from its OWN text through the same shaper the compositor
+    // measures with (inkWidthPx), not a fixed share of the column - the canvas
+    // chip hugs its words, and a fixed guess here would print a chip the words
+    // overflow or rattle around in.
+    const PAD = 5; // the same 5 px the .folio-chip rule pads with, each side.
+    const chips = [
+      { text: identity.title, fontPx: 11, weight: 700, atStart: !verso },
+      { text: pageLabel, fontPx: 8, weight: 400, atStart: verso },
+    ];
+    for (const c of chips) {
+      const w = Math.min(thirdPx, inkWidthPx(c.text, c.fontPx, 'sans', c.weight) + PAD * 2);
+      const x = c.atStart ? leftPx : leftPx + widthPx - w;
+      items.push({ kind: 'fill', x: mm(x), y: mm(header.top), width: mm(w), height: mm(chipPx), ink: themeInk });
+    }
   } else if (style.band === true && tint) {
-    items.push({ kind: 'fill', x: mm(leftPx), y: mm(header.top), width: mm(widthPx), height: mm(bandPx), ink: tint });
+    items.push({ kind: 'fill', x: mm(leftPx), y: mm(header.top), width: mm(widthPx), height: mm(chipPx), ink: tint });
   }
   items.push(title, middle, number);
   // No rule at all for a reversed banner - the panel's own edge IS the rule.
@@ -961,7 +985,7 @@ function folioItems(newspaper, page, geometry, identity) {
     // where the single rule always sat, and the inner line is a gap above it,
     // never past the band into the content that follows.
     const offsets = style.rule.double ? [0, -weight * 2] : [0];
-    for (const offset of offsets) items.push(ruleItem(leftPx, header.top + bandPx + offset, widthPx, weight, ruleInk));
+    for (const offset of offsets) items.push(ruleItem(leftPx, header.top + chipPx + offset, widthPx, weight, ruleInk));
   }
   return items.filter(Boolean);
 }
@@ -1010,13 +1034,18 @@ function footerItems(newspaper, page, geometry, identity) {
   const fstyle = footerStyleForTheme(page.style_theme);
   const footInk = fstyle.title !== 'plain' ? furnitureInkForTheme(page.style_theme) : null;
   const footTint = fstyle.band ? furnitureTintForTheme(page.style_theme) : null;
+  // THE FOOT KEEPS ITS CLEARANCE, exactly as the folio does - the paint sits
+  // at the bottom of its reserved band with white above it, rather than
+  // filling the band and meeting the last block's rule.
+  const footStripMm = Math.min(footHeightMm, mm(FOOT_STRIP_PX));
+  const footPaintY = footYMm + (footHeightMm - footStripMm);
   if (footTint) {
-    items.push({ kind: 'fill', x: leftMm, y: footYMm, width: widthMm, height: footHeightMm, ink: footTint });
+    items.push({ kind: 'fill', x: leftMm, y: footPaintY, width: widthMm, height: footStripMm, ink: footTint });
   }
   if (fstyle.rule) {
     const weight = mm(fstyle.rule.weight);
     const ruleInk = footInk || RULE_INK;
-    const yAt = fstyle.rule.edge === 'top' ? footYMm : footYMm + footHeightMm - weight;
+    const yAt = fstyle.rule.edge === 'top' ? footPaintY : footYMm + footHeightMm - weight;
     const offsets = fstyle.rule.double ? [0, fstyle.rule.edge === 'top' ? weight * 2 : -weight * 2] : [0];
     for (const offset of offsets) {
       items.push({ kind: 'rule', x: leftMm, y: yAt + offset, width: widthMm, height: weight, ink: ruleInk });

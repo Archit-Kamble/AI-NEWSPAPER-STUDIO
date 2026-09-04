@@ -84,11 +84,17 @@ test('how much a page wears follows its theme, and a sober page spares the lead'
   const front = dressed('front');
   const full = dressed('world');
   assert.ok(front.length >= 1 && front.length < full.length, 'a front page is more restrained than a feature page');
-  assert.strictEqual(full.length, 5, 'every story block on a feature page carries a ground');
+  // NOT every block, deliberately. Measured off the reference paper: even its
+  // most decorated page is about half white (45-50% tinted area, its
+  // photographs excluded). A page where everything carries a ground has no
+  // plain copy left for the dressed blocks to stand against - which is what
+  // the desk reported as "looking very saturated".
+  assert.ok(full.length >= 2 && full.length < 5,
+    `a feature page dresses some but not all of its stories, got ${full.length} of 5`);
   assert.ok(!front.some((one) => one.sectionKey === 'lead'),
     'the lead is not tinted on a sober page — it already shouts by size');
   assert.ok(full.some((one) => one.sectionKey === 'lead'),
-    'but it is on a feature page, where every story is dressed');
+    'but it is on a feature page — the reference leads its Sports page on a ground');
 });
 
 // Restyling a feature page as a front page has to take grounds OFF as well as

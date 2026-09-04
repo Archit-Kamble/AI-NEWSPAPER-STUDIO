@@ -152,6 +152,14 @@ export function mastheadMarkup(newspaper, page, geometry, { advertWidthPx = 0 } 
  * The folio strip inside pages carry: paper, page number, place and date on one
  * ruled line. Page one has the nameplate instead.
  */
+// The chip row the folio actually draws in, inside the 32 px band geometry.js
+// reserves for it. 19 px is the reference paper's own 16 px measured at its
+// page scale and converted to this page's 2 px/mm - see folioMarkup below.
+const FOLIO_CHIP_PX = 19;
+// The foot's own strip, inside the 28 px band reserved for it - the same
+// measured clearance the folio keeps, at the other end of the page.
+const FOOT_STRIP_PX = 20;
+
 // FIVE FOLIO STYLES, resolved from the page's own theme - the same
 // style_theme column page-styles.js writes when a page is dressed. No new
 // storage, no new API: a page nobody has dressed reads "plain"/"front" and
@@ -185,23 +193,49 @@ export function folioMarkup(newspaper, page, geometry) {
   const ink = style.title !== "plain" ? furnitureInkForTheme(theme) : null;
   const tint = style.band ? furnitureTintForTheme(theme) : null;
   const reversed = style.band === "reverse";
+
+  // THE FOLIO PAINTS A CHIP ROW, NOT THE WHOLE BAND IT IS GIVEN.
+  //
+  // The desk's report was that the header and footer were "touching borders",
+  // and they were: a themed folio filled its entire reserved 32 px band with
+  // solid colour, so the ink ran straight into the first block's own rule
+  // with only the 4 px content gap between them.
+  //
+  // The reference paper does not do that. Measured off its own page: a 16 px
+  // chip row, then FIVE ROWS OF CLEAR WHITE, then the first block - and the
+  // chips are small solid boxes (a red brand box, a yellow page-number box,
+  // a dark section box) on an otherwise white strip, never a band across the
+  // measure. At this page's 2 px/mm that chip row is 19 px.
+  //
+  // The reserved REGION is untouched - geometry.js still leaves the same 32 px
+  // plus its gap, and templates.js still starts the blocks in the same place.
+  // Only what the folio DRAWS inside it shrinks, which is what turns the
+  // remaining 13 px into the white the reference has.
   const css = [
     `left:${left}px`, `top:${top}px`, `width:${width}px`,
+    `height:${FOLIO_CHIP_PX}px`,
     style.rule.weight === 0 ? "border-bottom-width:0" : `border-bottom-width:${style.rule.weight}px`,
     style.rule.double ? "border-bottom-style:double" : "",
     ink && !reversed ? `border-bottom-color:${ink}` : "",
+    // A tinted strip is the chip row's own ground; a reversed banner does NOT
+    // paint the row at all - it paints the chips, below.
     style.band === true && tint ? `background:${tint}` : "",
-    reversed && ink ? `background:${ink};border-bottom-width:0` : "",
   ].filter(Boolean).join(";");
-  // The title's own ink: the theme's accent for 'accent'/'tinted-band', white
-  // for a reversed banner - set on the SPAN, not merely the container, for the
-  // same reason pageFootMarkup below sets it on its own spans: a colour named
-  // only in a CSS class a desk never presses cannot be judged against what the
-  // .folio-title rule already fixes at #c8102e.
-  const titleInk = reversed ? "#ffffff" : ink;
-  const titleSpan = `<span class="folio-title"${titleInk ? ` style="color:${escapeHtml(titleInk)}"` : ""}>${escapeHtml(identity.title || "")}</span>`;
-  const dateSpan = reversed ? dateBlock.replace('class="folio-date"', 'class="folio-date" style="color:#ffffff"') : dateBlock;
-  const numberSpan = reversed ? number.replace('class="folio-page"', 'class="folio-page" style="color:#ffffff"') : number;
+
+  // A CHIP: a small solid box with reversed type, the device the reference
+  // sets its brand and its page number in. Only a reversed style uses them -
+  // the quieter styles keep plain type, which is what those pages do too.
+  const chip = (cls, text, colour) => `<span class="${cls} folio-chip" style="background:${escapeHtml(colour)};color:#ffffff">${text}</span>`;
+  const titleInk = reversed ? null : ink;
+  const titleSpan = reversed && ink
+    ? chip("folio-title", escapeHtml(identity.title || ""), ink)
+    : `<span class="folio-title"${titleInk ? ` style="color:${escapeHtml(titleInk)}"` : ""}>${escapeHtml(identity.title || "")}</span>`;
+  const numberSpan = reversed && ink
+    ? chip("folio-page", `पृष्ठ ${escapeHtml(devanagari(page.page_number))}`, ink)
+    : number;
+  // The date stays plain on white in every style - the reference sets it that
+  // way on every page, and a date reversed out of a chip reads as a label.
+  const dateSpan = dateBlock;
 
   return `
     <div class="page-folio ${verso ? "folio-verso" : "folio-recto"} folio-style-${style.key}"
@@ -278,8 +312,16 @@ export function pageFootMarkup(newspaper, page, geometry) {
   const ruleCss = style.rule
     ? `border-${style.rule.edge}-width:${style.rule.weight}px;border-${style.rule.edge}-style:${style.rule.double ? "double" : "solid"};border-${style.rule.edge}-color:${ink || "#111"}`
     : "";
+  // THE FOOT KEEPS ITS CLEARANCE TOO. Same report, same cause, same fix as
+  // the folio above: a themed foot filled its whole reserved band with solid
+  // colour and met the last block's rule. Measured on the reference, its own
+  // foot furniture sits below FIVE ROWS OF CLEAR WHITE - so the paint is
+  // pushed to the bottom of the reserved band and the top of that band is
+  // left white, rather than the band being filled edge to edge.
+  const footInset = Math.max(0, band.footHeightPx - FOOT_STRIP_PX);
   const css = [
-    `left:${left}px`, `top:${band.footTop}px`, `width:${width}px`, `height:${band.footHeightPx}px`,
+    `left:${left}px`, `top:${band.footTop + footInset}px`, `width:${width}px`,
+    `height:${Math.min(band.footHeightPx, FOOT_STRIP_PX)}px`,
     ruleCss, tint ? `background:${tint}` : "",
   ].filter(Boolean).join(";");
 

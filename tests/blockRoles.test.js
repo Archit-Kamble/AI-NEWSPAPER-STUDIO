@@ -256,13 +256,17 @@ test('a screened headline is a block with NO ground, never both', () => {
   }
 });
 
-test('a front page carries no screened headlines, and a busy city page does', () => {
+test('a front page carries no screened headlines, and a city page reaches them', () => {
+  // A lead, a चौकट beside it and two secondaries - and deliberately NO run,
+  // because a run of equal blocks is a large device that can spend a city
+  // page's whole budget on grounds and leave nothing for the lighter one.
+  // That is correct behaviour (one budget, grounds first), so a fixture
+  // carrying one could not show what this test is about.
   const page = [
     article('anchor', 20, 180, 307, 296),
-    article('second-lead', 333, 180, 307, 144),
-    article('shoulder', 333, 332, 307, 144),
-    ...GRID_KEYS.map((k, i) => article(k, 20 + (i % 4) * 156, 484 + Math.floor(i / 4) * 184, 150, 176)),
-    article('foot', 20, 852, 307, 152),
+    article('side', 333, 180, 120, 150, 'x'.repeat(300)),
+    article('second-lead', 333, 340, 307, 144),
+    article('shoulder', 20, 490, 307, 144),
   ];
   const screened = (theme) => styles.styleForPage({ sections: page, theme, geometry: GEO })
     .filter((one) => one.patch.headlineStyle === 'band');
@@ -271,4 +275,54 @@ test('a front page carries no screened headlines, and a busy city page does', ()
     'a front page should carry no screened headlines');
   assert.ok(screened('city').length >= 1,
     'a city page should reach the second device - it is what stops a dressed page reading as rows of identical tinted boxes');
+});
+
+// THE BUDGET IS A SHARE OF AREA, and that is the third thing this number has
+// been. Counting BLOCKS made a run cost more than a whole page's budget, so
+// the one device a city page most wants was unaffordable. Counting UNITS fixed
+// that and broke the other end - units are not comparable in weight, so a page
+// of nine single-block units plus one eight-block run spent nine units and
+// tinted seventeen blocks: measured, page four of this newspaper came out at
+// 85% OF THE SHEET on every full-colour theme, which is the over-saturation
+// the desk reported in the first place arriving from the other direction.
+//
+// Area is what the reference was measured in and what a reader perceives.
+test('no theme tints more than half a dense page, and none leaves a dressable page bare', () => {
+  // A dense page: a lead, five secondaries and a run of eight - the shape that
+  // reached 85% under the unit budget.
+  const page = [
+    article('anchor', 20, 180, 307, 296),
+    article('second-lead', 333, 180, 307, 144),
+    article('shoulder', 333, 332, 307, 144),
+    ...GRID_KEYS.map((k, i) => article(k, 20 + (i % 4) * 156, 484 + Math.floor(i / 4) * 184, 150, 176)),
+    article('strip-left', 20, 852, 229, 120),
+    article('strip-centre', 255, 852, 229, 120),
+    article('foot-left', 20, 980, 307, 152),
+    article('foot-right', 333, 980, 307, 152),
+  ];
+  const areaOf = (s) => Number(s.width_px) * Number(s.height_px);
+  const dressable = page.reduce((sum, s) => sum + areaOf(s), 0);
+  const themeDecoration = (key) => styles.themeOf(key).decoration;
+
+  for (const theme of styles.PAGE_THEMES.map((t) => t.key)) {
+    const out = styles.styleForPage({ sections: page, theme, geometry: GEO });
+    const grounded = out.filter((one) => one.patch.backgroundColor);
+    const byKey = new Map(page.map((s) => [s.section_key, s]));
+    const inked = grounded.reduce((sum, one) => sum + areaOf(byKey.get(one.sectionKey)), 0);
+    const share = inked / dressable;
+    assert.ok(share <= 0.55,
+      `${theme}: ${(share * 100).toFixed(0)}% of the page's own stories carry a ground - the reference's most decorated page is about half white`);
+    // AND THE FIRST UNIT IS ALWAYS AFFORDABLE: a page whose only
+    // ground-carrying unit is bigger than its budget must not come out bare.
+    //
+    // `plain` and `front` are exempt, and both deliberately. `plain` is the
+    // absence of a look. A SOBER page's single device is the चौकट, and this
+    // fixture has none - so a front page carrying no small block beside its
+    // lead really is white, which is an ordinary printed front page and not a
+    // failure.
+    if (theme !== 'plain' && themeDecoration(theme) !== 'sober') {
+      const anything = grounded.length || out.some((one) => one.patch.headlineStyle !== 'plain');
+      assert.ok(anything, `${theme}: a themed page came out with nothing on it at all`);
+    }
+  }
 });

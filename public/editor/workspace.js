@@ -1801,26 +1801,55 @@ function bindDressPaper() {
   button.addEventListener("click", () => busyButton(button, "Dressing…", async () => {
     const state = store.getState();
     if (!state.newspaper) return;
-    const answer = await askConfirm({
-      title: "Dress every page of this edition?",
-      body: "Each page is given a look from the paper's own catalogue and every story block on it"
-        + " is set in a matching ground, rule and heading. Adverts, standing features and Smart Cards"
-        + " are left alone, and nothing that is written changes — only how it is set."
-        + " You can change any page afterwards, or set it back to Plain.",
-      confirm: "Dress the paper",
-    });
-    if (!answer) return;
     try {
+      // IT PROPOSES BEFORE IT WRITES, like the page control beside it - and it
+      // matters more here, because this is the one action that restyles a
+      // whole paper. The question used to describe the ACTION and name
+      // nothing: "each page is given a look" is true of any edition and tells
+      // a desk nothing about their own, which is how a desk learns to dismiss
+      // a question without reading it - the fault this codebase fixed once for
+      // a scoped AI overwrite and once for deleting an edition.
+      //
+      // The preview hands back the themes it chose and the real run applies
+      // exactly those, so choosing still costs ONE AI call. Asking again would
+      // bill the newsroom twice for one decision AND could answer differently,
+      // so the desk would approve one paper and be given another.
+      const look = await fetchJson(`/api/newspapers/${state.newspaper.id}/dress`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preview: true }),
+      });
+      if (!look.changing) {
+        showNotice("Every page of this edition is already dressed as it would be.");
+        return;
+      }
+      const named = (look.results || [])
+        .map((one) => `page ${one.pageNumber} as ${one.themeName}`)
+        .join(", ");
+      const answer = await askConfirm({
+        title: `Dress all ${look.pages} pages of this edition?`,
+        body: `${named}.\n\n${look.changing} of ${look.blocks} blocks change, and ${look.dressed}`
+          + ` will carry a ground. Adverts, standing features and Smart Cards are left alone,`
+          + ` and nothing that is written changes — only how it is set.`
+          + ` You can change any page afterwards, or set it back to Plain.`,
+        confirm: "Dress the paper",
+      });
+      if (!answer) return;
+      // The themes the desk just READ, not a fresh decision.
       const done = await fetchJson(`/api/newspapers/${state.newspaper.id}/dress`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ themes: look.themes }),
       });
       await reloadPages();
       await bindPageTheme();
+      // THE SOURCE IS THE PREVIEW'S, not the apply's. The apply is handed the
+      // themes the desk just approved, so it reports `desk` every time - and
+      // saying "worked out from what is on each page" about looks an AI chose
+      // is the software misdescribing its own work.
       showNotice(`${done.pages} page${done.pages === 1 ? "" : "s"} dressed — ${done.dressed} block`
         + `${done.dressed === 1 ? "" : "s"} given a ground. `
-        + (done.source === "ai" ? "The looks were chosen by AI." : "The looks were worked out from what is on each page."));
+        + (look.source === "ai" ? "The looks were chosen by AI." : "The looks were worked out from what is on each page."));
     } catch (error) {
       showNotice(error.message || "The paper could not be dressed.");
     }

@@ -491,6 +491,10 @@ async function dress(req, res) {
   const result = await pageStyleService.applyToEdition(req.params.id, {
     themes: req.body?.themes || null,
     useAi: req.body?.useAi !== false,
+    // A whole-paper restyle is the biggest presentational write in the
+    // product, so it proposes before it writes - and the preview hands back
+    // the themes it chose, which the real run then applies unchanged.
+    preview: req.body?.preview === true,
   });
   if (result?.error) return res.status(400).json(result);
   res.json(result);

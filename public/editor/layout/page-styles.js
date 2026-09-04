@@ -163,21 +163,55 @@ export function hueOf(key) {
  * is the stronger device, so grounds are spent first and heads take what is
  * left of the same budget.
  *
- * `share` COUNTS UNITS, NOT BLOCKS. A run of equal blocks in one hue is one
- * decoration a reader perceives, not ten - so a grid run costs one, the same
- * as the single चौकट beside it. Counting rectangles made a ten-cell run cost
- * more than a whole page's budget and so left the one device a city page most
- * wants permanently unaffordable.
+ * `share` IS A SHARE OF THE PAGE'S DRESSABLE AREA, and that is the third and
+ * last thing this number has been.
+ *
+ * Counting BLOCKS made a ten-cell run cost more than a whole page's budget, so
+ * the one device a city page most wants was permanently unaffordable. Counting
+ * UNITS fixed that and broke the other end: units are not comparable in weight,
+ * so a page of nine single-block units plus one eight-block run spent nine
+ * units and tinted seventeen blocks. Measured, page four of this newspaper came
+ * out at 85% OF THE SHEET on every full-colour theme - the over-saturation the
+ * desk reported in the first place, arriving from the other direction.
+ *
+ * Area is the unit the reference was measured in (27-50% of the sheet on its
+ * own feature pages) and it is what a reader actually perceives: a page is
+ * saturated by how much ink is on it, not by how many decisions were made. A
+ * run still costs only what its cells cover, which is what keeps it
+ * affordable.
+ *
+ * The share is of the DRESSABLE area - the stories - not of the whole sheet,
+ * because the adverts and the standing cards are never dressed and a page that
+ * happens to carry a full-page advert should not have its stories left plain
+ * for it. On a real page the two are close (dressable is ~90% of the sheet);
+ * on a page half given over to Smart Cards they are not, and the stories are
+ * the right denominator. Measured after: no page of fourteen real editions
+ * tints more than 25% of its sheet on any theme.
+ *
+ * A unit is taken whole or not at all, and the FIRST is always affordable - a
+ * page whose only ground-carrying unit is bigger than its budget would
+ * otherwise come out bare, and a page with nothing dressed is not what a theme
+ * was chosen for.
  */
 export const DECORATION = {
   none: { share: 0, headlineInk: false, band: 0, radiusPt: 0, rule: 'none', grounds: [], heads: [] },
   // A front page. Fewer than one block in six, nothing else touched, corners
   // square: the level that has to still read as a newspaper, not a magazine.
-  sober: { share: 0.15, headlineInk: true, band: 0, radiusPt: 0, rule: 'box', grounds: ['sidebar'], heads: [] },
-  light: { share: 0.3, headlineInk: true, band: 1, radiusPt: 0, rule: 'box', grounds: ['sidebar', 'grid'], heads: ['secondary'] },
+  sober: { share: 0.14, headlineInk: true, band: 0, radiusPt: 0, rule: 'box', grounds: ['sidebar'], heads: [] },
+  light: { share: 0.38, headlineInk: true, band: 1, radiusPt: 0, rule: 'box', grounds: ['sidebar', 'grid'], heads: ['secondary'] },
   // A feature page - about half of it, which is what the reference measures.
   full: { share: 0.55, headlineInk: true, band: 1, radiusPt: 3, rule: 'box', grounds: ['lead', 'sidebar', 'grid', 'secondary'], heads: ['brief'] },
 };
+
+/**
+ * What a screened headline costs against a ground, as a share of its block.
+ *
+ * A screen inks the headline band and leaves the rest of the frame white, so
+ * it is roughly a fifth of the block - and charging it as a whole ground would
+ * make the page spend its budget on the lighter device and never reach the
+ * heavier one.
+ */
+const SCREEN_COST = 0.2;
 
 export const DECORATION_KEYS = Object.keys(DECORATION);
 
@@ -374,12 +408,15 @@ export function styleForPage({ sections = [], theme, geometry, pageNumber, pageC
   // so 1145 tests passed over it.
   const chosen = [];
   const assigned = new Map();
-  const budget = Math.max(1, Math.round(candidates.length * decoration.share));
+  const areaOf = (s) => Number(s.width_px) * Number(s.height_px);
+  const dressableArea = candidates.reduce((sum, s) => sum + areaOf(s), 0);
+  const budget = dressableArea * decoration.share;
   let spent = 0;
   if (hues.length && decoration.share > 0) {
     for (const unit of units) {
-      // One unit, one unit of budget - see `share` on DECORATION above.
-      if (spent && spent + 1 > budget) continue;
+      // A unit costs the area its members cover - see `share` on DECORATION.
+      const cost = unit.members.reduce((sum, m) => sum + areaOf(m), 0);
+      if (spent && spent + cost > budget) continue;
       const taken = new Set();
       for (const member of unit.members) {
         for (const [otherKey, hue] of assigned) {
@@ -402,7 +439,7 @@ export function styleForPage({ sections = [], theme, geometry, pageNumber, pageC
         // cell of a run touches the next.
         assigned.set(member.section_key, hue);
       }
-      spent += 1;
+      spent += cost;
     }
   }
 
@@ -419,13 +456,17 @@ export function styleForPage({ sections = [], theme, geometry, pageNumber, pageC
       if (left <= 0) break;
       const member = unit.members[0];
       if (!member || assigned.has(member.section_key)) continue;
+      // A SCREEN IS LIGHTER THAN A GROUND, so it costs less of the same
+      // budget: it inks one headline band rather than the whole frame.
+      const cost = areaOf(member) * SCREEN_COST;
+      if (cost > left) continue;
       const taken = new Set();
       for (const [otherKey, hue] of [...assigned, ...screened]) {
         const other = candidates.find((s) => s.section_key === otherKey);
         if (other && touching(member, other, geometry)) taken.add(hue.key);
       }
       screened.set(member.section_key, hues.find((one) => !taken.has(one.key)) || hues[0]);
-      left -= 1;
+      left -= cost;
     }
   }
 

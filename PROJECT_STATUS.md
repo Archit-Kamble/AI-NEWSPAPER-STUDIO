@@ -8753,3 +8753,40 @@ grounds on one block is muddy, and the tint is the stronger device.
 Measured on page four: **9 grounded, 3 screened, 3 plain, 1 reversed** — real
 variety rather than rows of identical boxes. Canvas, PDF/IDML and `.sla` all
 draw it. `npm test` **1151/1151**.
+
+### Stage 4 (partial) — the budget is area, and the one-button run proposes first
+
+Recalibrating the styling pass against a dense real page (a lead, six
+secondaries, an eight-block run) found the unit-counted budget put page four
+of edition 40082 at **85% of the sheet tinted** on every full-colour theme —
+the exact over-saturation report, arriving from the fix meant to solve the
+opposite problem. The budget is now a share of the page's own **dressable
+area**, which is the unit the reference was measured in.
+
+`DECORATION.heads` was added alongside `grounds`: a screened headline (no
+ground, colour behind the headline band only) costs a fifth of a ground of the
+same budget, so a page can carry both real tints and the lighter device
+without either starving the other.
+
+**Investigated and found already working**: the "one button, whole paper"
+request the user asked for is fully built — service, controller, route, and a
+toolbar button with a proposal-then-write confirmation, busy state and result
+notice. It was never missing a door; my first diagnosis of that was wrong. It
+did have one real gap: the confirmation named nothing about the actual
+edition, so a `preview` mode was added and wired in, and the question now
+names every page's chosen look and the block/ground counts before anything is
+written — costing one AI call, not two.
+
+Driven through the real button end to end: the preview promised "9 will carry
+a ground" and the apply delivered exactly 9. `tests/dressEdition.test.js`
+(3 checks) holds it and caught a real bug — with no AI configured, the preview
+silently returned empty themes while the single-page fallback would have
+guessed correctly, so the promise the desk was shown didn't match reality.
+
+`npm test` **1155/1155**; `workspace.browser.js` 224/224,
+`desk-actions.browser.js` 27/27, `admin-screens.browser.js` 19/19.
+
+Still open for Stage 4: chart palette per page theme, AI image/thumbnail
+following the theme, captions following the theme. Deferred — only 3 blocks
+in the whole database carry a chart panel, so this is low value compared to
+what has been built.

@@ -219,26 +219,76 @@ async function proposeThemes(newspaperId) {
   }
 }
 
-/** Every page of one edition, each dressed for what it carries. */
-async function applyToEdition(newspaperId, { themes = null, useAi = true } = {}) {
+/**
+ * Every page of one edition, each dressed for what it carries.
+ *
+ * `preview` LOOKS AND WRITES NOTHING - the same shape `proposeForPage` gives
+ * the single-page control, and it matters more here, not less: this is the
+ * one action in the product that restyles a whole paper.
+ *
+ * It hands back the themes it chose, and the caller passes them straight to
+ * the real run. That is what `themes` is for, and it is why the preview costs
+ * ONE AI call rather than two: a dry run that asked again would bill the
+ * newsroom twice for one decision, and could answer differently the second
+ * time - so the desk would approve one paper and get another.
+ */
+async function applyToEdition(newspaperId, { themes = null, useAi = true, preview = false } = {}) {
   const id = parseInt(newspaperId, 10);
   const pages = await pageRepository.findByNewspaper(id);
+  if (!pages.length) return { error: 'That edition has no pages to dress.' };
   // The desk's own choice wins outright. Otherwise ask - and `proposeThemes`
   // falls back to the derived answer on its own, so this never fails for want
   // of a provider.
   let chosen = themes;
   let source = 'desk';
   if (!chosen) {
-    const proposal = useAi
-      ? await proposeThemes(id)
-      : { themes: null, source: 'derived' };
-    chosen = proposal.themes || {};
-    source = proposal.source;
+    if (useAi) {
+      const proposal = await proposeThemes(id);
+      chosen = proposal.themes || {};
+      source = proposal.source;
+    } else {
+      // THE DERIVED ANSWER IS STILL AN ANSWER, and it has to be stated.
+      // Leaving it null let `applyToPage` guess the same thing per page, so
+      // the result was right by luck - but the PREVIEW then reported no
+      // themes at all, and the whole promise here is that the run applies
+      // exactly what the desk was shown. A preview that names nothing cannot
+      // keep it.
+      const { guessTheme } = await styles();
+      chosen = Object.fromEntries(pages.map((page) => [
+        page.page_number,
+        guessTheme({ pageNumber: page.page_number, pageCount: pages.length }),
+      ]));
+      source = 'derived';
+    }
   }
+  const themeFor = (page) => chosen[page.page_number] || chosen[String(page.page_number)];
+
+  if (preview) {
+    const looks = [];
+    for (const page of pages) {
+      // eslint-disable-next-line no-await-in-loop
+      const one = await proposeForPage(page.id, { theme: themeFor(page) });
+      if (!one?.error) looks.push(one);
+    }
+    return {
+      newspaperId: id,
+      preview: true,
+      source,
+      // The themes it CHOSE, keyed by page number, so the real run applies
+      // exactly what the desk was shown and spends no second AI call.
+      themes: Object.fromEntries(pages.map((page) => [page.page_number, themeFor(page)]).filter(([, t]) => t)),
+      pages: looks.length,
+      changing: looks.reduce((sum, one) => sum + (one.changing || 0), 0),
+      blocks: looks.reduce((sum, one) => sum + (one.blocks || 0), 0),
+      dressed: looks.reduce((sum, one) => sum + (one.dressed || 0), 0),
+      results: looks,
+    };
+  }
+
   const done = [];
   for (const page of pages) {
     // eslint-disable-next-line no-await-in-loop
-    const result = await applyToPage(page.id, { theme: chosen[page.page_number] || chosen[String(page.page_number)] });
+    const result = await applyToPage(page.id, { theme: themeFor(page) });
     done.push(result);
   }
   return {

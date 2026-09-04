@@ -6989,6 +6989,58 @@ touching pairs, **0 clashes, 0 partial or multi-hue runs**.
 with exactly that diagnosis, and its clash test uses a fixture with a run
 touching both a sidebar and the lead — the case the old fixture could not see.
 
+### The decoration budget is a share of AREA, not of blocks or units
+
+Recalibrating the styling pass exposed the third and last thing this number
+has been. Counting **blocks** made a ten-cell run cost more than a whole
+page's budget, so the one device a city page most wants was unaffordable.
+Counting **units** fixed that and broke the other end: units are not
+comparable in weight, so a page of nine single-block units plus one
+eight-block run spent nine units and tinted seventeen blocks — measured, page
+four of this newspaper's own edition came out at **85% of the sheet** on every
+full-colour theme, the over-saturation the desk reported in the first place,
+arriving from the other direction.
+
+Area is the unit the reference was measured in (27–50% of the sheet on its own
+feature pages) and it is what a reader actually perceives — a page is
+saturated by how much ink is on it, not by how many decisions were made. The
+share is of the page's **dressable** area, not the whole sheet, so an advert-
+or Smart-Card-heavy page does not have its stories starved for them.
+
+A screen costs less of the same budget than a ground (`SCREEN_COST`, 0.2) — it
+inks one headline band rather than the whole frame. Swept across 14 real
+editions: **0 clashes, 0 partial/multi-hue runs, 0 blocks with both a ground
+and a screen, 0 pages over 55% of the sheet**, worst 25%.
+
+### Dress the whole paper — a service and a controller with no door
+
+`pageStyleService.applyToEdition` and `newspaperController.dress` had existed
+since the page-theme work landed, the route was mounted, and the button was
+already on the toolbar — but the confirmation described the **action**
+("each page is given a look from the paper's own catalogue") and named
+**nothing about the desk's own edition**, which is how a desk learns to
+dismiss a question without reading it: the same fault this codebase fixed once
+for a scoped AI overwrite and once for deleting an edition.
+
+**A `preview` mode was added to the service**, mirroring the single-page
+control: it looks and writes nothing, and it hands back the themes it chose so
+the real run applies exactly those. This is not a convenience — it is what
+keeps the choosing to **one** AI call rather than two: asking a second time
+would bill the newsroom twice for one decision and could answer differently,
+so the desk would approve one paper and be given another.
+
+Driven end to end through the real button: the question now reads *"Dress all
+4 pages of this edition? page 1 as Front page, page 2 as City news, page 3 as
+City news, page 4 as Feature. 26 of 36 blocks change, and 9 will carry a
+ground."* — and pressing confirm produced **exactly** those 9 grounds, on
+those 4 pages, in those looks. `tests/dressEdition.test.js` holds the
+promise-equals-delivery property, and it found a real bug on the way: with no
+AI configured, the preview returned **empty themes** while `applyToPage`'s own
+fallback guessed correctly per page — so the preview said nothing while the
+apply worked, which is exactly the case the whole feature exists to prevent.
+Fixed by stating the derived guess explicitly rather than leaving it implicit
+per page.
+
 ### There are TWO kinds of dressed block, and only one was built
 
 The desk described both: *"a light colour background then same colour but

@@ -14,7 +14,7 @@
 // content of this panel for those three, not an apology for missing one.
 
 import { escapeHtml } from "../format.js";
-import { TINTS, HEADLINE_STYLES as HEADLINE_STYLE_TABLE } from "../layout/inks.js";
+import { TINTS, INKS, HEADLINE_STYLES as HEADLINE_STYLE_TABLE } from "../layout/inks.js";
 import { BLOCK_SHAPES } from "../layout/block-shapes.js";
 import { composeSection, measureColumns, maxLegibleColumns } from "../compose/section-adapter.js";
 import { PART_LABEL } from "./typography-panel.js";
@@ -280,6 +280,12 @@ function blockPropertiesMarkup(section, view, page) {
   const border = String(view.borderStyle || section.border_style || "none");
   const ruleWidth = borderWidthPx(view.borderWidthPx ?? section.border_width_px);
   const ruleRadius = borderRadiusPx(view.borderRadiusPx ?? section.border_radius_px);
+  // NULL is "the desk has not said" - the same idiom border_ink already reads
+  // as everywhere else (page-styles.js's automatic theming, print-model.js,
+  // render.js). `view.borderInk` can genuinely be `null` where a desk has
+  // just cleared it, so this must NOT fall through past an explicit null the
+  // way `??` would - only an absent KEY should read the stored row.
+  const ruleInk = "borderInk" in view ? view.borderInk : (section.border_ink ?? null);
   const shapeKey = String(view.frameShape ?? section.frame_shape ?? "");
   const tint = view.backgroundColor ?? section.background_color ?? null;
   const headlineStyle = String(view.headlineStyle || section.headline_style || "plain");
@@ -325,6 +331,36 @@ function blockPropertiesMarkup(section, view, page) {
         <div class="segmented" data-prop-border-width>
           ${BORDER_WIDTHS.map(
             (width) => `<button type="button" class="segment${Math.abs(ruleWidth - width.px) < 0.01 ? " active" : ""}" data-border-width="${width.px}">${width.label}</button>`,
+          ).join("")}
+        </div>
+      </div>` : ""}
+      ${isRuled(border) ? `
+      <div class="form-group">
+        <!-- BORDER COLOUR - the one Properties control this catalogue never
+             had. border_ink has been a validated, stored, rendered, exported
+             column since the theming pass (page-styles.js writes it, canvas.js
+             reads it into --block-ink, print-model.js and Scribus both read it
+             for the plate) - but nothing under public/ ever sent it, so a desk
+             could see a themed rule's colour and had no way to set or clear
+             one by hand. The same shape as list_style and drop_cap before it:
+             a mechanism with no surface.
+
+             FULL-STRENGTH INKS, not TINTS - a rule is a line, not a wash, and
+             it is drawn at the paper's own ink strength wherever it comes
+             from. The SAME catalogue and the SAME "Black clears" rule the
+             marks toolbar's own ink picker already uses (block-frame.js):
+             Black carries no hex (inks.js - "the absence of an ink"), so
+             choosing it sends an empty string and the stored value is NULL,
+             which is exactly what --block-ink's own CSS fallback (#111) also
+             paints. Two separate "clear" affordances here (a Black swatch
+             AND a second Auto/none button) would be the same state offered
+             twice, which is worse than once. -->
+        <label>Rule colour</label>
+        <div class="tint-swatches" data-prop-border-ink>
+          ${INKS.map(
+            (ink) => `<button type="button" class="tint-swatch${(ruleInk || null) === ink.hex ? " active" : ""}"
+              data-border-ink="${ink.hex || ""}" title="${escapeHtml(ink.label)}"
+              style="--tint:${ink.hex || "#111111"}">${ink.hex ? "<i></i>" : "<i class=\"tint-swatch-none\"></i>"}</button>`,
           ).join("")}
         </div>
       </div>` : ""}
@@ -767,6 +803,13 @@ function bindBorderButtons(handlers) {
   document.querySelectorAll("[data-prop-border-radius] [data-border-radius]").forEach((button) => {
     button.addEventListener("click", () => {
       handlers.onPatch?.({ borderRadiusPx: Number(button.dataset.borderRadius) }, "properties-panel");
+    });
+  });
+  document.querySelectorAll("[data-prop-border-ink] [data-border-ink]").forEach((button) => {
+    button.addEventListener("click", () => {
+      // "" is Black, and Black is the absence of an ink (inks.js) - the same
+      // "Black clears" rule the marks toolbar's own ink picker already uses.
+      handlers.onPatch?.({ borderInk: button.dataset.borderInk || null }, "properties-panel");
     });
   });
   document.querySelectorAll("[data-prop-shape] [data-shape]").forEach((button) => {

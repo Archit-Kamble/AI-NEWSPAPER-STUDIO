@@ -6533,9 +6533,23 @@ body.print-view .page-imprint {
 .ai-parts { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 6px 0 0; }
 .ai-parts .toggle { display: inline-flex; align-items: center; gap: 6px; color: #55555f; font-size: .74rem; }
 
-/* The block's ground: five tints, chosen the same way an ink is - by pressing
-   the one you want, not by mixing it. */
-.tint-swatches { display: flex; gap: 6px; }
+/* The block's ground, chosen the same way an ink is - by pressing the one you
+   want, not by mixing it. Also the Border colour row beside it, which reads
+   this exact class.
+
+   `flex-wrap: wrap` and `flex-shrink: 0` are the fix for the fault
+   `.segmented`'s own header already names for the same shape of problem: a
+   choice with more than a handful of options cannot fit one un-wrapping row.
+   The comment here used to say "five tints" and the row had none of this -
+   at 39 tints (the palette expansion) it silently SHRANK every swatch toward
+   nothing and still overflowed 18 of them off the rail's own edge, invisible
+   and unclickable, with no scrollbar to find them by. Measured in the running
+   rail at 1512px: 18 of 39 Ground tints past the edge, 297px of row holding
+   540px of content. A newly added 20-swatch Border colour row would have
+   shipped the same way, merely still fitting by luck at this one width.
+   Wrapping is free for the rows that already fit - a 5-swatch WHEN this
+   comment was written row wraps onto exactly the one line it already used. */
+.tint-swatches { display: flex; flex-wrap: wrap; gap: 6px; }
 .tint-swatch {
   width: 30px;
   height: 26px;
@@ -6545,6 +6559,7 @@ body.print-view .page-imprint {
   background: none;
   cursor: pointer;
   line-height: 0;
+  flex-shrink: 0;
 }
 .tint-swatch i {
   display: block;
@@ -6556,6 +6571,14 @@ body.print-view .page-imprint {
 }
 .tint-swatch:hover { border-color: #cfcfd6; }
 .tint-swatch.active { border-color: var(--accent); }
+/* THE CLEAR SWATCH, same visual language as the marks toolbar's own
+   .ed-quill-ink-btn.is-none - a diagonal slash through white, rather than a
+   plain black fill that would read as "black ink" instead of "clear". */
+.tint-swatch-none {
+  background:
+    linear-gradient(to bottom right, transparent 45%, #b3b3bb 45%, #b3b3bb 55%, transparent 55%),
+    #fff;
+}
 
 /* The ink buttons: four swatches, not a colour wheel. A page is separated
    into plates, so the desk chooses a plate. "Black" is the absence of an ink

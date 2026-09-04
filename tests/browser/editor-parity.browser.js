@@ -169,6 +169,15 @@ const say = (ok, what, detail = '') => {
         .map((t) => t.replace(/\s+/g, ' ')).sort().join(','),
       ground: canvas ? getComputedStyle(canvas).backgroundColor : null,
       border: canvas ? getComputedStyle(canvas).borderTopStyle : null,
+      // The desk's report was "I am unable to see the border colour/width or
+      // curvy borders in editor at all" - and the width/radius mechanism
+      // turned out to be correct end to end (verified against the DB and the
+      // real PUT), the visible gap was that Border colour had NO control at
+      // all. These three catch a control that draws and does nothing, which
+      // is the one failure `border`/`borderTopStyle` above could not see.
+      borderColor: canvas ? getComputedStyle(canvas).borderTopColor : null,
+      borderWidth: canvas ? getComputedStyle(canvas).borderTopWidth : null,
+      borderRadius: canvas ? getComputedStyle(canvas).borderTopLeftRadius : null,
       pic: box ? {
         x: Math.round(box.x), y: Math.round(box.y), w: Math.round(box.width), h: Math.round(box.height),
         src: pic.getAttribute('src'), fit: getComputedStyle(pic).objectFit, tr: getComputedStyle(pic).transform,
@@ -498,6 +507,35 @@ const say = (ok, what, detail = '') => {
   await selectBlock();
   await press('[data-prop-border] [data-border="box"]', 'Border → box rules the block',
     (b, a) => a.border !== b.border || JSON.stringify(a.c) !== JSON.stringify(b.c));
+  // THE THREE CONTROLS BESIDE IT, none of which this net had ever pressed.
+  // Rule colour is new; the ladder is now five NAMED sizes (Small ... Extra
+  // large) rather than points, and Corner only shows while the block is
+  // boxed - all three rows are on screen right now because Border → box just
+  // ran.
+  //
+  // THE FIRST NON-ACTIVE RUNG, NOT NECESSARILY A DIFFERENT DRAWN WIDTH.
+  // Adjacent rungs on this ladder are 0.71px apart, and getComputedStyle's
+  // own border-width rounds to whole CSS pixels regardless of canvas zoom
+  // (verified in isolation: a 2.82px border reports as computed "2px") - so
+  // "Small" next to an active "Normal" can round to the identical value even
+  // though the underlying --block-rule custom property genuinely changed.
+  // Pressing the LAST rung against whatever is active is the same shape as
+  // the body-size ladder's own "one rung up, not just different" fix a few
+  // hundred lines up - except here the two ends (0.35px, 2.82px) are the
+  // pair guaranteed to round to different whole pixels, so the ceiling is
+  // pressed here rather than the neighbour.
+  await press('[data-prop-border-width] [data-border-width]:last-child:not(.active), [data-prop-border-width] [data-border-width]:first-child:not(.active)',
+    'Rule width changes the drawn weight',
+    (b, a) => a.borderWidth !== b.borderWidth);
+  await press('[data-prop-border-radius] [data-border-radius]:not(.active)', 'Corner rounds the block',
+    (b, a) => a.borderRadius !== b.borderRadius);
+  // Any swatch but the currently-active one, and never Black (index 0) twice
+  // in a row - the point is a REAL colour change, not clearing back to it.
+  await press('[data-prop-border-ink] .tint-swatch:not(.active):not(:first-child)', 'Rule colour paints the border, not the ground',
+    (b, a) => a.borderColor !== b.borderColor && a.ground === b.ground);
+  // And Black (the palette's own "clear" entry) takes it back off.
+  await press('[data-prop-border-ink] .tint-swatch:first-child', 'Rule colour → Black clears back to the paper\'s own ink',
+    (b, a) => a.borderColor !== b.borderColor);
   await press('[data-prop-border] [data-border="none"]', 'Border → none takes the rule off',
     (b, a) => a.border !== b.border || JSON.stringify(a.c) !== JSON.stringify(b.c));
   await press('[data-prop-tint] .tint-swatch:not([data-tint=""])', 'Ground lays a tint', (b, a) => a.ground !== b.ground);

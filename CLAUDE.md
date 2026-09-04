@@ -2491,6 +2491,63 @@ Three things it got wrong first, all found by measurement rather than reading:
 1195 on the same sweep — six lines in three thousand for another percent of
 visible condensation.
 
+### A border has no colour of its own to set, and the ones it has overflow
+
+The desk's report: *"I am unable to see the border color border width in
+editor at all also I am not seeing curvy borders also"*. All three needed
+driving the real running app to answer, and each turned out to be a
+different thing.
+
+**Border colour genuinely had no control.** `border_ink` has been a
+validated, stored, rendered and exported column since the theming pass —
+`page-styles.js` writes it, `canvas.js` reads it into `--block-ink`,
+`print-model.js` and Scribus both read it for the plate — but nothing under
+`public/` ever sent it. A desk could see a themed rule's colour and had no
+way to set or clear one by hand: the `list_style` / `drop_cap` shape again, a
+mechanism with no surface. **Rule colour** is now a swatch row beside Rule and
+Corner, offered only while the block is ruled, in the paper's full-strength
+`INKS` (never `TINTS` — a rule is a line, not a wash). It reads the exact
+"Black clears" rule the marks toolbar's own ink picker already uses
+(`block-frame.js`): Black carries no hex, so choosing it sends an empty
+string and the stored value is NULL — the same state `--block-ink`'s own CSS
+fallback (`#111`) already paints, so a second "Auto" button beside it would
+have offered the same state twice.
+
+**Border width and corner radius were never actually broken.** Driven end to
+end — click, `PUT`, the database, the `--block-rule`/`--block-radius`
+custom properties, the rendered `border` — every step matched. What made
+them look broken: at this workspace's default **Fit** zoom (measured on a
+real edition: **0.456×**), the five-rung width ladder spans 0.16 to 1.29
+*screen* pixels, and the smaller radii (`Soft`, `Round`) do the same — all
+comfortably sub-pixel. Screenshotted at 200% zoom instead: a visibly
+thicker rule, and a visibly curved corner on `Pill`, both exactly where the
+stored value said they would be. **Print View shows both cleanly at any
+zoom** — it is the one place the desk was already looking to judge a
+finished page and where the mechanism was never in doubt.
+
+**A second, real thing was found on the way**: `.tint-swatches` had no
+`flex-wrap`. It never needed one while the comment beside it still said
+"five tints" — the palette expansion took Ground to 39 and the row
+silently **shrank every swatch toward nothing and still overflowed 18 of
+them off the rail's edge**, unclickable, with no scrollbar to find them by.
+A newly added 20-swatch Border colour row would have shipped the same way,
+merely still fitting by luck at one particular viewport width. Fixed with
+the same `flex-wrap: wrap` / `flex-shrink: 0` shape `.segmented` already
+uses for the identical class of problem, documented there as "a choice with
+more than about five options is a LIST".
+
+`tests/browser/editor-parity.browser.js` now presses all three — Rule width,
+Corner, Rule colour, and Rule colour → Black — none of which this net had
+ever exercised. One assertion needed its own fix on the way: comparing
+against the *next* ladder rung failed intermittently, because
+`getComputedStyle`'s border-width rounds to whole CSS pixels regardless of
+zoom (reproduced in an isolated page with no app code at all: a stored
+`2.82px` reports as computed `"2px"`), so two adjacent 0.71px-apart rungs
+can round to the identical value. Pressing an END of the ladder against
+whatever is active — the same "one rung up, not just different" shape this
+file already uses for the body-size ladder — fixes it without touching the
+product.
+
 ### A rule's weight is named, not stated in points
 
 The desk asked for it by name: *"add border width also as small normal medium

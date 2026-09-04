@@ -6908,6 +6908,108 @@ omission. Black carries no hex in `INKS` (it is the *absence* of a mark) and
 inventing a near-black. Nothing is lost: a grey ground under a black heading is
 what an undressed block already is.
 
+### A block has a ROLE, and a run of equal blocks is one object
+
+The desk's report was that a dressed page looks *"very saturated"*, and the
+obvious reading is that too many blocks are dressed. Measured, that is not what
+was wrong.
+
+`styleForPage` ordered blocks by **area** and dressed the top share of them,
+and **area cannot rank equals.** On this newspaper's own page four — eight
+blocks of 150×176 in a run — it tinted `col-one-a` and `col-three-a`, left the
+other six plain, and gave the two different hues. Two arbitrary cells of an
+eight-cell run, chosen by nothing but sort stability among equal areas.
+
+Two coloured cells in a run of eight is worse than none and worse than eight,
+because a reader looks for the pattern and there is not one. **No budget can
+fix that; only knowing what a block IS can.**
+
+`public/editor/layout/block-roles.js` is the eighth shared catalogue:
+
+| role | what it is |
+|---|---|
+| `lead` | the biggest block that is not a grid cell |
+| `secondary` | a large story that is not the lead |
+| `sidebar` | the **चौकट** — small, and standing beside something much larger |
+| `grid` | one cell of a run of three or more equal blocks |
+| `brief` | short copy, or the `briefs` kind |
+
+**There is no `block_role` column and no dropdown, deliberately.** A desk making
+up thirty blocks a day must not also classify thirty blocks a day — a role set
+by hand would be exactly the state `background_color` was in before
+`page-styles.js` existed, a mechanism nobody has time to reach. Every signal is
+one the block already carries.
+
+**A run is matched with an 8 px tolerance, and needs three members.** This
+paper's own column grid does not divide evenly, so page four's run is 150 *and*
+151 wide and an exact match sees two runs where a reader sees one. Two equal
+blocks is a **pair**, which implies nothing about how it is dressed.
+
+**The budget counts UNITS, not blocks.** A run in one hue is one decoration a
+reader perceives, not eight. Counting rectangles made a run cost more than a
+whole page's budget, so the one device a city page most wants was permanently
+unaffordable — page four dressed exactly one block.
+
+| | grounded | of sheet | hues |
+|---|---|---|---|
+| page 1, front | 1/11 | 3% | 1 |
+| page 2, city | 2/6 | 11% | 2 |
+| page 3, sunday | 2/3 | 22% | 1 |
+| page 4, city | 9/16 | **37%** | **1 for the whole run** |
+
+The reference paper's own feature pages tint 27–50% of the sheet.
+
+#### Three duplicate authorities went, each found by asking what a field decides
+
+- **`sparesLead`** said *"is `lead` in `DECORATION.grounds`"* a second way. It
+  had been added one commit earlier and the general mechanism ate it.
+- **`ground` on a role** said whether it may be tinted, and could not: the same
+  secondary is tinted on a feature page and must not be on a front page, so the
+  **page** says which. `DECORATION.grounds` is the one authority.
+- **`order` on a role** said its priority, and could not: a front page reaches
+  for its चौकट first and a feature page for its lead. The `grounds` list **is**
+  the order — and the filter too. A role it does not name is not dressed, never
+  *"ranked last"*, which would still dress a lead on a front page the moment the
+  budget stretched.
+
+#### A run chooses its hue ONCE, and the fixture could not see it
+
+Making the run take its hue from its first cell put **17 clashing pairs** on
+this newspaper's own four pages — a sidebar and the run beside it in one hue, a
+dressed lead and the run under it in another. `pageStyle.test.js` has asserted
+*"no two blocks that touch wear the same hue"* since it was written and **its
+fixture has no run on it at all**, so 1145 tests passed over the regression.
+
+A unit chooses its hue once, against the **union of every member's**
+neighbours — a colour that clears the first cell's neighbour may sit right
+beside the last cell's. Swept after: 12 editions, 444 dressed blocks, 600
+touching pairs, **0 clashes, 0 partial or multi-hue runs**.
+
+`tests/blockRoles.test.js` holds it. Its grid test fails against the old code
+with exactly that diagnosis, and its clash test uses a fixture with a run
+touching both a sidebar and the lead — the case the old fixture could not see.
+
+### The folio is a CHIP, and the footer stands clear of the matter
+
+Two more reports, both measured on the running app and neither visible in the
+source: *"header and footer touching borders"*.
+
+A reversed folio painted its ink across the whole measure at the full height of
+its band, so the first block of the page began **at the ink** — 0 px of
+clearance on every dressed page. A printed paper sets its folio as chips, each
+only as wide as the words in it, with white paper either side and under them.
+
+`FOLIO_CHIP_PX` (19) is the chip's own height; the clearance is what is left of
+the band. Measured after: the folio is 12 px of ink and the first block starts
+**11 px** below it. `FOOT_STRIP_PX` (20) does the same at the other edge.
+
+**The export chips are sized from their own text through `inkWidthPx`** — the
+same shaper the compositor measures with — because the canvas chip hugs its
+words and a fixed share of the column would print a chip the words overflow.
+Measured on the sunday theme: **43.4 mm** behind the title and **12.9 mm**
+behind the page number, against one 310 mm band before. Mirrored by hand into
+`scribus.service.js`, whose footer is deliberately its own code.
+
 ### The theme is the AI's decision; the assignment is not
 
 This is the one part a per-block choice gets wrong, and the desk asked for the

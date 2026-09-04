@@ -8632,3 +8632,88 @@ not only the 3 used earlier.
 added holding black-text contrast ≥15:1 on all 18 vivid tints). Screenshotted
 `sport` and `sunday` themes on a real edition — visibly closer to the
 reference's saturation; no two touching blocks share a hue, still holds.
+
+---
+
+## The folio, the footer, and the block that has a ROLE
+
+Two reports from the desk on a page that had been dressed and did not read as
+a printed one: *"header and footer touching borders"*, and *"you are applying
+style to all blocks looking very saturated"*. Neither is visible in the
+source; both were measured on the running app.
+
+### Stage 0 — the two clearances, and the decoration budget
+
+| | before | after |
+|---|---|---|
+| folio → first block | **0 px** (a full-width ink band) | **11 px** (12 px chip row + white) |
+| the export's folio | one 310 mm band | two chips, **43.4 mm** + **12.9 mm** |
+| footer → last block | band filled to its top edge | painted at the band's bottom |
+| blocks dressed on a themed page | nearly all | **9 of 16**, lead plain |
+
+A printed paper sets its folio as **chips**, each only as wide as the words in
+it. `FOLIO_CHIP_PX` (19) is the chip's own height and the clearance is what is
+left of the band; `FOOT_STRIP_PX` (20) does the same at the other edge.
+
+The export chips are sized from their own text through **`inkWidthPx`** — the
+same shaper the compositor measures with — because the canvas chip hugs its
+words and a fixed share of the column would print a chip the words overflow.
+Mirrored by hand into `scribus.service.js`, whose footer is its own code.
+
+`sparesLead` was made an explicit flag here, having been inferred as
+`share >= 1` — an inference that silently stopped sparing the lead the moment
+the budget came down. Stage 1 then absorbed it entirely; see below.
+
+### Stage 1 — area cannot rank equals
+
+The obvious reading of "too saturated" is that too many blocks are dressed.
+**Measured, that is not what was wrong.** `styleForPage` ordered blocks by
+area and dressed the top share, and on this paper's own page four — eight
+blocks of 150×176 in a run — it tinted `col-one-a` and `col-three-a`, left six
+plain, and gave the two different hues. Two arbitrary cells of an eight-cell
+run, chosen by nothing but sort stability among equal areas.
+
+Two coloured cells in a run of eight is worse than none and worse than eight.
+No budget can fix it; only knowing what a block **is** can.
+
+`public/editor/layout/block-roles.js` — `lead`, `secondary`, `sidebar` (the
+चौकट), `grid`, `brief`. **Every one inferred**: there is no `block_role`
+column and no dropdown, because a desk making up thirty blocks a day must not
+also classify thirty blocks a day.
+
+| | grounded | of sheet | hues |
+|---|---|---|---|
+| page 1, front | 1/11 | 3% | 1 |
+| page 2, city | 2/6 | 11% | 2 |
+| page 3, sunday | 2/3 | 22% | 1 |
+| page 4, city | 9/16 | **37%** | **1 for the whole run** |
+
+The reference paper's feature pages tint 27–50% of the sheet.
+
+**Three duplicate authorities were removed**, each found by asking what a field
+actually decides: `sparesLead` (said "is `lead` in `grounds`" a second way),
+`ground` on a role (the *page* decides, not the role — the same secondary is
+tinted on a feature page and not on a front page), and `order` on a role (the
+`grounds` list is the order, and the filter too).
+
+**And a regression found by sweeping rather than reading.** Making a run take
+its hue from its first cell put **17 clashing pairs** on this paper's own four
+pages. `pageStyle.test.js` has asserted "no two touching blocks share a hue"
+since it was written and **its fixture has no run on it at all**, so 1145 tests
+passed over it. A unit now chooses its hue once, against the union of every
+member's neighbours.
+
+### Verified
+
+`npm test` **1146/1146**. Swept 12 real editions — 444 dressed blocks, 600
+touching pairs, **0 clashes, 0 partial or multi-hue runs**. Applied the `city`
+theme to a real page through the real desk route and screenshotted the canvas:
+16 blocks, 9 tinted, **2 hues**, no console errors. `tests/blockRoles.test.js`
+(12 checks) fails against the old code with exactly the grid diagnosis.
+
+### Still open
+
+Stage 2 (a section nameplate device — the `रविवार धमाल` box), Stage 3 (body
+ink, subheading ink, separate headline/deck band colours) and Stage 4 (chart
+palette, AI image and thumbnail, captions following the theme) are designed but
+not built. The three feature branches are not yet merged to `main`.

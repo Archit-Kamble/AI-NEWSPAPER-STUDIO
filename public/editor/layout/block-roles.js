@@ -29,11 +29,17 @@
 // one the block already carries: its size, where it sits, what it is beside,
 // and what its kind is.
 //
-// IT IS THE SIXTH SHARED CATALOGUE, beside the character grid, the block
-// kinds, the picture style, the inks and the borders, and it is shared for
-// the same reason: the canvas, the Block Editor, the PDF, the IDML and the
+// IT IS THE EIGHTH SHARED CATALOGUE, beside the character grid, the block
+// kinds, the picture style, the inks, the borders, the page styles, the
+// furniture styles and the block shapes - and it is shared for the same
+// reason they are: the canvas, the Block Editor, the PDF, the IDML and the
 // .sla must dress a block identically or the page the desk approved is not
 // the page that prints.
+//
+// THE COUNT IS KEPT BY HAND AND HAS DRIFTED ONCE ALREADY - furniture-styles
+// and this file both called themselves the sixth. If a ninth is added, sweep
+// `grep -rn "shared catalogue" CLAUDE.md public/editor/layout/` rather than
+// trusting the last number you read.
 
 /**
  * THE FIVE ROLES, and what each one may WEAR.

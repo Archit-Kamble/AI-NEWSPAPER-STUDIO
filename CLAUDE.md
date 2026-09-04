@@ -7212,6 +7212,50 @@ to draw the same shaped polygon, mirrored rather than shared.
 node --test tests/blockShapes.test.js tests/blockShapesExport.test.js
 ```
 
+## The theme's tints were measured against a real page, and were too pale
+
+The desk's report, after seeing the shipped theme system: *"I looked your
+theme they are visually stunning look at internet specially entertainment
+pages of newspapers you will find better theme add that themes as it is
+rather creating also make sure themes you are adding are same to same as
+border width and other minute details are also same."*
+
+**No live entertainment page could be reached.** Lokmat's and Sakal's own
+current editions carry no dedicated मनोरंजन page today; Pudhari now requires
+login on every edition (open three days earlier in this same session);
+Mumbai Mirror stopped print publication in 2020; PressReader and Free Press
+Journal redirected away or rendered blank headless. Asked the desk rather
+than fabricate measurements never actually taken - the desk pointed at the
+Pudhari screenshots already on disk from earlier in the session (12 pages,
+every one of them, not only the three already used).
+
+**Measured directly from the real screenshot pixels, not eyeballed.** A
+colour histogram of the paper's own Sports and विश्वसंचार pages, clustered by
+hue, gives the real block grounds: `#d1eded`, `#efd4c8`, `#efd8da` -
+consistently a **15-20% mix** of ink into white. This catalogue's tints were
+mixed at roughly 5-8%, using the SAME `screenOf()` formula this file already
+uses for a headline band's screen - visibly washed out by comparison, and now
+provably so.
+
+**Eighteen "vivid" tints, not a replacement of the pale family.** Every one is
+computed from the SAME already-legibility-tested ink at the measured share
+(0.17), so no unverified hue reaches a plate. Black body type keeps 18-19:1
+contrast against every one, far past WCAG's 4.5:1 floor for ordinary text -
+checked in `tests/paletteExpansion.test.js`, not assumed. The pale originals
+are untouched: a desk's own manual tint picker, and everything already
+shipped that reads it, is unaffected. Only `page-styles.js`'s `HUES` - the
+automatic page-theming system the desk was comparing against a real page -
+reaches for the vivid family now.
+
+**Border weight needed no change.** Measuring stroke width directly from the
+same screenshots (run-length of saturated pixels across a block boundary,
+converted through the screenshot's own px-per-mm) landed at 1-2pt - already
+inside the range this catalogue's existing `BORDER_WIDTHS` ladder covers.
+
+```bash
+node --test tests/paletteExpansion.test.js tests/furnitureExport.test.js
+```
+
 ## Engineering rules
 
 - **The overflow diagnosis started from desk-selected baseline `52c9556`.** Fix

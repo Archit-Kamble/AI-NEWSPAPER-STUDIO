@@ -18,9 +18,13 @@ const luma = (hex) => {
   return 0.2126 * parseInt(h.slice(0, 2), 16) + 0.7152 * parseInt(h.slice(2, 4), 16) + 0.0722 * parseInt(h.slice(4, 6), 16);
 };
 
-test('the palette holds 20 inks and 21 tints, every one named and separated', () => {
+test('the palette holds 20 inks and 39 tints, every one named and separated', () => {
   assert.strictEqual(inks.INKS.length, 20);
-  assert.strictEqual(inks.TINTS.length, 21);
+  // 21 pale originals + 18 "vivid" variants - the measured-from-a-real-page
+  // ground page-styles.js's automatic theming reaches for. See
+  // 'the palette theme system's tints stay contrast-safe for black type'
+  // below for why these have their own, looser luma floor.
+  assert.strictEqual(inks.TINTS.length, 39);
   const scribus = require('fs').readFileSync('src/services/scribus.service.js', 'utf8');
   for (const entry of [...inks.INKS, ...inks.TINTS]) {
     assert.ok(entry.scribus, `${entry.key} has no separation`);
@@ -31,18 +35,40 @@ test('the palette holds 20 inks and 21 tints, every one named and separated', ()
   }
 });
 
-// AN INK MUST HOLD SMALL DEVANAGARI ON NEWSPRINT; a TINT must leave black type
-// readable through it. This is the rule the original seven inks and eight
-// tints were chosen against - checked here rather than eyeballed, so it
-// cannot silently loosen as the list grows.
-test('every ink is dark enough and every tint light enough to read', () => {
+// AN INK MUST HOLD SMALL DEVANAGARI ON NEWSPRINT; a PALE TINT must leave black
+// type readable through it at the light touch the desk's own manual picker
+// offers. This is the rule the original seven inks and eight tints were
+// chosen against - checked here rather than eyeballed, so it cannot silently
+// loosen as the list grows. The 18 'vivid-*' tints are deliberately a
+// DIFFERENT, deeper family (see the next test) and are excluded here.
+test('every ink is dark enough and every pale tint light enough to read', () => {
   for (const ink of inks.INKS) {
     if (!ink.hex) continue; // Black carries none, deliberately.
     assert.ok(luma(ink.hex) < 120, `${ink.key} (${ink.hex}) is too light for an ink: luma ${luma(ink.hex).toFixed(0)}`);
   }
   for (const tint of inks.TINTS) {
-    if (!tint.hex) continue; // White carries none, deliberately.
+    if (!tint.hex || tint.key.startsWith('vivid-')) continue; // White carries none; vivid tints are checked below.
     assert.ok(luma(tint.hex) > 228, `${tint.key} (${tint.hex}) is too dark for a tint: luma ${luma(tint.hex).toFixed(0)}`);
+  }
+});
+
+// THE VIVID TINTS ARE DELIBERATELY DARKER THAN THE PALE FAMILY - measured
+// from a real printed page, not chosen by eye - so a plain luma floor is the
+// wrong test for them. What actually matters is that BLACK BODY TYPE still
+// reads clearly on top: WCAG's floor for ordinary text is 4.5:1, and this
+// holds every vivid tint to a floor of 15:1, comfortably inside the 18-19:1
+// this catalogue was computed to have.
+test("the palette theme system's tints stay contrast-safe for black type", () => {
+  const contrastOfBlackOn = (hex) => {
+    const h = hex.replace('#', '');
+    const L = (0.2126 * parseInt(h.slice(0, 2), 16) + 0.7152 * parseInt(h.slice(2, 4), 16) + 0.0722 * parseInt(h.slice(4, 6), 16)) / 255;
+    return (L + 0.05) / 0.05;
+  };
+  const vivid = inks.TINTS.filter((t) => t.key.startsWith('vivid-'));
+  assert.strictEqual(vivid.length, 18);
+  for (const tint of vivid) {
+    const ratio = contrastOfBlackOn(tint.hex);
+    assert.ok(ratio >= 15, `${tint.key} (${tint.hex}) only gives black type ${ratio.toFixed(1)}:1 contrast`);
   }
 });
 

@@ -8597,3 +8597,38 @@ produces 2 five-point polygons (fill + stroke) in the right inks, `.sla`
 produces exactly 2 `path=` polygons with `SahasTintMint`/`SahasGreen`.
 Screenshotted an octagon and a notched block with real Marathi copy — corners
 genuinely cut, text correctly clear of them. No leftover fixtures.
+
+## The theme's tints, measured against a real page — 4 Sept 2026, branch feature/block-shapes
+
+Desk report: "look at internet specially entertainment pages of newspapers
+you will find better theme ... make sure ... border width and other minute
+details are also same."
+
+**Six live sources tried, none usable**: Lokmat/Sakal carry no dedicated
+entertainment page in today's edition (checked every page); Pudhari now
+requires login on both editions that worked three days earlier; Mumbai Mirror
+stopped print in 2020; PressReader/FPJ redirected or rendered blank headless.
+Asked the desk rather than fabricate "measured" numbers never actually taken.
+The desk pointed at the Pudhari screenshots already on disk — all 12 pages,
+not only the 3 used earlier.
+
+- **Real pixel measurement**: colour-histogram-clustered the paper's own
+  Sports and विश्वसंचार pages. Real block grounds cluster around a **15-20%**
+  ink-into-white mix (`#d1eded`, `#efd4c8`, `#efd8da` measured); this
+  catalogue's tints were mixed at ~5-8% — visibly washed out by comparison.
+- **18 new "vivid" tints** in `inks.js`, computed via the SAME `screenOf()`
+  formula already used for a headline band's screen, at the measured 0.17
+  share, against the SAME already-legibility-tested inks — never an
+  unverified hue. Black type keeps 18-19:1 contrast (WCAG floor is 4.5:1).
+- **Additive, not a replacement**: the pale originals are untouched for the
+  desk's manual tint picker; only `page-styles.js`'s automatic theming reaches
+  for the vivid family.
+- **Border weight needed no change** — measured stroke width from the same
+  screenshots landed at 1-2pt, already inside the existing ladder.
+
+### Verified
+
+`npm test` 1134/1134 (2 tests updated for the new tint family, 1 new test
+added holding black-text contrast ≥15:1 on all 18 vivid tints). Screenshotted
+`sport` and `sunday` themes on a real edition — visibly closer to the
+reference's saturation; no two touching blocks share a hue, still holds.

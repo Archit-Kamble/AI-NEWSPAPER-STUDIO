@@ -177,6 +177,24 @@ const COLOURS = `
   <COLOR NAME="SahasTintPlum" CMYK="#00090407" Spot="0" Register="0"/>
   <COLOR NAME="SahasTintViolet" CMYK="#0a0c0005" Spot="0" Register="0"/>
   <COLOR NAME="SahasTintPine" CMYK="#0700020a" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintVividRed" CMYK="#00211c09" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintVividBlue" CMYK="#160e0013" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintVividGreen" CMYK="#15000b17" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintVividPurple" CMYK="#08100015" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintVividOrange" CMYK="#00142008" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintVividTeal" CMYK="#14020017" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintVividMaroon" CMYK="#00151014" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintVividRose" CMYK="#00170f0d" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintVividNavy" CMYK="#0f09001b" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintVividSky" CMYK="#1b0c000d" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintVividForest" CMYK="#0c00081d" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintVividOlive" CMYK="#02000e19" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintVividAmber" CMYK="#000d1f0d" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintVividRust" CMYK="#00111910" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintVividBrown" CMYK="#00080d19" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintVividPlum" CMYK="#000f0717" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintVividViolet" CMYK="#0e110013" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintVividPine" CMYK="#0f00021c" Spot="0" Register="0"/>
   <COLOR NAME="None" CMYK="#00000000" Spot="0" Register="0"/>`;
 
 // The four faces the publication actually ships (public/assets/fonts/, the

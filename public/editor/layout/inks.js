@@ -111,6 +111,46 @@ export const TINTS = [
   { key: 'plum', label: 'Plum', hex: '#f8eff4', scribus: 'SahasTintPlum' },
   { key: 'violet', label: 'Violet', hex: '#f0eefa', scribus: 'SahasTintViolet' },
   { key: 'pine', label: 'Pine', hex: '#eef5f3', scribus: 'SahasTintPine' },
+  // EIGHTEEN VIVID VARIANTS - measured, not invented.
+  //
+  // The desk's report: "look at internet specially entertainment pages of
+  // newspapers you will find better theme ... make sure ... border width and
+  // other minute details are also same." Pixel-sampled directly from the
+  // paper's OWN reference pages (Pudhari's Sports and विश्वसंचार pages,
+  // screenshotted at full resolution) rather than approximated: the real
+  // block grounds cluster around 15-20% of their ink mixed into white
+  // (#d1eded, #efd4c8, #efd8da measured), where the pale tints above were
+  // mixed at roughly 5-8% - visibly washed out by comparison.
+  //
+  // Computed with the SAME screenOf() mixing this file already uses for a
+  // headline band's screen (share 0.17, the measured middle of that real
+  // range), against the SAME eighteen already-legibility-tested inks above -
+  // never a new, unverified hue. Black body type keeps 18-19:1 contrast
+  // against every one of them, far past WCAG's 4.5:1 floor.
+  //
+  // A PARALLEL set, not a replacement: the pale originals stay exactly as
+  // they were for the desk's own manual tint picker and everything already
+  // shipped that reads it. Only page-styles.js's automatic page theming
+  // reaches for these - the one surface the desk was comparing against a
+  // real printed page.
+  { key: 'vivid-red', label: 'Vivid Red', hex: '#f6d6db', scribus: 'SahasTintVividRed' },
+  { key: 'vivid-blue', label: 'Vivid Blue', hex: '#d8dfec', scribus: 'SahasTintVividBlue' },
+  { key: 'vivid-green', label: 'Vivid Green', hex: '#d5e8de', scribus: 'SahasTintVividGreen' },
+  { key: 'vivid-purple', label: 'Vivid Purple', hex: '#e3dbea', scribus: 'SahasTintVividPurple' },
+  { key: 'vivid-orange', label: 'Vivid Orange', hex: '#f7e4d8', scribus: 'SahasTintVividOrange' },
+  { key: 'vivid-teal', label: 'Vivid Teal', hex: '#d6e6e8', scribus: 'SahasTintVividTeal' },
+  { key: 'vivid-maroon', label: 'Vivid Maroon', hex: '#ebd8dc', scribus: 'SahasTintVividMaroon' },
+  { key: 'vivid-rose', label: 'Vivid Rose', hex: '#f2dce4', scribus: 'SahasTintVividRose' },
+  { key: 'vivid-navy', label: 'Vivid Navy', hex: '#d7dce4', scribus: 'SahasTintVividNavy' },
+  { key: 'vivid-sky', label: 'Vivid Sky', hex: '#d8e7f2', scribus: 'SahasTintVividSky' },
+  { key: 'vivid-forest', label: 'Vivid Forest', hex: '#d7e2db', scribus: 'SahasTintVividForest' },
+  { key: 'vivid-olive', label: 'Vivid Olive', hex: '#e4e6d9', scribus: 'SahasTintVividOlive' },
+  { key: 'vivid-amber', label: 'Vivid Amber', hex: '#f2e6d5', scribus: 'SahasTintVividAmber' },
+  { key: 'vivid-rust', label: 'Vivid Rust', hex: '#efdfd8', scribus: 'SahasTintVividRust' },
+  { key: 'vivid-brown', label: 'Vivid Brown', hex: '#e6dfda', scribus: 'SahasTintVividBrown' },
+  { key: 'vivid-plum', label: 'Vivid Plum', hex: '#e8dae2', scribus: 'SahasTintVividPlum' },
+  { key: 'vivid-violet', label: 'Vivid Violet', hex: '#dfdcec', scribus: 'SahasTintVividViolet' },
+  { key: 'vivid-pine', label: 'Vivid Pine', hex: '#d6e3e1', scribus: 'SahasTintVividPine' },
 ];
 
 // A colour that has been through the DOM comes back as `rgb(200, 16, 46)`,

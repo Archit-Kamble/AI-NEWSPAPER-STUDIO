@@ -63,11 +63,11 @@ test('a themed page\'s folio prints the same reversed banner in the PDF/IDML wal
   // CLAUDE.md's "Scribus shares the FURNITURE, not the block walk" - so this
   // is the one place a themed footer could silently be plain) ---
   const sla = await scribusService.buildDocument(newspaper, pages);
-  // The 'orange' hue family's GROUND is named 'sand' in the tint catalogue
-  // (page-styles.js: { key: 'orange', tint: hexOf(TINTS, 'sand'), ... }) -
-  // there is no colour literally named SahasTintOrange anywhere in this
-  // system, which is exactly the pairing tests/paletteExpansion.test.js holds.
-  assert.match(sla, /PCOLOR="SahasTintSand"/, 'the .sla footer is not tinted for the sunday theme');
+  // The 'orange' hue family's GROUND is the measured VIVID variant
+  // page-styles.js's automatic theming reaches for (inks.js's 'vivid-orange',
+  // .sla name SahasTintVividOrange) - not the pale 'sand' a desk's own manual
+  // picker offers. See tests/paletteExpansion.test.js for why the two exist.
+  assert.match(sla, /PCOLOR="SahasTintVividOrange"/, 'the .sla footer is not tinted for the sunday theme');
   assert.match(sla, /PCOLOR="SahasOrange"/, 'the .sla footer title/page-number are not in the theme ink');
 });
 

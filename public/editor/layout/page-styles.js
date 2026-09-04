@@ -1,4 +1,15 @@
-// HOW A PAGE IS DRESSED - the paper's own look, stated once.
+// HOW A PAGE IS DRESSED - the paper's own look, stated once.//
+// THE GROUND IS A "VIVID" TINT, not the pale original a desk's own manual
+// picker uses. Measured, not chosen by eye: pixel-sampled directly from
+// Pudhari's own reference pages (their Sports and विश्वसंचार pages,
+// screenshotted at full resolution) after the desk asked for something
+// closer to what a real vivid entertainment/feature page looks like. Real
+// block grounds there cluster around a 15-20% mix of their own ink into
+// white; this catalogue's ORIGINAL tints were mixed at roughly 5-8% and
+// read, by comparison, washed out. inks.js's `vivid-*` entries are the
+// same eighteen already-legibility-tested inks, screened at the measured
+// share (0.17) - never a new, unverified hue, and black body type keeps
+// 18-19:1 contrast against every one of them.
 //
 // The desk's report was that this software fills a page but does not STYLE
 // one: "every block is having different style ... a light colour background
@@ -50,29 +61,29 @@ const hexOf = (table, key) => table.find((entry) => entry.key === key)?.hex ?? n
  * codebase guards hardest against.
  */
 export const HUES = [
-  { key: 'red', label: 'Red', tint: hexOf(TINTS, 'pink'), ink: hexOf(INKS, 'red') },
-  { key: 'blue', label: 'Blue', tint: hexOf(TINTS, 'blue'), ink: hexOf(INKS, 'blue') },
-  { key: 'green', label: 'Green', tint: hexOf(TINTS, 'mint'), ink: hexOf(INKS, 'green') },
-  { key: 'purple', label: 'Purple', tint: hexOf(TINTS, 'lilac'), ink: hexOf(INKS, 'purple') },
-  { key: 'orange', label: 'Orange', tint: hexOf(TINTS, 'sand'), ink: hexOf(INKS, 'orange') },
-  { key: 'teal', label: 'Teal', tint: hexOf(TINTS, 'teal'), ink: hexOf(INKS, 'teal') },
+  { key: 'red', label: 'Red', tint: hexOf(TINTS, 'vivid-red'), ink: hexOf(INKS, 'red') },
+  { key: 'blue', label: 'Blue', tint: hexOf(TINTS, 'vivid-blue'), ink: hexOf(INKS, 'blue') },
+  { key: 'green', label: 'Green', tint: hexOf(TINTS, 'vivid-green'), ink: hexOf(INKS, 'green') },
+  { key: 'purple', label: 'Purple', tint: hexOf(TINTS, 'vivid-purple'), ink: hexOf(INKS, 'purple') },
+  { key: 'orange', label: 'Orange', tint: hexOf(TINTS, 'vivid-orange'), ink: hexOf(INKS, 'orange') },
+  { key: 'teal', label: 'Teal', tint: hexOf(TINTS, 'vivid-teal'), ink: hexOf(INKS, 'teal') },
   // THIRTEEN MORE, paired the same way as the six above - one TINT, one INK,
   // never a mixed shade. `slate` pairs with the existing grey ground rather
   // than a new tint of its own: it is a dark blue-grey distinct from black,
   // and grey is already the neutral ground this palette has.
-  { key: 'maroon', label: 'Maroon', tint: hexOf(TINTS, 'maroon'), ink: hexOf(INKS, 'maroon') },
-  { key: 'rose', label: 'Rose', tint: hexOf(TINTS, 'rose'), ink: hexOf(INKS, 'rose') },
-  { key: 'navy', label: 'Navy', tint: hexOf(TINTS, 'navy'), ink: hexOf(INKS, 'navy') },
-  { key: 'sky', label: 'Sky', tint: hexOf(TINTS, 'sky'), ink: hexOf(INKS, 'sky') },
-  { key: 'forest', label: 'Forest', tint: hexOf(TINTS, 'forest'), ink: hexOf(INKS, 'forest') },
-  { key: 'olive', label: 'Olive', tint: hexOf(TINTS, 'olive'), ink: hexOf(INKS, 'olive') },
-  { key: 'amber', label: 'Amber', tint: hexOf(TINTS, 'amber'), ink: hexOf(INKS, 'amber') },
-  { key: 'rust', label: 'Rust', tint: hexOf(TINTS, 'rust'), ink: hexOf(INKS, 'rust') },
-  { key: 'brown', label: 'Brown', tint: hexOf(TINTS, 'brown'), ink: hexOf(INKS, 'brown') },
-  { key: 'plum', label: 'Plum', tint: hexOf(TINTS, 'plum'), ink: hexOf(INKS, 'plum') },
-  { key: 'violet', label: 'Violet', tint: hexOf(TINTS, 'violet'), ink: hexOf(INKS, 'violet') },
+  { key: 'maroon', label: 'Maroon', tint: hexOf(TINTS, 'vivid-maroon'), ink: hexOf(INKS, 'maroon') },
+  { key: 'rose', label: 'Rose', tint: hexOf(TINTS, 'vivid-rose'), ink: hexOf(INKS, 'rose') },
+  { key: 'navy', label: 'Navy', tint: hexOf(TINTS, 'vivid-navy'), ink: hexOf(INKS, 'navy') },
+  { key: 'sky', label: 'Sky', tint: hexOf(TINTS, 'vivid-sky'), ink: hexOf(INKS, 'sky') },
+  { key: 'forest', label: 'Forest', tint: hexOf(TINTS, 'vivid-forest'), ink: hexOf(INKS, 'forest') },
+  { key: 'olive', label: 'Olive', tint: hexOf(TINTS, 'vivid-olive'), ink: hexOf(INKS, 'olive') },
+  { key: 'amber', label: 'Amber', tint: hexOf(TINTS, 'vivid-amber'), ink: hexOf(INKS, 'amber') },
+  { key: 'rust', label: 'Rust', tint: hexOf(TINTS, 'vivid-rust'), ink: hexOf(INKS, 'rust') },
+  { key: 'brown', label: 'Brown', tint: hexOf(TINTS, 'vivid-brown'), ink: hexOf(INKS, 'brown') },
+  { key: 'plum', label: 'Plum', tint: hexOf(TINTS, 'vivid-plum'), ink: hexOf(INKS, 'plum') },
+  { key: 'violet', label: 'Violet', tint: hexOf(TINTS, 'vivid-violet'), ink: hexOf(INKS, 'violet') },
   { key: 'slate', label: 'Slate', tint: hexOf(TINTS, 'grey'), ink: hexOf(INKS, 'slate') },
-  { key: 'pine', label: 'Pine', tint: hexOf(TINTS, 'pine'), ink: hexOf(INKS, 'pine') },
+  { key: 'pine', label: 'Pine', tint: hexOf(TINTS, 'vivid-pine'), ink: hexOf(INKS, 'pine') },
 ];
 
 export const HUE_KEYS = HUES.map((hue) => hue.key);

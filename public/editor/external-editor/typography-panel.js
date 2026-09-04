@@ -112,6 +112,12 @@ export const ALIGNMENTS = [
 // object, shared by the writing toolbar and the Typography panel so the two
 // cannot answer it differently.
 export const ALIGN_FIELD = {
+  // The kicker follows the headline deliberately (CLAUDE.md: "a control of
+  // its own could only knock the two out of step") - it is the headline's
+  // own overline, never independently aligned. Writing headlineAlign while
+  // the kicker field has focus is correct: the kicker visually follows
+  // whatever that resolves to.
+  kicker: "headlineAlign",
   headline: "headlineAlign",
   subheading: "subheadingAlign",
   body: "textAlign",
@@ -227,6 +233,7 @@ let panelPart = "block";
 // words the Typography panel does - one catalog, not two that could drift.
 export const PART_LABEL = {
   block: "Whole block",
+  kicker: "Kicker",
   headline: "Headline",
   subheading: "Subheading",
   body: "Body",

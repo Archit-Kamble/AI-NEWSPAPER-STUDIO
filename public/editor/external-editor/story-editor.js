@@ -31,6 +31,11 @@ import "../layout/publication-type.js";
 // normal, but the count turns and says so.
 const HEADLINE_LIMIT = 90;
 const SUBHEADING_LIMIT = 140;
+// A kicker is a short overline, not a second headline - compose.js sizes it
+// at 1.05x the body's own size, deliberately small. 60 characters is generous
+// for what a kicker actually is; the field still ACCEPTS more, same reasoning
+// as the two limits above.
+const KICKER_LIMIT = 60;
 
 // A reading speed for Devanagari prose. Only ever shown as a rounded minute: a
 // sense of scale for the desk, never a measurement.
@@ -249,6 +254,21 @@ export function storyEditorMarkup(view, { budget = null, tools = "", pictures = 
                work. Same rich-text.js marks as the story, same sanitiser, and
                the counters still read plainText(), because a <b> is not a
                character a printer sets. -->
+          <!-- KICKER - the short overline above the headline. compose.js has
+               sized and budgeted this display flow since it was written
+               (headline-reserve.js's own HEADLINE_LINES-style pass), and
+               render.js has painted it, but nothing let a desk TYPE one -
+               the same mechanism-with-no-surface shape as border_ink and
+               headline_ink. Bound in the SAME generic loop as Headline and
+               Subheading below it, so it gets marks, autosave and paste
+               sanitising for free rather than a third hand-written copy. -->
+          <label class="story-field-label" for="edStoryKicker">
+            Kicker
+            <span class="field-counter" id="edStoryKickerCounter">${plainText(view.kicker).length}/${KICKER_LIMIT}</span>
+          </label>
+          <div id="edStoryKicker" class="story-kicker-input rich-field" contenteditable="true"
+            role="textbox" aria-label="Kicker" data-part="kicker"
+            data-placeholder="किकर — the short line above the headline, if any">${fieldHtml(view.kicker)}</div>
           <label class="story-field-label" for="edStoryHeadline">
             Headline
             <span class="field-counter" id="edStoryHeadlineCounter">${plainText(view.headline).length}/${HEADLINE_LIMIT}</span>
@@ -312,6 +332,7 @@ function refreshFieldCounters(view) {
     counter.textContent = `${length}/${limit}`;
     counter.classList.toggle("over", length > limit);
   };
+  set("edStoryKickerCounter", view.kicker, KICKER_LIMIT);
   set("edStoryHeadlineCounter", view.headline, HEADLINE_LIMIT);
   set("edStorySubheadingCounter", view.subheading, SUBHEADING_LIMIT);
 }
@@ -466,19 +487,20 @@ export function bindStoryEditor({ onPatch, getBudget, getSection, getView, getIm
   bindChartDialog();
   bindTableDialog();
 
+  const kicker = document.getElementById("edStoryKicker");
   const headline = document.getElementById("edStoryHeadline");
   const subheading = document.getElementById("edStorySubheading");
   const toolbar = document.getElementById("edStoryToolbar");
 
-  // Both fields behave identically, so they are bound identically rather than
-  // twice by hand - the second copy is where "and the subheading does not do
-  // that" comes from.
-  for (const [part, field] of [["headline", headline], ["subheading", subheading]]) {
+  // All three fields behave identically, so they are bound identically rather
+  // than by hand each time - the second copy is where "and the subheading
+  // does not do that" comes from.
+  for (const [part, field] of [["kicker", kicker], ["headline", headline], ["subheading", subheading]]) {
     if (!field) continue;
 
     field.addEventListener("input", () => {
       onPatch?.({ [part]: fieldValue(field) }, "story-editor");
-      refreshFieldCounters({ headline: fieldValue(headline), subheading: fieldValue(subheading) });
+      refreshFieldCounters({ kicker: fieldValue(kicker), headline: fieldValue(headline), subheading: fieldValue(subheading) });
     });
 
     // Typing here IS that object being edited - Tab-ing into the field, or a
@@ -594,7 +616,7 @@ export function refreshStoryPictures(images) {
 }
 
 export function refreshStoryEditor(view, section, images, source, selectedPart, selectedImageIds) {
-  if (selectedPart === "headline" || selectedPart === "subheading" || selectedPart === "body") {
+  if (selectedPart === "kicker" || selectedPart === "headline" || selectedPart === "subheading" || selectedPart === "body") {
     selectedTextPart = selectedPart;
   }
   // THE FIELD THE DESK IS ABOUT TO TYPE IN HAS TO BE REACHABLE.
@@ -659,6 +681,7 @@ export function refreshStoryEditor(view, section, images, source, selectedPart, 
     }
   }
 
+  const kickerField = document.getElementById("edStoryKicker");
   const headline = document.getElementById("edStoryHeadline");
   const subheading = document.getElementById("edStorySubheading");
   // Never while the caret is in it: replacing innerHTML under a live caret
@@ -669,6 +692,7 @@ export function refreshStoryEditor(view, section, images, source, selectedPart, 
     const wanted = fieldHtml(value);
     if (field.innerHTML !== wanted) field.innerHTML = wanted;
   };
+  restore(kickerField, view.kicker);
   restore(headline, view.headline);
   restore(subheading, view.subheading);
 
@@ -683,7 +707,7 @@ export function refreshStoryEditor(view, section, images, source, selectedPart, 
 /** Keeps the toolbar's controls in step with the object selected on the
  * canonical newspaper page. */
 function refreshBlockControls(view, part = selectedTextPart) {
-  if (part === "headline" || part === "subheading" || part === "body") {
+  if (part === "kicker" || part === "headline" || part === "subheading" || part === "body") {
     selectedTextPart = part;
   }
 
@@ -692,14 +716,31 @@ function refreshBlockControls(view, part = selectedTextPart) {
 
   const size = document.getElementById("edStorySize");
   if (size && document.activeElement !== size) {
-    const value = textSizeValue(view);
-    size.innerHTML = textSizeOptions(value);
-    size.value = String(value);
-    size.title = `${TEXT_SIZE_LABEL[selectedTextPart] || "Body size"} — selected object`;
-    size.setAttribute(
-      "aria-label",
-      `${TEXT_SIZE_LABEL[selectedTextPart] || "Body size"} for selected object`,
-    );
+    // A KICKER HAS NO SIZE OF ITS OWN TO SET. compose.js derives it from the
+    // body's own size (1.05x) - there is no kicker_font_px column, on
+    // purpose, the same reason there is no kicker_align: a control of its
+    // own could only knock the two out of step with what the engine actually
+    // does. Falling through to TEXT_SIZE_FIELD's "body" default the way
+    // `part: 'block'` already does would silently resize the BODY while the
+    // desk believes they are resizing the kicker - the exact "wrong object"
+    // fault this file exists to prevent. Disabling the control is what a
+    // control with nothing legal to do already does elsewhere in this
+    // product (canRound(), the picture Fit control on a cut-out).
+    if (selectedTextPart === "kicker") {
+      size.disabled = true;
+      size.title = "The kicker is sized from the body automatically, and is not set on its own.";
+      size.removeAttribute("aria-label");
+    } else {
+      size.disabled = false;
+      const value = textSizeValue(view);
+      size.innerHTML = textSizeOptions(value);
+      size.value = String(value);
+      size.title = `${TEXT_SIZE_LABEL[selectedTextPart] || "Body size"} — selected object`;
+      size.setAttribute(
+        "aria-label",
+        `${TEXT_SIZE_LABEL[selectedTextPart] || "Body size"} for selected object`,
+      );
+    }
   }
   const target = document.getElementById("edStorySizeTarget");
   if (target) target.textContent = PART_LABEL[selectedTextPart] || "Body";

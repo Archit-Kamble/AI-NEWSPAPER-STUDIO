@@ -2548,6 +2548,56 @@ whatever is active — the same "one rung up, not just different" shape this
 file already uses for the body-size ladder — fixes it without touching the
 product.
 
+### The kicker had no field, and it was the biggest finding of the audit
+
+`kicker` (TEXT) is not a small oversight like the swatch rows above it. It has
+been fully load-bearing since `compose.js` was written — its own display flow
+in `flowOf()`, its own size (1.05× the body, deliberately derived rather than
+independently stored — there is no `kicker_font_px` column), `render.js`
+paints it, Scribus's own export walk names it explicitly ("one per composed
+**kicker**/headline/deck") — and `section-model.js` has round-tripped it
+through the draft since that file was written. Every layer except one: **no
+field anywhere let a desk type one.**
+
+`public/editor/external-editor/story-editor.js` gained a Kicker field above
+Headline, bound through the exact same generic loop Headline and Subheading
+already share (`for (const [part, field] of [["kicker", ...], ["headline",
+...], ["subheading", ...]])`) — marks, autosave and paste sanitising for free,
+no third hand-written copy.
+
+Two objects this field touches do **not** get their own control, on purpose,
+both already stated as rules elsewhere in this file:
+
+- **No independent size.** `TEXT_SIZE_FIELD` has no `kicker` entry, so the
+  size stepper is explicitly **disabled** while the kicker is selected
+  rather than silently falling through to `bodyFontPx` — which is exactly
+  what `part: 'block'`'s existing fallback would have done, corrupting the
+  body's own size while the desk believed they were resizing the kicker.
+  The same "control that cannot act is not offered" rule `canRound()` and
+  the cut-out Fit control already follow.
+- **No independent alignment.** `ALIGN_FIELD.kicker = "headlineAlign"` — the
+  kicker follows the headline deliberately, so the align toolbar writes
+  `headlineAlign` while the kicker field has focus, never a field of its
+  own that could knock the two out of step.
+
+**Deliberately out of scope for this pass**: in-place editing directly on the
+composed page (the caret/frame/prompt machinery headline and subheading have
+— `promptComposition()`, `edKickerFrame`, the empty-block placeholder). Every
+existing guard that scopes that machinery to `"headline"`/`"subheading"`
+(`missingFlows()`, the addressable-parts filter in `block-frame.js`) already
+excludes `"kicker"` by name, so `selectedTextPart` flowing through as
+`"kicker"` is inert there rather than reaching for a frame that does not
+exist — checked, not assumed. Typing one only through the writing panel below
+the page is the whole of what shipped; a desk cannot yet click directly on
+the page to edit a kicker in place.
+
+Verified through the real chain, not the browser alone: a typed kicker
+reaches `print-model.js`'s walk and the `.sla` Scribus already names it in.
+`tests/browser/editor-parity.browser.js` presses it and checks the disabled
+size stepper specifically.
+
+### The audit the border-colour fix asked for: two more siblings, same shape
+
 ### The audit the border-colour fix asked for: two more siblings, same shape
 
 *"check everything missing as like this"* — a systematic sweep of every

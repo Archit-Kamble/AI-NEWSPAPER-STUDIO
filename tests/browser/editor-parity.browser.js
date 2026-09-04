@@ -160,7 +160,7 @@ const say = (ok, what, detail = '') => {
     const c = lines(canvas);
     return {
       c, e: lines(editor),
-      head: only(c, /headline/), body: only(c, /body/),
+      head: only(c, /headline/), body: only(c, /body/), kicker: only(c, /kicker/),
       // The MARKS in the body, not its line breaks. A larger headline
       // legitimately re-flows the copy under it, so comparing composed body
       // lines would call every display-size change a stray body edit; what
@@ -426,7 +426,30 @@ const say = (ok, what, detail = '') => {
   await settle(600);
   await leaveBodyEdit();
 
-  // ============================ 2. the three fields ========================
+  // ============================ 2. the three fields =========================
+  // A kicker is a fourth field with the same shape as the two below it - the
+  // desk asked "check everything missing like this" after border/headline/
+  // accent colour, and found compose.js had sized and budgeted this display
+  // flow since it was written with no way anywhere to type one.
+  const kickerField = await show('#edStoryKicker');
+  if (kickerField) {
+    await selectAllIn('edStoryKicker');
+    await page.keyboard.type('EXCLUSIVE', { delay: 20 });
+    await settle();
+    s = await snap();
+    say(/EXCLUSIVE/.test(s.kicker), 'the kicker field composes a kicker line', s.kicker.slice(0, 60));
+    parity(s, 'kicker field');
+    // NO SIZE OF ITS OWN. compose.js derives it from the body (1.05x); there
+    // is no kicker_font_px column, on purpose, the same reason there is no
+    // kicker_align - a control of its own could only knock the two out of
+    // step with what the engine actually does. The size stepper must refuse
+    // to write to it rather than silently resizing the body underneath.
+    const sizeDisabled = await page.evaluate(() => document.getElementById('edStorySize')?.disabled);
+    say(sizeDisabled === true, 'the size stepper is disabled while the kicker is selected - it has no size of its own to set');
+  } else {
+    say(false, 'the kicker field is there', '#edStoryKicker not found');
+  }
+
   await selectAllIn('edStoryHeadline');
   await page.keyboard.type('WATER SCHEME CLEARED', { delay: 20 });
   await settle();

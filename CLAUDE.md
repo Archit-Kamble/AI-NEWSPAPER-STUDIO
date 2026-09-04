@@ -2491,6 +2491,31 @@ Three things it got wrong first, all found by measurement rather than reading:
 1195 on the same sweep — six lines in three thousand for another percent of
 visible condensation.
 
+### A rule's weight is named, not stated in points
+
+The desk asked for it by name: *"add border width also as small normal medium
+large extra large"*. `BORDER_WIDTHS` had four rungs labelled by their own
+points (Hairline, 1 pt, 2 pt, 4 pt); it now has five, named **Small / Normal /
+Medium / Large / Extra large**. Storage is unchanged — still points, converted
+to editor px at this file's own ratio, still what the `.sla`, the PDF and the
+IDML all read. A label is a T-shirt scale over a printer's unit, never a
+second unit. The two original ends are untouched (0.5 pt hairline, 4 pt — as
+heavy as a page should ever go), so a block ruled at either extreme before this
+change prints at exactly the same weight after it; `Large` at 3 pt is the one
+new rung.
+
+**Two literal `[3]` indices had to become `.length - 1`**, and this is the
+same lesson `BORDER_RADII`'s own clamp already learned: a ladder that grows
+leaves a hardcoded ceiling index silently pointing at the wrong rung. Found
+before it shipped, not after — `borders.js`'s own `borderWidthPx()` clamp and
+`pageSection.service.js`'s validation both read `BORDER_WIDTHS[3]` as "the
+top", which after the fifth rung means *Large* (3 pt) rather than the true
+ceiling *Extra large* (4 pt): a desk asking for the heaviest weight would have
+been silently refused, and the refusal's own sentence would have understated
+the ceiling it was reporting. `tests/paletteExpansion.test.js` holds both —
+one checking the clamp directly, one driving the real `PUT` route end to end
+— and both fail against the literal-index version with exactly that diagnosis.
+
 ### A block is ruled by a decision, in points
 
 `border_style` had a third button ("Rule below") the server refused with a 400,

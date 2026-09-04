@@ -235,10 +235,17 @@ async function saveSection(pageId, sectionKey, body) {
   // own ends are the bounds. Nothing validated this before because nothing
   // could set it - the column has existed, and been read by the compositor for
   // the box inset, since it was added.
+  //
+  // THE CEILING IS THE LADDER'S OWN LAST ENTRY, never a literal index. Adding
+  // the fifth rung ('Large', 3pt) to BORDER_WIDTHS would otherwise have left
+  // this reading a literal [3] - the fourth entry, 'Large' at 3pt, not the
+  // real ceiling 'Extra large' at 4pt - which silently narrows what a desk may
+  // ask for AND understates the ceiling in the very sentence that states it.
+  const widthCeiling = BORDER_WIDTHS[BORDER_WIDTHS.length - 1];
   if (supplied(body.borderWidthPx)) {
     const width = Number(body.borderWidthPx);
-    if (!Number.isFinite(width) || width < BORDER_WIDTHS[0].px || width > BORDER_WIDTHS[3].px) {
-      return { error: `The rule must be between ${BORDER_WIDTHS[0].pt} and ${BORDER_WIDTHS[3].pt} points.` };
+    if (!Number.isFinite(width) || width < BORDER_WIDTHS[0].px || width > widthCeiling.px) {
+      return { error: `The rule must be between ${BORDER_WIDTHS[0].pt} and ${widthCeiling.pt} points.` };
     }
   }
   if (supplied(body.headlineStyle) && !palette.HEADLINE_STYLE_KEYS.includes(body.headlineStyle)) {

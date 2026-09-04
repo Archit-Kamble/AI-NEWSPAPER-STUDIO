@@ -75,13 +75,24 @@
     { key: 'rule-both-double', label: 'Double rules above and below', edges: ['top', 'bottom'], double: true },
   ]);
 
-  // A printer's own ladder. The hairline is what a page rules a gutter with;
-  // 4 pt is a section rule and is as heavy as a page should ever go.
+  // A printer's own ladder, NAMED rather than stated in points - the desk
+  // asked for it by name: "add border width also as small normal medium
+  // large extra large". The points underneath are unchanged from the four
+  // this catalogue already offered (0.5, 1, 2, 4 - the hairline a page rules
+  // a gutter with, up to the section rule that is as heavy as a page should
+  // ever go); `Large` at 3 pt is the one new rung, inserted between the two
+  // that were already a full point apart.
+  //
+  // STILL A T-SHIRT SCALE OVER A PRINTER'S UNIT, not a replacement of one. The
+  // stored value is still `px`, still converted from points at this file's own
+  // ratio, and still what `.sla`, PDF and IDML all read - a label is chosen
+  // here, never a second unit.
   const BORDER_WIDTHS = Object.freeze([
-    { pt: 0.5, px: px(0.5), label: 'Hairline' },
-    { pt: 1, px: px(1), label: '1 pt' },
-    { pt: 2, px: px(2), label: '2 pt' },
-    { pt: 4, px: px(4), label: '4 pt' },
+    { pt: 0.5, px: px(0.5), label: 'Small' },
+    { pt: 1, px: px(1), label: 'Normal' },
+    { pt: 2, px: px(2), label: 'Medium' },
+    { pt: 3, px: px(3), label: 'Large' },
+    { pt: 4, px: px(4), label: 'Extra large' },
   ]);
 
   // A printer's own ladder again. `pill` is deliberately a large number rather
@@ -138,8 +149,13 @@
    */
   function borderWidthPx(value) {
     const width = Number(value);
+    // [1] is 'Normal' and stays the default for "ruled but no width chosen" -
+    // the middle of the old four-rung ladder and still a sensible one of five.
+    // The ceiling is `.length - 1`, not a literal index: BORDER_RADII already
+    // learned this lesson (see its own borderRadiusPx below) - a literal `[3]`
+    // silently stopped meaning "the top" the moment a fifth rung was added.
     if (!Number.isFinite(width) || width <= 0) return BORDER_WIDTHS[1].px;
-    return Math.min(Math.max(width, BORDER_WIDTHS[0].px), BORDER_WIDTHS[3].px);
+    return Math.min(Math.max(width, BORDER_WIDTHS[0].px), BORDER_WIDTHS[BORDER_WIDTHS.length - 1].px);
   }
 
   const api = Object.freeze({

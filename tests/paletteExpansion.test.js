@@ -5,6 +5,17 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
+const { createApp } = require('../server');
+const pool = require('../src/config/db');
+const { signIn, removeEdition } = require('./helpers/desk');
+
+// FILE-SCOPE, registered once - so it runs after every per-test hook rather
+// than racing one. A `pool.end()` registered inside a single test's own
+// `t.after` can run before that same test's `removeEdition` still needs the
+// pool, because `t.after` order is not guaranteed LIFO across mixed sync/async
+// registrations here; every other test file in this repo that touches the
+// pool registers its `pool.end()` at file scope for exactly that reason.
+test.after(() => pool.end());
 
 let inks; let styles; let borders;
 test.before(async () => {
@@ -169,4 +180,66 @@ test('a new double style produces real rule geometry through the shared print mo
       (borders.isDouble(key) ? 2 : 1) * edges.length,
       `${key} should draw ${edges.length} edge(s) twice each`);
   }
+});
+
+// FIVE NAMED BORDER WIDTHS - the desk asked for it by name: "add border width
+// also as small normal medium large extra large". The two ends this catalogue
+// already had (0.5pt/hairline, 4pt/the heaviest a page should go) are
+// unchanged; 'Large' at 3pt is the one new rung.
+test('five named border widths, and the ceiling is read from the ladder\'s own length', () => {
+  assert.strictEqual(borders.BORDER_WIDTHS.length, 5);
+  assert.deepEqual(borders.BORDER_WIDTHS.map((w) => w.label),
+    ['Small', 'Normal', 'Medium', 'Large', 'Extra large']);
+  // The two original ends are unchanged - a page ruled 'hairline' or '4pt'
+  // before this change prints at exactly the same weight after it.
+  assert.strictEqual(borders.BORDER_WIDTHS[0].pt, 0.5);
+  assert.strictEqual(borders.BORDER_WIDTHS[borders.BORDER_WIDTHS.length - 1].pt, 4);
+
+  // THE CLAMP READS THE LADDER'S OWN CEILING, not a literal index. A literal
+  // [3] would silently point at 'Large' (3pt) now instead of the real ceiling
+  // 'Extra large' (4pt) - the fault this codebase has already been bitten by
+  // for BORDER_RADII, which already reads `.length - 1`.
+  const ceiling = borders.BORDER_WIDTHS[borders.BORDER_WIDTHS.length - 1].px;
+  assert.strictEqual(borders.borderWidthPx(999), ceiling);
+  assert.ok(borders.borderWidthPx(999) > borders.BORDER_WIDTHS[3].px,
+    'the clamp should reach the true ceiling, not stop at the fourth rung');
+});
+
+// THE SAME FAULT, AT THE VALIDATION BOUNDARY. pageSection.service.js checks a
+// supplied borderWidthPx against the ladder's own ends; a literal [3] there
+// would silently REJECT a legal 'Extra large' request and understate the
+// ceiling in the very sentence that reports it.
+test('a block may be ruled at the true ceiling width, through the real service', async (t) => {
+  const server = createApp().listen(0);
+  t.after(() => server.close());
+  const desk = await signIn(server.address().port);
+  const started = await desk.json('/api/newspapers/start', {
+    method: 'POST',
+    body: JSON.stringify({ publicationDate: '2099-08-28', pageCount: 4, fillFeatures: false }),
+  });
+  t.after(() => removeEdition(started.newspaper.id));
+  const pages = await desk.json(`/api/newspapers/${started.newspaper.id}/pages`);
+  const page1 = pages.find((p) => p.page_number === 1);
+  const section = page1.sections.find((s) => s.block_type === 'article');
+  const ceiling = borders.BORDER_WIDTHS[borders.BORDER_WIDTHS.length - 1];
+
+  const saved = await desk.json(`/api/pages/${page1.id}/sections/${section.section_key}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      headline: '', subheading: '', body: '',
+      borderStyle: 'box', borderWidthPx: ceiling.px,
+    }),
+  });
+  assert.ok(!saved.error, `the real ceiling (${ceiling.label}, ${ceiling.pt}pt) was refused: ${saved.error}`);
+
+  const tooWide = await desk.json(`/api/pages/${page1.id}/sections/${section.section_key}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      headline: '', subheading: '', body: '',
+      borderStyle: 'box', borderWidthPx: ceiling.px + 5,
+    }),
+  });
+  assert.ok(tooWide.error, 'a rule heavier than the true ceiling should still be refused');
+  assert.ok(tooWide.error.includes(String(ceiling.pt)),
+    `the refusal should name the true ceiling (${ceiling.pt}pt), got: ${tooWide.error}`);
 });

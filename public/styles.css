@@ -4772,6 +4772,22 @@ body.print-view .section-diagnostic {
    styles that really are full-width cells. */
 .page-folio > .folio-chip:first-child { justify-self: start; }
 .page-folio > .folio-chip:last-child { justify-self: end; }
+/* THE CENTRE CELL, when the page carries a section nameplate: the name's own
+   chip and then the date, on one line. It is ONE grid child so the folio
+   stays three columns - see masthead.js's folioMarkup. */
+.page-folio .folio-centre {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+}
+.page-folio .folio-section {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
 .folio-date,
 .folio-page {
   font-size: 8px;
@@ -5183,7 +5199,8 @@ body.print-view .newspaper-section.block-photo {
    on an even page, right on an odd one - so a reader flicking through finds it
    in the same place their thumb already is. */
 .page-folio > :first-child { text-align: left; }
-.page-folio > .folio-date { text-align: center; }
+.page-folio > .folio-date,
+.page-folio > .folio-centre { text-align: center; }
 .page-folio > :last-child { text-align: right; }
 /* A verso page swaps the two ears - the page number goes to the outer edge -
    and does it by REORDERING rather than by reversing the box, so the date

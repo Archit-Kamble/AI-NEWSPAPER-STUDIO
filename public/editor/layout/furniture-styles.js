@@ -120,3 +120,34 @@ export function furnitureTintForTheme(themeKey) {
   const hue = theme?.hues?.[0] && hueOf(theme.hues[0]);
   return hue?.tint || null;
 }
+
+/**
+ * THE SECTION NAMEPLATE - the box a feature page carries its own name in.
+ *
+ * The desk asked for it by name: "look pudhari header it like monday fun or
+ * Sunday dhamaal on some pages with Aesthetic look". Measured off the
+ * reference's own folio row, it sets THREE boxes - a brand box, a page-number
+ * box, and a dark SECTION box carrying the page's own name - and this product
+ * drew the first two and had no third.
+ *
+ * IT INVENTS NO TEXT. Every theme in `PAGE_THEMES` has carried a `marathi`
+ * name since it was written - रविवार धमाल, क्रीडा, विश्वसंचार, मनोरंजन - and
+ * nothing had ever drawn one. This is the same shape as `list_style` and
+ * `drop_cap`: a value stored, a name chosen, and no surface reading it.
+ *
+ * TWO THEMES CARRY NO NAMEPLATE, and neither is an omission:
+ *
+ *   `plain` is the absence of a look, and साधे is not the name of a section.
+ *   `front` never reaches this at all - page one has the nameplate itself,
+ *   and `folioMarkup` returns early on it.
+ *
+ * A theme whose name would be its own paper's name is refused for the same
+ * reason: a section box repeating the brand box two columns away is not a
+ * second mark, it is a mistake - the RNI lesson, and the lion's.
+ */
+export function sectionNameFor(themeKey) {
+  const theme = themeOf(themeKey);
+  if (!theme || theme.key === 'plain' || theme.key === 'front') return null;
+  const name = String(theme.marathi || '').trim();
+  return name || null;
+}

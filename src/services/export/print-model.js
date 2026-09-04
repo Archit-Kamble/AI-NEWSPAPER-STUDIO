@@ -931,7 +931,7 @@ function folioItems(newspaper, page, geometry, identity) {
   const thirdPx = widthPx / 3;
   const lineY = header.top + bandPx * 0.32;
 
-  const { folioStyleForTheme, furnitureInkForTheme, furnitureTintForTheme } = modules.furniture;
+  const { folioStyleForTheme, furnitureInkForTheme, furnitureTintForTheme, sectionNameFor } = modules.furniture;
   const style = folioStyleForTheme(page.style_theme);
   const reversed = style.band === 'reverse';
   const themeInk = style.title !== 'plain' ? furnitureInkForTheme(page.style_theme) : null;
@@ -944,7 +944,21 @@ function folioItems(newspaper, page, geometry, identity) {
     verso ? 'right' : 'left');
   const number = furnitureLine(leftPx + (verso ? 0 : thirdPx * 2), lineY + 2, thirdPx,
     pageLabel, { family: 'sans', weight: 400, fontPx: 8, ink: bodyInk }, verso ? 'left' : 'right');
-  const middle = furnitureLine(leftPx + thirdPx, lineY + 2, thirdPx,
+  // THE SECTION NAMEPLATE opens the centre cell, exactly as it does on the
+  // canvas: the reference's folio row carries three boxes and this is the
+  // third. Measured here rather than guessed, through the same shaper, so the
+  // date that follows it starts where the canvas starts it.
+  // Its ink is the THEME's own, never `themeInk` - see masthead.js's
+  // folioMarkup for why the folio style may not gate this.
+  const sectionName = sectionNameFor(page.style_theme);
+  const sectionInk = sectionName ? furnitureInkForTheme(page.style_theme) : null;
+  const SECTION_PAD = 5;
+  const sectionW = sectionName
+    ? inkWidthPx(sectionName, 8, 'sans', 700) + SECTION_PAD * 2
+    : 0;
+  const CENTRE_GAP = 6; // the .folio-centre gap
+  const centreRun = sectionName ? sectionW + CENTRE_GAP : 0;
+  const middle = furnitureLine(leftPx + thirdPx + centreRun, lineY + 2, thirdPx - centreRun,
     placeAndDate, { family: 'sans', weight: 400, fontPx: 8, ink: bodyInk }, 'center');
 
   const items = [];
@@ -973,6 +987,14 @@ function folioItems(newspaper, page, geometry, identity) {
     }
   } else if (style.band === true && tint) {
     items.push({ kind: 'fill', x: mm(leftPx), y: mm(header.top), width: mm(widthPx), height: mm(chipPx), ink: tint });
+  }
+  if (sectionName) {
+    // Drawn in every themed style, not only the reversed one - a section name
+    // set as ordinary type beside the date is a word, not a nameplate.
+    const x = leftPx + thirdPx;
+    items.push({ kind: 'fill', x: mm(x), y: mm(header.top), width: mm(sectionW), height: mm(chipPx), ink: sectionInk });
+    items.push(furnitureLine(x, lineY + 2, sectionW, sectionName,
+      { family: 'sans', weight: 700, bold: true, fontPx: 8, ink: '#ffffff' }, 'center'));
   }
   items.push(title, middle, number);
   // No rule at all for a reversed banner - the panel's own edge IS the rule.

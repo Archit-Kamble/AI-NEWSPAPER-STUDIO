@@ -8717,3 +8717,23 @@ Stage 2 (a section nameplate device — the `रविवार धमाल` bo
 ink, subheading ink, separate headline/deck band colours) and Stage 4 (chart
 palette, AI image and thumbnail, captions following the theme) are designed but
 not built. The three feature branches are not yet merged to `main`.
+
+### Stage 2 — the section nameplate
+
+The reference's folio row carries **three** boxes: brand, section, page number.
+This product drew two. `sectionNameFor()` in `furniture-styles.js` is the
+third, and it **invents no text** — every theme has carried a Marathi name
+since `PAGE_THEMES` was written and nothing had ever drawn one.
+
+| | |
+|---|---|
+| widest nameplate | रविवार धमाल, **26.2 mm** of the 103.3 mm column (25%) |
+| themed pages without one | **0** (was 1 — `business`) |
+| surfaces | canvas, PDF/IDML walk, and the `.sla`, all checked |
+
+The one real finding: gated on the folio style's own title treatment, the
+`business` page alone carried no nameplate, because it resolves to the
+understated `double-rule` whose title is plain. **A folio style says how the
+folio is ruled; whether a page names its section is the theme's business.**
+
+`npm test` **1149/1149**.

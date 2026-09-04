@@ -12,7 +12,7 @@
 // right.
 
 import { escapeHtml } from "../format.js";
-import { folioStyleForTheme, footerStyleForTheme, furnitureInkForTheme, furnitureTintForTheme } from "../layout/furniture-styles.js";
+import { folioStyleForTheme, footerStyleForTheme, furnitureInkForTheme, furnitureTintForTheme, sectionNameFor } from "../layout/furniture-styles.js";
 
 let identity = null;
 let loadedFor = null;
@@ -235,7 +235,39 @@ export function folioMarkup(newspaper, page, geometry) {
     : number;
   // The date stays plain on white in every style - the reference sets it that
   // way on every page, and a date reversed out of a chip reads as a label.
-  const dateSpan = dateBlock;
+  //
+  // THE SECTION NAMEPLATE OPENS THE CENTRE COLUMN. The reference's folio row
+  // carries three boxes, not two - a brand box, a page-number box, and a dark
+  // box naming the page's own section - and this is the third. It runs BEFORE
+  // the date on the same line rather than replacing it: a folio's job includes
+  // saying what day the paper is, and the centre column is `auto`, so it
+  // simply grows by the width of the name.
+  //
+  // It is drawn in every themed style, not only the reversed one, because
+  // unlike the brand and the page number it has no plain form to fall back
+  // to - a section name set as ordinary grey type beside the date is not a
+  // nameplate, it is a word.
+  //
+  // ITS INK IS THE THEME'S OWN, NOT `ink`. `ink` is null whenever the folio
+  // STYLE sets its title plain - the understated `double-rule`, which is what
+  // the business page resolves to - and that style says how the folio is
+  // RULED, not whether the page may say which section it is. Gated on it, the
+  // business page alone carried no nameplate while every other themed page
+  // did, which reads as a bug rather than as a choice. `sectionNameFor` is
+  // already the gate: it answers null for exactly the two themes that have no
+  // section to name.
+  const sectionName = sectionNameFor(theme);
+  const sectionInk = sectionName ? furnitureInkForTheme(theme) : null;
+  const sectionSpan = sectionInk
+    ? chip("folio-section", escapeHtml(sectionName), sectionInk)
+    : "";
+  // ONE grid child, not two. `.page-folio` is `1fr auto 1fr` and the date is
+  // the middle item in both the verso and the recto order - a second child
+  // here would make four columns and put the date off the page's centre line,
+  // which is the very fault that grid was written to fix.
+  const dateSpan = sectionSpan
+    ? `<span class="folio-centre">${sectionSpan}${dateBlock}</span>`
+    : dateBlock;
 
   return `
     <div class="page-folio ${verso ? "folio-verso" : "folio-recto"} folio-style-${style.key}"

@@ -75,3 +75,37 @@ test('a plain title treatment never resolves a theme colour', () => {
   }
 });
 
+
+// THE SECTION NAMEPLATE - the third box in the folio row.
+//
+// The desk asked for it by name: "look pudhari header it like monday fun or
+// Sunday dhamaal on some pages with Aesthetic look". The reference's folio
+// carries THREE boxes - brand, section, page number - and this product drew
+// the first two.
+//
+// It invents no text. Every theme has carried a `marathi` name since
+// PAGE_THEMES was written and nothing had ever drawn one: the same shape as
+// `list_style` and `drop_cap` before them, a value stored with no surface
+// reading it.
+test('every dressable theme names its own section, and two deliberately do not', () => {
+  const { PAGE_THEMES } = styles;
+  for (const theme of PAGE_THEMES) {
+    const name = furniture.sectionNameFor(theme.key);
+    if (theme.key === 'plain' || theme.key === 'front') {
+      // `plain` is the absence of a look and साधे names no section; `front`
+      // never reaches a folio at all - page one carries the nameplate itself.
+      assert.strictEqual(name, null, `${theme.key} should carry no section nameplate`);
+      continue;
+    }
+    assert.strictEqual(name, theme.marathi,
+      `${theme.key} should set its own Marathi name, not an invented one`);
+    assert.ok(name && name.length, `${theme.key} has no name to set`);
+  }
+});
+
+test('an unknown theme name is refused rather than guessed at', () => {
+  assert.strictEqual(furniture.sectionNameFor('no-such-theme'), null);
+  assert.strictEqual(furniture.sectionNameFor(''), null);
+  assert.strictEqual(furniture.sectionNameFor(null), null);
+  assert.strictEqual(furniture.sectionNameFor(undefined), null);
+});

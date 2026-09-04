@@ -57,7 +57,18 @@ test('a themed page\'s folio prints the same reversed banner in the PDF/IDML wal
   const folioFill = page3.items.find((i) => i.kind === 'fill' && i.y < 30 && i.ink === '#d2601a');
   assert.ok(folioFill, 'the sunday theme (orange) did not produce a reversed folio panel in print-model.js');
   const whiteText = page3.items.filter((i) => i.kind === 'text' && i.y < 30 && i.runs?.[0]?.ink === '#ffffff');
-  assert.strictEqual(whiteText.length, 3, 'a reversed folio should carry all three columns in white');
+  // FOUR, not three: the paper's title, the date, the page number - and the
+  // SECTION NAMEPLATE, the third box the reference's folio row carries and
+  // this product had no equivalent of. It is reversed out of the theme's own
+  // ink like the other two chips.
+  assert.strictEqual(whiteText.length, 4,
+    'a reversed folio should carry its three columns and its section nameplate in white');
+  const said = whiteText.map((i) => i.runs.map((r) => r.text).join(''));
+  assert.ok(said.some((t) => t.includes('रविवार धमाल')),
+    'the sunday theme should set its own name in the folio, and it comes from PAGE_THEMES');
+  // AND THE PLATE MUST CARRY IT TOO. Scribus's furniture is shared with this
+  // walk, so a nameplate missing there would mean the sheet the desk approved
+  // and the file that reaches the press name the page differently.
 
   // --- Scribus's own walk (its footer is NOT shared code, by design - see
   // CLAUDE.md's "Scribus shares the FURNITURE, not the block walk" - so this
@@ -69,6 +80,7 @@ test('a themed page\'s folio prints the same reversed banner in the PDF/IDML wal
   // picker offers. See tests/paletteExpansion.test.js for why the two exist.
   assert.match(sla, /PCOLOR="SahasTintVividOrange"/, 'the .sla footer is not tinted for the sunday theme');
   assert.match(sla, /PCOLOR="SahasOrange"/, 'the .sla footer title/page-number are not in the theme ink');
+  assert.ok(sla.includes('रविवार धमाल'), 'the .sla does not carry the page\'s own section nameplate');
 });
 
 // An UNDRESSED page - the ordinary case for every edition today - must draw
@@ -100,4 +112,49 @@ test('an undressed page\'s folio and footer are unchanged: no tint, no theme ink
   assert.strictEqual(folioRules[0].ink, '#111111', 'an undressed folio\'s hairline is the paper\'s own plain rule ink');
   const folioTitle = page3.items.find((i) => i.kind === 'text' && i.y < 30 && i.runs?.[0]?.ink === '#c8102e');
   assert.ok(folioTitle, 'an undressed folio title keeps the paper\'s own accent red');
+});
+
+// A PAGE SAYS WHICH SECTION IT IS WHATEVER ITS FOLIO STYLE.
+//
+// The nameplate was first gated on the folio style's own title treatment, and
+// `business` resolves to `double-rule`, whose title is deliberately plain - so
+// that one page alone carried no nameplate while every other themed page did,
+// which reads as a bug rather than as a choice. A folio style says how the
+// folio is RULED; whether the page names its section is the theme's business.
+test('a page whose folio style sets its title plain still carries its section nameplate', async (t) => {
+  const date = '2099-08-25';
+  const server = createApp().listen(0);
+  t.after(() => server.close());
+  const desk = await signIn(server.address().port);
+  const started = await desk.json('/api/newspapers/start', {
+    method: 'POST',
+    body: JSON.stringify({ publicationDate: date, pageCount: 4, fillFeatures: false }),
+  });
+  t.after(() => removeEdition(started.newspaper.id));
+
+  const pages = await desk.json(`/api/newspapers/${started.newspaper.id}/pages`);
+  const page3 = pages.find((p) => p.page_number === 3);
+  const dressed = await desk.json(`/api/pages/${page3.id}/style`, {
+    method: 'POST', body: JSON.stringify({ theme: 'business' }),
+  });
+  assert.ok(!dressed.error, `dressing failed: ${dressed.error}`);
+
+  const printModel = require('../src/services/export/print-model');
+  const furniture = await import('../public/editor/layout/furniture-styles.js');
+  assert.strictEqual(furniture.folioStyleForTheme('business').title, 'plain',
+    'this test is only meaningful while business resolves to a plain-title folio style');
+
+  const newspaper = await newspaperRepository.findById(started.newspaper.id);
+  const rows = await pageRepository.findByNewspaper(started.newspaper.id);
+  const hydrated = await Promise.all(rows.map((p) => pageRepository.findById(p.id)));
+  const model = await printModel.buildPrintModel(newspaper, hydrated);
+  const folio = model.pages.find((p) => p.number === 3).items.filter((i) => i.y < 30);
+
+  const said = folio.filter((i) => i.kind === 'text').map((i) => i.runs.map((r) => r.text).join(''));
+  assert.ok(said.some((t2) => t2.includes('अर्थकारण')), 'the business page does not name its own section');
+  // And it is a BOX, not a word: the nameplate is reversed out of the theme's
+  // own ink, which is a colour the palette can separate onto a plate.
+  const ink = furniture.furnitureInkForTheme('business');
+  assert.ok(folio.some((i) => i.kind === 'fill' && i.ink === ink),
+    'the nameplate is set as plain type rather than reversed out of a box');
 });

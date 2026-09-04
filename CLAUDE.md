@@ -6989,6 +6989,39 @@ touching pairs, **0 clashes, 0 partial or multi-hue runs**.
 with exactly that diagnosis, and its clash test uses a fixture with a run
 touching both a sidebar and the lead — the case the old fixture could not see.
 
+### The page says which section it is
+
+The desk asked for it by name: *"look pudhari header it like monday fun or
+Sunday dhamaal on some pages with Aesthetic look"*. Measured off the
+reference's own folio row, it sets **three** boxes — a brand box, a page-number
+box, and a dark box carrying the page's own name. This product drew the first
+two and had no third; `masthead.js`'s own comment already listed all three.
+
+**It invents no text.** Every theme in `PAGE_THEMES` has carried a `marathi`
+name since it was written — रविवार धमाल, क्रीडा, विश्वसंचार, मनोरंजन — and
+nothing had ever drawn one. That is the `list_style` / `drop_cap` shape again:
+a value stored, a name chosen, and no surface reading it.
+
+- **It opens the centre column and the date runs after it.** A folio's job
+  includes saying what day the paper is, so the nameplate does not replace the
+  date; the centre column is `auto` and simply grows by the name's width.
+  Widest of the nine is रविवार धमाल at **26.2 mm of the 103.3 mm** available.
+- **One grid child, not two.** `.page-folio` is `1fr auto 1fr` and the date is
+  the middle item in both the verso and recto orders — a second child there
+  would make four columns and put the date off the page's centre line, which is
+  the fault that grid was written to fix.
+- **`plain` and `front` carry none, and neither is an omission.** `plain` is the
+  absence of a look and साधे names no section; page one has the nameplate
+  itself, and `folioMarkup` returns early on it.
+- **The folio STYLE may not gate it.** Gated on the style's own title treatment
+  it was, and `business` resolves to the understated `double-rule`, whose title
+  is deliberately plain — so that one page alone carried no nameplate while
+  every other themed page did, which reads as a bug rather than as a choice. A
+  folio style says how the folio is *ruled*; whether a page names its section is
+  the theme's business. Measured after: **0 themed pages without one.**
+- The plate carries it too — the export chip is measured through the same
+  `inkWidthPx` shaper, and Scribus's own footer walk was checked for the string.
+
 ### The folio is a CHIP, and the footer stands clear of the matter
 
 Two more reports, both measured on the running app and neither visible in the

@@ -9476,3 +9476,124 @@ body.print-view #printViewBtn {
   white-space: normal;
 }
 .segmented { flex-wrap: wrap; }
+
+/* ===========================================================================
+   BLOCK DESIGN PRESETS
+
+   This is an INSPECTOR THUMBNAIL, never the printable block. The actual page
+   still draws through compose/render.js and the shared export model after the
+   preset writes ordinary, already-supported block fields. Keeping the mockup
+   deliberately diagrammatic prevents a second mini renderer from drifting
+   into a false promise about exact line breaks.
+   =========================================================================== */
+.prop-design-section select {
+  width: 100%;
+  margin-top: 4px;
+}
+.block-design-choice {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 11px;
+  align-items: center;
+  margin: 9px 0;
+  padding: 9px;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 7px;
+  background: #fafafa;
+}
+.block-design-preview {
+  position: relative;
+  box-sizing: border-box;
+  width: 112px;
+  height: 88px;
+  padding: 7px;
+  overflow: hidden;
+  border-radius: var(--preset-radius);
+  background: var(--preset-ground);
+}
+.block-design-preview.has-top { border-top: var(--preset-rule-width) solid var(--preset-rule); }
+.block-design-preview.has-right { border-right: var(--preset-rule-width) solid var(--preset-rule); }
+.block-design-preview.has-bottom { border-bottom: var(--preset-rule-width) solid var(--preset-rule); }
+.block-design-preview.has-left { border-left: var(--preset-rule-width) solid var(--preset-rule); }
+.block-design-preview.is-double.has-top { border-top-style: double; border-top-width: calc(var(--preset-rule-width) * 3); }
+.block-design-preview.is-double.has-right { border-right-style: double; border-right-width: calc(var(--preset-rule-width) * 3); }
+.block-design-preview.is-double.has-bottom { border-bottom-style: double; border-bottom-width: calc(var(--preset-rule-width) * 3); }
+.block-design-preview.is-double.has-left { border-left-style: double; border-left-width: calc(var(--preset-rule-width) * 3); }
+.block-design-preview span,
+.block-design-preview i {
+  display: block;
+  box-sizing: border-box;
+}
+.block-design-preview-kicker {
+  width: 34%;
+  height: 3px;
+  margin-bottom: 4px;
+  background: var(--preset-rule);
+}
+.block-design-preview-head {
+  width: 94%;
+  height: 7px;
+  margin: 0 0 3px;
+  padding: 1px 2px;
+  background: var(--preset-head-ground);
+  border-bottom: 4px solid var(--preset-head);
+}
+.block-design-preview.is-reverse .block-design-preview-head {
+  border-bottom-color: #fff;
+}
+.block-design-preview-head.short { width: 68%; }
+.block-design-preview-deck {
+  width: 88%;
+  height: 7px;
+  margin: 5px 0;
+  background: var(--preset-deck-ground);
+  border-bottom: 2px solid #5f5f65;
+}
+.block-design-preview > i {
+  width: 100%;
+  height: 1px;
+  margin-top: 4px;
+  background: #8a8a90;
+}
+.block-design-preview > i.short { width: 72%; }
+.block-design-copy strong {
+  display: block;
+  color: #202026;
+  font-size: 0.82rem;
+  line-height: 1.3;
+}
+.block-design-copy strong span {
+  color: var(--secondary, #666);
+  font-weight: 600;
+}
+.block-design-copy p {
+  margin: 3px 0;
+  color: #4f4f58;
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+.block-design-copy small {
+  color: #777780;
+  font-size: 0.68rem;
+  line-height: 1.25;
+}
+.prop-design-section [data-prop-design-apply] {
+  width: 100%;
+  justify-content: center;
+}
+.prop-design-section [data-prop-design-apply]:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.block-design-guard {
+  min-height: 1.25em;
+  margin: 0 0 5px;
+  color: #a42335;
+  font-size: 0.72rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+@media (max-width: 1280px) {
+  .block-design-choice { grid-template-columns: 92px minmax(0, 1fr); }
+  .block-design-preview { width: 92px; }
+}

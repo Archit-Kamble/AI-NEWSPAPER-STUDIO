@@ -16,6 +16,14 @@
 import { escapeHtml } from "../format.js";
 import { TINTS, INKS, HEADLINE_STYLES as HEADLINE_STYLE_TABLE } from "../layout/inks.js";
 import { BLOCK_SHAPES } from "../layout/block-shapes.js";
+import {
+  BLOCK_DESIGN_CATEGORIES,
+  availableBlockDesigns,
+  blockDesignPatch,
+  blockDesignPreviewMarkup,
+  matchingBlockDesign,
+  recommendedBlockDesigns,
+} from "../layout/block-design-presets.js";
 import { composeSection, measureColumns, maxLegibleColumns } from "../compose/section-adapter.js";
 import { PART_LABEL } from "./typography-panel.js";
 import { statusOf, statusLabel } from "../status/section-status.js";
@@ -301,7 +309,34 @@ function blockPropertiesMarkup(section, view, page) {
   const rawColumns = view.columnCount ?? section.column_count ?? null;
   const columns = Number.isInteger(Number(rawColumns)) && Number(rawColumns) >= 1 ? Number(rawColumns) : null;
   const dropCapLines = Math.max(0, Number(view.dropCapLines ?? section.drop_cap_lines ?? 0) || 0);
+  const designs = availableBlockDesigns(section, view);
+  const matchingDesign = matchingBlockDesign(view);
+  const recommended = new Set(recommendedBlockDesigns(section, view));
+  const initialDesign = matchingDesign || designs.find((entry) => recommended.has(entry.key)) || designs[0] || null;
   return `
+    <div class="prop-section prop-design-section">
+      <h5 class="prop-heading">Block design</h5>
+      <p class="muted ext-note">Original SAHAS newspaper treatments, assembled from the same print-tested rules, inks and screens used by every export. Choose first; nothing changes until Apply.</p>
+      ${designs.length ? `
+        <label for="propBlockDesign">Design</label>
+        <select id="propBlockDesign" data-prop-design>
+          ${BLOCK_DESIGN_CATEGORIES.map((category) => {
+            const choices = designs.filter((entry) => entry.category === category);
+            if (!choices.length) return "";
+            return `<optgroup label="${escapeHtml(category)}">${choices.map((entry) => `
+              <option value="${escapeHtml(entry.key)}"${initialDesign?.key === entry.key ? " selected" : ""}>${
+                recommended.has(entry.key) ? "★ " : ""}${escapeHtml(entry.marathi)} · ${escapeHtml(entry.label)}</option>`).join("")}</optgroup>`;
+          }).join("")}
+        </select>
+        <div class="block-design-choice" id="propBlockDesignChoice">
+          ${blockDesignChoiceMarkup(initialDesign, matchingDesign)}
+        </div>
+        <p class="block-design-guard" id="propBlockDesignGuard" role="status" aria-live="polite"></p>
+        <button type="button" class="layout-btn" data-prop-design-apply${matchingDesign?.key === initialDesign?.key ? " disabled" : ""}>Apply design</button>
+      ` : `<p class="muted">Design presets stay off advertisements and Smart Cards because those blocks own their complete printed treatment.</p>`}
+      <p class="muted ext-note">A design changes appearance only. It never changes the block's position or size, copy, pictures, font sizes, margins or columns.${initialDesign?.insetRisk ? " A boxed design insets copy; check the Layout meter after applying it." : ""}</p>
+    </div>
+
     <div class="field-grid">
       ${purposeMarkup(section, view)}
       <!-- DERIVED, like every other surface that says this. view.status is
@@ -516,6 +551,17 @@ function blockPropertiesMarkup(section, view, page) {
       <p class="muted ext-note">Accent colour is the fill behind a reversed or screened headline, and the colour of the accent word under the Accent treatment - not the running headline text.</p>
     </div>
   `;
+}
+
+function blockDesignChoiceMarkup(entry, matching = null) {
+  if (!entry) return "";
+  const current = matching?.key === entry.key;
+  return `${blockDesignPreviewMarkup(entry)}
+    <div class="block-design-copy">
+      <strong>${escapeHtml(entry.marathi)} <span>${escapeHtml(entry.label)}</span></strong>
+      <p>${escapeHtml(entry.description)}</p>
+      <small>${current ? "Current design" : entry.insetRisk ? "Uses an inset box · check Layout after applying" : "Open treatment · no box inset"}</small>
+    </div>`;
 }
 
 // Headline, subheading and body have no independent x/y/width/height in the
@@ -920,6 +966,49 @@ function bindHeadlineStyleButtons(handlers) {
   });
 }
 
+function bindDesignPreset(handlers, section, view) {
+  const select = document.querySelector("[data-prop-design]");
+  const apply = document.querySelector("[data-prop-design-apply]");
+  const host = document.getElementById("propBlockDesignChoice");
+  const guard = document.getElementById("propBlockDesignGuard");
+  if (!select || !apply || !host) return;
+  const matching = matchingBlockDesign(view);
+  const designs = availableBlockDesigns(section, view);
+  const refresh = () => {
+    const entry = designs.find((item) => item.key === select.value) || null;
+    host.innerHTML = blockDesignChoiceMarkup(entry, matching);
+    if (guard) guard.textContent = "";
+    apply.disabled = !entry || matching?.key === entry.key;
+    apply.title = entry?.insetRisk
+      ? "Apply this design, then check the Layout meter because a box insets the copy"
+      : "Apply this appearance to the selected block";
+  };
+  select.addEventListener("change", refresh);
+  apply.addEventListener("click", () => {
+    const patch = blockDesignPatch(select.value);
+    if (!patch) return;
+    // A box and a rounded corner consume real measure. Test the exact current
+    // words in the exact current frame at CLICK time, not while drawing 24
+    // thumbnails. A design may repair an already-overset custom treatment,
+    // but it may never turn a block that fits into one that loses copy.
+    try {
+      const before = composeSection(section, view);
+      const after = composeSection(section, { ...view, ...patch });
+      const failed = (result) => result.fitState === "OVERSET" || result.fitState === "NO_ROOM";
+      if (!failed(before) && failed(after)) {
+        if (guard) guard.textContent = "Not applied: this treatment would push copy out of the block. Choose an open design or shorten the story first.";
+        return;
+      }
+    } catch {
+      // The exact shaper can still be loading during the first instant of the
+      // editor. The ordinary Layout panel will recompose on the resulting
+      // draft; do not make a temporary asset-loading state disable the desk.
+    }
+    handlers.onPatch?.(patch, "block-design-preset");
+  });
+  refresh();
+}
+
 function bindImageControls() {
   if (!boundHandlers) return;
   bindGeometryFields(boundHandlers);
@@ -971,6 +1060,7 @@ function bindBlockControls() {
   bindRateDisclosure();
   bindPurposeControls(boundHandlers);
   if (!boundHandlers) return;
+  bindDesignPreset(boundHandlers, boundSection, boundView);
   bindBorderButtons(boundHandlers);
   bindPanelControls(boundHandlers, boundSection, boundView);
   bindTintButtons(boundHandlers);

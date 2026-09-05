@@ -63,7 +63,7 @@ const SHAPES = [
 import "../layout/borders.js";
 const { BORDER_STYLES, BORDER_WIDTHS, BORDER_RADII, isRuled, canRound, borderWidthPx, borderRadiusPx } = globalThis.SahasBorders;
 import "../layout/inset-panels.js";
-const { INSET_PANEL_KINDS, INSET_PANEL_MARKERS, INSET_PANEL_MIN_PX, panelsOf } = globalThis.SahasInsetPanels;
+const { INSET_PANEL_KINDS, INSET_PANEL_MARKERS, panelsOf, defaultPanelFor } = globalThis.SahasInsetPanels;
 
 // The tints come from the ONE colour catalogue (layout/inks.js), the same one
 // the ink marks and the press file read. A palette written out a second time
@@ -447,8 +447,8 @@ function blockPropertiesMarkup(section, view, page) {
       <h5 class="prop-heading">Panel inside the block</h5>
       <p class="muted ext-note">The चौकट a printed paper sets a fact box or a pull quote in. The story runs round it exactly as it runs round a photograph &mdash; it is a rectangle to the compositor and nothing more.</p>
       <div id="propPanels">${panelsMarkup(section, view)}</div>
-      <div class="segmented" data-prop-panel-add>
-        ${INSET_PANEL_KINDS.filter((kind) => kind.key !== "chart")
+      <div class="segmented segmented-grid" data-prop-panel-add>
+        ${INSET_PANEL_KINDS.filter((kind) => kind.key !== "chart" && kind.key !== "table")
           .map((kind) => `<button type="button" class="segment" data-panel-add="${kind.key}" title="${escapeHtml(kind.note)}">+ ${escapeHtml(kind.label)}</button>`).join("")}
       </div>
     </div>
@@ -506,13 +506,13 @@ function blockPropertiesMarkup(section, view, page) {
     <div class="prop-section">
       <h5 class="prop-heading">Headline treatment</h5>
       <div class="form-group">
-        <div class="segmented" data-prop-headline-style>
+        <div class="segmented segmented-grid" data-prop-headline-style>
           ${HEADLINE_STYLES.map(
             ([key, label]) => `<button type="button" class="segment${headlineStyle === key ? " active" : ""}" data-headline-style="${key}">${label}</button>`,
           ).join("")}
         </div>
       </div>
-      <p class="muted ext-note">Reversed sets the headline in white out of a solid band, in the block's accent colour. The band is drawn behind type that has already been placed, so it never changes where a line breaks.</p>
+      <p class="muted ext-note">Every treatment is paint around already-composed type: reversed and screened bands, rules in real gaps, a compact kicker tab, or stepped bands behind individual headline lines. None changes where a line breaks.</p>
       <!-- HEADLINE COLOUR - the same mechanism-with-no-surface gap Rule
            colour was. headline_ink has been read since render.js's own
            headlineLineHtml existed (the headline AND the kicker's own text
@@ -769,19 +769,21 @@ function bindLayerButtons(handlers) {
 function panelsMarkup(section, view) {
   const panels = panelsOf({ ...section, inset_panels: view.insetPanels ?? section.inset_panels });
   if (!panels.length) return `<p class="muted">No panel on this block.</p>`;
-  return panels.map((panel) => `
+  return panels.map((panel) => {
+    const meta = INSET_PANEL_KINDS.find((kind) => kind.key === panel.kind) || {};
+    const cardPanel = panel.kind === "chart" || panel.kind === "table";
+    return `
     <div class="prop-panel" data-panel-id="${escapeHtml(panel.id)}">
       <div class="prop-panel-head">
-        <strong>${escapeHtml(INSET_PANEL_KINDS.find((k) => k.key === panel.kind)?.label || panel.kind)}</strong>
+        <strong>${escapeHtml(meta.label || panel.kind)}</strong>
         <button type="button" class="btn-ghost" data-panel-remove="${escapeHtml(panel.id)}">Remove</button>
       </div>
-      ${panel.kind === "chart"
-        ? `<p class="muted ext-note">${escapeHtml(`${panel.card?.items?.length || 0} readings, set as ${panel.card?.chartType || "bars"}.`)}
-             Its data and its ink are edited with the Chart button on the editor; its size and position are below.</p>
+      ${cardPanel
+        ? `<p class="muted ext-note">Structured ${escapeHtml(meta.label || panel.kind)} data is edited with its editor button; its size and position are below.</p>
            <input type="hidden" data-panel-field="title" value="">
            <input type="hidden" data-panel-field="lines" value="">`
-        : `<label>Heading<input type="text" data-panel-field="title" value="${escapeHtml(panel.title)}"></label>
-           <label>Lines, one per row<textarea rows="3" data-panel-field="lines">${escapeHtml(panel.lines.join("\n"))}</textarea></label>`}
+        : `<label>${escapeHtml(meta.titleLabel || "Heading")}<input type="text" data-panel-field="title" value="${escapeHtml(panel.title)}"></label>
+           <label>${escapeHtml(meta.linesLabel || "Lines, one per printed row")}<textarea rows="4" data-panel-field="lines">${escapeHtml(panel.lines.join("\n"))}</textarea></label>`}
       <div class="prop-panel-geometry">
         ${["x", "y", "width", "height"].map((field) => `<label>${field}<input type="number" data-panel-field="${field}" value="${Math.round(panel[field])}"></label>`).join("")}
       </div>
@@ -795,7 +797,8 @@ function panelsMarkup(section, view) {
           ${TINTS.map((tint) => `<option value="${tint.hex || ""}"${(panel.tint || "") === (tint.hex || "") ? " selected" : ""}>${escapeHtml(tint.label)}</option>`).join("")}
         </select>
       </label>
-    </div>`).join("");
+    </div>`;
+  }).join("");
 }
 
 /**
@@ -836,36 +839,10 @@ function bindPanelControls(handlers, section, view) {
   document.querySelectorAll("[data-prop-panel-add] [data-panel-add]").forEach((button) => {
     button.addEventListener("click", () => {
       const kind = button.dataset.panelAdd;
-      const blockW = Number(section.width_px) || 200;
-      const blockH = Number(section.height_px) || 200;
-
-      // A CROSS-HEAD SPANS THE MEASURE and is one band deep - that is what
-      // makes it a cross-head rather than a box beside the story. Everything
-      // else is placed in the lower right at a bit under half the width, which
-      // is where a printed चौकट usually sits and is never over the headline.
-      const crosshead = kind === "crosshead";
-      const w = crosshead
-        ? Math.max(INSET_PANEL_MIN_PX, blockW - 4)
-        : Math.max(INSET_PANEL_MIN_PX, Math.round(blockW * 0.45));
-      const h = crosshead
-        ? Math.max(INSET_PANEL_MIN_PX, Math.round((Number(view?.bodyFontPx) || 6.4) * 1.45 * 2))
-        : Math.max(INSET_PANEL_MIN_PX, Math.round(blockH * 0.3));
-
-      send([...panelsFromDom(section, view), {
-        id: `panel-${Date.now().toString(36)}`,
-        kind,
-        x: crosshead ? 2 : Math.max(0, blockW - w - 2),
-        y: Math.round(blockH * 0.45),
-        width: w, height: h,
-        title: kind === "quote" ? "" : crosshead ? "पुढील टप्पा" : "ठळक मुद्दे",
-        // NOT a bullet. Measured: the publication serif and sans both lack
-        // U+2022, so every panel this button made was born holding a glyph
-        // that resolves to .notdef - a hollow box on screen and in the press
-        // file. The marker is the panel's own `marker` setting, which draws
-        // U+25AA (the mark the dateline already uses); a line's own text is
-        // just text, so it starts as a placeholder a desk types over.
-        lines: crosshead ? [] : [kind === "quote" ? "इथे अवतरण लिहा" : "इथे मजकूर लिहा"],
-      }]);
+      send([...panelsFromDom(section, view), defaultPanelFor(kind, {
+        width: Number(section.width_px) || 200,
+        height: Number(section.height_px) || 200,
+      }, Number(view?.bodyFontPx) || 6.4)]);
     });
   });
 

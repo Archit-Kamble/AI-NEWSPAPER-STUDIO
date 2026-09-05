@@ -26,10 +26,11 @@ const view = (overrides = {}) => ({
 });
 
 test('the library offers a broad original newspaper vocabulary with unique names', () => {
-  assert.ok(designs.BLOCK_DESIGN_PRESETS.length >= 24);
+  assert.ok(designs.BLOCK_DESIGN_PRESETS.length >= 37);
   const keys = designs.BLOCK_DESIGN_PRESETS.map((entry) => entry.key);
   assert.equal(new Set(keys).size, keys.length);
-  assert.ok(designs.BLOCK_DESIGN_CATEGORIES.length >= 4);
+  assert.ok(designs.BLOCK_DESIGN_CATEGORIES.length >= 5);
+  assert.ok(designs.BLOCK_DESIGN_CATEGORIES.includes('International newsroom'));
   assert.ok(designs.BLOCK_DESIGN_PRESETS.every((entry) => entry.label && entry.marathi && entry.description));
 });
 
@@ -135,4 +136,17 @@ test('the Properties panel offers no foreign skin over a Smart Card', () => {
   const html = properties.propertiesPanelMarkup(row, view({ smartCardKey: 'panchang' }), null, 'block', null);
   assert.match(html, /Design presets stay off advertisements and Smart Cards/);
   assert.doesNotMatch(html, /data-prop-design-apply/);
+});
+
+test('every new treatment and editorial insert is reachable from the real Properties panel', () => {
+  const row = section({ headline: 'मथळा', body: 'बातमी', body_font_px: 6.4 });
+  const draft = view({ headline: row.headline, body: row.body, bodyFontPx: 6.4 });
+  const html = properties.propertiesPanelMarkup(row, draft, null, 'block', null);
+  for (const key of ['headline-rule', 'accent-rule', 'display-rule', 'kicker-tab', 'kicker-tab-rule', 'stepped-lines']) {
+    assert.match(html, new RegExp(`data-headline-style="${key}"`), `${key} is not reachable`);
+  }
+  for (const key of ['key-number', 'explainer', 'timeline', 'qa', 'reaction', 'related', 'follow-up']) {
+    assert.match(html, new RegExp(`data-panel-add="${key}"`), `${key} is not reachable`);
+  }
+  assert.doesNotMatch(html, /data-panel-add="(?:chart|table)"/, 'structured card editors remain the only way to make chart/table data');
 });

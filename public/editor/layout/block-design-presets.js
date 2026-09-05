@@ -12,7 +12,7 @@
 // compositor. This is the paper's visual vocabulary, not another template
 // system.
 
-import { INKS, TINTS, screenOf } from './inks.js';
+import { INKS, TINTS, headlineTreatment, screenOf } from './inks.js';
 import './borders.js';
 
 const { BORDER_KEYS, BORDER_WIDTHS, BORDER_RADII } = globalThis.SahasBorders;
@@ -125,6 +125,66 @@ export const BLOCK_DESIGN_PRESETS = Object.freeze([
     description: 'A double red top rule and red headline signal urgency without flooding the block.',
     kinds: article, minWidth: 140,
     surface: { borderStyle: 'rule-above-double', borderWidthPx: rule('Medium'), borderInk: ink('red'), headlineStyle: 'accent', headlineInk: ink('red'), accentColor: ink('red') },
+  }),
+  preset({
+    key: 'ruled-splash', category: 'International newsroom', label: 'Ruled splash', marathi: 'रेषांकित मुख्य बातमी',
+    description: 'A filled headline measure with one accent word and a precise rule beneath it.',
+    kinds: article, minWidth: 190, minHeight: 130,
+    surface: { borderStyle: 'rule-above', borderWidthPx: rule('Medium'), borderInk: ink('red'), headlineStyle: 'accent-rule', accentColor: ink('red') },
+  }),
+  preset({
+    key: 'open-headline-rule', category: 'International newsroom', label: 'Open headline rule', marathi: 'खुली मथळा रेषा',
+    description: 'An open story with a rule tied to the headline instead of the outer block.',
+    kinds: article, minWidth: 145, minHeight: 100,
+    surface: { headlineStyle: 'headline-rule', accentColor: ink('slate') },
+  }),
+  preset({
+    key: 'section-tab-red', category: 'International newsroom', label: 'Section tab', marathi: 'विभाग पट्टी',
+    description: 'A compact screened tab behind the kicker creates a clear, repeatable section entry.',
+    kinds: editorial, minWidth: 135, minHeight: 95,
+    surface: { borderStyle: 'rule', borderWidthPx: rule('Small'), headlineStyle: 'kicker-tab', headlineInk: ink('red'), accentColor: ink('red') },
+  }),
+  preset({
+    key: 'city-desk-tab', category: 'International newsroom', label: 'City desk package', marathi: 'शहर वार्ता पट्टी',
+    description: 'A maroon section tab and closing display rule hold a local-news package together.',
+    kinds: compact, minWidth: 135, minHeight: 105,
+    surface: { borderStyle: 'rule-both', borderWidthPx: rule('Small'), borderInk: ink('maroon'), headlineStyle: 'kicker-tab-rule', headlineInk: ink('maroon'), accentColor: ink('maroon') },
+  }),
+  preset({
+    key: 'stepped-commentary', category: 'International newsroom', label: 'Stepped commentary', marathi: 'पायरीदार भाष्य',
+    description: 'Light bands follow each composed headline line, with a sober navy editorial rail.',
+    kinds: editorial, minWidth: 145, minHeight: 120,
+    surface: { borderStyle: 'rule-left', borderWidthPx: rule('Medium'), borderInk: ink('navy'), headlineStyle: 'stepped-lines', headlineInk: ink('navy'), accentColor: ink('blue') },
+  }),
+  preset({
+    key: 'interview-display-rule', category: 'International newsroom', label: 'Interview', marathi: 'मुलाखत',
+    description: 'Open side edges and a rule after the complete display make room for Q&A copy.',
+    kinds: editorial, minWidth: 150, minHeight: 120,
+    surface: { borderStyle: 'rule-both', borderWidthPx: rule('Small'), borderInk: ink('maroon'), headlineStyle: 'display-rule', headlineInk: ink('maroon'), accentColor: ink('maroon') },
+  }),
+  preset({
+    key: 'world-desk', category: 'International newsroom', label: 'World desk', marathi: 'जागतिक वार्ता',
+    description: 'A navy double entry rule and blue accent rule give foreign coverage a distinct desk identity.',
+    kinds: article, minWidth: 150, minHeight: 105,
+    surface: { borderStyle: 'rule-above-double', borderWidthPx: rule('Small'), borderInk: ink('navy'), headlineStyle: 'accent-rule', headlineInk: ink('navy'), accentColor: ink('blue') },
+  }),
+  preset({
+    key: 'data-headline-rule', category: 'International newsroom', label: 'Data brief', marathi: 'आकडेवारी बातमी',
+    description: 'A teal fact-paper ground, side rail and headline rule frame a sourced data story.',
+    kinds: compact, minWidth: 135, minHeight: 95,
+    surface: { borderStyle: 'rule-left', borderWidthPx: rule('Medium'), borderInk: ink('teal'), backgroundColor: tint('teal'), headlineStyle: 'headline-rule', headlineInk: ink('teal'), accentColor: ink('teal') },
+  }),
+  preset({
+    key: 'photo-display-rule', category: 'International newsroom', label: 'Photo dispatch', marathi: 'छायाचित्र वृत्तांत',
+    description: 'A quiet rule after the display anchors a photograph-led dispatch without boxing it.',
+    kinds: ['photo', 'article'], minWidth: 165, minHeight: 115,
+    surface: { borderStyle: 'rule', borderWidthPx: rule('Small'), borderInk: ink('slate'), headlineStyle: 'display-rule', accentColor: ink('slate') },
+  }),
+  preset({
+    key: 'weekend-stepped', category: 'International newsroom', label: 'Weekend essay', marathi: 'साप्ताहिक लेख',
+    description: 'Warm paper and stepped amber headline bands give a feature-page essay a measured magazine voice.',
+    kinds: editorial, minWidth: 165, minHeight: 130,
+    surface: { backgroundColor: tint('cream'), headlineStyle: 'stepped-lines', headlineInk: ink('brown'), accentColor: ink('amber') },
   }),
 
   preset({
@@ -278,6 +338,7 @@ export function recommendedBlockDesigns(section = {}, view = {}) {
 export function blockDesignPreviewMarkup(entry) {
   if (!entry) return '';
   const s = entry.surface;
+  const treatment = headlineTreatment(s.headlineStyle);
   const border = globalThis.SahasBorders.borderEdges(s.borderStyle);
   const isDouble = globalThis.SahasBorders.isDouble(s.borderStyle);
   const headlineGround = s.headlineStyle === 'reverse'
@@ -288,6 +349,8 @@ export function blockDesignPreviewMarkup(entry) {
   const style = [
     `--preset-ground:${s.backgroundColor || '#ffffff'}`,
     `--preset-rule:${s.borderInk || '#111111'}`,
+    `--preset-accent:${s.accentColor || '#c8102e'}`,
+    `--preset-accent-screen:${screenOf(s.accentColor || '#c8102e')}`,
     `--preset-head:${s.headlineInk || '#111111'}`,
     `--preset-head-ground:${headlineGround}`,
     `--preset-deck-ground:${deckGround}`,
@@ -295,7 +358,9 @@ export function blockDesignPreviewMarkup(entry) {
     `--preset-rule-width:${Math.max(1, Number(s.borderWidthPx) || 1)}px`,
   ].join(';');
   const classes = ['block-design-preview', isDouble ? 'is-double' : '',
-    ...border.map((edge) => `has-${edge}`), s.headlineStyle === 'reverse' ? 'is-reverse' : '']
+    ...border.map((edge) => `has-${edge}`), s.headlineStyle === 'reverse' ? 'is-reverse' : '',
+    treatment.ruleAfter ? `has-${treatment.ruleAfter}-rule` : '',
+    treatment.kickerTab ? 'has-kicker-tab' : '', treatment.steppedLines ? 'has-stepped-lines' : '']
     .filter(Boolean).join(' ');
   return `<div class="${classes}" style="${style}" aria-hidden="true">
     <span class="block-design-preview-kicker"></span>

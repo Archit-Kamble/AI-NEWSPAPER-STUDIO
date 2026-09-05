@@ -5094,6 +5094,15 @@ body.print-view .newspaper-canvas {
   display: block;
   z-index: 0;
 }
+/* Headline rules and the compact section tab are paint-only furniture. Their
+   rectangles come from the exact composition, inline; CSS owns only stacking.
+   Pointer events stay off so a rule can never obstruct selecting the story. */
+.section-headline-furniture {
+  position: absolute;
+  display: block;
+  z-index: 0;
+  pointer-events: none;
+}
 
 /* Caption under a placed photograph. */
 .section-placed-caption {
@@ -7583,12 +7592,24 @@ body.print-view .page-imprint {
 .section-inset-panel {
   position: absolute;
   box-sizing: border-box;
-  background: #fff;
-  border: 0.71px solid #111;
+  background: transparent;
+  border: none;
   overflow: hidden;
   font-family: "Sahas Sans", "Noto Sans Devanagari", Arial, sans-serif;
   color: #111;
   z-index: 3;
+}
+.section-inset-key-number .role-figure {
+  letter-spacing: -0.035em;
+}
+.section-inset-reaction .role-statement {
+  letter-spacing: -0.012em;
+}
+.section-inset-timeline .role-event,
+.section-inset-explainer .role-point,
+.section-inset-related .role-related {
+  padding-left: 1px;
+  box-sizing: border-box;
 }
 .section-inset-panel > span {
   position: absolute;
@@ -9530,6 +9551,13 @@ body.print-view #printViewBtn {
   margin-bottom: 4px;
   background: var(--preset-rule);
 }
+.block-design-preview.has-kicker-tab .block-design-preview-kicker {
+  width: 42%;
+  height: 7px;
+  padding-left: 2px;
+  background: var(--preset-accent-screen);
+  border-left: 2px solid var(--preset-accent);
+}
 .block-design-preview-head {
   width: 94%;
   height: 7px;
@@ -9542,6 +9570,26 @@ body.print-view #printViewBtn {
   border-bottom-color: #fff;
 }
 .block-design-preview-head.short { width: 68%; }
+.block-design-preview.has-stepped-lines .block-design-preview-head {
+  background: var(--preset-accent-screen);
+  border-left: 2px solid var(--preset-accent);
+  border-bottom-width: 0;
+}
+.block-design-preview.has-headline-rule .block-design-preview-head.short,
+.block-design-preview.has-display-rule .block-design-preview-deck {
+  position: relative;
+  margin-bottom: 6px;
+}
+.block-design-preview.has-headline-rule .block-design-preview-head.short::after,
+.block-design-preview.has-display-rule .block-design-preview-deck::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: calc(100% + 2px);
+  width: 146%;
+  height: 1px;
+  background: var(--preset-accent);
+}
 .block-design-preview-deck {
   width: 88%;
   height: 7px;

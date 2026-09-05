@@ -39,7 +39,7 @@ Useful references:
 
 ## Delivered in this branch
 
-The first layer is a one-click library of 25 original SAHAS block designs:
+The first layer is a one-click library of 37 original SAHAS block designs:
 
 - Core news: clean, hairline finish, section opener, double finish, left/right
   rail and open panel.
@@ -49,6 +49,23 @@ The first layer is a one-click library of 25 original SAHAS block designs:
   quotation.
 - Feature pages: blue feature, culture, sport, Sunday, profile and tribute.
 - Service/data: market data, civic notice and district briefs.
+- International newsroom: ruled splash, open headline rule, compact section
+  tab, city-desk package, stepped commentary, interview, world desk, data
+  brief, photo dispatch and weekend essay.
+
+The headline vocabulary itself now includes paint-only rules beneath a
+headline or complete display, an accent-word-and-rule treatment, a compact
+kicker tab, and light stepped bands following each composed headline line.
+Each device reads final compositor geometry and therefore cannot change a line
+break or move a block.
+
+Seven structured inserts can now be added inside a story: FT-style key number,
+numbered explainer, timeline, Q&A, attributed reaction, related/agenda, and a
+Marathi follow-up rail labelled काल / आज / पुढे.
+Each is editable, draggable and resizable through the existing panel workflow;
+the story flows around its rectangle, and the shared browser, PDF, IDML and
+Scribus paths consume the same line solve. Chart and table panel chrome was
+also unified so those two no longer show a browser-only box.
 
 The library is deliberately a preset over existing validated fields. It adds
 no schema, coordinates or alternate renderer. Applying a design creates one
@@ -56,18 +73,12 @@ ordinary draft patch and every existing output path renders it.
 
 ## Highest-value next additions
 
-### 1. Structured editorial packages
+### 1. Remaining structured editorial packages
 
 Add reusable content structures, independent of their visual treatment:
 
-- numbered explainer;
-- timeline;
-- key numbers;
-- question and answer;
 - comparison (before/after, proposal/reality, year/year);
-- related-story box;
-- reaction cluster with two to four attributed portraits/quotes;
-- follow-up: `काल काय घडले / आजची स्थिती / पुढे काय`;
+- portrait reaction cluster with two to four attributed quotes;
 - correction/clarification with original edition and page reference.
 
 These should use structured data, like Smart Cards, rather than parsing visual
@@ -129,4 +140,3 @@ Each addition must be delivered in this order:
 No design may silently change saved coordinates, margins, font sizes, image
 placement or copy. A design that consumes more measure must prove the current
 story still fits before it is applied.
-

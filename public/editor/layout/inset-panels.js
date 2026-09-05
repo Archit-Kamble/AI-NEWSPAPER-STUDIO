@@ -23,8 +23,15 @@
 // nothing pretends the nesting is recursive today, because it is not.
 (function installInsetPanels(root) {
   const KINDS = Object.freeze([
-    { key: 'note', label: 'Fact box', note: 'A ruled panel with a heading and a few lines.' },
-    { key: 'quote', label: 'Pull quote', note: 'A sentence lifted out of the story, set large.' },
+    { key: 'note', label: 'Fact box', titleLabel: 'Heading', linesLabel: 'Facts', note: 'A ruled panel with a heading and a few lines.' },
+    { key: 'quote', label: 'Pull quote', titleLabel: 'Quote heading', linesLabel: 'Quotation', note: 'A sentence lifted out of the story, set large.' },
+    { key: 'key-number', label: 'Key number', titleLabel: 'Number', linesLabel: 'Explanation and source', note: 'One large figure with a short explanation and source.' },
+    { key: 'explainer', label: 'Numbered explainer', titleLabel: 'Heading', linesLabel: 'Points, one per printed line', note: 'A compact sequence of facts or steps, numbered in Devanagari.' },
+    { key: 'timeline', label: 'Timeline', titleLabel: 'Heading', linesLabel: 'Events, one per printed line', note: 'Dated events in order, held together as one factual rail.' },
+    { key: 'qa', label: 'Question & answer', titleLabel: 'Heading', linesLabel: 'Question then answer, one per line', note: 'Alternating questions and answers for an interview or explainer.' },
+    { key: 'reaction', label: 'Reaction', titleLabel: 'Statement', linesLabel: 'Context, then speaker and role', note: 'A prominent statement followed by the speaker and role.' },
+    { key: 'related', label: 'Related / agenda', titleLabel: 'Heading', linesLabel: 'Related items, one per printed line', note: 'A short list of connected stories or essential context.' },
+    { key: 'follow-up', label: 'Follow-up', titleLabel: 'Heading', linesLabel: 'Yesterday, today and next — one per line', note: 'A three-step update showing what happened, the current position and what comes next.' },
     // A CROSS-HEAD - the ruled sub-head a printed paper sets between two
     // stretches of a long story, and the one device the Lokmat reference block
     // had that this product could not make.
@@ -82,6 +89,13 @@
     // A pull quote is ruled above and below and open at the sides, so it reads
     // as lifted OUT of the column rather than boxed beside it.
     quote: { edges: ['top', 'bottom'], family: 'serif', ground: true },
+    'key-number': { edges: ['top', 'bottom'], family: 'sans', ground: true },
+    explainer: { edges: ['top', 'right', 'bottom', 'left'], family: 'sans', ground: true },
+    timeline: { edges: ['left'], family: 'sans', ground: true },
+    qa: { edges: ['top', 'bottom'], family: 'serif', ground: true },
+    reaction: { edges: ['top', 'bottom'], family: 'serif', ground: true },
+    related: { edges: ['top', 'left', 'bottom'], family: 'sans', ground: true },
+    'follow-up': { edges: ['top', 'bottom'], family: 'sans', ground: true },
     // A cross-head carries one rule, above it, and no ground. The rule is what
     // says "a new part of this story starts here"; a box would say "this is a
     // different story", which is the opposite.
@@ -93,6 +107,7 @@
     // rules and no ground - a box round it would be a second frame inside the
     // one the block already is.
     chart: { edges: [], family: 'sans', ground: false },
+    table: { edges: [], family: 'sans', ground: false },
   });
   const panelStyle = (kind) => STYLES[kind] || STYLES.note;
 
@@ -292,6 +307,44 @@
   }
 
   /**
+   * One source of defaults for both editor entry points. The result is still
+   * ordinary panel data: after insertion the desk edits every word and every
+   * coordinate, and no template identity is stored.
+   */
+  function defaultPanelFor(kind, frame = {}, bodyFontPx = 6.4) {
+    const blockW = Math.max(MIN_PX, Number(frame.width) || 200);
+    const blockH = Math.max(MIN_PX, Number(frame.height) || 200);
+    const crosshead = kind === 'crosshead';
+    const share = ['explainer', 'timeline', 'qa', 'follow-up'].includes(kind) ? 0.54
+      : kind === 'key-number' ? 0.42 : 0.46;
+    const w = crosshead ? Math.max(MIN_PX, blockW - 4)
+      : Math.max(MIN_PX, Math.round(blockW * share));
+    const heightShare = ['explainer', 'timeline', 'qa', 'follow-up'].includes(kind) ? 0.38
+      : kind === 'key-number' ? 0.28 : 0.3;
+    const h = crosshead ? Math.max(MIN_PX, Math.round(Number(bodyFontPx) * 1.45 * 2))
+      : Math.max(MIN_PX, Math.round(blockH * heightShare));
+    const copy = {
+      quote: { title: '', lines: ['इथे अवतरण लिहा'] },
+      'key-number': { title: '१.२५ कोटी', lines: ['या आकड्याचा अर्थ', 'स्रोत : अधिकृत नोंद'] },
+      explainer: { title: 'हे का महत्त्वाचे?', lines: ['पहिला मुद्दा', 'दुसरा मुद्दा', 'तिसरा मुद्दा'] },
+      timeline: { title: 'घटनाक्रम', lines: ['सकाळी ८ — पहिली घटना', 'दुपारी १२ — पुढील घटना'] },
+      qa: { title: 'प्रश्नोत्तर', lines: ['मुख्य प्रश्न येथे लिहा', 'उत्तर येथे लिहा'] },
+      reaction: { title: '“महत्त्वाचे विधान येथे लिहा”', lines: ['संदर्भ किंवा स्पष्टीकरण', 'नाव, पद'] },
+      related: { title: 'आणखी वाचा', lines: ['संबंधित बातमी किंवा पार्श्वभूमी'] },
+      'follow-up': { title: 'घडामोडींचा मागोवा', lines: ['निर्णय जाहीर झाला', 'अंमलबजावणी सुरू आहे', 'पुढील सुनावणी सोमवारी'] },
+      crosshead: { title: 'पुढील टप्पा', lines: [] },
+      ornament: { title: '', lines: [] },
+      note: { title: 'ठळक मुद्दे', lines: ['इथे मजकूर लिहा'] },
+    }[kind] || { title: 'ठळक मुद्दे', lines: ['इथे मजकूर लिहा'] };
+    return {
+      id: `panel-${Date.now().toString(36)}`,
+      kind, x: crosshead ? 2 : Math.max(0, blockW - w - 2),
+      y: Math.max(0, Math.round(blockH * 0.45)), width: w, height: h,
+      ...copy,
+    };
+  }
+
+  /**
    * A panel as the compositor sees it: a rectangle, exactly like a picture.
    * There is no panel-specific arithmetic anywhere in the engine and there
    * must not be - it simply narrows the scanlines it crosses.
@@ -317,13 +370,26 @@
     // only the hair of air that keeps it off its own rule - the same 0.5 mm
     // the block's own inset is, and for the same reason.
     const inset = panel.kind === 'crosshead' || panel.kind === 'ornament' ? 1 : 3;
-    const titlePx = Math.max(5, bodyFontPx * (panel.kind === 'quote' ? 1.5 : panel.kind === 'crosshead' ? 1.3 : 1.15));
-    const linePx = Math.max(4.5, bodyFontPx * (panel.kind === 'quote' ? 1.5 : 0.95));
+    const titleScale = panel.kind === 'key-number' ? 2.8
+      : panel.kind === 'reaction' ? 1.65
+        : panel.kind === 'quote' ? 1.5
+          : panel.kind === 'crosshead' ? 1.3 : 1.15;
+    const lineScale = panel.kind === 'quote' || panel.kind === 'reaction' ? 1.15 : 0.95;
+    const titlePx = Math.max(5, bodyFontPx * titleScale);
+    const linePx = Math.max(4.5, bodyFontPx * lineScale);
     const lineHeight = 1.45;
     const out = [];
     let y = inset;
     if (panel.title) {
-      out.push({ text: panel.title, x: inset, y, width: panel.width - inset * 2, fontPx: titlePx, bold: true });
+      out.push({
+        text: panel.title, x: inset, y, width: panel.width - inset * 2,
+        fontPx: titlePx, bold: true,
+        align: panel.kind === 'key-number' ? 1 : 0,
+        role: panel.kind === 'key-number' ? 'figure'
+          : panel.kind === 'reaction' ? 'statement' : 'title',
+        family: panel.kind === 'reaction' ? 'serif' : 'sans',
+        ink: panel.kind === 'key-number' || panel.kind === 'related' ? 'accent' : null,
+      });
       y += titlePx * lineHeight;
     }
     panel.lines.forEach((text, index) => {
@@ -332,13 +398,28 @@
       // A hanging indent needs the line broken against a narrower measure for
       // every line after the first, which is what the compositor does for
       // running copy and what a panel deliberately does not have.
-      const mark = markerText(panel.marker, index);
+      const automaticMarker = panel.kind === 'explainer' ? markerText('number', index)
+        : panel.kind === 'timeline' ? `${devanagari(index + 1)}—`
+          : panel.kind === 'related' ? markerText('bullet', index)
+            : panel.kind === 'follow-up' ? (`${['काल', 'आज', 'पुढे'][index] || devanagari(index + 1)} :`)
+            : panel.kind === 'qa' ? (index % 2 === 0 ? 'प्र.' : 'उ.') : '';
+      const mark = automaticMarker || markerText(panel.marker, index);
       const marked = mark ? `${mark} ${text}` : text;
       out.push({
-        text: marked, x: inset, y, width: panel.width - inset * 2, fontPx: linePx, bold: false,
+        text: marked, x: inset, y, width: panel.width - inset * 2, fontPx: linePx,
+        bold: panel.kind === 'qa' ? index % 2 === 0
+          : panel.kind === 'reaction' ? index === panel.lines.length - 1 : false,
+        role: panel.kind === 'qa' ? (index % 2 === 0 ? 'question' : 'answer')
+          : panel.kind === 'reaction' ? (index === panel.lines.length - 1 ? 'attribution' : 'context')
+            : panel.kind === 'timeline' ? 'event'
+              : panel.kind === 'explainer' ? 'point'
+                : panel.kind === 'related' ? 'related'
+                  : panel.kind === 'follow-up' ? 'update' : 'line',
+        family: panel.kind === 'qa' ? (index % 2 === 0 ? 'sans' : 'serif')
+          : panel.kind === 'reaction' && index === panel.lines.length - 1 ? 'sans' : null,
         // An ornament's mark sits on the centre line of its own rule; every
         // other kind sets flush left, as copy does.
-        align: panel.kind === 'ornament' ? 1 : 0,
+        align: panel.kind === 'ornament' || panel.kind === 'key-number' ? 1 : 0,
       });
       y += linePx * lineHeight;
     });
@@ -350,7 +431,7 @@
     INSET_PANEL_STYLES: STYLES,
     INSET_PANEL_BULLET: BULLET,
     INSET_PANEL_ORNAMENTS: ORNAMENTS,
-    panelOf, panelsOf, obstacleFromPanel, panelLayout, panelStyle, markerText,
+    panelOf, panelsOf, defaultPanelFor, obstacleFromPanel, panelLayout, panelStyle, markerText,
   });
   root.SahasInsetPanels = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

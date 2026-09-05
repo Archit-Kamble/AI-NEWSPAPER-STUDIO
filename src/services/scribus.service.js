@@ -249,6 +249,7 @@ let smartCardLayoutModule = null;
 let textFlowModule = null;
 let imageGeometryModule = null;
 let accentModule = null;
+let inksModule = null;
 let furnitureModule = null;
 let blockShapesModule = null;
 
@@ -262,6 +263,7 @@ async function ensureComposeReady() {
   if (!textFlowModule) textFlowModule = await import('../../public/editor/layout/text-flow.js');
   if (!imageGeometryModule) imageGeometryModule = await import('../../public/editor/layout/image-geometry.js');
   if (!accentModule) accentModule = await import('../../public/editor/compose/accent.js');
+  if (!inksModule) inksModule = await import('../../public/editor/layout/inks.js');
   if (!furnitureModule) furnitureModule = await import('../../public/editor/layout/furniture-styles.js');
   if (!blockShapesModule) blockShapesModule = await import('../../public/editor/layout/block-shapes.js');
   await Promise.all([metricsModule.ensureFontsLoaded(), shaperModule.ensureShaperReady()]);
@@ -274,6 +276,7 @@ async function ensureComposeReady() {
     textFlow: textFlowModule,
     imageGeometry: imageGeometryModule,
     accent: accentModule,
+    inks: inksModule,
   };
 }
 
@@ -595,7 +598,8 @@ function furnitureFrames(items, { pageOffsetMm, ownPage, family = 'sans', weight
         runs: item.runs.map((run) => ({
           text: run.text, family: run.family || family, weight: run.weight || weight,
           bold: Boolean(run.bold), italic: false, underline: false,
-          fontPx: (run.sizePt / 72) * 25.4 * 2, ink: run.ink || null,
+          fontPx: (run.sizePt / 72) * 25.4 * 2,
+          colour: colourFor(run.ink || null),
         })),
         align: item.align === 'center' ? 1 : item.align === 'right' ? 2 : 0,
         ownPage,
@@ -616,7 +620,7 @@ function furnitureFrames(items, { pageOffsetMm, ownPage, family = 'sans', weight
  * offset the page itself is drawn at.
  */
 async function blockFrames(section, { pageIndex = 0, pageOffsetMm = 0 } = {}) {
-  const { adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry, accent } = await ensureComposeReady();
+  const { adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry, accent, inks } = await ensureComposeReady();
   const parts = [];
 
   const holdsCard = Boolean(section.smart_card_key) && Boolean(section.smart_card_data)
@@ -657,7 +661,7 @@ async function blockFrames(section, { pageIndex = 0, pageOffsetMm = 0 } = {}) {
     }));
   }
 
-  parts.push(displayBandFrames(composition, section, accent, richText, {
+  parts.push(displayBandFrames(composition, section, accent, richText, inks, {
     xBaseMm: mm(section.x_px), yBaseMm: mm(section.y_px), pageOffsetMm, ownPage: pageIndex,
   }));
 
@@ -727,11 +731,11 @@ async function blockFrames(section, { pageIndex = 0, pageOffsetMm = 0 } = {}) {
  * `headline_style: 'accent'`) split into its own run so it paints in the
  * paper's colour, decided band-wide by accent.js's headlineSegments() -
  * exactly as render.js's composedMarkup() already does for the browser. */
-function displayBandFrames(composition, section, accent, richText, { xBaseMm, yBaseMm, pageOffsetMm, ownPage }) {
+function displayBandFrames(composition, section, accent, richText, inks, { xBaseMm, yBaseMm, pageOffsetMm, ownPage }) {
   const parts = [];
   const headlineBand = composition.bands?.headline;
   const headlineTexts = headlineBand ? headlineBand.lines.map((line) => line.text) : [];
-  const headline = accent.headlineSegments(headlineTexts, { accentStyle: section.headline_style === 'accent' });
+  const headline = accent.headlineSegments(headlineTexts, { accentStyle: inks.accentedHeadline(section.headline_style) });
 
   // A reversed headline is white type out of a solid panel, and the panel is
   // laid down first - exactly as render.js draws it for the browser, at the
@@ -746,7 +750,34 @@ function displayBandFrames(composition, section, accent, richText, { xBaseMm, yB
       yMm: yBaseMm + mm(headlineBand.top - REVERSE_BLEED_PX) + pageOffsetMm,
       widthMm: mm(composition.content.measure),
       heightMm: mm(headlineBand.height + REVERSE_BLEED_PX * 2),
-      colour: 'SahasRed', ownPage,
+      colour: colourFor(section.accent_color || ACCENT_HEX), ownPage,
+    }));
+  }
+
+  // Screened display bands were already part of the shared canvas/print
+  // catalogue; Scribus must lay down the same screen before its type.
+  for (const key of inks.groundedBands(section.headline_style)) {
+    const band = composition.bands?.[key];
+    if (!band?.lines?.length) continue;
+    parts.push(fillFrame({
+      xMm: xBaseMm + mm(composition.content.left),
+      yMm: yBaseMm + mm(band.top - REVERSE_BLEED_PX) + pageOffsetMm,
+      widthMm: mm(composition.content.measure),
+      heightMm: mm(band.height + REVERSE_BLEED_PX * 2),
+      colour: colourFor(inks.screenOf(section.accent_color || ACCENT_HEX)), ownPage,
+    }));
+  }
+
+  // The compositor supplies every rectangle. Scribus only changes pixels to
+  // millimetres and names the ink, exactly as the neutral print model does.
+  for (const piece of inks.headlineFurniture(section.headline_style, composition)) {
+    const hex = piece.ink === 'screen'
+      ? inks.screenOf(section.accent_color || ACCENT_HEX)
+      : (section.accent_color || ACCENT_HEX);
+    parts.push(fillFrame({
+      xMm: xBaseMm + mm(piece.x), yMm: yBaseMm + mm(piece.y) + pageOffsetMm,
+      widthMm: mm(piece.width), heightMm: mm(piece.height),
+      colour: colourFor(hex), ownPage,
     }));
   }
 
@@ -759,9 +790,12 @@ function displayBandFrames(composition, section, accent, richText, { xBaseMm, yB
       // one plain run: the browser printed the bold word and the paper did
       // not, which is the exact class of divergence a press file may not have.
       const runs = key === 'headline' && headline
-        ? segmentRuns(headline[lineIndex], { family: line.family, weight: line.weight }, 'SahasRed').map((run) => ({ ...run, fontPx: run.fontPx || line.fontPx }))
+        ? segmentRuns(headline[lineIndex], { family: line.family, weight: line.weight }, colourFor(section.accent_color || ACCENT_HEX)).map((run) => ({ ...run, fontPx: run.fontPx || line.fontPx }))
         : richText.styledRuns(line.text, line.at || 0, band.marks || [], line.fontPx)
           .map((run) => ({ ...run, family: line.family, weight: run.bold ? 700 : line.weight }));
+      if (!reversed && section.headline_ink && (key === 'headline' || key === 'kicker')) {
+        runs.forEach((run) => { if (!run.colour) run.colour = colourFor(section.headline_ink); });
+      }
       // Out of the panel above. A desk's own ink mark inside the headline
       // still wins, the same way it does in the browser.
       if (reversed && key === 'headline') {

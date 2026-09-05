@@ -21,6 +21,9 @@ import { presentationRanges, renderPresentation } from "../layout/editorial-pres
 import { composeSection } from "../compose/section-adapter.js";
 import { composedMarkup, diagnosticMarkup } from "../compose/render.js";
 import { fontsReady } from "../compose/font-metrics.js";
+import { shapedRectPoints } from "../layout/block-shapes.js";
+import "../layout/borders.js";
+const { isRuled, isDouble, borderWidthPx } = globalThis.SahasBorders;
 
 const ICONS = {
   article:
@@ -464,6 +467,50 @@ function continuationFlag(section) {
   return "";
 }
 
+/**
+ * THE BORDER TRACES THE BLOCK'S OWN SHAPE - the canvas's half of the same
+ * promise print-model.js's blockRules() already keeps for the plate. A cut
+ * corner used to get a CSS clip-path (the right visible outline) plus a
+ * plain rectangular `border` underneath it - so the two straight edges
+ * either side of a cut simply stopped dead at the clip, with no line drawn
+ * along the new diagonal, while the exported PDF/IDML/Scribus correctly
+ * traced the whole polygon. The desk's report - "if I change the shape then
+ * border should go according to shape" - is exactly that seam.
+ *
+ * canvas.js's applyBlockRule() suppresses the CSS `border` shorthand the
+ * moment a block carries both a shape and a rule, so this SVG polygon is the
+ * ONLY border ink drawn in that case - never a second line stacked under it.
+ * The point list is the SAME shapedRectPoints() the clip-path and the export
+ * both read, offset by half the stroke width exactly as blockRules() insets
+ * it, so what is drawn here is pixel-for-pixel the shape blockRules() emits
+ * to the plate, just scaled to editor px instead of millimetres.
+ */
+function shapeBorderMarkup(section, view) {
+  const shapeKey = view?.frameShape ?? section?.frame_shape;
+  if (!shapeKey) return "";
+  const borderStyle = String(view?.borderStyle ?? section?.border_style ?? "none");
+  if (!isRuled(borderStyle)) return "";
+  const width = Number(section.width_px) || 0;
+  const height = Number(section.height_px) || 0;
+  if (width <= 0 || height <= 0) return "";
+  const weight = borderWidthPx(view?.borderWidthPx ?? section?.border_width_px);
+  const ink = view?.borderInk ?? section?.border_ink ?? "#111111";
+  const offsets = isDouble(borderStyle) ? [0, weight * 2] : [0];
+  const polys = offsets
+    .map((o) => {
+      const localW = width - o * 2;
+      const localH = height - o * 2;
+      if (localW - weight <= 0 || localH - weight <= 0) return "";
+      const points = shapedRectPoints(shapeKey, localW - weight, localH - weight)
+        .map(([px, py]) => `${(o + weight / 2 + px).toFixed(2)},${(o + weight / 2 + py).toFixed(2)}`)
+        .join(" ");
+      return `<polygon points="${points}" fill="none" stroke="${escapeHtml(ink)}" stroke-width="${weight}" />`;
+    })
+    .join("");
+  if (!polys) return "";
+  return `<svg class="section-shape-border" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" preserveAspectRatio="none" aria-hidden="true">${polys}</svg>`;
+}
+
 export function sectionInnerHtml(section, view, { dirty = false, selected = false } = {}) {
   const status = statusOf(view, Boolean((section.images || []).length));
   const type = sectionType(section.section_key);
@@ -492,6 +539,7 @@ export function sectionInnerHtml(section, view, { dirty = false, selected = fals
     ${sectionContentMarkup(section, view)}
     ${placedImagesMarkup(section)}
     ${insetPanelsMarkup(section, view)}
+    ${shapeBorderMarkup(section, view)}
     <div class="section-hover-toolbar">
       <button type="button" class="section-hover-btn" data-section-action="story" title="Attach a reporter story">Story</button>
       <button type="button" class="section-hover-btn" data-section-action="image" title="Open the image workspace">Image</button>

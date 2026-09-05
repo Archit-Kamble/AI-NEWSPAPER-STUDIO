@@ -4954,6 +4954,21 @@ body.print-view .section-diagnostic {
    block of colour and the two disagree at every corner. */
 .newspaper-section { border-radius: var(--block-radius, 0); }
 
+/* THE SHAPE-TRACED BORDER, drawn by section-thumb.js's shapeBorderMarkup()
+   for a block that carries both a cut corner and a rule - the CSS `border`
+   shorthand cannot follow a clip-path's new diagonal edge, so this SVG
+   polygon is the sole border ink there (canvas.js's applyBlockRule() sets
+   the CSS one to `none` in that case). Above ordinary content, below the
+   selection handles and hover toolbar, and never a click target of its own. */
+.section-shape-border {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 4;
+}
+
 
 /* ===========================================================================
    Print view
@@ -7671,6 +7686,51 @@ body.print-view .page-imprint {
 .overlay-handle-ne { right: -4px; top: -4px; cursor: nesw-resize; }
 .overlay-handle-sw { left: -4px; bottom: -4px; cursor: nesw-resize; }
 .overlay-handle-se { right: -4px; bottom: -4px; cursor: nwse-resize; }
+
+/* A fact box, pull quote, cross-head, separator or chart/table set INSIDE
+   the selected block, draggable and resizable right here - the same
+   directness a page overlay picture already has, immediately above. The
+   panel's own ink (tint, rule, marker, card) is drawn underneath by
+   insetPanelsMarkup(); this layer is only ever the handle box, exactly as
+   .section-handle is only the handle box for a whole block. Blue rather
+   than the overlay's red, matching .section-handle - a block-internal
+   object, not a page-level one. */
+.panel-drag-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* Above the selected block's own content (.newspaper-section.active is 3),
+     or the panel's own drawn ink - a sibling inside that same block - steals
+     the pointer from a handle sitting right at the panel's edge. Below the
+     BLOCK's own outer handles/label/toolbar (5, 5, 6): those resize the
+     block itself and must keep working even where a panel fills it. */
+  z-index: 4;
+}
+.panel-drag-frame {
+  position: absolute;
+  margin: 0;
+  pointer-events: auto;
+  cursor: move;
+  outline: 1.5px dashed rgba(47, 111, 214, 0.55);
+  outline-offset: -1.5px;
+}
+.panel-drag-frame:hover,
+.panel-drag-frame.is-dragging {
+  outline: 1.5px solid #2f6fd6;
+}
+.panel-drag-handle {
+  position: absolute;
+  width: 7px; height: 7px;
+  background: #fff;
+  border: 1.5px solid #2f6fd6;
+  border-radius: 1px;
+  z-index: 2;
+}
+.panel-drag-handle-nw { left: -4px; top: -4px; cursor: nwse-resize; }
+.panel-drag-handle-ne { right: -4px; top: -4px; cursor: nesw-resize; }
+.panel-drag-handle-sw { left: -4px; bottom: -4px; cursor: nesw-resize; }
+.panel-drag-handle-se { right: -4px; bottom: -4px; cursor: nwse-resize; }
+body.print-view .panel-drag-layer { display: none; }
 
 /* --- proposed pictures ---------------------------------------------------- */
 .ai-candidates:empty { display: none; }

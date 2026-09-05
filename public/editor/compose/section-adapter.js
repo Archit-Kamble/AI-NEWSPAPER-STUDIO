@@ -27,11 +27,11 @@ import '../layout/caption-geometry.js';
 
 const { captionBox } = globalThis.SahasCaptionGeometry;
 import '../layout/borders.js';
-const { isBoxed, borderThicknessPx } = globalThis.SahasBorders;
+const { isBoxed, borderThicknessPx, canRound, borderRadiusPx } = globalThis.SahasBorders;
 import '../layout/inset-panels.js';
 const { panelsOf, obstacleFromPanel } = globalThis.SahasInsetPanels;
 import '../layout/page-overlays.js';
-import { cornerObstacles } from '../layout/block-shapes.js';
+import { cornerObstacles, roundedCornerObstacles } from '../layout/block-shapes.js';
 const { overlaysOf, overlayObstaclesFor } = globalThis.SahasPageOverlays;
 
 function pick(section, view, camel, snake, fallback) {
@@ -305,6 +305,22 @@ export function obstaclesOf(section, view = {}) {
   const shapeKey = view?.frameShape ?? section?.frame_shape;
   if (shapeKey) {
     out.push(...cornerObstacles(shapeKey, 0, 0, Number(section.width_px) || 0, Number(section.height_px) || 0));
+  } else {
+    // A ROUNDED corner is the same fault a cut one already had a fix for,
+    // one level softer: canvas.js's own --block-radius rounds the block's
+    // real overflow clip (.newspaper-section is overflow:hidden and must
+    // be), so a Pill block that composed as a plain rectangle set type
+    // straight into the curve and the browser silently clipped it away -
+    // visible only as a story that read as complete on screen and printed
+    // with its last words missing. THE SHAPE TAKES PRECEDENCE (the `else`):
+    // print-model.js's blockRules() already ignores the radius the moment a
+    // frame_shape is set, so a cut corner and a rounded one are never both
+    // in effect on the one block.
+    const borderStyle = String(pick(section, view, 'borderStyle', 'border_style', 'none') || 'none');
+    if (canRound(borderStyle)) {
+      const radius = borderRadiusPx(pick(section, view, 'borderRadiusPx', 'border_radius_px', 0));
+      out.push(...roundedCornerObstacles(radius, 0, 0, Number(section.width_px) || 0, Number(section.height_px) || 0));
+    }
   }
   return out;
 }

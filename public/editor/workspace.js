@@ -1296,6 +1296,32 @@ async function moveOverlay(id, rect) {
   store.replacePage(await response.json(), { structural: true });
 }
 
+/**
+ * A fact box, pull quote, cross-head, separator or chart/table, moved or
+ * sized directly on the main canvas - panel-drag.js's own commit, scoped to
+ * whichever block is selected (the layer it drags never shows any other
+ * block's panels, so sectionKey here is always the one already open).
+ *
+ * Unlike an overlay, this is entirely local to the one block's own draft -
+ * patchDraft() carries it through autosave and history exactly as the
+ * Properties panel's "+ Fact box" and the Block Editor's own panel drag
+ * already do, never a separate page-level PATCH.
+ */
+function movePanel(sectionKey, panelId, rect) {
+  const section = store.getSelectedSection();
+  if (!section || section.section_key !== sectionKey) return;
+  const view = currentView();
+  const panels = Array.isArray(view?.insetPanels) ? view.insetPanels
+    : Array.isArray(section.inset_panels) ? section.inset_panels : [];
+  const updated = panels.map((panel) => (String(panel?.id) === String(panelId)
+    ? { ...panel, x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+    : panel));
+  // patchDraft() fires the DRAFT topic, which repaints this one section (and
+  // this layer with it, through refreshSection()) - the same one-box repaint
+  // every other keystroke already gets. No full renderPageArea() needed.
+  patchDraft({ insetPanels: updated }, "canvas-panel-drag");
+}
+
 async function undo() {
   const result = history.undo();
   if (!result) return;
@@ -2792,6 +2818,7 @@ function renderPageArea() {
     onSectionAction,
     onMoveSection: moveSection,
     onMoveOverlay: moveOverlay,
+    onMovePanel: movePanel,
     guides: pageGuides,
     guidesVisible,
     onCreateGuide: createGuide,

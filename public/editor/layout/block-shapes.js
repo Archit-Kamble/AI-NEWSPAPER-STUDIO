@@ -121,6 +121,35 @@ export function cornerObstacles(shapeKey, x, y, width, height) {
 }
 
 /**
+ * THE ROUNDED-CORNER OBSTACLE BOXES - the same idea as `cornerObstacles()`,
+ * for a block whose Corner control (border_radius_px) is rounded rather than
+ * cut. A cut corner is a straight 45deg chord and exclusion.js's 'corner'
+ * shape traces exactly that; a circular arc's own missing sliver is LARGER
+ * than that chord (the arc bulges toward the block's own corner point more
+ * than a straight diagonal does), so tracing it as a triangle would still
+ * leave a thin wedge where composed type could sit outside the rounded
+ * shape's own visible ink. These are plain rectangles instead - the same
+ * default `exclusionIntervals()` already gives an obstacle with no `shape`
+ * at all - one full radius-by-radius square per corner, which is a superset
+ * of the true missing sliver and therefore never under-excludes it.
+ *
+ * Radius is clamped to half the shorter side, mirroring the clamp
+ * `borderRadiusPx()`'s own CSS already applies (a `pill` radius is an end
+ * cap, not a shape that folds through itself) - a block with no shape and no
+ * ordinary rounding calls this with radius 0 and gets nothing back.
+ */
+export function roundedCornerObstacles(radiusPx, x, y, width, height) {
+  const r = Math.max(0, Math.min(Number(radiusPx) || 0, Math.min(width, height) / 2));
+  if (r <= 0) return [];
+  return [
+    { x, y, width: r, height: r, standOffPx: 0 },
+    { x: x + width - r, y, width: r, height: r, standOffPx: 0 },
+    { x, y: y + height - r, width: r, height: r, standOffPx: 0 },
+    { x: x + width - r, y: y + height - r, width: r, height: r, standOffPx: 0 },
+  ];
+}
+
+/**
  * THE VISIBLE POLYGON - a closed point list, clockwise from the top-left,
  * in the block's OWN LOCAL coordinates (0,0 at its own top-left corner),
  * which is what a CSS `clip-path: polygon()` and print-model.js's `poly`

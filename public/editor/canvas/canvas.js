@@ -17,6 +17,7 @@ import { clipPathFor } from "../layout/block-shapes.js";
 import { escapeHtml } from "../format.js";
 import { bindSectionDrag } from "./section-drag.js";
 import { bindOverlayDrag, overlayHandlesMarkup, setSelectedOverlay } from "./overlay-drag.js";
+import { bindPanelDrag, panelDragLayerMarkup, refreshPanelDragLayer } from "./panel-drag.js";
 import { viewOfSection } from "../section-model.js";
 import { computeMetrics } from "../layout/layout-metrics.js";
 import { rulerMarkup, rebuildRulers, bindRulers } from "./ruler.js";
@@ -143,6 +144,7 @@ export function renderCanvas(page, newspaper, selection, callbacks = {}) {
           })
           .join("")}
         ${overlayLayerMarkup(page)}
+        ${panelDragLayerMarkup(page, draft, selectedSectionKey)}
         ${guideLayerMarkup()}
       </div>
      </div>
@@ -191,6 +193,11 @@ export function renderCanvas(page, newspaper, selection, callbacks = {}) {
   // that grid is the only reason a desk places one.
   bindOverlayDrag(document.getElementById("canvasSurface"),
     (id, rect) => handlers.onMoveOverlay?.(id, rect));
+  // A fact box, pull quote, cross-head, separator or chart/table set inside
+  // the SELECTED block, moved and sized right here rather than only in the
+  // Block Editor's own mirrored page - see panel-drag.js for why.
+  bindPanelDrag(document.getElementById("canvasSurface"),
+    (sectionKey, panelId, rect) => handlers.onMovePanel?.(sectionKey, panelId, rect));
   bindViewport();
   bindSpacebarPan();
   applyTransform();
@@ -319,10 +326,21 @@ function shapeClipPath(view, section) {
   return clipPathFor(view.frameShape, width, height);
 }
 
+// A SHAPED BLOCK'S BORDER IS DRAWN BY THE SVG OVERLAY, not this CSS shorthand
+// - section-thumb.js's shapeBorderMarkup() traces the exact same polygon
+// print-model.js's blockRules() sends to the plate, including the diagonal
+// of a cut corner, which a plain rectangular `border` clipped by a
+// `clip-path` cannot draw (the clip removes the corner; nothing draws a line
+// along the new edge it exposes). So the CSS border is switched off here the
+// moment a block carries both a shape and a rule, or the desk would see a
+// straight-sided border stub UNDER the correct traced one. THE SHAPE ALSO
+// TAKES PRECEDENCE OVER THE RADIUS, matching blockRules()'s own rule stated
+// in its comment - a block cannot be both cut and rounded at once.
 function blockRuleCss(view, section) {
   const clip = shapeClipPath(view, section);
   const clipCss = clip ? `clip-path:${clip};` : '';
   if (!isRuled(view.borderStyle)) return clipCss;
+  if (view.frameShape) return clipCss + 'border:none;';
   const radius = canRound(view.borderStyle) ? borderRadiusPx(view.borderRadiusPx) : 0;
   return clipCss + `--block-rule:${borderWidthPx(view.borderWidthPx)}px;`
     + (view.borderInk ? `--block-ink:${view.borderInk};` : '')
@@ -334,11 +352,24 @@ function applyBlockRule(element, view, section) {
   if (clip) element.style.setProperty('clip-path', clip);
   else element.style.removeProperty('clip-path');
   if (!isRuled(view.borderStyle)) {
+    element.style.removeProperty('border');
     element.style.removeProperty('--block-rule');
     element.style.removeProperty('--block-ink');
     element.style.removeProperty('--block-radius');
     return;
   }
+  if (view.frameShape) {
+    // The SVG overlay is the only border ink now; the CSS shorthand would
+    // otherwise fall back to its own default (0.71px solid #111) the moment
+    // the custom properties below it are cleared, which is a border nobody
+    // asked for rather than none at all.
+    element.style.setProperty('border', 'none');
+    element.style.removeProperty('--block-rule');
+    element.style.removeProperty('--block-ink');
+    element.style.removeProperty('--block-radius');
+    return;
+  }
+  element.style.removeProperty('border');
   element.style.setProperty('--block-rule', `${borderWidthPx(view.borderWidthPx)}px`);
   const radius = canRound(view.borderStyle) ? borderRadiusPx(view.borderRadiusPx) : 0;
   if (view.borderInk) element.style.setProperty('--block-ink', view.borderInk);
@@ -365,6 +396,10 @@ export function refreshSection(section, view, { selected = false, dirty = false 
   // reason: a desk pressing "2 pt" must see 2 pt without a reload.
   applyBlockRule(element, view, section);
   element.innerHTML = sectionInnerHtml(section, view, { dirty, selected });
+  // The panel-drag layer is a sibling of every section, not nested inside
+  // one, so this repaint does not touch it on its own - only the SELECTED
+  // block's own panels are ever shown there.
+  if (selected) refreshPanelDragLayer(section, view);
 }
 
 // Selection moved: only the two affected boxes change, and only their chrome.
@@ -379,5 +414,7 @@ export function refreshSelection(previousKey, currentKey, sections, draft) {
     const view = viewOfSection(section, draft, currentKey);
     element.innerHTML = sectionInnerHtml(section, view, { dirty: false, selected });
   });
+  const currentSection = sections?.find((s) => s.section_key === currentKey);
+  refreshPanelDragLayer(currentSection, currentSection ? viewOfSection(currentSection, draft, currentKey) : null);
   document.querySelectorAll(".minimap-block").forEach((block) => block.classList.remove("active"));
 }

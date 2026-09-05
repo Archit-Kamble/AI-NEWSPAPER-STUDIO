@@ -334,6 +334,7 @@ function blockPropertiesMarkup(section, view, page) {
           ).join("")}
         </div>
       </div>
+      ${!isRuled(border) ? `<p class="muted ext-note">Pick a style above - Box, or any Rule - to set its width and colour. Corner then appears too, for a Box.</p>` : ""}
       ${isRuled(border) ? `
       <div class="form-group">
         <label>Rule</label>

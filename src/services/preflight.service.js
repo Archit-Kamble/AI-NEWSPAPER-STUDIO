@@ -21,6 +21,7 @@ const pool = require('../config/db');
 const { geometryOf, pxToMm } = require('../layout/geometry');
 const { getTemplate } = require('../layout/templates');
 const { resolveFramePurpose } = require('../layout/frame-purpose');
+const { panelsOf } = require('../../public/editor/layout/inset-panels.js');
 
 // Below this, a photograph visibly breaks up on newsprint. 300 dpi is the
 // target; 150 is the point at which a picture editor would reject it.
@@ -28,6 +29,40 @@ const MIN_EFFECTIVE_DPI = 150;
 const IDEAL_EFFECTIVE_DPI = 300;
 // Newsprint will not hold type smaller than this legibly.
 const MIN_BODY_PT = 6.5;
+
+// Evidence furniture has to say where the evidence came from. This is a
+// WARNING rather than a blocker because the source may already be explicit in
+// the surrounding report, but the desk must see the omission before the page
+// reaches plate. It never invents or inserts a source.
+const SOURCE_LABEL = /^(?:स्रोत|संदर्भ|आधार|source)\s*[:：\-]/i;
+const labelledSource = (value) => SOURCE_LABEL.test(String(value || '').trim());
+
+function evidenceSourceFindings(section = {}) {
+  const findings = [];
+  for (const panel of panelsOf(section)) {
+    if (['document', 'key-number'].includes(panel.kind)
+      && !panel.lines.some(labelledSource)) {
+      findings.push({
+        level: 'warning', check: 'unsourced-evidence-panel',
+        message: `${panel.kind === 'document' ? 'Document excerpt' : 'Key number'} has no labelled source. Add “स्रोत : …” before press.`,
+      });
+    }
+    if (['chart', 'table'].includes(panel.kind) && !String(panel.card?.source || '').trim()) {
+      findings.push({
+        level: 'warning', check: 'unsourced-data-panel',
+        message: `${panel.kind === 'chart' ? 'Chart' : 'Table'} inset has no source. Add the provider and reference date before press.`,
+      });
+    }
+  }
+  const cardKey = String(section.smart_card_key || '').toLowerCase();
+  if (['chart', 'table'].includes(cardKey) && !String(section.smart_card_data?.source || '').trim()) {
+    findings.push({
+      level: 'warning', check: 'unsourced-data-card',
+      message: `${cardKey === 'chart' ? 'Chart' : 'Table'} block has no source. Add the provider and reference date before press.`,
+    });
+  }
+  return findings;
+}
 
 let JimpModule = null;
 async function getJimp() {
@@ -266,6 +301,14 @@ async function checkPage(page, newspaper, totalPages) {
           message: 'This Smart Card does not fit its block at a legible size. Widen or heighten the block, or reduce what the card holds.',
         });
       }
+    }
+
+    // --- evidence and data provenance ------------------------------------
+    // These warnings inspect the same stored panel/card structures every
+    // renderer consumes. They do not infer a citation from prose, because a
+    // printed evidence module should carry its own visible source label.
+    for (const finding of evidenceSourceFindings(section)) {
+      findings.push({ ...finding, ...at(section) });
     }
 
     // --- photograph/caption against printable copy ------------------------
@@ -508,5 +551,6 @@ async function validatePageLayout(page, newspaper) {
 
 module.exports = {
   checkEdition, checkPage, validatePageLayout, effectiveDpi,
+  evidenceSourceFindings,
   MIN_EFFECTIVE_DPI, IDEAL_EFFECTIVE_DPI, MIN_BODY_PT,
 };

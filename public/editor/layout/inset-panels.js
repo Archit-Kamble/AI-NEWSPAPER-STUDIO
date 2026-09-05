@@ -32,6 +32,8 @@
     { key: 'reaction', label: 'Reaction', titleLabel: 'Statement', linesLabel: 'Context, then speaker and role', note: 'A prominent statement followed by the speaker and role.' },
     { key: 'related', label: 'Related / agenda', titleLabel: 'Heading', linesLabel: 'Related items, one per printed line', note: 'A short list of connected stories or essential context.' },
     { key: 'follow-up', label: 'Follow-up', titleLabel: 'Heading', linesLabel: 'Yesterday, today and next — one per line', note: 'A three-step update showing what happened, the current position and what comes next.' },
+    { key: 'comparison', label: 'Before / now', titleLabel: 'Heading', linesLabel: 'Before then now, one per printed line', note: 'A direct two-state comparison without asking the reader to infer the change.' },
+    { key: 'document', label: 'Document excerpt', titleLabel: 'Document or subject', linesLabel: 'Excerpt lines, with the source last', note: 'A short extract from a report, order, judgment or public record with its source.' },
     // A CROSS-HEAD - the ruled sub-head a printed paper sets between two
     // stretches of a long story, and the one device the Lokmat reference block
     // had that this product could not make.
@@ -96,6 +98,8 @@
     reaction: { edges: ['top', 'bottom'], family: 'serif', ground: true },
     related: { edges: ['top', 'left', 'bottom'], family: 'sans', ground: true },
     'follow-up': { edges: ['top', 'bottom'], family: 'sans', ground: true },
+    comparison: { edges: ['top', 'right', 'bottom', 'left'], family: 'sans', ground: true },
+    document: { edges: ['top', 'left', 'bottom'], family: 'serif', ground: true },
     // A cross-head carries one rule, above it, and no ground. The rule is what
     // says "a new part of this story starts here"; a box would say "this is a
     // different story", which is the opposite.
@@ -315,11 +319,11 @@
     const blockW = Math.max(MIN_PX, Number(frame.width) || 200);
     const blockH = Math.max(MIN_PX, Number(frame.height) || 200);
     const crosshead = kind === 'crosshead';
-    const share = ['explainer', 'timeline', 'qa', 'follow-up'].includes(kind) ? 0.54
+    const share = ['explainer', 'timeline', 'qa', 'follow-up', 'comparison', 'document'].includes(kind) ? 0.54
       : kind === 'key-number' ? 0.42 : 0.46;
     const w = crosshead ? Math.max(MIN_PX, blockW - 4)
       : Math.max(MIN_PX, Math.round(blockW * share));
-    const heightShare = ['explainer', 'timeline', 'qa', 'follow-up'].includes(kind) ? 0.38
+    const heightShare = ['explainer', 'timeline', 'qa', 'follow-up', 'comparison', 'document'].includes(kind) ? 0.38
       : kind === 'key-number' ? 0.28 : 0.3;
     const h = crosshead ? Math.max(MIN_PX, Math.round(Number(bodyFontPx) * 1.45 * 2))
       : Math.max(MIN_PX, Math.round(blockH * heightShare));
@@ -332,6 +336,8 @@
       reaction: { title: '“महत्त्वाचे विधान येथे लिहा”', lines: ['संदर्भ किंवा स्पष्टीकरण', 'नाव, पद'] },
       related: { title: 'आणखी वाचा', lines: ['संबंधित बातमी किंवा पार्श्वभूमी'] },
       'follow-up': { title: 'घडामोडींचा मागोवा', lines: ['निर्णय जाहीर झाला', 'अंमलबजावणी सुरू आहे', 'पुढील सुनावणी सोमवारी'] },
+      comparison: { title: 'काय बदलले?', lines: ['पूर्वीची स्थिती येथे लिहा', 'सध्याची स्थिती येथे लिहा'] },
+      document: { title: 'अधिकृत नोंद', lines: ['दस्तऐवजातील महत्त्वाचा उतारा', 'स्रोत : आदेश / अहवालाचे नाव'] },
       crosshead: { title: 'पुढील टप्पा', lines: [] },
       ornament: { title: '', lines: [] },
       note: { title: 'ठळक मुद्दे', lines: ['इथे मजकूर लिहा'] },
@@ -388,12 +394,14 @@
         role: panel.kind === 'key-number' ? 'figure'
           : panel.kind === 'reaction' ? 'statement' : 'title',
         family: panel.kind === 'reaction' ? 'serif' : 'sans',
-        ink: panel.kind === 'key-number' || panel.kind === 'related' ? 'accent' : null,
+        ink: ['key-number', 'related', 'document'].includes(panel.kind) ? 'accent' : null,
       });
       y += titlePx * lineHeight;
     }
     panel.lines.forEach((text, index) => {
-      if (y + linePx * lineHeight > panel.height - inset) return;
+      const sourceLine = panel.kind === 'document' && index === panel.lines.length - 1;
+      const actualLinePx = sourceLine ? Math.max(4.5, bodyFontPx * 0.78) : linePx;
+      if (y + actualLinePx * lineHeight > panel.height - inset) return;
       // The marker is set into the line rather than hung in its own column.
       // A hanging indent needs the line broken against a narrower measure for
       // every line after the first, which is what the compositor does for
@@ -402,26 +410,32 @@
         : panel.kind === 'timeline' ? `${devanagari(index + 1)}—`
           : panel.kind === 'related' ? markerText('bullet', index)
             : panel.kind === 'follow-up' ? (`${['काल', 'आज', 'पुढे'][index] || devanagari(index + 1)} :`)
-            : panel.kind === 'qa' ? (index % 2 === 0 ? 'प्र.' : 'उ.') : '';
+              : panel.kind === 'comparison' ? (index % 2 === 0 ? 'आधी :' : 'आता :')
+                : panel.kind === 'qa' ? (index % 2 === 0 ? 'प्र.' : 'उ.') : '';
       const mark = automaticMarker || markerText(panel.marker, index);
       const marked = mark ? `${mark} ${text}` : text;
       out.push({
-        text: marked, x: inset, y, width: panel.width - inset * 2, fontPx: linePx,
+        text: marked, x: inset, y, width: panel.width - inset * 2, fontPx: actualLinePx,
         bold: panel.kind === 'qa' ? index % 2 === 0
-          : panel.kind === 'reaction' ? index === panel.lines.length - 1 : false,
+          : panel.kind === 'reaction' ? index === panel.lines.length - 1
+            : panel.kind === 'comparison' ? index % 2 === 1
+              : sourceLine,
         role: panel.kind === 'qa' ? (index % 2 === 0 ? 'question' : 'answer')
           : panel.kind === 'reaction' ? (index === panel.lines.length - 1 ? 'attribution' : 'context')
             : panel.kind === 'timeline' ? 'event'
               : panel.kind === 'explainer' ? 'point'
                 : panel.kind === 'related' ? 'related'
-                  : panel.kind === 'follow-up' ? 'update' : 'line',
+                  : panel.kind === 'follow-up' ? 'update'
+                    : panel.kind === 'comparison' ? (index % 2 === 0 ? 'before' : 'now')
+                      : panel.kind === 'document' ? (sourceLine ? 'source' : 'excerpt') : 'line',
         family: panel.kind === 'qa' ? (index % 2 === 0 ? 'sans' : 'serif')
-          : panel.kind === 'reaction' && index === panel.lines.length - 1 ? 'sans' : null,
+          : panel.kind === 'reaction' && index === panel.lines.length - 1 ? 'sans'
+            : panel.kind === 'document' ? (sourceLine ? 'sans' : 'serif') : null,
         // An ornament's mark sits on the centre line of its own rule; every
         // other kind sets flush left, as copy does.
         align: panel.kind === 'ornament' || panel.kind === 'key-number' ? 1 : 0,
       });
-      y += linePx * lineHeight;
+      y += actualLinePx * lineHeight;
     });
     return { inset, titlePx, linePx, lineHeight, lines: out, usedHeight: y + inset };
   }

@@ -677,8 +677,9 @@ async function blockFrames(section, { pageIndex = 0, pageOffsetMm = 0 } = {}) {
   }
 
   if (section.body) {
-    const { marks } = richText.textWithMarks(section.body);
+    const { marks: authoredMarks } = richText.textWithMarks(section.body);
     const prefix = textFlow.datelineText(section);
+    const marks = textFlow.marksWithDateline(authoredMarks, prefix.length);
     for (const line of composition.bodyLines) {
       const runs = styledBodyRuns(line, marks, prefix.length, richText);
       // Same hard-overset case as displayBandFrames(): a body piece wider

@@ -107,6 +107,28 @@ test('the model carries the same words, in the same order, as the press file', a
   }
 });
 
+test('the automatic dateline and byline are bold furniture in every press path', async () => {
+  const sections = [articleSection()];
+  const [sla, built] = await Promise.all([
+    scribus.buildDocument(newspaper, pageOf(sections)),
+    model.buildPrintModel(newspaper, pageOf(sections)),
+  ]);
+  const prefix = '■ सातारा, साहस वार्ता ';
+  const prefixRun = built.pages[0].items
+    .filter((item) => item.kind === 'text')
+    .flatMap((item) => item.runs)
+    .find((run) => run.text === prefix);
+  const bodyRun = built.pages[0].items
+    .filter((item) => item.kind === 'text')
+    .flatMap((item) => item.runs)
+    .find((run) => run.text.startsWith('ज्ञानेश्वर'));
+  assert.equal(prefixRun?.bold, true);
+  assert.equal(prefixRun?.weight, 700);
+  assert.equal(bodyRun?.bold, false, 'the authored report remains ordinary body weight');
+  assert.match(sla, /CH="■ सातारा, साहस वार्ता "[^>]+FONT="Noto Serif Devanagari Bold"/);
+  assert.match(sla, /CH="ज्ञानेश्वर[^"<]*"[^>]+FONT="Noto Serif Devanagari Regular"/);
+});
+
 test('a tinted block puts its ground down first, and a reversed headline its panel', async () => {
   const built = await model.buildPrintModel(newspaper, pageOf([
     articleSection({ background_color: '#fbf3e9', headline_style: 'reverse' }),

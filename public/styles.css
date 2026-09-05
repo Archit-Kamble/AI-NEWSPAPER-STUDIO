@@ -9570,6 +9570,18 @@ body.print-view #printViewBtn {
   border-bottom-color: #fff;
 }
 .block-design-preview-head.short { width: 68%; }
+.block-design-preview.has-accent-word .block-design-preview-head.short {
+  position: relative;
+}
+.block-design-preview.has-accent-word .block-design-preview-head.short::before {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: -4px;
+  width: 25%;
+  height: 4px;
+  background: var(--preset-accent);
+}
 .block-design-preview.has-stepped-lines .block-design-preview-head {
   background: var(--preset-accent-screen);
   border-left: 2px solid var(--preset-accent);
@@ -9619,6 +9631,14 @@ body.print-view #printViewBtn {
   color: #4f4f58;
   font-size: 0.74rem;
   line-height: 1.35;
+}
+.block-design-copy .block-design-companion {
+  color: #54505a;
+  font-size: 0.69rem;
+}
+.block-design-copy .block-design-companion b {
+  color: #24222a;
+  font-weight: 750;
 }
 .block-design-copy small {
   color: #777780;

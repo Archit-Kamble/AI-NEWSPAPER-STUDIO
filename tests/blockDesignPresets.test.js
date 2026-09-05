@@ -26,12 +26,18 @@ const view = (overrides = {}) => ({
 });
 
 test('the library offers a broad original newspaper vocabulary with unique names', () => {
-  assert.ok(designs.BLOCK_DESIGN_PRESETS.length >= 37);
+  assert.ok(designs.BLOCK_DESIGN_PRESETS.length >= 43);
   const keys = designs.BLOCK_DESIGN_PRESETS.map((entry) => entry.key);
   assert.equal(new Set(keys).size, keys.length);
   assert.ok(designs.BLOCK_DESIGN_CATEGORIES.length >= 5);
   assert.ok(designs.BLOCK_DESIGN_CATEGORIES.includes('International newsroom'));
+  assert.ok(designs.BLOCK_DESIGN_CATEGORIES.includes('Accountability'));
   assert.ok(designs.BLOCK_DESIGN_PRESETS.every((entry) => entry.label && entry.marathi && entry.description));
+});
+
+test('every choice is a materially distinct printable surface', () => {
+  const surfaces = designs.BLOCK_DESIGN_PRESETS.map((entry) => JSON.stringify(entry.surface));
+  assert.equal(new Set(surfaces).size, surfaces.length);
 });
 
 test('a block design can only write appearance fields - never sacred geometry or copy', () => {
@@ -91,10 +97,19 @@ test('small blocks never receive designs whose declared minimum cannot fit', () 
 });
 
 test('recommendations follow editorial meaning instead of choosing decoration randomly', () => {
-  assert.equal(designs.recommendedBlockDesigns(section(), view({ storyType: 'ANALYSIS' }))[0], 'analysis-navy');
+  assert.equal(designs.recommendedBlockDesigns(section(), view({ storyType: 'ANALYSIS' }))[0], 'stepped-commentary');
   assert.equal(designs.recommendedBlockDesigns(section(), view({ storyType: 'OPINION' }))[0], 'opinion-cream');
-  assert.equal(designs.recommendedBlockDesigns(section(), view({ editorialPriority: 5 }))[0], 'lead-accent');
-  assert.equal(designs.recommendedBlockDesigns(section({ block_type: 'briefs' }), view({ blockType: 'briefs', storyType: 'BRIEF' }))[0], 'district-briefs');
+  assert.equal(designs.recommendedBlockDesigns(section(), view({ editorialPriority: 5 }))[0], 'ruled-splash');
+  assert.equal(designs.recommendedBlockDesigns(section(), view({ storyType: 'DATA' }))[0], 'data-headline-rule');
+  assert.equal(designs.recommendedBlockDesigns(section(), view({ storyType: 'PHOTO_FEATURE' }))[0], 'photo-display-rule');
+  assert.equal(designs.recommendedBlockDesigns(section({ block_type: 'briefs' }), view({ blockType: 'briefs', storyType: 'BRIEF' }))[0], 'city-desk-tab');
+});
+
+test('accountability designs advise evidence structures but never apply one', () => {
+  const investigation = designs.blockDesignPreset('investigation-file');
+  assert.deepEqual(investigation.companionPanels, ['document', 'timeline']);
+  assert.deepEqual(Object.keys(designs.blockDesignPatch(investigation.key)).sort(), [...designs.BLOCK_DESIGN_FIELDS].sort());
+  assert.equal('insetPanels' in designs.blockDesignPatch(investigation.key), false);
 });
 
 test('matching a design compares the complete appearance, not a single colour', () => {
@@ -108,6 +123,7 @@ test('preview markup contains only resolved catalogue values', () => {
   const html = designs.blockDesignPreviewMarkup(entry);
   assert.match(html, /block-design-preview/);
   assert.match(html, /has-top/);
+  assert.match(html, /has-accent-word/);
   assert.doesNotMatch(html, /urgent-update/);
   assert.doesNotMatch(html, /undefined|null/);
 });
@@ -131,6 +147,18 @@ test('the real Properties panel exposes recommendations and a deliberate Apply a
   assert.match(html, /nothing changes until Apply/);
 });
 
+test('the inspector explains the evidence insert that completes an accountability design', () => {
+  const row = section({
+    headline: 'अहवालातील निष्कर्ष', body: 'अधिकृत अहवालात निष्कर्ष नोंदवण्यात आला.',
+    margin_px: 1, body_font_px: 6.4, headline_font_px: 24, subheading_font_px: 10,
+  });
+  const draft = view({ ...designs.blockDesignPatch('investigation-file'), headline: row.headline, body: row.body, bodyFontPx: 6.4 });
+  const html = properties.propertiesPanelMarkup(row, draft, null, 'block', null);
+  assert.match(html, /Works with:/);
+  assert.match(html, /Document excerpt/);
+  assert.match(html, /Timeline/);
+});
+
 test('the Properties panel offers no foreign skin over a Smart Card', () => {
   const row = section({ smart_card_key: 'panchang' });
   const html = properties.propertiesPanelMarkup(row, view({ smartCardKey: 'panchang' }), null, 'block', null);
@@ -145,7 +173,7 @@ test('every new treatment and editorial insert is reachable from the real Proper
   for (const key of ['headline-rule', 'accent-rule', 'display-rule', 'kicker-tab', 'kicker-tab-rule', 'stepped-lines']) {
     assert.match(html, new RegExp(`data-headline-style="${key}"`), `${key} is not reachable`);
   }
-  for (const key of ['key-number', 'explainer', 'timeline', 'qa', 'reaction', 'related', 'follow-up']) {
+  for (const key of ['key-number', 'explainer', 'timeline', 'qa', 'reaction', 'related', 'follow-up', 'comparison', 'document']) {
     assert.match(html, new RegExp(`data-panel-add="${key}"`), `${key} is not reachable`);
   }
   assert.doesNotMatch(html, /data-panel-add="(?:chart|table)"/, 'structured card editors remain the only way to make chart/table data');

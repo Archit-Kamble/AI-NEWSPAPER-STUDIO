@@ -21,6 +21,7 @@ import { presentationRanges, renderPresentation } from '../layout/editorial-pres
 import { publicationFamily } from './font-metrics.js';
 import { headlineSegments } from './accent.js';
 import { setSpaces } from './graphemes.js';
+import { marksWithDateline } from '../layout/text-flow.js';
 
 // The measured font, painted. Every line now carries the family/weight
 // compose.js actually measured it in (see compose.js); this turns that back
@@ -260,7 +261,8 @@ export function composedMarkup(composition, view, { datelinePrefix = '' } = {}) 
     });
   }
 
-  const { text: bodyText, marks } = textWithMarks(view.body);
+  const { text: bodyText, marks: authoredMarks } = textWithMarks(view.body);
+  const marks = marksWithDateline(authoredMarks, datelinePrefix.length);
   const semantic = presentationRanges(bodyText, view.editorialPresentation, 'body');
 
   // THE INITIAL LETTER. Painted, not composed - it is one glyph in its own

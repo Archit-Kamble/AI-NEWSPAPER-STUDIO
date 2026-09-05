@@ -39,7 +39,7 @@ Useful references:
 
 ## Delivered in this branch
 
-The first layer is a one-click library of 37 original SAHAS block designs:
+The first layer is a one-click library of 43 original SAHAS block designs:
 
 - Core news: clean, hairline finish, section opener, double finish, left/right
   rail and open panel.
@@ -52,6 +52,10 @@ The first layer is a one-click library of 37 original SAHAS block designs:
 - International newsroom: ruled splash, open headline rule, compact section
   tab, city-desk package, stepped commentary, interview, world desk, data
   brief, photo dispatch and weekend essay.
+- Accountability: investigation file, verified report, public record,
+  before-and-now, reader guide and results desk. These entries also name the
+  evidence insert that works with the treatment, but never add one or invent
+  its contents automatically.
 
 The headline vocabulary itself now includes paint-only rules beneath a
 headline or complete display, an accent-word-and-rule treatment, a compact
@@ -59,15 +63,18 @@ kicker tab, and light stepped bands following each composed headline line.
 Each device reads final compositor geometry and therefore cannot change a line
 break or move a block.
 
-Seven structured inserts can now be added inside a story: FT-style key number,
+Nine structured inserts can now be added inside a story: FT-style key number,
 numbered explainer, timeline, Q&A, attributed reaction, related/agenda, and a
-Marathi follow-up rail labelled काल / आज / पुढे.
+Marathi follow-up rail labelled काल / आज / पुढे, plus a direct before/now
+comparison and a sourced official-document excerpt.
 Each is editable, draggable and resizable through the existing panel workflow;
 the story flows around its rectangle, and the shared browser, PDF, IDML and
 Scribus paths consume the same line solve. Chart and table panel chrome was
 also unified so those two no longer show a browser-only box.
 
-The library is deliberately a preset over existing validated fields. It adds
+The automatic location/byline prefix is now set as bold editorial furniture
+on the canvas and in every press path, while the reporter's stored body remains
+untouched and regular. The library is deliberately a preset over existing validated fields. It adds
 no schema, coordinates or alternate renderer. Applying a design creates one
 ordinary draft patch and every existing output path renders it.
 
@@ -77,7 +84,6 @@ ordinary draft patch and every existing output path renders it.
 
 Add reusable content structures, independent of their visual treatment:
 
-- comparison (before/after, proposal/reality, year/year);
 - portrait reaction cluster with two to four attributed quotes;
 - correction/clarification with original edition and page reference.
 

@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const panels = require('../public/editor/layout/inset-panels.js');
 const printModel = require('../src/services/export/print-model');
 const scribus = require('../src/services/scribus.service');
+const preflight = require('../src/services/preflight.service');
 
 let inks;
 let render;
@@ -77,7 +78,16 @@ test('the canonical HTML renderer paints the new furniture but never recomposes 
   assert.equal(JSON.stringify(made), before, 'rendering is paint-only');
 });
 
-const NEW_PANEL_KINDS = ['key-number', 'explainer', 'timeline', 'qa', 'reaction', 'related', 'follow-up'];
+test('the dateline and byline are typographic furniture on canvas, not plain body copy', () => {
+  const prefix = '■ सातारा, साहस वार्ता ';
+  const made = { content: { left: 2, top: 2, right: 198, bottom: 80, measure: 196 }, bands: {}, bodyLines: [
+    { text: `${prefix}शहरातील काम सुरू झाले.`, at: 0, x: 2, y: 4, width: 150, measure: 196, height: 10, baseline: 11, fontPx: 6.4, family: 'serif', weight: 400 },
+  ] };
+  const html = render.composedMarkup(made, { body: 'शहरातील काम सुरू झाले.', editorialPresentation: null }, { datelinePrefix: prefix });
+  assert.match(html, /<b>■ सातारा, साहस वार्ता <\/b>शहरातील/);
+});
+
+const NEW_PANEL_KINDS = ['key-number', 'explainer', 'timeline', 'qa', 'reaction', 'related', 'follow-up', 'comparison', 'document'];
 
 test('every structured insert has editable defaults, legal geometry and bounded type', () => {
   for (const kind of NEW_PANEL_KINDS) {
@@ -109,6 +119,11 @@ test('structured inserts carry newspaper semantics, not aliases for a fact box',
   assert.match(solve('follow-up')[1].text, /^काल :/);
   assert.match(solve('follow-up')[2].text, /^आज :/);
   assert.match(solve('follow-up')[3].text, /^पुढे :/);
+  assert.match(solve('comparison')[1].text, /^आधी :/);
+  assert.match(solve('comparison')[2].text, /^आता :/);
+  assert.equal(solve('comparison')[2].role, 'now');
+  assert.equal(solve('document').at(-1).role, 'source');
+  assert.equal(solve('document').at(-1).family, 'sans');
   assert.equal(solve('reaction').at(-1).role, 'attribution');
 });
 
@@ -139,6 +154,25 @@ test('chart and table panel chrome is explicitly neutral in the shared catalogue
     assert.deepEqual(panels.panelStyle(kind).edges, []);
     assert.equal(panels.panelStyle(kind).ground, false);
   }
+});
+
+test('preflight calls out evidence modules that have lost their visible source', () => {
+  const frame = { width_px: 260, height_px: 320 };
+  const unsourced = {
+    ...panels.defaultPanelFor('document', { width: 260, height: 320 }, 6.4),
+    lines: ['अधिकृत नोंदीतील महत्त्वाचा उतारा'],
+  };
+  const sourced = { ...unsourced, id: 'sourced', lines: [...unsourced.lines, 'स्रोत : जिल्हाधिकारी आदेश'] };
+  assert.deepEqual(
+    preflight.evidenceSourceFindings({ ...frame, inset_panels: [unsourced] }).map((item) => item.check),
+    ['unsourced-evidence-panel'],
+  );
+  assert.deepEqual(preflight.evidenceSourceFindings({ ...frame, inset_panels: [sourced] }), []);
+  assert.deepEqual(
+    preflight.evidenceSourceFindings({ ...frame, smart_card_key: 'chart', smart_card_data: { items: [{ label: 'अ', value: 1 }] } })
+      .map((item) => item.check),
+    ['unsourced-data-card'],
+  );
 });
 
 test('Scribus receives the new headline furniture and structured panel ink', async () => {

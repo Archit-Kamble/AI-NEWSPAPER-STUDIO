@@ -47,9 +47,10 @@ const editorial = ['article', 'feature'];
 const compact = ['briefs', 'article', 'feature'];
 
 const preset = ({ key, category, label, marathi, description, kinds = allNews,
-  minWidth = 0, minHeight = 0, insetRisk = false, surface = {} }) => Object.freeze({
+  minWidth = 0, minHeight = 0, insetRisk = false, companionPanels = [], surface = {} }) => Object.freeze({
   key, category, label, marathi, description,
   kinds: Object.freeze([...kinds]), minWidth, minHeight, insetRisk,
+  companionPanels: Object.freeze([...companionPanels]),
   surface: Object.freeze({ ...CLEAN_SURFACE, ...surface }),
 });
 
@@ -187,6 +188,54 @@ export const BLOCK_DESIGN_PRESETS = Object.freeze([
     surface: { backgroundColor: tint('cream'), headlineStyle: 'stepped-lines', headlineInk: ink('brown'), accentColor: ink('amber') },
   }),
 
+  // ACCOUNTABILITY IS A JOB, NOT A COLOUR. These treatments distinguish the
+  // forms a serious newsroom uses to show how it knows: investigation,
+  // verification, public record, direct comparison and an explanatory guide.
+  // `companionPanels` is advice in the inspector only. Applying a surface
+  // never manufactures evidence, inserts copy or moves a rectangle.
+  preset({
+    key: 'investigation-file', category: 'Accountability', label: 'Investigation file', marathi: 'शोधवृत्त',
+    description: 'A doubled red evidence rail and a ruled headline give an investigation authority without turning the story into an alarm banner.',
+    kinds: editorial, minWidth: 165, minHeight: 120,
+    companionPanels: ['document', 'timeline'],
+    surface: { borderStyle: 'rule-left-double', borderWidthPx: rule('Normal'), borderInk: ink('red'), headlineStyle: 'accent-rule', accentColor: ink('red') },
+  }),
+  preset({
+    key: 'verified-report', category: 'Accountability', label: 'Verified report', marathi: 'तथ्य पडताळणी',
+    description: 'A teal entry rule and compact desk tab mark a checked claim; the pale ground keeps evidence distinct from commentary.',
+    kinds: compact, minWidth: 140, minHeight: 105,
+    companionPanels: ['comparison', 'document'],
+    surface: { borderStyle: 'rule-above-double', borderWidthPx: rule('Small'), borderInk: ink('teal'), backgroundColor: tint('teal'), headlineStyle: 'kicker-tab-rule', headlineInk: ink('teal'), accentColor: ink('teal') },
+  }),
+  preset({
+    key: 'public-record', category: 'Accountability', label: 'Public record', marathi: 'सार्वजनिक नोंद',
+    description: 'Slate double rules and a quiet paper-grey ground set an order, audit, judgment or official record apart from ordinary narration.',
+    kinds: compact, minWidth: 135, minHeight: 100,
+    companionPanels: ['document'],
+    surface: { borderStyle: 'rule-both-double', borderWidthPx: rule('Small'), borderInk: ink('slate'), backgroundColor: tint('grey'), headlineStyle: 'headline-rule', headlineInk: ink('slate'), accentColor: ink('slate') },
+  }),
+  preset({
+    key: 'policy-before-now', category: 'Accountability', label: 'Before and now', marathi: 'आधी आणि आता',
+    description: 'An open blue comparison rail makes a policy or outcome change easy to scan while leaving the reporting visually primary.',
+    kinds: compact, minWidth: 145, minHeight: 105,
+    companionPanels: ['comparison'],
+    surface: { borderStyle: 'rule-both', borderWidthPx: rule('Normal'), borderInk: ink('blue'), backgroundColor: tint('blue'), headlineStyle: 'display-rule', headlineInk: ink('navy'), accentColor: ink('blue') },
+  }),
+  preset({
+    key: 'reader-guide', category: 'Accountability', label: 'Reader guide', marathi: 'वाचक मार्गदर्शक',
+    description: 'A warm left rail and section tab identify practical explanation without making public-service reporting look promotional.',
+    kinds: editorial, minWidth: 145, minHeight: 110,
+    companionPanels: ['explainer', 'related'],
+    surface: { borderStyle: 'rule-left', borderWidthPx: rule('Medium'), borderInk: ink('amber'), backgroundColor: tint('cream'), headlineStyle: 'kicker-tab-rule', headlineInk: ink('brown'), accentColor: ink('amber') },
+  }),
+  preset({
+    key: 'results-desk', category: 'Accountability', label: 'Results desk', marathi: 'निकाल कक्ष',
+    description: 'A maroon double close and precise headline rule hold election, examination or official tally reporting together.',
+    kinds: compact, minWidth: 145, minHeight: 100,
+    companionPanels: ['key-number', 'comparison'],
+    surface: { borderStyle: 'rule-both-double', borderWidthPx: rule('Normal'), borderInk: ink('maroon'), backgroundColor: tint('maroon'), headlineStyle: 'headline-rule', headlineInk: ink('maroon'), accentColor: ink('maroon') },
+  }),
+
   preset({
     key: 'analysis-navy', category: 'Editorial', label: 'Analysis', marathi: 'विश्लेषण',
     description: 'A navy side rule and deck screen separate interpretation from straight reporting.',
@@ -321,14 +370,14 @@ export function recommendedBlockDesigns(section = {}, view = {}) {
   const type = String(view.storyType || section.story_type || '').toUpperCase();
   const priority = Number(view.editorialPriority ?? section.editorial_priority ?? 3);
   const kind = String(view.blockType || section.block_type || 'article');
-  const keys = type === 'OPINION' ? ['opinion-cream', 'editorial-formal']
-    : type === 'ANALYSIS' ? ['analysis-navy', 'navy-deck-screen']
+  const keys = type === 'OPINION' ? ['opinion-cream', 'stepped-commentary', 'editorial-formal']
+    : type === 'ANALYSIS' ? ['stepped-commentary', 'analysis-navy', 'navy-deck-screen']
       : type === 'QUOTE' ? ['quote-open', 'open-panel']
-        : type === 'DATA' ? ['market-teal', 'context-box']
-          : type === 'SIDEBAR' ? ['context-box', 'left-rail']
-            : type === 'PHOTO_FEATURE' ? ['clean-news', 'section-opener']
-              : type === 'BRIEF' || kind === 'briefs' ? ['district-briefs', 'hairline-finish']
-                : priority >= 5 ? ['lead-accent', 'lead-reversed', 'clean-news']
+        : type === 'DATA' ? ['data-headline-rule', 'market-teal', 'results-desk', 'context-box']
+          : type === 'SIDEBAR' ? ['reader-guide', 'context-box', 'left-rail']
+            : type === 'PHOTO_FEATURE' ? ['photo-display-rule', 'clean-news', 'section-opener']
+              : type === 'BRIEF' || kind === 'briefs' ? ['city-desk-tab', 'district-briefs', 'hairline-finish']
+                : priority >= 5 ? ['ruled-splash', 'lead-accent', 'lead-reversed', 'clean-news']
                   : ['clean-news', 'hairline-finish', 'section-opener'];
   const available = new Set(availableBlockDesigns(section, view).map((entry) => entry.key));
   return keys.filter((key) => available.has(key));
@@ -360,7 +409,8 @@ export function blockDesignPreviewMarkup(entry) {
   const classes = ['block-design-preview', isDouble ? 'is-double' : '',
     ...border.map((edge) => `has-${edge}`), s.headlineStyle === 'reverse' ? 'is-reverse' : '',
     treatment.ruleAfter ? `has-${treatment.ruleAfter}-rule` : '',
-    treatment.kickerTab ? 'has-kicker-tab' : '', treatment.steppedLines ? 'has-stepped-lines' : '']
+    treatment.kickerTab ? 'has-kicker-tab' : '', treatment.steppedLines ? 'has-stepped-lines' : '',
+    treatment.accentWord ? 'has-accent-word' : '']
     .filter(Boolean).join(' ');
   return `<div class="${classes}" style="${style}" aria-hidden="true">
     <span class="block-design-preview-kicker"></span>

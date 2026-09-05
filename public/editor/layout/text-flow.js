@@ -87,6 +87,18 @@ export function datelineText(view = {}) {
   return parts.length ? `■ ${parts.join(', ')} ` : '';
 }
 
+/**
+ * The dateline/byline is newspaper furniture, not reporter-authored body
+ * markup. Its range lives immediately BEFORE body offset zero because the
+ * compositor prefixes it to the body while authored marks remain indexed to
+ * the stored story alone. One helper keeps browser, neutral print model and
+ * Scribus on that same coordinate convention.
+ */
+export function marksWithDateline(marks = [], prefixLength = 0) {
+  const length = Math.max(0, Number(prefixLength) || 0);
+  return length ? [{ tag: 'b', start: -length, end: 0 }, ...marks] : [...marks];
+}
+
 // The one translation from a persisted section (snake case) or an editor view
 // (camel case) into the flow engine. Keeping it here prevents fit, preflight
 // and quality from each quietly choosing different defaults.

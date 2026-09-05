@@ -315,8 +315,9 @@ async function blockItems(section, { mono = false } = {}) {
   }
 
   if (section.body) {
-    const { marks } = richText.textWithMarks(section.body);
+    const { marks: authoredMarks } = richText.textWithMarks(section.body);
     const prefixLength = textFlow.datelineText(section).length;
+    const marks = textFlow.marksWithDateline(authoredMarks, prefixLength);
     for (const line of composition.bodyLines) {
       const at = (line.at || 0) - prefixLength;
       const runs = richText.styledRuns(line.text, at, marks, line.fontPx).map((piece) => run(

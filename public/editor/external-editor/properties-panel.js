@@ -556,10 +556,14 @@ function blockPropertiesMarkup(section, view, page) {
 function blockDesignChoiceMarkup(entry, matching = null) {
   if (!entry) return "";
   const current = matching?.key === entry.key;
+  const panelNames = (entry.companionPanels || [])
+    .map((key) => INSET_PANEL_KINDS.find((kind) => kind.key === key)?.label)
+    .filter(Boolean);
   return `${blockDesignPreviewMarkup(entry)}
     <div class="block-design-copy">
       <strong>${escapeHtml(entry.marathi)} <span>${escapeHtml(entry.label)}</span></strong>
       <p>${escapeHtml(entry.description)}</p>
+      ${panelNames.length ? `<p class="block-design-companion"><b>Works with:</b> ${escapeHtml(panelNames.join(" · "))}</p>` : ""}
       <small>${current ? "Current design" : entry.insetRisk ? "Uses an inset box · check Layout after applying" : "Open treatment · no box inset"}</small>
     </div>`;
 }

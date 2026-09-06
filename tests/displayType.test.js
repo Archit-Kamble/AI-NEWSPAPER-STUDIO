@@ -561,3 +561,56 @@ test('an offer is only made when it would actually fill', () => {
     }
   }
 });
+
+// A REVERSED HEADLINE WITH NO DECK UNDER IT DREW NO PANEL, AND ITS TYPE IS WHITE
+//
+// Reported from the desk against a real 620x224 banner: the headline
+// "घनकचरा व्यवस्थापनावर सविस्तर चर्चा करण्यात आली" never appeared on the
+// layout, and appeared in the Block Editor only after a double click - which
+// is the inline editable field, styled from the stored value rather than from
+// the composed ink.
+//
+// The composition was correct all along: one line, full text, at the size the
+// desk had locked. What failed was the PANEL behind it. `roomBelow()` falls
+// through to the first body line when there is no kicker or deck to bound the
+// bleed against, and it read `.top` - a property a composed LINE does not
+// carry; only a BAND does. So it returned undefined, `undefined - gap` is NaN,
+// `Math.min`/`Math.max` propagate it, and panelRect() answered `height: NaN`.
+// The browser drops `height:NaNpx` as invalid and the panel collapses to
+// nothing, leaving type that render.js paints WHITE for a reverse treatment.
+// White on white paper.
+//
+// It needed a block with no deck AND no kicker to reach that fallback, which
+// is why it survived: every fixture with a reversed headline had a subheading.
+// The press path shares panelRect(), so the .sla, the PDF and the IDML were
+// emitting a panel with a NaN height too - this was a press-day fault as well
+// as a screen one.
+test('a reverse panel has a real height when nothing follows the headline but the body', async () => {
+  const render = await load('render.js');
+  const frame = {
+    width: 620, height: 224, padding: 4,
+    headlineFontPx: 32, bodyFontPx: 6.4, lineHeight: 1.45,
+  };
+  const headline = 'घनकचरा व्यवस्थापनावर सविस्तर चर्चा करण्यात आली';
+  const body = 'पुणे : महापालिकेच्या स्थायी समितीच्या बैठकीत शहरातील घनकचरा '
+    + 'व्यवस्थापनाच्या प्रश्नावर सविस्तर चर्चा करण्यात आली. ';
+
+  // No subheading and no kicker - that is the whole point of the fixture.
+  const composition = compose.composeBlock({ ...frame, headline, body: body.repeat(12) });
+  assert.equal(composition.bands.deck?.lines?.length ?? 0, 0, 'the fixture must carry no deck');
+  assert.ok(composition.bands.headline.lines.length > 0, 'and the headline must actually be set');
+  assert.ok(composition.bodyLines.length > 0, 'and the body must reach the fallback');
+
+  const rect = render.panelRect(composition, 'headline');
+  assert.ok(rect, 'a set headline offers a panel rectangle');
+  assert.ok(Number.isFinite(rect.height),
+    `the panel needs a real height, not ${rect.height} - an invalid one is dropped by the browser `
+    + 'and the white type is then set on white paper');
+  assert.ok(rect.height >= composition.bands.headline.height,
+    'and it is never drawn smaller than the type it sits behind');
+
+  // The markup itself, because that is what a browser is handed.
+  const markup = render.composedMarkup(composition, { headlineStyle: 'reverse', accentColor: '#c8102e' });
+  assert.ok(markup.includes('section-headline-reverse'), 'the panel is emitted');
+  assert.ok(!/height:\s*NaNpx/.test(markup), 'and never with a NaN height');
+});

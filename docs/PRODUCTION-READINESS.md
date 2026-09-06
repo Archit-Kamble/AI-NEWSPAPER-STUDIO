@@ -11,7 +11,7 @@ had outgrown (#22), a swallowed press (#23), three save races behind the
 snapshot fix (#24), and a net robustness change that cost twelve checks (#25).
 All seven are closed and all seven are below.
 
-**Twenty-two of the twenty-five are now closed**, on 2026-09-06, and each entry below says what
+**Twenty-three of the twenty-six are now closed**, on 2026-09-06, and each entry below says what
 was done and how it was verified. Three remain, and each of them is blocked on something
 this software cannot supply for itself — artwork, a printer's colour profile, or a
 decision only the owner can take. They are at the bottom, under **Still open**.
@@ -91,6 +91,28 @@ check asserted the old product; it now asserts the invariant its own name states
 load may not pull the caret INTO THE STORY), and `workspace-shell` is not the story. The
 two load-bearing checks beside it — 0 of 24 keystrokes reaching the copy, 24 of 24
 reaching the headline — passed throughout. 11/11.
+
+### #26 — a reversed headline drew no panel, and its type is white
+
+**[Desk]** Reported against edition 40082's 620x224 banner: the headline never
+appeared on the layout, and appeared in the Block Editor only after a double click —
+which is the inline editable field, styled from the stored value while every other
+surface draws the composition.
+
+The composition was correct: one line, full text, at the locked size. `roomBelow()` in
+`render.js` bounds a reverse panel's bleed against the next display band, else the first
+body line — and read `firstBody.top`. A composed LINE carries `y`; only a BAND carries
+`top`. So it returned undefined, `undefined - MIN_PANEL_GAP` is NaN, and `panelRect()`
+answered `height: NaN`. The browser drops `height:NaNpx`, the panel collapses, and the
+type is white because that is what `reverse` means. White on white paper.
+
+Reaching that fallback needs a block with no deck AND no kicker, which is why it
+survived — every reversed fixture had a subheading. Swept: `reverse` is on 5 blocks,
+exactly 1 without a deck, the one reported. **The press path shares `panelRect()`
+deliberately**, so the `.sla`, the PDF and the IDML were emitting a NaN-height panel for
+that block too — each writer's `if (rect)` guard passes, because the rect is truthy.
+
+Held by `tests/displayType.test.js`, which fails against the old property.
 
 ### #25 — a robustness change to a net cost twelve checks
 

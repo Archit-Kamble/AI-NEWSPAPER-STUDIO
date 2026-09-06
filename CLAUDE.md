@@ -8081,6 +8081,53 @@ fails against the code without its fix.
 was still `{ ...draft }`, so `tags` and `insetPanels` in a recovery snapshot
 aliased live arrays.
 
+### A composed LINE carries `y`; only a BAND carries `top`
+
+The desk's report, against a real 620x224 banner on edition 40082: the headline
+*"घनकचरा व्यवस्थापनावर सविस्तर चर्चा करण्यात आली"* **never appeared on the
+layout**, and appeared in the Block Editor only after a double click.
+
+That last detail is the whole diagnosis. A double click opens the inline
+editable field, which is styled from the STORED value; every other surface
+draws the COMPOSITION. So the copy was never missing - it was being composed,
+positioned and emitted, and could not be seen.
+
+Composed in Node against the real row, which is where it was found rather than
+in the browser:
+
+```
+bands.headline.lines : 1   "घनकचरा व्यवस्थापनावर सविस्तर चर्चा करण्यात आली"
+headline span        : color:#fff
+reverse panel        : height:NaNpx
+```
+
+The block carries `headline_style: 'reverse'` - white type out of a solid
+panel - so `render.js` paints the type white, correctly and unconditionally.
+The panel behind it had **`height: NaN`**, which a browser drops as invalid,
+collapsing it to nothing. White type on white paper.
+
+`roomBelow()` bounds the panel's bleed against whatever comes next: the
+following display band if there is one, **else the first body line**. It read
+`firstBody.top` - and a composed line does not have `top`. It has **`y`**. Only
+a *band* carries `top`. So it returned `undefined`, `undefined - MIN_PANEL_GAP`
+is NaN, and `Math.min`/`Math.max` propagate NaN through to the rectangle.
+
+**It needed a block with no deck AND no kicker to reach that fallback at all**,
+which is why it survived: every fixture with a reversed headline also had a
+subheading under it. Swept across the database - `reverse` is on 5 blocks and
+exactly **1** of them has no deck, which is the block the desk reported.
+
+**And it was a press-day fault, not only a screen one.** `scribus.service.js`
+and `print-model.js` both call `render.panelRect()` deliberately, so that the
+plate bleeds exactly as far as the sheet - which is right, and meant the `.sla`,
+the PDF and the IDML were all emitting a panel with a NaN height for the same
+block. `rect` is truthy, so the `if (rect)` guard in each writer let it
+through.
+
+`tests/displayType.test.js` composes a reversed headline with no deck and
+requires a finite panel height, and requires the emitted markup never to carry
+`height:NaNpx`. It fails against the old property with exactly that number.
+
 ### And the last four real-account dependencies are gone
 
 `hardening.test.js` and `press.test.js` still signed in as the newspaper's own

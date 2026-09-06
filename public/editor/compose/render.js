@@ -165,8 +165,23 @@ function roomBelow(composition, afterKey) {
     const next = composition.bands?.[FLOW_ORDER[i]];
     if (next?.lines?.length) return next.top;
   }
+  // A COMPOSED LINE CARRIES `y`, NOT `top` - only a BAND carries `top`.
+  //
+  // Reading `.top` here got `undefined`, so this returned undefined, and
+  // `undefined - MIN_PANEL_GAP` is NaN. `Math.min(x, NaN)` and `Math.max(x,
+  // NaN)` are both NaN, so panelRect() handed back `height: NaN`, the browser
+  // dropped `height:NaNpx` as invalid, and the panel collapsed to nothing -
+  // while the type above it is painted WHITE, because that is what a reverse
+  // band means. White type on white paper: the headline was set, positioned
+  // and emitted, and could not be seen on any surface that draws the
+  // composition. Only a double click showed it, because the inline editable
+  // field styles from the stored value rather than from the composed ink.
+  //
+  // It needed a block with no deck and no kicker to reach this fallback at
+  // all, which is why it survived: every fixture with a reversed headline
+  // also had a subheading under it.
   const firstBody = composition.bodyLines?.[0];
-  if (firstBody) return firstBody.top;
+  if (firstBody) return firstBody.y;
   return composition.content.bottom;
 }
 

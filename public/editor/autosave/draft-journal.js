@@ -109,13 +109,19 @@ function entries() {
 // one path where the compositor is already running per character. Passing a
 // thunk means the throttle is checked first and the work is only done on the
 // write that actually happens.
-export function remember(snapshot, { force = false } = {}) {
+export function remember(snapshot, { force = false, unlessNewerThan = Infinity } = {}) {
   const now = Date.now();
   if (!force && now - lastWriteAt < THROTTLE_MS) return;
   if (typeof snapshot === 'function') snapshot = snapshot();
   if (!snapshot || !snapshot.pageId || !snapshot.sectionKey || !snapshot.draft) return;
   lastWriteAt = now;
   try {
+    const existing = window.localStorage.getItem(keyFor(snapshot.pageId, snapshot.sectionKey));
+    if (existing && Number.isFinite(unlessNewerThan)) {
+      try {
+        if (JSON.parse(existing)?.at >= unlessNewerThan) return;
+      } catch { /* replace an unreadable recovery entry */ }
+    }
     window.localStorage.setItem(
       keyFor(snapshot.pageId, snapshot.sectionKey),
       JSON.stringify({
@@ -132,8 +138,15 @@ export function remember(snapshot, { force = false } = {}) {
 }
 
 /** The server has it. The browser's copy is no longer worth anything. */
-export function forget(pageId, sectionKey) {
-  try { window.localStorage.removeItem(keyFor(pageId, sectionKey)); } catch { /* nothing to do */ }
+export function forget(pageId, sectionKey, { through = Infinity } = {}) {
+  try {
+    const key = keyFor(pageId, sectionKey);
+    const entry = JSON.parse(window.localStorage.getItem(key));
+    // A late receipt cannot erase a newer recovery copy. Equality is kept
+    // too: a keystroke can share the capture's millisecond timestamp.
+    if (entry && entry.at >= through) return;
+    window.localStorage.removeItem(key);
+  } catch { /* nothing to do */ }
 }
 
 /**

@@ -11,6 +11,9 @@ const assert = require('node:assert/strict');
 const { createApp } = require('../server');
 const { resetLoginThrottle, MAX_FAILURES } = require('../src/middleware/loginThrottle');
 const { looksLikeImage, IMAGE_TYPES } = require('../src/middleware/upload');
+const { testOwner } = require('./helpers/desk-owner');
+// Registers the shared disposable-user cleanup and database safety guard.
+require('./helpers/desk');
 
 // A one-pixel PNG, as real bytes - the point of several cases below is that
 // what a file CONTAINS is checked, so a fixture that only claims to be a PNG
@@ -154,7 +157,7 @@ test('a password cannot be guessed at without limit', async () => {
     const attempt = (password) => fetch(`http://127.0.0.1:${port}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'admin@esahas.com', password }),
+      body: JSON.stringify({ email: 'login-throttle@example.test', password }),
     });
 
     for (let i = 0; i < MAX_FAILURES; i += 1) {
@@ -181,16 +184,17 @@ test('a password cannot be guessed at without limit', async () => {
 });
 
 test('a correct password clears the run of failures rather than being counted with them', async () => {
+  const owner = await testOwner();
   const { server, port } = listen();
   resetLoginThrottle();
   try {
     const login = (password) => fetch(`http://127.0.0.1:${port}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'admin@esahas.com', password }),
+      body: JSON.stringify({ email: owner.email, password }),
     });
     for (let i = 0; i < MAX_FAILURES - 1; i += 1) await login('wrong');
-    assert.equal((await login('admin123')).status, 200, 'a desk that mistypes and then gets it right is let in');
+    assert.equal((await login(owner.password)).status, 200, 'a desk that mistypes and then gets it right is let in');
     // The counter is reset, so the next mistake starts from one again.
     for (let i = 0; i < MAX_FAILURES - 1; i += 1) {
       assert.equal((await login('wrong')).status, 401);
@@ -255,13 +259,14 @@ test('an expired session is not honoured, and is swept away', async () => {
 });
 
 test('the first request after signing in is already signed in', async () => {
+  const owner = await testOwner();
   const { server, port } = listen();
   resetLoginThrottle();
   try {
     const response = await fetch(`http://127.0.0.1:${port}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'admin@esahas.com', password: 'admin123' }),
+      body: JSON.stringify({ email: owner.email, password: owner.password }),
     });
     assert.equal(response.status, 200);
     const cookie = (response.headers.getSetCookie?.() || [])
@@ -274,7 +279,7 @@ test('the first request after signing in is already signed in', async () => {
     // answering correctly.
     const me = await fetch(`http://127.0.0.1:${port}/api/auth/me`, { headers: { Cookie: cookie } })
       .then((r) => r.json());
-    assert.equal(me.user?.email, 'admin@esahas.com', 'the very first request must already carry the session');
+    assert.equal(me.user?.email, owner.email, 'the very first request must already carry the session');
   } finally {
     resetLoginThrottle();
     server.close();
@@ -282,6 +287,7 @@ test('the first request after signing in is already signed in', async () => {
 });
 
 test('signing in issues a new session id, so a planted one cannot inherit a desk\'s authority', async () => {
+  const owner = await testOwner();
   const { server, port } = listen();
   resetLoginThrottle();
   try {
@@ -294,7 +300,7 @@ test('signing in issues a new session id, so a planted one cannot inherit a desk
     const login = await fetch(`http://127.0.0.1:${port}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(before ? { Cookie: before } : {}) },
-      body: JSON.stringify({ email: 'admin@esahas.com', password: 'admin123' }),
+      body: JSON.stringify({ email: owner.email, password: owner.password }),
     });
     assert.equal(login.status, 200);
     const after = (login.headers.getSetCookie?.() || [])

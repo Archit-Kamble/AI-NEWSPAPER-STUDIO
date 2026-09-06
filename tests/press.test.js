@@ -67,9 +67,7 @@ test('a reporter files copy but does not make up the page', async () => {
   const port = server.address().port;
 
   try {
-    const reporter = await signIn(port, {
-      email: 'reporter@esahas.com', password: 'reporter123', role: 'reporter',
-    });
+    const reporter = await signIn(port, { role: 'reporter' });
     // Filing is theirs.
     assert.equal((await reporter('/api/news')).status, 200);
     // Making up the paper is not.

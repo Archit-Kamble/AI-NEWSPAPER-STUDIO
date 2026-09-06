@@ -99,6 +99,8 @@ async function fetchJson(url, options) {
  * worse than the save failing, and the block is still in the draft.
  */
 export async function leaveWorkspace() {
+  selectionRequest++;
+  if (store.isDirty()) journal.remember(captureDraft, { force: true });
   try {
     await autosave.flush();
   } catch (error) {
@@ -948,8 +950,12 @@ async function placeSmartCardInNewBlock(key, payload) {
 
 // ----------------------------------------------------------------- actions ---
 
-function selectSection(sectionKey) {
+let selectionRequest = 0;
+
+async function selectSection(sectionKey) {
+  const request = ++selectionRequest;
   const state = store.getState();
+  const pageId = state.currentPageId;
   if (state.selectedSectionKey === sectionKey) {
     // CLICKING THE BLOCK THAT IS ALREADY OPEN SELECTS THE BLOCK ITSELF.
     //
@@ -961,16 +967,21 @@ function selectSection(sectionKey) {
     // discoverable, and is not what a layout tool does. Clicking a frame you
     // are inside selects that frame; this is that gesture.
     selectPart("block");
-    return;
+    return true;
   }
 
   // Leaving a section with unsaved work must not lose it: the debounce timer is
   // never given the chance to expire after the draft has been swapped out.
   const leaving = state.selectedSectionKey;
-  if (leaving && state.dirty) autosave.flush();
+  if (leaving && state.dirty) {
+    journal.remember(captureDraft, { force: true });
+    await autosave.flush();
+  }
+  // A second click (including back on the old block) supersedes this one.
+  if (request !== selectionRequest || store.getState().currentPageId !== pageId) return false;
 
   const section = store.getSection(sectionKey);
-  if (!section) return;
+  if (!section) return false;
 
   const draft = draftFromSection(section);
   store.setSelectedSection(sectionKey, draft);
@@ -983,6 +994,7 @@ function selectSection(sectionKey) {
   syncRemoveBlockButton();
   syncReuniteButton();
   refreshToolbarSelection(true, store.getState().storyPickerOpen);
+  return true;
 }
 
 // Which object inside the selected block is the editing target - clicking
@@ -1109,7 +1121,7 @@ function blockName(sectionKey, section) {
 }
 
 async function clearSection(sectionKey) {
-  if (store.getState().selectedSectionKey !== sectionKey) selectSection(sectionKey);
+  if (store.getState().selectedSectionKey !== sectionKey && !await selectSection(sectionKey)) return;
   const draft = store.getDraft();
   if (!draft) return;
   const carries = draft.headline || draft.subheading || draft.body || draft.imageUrl
@@ -1158,12 +1170,12 @@ function setSectionStatus(statusKey) {
   patchDraft({ status: statusKey }, "canvas");
 }
 
-function onSectionAction(sectionKey, action) {
+async function onSectionAction(sectionKey, action) {
   if (action === "clear") return clearSection(sectionKey);
   if (action === "add-block") return addBlock();
   if (action === "delete-block") return deleteBlock(sectionKey);
 
-  selectSection(sectionKey);
+  if (!await selectSection(sectionKey)) return;
   if (action === "story") return chooseStory();
   // Pictures are part of the writing surface, so "Add a picture" from the
   // page's own menu goes to the story panel - there is no separate picture
@@ -1579,7 +1591,8 @@ function captureDraft() {
     // through the one translation that already exists, rather than through a
     // second, inverse copy of it - which is the drift this codebase has been
     // bitten by twice.
-    draft: { ...draft },
+    draft: JSON.parse(JSON.stringify(draft)),
+    capturedAt: Date.now(),
   };
   // DELIBERATELY NOT JOURNALLED HERE.
   //
@@ -1624,8 +1637,6 @@ async function persistDraft(snapshot) {
   store.replacePage(await response.json());
   // The database has it. The browser's copy is no longer worth anything, and
   // leaving it would make the next open offer to restore words already saved.
-  journal.forget(snapshot.pageId, snapshot.sectionKey);
-
   // A LATE ANSWER MAY NOT SPEAK FOR A NEWER DRAFT.
   //
   // `history.markSaved()` stamps the CURRENT top of the undo stack as having
@@ -1638,11 +1649,38 @@ async function persistDraft(snapshot) {
   const stillTheSameBlock = current
     && current.id === snapshot.pageId
     && now.selectedSectionKey === snapshot.sectionKey;
-  if (stillTheSameBlock) history.markSaved();
+  const sameDraft = stillTheSameBlock
+    && JSON.stringify(store.getDraft()) === JSON.stringify(snapshot.draft);
+  if (sameDraft) {
+    journal.forget(snapshot.pageId, snapshot.sectionKey);
+    history.markSaved();
+  } else {
+    // A receipt only retires recovery entries older than the snapshot it
+    // acknowledges. Newer typing, including in another tab, stays recoverable.
+    journal.forget(snapshot.pageId, snapshot.sectionKey, { through: snapshot.capturedAt });
+    if (stillTheSameBlock && store.isDirty()) {
+      journal.remember(captureDraft, { force: true });
+      autosave.schedule();
+    }
+  }
   return true;
 }
 
-function onAutosaveState(saveState, message) {
+function onAutosaveState(saveState, message, snapshot) {
+  if (saveState === "saved" && store.isDirty()) {
+    const page = store.getCurrentPage();
+    const isCurrent = snapshot && page?.id === snapshot.pageId
+      && store.getState().selectedSectionKey === snapshot.sectionKey
+      && JSON.stringify(store.getDraft()) === JSON.stringify(snapshot.draft);
+    // setSaveState("saved") clears the dirty flag. A response for an older
+    // draft must not do that, even if its block is still selected.
+    if (!isCurrent) {
+      store.setSaveState("idle");
+      journal.remember(captureDraft, { force: true });
+      autosave.schedule();
+      return;
+    }
+  }
   store.setSaveState(saveState, message);
 }
 
@@ -1732,9 +1770,15 @@ select.onchange = async () => {
 };
 }
 
-function selectPage(pageId) {
-  if (store.getState().dirty) autosave.flush();
+async function selectPage(pageId) {
+  const request = ++selectionRequest;
+  if (store.getState().dirty) {
+    journal.remember(captureDraft, { force: true });
+    await autosave.flush();
+  }
+  if (request !== selectionRequest) return false;
   store.setCurrentPage(pageId);
+  return true;
 }
 
 async function applyTemplate(templateKey) {
@@ -2312,7 +2356,11 @@ function bindPaperControls() {
 function onWorkspaceBeforeUnload(event) {
   const outstanding = autosave.isOutstanding() || store.isDirty();
   if (!outstanding) return undefined;
-  journal.remember(autosave.outstandingSnapshot() || captureDraft(), { force: true });
+  // Preserve both a failed older block and the current typing. If they are
+  // the same block, the latest draft is deliberately written last.
+  const pending = autosave.outstandingSnapshot();
+  if (pending) journal.remember(pending, { force: true, unlessNewerThan: pending.capturedAt });
+  if (store.isDirty()) journal.remember(captureDraft, { force: true });
   event.preventDefault();
   // Browsers show their own sentence and ignore this one; returning it is
   // still what arms the prompt in older engines.
@@ -2370,8 +2418,8 @@ async function offerJournalledDrafts() {
   const first = waiting[0];
   const page = (pages || []).find((p) => Number(p.id) === Number(first.pageId));
   if (!page) return;
-  if (store.getCurrentPage()?.id !== page.id) await selectPage(page.id);
-  selectSection(first.sectionKey);
+  if (store.getCurrentPage()?.id !== page.id && !await selectPage(page.id)) return;
+  if (!await selectSection(first.sectionKey)) return;
   store.updateDraft(first.draft, "journal");
   showNotice("Restored into the block. Look it over, then Save.");
 }
@@ -2503,9 +2551,9 @@ function renderPreflight(report) {
     report,
     pages: store.getState().pages,
     onNotice: showNotice,
-    onOpenFinding: (pageNumber, sectionKey) => {
+    onOpenFinding: async (pageNumber, sectionKey) => {
       const page = store.getState().pages.find((p) => Number(p.page_number) === Number(pageNumber));
-      if (page) store.setCurrentPage(page.id);
+      if (page && !await selectPage(page.id)) return;
       const key = String(sectionKey || "").split(" / ")[0];
       if (store.getSection(key)) selectSection(key);
     },
@@ -2608,9 +2656,9 @@ async function showWorklist() {
   }
 
   renderWorklist(list, {
-    onGoTo: (pageNumber, sectionKey) => {
+    onGoTo: async (pageNumber, sectionKey) => {
       const page = store.getState().pages.find((p) => Number(p.page_number) === Number(pageNumber));
-      if (page) store.setCurrentPage(page.id);
+      if (page && !await selectPage(page.id)) return;
       if (store.getSection(sectionKey)) selectSection(sectionKey);
     },
   });
@@ -3058,11 +3106,11 @@ function showBulkProposals(batch, skipped, { fromToday = 0 } = {}) {
   document.getElementById("bulkClose").addEventListener("click", closeOnEscape(() => panel.remove()));
 
   panel.querySelectorAll("[data-bulk-accept]").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", async () => {
       const key = button.dataset.bulkAccept;
       const result = batch.results.find((r) => r.sectionKey === key);
       if (!result?.proposal) return;
-      selectSection(key);
+      if (!await selectSection(key)) return;
       patchDraft({ ...result.proposal, aiGenerated: true, status: "needs_review" }, "bulk");
       button.disabled = true;
       button.textContent = "Accepted";

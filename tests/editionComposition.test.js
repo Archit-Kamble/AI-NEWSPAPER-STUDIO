@@ -408,9 +408,17 @@ test('composition baseline and frame fingerprints change on fit mode, flip, mask
   }
 });
 
-test('workflow image validation applies the press DPI floor at planned print size', async () => {
+test('workflow image validation applies the press DPI floor at planned print size', async (t) => {
   const { validateImageIntents } = require('../src/services/editionCompositionWorkflow.service');
-  const intent = { companion: true, requirement: 'IMAGE_REQUIRED', state: 'IMAGE_PLANNED', destinationSectionId: 1, image: { url: '/uploads/zz-test-edition-lead-1.jpg' } };
+  const fs = require('node:fs/promises');
+  const path = require('node:path');
+  const { Jimp } = await import('jimp');
+  // This used to depend on an ignored upload left in one developer's checkout.
+  // Own the fixture so a fresh clone checks DPI, not a missing-file failure.
+  const directory = await fs.mkdtemp(path.join(__dirname, '../public/uploads/zz-dpi-test-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  await new Jimp({ width: 64, height: 64, color: 0x808080ff }).write(path.join(directory, 'small.png'));
+  const intent = { companion: true, requirement: 'IMAGE_REQUIRED', state: 'IMAGE_PLANNED', destinationSectionId: 1, image: { url: `/uploads/${path.basename(directory)}/small.png` } };
   const plan = { pages: [{ frames: [], page: { sections: [{ id: 1, width_px: 2000, height_px: 3000, margin_px: 12 }] }, imageIntents: [intent] }] };
   await validateImageIntents(plan);
   assert.equal(intent.state, 'IMAGE_INSUFFICIENT_RESOLUTION');

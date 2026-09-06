@@ -31,6 +31,7 @@ const RETRY_DELAYS_MS = [1500, 4000];
 
 let timer = null;
 let inFlight = false;
+let running = null;
 let pendingWhileInFlight = false;
 let retryIndex = 0;
 let saveFn = null;
@@ -83,36 +84,63 @@ export function discardOutstanding() {
 // section, where waiting out the debounce would lose the edit.
 export async function flush() {
   cancel();
-  await run();
+  // A navigation awaits flush to keep the selected draft alive. Returning
+  // while another request is running would let it switch blocks before the
+  // final keystrokes are captured. Drain that request, then save the latest.
+  if (inFlight) {
+    await bounded(running);
+    cancel();
+  }
+  await bounded(run());
 }
 
-async function run() {
-  if (!saveFn) return;
-  if (inFlight) {
-    pendingWhileInFlight = true;
-    return;
-  }
+// BUT THE WAIT IS BOUNDED, BECAUSE A CLICK MAY NOT HANG ON A REQUEST.
+//
+// Selecting a block and turning a page both await flush() now, so an
+// unbounded wait makes an unanswered save freeze the gesture: the desk clicks
+// a block and nothing happens, with no error, because there is nothing to
+// report yet. A FAILED save settles immediately - the catch below swallows it
+// and schedules the retry - so this only ever bounds a request that has not
+// answered at all.
+//
+// Giving up the wait costs nothing that matters: the caller has already
+// written the draft to the recovery journal, the snapshot the save is holding
+// is immutable, and the late-answer guard refuses to let that response speak
+// for whatever the desk has open by the time it lands. So the save carries on
+// in the background and the desk carries on working.
+const FLUSH_WAIT_MS = 5000;
+function bounded(promise) {
+  if (!promise || typeof promise.then !== "function") return Promise.resolve();
+  return Promise.race([promise, new Promise((resolve) => setTimeout(resolve, FLUSH_WAIT_MS))]);
+}
 
+function run() {
   // AN EXPIRED TIMEOUT IS NOT OUTSTANDING WORK.
   //
   // `schedule()` stores the debounce's id in `timer` and nothing ever cleared
   // it once that timeout FIRED - so from the first autosave onwards `timer`
   // held a dead id for the life of the workspace, and `isOutstanding()` was
-  // permanently true.
-  //
-  // That is not a cosmetic leak. Two things read it: the unload guard, which
-  // would therefore have asked EVERY desk to confirm leaving EVERY time they
-  // navigated, whether or not anything was unsaved; and the draft journal's
-  // forced write on the way out, which then left an entry for a block that was
-  // safely saved - and the next page load offered to restore it. Found by
-  // driving the browser net, whose click was blocked by exactly that offer
-  // sitting over the canvas.
+  // permanently true. Two things read it: the unload guard, which would have
+  // asked EVERY desk to confirm leaving EVERY time they navigated; and the
+  // draft journal's forced write, which then left a recovery entry for a
+  // block that was safely saved, offered back on the next open as a modal
+  // over the canvas.
   //
   // Cleared here rather than in schedule(): if run() is executing then the
-  // timeout has fired (or flush() cancelled it and called straight through),
-  // so at this instant nothing is scheduled. The retry branch below sets it
-  // again, which is a real pending save.
+  // debounce has fired - even when a previous request is still running - so
+  // at this instant nothing is scheduled. The retry branch sets it again,
+  // which is a real pending save.
   timer = null;
+  if (!saveFn) return;
+  if (inFlight) {
+    pendingWhileInFlight = true;
+    return running;
+  }
+  running = saveAttempt();
+  return running;
+}
+
+async function saveAttempt() {
 
   // A retry re-sends the snapshot that failed. Only a FRESH attempt asks what
   // there is to save, and it asks exactly once.
@@ -134,7 +162,7 @@ async function run() {
     if (!ok) throw new Error("Save rejected");
     retryIndex = 0;
     attempt = null;
-    onState?.("saved");
+    onState?.("saved", undefined, sending);
   } catch (error) {
     if (retryIndex < RETRY_DELAYS_MS.length) {
       const delay = RETRY_DELAYS_MS[retryIndex];

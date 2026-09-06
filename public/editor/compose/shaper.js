@@ -1,3 +1,4 @@
+import { readFontFile } from './font-bytes.js';
 // Real Devanagari shaping. This is the exact authority font-metrics.js
 // claimed to be and was not.
 //
@@ -41,18 +42,11 @@ const { FONT_FILES, faceKey } = globalThis.SahasTypefaces;
 // comment saying so. Both now read layout/typefaces.js, so the measurer and
 // the shaper cannot disagree about which face a block is set in.
 
-async function readFontFile(path) {
-  if (typeof process !== 'undefined' && process.versions?.node) {
-    const { readFile } = await import('node:fs/promises');
-    const { fileURLToPath } = await import('node:url');
-    const here = fileURLToPath(import.meta.url);
-    const root = here.slice(0, here.indexOf('/public/'));
-    return readFile(`${root}/public${path}`);
-  }
-  const response = await fetch(path);
-  if (!response.ok) throw new Error(`${path} could not be read`);
-  return new Uint8Array(await response.arrayBuffer());
-}
+// Both this module and its neighbour used to carry a byte-identical copy of
+// this, and each independently fetched EVERY publication face - so opening an
+// edition downloaded the paper's ten faces twice, 3.2 MB of TTF arriving as
+// 6.4 MB on the one request a desk waits through before the sheet appears. One
+// cached reader, in font-bytes.js.
 
 // One module, two runtimes, same as font-metrics.js: Node reaches the real
 // npm package (harfbuzzjs, in node_modules); the browser has no bundler and

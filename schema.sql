@@ -87,6 +87,7 @@ ALTER TABLE publication_settings ADD COLUMN IF NOT EXISTS coverage_city VARCHAR(
 CREATE TABLE IF NOT EXISTS newspapers (
   id SERIAL PRIMARY KEY,
   name VARCHAR(200) NOT NULL,
+  template VARCHAR(100) NOT NULL DEFAULT 'front',
   publication_date DATE NOT NULL DEFAULT CURRENT_DATE,
   status VARCHAR(30) NOT NULL DEFAULT 'draft',
   page_width_px INTEGER NOT NULL DEFAULT 660,
@@ -105,6 +106,24 @@ CREATE TABLE IF NOT EXISTS newspapers (
   epaper_source VARCHAR(30)
 );
 
+-- SCHEMA.SQL DID NOT DECLARE A COLUMN THE CODE HAS ALWAYS WRITTEN.
+--
+-- `newspaper.repository.js` names `template` in BOTH of its INSERTs, and this
+-- file never created it. Nothing could notice, because every database that
+-- exists already carries the column - so the fault is invisible until somebody
+-- installs SAHAS somewhere new, where creating the very first edition fails
+-- with `column "template" of relation "newspapers" does not exist`. That is
+-- the third time this exact drift has been found here: the first was
+-- `news_items.newspaper_id`'s ON DELETE rule, the second the `users.role`
+-- CHECK, and both were also found only when something finally exercised them.
+--
+-- The DEFAULT is deliberate and is NOT a copy of the live database, which
+-- carries this column NOT NULL with no default. PostgreSQL cannot add a NOT
+-- NULL column to a table that already has rows unless it is given one, so the
+-- ALTER below needs it. Both INSERT sites pass 'front' explicitly, so the
+-- default never actually decides anything - it exists to make this line
+-- applicable to a database that predates it.
+ALTER TABLE newspapers ADD COLUMN IF NOT EXISTS template VARCHAR(100) NOT NULL DEFAULT 'front';
 ALTER TABLE newspapers ADD COLUMN IF NOT EXISTS publication_date DATE NOT NULL DEFAULT CURRENT_DATE;
 ALTER TABLE newspapers ADD COLUMN IF NOT EXISTS page_width_px INTEGER NOT NULL DEFAULT 660;
 ALTER TABLE newspapers ADD COLUMN IF NOT EXISTS page_height_px INTEGER NOT NULL DEFAULT 1060;

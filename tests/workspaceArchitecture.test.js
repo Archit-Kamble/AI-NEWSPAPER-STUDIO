@@ -25,7 +25,18 @@ test('admin.js does not define its own renderWorkspace - it only imports the rea
   // legitimately also imported `leaveWorkspace` from the same module - a
   // source-shaped assertion breaking on a change it was never written to
   // catch. The line below is the one that actually holds the rule.
-  assert.match(source, /import\s*\{[^}]*\brenderWorkspace\b[^}]*\}\s*from\s*["']\.\/editor\/workspace\.js["']/);
+  // Static OR dynamic. admin.js loads the editor on demand now - a static
+  // import made the LOGIN screen fetch 108 modules of layout desk before it
+  // could draw a form - and the invariant this line holds is WHERE
+  // renderWorkspace comes from, not which syntax reaches it. Pinning the
+  // spelling is what broke this check once already, when admin.js
+  // legitimately began importing leaveWorkspace from the same module.
+  assert.match(
+    source,
+    /(import\s*\{[^}]*\brenderWorkspace\b[^}]*\}\s*from\s*["']\.\/editor\/workspace\.js["'])|(import\(\s*["']\.\/editor\/workspace\.js["']\s*\))/,
+    'admin.js reaches renderWorkspace through editor/workspace.js',
+  );
+  assert.match(source, /\brenderWorkspace\b/, 'and actually uses it');
   assert.doesNotMatch(source, /function\s+renderWorkspace\s*\(/);
 });
 

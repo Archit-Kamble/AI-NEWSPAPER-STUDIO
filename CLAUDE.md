@@ -4201,6 +4201,18 @@ ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS border_radius_px NUMERIC(5,2)
 -- polygon", because a genuinely new outline would need the compositor's own
 -- scanline algorithm to change; a corner cut needs only one more OBSTACLE.
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS frame_shape VARCHAR(20);
+
+-- TWO EDITORS COULD SILENTLY OVERWRITE EACH OTHER. Measured: two authenticated
+-- sessions saved the same block from the same base version, both answered 200,
+-- and the first editor's work was gone with nothing anywhere saying so. The
+-- UPDATE carried no revision condition at all, so the last write simply won.
+--
+-- An integer rather than a timestamp: monotonic, exact, and not confusable by
+-- two saves inside one clock tick. Every existing row starts at 1, so the
+-- migration changes nothing - and the condition is written
+-- `($59::int IS NULL OR revision = $59)`, so a caller that does not send an
+-- expected revision saves exactly as it always did.
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 1;
 ```
 
 **The session table is deliberately NOT in this list.** `user_sessions` is
@@ -7647,6 +7659,213 @@ inside the range this catalogue's existing `BORDER_WIDTHS` ladder covers.
 ```bash
 node --test tests/paletteExpansion.test.js tests/furnitureExport.test.js
 ```
+
+## The production-readiness pass — what a second editor, a dropped connection and a closed tab now do
+
+Two independent full regressions produced nineteen findings
+(`docs/PRODUCTION-READINESS.md`). Sixteen are closed; the three that remain are
+blocked on artwork, a printer's ICC profile, and a deletion only the owner may
+authorise. What follows is the part a future change has to know about.
+
+### Black was declared as NO INK, and it is 95% of the paper
+
+The `.sla` colour table read `Black = #00000000`. That attribute is four bytes,
+`#CCMMYYKK`, so it meant C0 M0 Y0 K0 — **nothing on any of the four plates** —
+on the 443 of 465 text runs set in `TXTFILL="Black"`. A press file whose black
+is no ink prints essentially blank.
+
+The byte order was not assumed and must not be re-derived by eye:
+`Registration` is `#ffffffff` (100% of every plate, which is what a
+registration mark *is*) and `SahasRed` decodes to its own known separation.
+`tests/inkAndGround.test.js` asserts both **before** it reads Black, so the
+scale and the order are proved by the table rather than taken on faith.
+
+`White` stays `#00000000` and that is correct rather than the same oversight —
+white IS the absence of ink, the newsprint showing through. The two being
+byte-identical is what made the fault visible.
+
+### A block carries a REVISION, and the lock is opt-in
+
+`page_sections.revision` is an integer, and `saveSection`'s UPDATE carries
+`AND ($59::int IS NULL OR revision = $59)`.
+
+**The `IS NULL` branch is the whole safety argument.** A caller that sends no
+`expectedRevision` makes the condition vacuous and saves exactly as it always
+did, so the AI writer, `pageStyle.service.js`, the newsdesk run, every script
+and every existing test are untouched. Only the editor — which knows what
+revision it loaded — opts in. A lock that broke every other caller to protect
+one path would have cost more than the fault it fixes.
+
+- **A conflict is 409, never 400.** 400 tells a desk they sent something wrong,
+  which is untrue and cannot be acted on — the fault the catch-all handler
+  already had once. The current row travels with the 409 so the editor can show
+  both versions.
+- **The desk chooses, and the software does not pick a winner.** `Keep mine`
+  re-sends against **their** revision rather than bypassing the check, so a
+  third save landing in between asks again instead of being overwritten in
+  silence. `Load theirs` rebuilds the draft the way `selectSection()` does
+  rather than *through* it — that function returns early when the block is
+  already selected and flushes the dirty draft on the way, which would save
+  this desk's version over theirs at the exact moment they asked for the
+  opposite.
+- **The revision is read from the store's own section row**, never held in the
+  draft. It is bookkeeping about the save, not copy; putting it in the draft
+  would mean marking the block dirty every time the server answered.
+- The migration is in `schema.sql` and must be applied by hand, like every
+  other one. All 6,047 existing rows start at 1 and none changed.
+
+### A save is OF something, and a late answer may not speak for a newer draft
+
+`autosave.run()` called a zero-argument `saveFn()` that reached into the store
+for the current page, block and draft. Correct for the first attempt, wrong for
+every retry — 1.5s or 4s later the desk has moved on, so **block A's failed
+save wrote block B**.
+
+`configure({ save, capture })` now takes a snapshot once, at the moment the
+attempt begins, and every retry of that attempt re-sends **that** snapshot.
+Nothing in `autosave.js` asks the store what is current; it cannot, because it
+is not given a way to.
+
+- **The payload is deep-cloned.** `payloadFromDraft` builds a fresh object but
+  carries `tags` and `insetPanels` by reference, and a retry must send what
+  FAILED rather than what those arrays have become.
+- **`history.markSaved()` runs only when the response is still for the selected
+  block.** It stamps the current top of the undo stack as having reached the
+  database; on a late answer for another block that stamp is a lie about the
+  block being typed into, which is the worst thing a save indicator can be
+  wrong about.
+
+### The draft journal is an OFFER, and it keeps the draft, not the payload
+
+`public/editor/autosave/draft-journal.js`. Between a keystroke and the server
+acknowledging it, the copy existed in exactly one place — a tab.
+
+- **localStorage, not IndexedDB, deliberately.** `beforeunload` cannot await
+  anything, and that is the one moment this exists for.
+- **Throttled to one write per two seconds**, not per keystroke: the typing
+  path already runs the compositor, and a synchronous write per character would
+  be paying for the safety net where a desk would feel it.
+- **Every write is wrapped.** A full quota, a private window, a browser set to
+  block site data — all throw on `setItem`, and none of them is a reason for a
+  keystroke to fail.
+- **It journals the DRAFT, never the payload.** `payloadFromDraft` is a
+  *translation*, not a copy: it renames (`reporterName` from `draft.author`) and
+  encodes (`columnCount: 0` is the wire's word for Auto). Restoring a payload
+  into a draft would drop the byline and pin every Auto block to an explicit
+  column count, silently.
+- **It never restores by itself.** It names the blocks and a person presses it,
+  and restoring puts the words in the draft where Ctrl+Z still reaches them.
+
+### The page has a Content-Security-Policy, and two entries in it are load-bearing
+
+`'wasm-unsafe-eval'` — the compositor's shaper is HarfBuzz compiled to
+WebAssembly, and Chrome refuses `WebAssembly.instantiate` under any `script-src`
+that does not admit it. Without it the shaper never becomes ready, which in the
+browser means every block silently measured against the fallback grid: a page
+composed against a font it is not set in. It is far narrower than
+`'unsafe-eval'` and still refuses `eval()` and `new Function()`.
+
+`'unsafe-inline'` for **style only** — this product positions every composed
+line by writing a style attribute; that is what `render.js` IS. It is not
+extended to `script-src`, and the palette boundary at the service is what keeps
+arbitrary text out of those attributes.
+
+**No inline event handlers anywhere, and this is now a rule.** Four
+`onerror="…"` attributes drew the broken-image fallbacks, measured as 263 CSP
+violations in one net run. Under a policy worth having they do not error — they
+silently **stop working**, and the desk sees the glyph the handler existed to
+remove. `public/ui/broken-image.js` is one capture-phase listener at the
+document; `error` does not bubble, so the capture flag is load-bearing, and the
+policy is named on the element as `data-broken` rather than as script.
+
+### One reader for the publication faces
+
+`public/editor/compose/font-bytes.js`. `font-metrics.js` and `shaper.js` each
+carried a byte-identical `readFontFile()` and each independently fetched every
+face, so opening an edition downloaded the paper's ten faces **twice** — 3.2 MB
+of TTF arriving as 6.4 MB, on the request a desk waits through before the sheet
+appears. The cache holds the ArrayBuffer and hands each caller its own view;
+neither reader writes to the bytes. **A failed read is not cached** — a face
+that could not be fetched because the connection dropped must be askable again,
+which is the fault already fixed for the templates and geometry caches.
+
+### The editor is loaded on demand, and everything is compressed
+
+`admin.js` imported `editor/workspace.js` **statically**, so the login screen
+fetched 108 modules of layout desk before it could draw a form. It is a dynamic
+import cached in a promise; nothing in `workspace.js` runs at import time.
+`tests/workspaceArchitecture.test.js` accepts either syntax now, because the
+invariant it holds is WHERE `renderWorkspace` comes from.
+
+`compression` is registered first, so it wraps the API as well as the static
+files. Measured: the editor's module graph 1.63 MB → 0.56 MB, `styles.css`
+328 KB → 88 KB, `/api/news` 2.02 MB → 170 KB, `/api/newspapers` 330 KB → 10 KB.
+No API contract changed, so the Story Explorer's client-side search still has
+the whole list it filters.
+
+**Only the fonts and the vendored libraries are cached** (a day). The
+application's own code must revalidate: a deploy leaving desks running
+yesterday's editor with no way to tell is a far worse fault than a slow load.
+
+### A test may not write to an account somebody uses
+
+Seven test files upserted `admin@esahas.com` and **replaced its password hash**
+with a constant published in this repository, never restoring it. That is the
+real administrator of a real newspaper — and it is also why nothing noticed,
+because the tests worked BECAUSE they had corrupted the account, so the
+corruption looked like configuration.
+
+- `tests/helpers/desk-owner.js` makes a disposable login per role on an
+  `@example.test` address (a reserved TLD, so it can never be a real mailbox)
+  with a random password, removes it, and sweeps ones left by killed runs.
+- `tests/helpers/desk.js`'s `signIn()` uses it by default. A caller naming an
+  email explicitly still gets exactly what it asked for.
+- **A fixture is removed in the same `finally` that made it.** `health.test.js`
+  cleaned up its FILES and not its edition — 265 identical `2099-01-01`
+  editions, 4,222 blocks, 70% of `page_sections`, one per run, and they sort
+  first so a desk met test data before a real edition.
+- **A hardcoded row id is not an identity.** `roles.test.js` addressed
+  self-protection through a literal `/api/staff/1`, which meant "self" only by
+  accident of insertion order — so the check would have gone on passing while
+  testing something else entirely.
+- `tests/helpers/test-database.js` **refuses** under `NODE_ENV=production` and
+  warns otherwise, naming the database. It does not refuse on a dev machine: a
+  fix that turns 1,199 passing tests into zero is not a fix. Point `DB_NAME` at
+  anything ending `_test` and it goes quiet.
+- The twenty browser nets read `SAHAS_DESK_EMAIL`/`SAHAS_DESK_PASSWORD`
+  (`tests/browser/helpers/desk-login.js`), defaulting to what they always used.
+
+```bash
+npm run test:browser                    # all twenty, serially, against the running app
+npm run test:browser workspace parity   # by name
+```
+
+It reports the **last** line rather than the first failure, because this
+repository has been bitten by a net that crashed at check 18 of 211 and looked
+like a pass.
+
+### A pruning script that deletes the wrong rows is worse than none
+
+`scripts/prune-test-fixtures.js` reports by default and needs `--delete
+--i-have-a-backup` to touch anything. **Its first version was wrong in the most
+dangerous possible direction** and the reason is worth keeping: it filtered on
+"2099-dated, no e-paper release, **no press file**" — and the leaked editions
+all *do* carry press files, because the leaking test uploads a fake `.sla` and
+`.pdf` every run. So it excluded all 266 and selected the ten that were left,
+which are the editions the browser nets open by default and the showcase page
+this file tells you to look at. It matches the leak's measured signature now,
+and prints the list it is **keeping** so the claim can be checked.
+
+### `/ActualText` was there all along
+
+A regression reported "zero `/ActualText` in a 2.76 MB export". Every content
+stream is `/FlateDecode`; that was a grep of compressed bytes. Decompressed, a
+real four-page export carries **948 spans**. `tests/pdfTextRecovery.test.js`
+decompresses and reads them, so the claim is about the document rather than its
+bytes. Words that still extract poorly do so because **poppler does not honour
+`/ActualText`** and falls back to `/ToUnicode`, which cannot describe
+many-to-many Devanagari shaping — a limitation `pdf.writer.js` already
+documents and which no change here can remove.
 
 ## Engineering rules
 

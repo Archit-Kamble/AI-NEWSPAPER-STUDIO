@@ -1,272 +1,141 @@
-# Production readiness — the open problem register
+# Production readiness — the problem register
 
 Two independent full regressions were run on 2026-09-06: one by Claude on `main`, one by
 Codex on `codex/newspaper-block-designs`. This is the combined list, ranked by what it
 costs the newsroom on press day.
 
-**Nothing in this file is fixed unless it says FIXED.** Each entry names the file and line
-so the next pass can start from evidence rather than from a description.
+**Sixteen of the nineteen are now closed**, on 2026-09-06, and each entry below says what
+was done and how it was verified. Three remain, and each of them is blocked on something
+this software cannot supply for itself — artwork, a printer's colour profile, or a
+decision only the owner can take. They are at the bottom, under **Still open**.
 
 Source is marked: **[C]** Claude's regression, **[X]** Codex's regression, **[C+X]** both
 found it independently.
 
 ---
 
-## Already fixed (recorded so it is not re-audited)
+## Closed
 
-| | what it was | where |
-|---|---|---|
-| **[C]** FIXED | The folio rule was struck **through** the folio type on every inside page of every PDF and IDML. Text ink 32.72→49.82, rule at 39.00. Cause: `lineY = header.top + bandPx * 0.32`, a fraction tuned while the rule still sat at the bottom of the 32px band; the chip-row change moved the rule to 19 and left the type behind. Now centred in the chip row, mirroring the canvas's `align-items: center`. | `src/services/export/print-model.js` `folioItems()` |
-| **[C]** FIXED | Scribus dropped **every** furniture text colour. `furnitureFrames()` passed the field as `ink:`; `lineFrame()` reads `run.colour`, so all 465 runs fell to `'Black'`. A `sunday`-themed folio drew its orange panel and set **black** type on it. `colourFor()` also had no white case, so reversed type could not resolve. | `src/services/scribus.service.js:597`, `:302`, `colourFor()` |
-
-Both are held by tests that fail against the old code, in `tests/furnitureExport.test.js`.
-
----
-
-## P0 — release blockers
-
-### 1. **[X]** Two editors silently overwrite each other
-
-Two authenticated sessions edited the same block from the same base version. First save
-200, second **stale** save 200, and the first editor's work was gone. The API receives
-`updated_at` and ignores it; the UPDATE carries no revision condition.
-
-- `src/repositories/page.repository.js:435`, `:495`
-
-**Fix shape:** an integer section revision, `UPDATE … WHERE revision = $expected`, HTTP 409
-when someone saved first, and a compare UI offering keep-mine / load-theirs. Durable
-revisions so overwritten copy is recoverable.
-
-### 2. **[X]** Autosave can save or clear the **wrong** draft
-
-Page and block changes call `autosave.flush()` without awaiting it, then immediately replace
-the current draft. The retry then calls `persistDraft()` against whichever page/block is
-current **at retry time**. Deterministically reproduced: `block-A save fails → selection
-changes → retry saves block-B`.
-
-- `public/editor/workspace.js:907`, `:1474`, `:1366`
-- `public/editor/autosave/autosave.js:36`
-
-**Fix shape:** autosave an immutable `{pageId, sectionKey, payload, revision}` snapshot;
-ignore stale responses; never let a late response mark a *newer* draft as saved.
-
-### 3. **[X]** Refresh or tab close can lose recent copy
-
-Workspace drafts live only in memory and autosave debounces one second. There is no
-`beforeunload`, no `pagehide`, no local draft journal anywhere in the workspace — only the
-reporter form has an unload guard. A failed flush inside `leaveWorkspace()` is swallowed and
-schedules a retry that may run after another block is selected.
-
-- `public/editor/workspace.js:100` (`leaveWorkspace`)
-
-**Fix shape:** a small IndexedDB draft journal held until the server acknowledges the exact
-revision, plus a warn-before-unload while a save is outstanding.
-
-### 4. **[C+X]** The test suite writes into the **real** newsroom database
-
-Two halves, both confirmed by measurement:
-
-- **[X]** Seven test files upsert `admin@esahas.com` and replace its password hash with a
-  repository-known test credential, never restoring it. The real administrator password has
-  therefore been overwritten and **must be rotated by hand** — the old hash was not
-  preserved. The known reporter credential also works.
-  - `tests/roles.test.js:36`, `tests/pressReadiness.test.js:11`, and five more
-- **[C+X]** Fixtures are never cleaned up. `tests/health.test.js:81` creates an edition with
-  **zero `t.after` blocks and zero DELETEs** — one leaked edition per run.
-
-Measured contamination (Claude, 2026-09-06):
-
-| | |
+| | what it was, and what closed it |
 |---|---|
-| editions | **273 of 474** are 2099-dated fixtures (263 named `साहस`, 264 on `2099-01-01`) |
-| pages | 301 of 435 |
-| `page_sections` | **4,555 of 6,002 — 76%** |
-| accumulated | 2026-08-23 → 2026-09-05, ~20/day |
+| **[C]** #6 | **The press file declared black as NO INK.** `Black = #00000000` in the `.sla` colour table — the attribute is four bytes `#CCMMYYKK`, so C0 M0 Y0 K0, nothing on any of the four plates, on the **443 of 465 text runs (95% of all type)** set in `TXTFILL="Black"`. A press file whose black is no ink prints essentially blank. Now `#000000ff`, which is the rule this project already states for the PDF writer. The byte order is not assumed: `tests/inkAndGround.test.js` asserts `Registration` at `#ffffffff` and `SahasRed` at its own known separation *before* it reads Black, and fails against the old value. White stays `#00000000` — white IS the absence of ink — and the two being byte-identical is what made the fault visible. |
+| **[X]** #1 | **Two editors silently overwrote each other.** `page_sections` gains an integer `revision`; the UPDATE carries `AND ($59::int IS NULL OR revision = $59)`. **Opt-in by construction**: a caller that sends no expected revision makes the condition vacuous and saves exactly as before, so the AI writer, the styling pass, the newsdesk run and every script are untouched. A conflict answers **409** (not 400 — a conflict is not a bad request) carrying the current row, and the desk is shown which fields differ and chooses; "Keep mine" re-sends against *their* revision, so a third save asks again rather than being overwritten in silence. Driven through the real routes: 200 → 409 with the server's row intact → 200 after reloading → 200 for a caller sending none. All 6,047 existing rows start at 1 and none changed. |
+| **[X]** #2 | **Autosave's retry saved whatever was open when it fired.** `run()` called a zero-argument save that reached into the store, so a retry 1.5s or 4s later wrote the block the desk had moved to. A save is now OF something: `capture()` takes an immutable snapshot once and every retry re-sends that one. The payload is deep-cloned (`payloadFromDraft` carries `tags` and `insetPanels` by reference). And a late answer may no longer mark a **newer** draft saved — `history.markSaved()` runs only when the response is still for the selected block. |
+| **[X]** #3 | **Refresh or tab close lost recent copy.** There was no `beforeunload`, no `pagehide` and no local journal anywhere in the workspace. Both added: a guard while a save is outstanding, and `public/editor/autosave/draft-journal.js` — localStorage rather than IndexedDB *precisely because* `beforeunload` cannot await anything. Throttled to one small write per two seconds of typing (the compositor already runs per keystroke), every write wrapped so a full quota or a private window can never make a keystroke fail, bounded at 40 entries / 7 days. It **never restores by itself**: it names the blocks and a person presses it. It journals the **draft**, not the payload — `payloadFromDraft` is a translation, not a copy, and restoring one into the other would drop the byline and pin every Auto block to an explicit column count. |
+| **[C+X]** #4 | **The test suite wrote into the real newsroom.** Seven files upserted `admin@esahas.com` and **replaced its password hash** with a constant published in this repository, never restoring it — which is also why nothing noticed, since the tests worked *because* they had corrupted the account. All seven are gone; `tests/helpers/desk-owner.js` makes a disposable per-role login on an `@example.test` address with a random password, removes it, and sweeps abandoned ones. `roles.test.js` addressed self-protection through a literal `/api/staff/1`, which meant "self" only by accident of insertion order — it uses its own seeded owner's id now. `health.test.js` created one edition per run and removed none, and filed news as the real reporter under user id 2; it cleans up in the same `finally` and uses its own account. The twenty browser nets no longer hardcode the credential (`SAHAS_DESK_EMAIL` / `SAHAS_DESK_PASSWORD`). `tests/helpers/test-database.js` **refuses outright** under `NODE_ENV=production` and warns loudly otherwise — it does not refuse on a dev machine, because a fix that turns 1,199 passing tests into zero is not a fix. **The existing rows are NOT deleted — see Still open.** |
+| **[X]** #5 | **A published placeholder passed the startup guard.** It named `dev-secret` and nothing else, so `.env.example`'s own `SESSION_SECRET=change-this-secret` walked past it. The guard checks the CLASS of value now — placeholder wording first (so a short placeholder is not merely told to be longer), then length, then character variety — and one test points at `.env.example`'s **actual bytes**, so the two cannot drift. The example ships an **empty** secret rather than an example one. |
+| **[X]** #7 | **Repeatedly opening editions made page switching progressively slower.** `subscribeViews()` added seven store subscriptions per render and released none, so five opens meant five page-area renders, five side-panel renders and five guide requests per page click — the measured 1–2 s. `store.subscribe()` has **returned its own unsubscribe since it was written** and no caller had ever used it. Released at the top of `subscribeViews()` and again in `leaveWorkspace()`. The two window listeners are deliberately **not** included: `onWorkspaceResized` is one stable module-level function and the DOM ignores a duplicate registration, so teardown there would be removing a leak that is not there. |
+| **[X]** #8 | **Rapid edition navigation could paint the wrong edition.** The navigator's `stale` token was checked before `renderWorkspace` and never again — and everything slow about opening an edition is *inside* that function (two edition fetches, the news list, the identity, the geometry, the fonts, the shaper). It is threaded in and checked at the two points where the function commits. `loadIdentity()` had the same shape one layer down: it set `loadedFor` on the way out and committed unconditionally on the way back, so B's nameplate carried A's volume and issue number whenever A finished last. |
+| **[X]** #9 | **Page guides and block images could cross selections.** Both loaders captured their subject, awaited, then wrote a module global — and `redrawCompose()` applies that global to whatever is selected **now**, so a slow response for block A displayed A's photographs inside block B and `history.primeImages()` wrote them into B's opening snapshot, where an undo would restore pictures that were never in it. Both check on the way back and drop a response whose subject is no longer open. |
+| **[C]** #11 | **FALSE ALARM, and corrected.** The report was "zero `/ActualText` in a 2.76 MB export". Every content stream is `/FlateDecode`, so that was a grep of compressed bytes. Decompressed, a real four-page export carries **948 `/ActualText` spans**, including the exact string `सूर्योदय ०६:३७ · सूर्यास्त १७:५९ · दिनमान ११ तास २२ मिनिटे`. Extraction with `pdftotext` recovers full Marathi body copy correctly; the words that degrade do so because **poppler does not honour `/ActualText`** and falls back to `/ToUnicode`, which cannot describe many-to-many Devanagari shaping — a limitation `pdf.writer.js` already documents. `tests/pdfTextRecovery.test.js` decompresses the streams and holds it, and fails if the marked content is dropped. |
+| **[X]** #12 | **Production environment was not configured.** `.env.example` now documents `NODE_ENV`, `TRUST_PROXY`, `DB_SSL` and `JSON_BODY_LIMIT` — and `TRUST_PROXY` and `DB_SSL` are **wired**, not merely documented: a variable nothing reads is the mechanism-with-no-surface fault this codebase records three times. `DB_SSL` defaults to off, so no existing deployment changes; `TRUST_PROXY` is deliberately not defaulted on in production, because trusting a forwarding header from a client that is *not* behind a proxy lets it claim any address and turns the login throttle into a way past itself. |
+| **[X]** #13 | **Dependency and header hardening.** CSP, Permissions-Policy, HSTS (production only), `x-powered-by` off. The policy admits `'wasm-unsafe-eval'` — without it Chrome refuses `WebAssembly.instantiate` and the HarfBuzz shaper never becomes ready, so every block would silently compose against the fallback grid — and `'unsafe-inline'` for **style only**, because `render.js` positions every composed line with a style attribute. `express.json` came down from **50 MB** (parsed before anything asks who is sending it) to a configurable 5 MB; pictures and press files are multipart and bounded separately. `npm` and `start` were production dependencies and nothing required either. **Vulnerabilities 10 (6 high, 4 moderate) → 3 (moderate)**: removing those two deps and taking `onnxruntime-node` to 1.29.0 cleared both highs, and the ONNX cut-out model was re-verified loading with the same input/output shape. The remaining three are Express 4's transitive `body-parser`/`qs`; Express is already at the latest 4.x and the fix requires **Express 5**, a breaking major — see Still open. |
+| **[X]** #14 | **Cold load was heavy.** Three measured changes, no API contract touched. **Compression** (`compression`, registered first so it wraps the API too): the editor's 90-module graph **1.63 MB → 0.56 MB (66%)**, `styles.css` **328 KB → 88 KB**, `/api/news` **2.02 MB → 170 KB**, `/api/newspapers` **330 KB → 10 KB**. **One font reader** (`public/editor/compose/font-bytes.js`): `font-metrics.js` and `shaper.js` each carried a byte-identical `readFontFile()` and each independently fetched every face, so a desk downloaded the paper's ten faces **twice** — 3.2 MB arriving as 6.4 MB. **The editor is loaded on demand**: `admin.js` imported `editor/workspace.js` statically, so the login screen fetched 108 modules of layout desk before it could draw a form. Fonts and vendored libraries are held for a day; the application's own code still revalidates, because a deploy leaving desks on yesterday's editor is a far worse fault than a slow load. |
+| **[C]** #15 | **One genuinely unguarded `fetch(...).json()`.** The Publish dialog read the edition with no `response.ok` and no `.catch()`, so on a 401 or 500 it drew its question for an edition it had never loaded, and on a non-JSON answer it threw inside an async click handler and the button silently did nothing. Guarded, and a failure now says so with a retry. |
+| **[X]** #16 | **Accessibility gaps.** The publication modal had no dialog semantics, focus trap or restore, no Escape and no accessible close — fixed by putting it on `public/ui/dialog.js`, which already had all of that, **removing a second dialog implementation** rather than teaching it to behave. Page pills gained `aria-current` and a real label ("Page 4, has copy") instead of state carried in colour alone; the Story Explorer close button gained a name. |
+| **[C]** #19 | **Housekeeping.** Two nets wrote screenshots over **tracked** files, so every verification run dirtied the working tree; they write to a gitignored `runs/` now and the historical shots stay. The 41 equal-specificity CSS conflicts are unchanged and remain cosmetic debt. |
 
-Codex measured the same shape from the other side: 1,652 leaked `test-{timestamp}` news
-rows; 827 of 1,399 rows returned by `/api/news`; 263 of 474 editions on `/api/newspapers`.
+### And one the CSP found rather than merely being adopted
 
-**And they sort first.** All ten of the first entries in `GET /api/newspapers` are fixtures,
-so a desk opening Past Newspapers wades through test data before reaching a real edition.
-This is the failure this codebase has already recorded twice (116 editions, then 221) and it
-is now larger than either.
-
-**Fix shape:** a dedicated `sahas_test` database; refuse to run unless the database name
-ends in `_test`; unique disposable users instead of real addresses; cleanup in `finally`.
-Then prune the existing 273 fixtures **after a backup** — that deletion needs the owner's
-explicit approval, so it was not done.
-
-### 5. **[X]** A production secret placeholder passes the startup guard
-
-`.env.example:6` ships `SESSION_SECRET=change-this-secret` and no `NODE_ENV=production`.
-The guard at `server.js:36` rejects only the literal `dev-secret`, so the public placeholder
-is accepted.
-
-**Fix shape:** reject known placeholders and enforce a length/entropy floor; put
-`NODE_ENV=production` in the example with deployment notes.
-
-### 6. **[C]** The Scribus colour table defines `Black` as **no ink**
-
-```
-Black        = C0%  M0%  Y0%  K0%      <- no ink on any plate
-White        = C0%  M0%  Y0%  K0%      <- identical
-Registration = C100% M100% Y100% K100% <- correct, and validates the format reading
-```
-
-`SahasRed` decodes to C0 M100 Y90 K10, which confirms the byte order independently. **443 of
-465 text runs — 95% of all type in the press file — are set in `TXTFILL="Black"`.** If
-Scribus honours the document's own colour table, the press file prints essentially blank.
-
-- `src/services/scribus.service.js`, the `COLOURS` constant
-
-**Not fixed deliberately.** The correct value is almost certainly `#000000ff` (100% K, which
-is this project's own stated rule), but no Scribus binary is available here to render
-against, and this is the single most consequential value in the press file. **Open one `.sla`
-in real Scribus and check whether black type prints, before changing it.**
+Four inline `onerror` handlers — the broken-image fallbacks on the canvas's placed picture,
+a block's thumbnail, the Pictures panel and the Story Explorer — measured as **263 CSP
+violations in one net run**. They matter more than they look: under a policy worth having
+they would silently **stop working**, and the desk would see the broken glyph they exist to
+remove, with nothing anywhere saying why. `public/ui/broken-image.js` replaces all four with
+one capture-phase listener at the document — `error` does not bubble, which is why the
+capture flag is load-bearing. After it: **224/224 with zero violations and zero console
+errors**, where the same net had been exit 1.
 
 ---
 
-## P1 — serious, not release-blocking
+## Still open
 
-### 7. **[X]** Repeatedly opening editions makes page switching progressively slower
-
-Every workspace render calls `subscribeViews()` again, adding seven store subscriptions plus
-window resize listeners; `leaveWorkspace()` removes none. After five opens, one page click
-triggers ~5 page-area renders, ~5 side-panel renders and ~5 guide requests. This is the
-direct cause of the observed 1–2 second page switching.
-
-- `public/editor/workspace.js:2020`, `:3100`, `:100`
-
-### 8. **[X]** Rapid edition navigation can paint the **wrong** edition
-
-Stale-operation tokens are checked only *before* the async work. Reproduced: address showed
-the fast edition, the painted screen showed the slow earlier one. The masthead identity has
-the same race and retained edition A's identity when A finished last.
-
-- `public/admin/navigation.js:66`, `public/admin.js:473`, `public/editor/workspace.js:144`
-- `public/editor/canvas/masthead.js:26`
-
-### 9. **[X]** Page guides and block images can cross selections
-
-Both loaders capture a page/block, await, then replace module-global data without checking
-the selection still matches. `redrawCompose()` assigns the returned image list to the
-*currently* selected section — so a slow response for block A can display A's pictures inside
-block B and contaminate B's history.
-
-- `public/editor/workspace.js:260`, `:319`
+Each of these is blocked on something outside the code.
 
 ### 10. **[X]** The masthead artwork is below press resolution
 
 `sahas-nameplate.png` is 1600×300 and measures ~190 PPI in the generated press file. It
-should be vector, or at least 300 PPI at printed size. (The 12 Rashi images are fine — above
-~560 DPI at current card size.)
+should be vector, or at least 300 PPI at printed size — **1600×300 cannot be resampled into
+either**. This needs the original artwork from whoever drew the nameplate; nothing in the
+software can create resolution that is not in the file. The RNI number is part of that
+artwork, so it is a registered mark rather than something to redraw.
 
 - `src/layout/identity.js:31`, `src/services/export/print-model.js:864`
 
-### 11. **[C]** The press PDF carries no `/ActualText`
-
-Zero occurrences in a 2.76 MB export; only 3 ToUnicode CMaps. CLAUDE.md states
-"`/ActualText` on every run" — that is not what the file contains. **Rendering is correct**
-(verified by rasterising page 2); only extraction degrades, and only for complex clusters:
-`सूर्यास्त` extracts as `सय स्त`, `दिनमान` as `दनम न`; simple words extract fine. The
-archive and any indexer cannot find complex Marathi words.
-
-### 12. **[X]** Production environment is not configured
-
-`NODE_ENV` unset · `SESSION_SECRET` absent (falls back to `dev-secret`, non-secure cookie) ·
-documented default admin credential still works · `OPEN_METEO_API_KEY` absent so weather
-correctly refuses (`src/features/havaman.js:96`) · `DB_SSL` absent with no pool SSL config
-(`src/config/db.js:35`) · reverse-proxy trust not configured, so secure cookies need
-verification when TLS terminates before Node.
-
-### 13. **[X]** Dependency and header hardening
-
-10 vulnerabilities (6 high, 4 moderate) across `onnxruntime-node`/`adm-zip`, `tar`,
-`brace-expansion`, `ip-address`, Express/`qs`, `undici`. Also: `npm` and `start` are
-unnecessary production dependencies (`package.json:19`); anonymous requests are parsed up to
-**50 MB before authentication** (`server.js:70`); no CSP, HSTS or Permissions-Policy;
-`X-Powered-By` still exposed.
-
----
-
-## P2 — real, lower cost
-
-### 14. **[X]** Cold load is heavy
-
-108 JS modules ≈1.94 MB · `styles.css` ≈330 KB · 3.15 MiB across ten fonts · ≈422 KB
-HarfBuzz WASM · assets `max-age=0` with no compression · `admin.js:1` imports the whole
-workspace so login/admin screens load editor code · `/api/news` returns 1,399 records
-≈2.1 MB when the picker shows 40 · `/api/newspapers` returns 476 editions ≈343 KB.
-
-`font-metrics.js:229` and `shaper.js:77` **each independently fetch every font**, with no
-shared byte cache.
-
-Backend is not the cause: warm API/static TTFB 0.7–1.7 ms, page composition 5–10 ms.
-
-### 15. **[C]** One genuinely unguarded `fetch(...).json()`
-
-```js
-const newspaper = await fetch(`/api/newspapers/${newspaperId}`).then((r) => r.json());
-```
-No `response.ok`, no `.catch()`. On 401/500 the Publish dialog renders normally for an
-edition it failed to load; on a non-JSON response it throws inside an async click handler and
-the button silently does nothing. Publishing itself is server-guarded, so nothing wrong is
-published.
-
-- `public/editor/publication.js:8`
-
-### 16. **[X]** Accessibility gaps
-
-The publication confirmation modal has no dialog semantics, focus trap/restore, Escape
-handling, or accessible name on its close button (`public/editor/publication.js:15`). The
-Story Explorer close button has no accessible name (`public/editor/workspace.js:1705`). Page
-buttons expose active state visually only, with no `aria-current`/`aria-pressed`
-(`public/editor/page-navigator.js:5`).
-
 ### 17. **[X]** The PDF is valid CMYK but not a colour-managed press standard
 
-No ICC profile, no OutputIntent, no PDF/X declaration, no bleed geometry; DeviceCMYK
-conversion is deliberately naïve (`src/services/export/pdf.writer.js:36`). Not wrong until
-the press states its requirements — but SAHAS should not call the output universally
-press-ready. Get the press's ICC profile and required PDF/X variant, then make those part of
-preflight.
+No ICC profile, no OutputIntent, no PDF/X declaration, no bleed geometry; the DeviceCMYK
+conversion is deliberately naïve and says so (`pdf.writer.js:36`). This is **not wrong** —
+it is honest about having no colour-management pipeline — but SAHAS should not describe the
+output as universally press-ready. Closing it needs the press to state its own ICC profile
+and required PDF/X variant; those then belong in preflight. Ask the printer.
 
-### 18. **[X]** `npm test` runs none of the 20 browser nets, and there is no CI
+### 4 (second half). The 266 fixture editions already in the database
 
-Documented at `README.md:40`. Add `npm run test:browser`, an isolated test server and
-database, browser execution in CI, artifact retention for failed screenshots, and regression
-tests for the navigation race, autosave failure and repeated-edition-open leak.
+The leak is fixed and nothing new accumulates. What is already there is **the owner's data
+to remove**, so it is not removed here:
 
-### 19. **[C]** Housekeeping
+```
+node scripts/prune-test-fixtures.js                            # reports, changes nothing
+node scripts/prune-test-fixtures.js --delete --i-have-a-backup # after a pg_dump
+```
 
-- `tmp-visual-pass/canvas-chart-panel.png` is **tracked** and overwritten by
-  `chart-panel.browser.js`, so every net run dirties the working tree.
-- 41 equal-specificity CSS conflicts (e.g. `.section-handle { width: 7px VS 10px }`). The
-  later value wins; cosmetic debt, consistent with the state already recorded.
+Measured: **266 of 477 editions**, 4,222 blocks (70% of `page_sections`), 1,660 filings,
+all of them one `health.test.js` run repeated — `2099-01-01`, named `साहस`, one page,
+`finalised`, two placeholder files.
+
+**The script's first version was wrong in the most dangerous possible direction** and it is
+worth recording why. It filtered on "2099-dated, no e-paper release, **no press file**" —
+and the leaked editions all *do* carry press files, because the leaking test uploads a fake
+`.sla` and `.pdf` on every run. So that filter excluded all 266 and selected the **ten that
+were left**, which are the editions the browser nets open by default (40294, 44929, 49291)
+and the showcase page CLAUDE.md tells you to look at. Running it would have deleted the
+useful fixtures and kept the junk. It matches the leak's measured signature instead, and
+prints the list it is **keeping** so the claim can be checked rather than believed.
+
+### 18. **[X]** CI
+
+`npm run test:browser` now runs all twenty nets serially against the running app, reporting
+the **last** line rather than the first failure — this repository has been bitten by a net
+that crashed at check 18 of 211 and looked like a pass. Actual CI (a runner, an isolated
+database, artifact retention) is an infrastructure decision with a cost, not a code change,
+so it is left for the owner. The database side is ready for it: point `DB_NAME` at anything
+ending `_test` and `tests/helpers/test-database.js` stops warning.
+
+### 13 (remainder). Express 5
+
+Three moderate advisories remain in `body-parser` and `qs`, reached through Express. Express
+is already at the latest 4.x (4.22.2); the fix is **Express 5**, whose router, `req.query`
+parsing and error handling all change behaviour. That is a migration with its own testing,
+not a patch bump, and doing it in the same pass as everything above would make both
+unreviewable.
 
 ---
 
 ## Known flakes — recorded, not bugs
 
-- `tests/currentNewsWriting.test.js` "check the sources first" — fails ~1 run in 4 inside a
-  full sweep, passes in isolation. Inside the settle loop's designed `MAX_FILL_CALLS` envelope.
-- `tests/browser/headline-focus.browser.js` — 8/11 in a back-to-back sweep, **11/11 three
-  times in isolation** (re-verified 2026-09-06). Not a regression.
+- `tests/currentNewsWriting.test.js` "check the sources first" — failed ~1 run in 4 inside a
+  full sweep. **Still not diagnosed.** The obvious explanation was checked and is wrong:
+  `withProviders` deletes the whole real chain before installing its stubs (that was fixed
+  in an earlier pass, and CLAUDE.md records it), so nothing there can reach a live account.
+  It did not recur across three full suite runs during this work. Left recorded rather than
+  papered over — loosening an assertion nobody has explained would hide a real
+  extra-charge path, which is exactly what that check is for.
+- `tests/browser/headline-focus.browser.js` — 8/11 in a back-to-back sweep, 11/11 three
+  times in isolation. Not a regression.
 
 ## Verified sound — do not re-audit
 
-Claude's regression: schema drift **zero** (every hand-applied migration present, including
-`news_items.newspaper_id → SET NULL`, all four roles in the `users.role` CHECK, `epaper_pdf`
-in the publication-files CHECK, both indexes) · all four exports produce valid artifacts ·
+Claude's regression: schema drift **zero** · all four exports produce valid artifacts ·
 86 written blocks compared canvas-vs-plate with **0** headline/body/rule/ground mismatches ·
 API 404 answers JSON · unauthenticated desk GET → 401 · `nosniff` present · PostgreSQL
 session store · `unhandledRejection`/`uncaughtException`/`SIGTERM` handlers · login throttle
 wired · upload byte-signature check · e-paper non-selected assets 404 and traversal 404 ·
 PDF is CMYK (0 `DeviceRGB`) · the `'; DROP TABLE page_sections; --` fixture headline is
-correctly XML-escaped in the `.sla` · 113 browser modules parse as ESM with 0 syntax failures
-· only the two documented dead mechanisms (`border_color`, `letter_spacing_px`) · all four
-`working()` guard flags release in a `finally`.
+correctly XML-escaped in the `.sla` · 113 browser modules parse as ESM with 0 syntax
+failures · only the two documented dead mechanisms (`border_color`, `letter_spacing_px`) ·
+all four `working()` guard flags release in a `finally`.
 
-Codex's regression: 1,180/1,184 tests (four failures are env leakage and one missing ignored
-fixture) · all 108 frontend modules HTTP 200 · valid CMYK PDF 1.4 at 330×530 mm with embedded
-CID Devanagari and searchable text · valid IDML ZIP · valid Scribus XML · no missing assets.
+Codex's regression: all 108 frontend modules HTTP 200 · valid CMYK PDF 1.4 at 330×530 mm
+with embedded CID Devanagari and searchable text · valid IDML ZIP · valid Scribus XML · no
+missing assets.

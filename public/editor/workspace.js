@@ -156,7 +156,23 @@ function renderWorkspaceSkeleton() {
     </div>`;
 }
 
-export async function renderWorkspace(newspaperId) {
+/**
+ * `stale` is the navigator's own token, and it is checked HERE as well as
+ * before the call.
+ *
+ * `paintDeskScreen` checked it and then awaited this function, which itself
+ * awaits eight things - two edition fetches, the news list, the identity, the
+ * geometry, the fonts and the shaper. So a desk pressing edition A and then
+ * edition B had B paint first and A paint over it whenever A's fetches
+ * finished last: the address named B and the screen showed A, with A's pages
+ * in the store and A's blocks under the cursor.
+ *
+ * Checked at the two points where this function COMMITS - after the fetches
+ * and again after the identity - rather than continuously. Everything before
+ * those is reading, and reading into a screen nobody is looking at costs
+ * nothing but time.
+ */
+export async function renderWorkspace(newspaperId, { stale } = {}) {
   renderWorkspaceSkeleton();
   let newspaper, pages, reporterNews, me;
   try {
@@ -185,7 +201,11 @@ export async function renderWorkspace(newspaperId) {
     // The paper's standing furniture, and this edition's volume and issue number
     // worked out from its date. Fetched before the first paint so page one is
     // drawn complete rather than popping its nameplate in a moment later.
+    // A newer screen has been asked for while these were in flight. Nothing
+    // has been committed yet, so leaving now leaves no trace.
+    if (stale?.()) return;
     await loadIdentity(newspaper?.publication_date, pages?.length);
+    if (stale?.()) return;
   } catch (error) {
     renderWorkspaceLoadError(newspaperId, error);
     return;
@@ -272,6 +292,16 @@ function currentStory() {
 let pageGuides = [];
 let guidesVisible = true;
 
+// A SLOW ANSWER FOR ONE PAGE MAY NOT DRESS ANOTHER.
+//
+// This captured the page, awaited, and then assigned the module-global list
+// without ever asking whether the desk was still on that page. Turning from
+// page 1 to page 2 while page 1's guides were in flight drew page 1's guides
+// over page 2 - and because the ruler drags act on that same global, a guide
+// dragged afterwards moved a guide belonging to a page nobody was looking at.
+//
+// The check is on the way back, not the way out: the request is fine, it is
+// the ASSIGNMENT that has to be conditional.
 async function loadPageGuides() {
   const page = store.getCurrentPage();
   if (!page) {
@@ -279,7 +309,9 @@ async function loadPageGuides() {
     return;
   }
   const response = await fetch(`/api/pages/${page.id}/guides`);
-  pageGuides = response.ok ? await response.json() : [];
+  const guides = response.ok ? await response.json() : [];
+  if (store.getCurrentPage()?.id !== page.id) return;
+  pageGuides = guides;
   refreshGuides(pageGuides);
 }
 
@@ -339,7 +371,23 @@ async function loadSectionImages() {
     return;
   }
   const response = await fetch(`/api/pages/${page.id}/sections/${encodeURIComponent(key)}/images`);
-  sectionImages = response.ok ? await response.json() : [];
+  const images = response.ok ? await response.json() : [];
+
+  // A SLOW ANSWER FOR ONE BLOCK MAY NOT LAND IN ANOTHER.
+  //
+  // This assigned straight into the module-global list and then called
+  // redrawCompose(), which reads whatever is selected NOW - so a slow response
+  // for block A displayed A's photographs inside block B, and
+  // history.primeImages() below wrote them into B's opening snapshot, where an
+  // undo would then restore pictures that were never in it. Both surfaces
+  // wrong, and neither of them the one that was asked.
+  //
+  // Dropped rather than queued: the block it belongs to is no longer open, and
+  // whichever block IS open has had its own loadSectionImages() started.
+  const state = store.getState();
+  if (store.getCurrentPage()?.id !== page.id || state.selectedSectionKey !== key) return;
+
+  sectionImages = images;
   // The opening history snapshot (history.reset(), in selectSection()) was
   // taken before these arrived, so it doesn't yet know this block's actual
   // pictures - correct it in place rather than push a second "opened" step.
@@ -1418,7 +1466,7 @@ async function resolveSaveConflict(snapshot, current) {
   // Their work is already safe on the server; this desk's is in the journal,
   // written before the save was attempted. Forced, because the question below
   // is the desk's to take their time over and the tab may close first.
-  journal.remember({ ...snapshot, draft: snapshot.draft }, { force: true });
+  journal.remember(snapshot, { force: true });
 
   const changes = differences(snapshot.payload, current);
   const keepMine = await askConfirm({
@@ -1452,7 +1500,11 @@ async function resolveSaveConflict(snapshot, current) {
       store.setSelectedSection(snapshot.sectionKey, draft);
       history.reset(draft, `Loaded another editor's version of ${snapshot.sectionKey}`);
       renderSidePanels();
-      refreshSection(section, viewOfSection(section), { selected: true, dirty: false });
+      // currentView(), not viewOfSection() directly: every other caller of
+      // refreshSection passes the view WITH its own sectionKey on it, and a
+      // view missing that key is a shape this renderer has never been handed.
+      const view = currentView();
+      if (view) refreshSection(section, view, { selected: true, dirty: false });
     }
     showNotice("Loaded their version. Yours is still in this browser until the next successful save.");
     return;
@@ -1529,9 +1581,15 @@ function captureDraft() {
     // bitten by twice.
     draft: { ...draft },
   };
-  // Written down before it is sent, so a save that never lands still leaves
-  // the words somewhere a crash cannot reach. Throttled inside the journal.
-  journal.remember(snapshot);
+  // DELIBERATELY NOT JOURNALLED HERE.
+  //
+  // This function is itself passed to the journal as a thunk (see the DRAFT
+  // subscriber), so writing from inside it would recurse into remember() and
+  // write twice for one change. Journalling happens at the two points that
+  // actually matter and nowhere else: on the typing path, throttled; and on
+  // beforeunload, forced. A failed save keeps its snapshot in autosave's own
+  // `attempt`, which the unload guard reads, so "written down before it is
+  // sent" is still covered from both directions.
   return snapshot;
 }
 
@@ -3427,7 +3485,12 @@ function subscribeViews() {
     // write every two seconds of typing rather than one per keystroke, which
     // on this path - where the compositor already runs per character - is the
     // difference between a safety net and a tax.
-    journal.remember(captureDraft());
+    // A THUNK, not a snapshot: captureDraft() runs payloadFromDraft and a deep
+    // clone, and the journal writes at most once every two seconds - so
+    // building it eagerly would do that work on every keystroke and discard
+    // almost all of it, on the one path where the compositor already runs per
+    // character.
+    journal.remember(captureDraft);
     refreshSection(section, view, { selected: true, dirty: store.isDirty() });
     if (source === "properties-panel") refreshColumnRules(section, view);
     refreshExternalEditor(section, view, currentStory(), source, store.getSelectedPart(), store.getSelectedImageIds());

@@ -2,6 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const path = require("path");
 const session = require("express-session");
+const compression = require("compression");
 const dotenv = require("dotenv");
 const multer = require("multer");
 const { templates } = require('./src/layout/templates');
@@ -103,6 +104,21 @@ function createApp(options = {}) {
   // The version of Express this newsroom runs is not a fact a visitor needs,
   // and it is the first thing an automated scan reads.
   app.disable("x-powered-by");
+
+  // WHAT THIS APPLICATION SENDS IS MOSTLY TEXT, AND NONE OF IT WAS COMPRESSED.
+  //
+  // The workspace is 108 JavaScript modules (~1.94 MB) plus a ~330 KB
+  // stylesheet, and every byte of it went over the wire uncompressed - which
+  // on the newsroom's own connection is most of what a desk waits through
+  // before an edition opens. Measured from the other side: warm API and static
+  // TTFB is 0.7-1.7 ms and composing a page is 5-10 ms, so the backend was
+  // never the slow part; the transfer was.
+  //
+  // Registered FIRST, so it wraps every later response - the API's JSON as
+  // well as the static files. It leaves the fonts, the WASM and the images
+  // alone on its own (they are already compressed formats, and compression's
+  // own filter declines them), so this costs CPU only where it buys something.
+  app.use(compression());
 
   // WHERE TLS IS TERMINATED DECIDES WHETHER THE COOKIE IS EVER SENT.
   //
@@ -233,7 +249,28 @@ function createApp(options = {}) {
   // first so a guessed PNG URL cannot reveal an edition before Publish or
   // after the desk removes its public copy.
   app.get("/uploads/epaper/:id/:filename", asyncRoute(newspaperController.epaperAsset));
-  app.use(express.static(path.join(__dirname, "public")));
+  // WHAT MAY BE HELD, AND FOR HOW LONG.
+  //
+  // express.static sends an ETag and no max-age, so every asset costs a
+  // conditional request on every load - 108 of them for the editor alone.
+  // Deliberately split rather than set globally: the application's own code
+  // MUST revalidate, or a deploy would leave desks running yesterday's editor
+  // with no way to tell, which is a far worse fault than a slow load.
+  //
+  // Only two things are held: the publication FACES and the vendored
+  // libraries. Both are third-party binaries this project pins by name and
+  // replaces by version, both are the largest single downloads here (3.2 MB of
+  // TTF, 422 KB of HarfBuzz WASM), and neither can go stale in a way that
+  // changes what the paper says - the compositor measures the same file it
+  // paints with. A day, not a year: long enough to remove the cost from a
+  // working session, short enough that replacing a face is not a support call.
+  app.use(express.static(path.join(__dirname, "public"), {
+    setHeaders: (res, filePath) => {
+      if (/[\\/](assets[\\/]fonts|vendor)[\\/]/.test(filePath)) {
+        res.setHeader("Cache-Control", "public, max-age=86400");
+      }
+    },
+  }));
 
   // A HEALTH CHECK THAT DOES NOT CHECK ANYTHING IS WORSE THAN NONE.
   //

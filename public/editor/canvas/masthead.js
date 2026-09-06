@@ -36,6 +36,19 @@ export function loadIdentity(isoDate, pageCount) {
   return fetch(`/api/identity?${query}`)
     .then((response) => (response.ok ? response.json() : null))
     .then((data) => {
+      // A SLOW ANSWER FOR ONE EDITION MAY NOT NAME ANOTHER.
+      //
+      // `loadedFor` was set on the way OUT and the answer was committed
+      // unconditionally on the way back, so opening edition A and then edition
+      // B - a desk pressing two rows quickly - left B's nameplate carrying A's
+      // volume and issue number whenever A finished last. Measured: the address
+      // said B, the plate said A.
+      //
+      // The identity is what the nameplate and the folio are drawn from, so
+      // this is not a cosmetic mismatch; it is the wrong issue number over a
+      // real page. Discarded rather than stored: whichever edition IS open has
+      // its own request already running.
+      if (loadedFor !== key) return identity;
       identity = data;
       return data;
     })

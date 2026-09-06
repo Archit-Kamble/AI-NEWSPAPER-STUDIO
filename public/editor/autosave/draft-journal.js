@@ -35,6 +35,21 @@
  * asynchronous store is no use.
  */
 
+// WHEN THIS PAGE LOADED.
+//
+// An entry written during THIS session is not orphaned work - it is the block
+// the desk has open, which autosave is still trying to save and whose failure
+// they are already being told about in the corner. Offering to "restore" it
+// would be the software interrupting a desk to hand them back what they are
+// currently typing.
+//
+// The journal is the net under a CRASH: a tab that closed, a browser that
+// died, a machine that lost power. What distinguishes that is precisely that
+// the entry predates the page now asking. So the offer is scoped to entries
+// older than this page load, and everything written since is left to autosave,
+// where it belongs.
+const SESSION_START = Date.now();
+
 const PREFIX = 'sahas.draft.';
 const MAX_ENTRIES = 40;
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -86,10 +101,19 @@ function entries() {
  * guard uses - that moment is the whole reason this exists, and it happens
  * once.
  */
+// `snapshot` may be a FUNCTION, and on the typing path it must be.
+//
+// The throttle is what keeps this cheap, and a caller that builds the snapshot
+// before calling was paying for it on every keystroke and then having it
+// thrown away - captureDraft() runs payloadFromDraft AND a deep clone, on the
+// one path where the compositor is already running per character. Passing a
+// thunk means the throttle is checked first and the work is only done on the
+// write that actually happens.
 export function remember(snapshot, { force = false } = {}) {
-  if (!snapshot || !snapshot.pageId || !snapshot.sectionKey || !snapshot.draft) return;
   const now = Date.now();
   if (!force && now - lastWriteAt < THROTTLE_MS) return;
+  if (typeof snapshot === 'function') snapshot = snapshot();
+  if (!snapshot || !snapshot.pageId || !snapshot.sectionKey || !snapshot.draft) return;
   lastWriteAt = now;
   try {
     window.localStorage.setItem(
@@ -119,7 +143,8 @@ export function forget(pageId, sectionKey) {
  */
 export function pendingFor(pageIds) {
   const wanted = new Set((pageIds || []).map(Number));
-  return entries().filter((entry) => wanted.has(Number(entry.pageId)));
+  return entries().filter((entry) => wanted.has(Number(entry.pageId))
+    && entry.at < SESSION_START);
 }
 
 /** Used by the offer, to say what is in an entry without restoring it. */

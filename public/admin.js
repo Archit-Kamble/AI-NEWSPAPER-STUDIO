@@ -1,4 +1,25 @@
-import { renderWorkspace, leaveWorkspace } from "./editor/workspace.js";
+// THE LOGIN SCREEN LOADED THE WHOLE EDITOR.
+//
+// This was a static `import { renderWorkspace, leaveWorkspace } from
+// "./editor/workspace.js"`, and workspace.js is the root of the editor's whole
+// module graph - the canvas, the compositor, the Block Editor, the smart
+// cards, 108 modules and about 1.9 MB. A static import is fetched and
+// evaluated before this module's first line runs, so a reporter signing in, an
+// owner opening Settings and anyone looking at the e-paper list all paid for
+// the layout desk before they saw a form.
+//
+// It is loaded on demand instead, once, and cached in the promise. Nothing in
+// workspace.js runs at import time - it declares and exports, and every
+// listener it binds is bound inside renderWorkspace - so deferring it changes
+// no behaviour, only when the bytes arrive.
+//
+// `leaveWorkspace` is only ever called when `.workspace-shell` is on the page,
+// which means renderWorkspace has already run and this resolves from cache.
+let workspaceModule = null;
+function workspace() {
+  if (!workspaceModule) workspaceModule = import("./editor/workspace.js");
+  return workspaceModule;
+}
 import { startNavigation, navigate, stopNavigation } from "./admin/navigation.js";
 import { renderEditions } from "./admin/editions.js";
 import { renderEpapers } from "./admin/epapers.js";
@@ -476,7 +497,7 @@ async function renderAdminDashboard() {
     // typing. Autosave is on a timer, so between the last keystroke and the
     // next tick the only copy of a sentence is in the draft - and Back is now
     // one keypress away from here.
-    if (document.querySelector(".workspace-shell")) await leaveWorkspace();
+    if (document.querySelector(".workspace-shell")) await (await workspace()).leaveWorkspace();
     if (stale?.()) return;
 
     document.querySelectorAll(".sidebar-btn").forEach((b) => b.classList.remove("active"));
@@ -492,7 +513,9 @@ async function renderAdminDashboard() {
       closeAppSidebar();
       const rightPanel = document.getElementById("rightPanel");
       if (rightPanel) { rightPanel.innerHTML = ""; rightPanel.style.display = "none"; }
-      await renderWorkspace(id);
+      // The token travels IN. It was checked before this call and never
+      // again, and everything slow about opening an edition is inside it.
+      await (await workspace()).renderWorkspace(id, { stale });
       return;
     }
 

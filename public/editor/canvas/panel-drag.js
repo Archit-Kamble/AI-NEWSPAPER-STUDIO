@@ -34,6 +34,7 @@ import { viewOfSection } from '../section-model.js';
 const { panelsOf, INSET_PANEL_MIN_PX } = globalThis.SahasInsetPanels;
 
 let onCommit = null;
+let onSelect = null;
 let active = null;
 
 function surfaceScale(surface) {
@@ -94,9 +95,12 @@ export function refreshPanelDragLayer(section, view) {
  *                local pixels (0,0 at that block's own top-left), which is
  *                the space page_sections.inset_panels is stored in - only
  *                when the rectangle actually changed.
+ * @param select  the canvas's OWN block selection, so a press on a panel goes
+ *                through the one path every other press on this sheet does.
  */
-export function bindPanelDrag(surface, commit) {
+export function bindPanelDrag(surface, commit, select) {
   onCommit = commit;
+  onSelect = select;
   if (!surface || surface.dataset.panelDragBound === "1") return;
   surface.dataset.panelDragBound = "1";
 
@@ -111,6 +115,17 @@ export function bindPanelDrag(surface, commit) {
       `.newspaper-section[data-section-key="${CSS.escape(frame.dataset.sectionKey)}"]`,
     );
     if (!sectionEl) return;
+
+    // ...and it is the BLOCK that is selected, not the panel. This layer is
+    // only ever drawn for the block already open, so pressing a panel cannot
+    // change which block a desk is on - what it restores is the gesture
+    // documented for every other part of this page: clicking a block that is
+    // already open selects the BLOCK itself, which is the only way back to
+    // Border, Ground, Columns and Drop cap once the caret has been in the
+    // body. Without it the press was swallowed by the stopPropagation above
+    // and nothing at all happened over the panel's own rectangle - on a chart
+    // panel a quarter of the block, on a cross-head its whole measure.
+    onSelect?.(frame.dataset.sectionKey);
 
     const handle = event.target.closest("[data-panel-drag-handle]");
     const scale = surfaceScale(surface);

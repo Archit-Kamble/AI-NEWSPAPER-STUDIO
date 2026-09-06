@@ -362,6 +362,34 @@ const say = (ok, what, detail = '') => {
   say(await page.locator('[data-prop-panel-add] [data-panel-add="note"]').count() > 0,
     'and Properties offers a control to make one');
 
+  // The panel's own drag frame is drawn OVER the block, and its pointerdown
+  // stops the press from reaching the block underneath. So the frame has to
+  // do what the block would have done: select it. Without that, the gesture
+  // CLAUDE.md documents - "clicking a block that is already open selects the
+  // block itself", the only way back to Border/Ground/Columns once the caret
+  // has been in the body - is dead over the panel's own rectangle, silently.
+  // Pressed here rather than reasoned about, because nothing on screen says
+  // that rectangle behaves differently from the block around it.
+  const panelFrame = page.locator(
+    `.panel-drag-frame[data-section-key="${panelBlock}"][data-panel-id="visual-pass-panel"]`).first();
+  if (await panelFrame.count()) {
+    await page.locator('#edStoryHeadline, .ext-field-headline').first().click().catch(() => {});
+    await page.waitForTimeout(400);
+    await panelFrame.click();
+    await page.waitForTimeout(1200);
+    const selected = await page.evaluate((key) => {
+      const el = document.querySelector(`.newspaper-section[data-section-key="${key}"]`);
+      return { active: Boolean(el && el.classList.contains('active')),
+        whole: Boolean(document.querySelector('[data-prop-border]') &&
+          document.querySelector('[data-prop-tint]') &&
+          document.querySelector('[data-prop-columns]')) };
+    }, panelBlock);
+    say(selected.active && selected.whole, 'pressing the panel selects the block it belongs to',
+      `active ${selected.active}, whole-block controls ${selected.whole}`);
+  } else {
+    say(false, 'pressing the panel selects the block it belongs to', 'no drag frame drawn');
+  }
+
   // ---- a cross-head, and the LIST the compositor never used to set --------
   //
   // Both were closed together because they are the same gap: a mid-block flow.
@@ -380,7 +408,18 @@ const say = (ok, what, detail = '') => {
   // already proved is setting real body lines, which is exactly what a list
   // needs; it also means the list and the panel are exercised on one block.
   const listBlock = panelBlock;
-  await page.locator(`.newspaper-section[data-section-key="${listBlock}"]`).first().click();
+  // NOT the element's centre. The panel this net placed sits across it, and
+  // its drag frame is the topmost thing there - so a centre click is refused
+  // by the actionability check even though the press would be handled. Press
+  // the part of the block that is actually visible, which is where a desk
+  // would press too - the same correction editor-parity.browser.js already
+  // carries for a frame below the fold.
+  const listBox = await page.evaluate((key) => {
+    const el = document.querySelector(`.newspaper-section[data-section-key="${key}"]`);
+    return el ? { w: el.offsetWidth, h: el.offsetHeight } : null;
+  }, listBlock);
+  await page.locator(`.newspaper-section[data-section-key="${listBlock}"]`).first().click(
+    listBox ? { position: { x: Math.round(listBox.w * 0.22), y: Math.round(listBox.h * 0.55) } } : {});
   await page.waitForTimeout(1800);
   const typoTab = page.locator('[data-ext-tab="typography"], [data-tab="typography"]').first();
   if (await typoTab.count()) { await typoTab.click(); await page.waitForTimeout(500); }

@@ -197,7 +197,8 @@ export function renderCanvas(page, newspaper, selection, callbacks = {}) {
   // the SELECTED block, moved and sized right here rather than only in the
   // Block Editor's own mirrored page - see panel-drag.js for why.
   bindPanelDrag(document.getElementById("canvasSurface"),
-    (sectionKey, panelId, rect) => handlers.onMovePanel?.(sectionKey, panelId, rect));
+    (sectionKey, panelId, rect) => handlers.onMovePanel?.(sectionKey, panelId, rect),
+    (sectionKey) => handlers.onSelectSection?.(sectionKey));
   bindViewport();
   bindSpacebarPan();
   applyTransform();

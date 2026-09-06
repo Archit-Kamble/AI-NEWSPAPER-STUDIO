@@ -11,7 +11,7 @@ had outgrown (#22), a swallowed press (#23), three save races behind the
 snapshot fix (#24), and a net robustness change that cost twelve checks (#25).
 All seven are closed and all seven are below.
 
-**Twenty-three of the twenty-six are now closed**, on 2026-09-06, and each entry below says what
+**Twenty-four of the twenty-six are now closed**, on 2026-09-06, and each entry below says what
 was done and how it was verified. Three remain, and each of them is blocked on something
 this software cannot supply for itself — artwork, a printer's colour profile, or a
 decision only the owner can take. They are at the bottom, under **Still open**.
@@ -223,13 +223,30 @@ database, artifact retention) is an infrastructure decision with a cost, not a c
 so it is left for the owner. The database side is ready for it: point `DB_NAME` at anything
 ending `_test` and `tests/helpers/test-database.js` stops warning.
 
-### 13 (remainder). Express 5
+### 13 (remainder). ~~Express 5~~ — CLOSED, and the premise was wrong
 
-Three moderate advisories remain in `body-parser` and `qs`, reached through Express. Express
-is already at the latest 4.x (4.22.2); the fix is **Express 5**, whose router, `req.query`
-parsing and error handling all change behaviour. That is a migration with its own testing,
-not a patch bump, and doing it in the same pass as everything above would make both
-unreviewable.
+This entry said *"the fix is Express 5"*. It is not, and that claim would have bought a
+router/`req.query`/error-handling migration to fix two advisories in a leaf dependency.
+
+All three advisories are **`qs`**, reached twice: Express parses `req.query` with it, and
+body-parser's extended urlencoded parser uses it. `qs@6.16.0` is the patched release.
+Express 4.22.2 and body-parser 1.20.6 both declare `qs@~6.15.1`, and a tilde range cannot
+reach 6.16 — which is the whole of why `npm audit fix` could not do it and why Express 5
+looked like the only road.
+
+One `overrides` entry in `package.json` reaches it: **3 moderate → 0 vulnerabilities.**
+
+**Pinned exactly, not floated.** Express and body-parser were tested against 6.15.x, so
+forcing 6.16.0 is already a small leap the suite has to validate; a `^6.16.0` override
+would let every future install run a combination nothing here has checked. `npm audit` is
+what says when to move it.
+
+Verified rather than assumed, because `qs` sits under every request: the whole suite
+(1213 unit tests, 20/20 browser nets) plus a direct parity check of what `qs` actually
+decides — scalars, repeated keys, `a[b]` nesting, `tags[]` arrays, a Devanagari value and
+an urlencoded form body. All identical.
+
+Express 5 remains available and is no longer urgent: nothing on this register needs it.
 
 ---
 

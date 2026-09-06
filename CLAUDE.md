@@ -8175,6 +8175,33 @@ through.
 requires a finite panel height, and requires the emitted markup never to carry
 `height:NaNpx`. It fails against the old property with exactly that number.
 
+### Three advisories in a leaf dependency, and the fix was not a major migration
+
+The register carried this as *"the fix is Express 5"* — a router, `req.query`
+and error-handling migration, bought to close two advisories in a package
+neither of those subsystems is.
+
+All three are **`qs`**. Express parses `req.query` with it and body-parser's
+extended urlencoded parser uses it, so it is under every request — but it is
+still a leaf. `qs@6.16.0` is patched; Express 4.22.2 and body-parser 1.20.6
+both declare `qs@~6.15.1`, and a **tilde range cannot reach a minor bump**.
+That is the whole reason `npm audit fix` reported a fix it could not apply, and
+the whole reason Express 5 looked like the only road.
+
+One `overrides` entry: **3 moderate → 0**.
+
+- **Pinned exactly, not floated.** Express and body-parser were tested against
+  6.15.x, so forcing 6.16.0 is already a small leap the suite has to validate;
+  `^6.16.0` would let every future install run a combination nothing here has
+  checked. `npm audit` is what says when to move it.
+- **Verified where it actually decides things**, not just by the audit going
+  quiet: scalars, repeated keys, `a[b]` nesting, `tags[]` arrays, a Devanagari
+  value and an urlencoded form body all parse identically. `req.query` and the
+  login form are the two paths that would fail silently and in production.
+
+**Read what a fix advisory actually names before accepting the migration it
+implies.** The version range was the obstacle, not the major version.
+
 ### And the last four real-account dependencies are gone
 
 `hardening.test.js` and `press.test.js` still signed in as the newspaper's own

@@ -33,7 +33,7 @@ const FOOT_STRIP_PX = 20;
 const { identityFor, dateLine, devanagari } = require('../../layout/identity');
 const { strip } = require('../../layout/plain-text');
 const { captionBox, PLACED_CAPTION_METRICS } = require('../../../public/editor/layout/caption-geometry');
-const { borderEdges, borderWidthPx, isDouble, isBoxed, borderRadiusPx } = require('../../../public/editor/layout/borders');
+const { borderEdges, borderWidthPx, borderOffsetsPx, isBoxed, borderRadiusPx } = require('../../../public/editor/layout/borders');
 const { panelsOf, panelLayout, panelStyle } = require('../../../public/editor/layout/inset-panels');
 const { overlaysOf } = require('../../../public/editor/layout/page-overlays');
 const { smartCardLines } = require('./smart-card-lines');
@@ -1340,7 +1340,7 @@ function blockRules(section) {
   const ink = section.border_ink || RULE_INK;
   const shapeKey = section.frame_shape;
   const out = [];
-  for (const offset of isDouble(section.border_style) ? [0, weight * 2] : [0]) {
+  for (const offset of borderOffsetsPx(section.border_style, weight)) {
     const o = mm(offset);
     if (shapeKey) {
       // A cut corner traced as one stroked polygon, in the block's own

@@ -55,6 +55,20 @@
     { key: 'rule-left', label: 'Rule left', edges: ['left'] },
     { key: 'rule-right', label: 'Rule right', edges: ['right'] },
     { key: 'rule-sides', label: 'Rules left and right', edges: ['left', 'right'] },
+    // OPEN FRAMES. A newspaper often needs to attach a panel to the block
+    // beside or below it without drawing an advert-like box around all four
+    // sides. These are ordinary edge sets, not special rendering modes, so
+    // the canvas and every press writer receive exactly the same geometry.
+    { key: 'frame-open-bottom', label: 'Frame, open bottom', edges: ['top', 'right', 'left'] },
+    { key: 'frame-open-top', label: 'Frame, open top', edges: ['right', 'bottom', 'left'] },
+    { key: 'frame-open-right', label: 'Frame, open right', edges: ['top', 'bottom', 'left'] },
+    { key: 'frame-open-left', label: 'Frame, open left', edges: ['top', 'right', 'bottom'] },
+    // TWO-EDGE CORNER RULES are useful for a compact brief, score, result or
+    // continuation marker. They indicate direction without enclosing copy.
+    { key: 'corner-top-left', label: 'Corner, top left', edges: ['top', 'left'] },
+    { key: 'corner-top-right', label: 'Corner, top right', edges: ['top', 'right'] },
+    { key: 'corner-bottom-left', label: 'Corner, bottom left', edges: ['bottom', 'left'] },
+    { key: 'corner-bottom-right', label: 'Corner, bottom right', edges: ['bottom', 'right'] },
     // A DOUBLE RULE is one rule drawn twice with a gap of its own weight
     // between - the device every printed paper uses to say "this is a section,
     // not another story". It is not a thicker line and must not be drawn as
@@ -73,6 +87,13 @@
     { key: 'rule-right-double', label: 'Double rule right', edges: ['right'], double: true },
     { key: 'rule-sides-double', label: 'Double rules left and right', edges: ['left', 'right'], double: true },
     { key: 'rule-both-double', label: 'Double rules above and below', edges: ['top', 'bottom'], double: true },
+    // A TRIPLE RULE closes a major package or a special section. It is three
+    // separate fine rules, never one heavy stripe. The same offset generator
+    // is consumed by the canvas overlay and press model, so the extra line is
+    // real output functionality rather than a browser-only border effect.
+    { key: 'rule-triple', label: 'Triple rule below', edges: ['bottom'], lines: 3 },
+    { key: 'rule-above-triple', label: 'Triple rule above', edges: ['top'], lines: 3 },
+    { key: 'box-triple', label: 'Triple box', edges: ['top', 'right', 'bottom', 'left'], lines: 3 },
   ]);
 
   // A printer's own ladder, NAMED rather than stated in points - the desk
@@ -131,14 +152,21 @@
   const borderEdges = (key) => byKey(key).edges;
   /** Does this style enclose the block on all four sides? */
   const isBoxed = (key) => borderEdges(key).length === 4;
+  /** How many equal rules are drawn, each separated by a gap of one weight. */
+  const borderLineCount = (key) => Math.max(1, Number(byKey(key).lines) || (byKey(key).double ? 2 : 1));
   /** Is the rule drawn twice, with a gap of its own weight between? */
-  const isDouble = (key) => Boolean(byKey(key).double);
+  const isDouble = (key) => borderLineCount(key) === 2;
+  /** Offsets for every physical rule, in editor px. */
+  const borderOffsetsPx = (key, width) => {
+    const weight = borderWidthPx(width);
+    return Array.from({ length: borderLineCount(key) }, (_, index) => index * weight * 2);
+  };
   /**
    * The total ink a double rule occupies: two rules and the gap between them.
    * A boxed block insets its type by this, not by one rule's width, or the
    * inner rule lands on the first line.
    */
-  const borderThicknessPx = (key, width) => borderWidthPx(width) * (isDouble(key) ? 3 : 1);
+  const borderThicknessPx = (key, width) => borderWidthPx(width) * (borderLineCount(key) * 2 - 1);
   /** Is anything ruled at all? */
   const isRuled = (key) => borderEdges(key).length > 0;
 
@@ -160,7 +188,8 @@
 
   const api = Object.freeze({
     BORDER_STYLES, BORDER_WIDTHS, BORDER_RADII, BORDER_KEYS: KEYS,
-    borderEdges, isBoxed, isRuled, isDouble, borderWidthPx, borderThicknessPx,
+    borderEdges, isBoxed, isRuled, isDouble, borderLineCount, borderOffsetsPx,
+    borderWidthPx, borderThicknessPx,
     borderRadiusPx, canRound,
   });
   root.SahasBorders = api;

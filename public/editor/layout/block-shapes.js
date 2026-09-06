@@ -29,7 +29,7 @@
 // is the single source both readers use.
 
 /**
- * Five shapes, plus the rectangle every block already is.
+ * Eleven shapes, plus the rectangle every block already is.
  *
  * `corners` names which corners are cut, each `'tl'|'tr'|'bl'|'br'` -
  * `exclusion.js`'s own vocabulary, not invented here. `cutShare` is the
@@ -49,6 +49,14 @@ export const BLOCK_SHAPES = [
   // for a page's lead device or a section's own banner block.
   { key: 'chevron', label: 'Chevron (diagonal corners)', corners: ['tl', 'br'], cutShare: 0.14 },
   { key: 'chevron-alt', label: 'Chevron (other diagonal)', corners: ['tr', 'bl'], cutShare: 0.14 },
+  // Two cuts on the SAME side make a restrained bevel. This is the useful
+  // newspaper version of a trapezoid: a section strip, profile panel or data
+  // block can gain direction while all copy still runs around the two exact
+  // corner obstacles the compositor already understands.
+  { key: 'bevel-top', label: 'Bevelled top', corners: ['tl', 'tr'], cutShare: 0.24 },
+  { key: 'bevel-bottom', label: 'Bevelled bottom', corners: ['bl', 'br'], cutShare: 0.24 },
+  { key: 'bevel-left', label: 'Bevelled left', corners: ['tl', 'bl'], cutShare: 0.24 },
+  { key: 'bevel-right', label: 'Bevelled right', corners: ['tr', 'br'], cutShare: 0.24 },
   // All four - the octagon panel a printed page uses for a badge, a stat box
   // or a standout fact.
   { key: 'octagon', label: 'Octagon (all corners)', corners: ['tl', 'tr', 'bl', 'br'], cutShare: 0.12 },

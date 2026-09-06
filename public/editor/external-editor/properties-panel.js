@@ -422,7 +422,7 @@ function blockPropertiesMarkup(section, view, page) {
           ).join("")}
         </div>
       </div>` : ""}
-      <p class="muted ext-note">Nothing is ruled unless you rule it. A rule is specified in points, the way a printer specifies one. A box sets the copy in a little way from its own line, the way a printed panel does, and the page draws no hairline in the gutter beside a block that already has a box.${canRound(border) ? " A rounded or pill corner is a printed feature page's own device - a front or city page keeps its corners square, so a page's theme sets this on purpose and you can still set it by hand." : " Only a full box can take a corner - a single rule has nothing to round."}</p>
+      <p class="muted ext-note">Nothing is ruled unless you rule it. A rule is specified in points, the way a printer specifies one. Open frames attach a note to neighbouring coverage; corner rules mark direction without making a card. A full box sets the copy in from its own line, and the page draws no duplicate gutter hairline beside it.${canRound(border) ? " A rounded or pill corner is a printed feature page's own device - a front or city page keeps its corners square, so a page's theme sets this on purpose and you can still set it by hand." : " Only a full box can take a rounded corner."}</p>
     </div>
 
     <div class="prop-section">
@@ -440,7 +440,7 @@ function blockPropertiesMarkup(section, view, page) {
           ).join("")}
         </div>
       </div>
-      <p class="muted ext-note">A cut corner is an obstacle to the compositor, exactly like a photograph - the story is composed clear of it, never printed through it. Two cuts on one edge (a chevron, an octagon) are set shallower than one, so they can never meet.</p>
+      <p class="muted ext-note">A notch, diagonal or bevel is an obstacle to the compositor, exactly like a photograph - the story is composed clear of it, never printed through it. Two cuts on one edge are set shallower than one, so they can never meet.</p>
     </div>
 
     <div class="prop-section">
@@ -512,7 +512,7 @@ function blockPropertiesMarkup(section, view, page) {
           ).join("")}
         </div>
       </div>
-      <p class="muted ext-note">Every treatment is paint around already-composed type: reversed and screened bands, rules in real gaps, a compact kicker tab, or stepped bands behind individual headline lines. None changes where a line breaks.</p>
+      <p class="muted ext-note">Every treatment is paint around already-composed type: reversed and screened bands, full, short, centred, heavy or double rules in real gaps, section tabs and rails, or stepped bands behind individual headline lines. None changes where a line breaks.</p>
       <!-- HEADLINE COLOUR - the same mechanism-with-no-surface gap Rule
            colour was. headline_ink has been read since render.js's own
            headlineLineHtml existed (the headline AND the kicker's own text

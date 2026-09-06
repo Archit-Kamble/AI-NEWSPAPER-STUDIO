@@ -13,6 +13,7 @@
 // system.
 
 import { INKS, TINTS, headlineTreatment, screenOf } from './inks.js';
+import { clipPathFor, shapedRectPoints } from './block-shapes.js';
 import './borders.js';
 
 const { BORDER_KEYS, BORDER_WIDTHS, BORDER_RADII } = globalThis.SahasBorders;
@@ -96,6 +97,24 @@ export const BLOCK_DESIGN_PRESETS = Object.freeze([
     kinds: compact,
     surface: { borderStyle: 'rule-both', borderWidthPx: rule('Small'), borderInk: ink('slate') },
   }),
+  preset({
+    key: 'corner-brief', category: 'Core news', label: 'Corner brief', marathi: 'कोपरा वार्ता',
+    description: 'A top-left corner rule and a short headline rule give a compact brief a clear entry point.',
+    kinds: compact, minWidth: 115, minHeight: 75,
+    surface: { borderStyle: 'corner-top-left', borderWidthPx: rule('Normal'), borderInk: ink('slate'), headlineStyle: 'headline-rule-short', accentColor: ink('slate') },
+  }),
+  preset({
+    key: 'open-right-note', category: 'Core news', label: 'Open-right note', marathi: 'उजवीकडे खुली नोंद',
+    description: 'A three-sided frame opens toward the related story beside it, ideal for context or follow-up copy.',
+    kinds: compact, minWidth: 120, minHeight: 85,
+    surface: { borderStyle: 'frame-open-right', borderWidthPx: rule('Small'), borderInk: ink('slate'), backgroundColor: tint('grey'), headlineStyle: 'headline-rule-short', headlineInk: ink('slate'), accentColor: ink('slate') },
+  }),
+  preset({
+    key: 'ledger-close', category: 'Core news', label: 'Ledger close', marathi: 'त्रिरेषा समाप्ती',
+    description: 'Three hairlines close a major run of related stories with more ceremony than an ordinary separator.',
+    kinds: compact, minWidth: 130, minHeight: 90,
+    surface: { borderStyle: 'rule-triple', borderWidthPx: rule('Small'), borderInk: ink('slate'), headlineStyle: 'headline-rule-short', accentColor: ink('slate') },
+  }),
 
   preset({
     key: 'lead-accent', category: 'News hierarchy', label: 'Lead accent', marathi: 'मुख्य ठळक',
@@ -108,6 +127,24 @@ export const BLOCK_DESIGN_PRESETS = Object.freeze([
     description: 'White headline out of one solid ink band for an exceptional lead.',
     kinds: article, minWidth: 210, minHeight: 150,
     surface: { borderStyle: 'rule-above', borderWidthPx: rule('Medium'), borderInk: ink('red'), headlineStyle: 'reverse', accentColor: ink('red') },
+  }),
+  preset({
+    key: 'breaking-open-frame', category: 'News hierarchy', label: 'Breaking frame', marathi: 'ठळक खुली चौकट',
+    description: 'A red frame open at the foot and a heavy headline rule create urgency without a solid banner.',
+    kinds: article, minWidth: 175, minHeight: 120,
+    surface: { borderStyle: 'frame-open-bottom', borderWidthPx: rule('Medium'), borderInk: ink('red'), headlineStyle: 'headline-rule-heavy', headlineInk: ink('red'), accentColor: ink('red') },
+  }),
+  preset({
+    key: 'lead-centred-rule', category: 'News hierarchy', label: 'Centred lead', marathi: 'मध्यरेषा मुख्य बातमी',
+    description: 'A centred accent rule gives a broad, formal lead a composed front-page finish.',
+    kinds: article, minWidth: 205, minHeight: 135,
+    surface: { borderStyle: 'rule-above-double', borderWidthPx: rule('Small'), borderInk: ink('navy'), headlineStyle: 'headline-rule-center', headlineInk: ink('navy'), accentColor: ink('red') },
+  }),
+  preset({
+    key: 'premium-splash', category: 'News hierarchy', label: 'Premium splash', marathi: 'त्रिरेषा मुख्य बातमी',
+    description: 'A triple red entry rule and a compact accent finish reserve the strongest hierarchy for the day’s defining story.',
+    kinds: article, minWidth: 220, minHeight: 150,
+    surface: { borderStyle: 'rule-above-triple', borderWidthPx: rule('Small'), borderInk: ink('red'), headlineStyle: 'accent-rule', headlineInk: ink('red'), accentColor: ink('red') },
   }),
   preset({
     key: 'blue-head-screen', category: 'News hierarchy', label: 'Blue headline screen', marathi: 'निळी मथळा पट्टी',
@@ -187,6 +224,18 @@ export const BLOCK_DESIGN_PRESETS = Object.freeze([
     kinds: editorial, minWidth: 165, minHeight: 130,
     surface: { backgroundColor: tint('cream'), headlineStyle: 'stepped-lines', headlineInk: ink('brown'), accentColor: ink('amber') },
   }),
+  preset({
+    key: 'section-rail-blue', category: 'International newsroom', label: 'Section rail', marathi: 'विभाग रेषा',
+    description: 'A blue section tab continues into a fine rail, creating a repeatable desk signature across a page.',
+    kinds: editorial, minWidth: 145, minHeight: 95,
+    surface: { borderStyle: 'rule', borderWidthPx: rule('Small'), borderInk: ink('blue'), headlineStyle: 'kicker-rail', headlineInk: ink('navy'), accentColor: ink('blue') },
+  }),
+  preset({
+    key: 'double-display-package', category: 'International newsroom', label: 'Double display close', marathi: 'दुहेरी मथळा समाप्ती',
+    description: 'Two fine rules close the complete display for a formal package or special report.',
+    kinds: editorial, minWidth: 160, minHeight: 115,
+    surface: { borderStyle: 'frame-open-top', borderWidthPx: rule('Small'), borderInk: ink('maroon'), headlineStyle: 'display-rule-double', headlineInk: ink('maroon'), accentColor: ink('maroon') },
+  }),
 
   // ACCOUNTABILITY IS A JOB, NOT A COLOUR. These treatments distinguish the
   // forms a serious newsroom uses to show how it knows: investigation,
@@ -234,6 +283,20 @@ export const BLOCK_DESIGN_PRESETS = Object.freeze([
     kinds: compact, minWidth: 145, minHeight: 100,
     companionPanels: ['key-number', 'comparison'],
     surface: { borderStyle: 'rule-both-double', borderWidthPx: rule('Normal'), borderInk: ink('maroon'), backgroundColor: tint('maroon'), headlineStyle: 'headline-rule', headlineInk: ink('maroon'), accentColor: ink('maroon') },
+  }),
+  preset({
+    key: 'legal-docket', category: 'Accountability', label: 'Legal docket', marathi: 'कायदेशीर नोंद',
+    description: 'A sober open-top frame and double display rule distinguish a court, tender or government record.',
+    kinds: compact, minWidth: 145, minHeight: 105,
+    companionPanels: ['document', 'timeline'],
+    surface: { borderStyle: 'frame-open-top', borderWidthPx: rule('Normal'), borderInk: ink('slate'), backgroundColor: tint('grey'), headlineStyle: 'display-rule-double', headlineInk: ink('slate'), accentColor: ink('slate') },
+  }),
+  preset({
+    key: 'verdict-corner', category: 'Accountability', label: 'Verdict corner', marathi: 'निर्णय कोपरा',
+    description: 'A firm upper-right corner and heavy maroon headline rule suit a decisive official outcome.',
+    kinds: compact, minWidth: 130, minHeight: 90,
+    companionPanels: ['key-number', 'document'],
+    surface: { borderStyle: 'corner-top-right', borderWidthPx: rule('Medium'), borderInk: ink('maroon'), backgroundColor: tint('maroon'), headlineStyle: 'headline-rule-heavy', headlineInk: ink('maroon'), accentColor: ink('maroon') },
   }),
 
   preset({
@@ -309,6 +372,30 @@ export const BLOCK_DESIGN_PRESETS = Object.freeze([
     kinds: editorial, minWidth: 140, minHeight: 110, insetRisk: true,
     surface: { borderStyle: 'box-double', borderWidthPx: rule('Small'), backgroundColor: tint('grey') },
   }),
+  preset({
+    key: 'profile-bevel', category: 'Feature pages', label: 'Bevelled profile', marathi: 'तिरपा व्यक्तिवेध',
+    description: 'A top bevel, rose rule and restrained paper tint create a distinctive profile without changing its layout.',
+    kinds: editorial, minWidth: 155, minHeight: 125, insetRisk: true,
+    surface: { borderStyle: 'box', borderWidthPx: rule('Normal'), borderInk: ink('rose'), backgroundColor: tint('rose'), headlineStyle: 'headline-rule-short', headlineInk: ink('plum'), accentColor: ink('rose'), frameShape: 'bevel-top' },
+  }),
+  preset({
+    key: 'culture-chevron', category: 'Feature pages', label: 'Culture chevron', marathi: 'संस्कृती तिरपी चौकट',
+    description: 'Opposite cut corners and a plum headline screen give arts coverage a controlled visual cadence.',
+    kinds: editorial, minWidth: 155, minHeight: 120, insetRisk: true,
+    surface: { borderStyle: 'box', borderWidthPx: rule('Small'), borderInk: ink('plum'), backgroundColor: tint('vivid-plum'), headlineStyle: 'band-deck', headlineInk: ink('plum'), accentColor: ink('plum'), frameShape: 'chevron-alt' },
+  }),
+  preset({
+    key: 'weekend-octagon', category: 'Feature pages', label: 'Weekend octagon', marathi: 'अष्टकोनी रविवार',
+    description: 'A softly screened octagonal frame makes a long-read fact or standfirst feel deliberately special.',
+    kinds: editorial, minWidth: 165, minHeight: 135, insetRisk: true,
+    surface: { borderStyle: 'box-double', borderWidthPx: rule('Small'), borderInk: ink('amber'), backgroundColor: tint('cream'), headlineStyle: 'headline-rule-center', headlineInk: ink('brown'), accentColor: ink('amber'), frameShape: 'octagon' },
+  }),
+  preset({
+    key: 'heritage-frame', category: 'Feature pages', label: 'Heritage frame', marathi: 'त्रिरेषा विशेष',
+    description: 'A formal triple maroon frame gives an anniversary, archive or commemorative package a print-led identity.',
+    kinds: editorial, minWidth: 165, minHeight: 130, insetRisk: true,
+    surface: { borderStyle: 'box-triple', borderWidthPx: rule('Small'), borderInk: ink('maroon'), backgroundColor: tint('cream'), headlineStyle: 'headline-rule-center', headlineInk: ink('maroon'), accentColor: ink('maroon') },
+  }),
 
   preset({
     key: 'market-teal', category: 'Service & data', label: 'Market data', marathi: 'बाजार',
@@ -327,6 +414,30 @@ export const BLOCK_DESIGN_PRESETS = Object.freeze([
     description: 'A strong maroon top rule for a compact stack of town and taluka reports.',
     kinds: compact, minWidth: 120, minHeight: 110,
     surface: { borderStyle: 'rule-above-double', borderWidthPx: rule('Normal'), borderInk: ink('maroon'), headlineInk: ink('maroon'), accentColor: ink('maroon') },
+  }),
+  preset({
+    key: 'tender-notice', category: 'Service & data', label: 'Tender notice', marathi: 'निविदा सूचना',
+    description: 'A formal three-sided slate frame and double display rule suit public tenders and statutory notices.',
+    kinds: compact, minWidth: 140, minHeight: 105,
+    surface: { borderStyle: 'frame-open-bottom', borderWidthPx: rule('Normal'), borderInk: ink('slate'), backgroundColor: tint('grey'), headlineStyle: 'display-rule-double', headlineInk: ink('slate'), accentColor: ink('slate') },
+  }),
+  preset({
+    key: 'market-tape', category: 'Service & data', label: 'Market tape', marathi: 'बाजार पट्टा',
+    description: 'A teal section rail and open-bottom frame organise market figures and the previous session’s context.',
+    kinds: compact, minWidth: 145, minHeight: 95,
+    surface: { borderStyle: 'frame-open-bottom', borderWidthPx: rule('Small'), borderInk: ink('teal'), backgroundColor: tint('teal'), headlineStyle: 'kicker-rail', headlineInk: ink('teal'), accentColor: ink('teal') },
+  }),
+  preset({
+    key: 'scoreline', category: 'Service & data', label: 'Scoreline', marathi: 'क्रीडा निकाल',
+    description: 'A forest corner rule and compact headline finish keep scores fast to scan and unmistakably editorial.',
+    kinds: compact, minWidth: 120, minHeight: 80,
+    surface: { borderStyle: 'corner-bottom-right', borderWidthPx: rule('Medium'), borderInk: ink('forest'), backgroundColor: tint('forest'), headlineStyle: 'headline-rule-short', headlineInk: ink('forest'), accentColor: ink('forest') },
+  }),
+  preset({
+    key: 'weather-window', category: 'Service & data', label: 'Weather window', marathi: 'हवामान चौकट',
+    description: 'An open-left blue frame and centred rule create a calm service panel for local weather.',
+    kinds: compact, minWidth: 125, minHeight: 85,
+    surface: { borderStyle: 'frame-open-left', borderWidthPx: rule('Small'), borderInk: ink('blue'), backgroundColor: tint('blue'), headlineStyle: 'headline-rule-center', headlineInk: ink('navy'), accentColor: ink('blue') },
   }),
 ]);
 
@@ -389,7 +500,8 @@ export function blockDesignPreviewMarkup(entry) {
   const s = entry.surface;
   const treatment = headlineTreatment(s.headlineStyle);
   const border = globalThis.SahasBorders.borderEdges(s.borderStyle);
-  const isDouble = globalThis.SahasBorders.isDouble(s.borderStyle);
+  const lineCount = globalThis.SahasBorders.borderLineCount(s.borderStyle);
+  const isDouble = lineCount === 2;
   const headlineGround = s.headlineStyle === 'reverse'
     ? s.accentColor
     : ['band', 'band-both'].includes(s.headlineStyle) ? screenOf(s.accentColor) : 'transparent';
@@ -405,14 +517,50 @@ export function blockDesignPreviewMarkup(entry) {
     `--preset-deck-ground:${deckGround}`,
     `--preset-radius:${s.borderRadiusPx || 0}px`,
     `--preset-rule-width:${Math.max(1, Number(s.borderWidthPx) || 1)}px`,
+    s.frameShape ? `clip-path:${clipPathFor(s.frameShape, 112, 88)}` : '',
   ].join(';');
-  const classes = ['block-design-preview', isDouble ? 'is-double' : '',
-    ...border.map((edge) => `has-${edge}`), s.headlineStyle === 'reverse' ? 'is-reverse' : '',
+  const needsBorderOverlay = Boolean(s.frameShape) || lineCount > 2;
+  const classes = ['block-design-preview', isDouble ? 'is-double' : '', lineCount > 2 ? 'is-triple' : '',
+    ...(needsBorderOverlay ? ['is-shaped'] : border.map((edge) => `has-${edge}`)),
+    s.headlineStyle === 'reverse' ? 'is-reverse' : '',
     treatment.ruleAfter ? `has-${treatment.ruleAfter}-rule` : '',
     treatment.kickerTab ? 'has-kicker-tab' : '', treatment.steppedLines ? 'has-stepped-lines' : '',
+    treatment.kickerRail ? 'has-kicker-rail' : '',
+    Number(treatment.ruleShare) < 1 ? 'has-short-rule' : '',
+    treatment.ruleAlign === 'centre' ? 'has-centred-rule' : '',
+    Number(treatment.ruleHeight) > 1 ? 'has-heavy-rule' : '',
+    Number(treatment.ruleCount) > 1 ? 'has-double-rule' : '',
     treatment.accentWord ? 'has-accent-word' : '']
     .filter(Boolean).join(' ');
+  const shapeBorder = (() => {
+    if (!needsBorderOverlay || !border.length) return '';
+    const weight = Math.max(1, Number(s.borderWidthPx) || 1);
+    const offsets = globalThis.SahasBorders.borderOffsetsPx(s.borderStyle, weight);
+    const polygons = offsets.map((offset) => {
+      const width = 112 - offset * 2 - weight;
+      const height = 88 - offset * 2 - weight;
+      if (width <= 0 || height <= 0) return '';
+      if (s.frameShape) {
+        const points = shapedRectPoints(s.frameShape, width, height)
+          .map(([x, y]) => `${(x + offset + weight / 2).toFixed(2)},${(y + offset + weight / 2).toFixed(2)}`)
+          .join(' ');
+        return `<polygon points="${points}" fill="none" stroke="${s.borderInk || '#111111'}" stroke-width="${weight}" />`;
+      }
+      const lines = {
+        top: [offset, offset + weight / 2, 112 - offset, offset + weight / 2],
+        right: [112 - offset - weight / 2, offset, 112 - offset - weight / 2, 88 - offset],
+        bottom: [offset, 88 - offset - weight / 2, 112 - offset, 88 - offset - weight / 2],
+        left: [offset + weight / 2, offset, offset + weight / 2, 88 - offset],
+      };
+      return border.map((edge) => {
+        const [x1, y1, x2, y2] = lines[edge];
+        return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${s.borderInk || '#111111'}" stroke-width="${weight}" />`;
+      }).join('');
+    }).join('');
+    return `<svg class="block-design-preview-shape" viewBox="0 0 112 88" aria-hidden="true">${polygons}</svg>`;
+  })();
   return `<div class="${classes}" style="${style}" aria-hidden="true">
+    ${shapeBorder}
     <span class="block-design-preview-kicker"></span>
     <span class="block-design-preview-head"></span>
     <span class="block-design-preview-head short"></span>

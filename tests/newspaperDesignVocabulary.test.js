@@ -48,6 +48,38 @@ test('headline furniture is derived only from final composition rectangles', () 
   noBody.bodyLines = [];
   const close = inks.headlineFurniture('display-rule', noBody)[0];
   assert.ok(close.y <= 72, 'a body-less story does not strand its display rule in the middle of empty paper');
+
+  const short = inks.headlineFurniture('headline-rule-short', made);
+  assert.equal(short.length, 1);
+  assert.ok(Math.abs(short[0].width - made.content.measure * 0.34) < 0.001);
+  assert.equal(short[0].x, made.content.left);
+
+  const centred = inks.headlineFurniture('headline-rule-center', made);
+  assert.equal(centred.length, 1);
+  assert.ok(Math.abs(centred[0].x - (made.content.left + (made.content.measure - centred[0].width) / 2)) < 0.001);
+
+  const heavy = inks.headlineFurniture('headline-rule-heavy', made);
+  assert.equal(heavy[0].height, 2);
+
+  const doubled = inks.headlineFurniture('display-rule-double', made);
+  assert.equal(doubled.length, 2);
+  assert.ok(doubled[1].y > doubled[0].y);
+
+  const rail = inks.headlineFurniture('kicker-rail', made);
+  assert.deepEqual(rail.map((item) => item.kind), ['fill', 'rule', 'rule']);
+  assert.ok(rail[2].x > made.content.left + rail[0].width, 'the rail starts after the measured tab');
+  assert.ok(rail[2].x + rail[2].width <= made.content.right + 0.001);
+});
+
+test('a headline rule is suppressed when the first body line leaves no real gap', () => {
+  const made = composition();
+  delete made.bands.deck;
+  made.bands.headline.height = 40;
+  made.bodyLines = [{ ...made.bodyLines[0], y: 53, height: 10 }];
+  // Headline bottom is 54; the body line begins at 53 and occupies that edge.
+  // Painting at the next arbitrary point would strike the body copy.
+  assert.deepEqual(inks.headlineFurniture('headline-rule-short', made), []);
+  assert.deepEqual(inks.headlineFurniture('headline-rule-heavy', made), []);
 });
 
 test('stepped headline bands stay behind each line instead of striking Marathi descenders', () => {

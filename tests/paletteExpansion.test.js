@@ -147,8 +147,8 @@ test('a full-colour theme with its wider hue set still gives no two touching blo
   }
 });
 
-test('15 border styles, and the 5 new ones use the same double-rule mechanism as the original two', () => {
-  assert.strictEqual(borders.BORDER_STYLES.length, 15);
+test('26 border styles, including open frames, corner rules and triple rules, share one catalogue', () => {
+  assert.strictEqual(borders.BORDER_STYLES.length, 26);
   const added = ['rule-above-double', 'rule-left-double', 'rule-right-double', 'rule-sides-double', 'rule-both-double'];
   for (const key of added) {
     assert.ok(borders.isDouble(key), `${key} should be a double rule`);
@@ -160,6 +160,30 @@ test('15 border styles, and the 5 new ones use the same double-rule mechanism as
   for (const key of added) assert.strictEqual(borders.canRound(key), false, `${key} should not offer a corner`);
   assert.strictEqual(borders.canRound('box'), true);
   assert.strictEqual(borders.canRound('box-double'), true);
+
+  const openFrames = {
+    'frame-open-bottom': ['top', 'right', 'left'],
+    'frame-open-top': ['right', 'bottom', 'left'],
+    'frame-open-right': ['top', 'bottom', 'left'],
+    'frame-open-left': ['top', 'right', 'bottom'],
+    'corner-top-left': ['top', 'left'],
+    'corner-top-right': ['top', 'right'],
+    'corner-bottom-left': ['bottom', 'left'],
+    'corner-bottom-right': ['bottom', 'right'],
+  };
+  for (const [key, edges] of Object.entries(openFrames)) {
+    assert.deepEqual(borders.borderEdges(key), edges, `${key} has the wrong printable edges`);
+    assert.equal(borders.isRuled(key), true);
+    assert.equal(borders.isDouble(key), false);
+    assert.equal(borders.canRound(key), false);
+  }
+
+  for (const key of ['rule-triple', 'rule-above-triple', 'box-triple']) {
+    assert.equal(borders.borderLineCount(key), 3);
+    assert.equal(borders.isDouble(key), false);
+    assert.deepEqual(borders.borderOffsetsPx(key, 1), [0, 2, 4]);
+    assert.equal(borders.borderThicknessPx(key, 1), 5);
+  }
 });
 
 // blockRules() in print-model.js reads edges and double GENERICALLY - it was

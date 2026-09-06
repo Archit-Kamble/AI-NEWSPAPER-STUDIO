@@ -26,13 +26,14 @@ const view = (overrides = {}) => ({
 });
 
 test('the library offers a broad original newspaper vocabulary with unique names', () => {
-  assert.ok(designs.BLOCK_DESIGN_PRESETS.length >= 43);
+  assert.ok(designs.BLOCK_DESIGN_PRESETS.length >= 61);
   const keys = designs.BLOCK_DESIGN_PRESETS.map((entry) => entry.key);
   assert.equal(new Set(keys).size, keys.length);
   assert.ok(designs.BLOCK_DESIGN_CATEGORIES.length >= 5);
   assert.ok(designs.BLOCK_DESIGN_CATEGORIES.includes('International newsroom'));
   assert.ok(designs.BLOCK_DESIGN_CATEGORIES.includes('Accountability'));
   assert.ok(designs.BLOCK_DESIGN_PRESETS.every((entry) => entry.label && entry.marathi && entry.description));
+  assert.ok(designs.BLOCK_DESIGN_PRESETS.some((entry) => entry.surface.frameShape), 'the preset library should expose shaped feature treatments');
 });
 
 test('every choice is a materially distinct printable surface', () => {
@@ -63,6 +64,8 @@ test('every preset uses the closed print palette and existing renderer treatment
     assert.ok(legalInks.has(entry.surface.accentColor), `${entry.key} accent ink`);
     assert.ok(legalTints.has(entry.surface.backgroundColor), `${entry.key} ground`);
     assert.ok(legalHeads.has(entry.surface.headlineStyle), `${entry.key} headline treatment`);
+    assert.ok(entry.surface.headlineStyle.length <= 20, `${entry.key} headline style exceeds the database column`);
+    assert.ok(entry.surface.borderStyle.length <= 20, `${entry.key} border style exceeds the database column`);
   }
 });
 
@@ -126,6 +129,11 @@ test('preview markup contains only resolved catalogue values', () => {
   assert.match(html, /has-accent-word/);
   assert.doesNotMatch(html, /urgent-update/);
   assert.doesNotMatch(html, /undefined|null/);
+
+  const shaped = designs.blockDesignPreviewMarkup(designs.blockDesignPreset('profile-bevel'));
+  assert.match(shaped, /block-design-preview-shape/);
+  assert.match(shaped, /<polygon/);
+  assert.match(shaped, /clip-path:polygon/);
 });
 
 test('the real Properties panel exposes recommendations and a deliberate Apply action', () => {
@@ -170,11 +178,20 @@ test('every new treatment and editorial insert is reachable from the real Proper
   const row = section({ headline: 'मथळा', body: 'बातमी', body_font_px: 6.4 });
   const draft = view({ headline: row.headline, body: row.body, bodyFontPx: 6.4 });
   const html = properties.propertiesPanelMarkup(row, draft, null, 'block', null);
-  for (const key of ['headline-rule', 'accent-rule', 'display-rule', 'kicker-tab', 'kicker-tab-rule', 'stepped-lines']) {
+  for (const key of ['headline-rule', 'accent-rule', 'display-rule', 'kicker-tab', 'kicker-tab-rule', 'stepped-lines',
+    'headline-rule-short', 'headline-rule-center', 'headline-rule-heavy', 'display-rule-double', 'kicker-rail']) {
     assert.match(html, new RegExp(`data-headline-style="${key}"`), `${key} is not reachable`);
   }
   for (const key of ['key-number', 'explainer', 'timeline', 'qa', 'reaction', 'related', 'follow-up', 'comparison', 'document']) {
     assert.match(html, new RegExp(`data-panel-add="${key}"`), `${key} is not reachable`);
+  }
+  for (const key of ['frame-open-bottom', 'frame-open-top', 'frame-open-right', 'frame-open-left',
+    'corner-top-left', 'corner-top-right', 'corner-bottom-left', 'corner-bottom-right',
+    'rule-triple', 'rule-above-triple', 'box-triple']) {
+    assert.match(html, new RegExp(`data-border="${key}"`), `${key} is not reachable`);
+  }
+  for (const key of ['bevel-top', 'bevel-bottom', 'bevel-left', 'bevel-right']) {
+    assert.match(html, new RegExp(`data-shape="${key}"`), `${key} is not reachable`);
   }
   assert.doesNotMatch(html, /data-panel-add="(?:chart|table)"/, 'structured card editors remain the only way to make chart/table data');
 });

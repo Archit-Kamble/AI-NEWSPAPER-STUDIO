@@ -4908,6 +4908,45 @@ body.print-view .section-diagnostic {
   border-left: var(--block-rule, 0.71px) solid var(--block-ink, #111);
   border-right: var(--block-rule, 0.71px) solid var(--block-ink, #111);
 }
+/* Open frames and corner rules use the same physical rule as every existing
+   edge. They are listed explicitly because CSS has no edge-set primitive;
+   the shared border catalogue remains the source of truth for export. */
+.newspaper-section.ruled-frame-open-bottom {
+  border-top: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-right: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-left: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+}
+.newspaper-section.ruled-frame-open-top {
+  border-right: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-bottom: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-left: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+}
+.newspaper-section.ruled-frame-open-right {
+  border-top: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-bottom: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-left: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+}
+.newspaper-section.ruled-frame-open-left {
+  border-top: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-right: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-bottom: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+}
+.newspaper-section.ruled-corner-top-left {
+  border-top: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-left: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+}
+.newspaper-section.ruled-corner-top-right {
+  border-top: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-right: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+}
+.newspaper-section.ruled-corner-bottom-left {
+  border-bottom: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-left: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+}
+.newspaper-section.ruled-corner-bottom-right {
+  border-right: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-bottom: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+}
 /* A double rule is two lines with a gap of the same weight between them.
    CSS `border-style: double` divides the declared width into exactly that -
    line, gap, line - so the declared width is three times the chosen rule,
@@ -4954,11 +4993,10 @@ body.print-view .section-diagnostic {
    block of colour and the two disagree at every corner. */
 .newspaper-section { border-radius: var(--block-radius, 0); }
 
-/* THE SHAPE-TRACED BORDER, drawn by section-thumb.js's shapeBorderMarkup()
-   for a block that carries both a cut corner and a rule - the CSS `border`
-   shorthand cannot follow a clip-path's new diagonal edge, so this SVG
-   polygon is the sole border ink there (canvas.js's applyBlockRule() sets
-   the CSS one to `none` in that case). Above ordinary content, below the
+/* THE SHAPE/MULTI-RULE BORDER, drawn by section-thumb.js's shared overlay.
+   CSS cannot follow a clip-path's diagonal edge and has no triple-border
+   primitive, so this SVG is the sole border ink in those cases (canvas.js's
+   applyBlockRule() sets the CSS one to `none`). Above ordinary content, below the
    selection handles and hover toolbar, and never a click target of its own. */
 .section-shape-border {
   position: absolute;
@@ -5026,6 +5064,42 @@ body.print-view .newspaper-section.ruled-rule-right {
 body.print-view .newspaper-section.ruled-rule-sides {
   border-left: var(--block-rule, 0.71px) solid var(--block-ink, #111);
   border-right: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+}
+body.print-view .newspaper-section.ruled-frame-open-bottom {
+  border-top: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-right: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-left: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+}
+body.print-view .newspaper-section.ruled-frame-open-top {
+  border-right: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-bottom: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-left: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+}
+body.print-view .newspaper-section.ruled-frame-open-right {
+  border-top: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-bottom: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-left: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+}
+body.print-view .newspaper-section.ruled-frame-open-left {
+  border-top: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-right: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-bottom: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+}
+body.print-view .newspaper-section.ruled-corner-top-left {
+  border-top: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-left: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+}
+body.print-view .newspaper-section.ruled-corner-top-right {
+  border-top: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-right: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+}
+body.print-view .newspaper-section.ruled-corner-bottom-left {
+  border-bottom: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-left: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+}
+body.print-view .newspaper-section.ruled-corner-bottom-right {
+  border-right: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-bottom: var(--block-rule, 0.71px) solid var(--block-ink, #111);
 }
 body.print-view .newspaper-section.ruled-rule-double {
   border-bottom: max(3px, calc(var(--block-rule, 0.71px) * 3)) double var(--block-ink, #111);
@@ -9558,6 +9632,18 @@ body.print-view #printViewBtn {
   background: var(--preset-accent-screen);
   border-left: 2px solid var(--preset-accent);
 }
+.block-design-preview.has-kicker-rail .block-design-preview-kicker {
+  position: relative;
+}
+.block-design-preview.has-kicker-rail .block-design-preview-kicker::after {
+  content: "";
+  position: absolute;
+  left: calc(100% + 4px);
+  top: 3px;
+  width: 128%;
+  height: 1px;
+  background: var(--preset-accent);
+}
 .block-design-preview-head {
   width: 94%;
   height: 7px;
@@ -9601,6 +9687,27 @@ body.print-view #printViewBtn {
   width: 146%;
   height: 1px;
   background: var(--preset-accent);
+}
+.block-design-preview.has-short-rule .block-design-preview-head.short::after {
+  width: 50%;
+}
+.block-design-preview.has-centred-rule .block-design-preview-head.short::after {
+  left: 48%;
+  width: 50%;
+}
+.block-design-preview.has-heavy-rule .block-design-preview-head.short::after {
+  height: 2px;
+}
+.block-design-preview.has-double-rule .block-design-preview-deck::after {
+  box-shadow: 0 3px 0 var(--preset-accent);
+}
+.block-design-preview-shape {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
 }
 .block-design-preview-deck {
   width: 88%;

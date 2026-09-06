@@ -221,6 +221,17 @@ export const HEADLINE_STYLES = [
   { key: 'display-rule', label: 'Rule below display', grounds: [], ruleAfter: 'display' },
   { key: 'kicker-tab', label: 'Section tab', grounds: [], kickerTab: true },
   { key: 'kicker-tab-rule', label: 'Section tab + rule', grounds: [], kickerTab: true, ruleAfter: 'display' },
+  // More display hierarchy without stealing one pixel from the story. The
+  // rule variants differ in length, position and rhythm, but they are all
+  // painted into gaps the compositor has already proved are empty.
+  { key: 'headline-rule-short', label: 'Short rule below headline', grounds: [], ruleAfter: 'headline', ruleShare: 0.34 },
+  { key: 'headline-rule-center', label: 'Centred rule below headline', grounds: [], ruleAfter: 'headline', ruleShare: 0.34, ruleAlign: 'centre' },
+  { key: 'headline-rule-heavy', label: 'Heavy rule below headline', grounds: [], ruleAfter: 'headline', ruleHeight: 2 },
+  { key: 'display-rule-double', label: 'Double rule below display', grounds: [], ruleAfter: 'display', ruleCount: 2 },
+  // A thin rail continues from the kicker tab across the remaining measure.
+  // Its y is inside the kicker's own composed band and its x begins after the
+  // measured tab, so it can never cross the kicker words.
+  { key: 'kicker-rail', label: 'Section tab + rail', grounds: [], kickerTab: true, kickerRail: true },
   // A rule beneath each ALREADY-COMPOSED headline line. This is the narrow
   // headline-rail device used on international comment/analysis pages: the
   // rule follows the words, not the block width, and never asks the browser
@@ -273,6 +284,11 @@ export function headlineFurniture(style, composition) {
     if (bottom > top) {
       pieces.push({ kind: 'fill', x: content.left, y: top, width, height: bottom - top, ink: 'screen' });
       accentRule(content.left, top, 2, bottom - top);
+      if (treatment.kickerRail) {
+        const railX = content.left + width + 4;
+        const railWidth = Math.max(0, content.right - railX);
+        accentRule(railX, top + Math.max(0, (bottom - top - 1) / 2), railWidth, 1);
+      }
     }
   }
 
@@ -296,18 +312,42 @@ export function headlineFurniture(style, composition) {
     if (treatment.ruleAfter === 'display') band = bands.deck || bands.headline || bands.kicker;
     if (band?.lines?.length) {
       const after = band.top + band.height;
-      const candidates = [
-        ...Object.values(bands).filter((one) => one?.lines?.length && one.top > after).map((one) => one.top),
-        ...(composition.bodyLines || []).filter((line) => line.y > after).map((line) => line.y),
+      const following = [
+        ...Object.values(bands)
+          .filter((one) => one !== band && one?.lines?.length && one.top > band.top)
+          .map((one) => ({ top: one.top, bottom: one.top + one.height })),
+        ...(composition.bodyLines || [])
+          .filter((line) => line.y > band.top)
+          .map((line) => ({ top: line.y, bottom: line.y + (line.height || 0) })),
       ];
+      // Line boxes may overlap slightly even when their glyphs are clear -
+      // baseline spacing owns that decision. Such an overlap is still NOT an
+      // empty gap a rule may occupy. The former `line.y > after` filter simply
+      // ignored the overlapping first body line, treated the foot of the block
+      // as the next object, and painted the rule straight through the copy.
+      const occupiedAtEdge = following.some((one) => one.top <= after && one.bottom > after);
+      const candidates = following.filter((one) => one.top > after).map((one) => one.top);
       const next = candidates.length ? Math.min(...candidates) : content.bottom;
       // The rule sits halfway through a REAL gap. If this composition has no
       // spare gap, suppress the furniture rather than draw through Marathi.
-      if (Number.isFinite(next) && next - after >= 1) {
+      if (!occupiedAtEdge && Number.isFinite(next) && next - after >= 1) {
         // Keep the rule visually tied to the display. The cap matters when a
         // story has no body: `content.bottom` may be hundreds of pixels away,
         // and a midpoint there would strand the rule in empty paper.
-        accentRule(content.left, after + Math.min(2, (next - after - 1) / 2), content.measure, 1);
+        const height = Math.max(1, Number(treatment.ruleHeight) || 1);
+        const count = Math.max(1, Math.min(2, Number(treatment.ruleCount) || 1));
+        const occupied = height * count + (count - 1) * height;
+        if (next - after >= occupied) {
+          const share = Math.max(0.12, Math.min(1, Number(treatment.ruleShare) || 1));
+          const width = content.measure * share;
+          const align = treatment.ruleAlign || 'left';
+          const x = align === 'centre' ? content.left + (content.measure - width) / 2
+            : align === 'right' ? content.right - width : content.left;
+          const y = after + Math.min(2, Math.max(0, (next - after - occupied) / 2));
+          for (let index = 0; index < count; index += 1) {
+            accentRule(x, y + index * height * 2, width, height);
+          }
+        }
       }
     }
   }

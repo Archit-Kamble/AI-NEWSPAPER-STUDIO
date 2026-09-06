@@ -158,3 +158,92 @@ test('a page whose folio style sets its title plain still carries its section na
   assert.ok(folio.some((i) => i.kind === 'fill' && i.ink === ink),
     'the nameplate is set as plain type rather than reversed out of a box');
 });
+
+// THE FOLIO HAIRLINE SITS BELOW THE FOLIO TYPE, NOT THROUGH IT.
+//
+// Found by rasterising a real press PDF and looking at page two: the rule ran
+// straight through `पृष्ठ २`, the date and the paper's name - a strike-through
+// on every inside page of every PDF and IDML export.
+//
+// The canvas is right and always was. `.page-folio` is drawn at
+// `height: FOLIO_CHIP_PX` (19px) with `align-items: center` and a
+// `border-bottom`, so the type is centred in 0..19 and the rule sits at 19,
+// clear beneath it.
+//
+// The plate disagreed because `folioItems()` placed its type at
+// `header.top + bandPx * 0.32` - a fraction tuned when the rule was still at
+// the BOTTOM of the reserved 32px band. The "folio paints a chip row, not the
+// whole band" change moved the rule up to `header.top + chipPx` (19) and left
+// the type where it was. Measured, in editor px from the matter's top edge:
+//
+//     folio TEXT ink : 32.72 -> 49.82
+//     folio RULE at  : 39.00      <- inside the ink, at the x-height
+//
+// The invariant this holds is the general one rather than the arithmetic: a
+// rule the folio draws may not cross any type the folio sets. The almanac
+// strip below the chip row satisfies it too - it is deliberately BELOW the
+// rule, which is exactly where the reference paper puts its own.
+test('the folio hairline does not strike through the folio type', async (t) => {
+  const date = '2099-08-27';
+  const server = createApp().listen(0);
+  t.after(() => server.close());
+  const desk = await signIn(server.address().port);
+  const started = await desk.json('/api/newspapers/start', {
+    method: 'POST',
+    body: JSON.stringify({ publicationDate: date, pageCount: 4, fillFeatures: false }),
+  });
+  t.after(() => removeEdition(started.newspaper.id));
+
+  const printModel = require('../src/services/export/print-model');
+  const newspaper = await newspaperRepository.findById(started.newspaper.id);
+  const rows = await pageRepository.findByNewspaper(started.newspaper.id);
+  const pages = await Promise.all(rows.map((p) => pageRepository.findById(p.id)));
+  const model = await printModel.buildPrintModel(newspaper, pages);
+  const page3 = model.pages.find((p) => p.number === 3);
+
+  const band = page3.items.filter((i) => i.y < 30);
+  const rules = band.filter((i) => i.kind === 'rule');
+  assert.strictEqual(rules.length, 1, 'an undressed folio draws exactly one hairline');
+  const rule = rules[0];
+  const texts = band.filter((i) => i.kind === 'text');
+  assert.ok(texts.length >= 3, 'the folio should set its title, its date and its page number');
+
+  const struck = texts.filter((t2) => rule.y > t2.y && rule.y < t2.y + t2.height);
+  assert.deepStrictEqual(
+    struck.map((t2) => t2.runs.map((r) => r.text).join('')),
+    [],
+    'the folio hairline passes through folio type - it must sit clear of every line the folio sets',
+  );
+});
+
+// A REVERSED FOLIO'S TYPE REACHES THE PLATE WHITE.
+//
+// The test above this one already proved the reversed PANEL prints - the .sla
+// carries `PCOLOR="SahasOrange"`. What nothing checked was the type ON that
+// panel, and it was not white: measured on a sunday-themed page, the print
+// model emits four `#ffffff` furniture runs and the .sla contained
+// `{"Black":148,"SahasRed":2,"SahasOrange":2}` and no white text at all.
+//
+// So the plate drew a dark orange box and set BLACK type in it, where the
+// canvas and the PDF both show white. The panel is the half that worked, which
+// is the worst possible pairing: an unreadable folio rather than a plain one.
+//
+// Cause: `furnitureFrames()` handed its runs a field called `ink`, and
+// `lineFrame()` reads `run.colour` - so every furniture run in the document
+// fell through to its `'Black'` default. The fill/rule branch beside it passes
+// `colour: colourFor(item.ink)` correctly, which is why only the type was lost.
+test('a reversed folio sets its type in white on the plate, not black on its own panel', async (t) => {
+  const date = '2099-08-28';
+  const { newspaperId } = await dressedEdition(t, date);
+
+  const scribusService = require('../src/services/scribus.service');
+  const newspaper = await newspaperRepository.findById(newspaperId);
+  const rows = await pageRepository.findByNewspaper(newspaperId);
+  const pages = await Promise.all(rows.map((p) => pageRepository.findById(p.id)));
+  const sla = await scribusService.buildDocument(newspaper, pages);
+
+  assert.match(sla, /PCOLOR="SahasOrange"/,
+    'this test is only meaningful while the sunday theme still paints a reversed folio panel');
+  assert.match(sla, /TXTFILL="White"/,
+    'the reversed folio panel carries no white type on the plate - its type prints black on a dark panel');
+});

@@ -136,11 +136,59 @@ function headlineLineHtml(line, view, segments, marks) {
 // mistake. One pixel is 0.5 mm on this page.
 const REVERSE_BLEED = 2;
 
+// The smallest gap a coloured panel keeps from whatever sits directly below
+// it. Without a floor here REVERSE_BLEED is spent in full even when the next
+// band sits close underneath - a deck is set tight to its headline by design
+// (BASELINE_GAP, compose.js), tighter than the panel assumes - and the panel
+// reads as touching, or overlapping, the very thing it was drawn to sit
+// above. 1.5 mm: smaller and it is a hairline at screen resolution, which is
+// exactly the "touching" complaint this exists to fix; the panel still never
+// gives up more of REVERSE_BLEED's own 1 mm bleed than the next flow forces.
+const MIN_PANEL_GAP = 3;
+
 const BAND_CLASS = {
   kicker: 'section-kicker',
   headline: 'section-headline',
   deck: 'section-subheading',
 };
+
+// Order the display flows actually pour in. A panel's bottom bleed may never
+// cross into whatever comes next in this order - the following display band
+// if there is one, else the first line of the body, else the block's own
+// usable bottom.
+const FLOW_ORDER = ['kicker', 'headline', 'deck'];
+
+function roomBelow(composition, afterKey) {
+  const from = FLOW_ORDER.indexOf(afterKey) + 1;
+  for (let i = from; i < FLOW_ORDER.length; i += 1) {
+    const next = composition.bands?.[FLOW_ORDER[i]];
+    if (next?.lines?.length) return next.top;
+  }
+  const firstBody = composition.bodyLines?.[0];
+  if (firstBody) return firstBody.top;
+  return composition.content.bottom;
+}
+
+/**
+ * The rectangle a coloured headline/deck panel draws into, for `key` (one of
+ * `composition.bands`). Bled a hair past the band's own text top and bottom
+ * (REVERSE_BLEED) so the type is not sitting on the panel's edge - but never
+ * past the top of the block's own content box, and never closer than
+ * `MIN_PANEL_GAP` to whatever the next display flow or the body starts at.
+ * Both bounds are floors on the bleed, never a shrink of the band's own text
+ * height - the panel can never be drawn smaller than the type it is behind.
+ */
+export function panelRect(composition, key) {
+  const band = composition.bands?.[key];
+  if (!band?.lines?.length) return null;
+  const top = Math.max(0, band.top - REVERSE_BLEED);
+  const naturalBottom = band.top + band.height;
+  const bottom = Math.max(
+    naturalBottom,
+    Math.min(naturalBottom + REVERSE_BLEED, roomBelow(composition, key) - MIN_PANEL_GAP),
+  );
+  return { top, height: bottom - top };
+}
 
 /**
  * Every line of a composed block, as absolutely positioned spans.
@@ -161,17 +209,20 @@ export function composedMarkup(composition, view, { datelinePrefix = '' } = {}) 
   // - a reverse band that stopped at the end of the shortest line would read as
   // a highlighter, not as a printed panel - and it is taken a hair past the
   // band's own box top and bottom (REVERSE_BLEED) so the type has ink around
-  // it rather than sitting on the panel's edge.
+  // it rather than sitting on the panel's edge. `panelRect()` bounds that
+  // bleed against the block's own content box and against whatever comes
+  // next - see its own comment for why a fixed bleed cannot be trusted alone.
   const reversed = view.headlineStyle === 'reverse';
-  if (reversed && composition.bands?.headline?.lines?.length) {
-    const band = composition.bands.headline;
-    const left = composition.content.left;
-    const width = composition.content.measure;
-    pieces.push(
-      `<i class="section-headline-reverse" style="left:${left.toFixed(2)}px;top:${(band.top - REVERSE_BLEED).toFixed(2)}px;`
-      + `width:${width.toFixed(2)}px;height:${(band.height + REVERSE_BLEED * 2).toFixed(2)}px;`
-      + `background:${escapeHtml(view.accentColor || '#111111')}"></i>`,
-    );
+  if (reversed) {
+    const rect = panelRect(composition, 'headline');
+    if (rect) {
+      pieces.push(
+        `<i class="section-headline-reverse" style="left:${composition.content.left.toFixed(2)}px;`
+        + `top:${rect.top.toFixed(2)}px;`
+        + `width:${composition.content.measure.toFixed(2)}px;height:${rect.height.toFixed(2)}px;`
+        + `background:${escapeHtml(view.accentColor || '#111111')}"></i>`,
+      );
+    }
   }
 
   // A SCREEN BEHIND A DISPLAY BAND. The same ink laid down lightly, with the
@@ -184,13 +235,12 @@ export function composedMarkup(composition, view, { datelinePrefix = '' } = {}) 
   // changes. Which bands get one comes from the one catalogue, so the press
   // model cannot disagree about it.
   for (const key of groundedBands(view.headlineStyle)) {
-    const band = composition.bands?.[key];
-    if (!band?.lines?.length) continue;
+    const rect = panelRect(composition, key);
+    if (!rect) continue;
     pieces.push(
       `<i class="section-band-screen" style="left:${composition.content.left.toFixed(2)}px;`
-      + `top:${(band.top - REVERSE_BLEED).toFixed(2)}px;`
-      + `width:${composition.content.measure.toFixed(2)}px;`
-      + `height:${(band.height + REVERSE_BLEED * 2).toFixed(2)}px;`
+      + `top:${rect.top.toFixed(2)}px;`
+      + `width:${composition.content.measure.toFixed(2)}px;height:${rect.height.toFixed(2)}px;`
       + `background:${escapeHtml(screenOf(view.accentColor || '#c8102e'))}"></i>`,
     );
   }

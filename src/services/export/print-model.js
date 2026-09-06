@@ -47,7 +47,7 @@ let modules = null;
 
 async function ensureComposeReady() {
   if (!modules) {
-    const [metrics, shaper, adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry, accent, compose, columnRules, inks, furniture, blockShapes] =
+    const [metrics, shaper, adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry, accent, compose, columnRules, inks, furniture, blockShapes, render, almanac] =
       await Promise.all([
         import('../../../public/editor/compose/font-metrics.js'),
         import('../../../public/editor/compose/shaper.js'),
@@ -70,8 +70,17 @@ async function ensureComposeReady() {
         // The block-shape catalogue - a block's own cut-corner outline,
         // traced as one polygon everywhere the block's border is drawn.
         import('../../../public/editor/layout/block-shapes.js'),
+        // panelRect() - where a reverse panel or a headline/deck screen is
+        // actually drawn. Reused rather than re-derived, so the plate and the
+        // canvas can never disagree about how far a coloured panel bleeds
+        // past its own type.
+        import('../../../public/editor/compose/render.js'),
+        // Sunrise/sunset/day-length, for the folio's own compact strip - the
+        // same file masthead.js reads, so the plate prints the exact three
+        // numbers the canvas showed the desk, never a second calculation.
+        import('../../../public/editor/layout/almanac.js'),
       ]);
-    modules = { metrics, shaper, adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry, accent, compose, columnRules, inks, furniture, blockShapes };
+    modules = { metrics, shaper, adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry, accent, compose, columnRules, inks, furniture, blockShapes, render, almanac };
   }
   await Promise.all([modules.metrics.ensureFontsLoaded(), modules.shaper.ensureShaperReady()]);
   modules.shaper.requireShaperReady();
@@ -158,7 +167,6 @@ function bandInk(section, key, reversed) {
   if (section?.headline_ink && (key === 'headline' || key === 'kicker')) return section.headline_ink;
   return null;
 }
-const REVERSE_BLEED_PX = 2;
 
 async function blockItems(section, { mono = false } = {}) {
   const { adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry, accent } = await ensureComposeReady();
@@ -228,16 +236,27 @@ async function blockItems(section, { mono = false } = {}) {
   // A reversed headline is white type out of a solid panel, and the panel is
   // laid down first. A file that emitted the white type without the panel
   // would print nothing at all where the lead's headline should be.
+  //
+  // `panelRect()` is render.js's own - the plate must bleed exactly as far
+  // past the headline's own type as the canvas does, and stop exactly as
+  // short of whatever the deck or the body starts at. A second, hand-copied
+  // version of that arithmetic is how the plate and the screen came to
+  // disagree here before: this fill hard-coded ACCENT_INK below rather than
+  // reading the block's own accent_color, so a page dressed in forest or navy
+  // still printed its reversed headline in the paper's default red.
   const reversed = section.headline_style === 'reverse';
-  if (reversed && headlineBand?.lines?.length) {
-    items.push({
-      kind: 'fill',
-      x: x0 + mm(composition.content.left),
-      y: y0 + mm(headlineBand.top - REVERSE_BLEED_PX),
-      width: mm(composition.content.measure),
-      height: mm(headlineBand.height + REVERSE_BLEED_PX * 2),
-      ink: ACCENT_INK,
-    });
+  if (reversed) {
+    const rect = modules.render.panelRect(composition, 'headline');
+    if (rect) {
+      items.push({
+        kind: 'fill',
+        x: x0 + mm(composition.content.left),
+        y: y0 + mm(rect.top),
+        width: mm(composition.content.measure),
+        height: mm(rect.height),
+        ink: section.accent_color || ACCENT_INK,
+      });
+    }
   }
 
   // AND A SCREEN BEHIND A DISPLAY BAND, from the same catalogue the canvas
@@ -247,14 +266,14 @@ async function blockItems(section, { mono = false } = {}) {
   const { groundedBands, screenOf } = modules.inks || {};
   if (groundedBands) {
     for (const key of groundedBands(section.headline_style)) {
-      const band = bands[key];
-      if (!band?.lines?.length) continue;
+      const rect = modules.render.panelRect(composition, key);
+      if (!rect) continue;
       items.push({
         kind: 'fill',
         x: x0 + mm(composition.content.left),
-        y: y0 + mm(band.top - REVERSE_BLEED_PX),
+        y: y0 + mm(rect.top),
         width: mm(composition.content.measure),
-        height: mm(band.height + REVERSE_BLEED_PX * 2),
+        height: mm(rect.height),
         ink: screenOf(section.accent_color || ACCENT_INK),
       });
     }
@@ -929,7 +948,29 @@ function folioItems(newspaper, page, geometry, identity) {
 
   const bandPx = Math.min(HEADER_FOLIO_PX, header.bottom - header.top);
   const thirdPx = widthPx / 3;
-  const lineY = header.top + bandPx * 0.32;
+  // THE FOLIO PAINTS A CHIP ROW, NOT THE WHOLE BAND (see the fills below for
+  // the measurement). The rule closes that chip row at `header.top + chipPx`.
+  const chipPx = Math.min(FOLIO_CHIP_PX, bandPx);
+
+  // AND THE TYPE IS CENTRED IN THAT CHIP ROW, because that is where the canvas
+  // puts it: `.page-folio` is drawn at `height: FOLIO_CHIP_PX` with
+  // `align-items: center` and a `border-bottom`, so every column's line box is
+  // centred in 0..chipPx and the rule sits beneath all of them.
+  //
+  // This used to be `header.top + bandPx * 0.32` for every column, a fraction
+  // tuned while the rule was still at the BOTTOM of the reserved 32px band.
+  // Moving the rule up to the chip row left the type behind, and the rule then
+  // ran through it - measured on a real press PDF, in editor px:
+  //
+  //     folio TEXT ink : 32.72 -> 49.82
+  //     folio RULE at  : 39.00      <- inside the ink, at the x-height
+  //
+  // A strike-through across the paper's own name, the date and the page
+  // number, on every inside page of every PDF and IDML export. Centring per
+  // SIZE rather than per band also retires the hand `+ 2` the 8px columns
+  // carried to fake alignment with the 11px title: each line box now centres
+  // itself, which is what `align-items: center` does on the canvas.
+  const centredY = (fontPx) => header.top + (chipPx - fontPx * MASTHEAD.linePx) / 2;
 
   const { folioStyleForTheme, furnitureInkForTheme, furnitureTintForTheme, sectionNameFor } = modules.furniture;
   const style = folioStyleForTheme(page.style_theme);
@@ -939,10 +980,10 @@ function folioItems(newspaper, page, geometry, identity) {
   const bodyInk = reversed ? '#ffffff' : undefined;
   const tint = style.band ? furnitureTintForTheme(page.style_theme) : null;
 
-  const title = furnitureLine(leftPx + (verso ? thirdPx * 2 : 0), lineY, thirdPx,
+  const title = furnitureLine(leftPx + (verso ? thirdPx * 2 : 0), centredY(11), thirdPx,
     identity.title, { family: 'sans', weight: 700, bold: true, fontPx: 11, ink: titleInk },
     verso ? 'right' : 'left');
-  const number = furnitureLine(leftPx + (verso ? 0 : thirdPx * 2), lineY + 2, thirdPx,
+  const number = furnitureLine(leftPx + (verso ? 0 : thirdPx * 2), centredY(8), thirdPx,
     pageLabel, { family: 'sans', weight: 400, fontPx: 8, ink: bodyInk }, verso ? 'left' : 'right');
   // THE SECTION NAMEPLATE opens the centre cell, exactly as it does on the
   // canvas: the reference's folio row carries three boxes and this is the
@@ -958,7 +999,7 @@ function folioItems(newspaper, page, geometry, identity) {
     : 0;
   const CENTRE_GAP = 6; // the .folio-centre gap
   const centreRun = sectionName ? sectionW + CENTRE_GAP : 0;
-  const middle = furnitureLine(leftPx + thirdPx + centreRun, lineY + 2, thirdPx - centreRun,
+  const middle = furnitureLine(leftPx + thirdPx + centreRun, centredY(8), thirdPx - centreRun,
     placeAndDate, { family: 'sans', weight: 400, fontPx: 8, ink: bodyInk }, 'center');
 
   const items = [];
@@ -968,7 +1009,6 @@ function folioItems(newspaper, page, geometry, identity) {
   // ink straight into the first block's rule; the reference paper leaves five
   // rows of white there, and its brand and page number are small solid CHIPS
   // rather than a band across the measure.
-  const chipPx = Math.min(FOLIO_CHIP_PX, bandPx);
   if (reversed && themeInk) {
     // Chips, not a band: one behind the title, one behind the page number.
     // Each is sized from its OWN text through the same shaper the compositor
@@ -993,10 +1033,25 @@ function folioItems(newspaper, page, geometry, identity) {
     // set as ordinary type beside the date is a word, not a nameplate.
     const x = leftPx + thirdPx;
     items.push({ kind: 'fill', x: mm(x), y: mm(header.top), width: mm(sectionW), height: mm(chipPx), ink: sectionInk });
-    items.push(furnitureLine(x, lineY + 2, sectionW, sectionName,
+    items.push(furnitureLine(x, centredY(8), sectionW, sectionName,
       { family: 'sans', weight: 700, bold: true, fontPx: 8, ink: '#ffffff' }, 'center'));
   }
   items.push(title, middle, number);
+  // SUNRISE, SUNSET, DAY LENGTH - the plate's own copy of the strip
+  // masthead.js paints into the same reserved white below the chip row (see
+  // folioMarkup). Computed from the paper's own place of publication so the
+  // plate never names Satara next to Mumbai's sunrise.
+  const place = { name: identity.placeOfPublication, ...identity.placeCoordinates };
+  const almanacText = modules.almanac.stripLine(newspaper.publication_date, place);
+  if (almanacText) {
+    // The chip row is chipPx tall inside the bandPx reserved for the whole
+    // folio; centre the strip in what is left rather than crowding either
+    // edge of that remaining white.
+    const almanacFontPx = 6;
+    const almanacY = header.top + chipPx + Math.max(0, (bandPx - chipPx - almanacFontPx * MASTHEAD.linePx) / 2);
+    items.push(furnitureLine(leftPx, almanacY, widthPx, almanacText,
+      { family: 'sans', weight: 400, fontPx: almanacFontPx, ink: '#767676' }, 'center'));
+  }
   // No rule at all for a reversed banner - the panel's own edge IS the rule.
   // A double rule is the same two-offset geometry blockRules() already draws.
   if (!reversed && style.rule.weight > 0) {

@@ -20,6 +20,10 @@ import { textWithMarks } from '../layout/rich-text.js';
 import { datelineText, DEFAULT_BODY_FONT_PX } from '../layout/text-flow.js';
 import { columnGutterPx } from './compose.js';
 import { blockExpectsCopy } from '../layout/block-kinds.js';
+// Which headline treatments lay a coloured panel down - the same lookup
+// render.js and print-model.js use to decide whether to draw one, reached
+// here to decide whether the block needs to give that panel room.
+import { groundedBands } from '../layout/inks.js';
 // A side-effect module shared with Scribus, so it installs onto globalThis
 // rather than exporting - the canvas and the print path must use one caption
 // geometry, and that predates this engine.
@@ -374,7 +378,18 @@ export function composeSection(section = {}, view = {}) {
   const boxInset = isBoxed(border)
     ? BOX_INSET_PX + borderThicknessPx(border, pick(section, view, 'borderWidthPx', 'border_width_px', 1))
     : 0;
-  const padding = Math.max(margin, boxInset);
+  // A COLOURED HEADLINE PANEL wants the same room a box does, and for the
+  // same reason: a panel with no gap from the block's bare edge reads as
+  // touching it, where a bare 1 px margin never has to answer for that with
+  // ordinary text - a printed word has white space inside its own glyphs, a
+  // solid fill has none. `reverse` and the three `band` treatments
+  // (inks.js's HEADLINE_STYLES) all paint one. A block already boxed gets no
+  // more than the box already gave it - Math.max below is the whole rule.
+  const headlineStyle = String(pick(section, view, 'headlineStyle', 'headline_style', 'plain') || 'plain');
+  const panelInset = headlineStyle === 'reverse' || groundedBands(headlineStyle).length
+    ? BOX_INSET_PX
+    : 0;
+  const padding = Math.max(margin, boxInset, panelInset);
   const bodyFontPx = positive(
     pick(section, view, 'bodyFontPx', 'body_font_px', DEFAULT_BODY_FONT_PX),
     DEFAULT_BODY_FONT_PX,

@@ -4795,6 +4795,27 @@ body.print-view .section-diagnostic {
   line-height: var(--devanagari-line);
 }
 
+/* Sunrise/sunset/day-length, in the white the chip row deliberately leaves
+   below it - see masthead.js's folioMarkup. 13px is the whole of what is
+   reserved and not drawn by the chip row, so this is capped rather than
+   left to overflow into the first block's own ink. */
+.page-folio-almanac {
+  position: absolute;
+  z-index: 4;
+  pointer-events: none;
+  height: 13px;
+  overflow: hidden;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "Sahas Sans", "Noto Sans Devanagari", Arial, sans-serif;
+  font-size: 7px;
+  line-height: 1.3;
+  color: #767676;
+  text-align: center;
+}
+
 /* --- press registration marks ------------------------------------------- */
 
 .page-registration {

@@ -71,6 +71,11 @@ const identity = {
 
   price: 'किंमत - २ रू',
   placeOfPublication: 'सातारा',
+  // Where "सातारा" actually is, so anything computed from the town - right
+  // now just the folio's sunrise/sunset strip - reads its own place rather
+  // than panchang.js's unrelated Mumbai default. Satara city, to four
+  // decimals; a district daily printed anywhere else would carry its own.
+  placeCoordinates: { latitude: 17.6805, longitude: 74.0183 },
 
   // The printline at the foot of the page. This is a legal requirement on an
   // Indian newspaper, not decoration, and it is identical in every edition -

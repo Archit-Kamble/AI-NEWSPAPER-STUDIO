@@ -13,6 +13,7 @@
 
 import { escapeHtml } from "../format.js";
 import { folioStyleForTheme, footerStyleForTheme, furnitureInkForTheme, furnitureTintForTheme, sectionNameFor } from "../layout/furniture-styles.js";
+import { stripLine } from "../layout/almanac.js";
 
 let identity = null;
 let loadedFor = null;
@@ -269,11 +270,29 @@ export function folioMarkup(newspaper, page, geometry) {
     ? `<span class="folio-centre">${sectionSpan}${dateBlock}</span>`
     : dateBlock;
 
+  // SUNRISE, SUNSET, DAY LENGTH - drawn in the white the chip row already
+  // leaves below it (masthead.js's own comment above says why the chip row
+  // is 19 of the reserved 32px, not the whole band: the reference paper
+  // leaves five rows of white there rather than filling the band edge to
+  // edge). This costs no new geometry - it is the same reserved band,
+  // painted a little further, exactly as the chip row already is one draw
+  // inside a taller reservation.
+  //
+  // Computed from the paper's own place of publication, never Mumbai's
+  // default - a Satara folio naming Satara next to Mumbai's sunrise would be
+  // a new, avoidable mistake this feature would have introduced by itself.
+  const place = { name: identity.placeOfPublication, ...identity.placeCoordinates };
+  const almanac = stripLine(newspaper?.publication_date, place);
+  const almanacBand = almanac
+    ? `<div class="page-folio-almanac" style="left:${left}px;top:${top + FOLIO_CHIP_PX}px;width:${width}px">${escapeHtml(almanac)}</div>`
+    : "";
+
   return `
     <div class="page-folio ${verso ? "folio-verso" : "folio-recto"} folio-style-${style.key}"
          style="${css}">
       ${verso ? `${numberSpan}${dateSpan}${titleSpan}` : `${titleSpan}${dateSpan}${numberSpan}`}
     </div>
+    ${almanacBand}
   `;
 }
 

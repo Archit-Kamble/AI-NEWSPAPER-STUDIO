@@ -89,6 +89,16 @@ let documentColours = new Map();
 function colourFor(hex, fallback = 'Black') {
   if (!hex) return fallback;
   const key = String(hex).toLowerCase();
+  // WHITE IS IN THE TABLE ABOVE AND MUST RESOLVE TO IT BY NAME. Reversed type
+  // - a headline out of its panel, a themed folio out of its banner - is the
+  // one ink this exporter is asked for that the palette deliberately does not
+  // name: `inkSeparation('#ffffff')` answers 'Black' (white is the absence of
+  // an ink, so the palette has nothing to say about it) and
+  // `tintSeparation('#ffffff')` answers 'None'. Both fall through, and the
+  // auto-register below would then mint a `SahasAutoN` for it. The block walk
+  // never hit this because it sets `run.colour = 'White'` by hand for a
+  // reversed headline; the furniture had no such special case.
+  if (key === '#ffffff' || key === '#fff') return 'White';
   // THE PALETTE NAMES ITS OWN COLOURS. This was a one-entry map holding the
   // paper's red, so every other palette ink fell through to the auto-register
   // below and reached the plate as "SahasAuto3" - a real colour with a name
@@ -209,11 +219,6 @@ const FONT_NAMES = {
   'sans/400': 'Noto Sans Devanagari Regular',
   'sans/700': 'Noto Sans Devanagari Bold',
 };
-// The same hair of ink a printed reverse panel carries above and below its
-// type - one copy of the number, shared with compose/render.js's REVERSE_BLEED
-// by being stated in the same units (editor px) and converted here.
-const REVERSE_BLEED_PX = 2;
-
 const BODY_FONT = FONT_NAMES['serif/400'];
 const HEAD_FONT = FONT_NAMES['sans/700'];
 
@@ -251,6 +256,7 @@ let imageGeometryModule = null;
 let accentModule = null;
 let furnitureModule = null;
 let blockShapesModule = null;
+let renderModule = null;
 
 async function ensureComposeReady() {
   if (!metricsModule) metricsModule = await import('../../public/editor/compose/font-metrics.js');
@@ -264,6 +270,10 @@ async function ensureComposeReady() {
   if (!accentModule) accentModule = await import('../../public/editor/compose/accent.js');
   if (!furnitureModule) furnitureModule = await import('../../public/editor/layout/furniture-styles.js');
   if (!blockShapesModule) blockShapesModule = await import('../../public/editor/layout/block-shapes.js');
+  // panelRect() - where a reverse headline panel is actually drawn, shared
+  // with print-model.js so the .sla cannot bleed a different amount than the
+  // PDF past the same headline.
+  if (!renderModule) renderModule = await import('../../public/editor/compose/render.js');
   await Promise.all([metricsModule.ensureFontsLoaded(), shaperModule.ensureShaperReady()]);
   shaperModule.requireShaperReady();
   return {
@@ -274,6 +284,7 @@ async function ensureComposeReady() {
     textFlow: textFlowModule,
     imageGeometry: imageGeometryModule,
     accent: accentModule,
+    render: renderModule,
   };
 }
 
@@ -595,7 +606,16 @@ function furnitureFrames(items, { pageOffsetMm, ownPage, family = 'sans', weight
         runs: item.runs.map((run) => ({
           text: run.text, family: run.family || family, weight: run.weight || weight,
           bold: Boolean(run.bold), italic: false, underline: false,
-          fontPx: (run.sizePt / 72) * 25.4 * 2, ink: run.ink || null,
+          fontPx: (run.sizePt / 72) * 25.4 * 2,
+          // `colour`, NOT `ink` - lineFrame() reads run.colour, so naming this
+          // field after the model's own vocabulary silently dropped every
+          // furniture colour in the document to lineFrame's 'Black' default.
+          // Measured on a sunday-themed page: the print model emits four
+          // #ffffff runs onto a #d2601a panel and the .sla carried no white
+          // text at all - a dark orange folio with BLACK type set in it. The
+          // fill/rule branch above always passed `colour:` correctly, which is
+          // why the panel drew and only its type was lost.
+          colour: run.ink ? colourFor(run.ink) : undefined,
         })),
         align: item.align === 'center' ? 1 : item.align === 'right' ? 2 : 0,
         ownPage,
@@ -616,7 +636,7 @@ function furnitureFrames(items, { pageOffsetMm, ownPage, family = 'sans', weight
  * offset the page itself is drawn at.
  */
 async function blockFrames(section, { pageIndex = 0, pageOffsetMm = 0 } = {}) {
-  const { adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry, accent } = await ensureComposeReady();
+  const { adapter, richText, smartCards, smartCardLayout, textFlow, imageGeometry, accent, render } = await ensureComposeReady();
   const parts = [];
 
   const holdsCard = Boolean(section.smart_card_key) && Boolean(section.smart_card_data)
@@ -657,7 +677,7 @@ async function blockFrames(section, { pageIndex = 0, pageOffsetMm = 0 } = {}) {
     }));
   }
 
-  parts.push(displayBandFrames(composition, section, accent, richText, {
+  parts.push(displayBandFrames(composition, section, accent, richText, render, {
     xBaseMm: mm(section.x_px), yBaseMm: mm(section.y_px), pageOffsetMm, ownPage: pageIndex,
   }));
 
@@ -727,7 +747,7 @@ async function blockFrames(section, { pageIndex = 0, pageOffsetMm = 0 } = {}) {
  * `headline_style: 'accent'`) split into its own run so it paints in the
  * paper's colour, decided band-wide by accent.js's headlineSegments() -
  * exactly as render.js's composedMarkup() already does for the browser. */
-function displayBandFrames(composition, section, accent, richText, { xBaseMm, yBaseMm, pageOffsetMm, ownPage }) {
+function displayBandFrames(composition, section, accent, richText, render, { xBaseMm, yBaseMm, pageOffsetMm, ownPage }) {
   const parts = [];
   const headlineBand = composition.bands?.headline;
   const headlineTexts = headlineBand ? headlineBand.lines.map((line) => line.text) : [];
@@ -735,19 +755,28 @@ function displayBandFrames(composition, section, accent, richText, { xBaseMm, yB
 
   // A reversed headline is white type out of a solid panel, and the panel is
   // laid down first - exactly as render.js draws it for the browser, at the
-  // same REVERSE_BLEED and across the same full measure. A press file that
-  // emitted the white type without the panel would print nothing at all where
-  // the lead's headline should be, which is the worst failure this exporter
-  // could have.
+  // same bleed, bounded the same way (`panelRect()`, shared rather than
+  // re-derived - a hand-copied REVERSE_BLEED here is what let this panel run
+  // to the block's bare edge and into the deck below, unnoticed, on a surface
+  // nobody screenshots to check). A press file that emitted the white type
+  // without the panel would print nothing at all where the lead's headline
+  // should be, which is the worst failure this exporter could have.
+  //
+  // Coloured in the BLOCK'S OWN accent, not a fixed house red - `colourFor()`
+  // is the one lookup that keeps a dressed page's plate the same ink as its
+  // screen.
   const reversed = section.headline_style === 'reverse';
-  if (reversed && headlineBand?.lines?.length) {
-    parts.push(fillFrame({
-      xMm: xBaseMm + mm(composition.content.left),
-      yMm: yBaseMm + mm(headlineBand.top - REVERSE_BLEED_PX) + pageOffsetMm,
-      widthMm: mm(composition.content.measure),
-      heightMm: mm(headlineBand.height + REVERSE_BLEED_PX * 2),
-      colour: 'SahasRed', ownPage,
-    }));
+  if (reversed) {
+    const rect = render.panelRect(composition, 'headline');
+    if (rect) {
+      parts.push(fillFrame({
+        xMm: xBaseMm + mm(composition.content.left),
+        yMm: yBaseMm + mm(rect.top) + pageOffsetMm,
+        widthMm: mm(composition.content.measure),
+        heightMm: mm(rect.height),
+        colour: colourFor(section.accent_color, 'SahasRed'), ownPage,
+      }));
+    }
   }
 
   for (const [key, band] of Object.entries(composition.bands || {})) {

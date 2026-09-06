@@ -3485,12 +3485,25 @@ function subscribeViews() {
     // write every two seconds of typing rather than one per keystroke, which
     // on this path - where the compositor already runs per character - is the
     // difference between a safety net and a tax.
+    //
+    // ONLY WHILE THERE IS UNSAVED WORK, and that guard is load-bearing.
+    //
+    // The DRAFT topic does not fire only for typing - it fires whenever the
+    // draft is republished, including after a save has already landed. Writing
+    // unconditionally therefore left an entry describing a block that was
+    // safely in the database, with nothing left to clear it (`forget()` runs on
+    // a successful SAVE, and no save was coming). On the next page load that
+    // stale entry was offered back as unsaved work: a desk asked to restore
+    // words that were never lost, over a modal that covers the page.
+    //
+    // Found by driving it - the browser net's click began failing with
+    // `sahas-dialog-backdrop intercepts pointer events`, which is the offer
+    // sitting over the canvas.
+    //
     // A THUNK, not a snapshot: captureDraft() runs payloadFromDraft and a deep
-    // clone, and the journal writes at most once every two seconds - so
-    // building it eagerly would do that work on every keystroke and discard
-    // almost all of it, on the one path where the compositor already runs per
-    // character.
-    journal.remember(captureDraft);
+    // clone, so building it eagerly would do that work on every keystroke and
+    // discard almost all of it.
+    if (store.isDirty()) journal.remember(captureDraft);
     refreshSection(section, view, { selected: true, dirty: store.isDirty() });
     if (source === "properties-panel") refreshColumnRules(section, view);
     refreshExternalEditor(section, view, currentStory(), source, store.getSelectedPart(), store.getSelectedImageIds());

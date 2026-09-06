@@ -432,6 +432,28 @@ const say = (ok, what, detail = '') => {
   // block composes to no lines at all - so there was nothing for the caret to
   // be measured against and none was drawn.
   {
+    // THE APP IS A WRITER TOO, AND THIS FIXTURE PUT IS A SECOND ONE.
+    //
+    // Section 10 blurs the subheading, which commits and SCHEDULES a save on
+    // the one-second autosave debounce. The PUT below lands inside that window,
+    // so the desk's own save then arrives afterwards carrying the revision it
+    // loaded - and is correctly refused with a 409, which opens the compare
+    // dialog over the canvas and makes the click after it time out.
+    //
+    // That is the optimistic lock working, and it is REVEALING this race rather
+    // than causing it: before the lock existed, the app's late save silently
+    // overwrote this fixture, so section 12 was measuring a block whose
+    // contents it did not actually control and had no way to notice.
+    //
+    // So the net waits for the desk's own pending save to land before writing
+    // out of band. `.has-work` is the toolbar's own dirty flag, which is what
+    // the desk sees too.
+    await page.waitForFunction(() => {
+      const save = document.getElementById('tbSave');
+      return save && !save.classList.contains('has-work');
+    }, null, { timeout: 10000 }).catch(() => {});
+    await page.waitForTimeout(800);
+
     await page.evaluate(async ([key, kept]) => {
       await fetch(`/api/pages/${kept.pageId}/sections/${key}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },

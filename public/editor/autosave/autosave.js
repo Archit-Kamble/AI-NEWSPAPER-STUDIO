@@ -93,6 +93,27 @@ async function run() {
     return;
   }
 
+  // AN EXPIRED TIMEOUT IS NOT OUTSTANDING WORK.
+  //
+  // `schedule()` stores the debounce's id in `timer` and nothing ever cleared
+  // it once that timeout FIRED - so from the first autosave onwards `timer`
+  // held a dead id for the life of the workspace, and `isOutstanding()` was
+  // permanently true.
+  //
+  // That is not a cosmetic leak. Two things read it: the unload guard, which
+  // would therefore have asked EVERY desk to confirm leaving EVERY time they
+  // navigated, whether or not anything was unsaved; and the draft journal's
+  // forced write on the way out, which then left an entry for a block that was
+  // safely saved - and the next page load offered to restore it. Found by
+  // driving the browser net, whose click was blocked by exactly that offer
+  // sitting over the canvas.
+  //
+  // Cleared here rather than in schedule(): if run() is executing then the
+  // timeout has fired (or flush() cancelled it and called straight through),
+  // so at this instant nothing is scheduled. The retry branch below sets it
+  // again, which is a real pending save.
+  timer = null;
+
   // A retry re-sends the snapshot that failed. Only a FRESH attempt asks what
   // there is to save, and it asks exactly once.
   if (!attempt) attempt = captureFn ? captureFn() : null;

@@ -7947,6 +7947,147 @@ bytes. Words that still extract poorly do so because **poppler does not honour
 many-to-many Devanagari shaping — a limitation `pdf.writer.js` already
 documents and which no change here can remove.
 
+## The post-merge review — a swallowed press, a lost caret, and the save races
+
+Two passes over the merged tree: mine, driving the nets, and a second in a
+separate worktree (`codex/post-merge-review`). Everything below is measured.
+
+### A press on a panel selects the block it belongs to
+
+`visual-pass.browser.js` stopped dead — its click refused, the run crashing at
+check 32 of 47 with the last fifteen never running:
+
+```
+<div class="panel-drag-frame" data-panel-id="visual-pass-panel">
+  from <div class="panel-drag-layer"> subtree intercepts pointer events
+```
+
+The obvious reading is a test colliding with its own fixture, and the obvious
+fix is to press Escape instead. **That is the wrong reading**, and Escape is
+precisely the workaround this file already names as the SYMPTOM of the fault it
+fixed once — *"once the caret had been in the body the only way back was the
+Escape key"*.
+
+The panel drag layer arrived on the main canvas with the merged branch. It is
+drawn only for the block already open, its `pointerdown` calls
+`stopPropagation()`, and **it selects nothing** — while its own comment claims
+*"Selected on POINTERDOWN, like every other object on this page"*. So over a
+panel's own rectangle the press was swallowed and nothing at all happened: on a
+chart panel a quarter of the block, on a full-measure cross-head its whole
+width, with nothing on screen to say that rectangle behaves differently from
+the block around it. What is lost there is the gesture this file already
+records — *clicking a block that is already open selects the BLOCK itself* —
+which is the only way back to Border, Ground, Columns and Drop cap once the
+caret has been in the body.
+
+The frame now selects the owning block through `handlers.onSelectSection`, the
+canvas's own path rather than a second copy of it. It cannot change WHICH block
+a desk is on, because the layer is only ever drawn for the one already open.
+
+The net presses the panel and asserts the block became the selected object;
+reverting the one line takes it from 47/47 to 45/47 with exactly that
+diagnosis. Its later click presses the part of the block that is actually
+visible rather than the element's centre — the same correction
+`editor-parity.browser.js` already carries for a frame below the fold.
+
+### A net outlived the gesture it was pinned to, and I nearly "fixed" the product
+
+`headline-focus.browser.js` failed 9/11 deterministically — three runs alone,
+three more in the suite — while the register recorded it as a flake. It is not
+a flake, and chasing it properly is the whole lesson here.
+
+Bisected first, against servers booted at `c19d93c` and the pre-merge
+`74b1578`: **it fails at both**, so nothing in the merge caused it. Then
+instrumented, the way this repository caught the last focus thief:
+
+```
+blur  <- edStoryHeadline   at renderExternalEditor (external-editor.js)
+focus -> workspace-shell   at loadBodyIntoQuill    <- the release branch
+```
+
+That reads like a fault, and a fix for it was written and measured working: the
+panel would record which field held the caret before it rewrote its own markup,
+and the mount would hand it back. **It was reverted, because the premise was
+wrong**, and what showed that was asking what else reads a field's focus:
+`focusin` on a display field **selects that part**. So handing the caret back
+would have silently undone the very gesture that caused the rebuild — a desk
+who clicked the block would get the block selected and then un-selected again.
+
+Following that through gives the real answer. The check's own comment says
+*"Re-selecting the block is what mounts it again"*, and that was true when it
+was written: clicking a block that was already open **returned early and did
+nothing**. `selectSection()` now treats that click as *select the BLOCK
+itself* — the documented way back to Border, Ground and Columns once the caret
+has been in the body. So the gesture changed meaning, the desk really has moved
+to a different object, and **the caret leaving the headline is correct**.
+
+The check was asserting the old product. Its own NAME states the invariant that
+still holds — the load may not pull the caret *into the story* — and
+`workspace-shell` is not the story. It asserts that now, and the two
+load-bearing checks beside it (0 of 24 keystrokes reaching the copy, 24 of 24
+reaching the headline, across eight delays) passed throughout and are what
+actually guard the race. 11/11.
+
+**A test that fails intermittently is not automatically a flake, and a
+plausible stack trace is not automatically a bug.** This one had been believed
+to be a flake because it had only ever been run inside a sweep.
+
+### Empty room is not the margin corner
+
+`workspace.browser.js` went 224/224 → 212/224 on a change meant to make it more
+robust: its "click empty room on the page" point was found by scanning from
+`(2, 2)`. The comment directly above that scan already says why that is the one
+place not to look — the block's inset is 0.5 mm, *"so at this fixture's scale
+the corner is about two screen pixels of margin and the hit test can land
+either side of it. A test that depends on which side is testing the rounding,
+not the product."* Twelve checks failed in a chain behind it.
+
+The concern behind the change was real (band hit boxes can overlap, so the
+midpoint of two frames is not reliably empty on every fixture). So the scan is
+kept and made to mean what the comment says: inset from the edge, and a point
+counts as empty room only when its neighbours are empty too — which is what
+*"tens of pixels of it"* means, and what a desk's own click lands in. 224/224.
+
+### A late answer may not acknowledge newer typing
+
+The snapshot work closed *which block* a retry writes. It left open *whether a
+receipt may speak for the current draft*, and three races behind it:
+
+- **A stale "saved" cleared the dirty flag** for typing done after the request
+  left. `onAutosaveState` now compares the acknowledged snapshot against the
+  live draft and, when they differ, returns the block to `idle`, re-journals and
+  re-schedules rather than reporting work as saved that is not.
+- **A late receipt erased a newer recovery copy.** `journal.forget()` takes a
+  `through` timestamp and removes only entries older than the snapshot being
+  acknowledged.
+- **`flush()` returned while a request was still in flight**, so a navigation
+  could switch blocks before the final keystrokes were captured. It drains the
+  in-flight save first, and `selectSection`/`selectPage` await it. A
+  `selectionRequest` counter makes the last click win, which is required once
+  those became asynchronous.
+
+**But the wait is BOUNDED (5s), because a click may not hang on a request.**
+Awaiting an unanswered save turns one dead request into an editor that ignores
+clicks — no error, nothing on screen, because the save has not failed yet, it
+simply has not come back. A *failed* save settles immediately (the catch
+swallows it and schedules the retry), so the bound only ever releases a request
+that never answered. Giving up costs nothing: the draft is already in the
+recovery journal, the snapshot is immutable, and the late-answer guard above
+refuses to let that response speak for whatever is open by the time it lands.
+`tests/autosaveRace.test.js` holds all of it — 12 tests, and each of the four
+fails against the code without its fix.
+
+`captureDraft()` also deep-copies the draft. The payload was cloned; the draft
+was still `{ ...draft }`, so `tags` and `insetPanels` in a recovery snapshot
+aliased live arrays.
+
+### And the last four real-account dependencies are gone
+
+`hardening.test.js` and `press.test.js` still signed in as the newspaper's own
+owner; the DPI test depended on an ignored upload left in one checkout and
+would have failed on a fresh clone as a missing file rather than as a DPI
+check. All four use disposable fixtures now.
+
 ## Engineering rules
 
 - **The overflow diagnosis started from desk-selected baseline `52c9556`.** Fix

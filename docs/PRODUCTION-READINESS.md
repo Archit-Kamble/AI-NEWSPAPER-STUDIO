@@ -4,7 +4,11 @@ Two independent full regressions were run on 2026-09-06: one by Claude on `main`
 Codex on `codex/newspaper-block-designs`. This is the combined list, ranked by what it
 costs the newsroom on press day.
 
-**Sixteen of the nineteen are now closed**, on 2026-09-06, and each entry below says what
+A twentieth was found by Codex while reviewing the merge, and a twenty-first by
+driving the browser net afterwards — that one a fault this pass introduced.
+Both are closed and both are below.
+
+**Eighteen of the twenty-one are now closed**, on 2026-09-06, and each entry below says what
 was done and how it was verified. Three remain, and each of them is blocked on something
 this software cannot supply for itself — artwork, a printer's colour profile, or a
 decision only the owner can take. They are at the bottom, under **Still open**.
@@ -34,6 +38,35 @@ found it independently.
 | **[C]** #15 | **One genuinely unguarded `fetch(...).json()`.** The Publish dialog read the edition with no `response.ok` and no `.catch()`, so on a 401 or 500 it drew its question for an edition it had never loaded, and on a non-JSON answer it threw inside an async click handler and the button silently did nothing. Guarded, and a failure now says so with a retry. |
 | **[X]** #16 | **Accessibility gaps.** The publication modal had no dialog semantics, focus trap or restore, no Escape and no accessible close — fixed by putting it on `public/ui/dialog.js`, which already had all of that, **removing a second dialog implementation** rather than teaching it to behave. Page pills gained `aria-current` and a real label ("Page 4, has copy") instead of state carried in colour alone; the Story Explorer close button gained a name. |
 | **[C]** #19 | **Housekeeping.** Two nets wrote screenshots over **tracked** files, so every verification run dirtied the working tree; they write to a gitignored `runs/` now and the historical shots stay. The 41 equal-specificity CSS conflicts are unchanged and remain cosmetic debt. |
+
+### #20 — found by Codex during the merge review, and confirmed independently
+
+**`schema.sql` never declared `newspapers.template`**, which
+`newspaper.repository.js` names in **both** of its INSERTs. Invisible on every
+database that exists — they all carry the column — and fatal on a fresh
+install, where creating the very first edition fails with
+`column "template" of relation "newspapers" does not exist`. The **third**
+instance of this drift here, after `news_items.newspaper_id`'s ON DELETE rule
+and the `users.role` CHECK.
+
+`tests/schemaBootstrap.test.js` applies the whole file into a transaction-scoped
+schema namespace, creates an edition, applies it again to prove re-running is
+free, and rolls it all back. Checked both ways: it fails against the old file
+with exactly that error.
+
+### #21 — an expired timeout made autosave believe a save was always pending
+
+Introduced by this pass's own #2/#3 work and caught by the browser net.
+`schedule()` stores the debounce id in `timer` and nothing cleared it once the
+timeout **fired**, so `isOutstanding()` was permanently true from the first
+autosave onwards. The unload guard would have asked every desk to confirm
+leaving on every navigation, and the journal's forced write then left an entry
+for a block that was safely saved — which the next page load offered to restore,
+as a modal whose backdrop covered the canvas. Cleared at the top of `run()`;
+verified in the running app.
+
+The journal's DRAFT subscriber is now guarded on `store.isDirty()` for the same
+family of reason: that topic fires after a save has landed too.
 
 ### And one the CSP found rather than merely being adopted
 
@@ -114,6 +147,11 @@ unreviewable.
 
 ## Known flakes — recorded, not bugs
 
+- `tests/browser/body-editing.browser.js` — **no longer a flake and no longer
+  failing**: it was the expired-timeout fault above plus a real race of its own
+  (an out-of-band fixture PUT landing inside the autosave debounce, which the
+  optimistic lock correctly refuses with a 409). 35/35, exit 0, zero console
+  errors.
 - `tests/currentNewsWriting.test.js` "check the sources first" — failed ~1 run in 4 inside a
   full sweep. **Still not diagnosed.** The obvious explanation was checked and is wrong:
   `withProviders` deletes the whole real chain before installing its stubs (that was fixed

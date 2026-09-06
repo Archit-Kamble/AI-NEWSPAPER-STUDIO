@@ -4213,6 +4213,14 @@ ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS frame_shape VARCHAR(20);
 -- `($59::int IS NULL OR revision = $59)`, so a caller that does not send an
 -- expected revision saves exactly as it always did.
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 1;
+
+-- A COLUMN THE CODE HAS ALWAYS WRITTEN AND THIS FILE NEVER DECLARED.
+-- newspaper.repository.js names `template` in BOTH of its INSERTs. Every
+-- existing database has it, so the fault only appears on a FRESH install,
+-- where creating the first edition fails. The DEFAULT is required for the
+-- ALTER (Postgres cannot add NOT NULL to a non-empty table without one) and is
+-- deliberately not what production carries, where the column has no default.
+ALTER TABLE newspapers ADD COLUMN IF NOT EXISTS template VARCHAR(100) NOT NULL DEFAULT 'front';
 ```
 
 **The session table is deliberately NOT in this list.** `user_sessions` is
@@ -7855,6 +7863,78 @@ all *do* carry press files, because the leaking test uploads a fake `.sla` and
 which are the editions the browser nets open by default and the showcase page
 this file tells you to look at. It matches the leak's measured signature now,
 and prints the list it is **keeping** so the claim can be checked.
+
+### schema.sql did not declare a column the code has always written
+
+`newspaper.repository.js` names `newspapers.template` in **both** of its
+INSERTs and `schema.sql` never created it. Nothing could notice, because every
+database that exists already carries the column — so the fault is invisible
+until SAHAS is installed somewhere new, where creating the very first edition
+fails with `column "template" of relation "newspapers" does not exist`.
+
+**That is the third time this exact drift has been found here**, after
+`news_items.newspaper_id`'s ON DELETE rule and the `users.role` CHECK, and all
+three were found only when something finally exercised them. `schema.sql` is
+never run at boot, so nothing routinely proves it can build the database this
+code needs.
+
+`tests/schemaBootstrap.test.js` is what makes it provable: it applies the whole
+file into a **transaction-scoped schema namespace**, creates an edition, applies
+it **again** to show re-running is free, and rolls the lot back — so it can hold
+this without migrating anything. It fails against the old file with exactly that
+error.
+
+**The DEFAULT is deliberate and is not a copy of production**, which carries the
+column NOT NULL with no default. PostgreSQL cannot add a NOT NULL column to a
+table that already has rows without one, so the ALTER needs it; both INSERT
+sites pass `'front'` explicitly, so it never actually decides anything.
+
+### An expired timeout is not outstanding work
+
+`schedule()` stores the debounce's id in `timer`, and nothing cleared it once
+that timeout **fired**. So from the first autosave onwards `timer` held a dead
+id for the life of the workspace and `isOutstanding()` was permanently true.
+
+Two things read it and both did the wrong thing:
+
+- the **unload guard** would have asked every desk to confirm leaving every time
+  they navigated, whether or not anything was unsaved — a warning that is always
+  on is one nobody reads, which is the fault this file already records for a
+  permanently-red Save button;
+- the **journal's forced write** on the way out then left an entry for a block
+  that was safely in the database, and the next page load offered to restore it.
+
+`timer` is cleared at the top of `run()`: if `run()` is executing then the
+timeout has fired, so at that instant nothing is scheduled, and the retry branch
+sets it again for a save that really is pending.
+
+**The journal is a net under UNSAVED work**, so the DRAFT subscriber is guarded
+on `store.isDirty()`. That topic fires whenever the draft is republished,
+including after a save has landed, so writing unconditionally left entries
+describing blocks that were never at risk — and nothing was coming to clear
+them, because `forget()` runs on a successful SAVE.
+
+Both were found by driving `body-editing.browser.js`, whose click was blocked by
+the restore offer sitting over the canvas:
+`sahas-dialog-backdrop intercepts pointer events`.
+
+#### The lock revealed a race in the net rather than causing one
+
+That net's section 10 blurs the subheading, which schedules a save on the
+one-second debounce; section 12's out-of-band fixture PUT lands inside that
+window, so the desk's own save arrives afterwards carrying the revision it
+loaded and is correctly refused with a **409**. Before the optimistic lock
+existed, that late save silently **overwrote the fixture** — so section 12 was
+measuring a block whose contents it did not control and had no way to notice.
+It waits for the toolbar's own dirty flag to clear before writing out of band.
+
+**And a throwaway diagnostic broke a real block**, which is this repository's own
+rule ignored: a probe wrote `PROBE` into edition 40294's anchor and did not put
+it back, and each subsequent crashed run then restored that damage faithfully —
+the net restores what it FOUND. Refilled with `scripts/fill-edition-copy.js`,
+which is the documented remedy and works because 40294 is a 2099 fixture. A
+scratch script that writes into a real block is a net, and the same rule applies
+to it.
 
 ### `/ActualText` was there all along
 

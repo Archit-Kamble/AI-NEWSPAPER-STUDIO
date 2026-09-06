@@ -14,6 +14,7 @@
 
 require('dotenv').config();
 const { chromium } = require('playwright-core');
+const { DESK_EMAIL, DESK_PASSWORD } = require('./helpers/desk-login');
 // There is deliberately no DELETE route for a login - an owner blocks an
 // account, because blocking keeps the filing and review history that a
 // newsroom has to be able to answer for. So this net removes its own
@@ -50,7 +51,7 @@ const check = (name, ok, detail = '') => {
   const ownerContext = await browser.newContext();
   const ownerApi = ownerContext.request;
   const signInOwner = await ownerApi.post(`${BASE}/api/auth/login`, {
-    data: { email: 'admin@esahas.com', password: 'admin123' },
+    data: { email: DESK_EMAIL, password: DESK_PASSWORD },
   });
   if (!signInOwner.ok()) throw new Error(`owner sign-in answered ${signInOwner.status()}`);
 
@@ -163,8 +164,8 @@ const check = (name, ok, detail = '') => {
       page.on('pageerror', (e) => errors.push(`pageerror: ${e.message.slice(0, 140)}`));
       await page.goto(BASE);
       await page.waitForTimeout(700);
-      await page.fill('#email', 'admin@esahas.com');
-      await page.fill('#password', 'admin123');
+      await page.fill('#email', DESK_EMAIL);
+      await page.fill('#password', DESK_PASSWORD);
       await page.click('#loginBtn');
       await page.waitForTimeout(1600);
       for (const id of ['newEditionBtn', 'pastBtn', 'pastNewsBtn', 'reportersBtn', 'settingsBtn', 'epaperBtn']) {

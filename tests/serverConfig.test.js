@@ -32,9 +32,52 @@ test('production with the dev fallback value refuses to start', (t) => {
   assert.throws(() => createApp(), /SESSION_SECRET/);
 });
 
+// A REAL secret, generated the way the refusal message tells a deploy to
+// generate one. The fixture used to read 'a-real-generated-secret' - 23
+// characters that only LOOK like a secret, which is the same mistake as the
+// guard that let the published placeholder through, sitting in the test that
+// was supposed to prove the guard worked.
+const REAL_SECRET = require('crypto').randomBytes(48).toString('base64url');
+
 test('production with a real secret starts normally', (t) => {
-  withEnv(t, { NODE_ENV: 'production', SESSION_SECRET: 'a-real-generated-secret' });
+  withEnv(t, { NODE_ENV: 'production', SESSION_SECRET: REAL_SECRET });
   assert.doesNotThrow(() => createApp());
+});
+
+// .env.example ships this exact string. A guard that named only "dev-secret"
+// accepted it, so a deploy that copied the example and changed everything
+// except the line telling it to change that line signed every desk's cookie
+// with a constant published in this repository.
+test('production with .env.example\'s own placeholder refuses to start', (t) => {
+  withEnv(t, { NODE_ENV: 'production', SESSION_SECRET: 'change-this-secret' });
+  assert.throws(() => createApp(), /placeholder/);
+});
+
+test('production refuses a secret that is merely short', (t) => {
+  withEnv(t, { NODE_ENV: 'production', SESSION_SECRET: 'aB3$xQ7!zM2' });
+  assert.throws(() => createApp(), /at least 32/);
+});
+
+// Long, and carries almost no entropy - the other way to satisfy a length
+// floor without satisfying what the floor is for.
+test('production refuses a long secret made of too few characters', (t) => {
+  withEnv(t, { NODE_ENV: 'production', SESSION_SECRET: 'abababababababababababababababababab' });
+  assert.throws(() => createApp(), /distinct characters/);
+});
+
+// The example is a file in this repository, so the guard can be pointed at
+// the actual value rather than at a copy of it that could drift.
+test('whatever .env.example ships is refused in production', (t) => {
+  const fs = require('fs');
+  const path = require('path');
+  const example = fs.readFileSync(path.join(__dirname, '..', '.env.example'), 'utf8');
+  const line = example.split('\n').find((l) => l.startsWith('SESSION_SECRET='));
+  assert.ok(line, '.env.example still names SESSION_SECRET');
+  const shipped = line.slice('SESSION_SECRET='.length).trim();
+  if (!shipped) return; // an empty example value is refused by the "not set" branch
+  withEnv(t, { NODE_ENV: 'production', SESSION_SECRET: shipped });
+  assert.throws(() => createApp(), /SESSION_SECRET/,
+    'the value published in .env.example must never be accepted in production');
 });
 
 test('development with no SESSION_SECRET still starts (the LAN-desk default)', (t) => {

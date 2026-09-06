@@ -7,6 +7,21 @@ const fit = require('../services/fit.service');
 
 async function update(req, res) {
   const result = await pageSectionService.saveSection(req.params.pageId, req.params.sectionId, req.body);
+  // A CONFLICT IS NOT A BAD REQUEST, and it must not be answered as one.
+  //
+  // 400 tells a desk they sent something wrong, which is untrue and cannot be
+  // acted on - the same fault the catch-all had when it answered every error
+  // with 400. 409 says what actually happened, and the current row travels
+  // with it so the editor can show both versions rather than only announcing
+  // that one was lost. Checked BEFORE `result.error`, because a conflict
+  // carries a sentence too.
+  if (result?.conflict) {
+    return res.status(409).json({
+      error: result.error,
+      conflict: true,
+      current: result.current,
+    });
+  }
   if (result?.error) return res.status(400).json({ error: result.error });
   const page = result;
   if (!page) return res.status(404).json({ error: 'Not found' });

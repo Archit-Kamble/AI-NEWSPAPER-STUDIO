@@ -21,3 +21,8 @@ models/
 npm-debug.log*
 .DS_Store
 .scratch/
+
+# A browser net's screenshots. The shots already tracked under tmp-visual-pass/
+# are the record of past design passes and stay; what a RUN writes goes in
+# runs/ so a verification pass leaves the working tree clean.
+tmp-visual-pass/runs/

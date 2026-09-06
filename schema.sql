@@ -937,3 +937,21 @@ ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS border_radius_px NUMERIC(5,2)
 -- cut needs only one more OBSTACLE entry - the same vocabulary a photograph
 -- and a चौकट panel already are.
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS frame_shape VARCHAR(20);
+
+-- TWO EDITORS COULD SILENTLY OVERWRITE EACH OTHER, AND NOTHING NOTICED.
+--
+-- Measured: two authenticated sessions opened the same block from the same
+-- base version, both saved, both answered 200, and the first editor's work was
+-- gone with nothing anywhere saying so. `updated_at` was already sent to the
+-- client and already ignored; the UPDATE carried no condition at all, so the
+-- last write simply won.
+--
+-- An integer revision rather than a timestamp: it is monotonic, it is exact,
+-- and it cannot be confused by two saves inside one clock tick. It starts at 1
+-- for every row that already exists, which is what makes this migration free -
+-- every block in the database gets a revision without any of them changing.
+--
+-- The CHECK is deliberately absent and the column deliberately NOT NULL: a row
+-- with no revision could not be compared against, and a comparison that cannot
+-- be made is a lock that is not there.
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 1;

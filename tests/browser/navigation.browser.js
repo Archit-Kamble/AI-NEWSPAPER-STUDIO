@@ -13,6 +13,7 @@
 // Needs playwright-core and Chrome at /usr/bin/google-chrome (CHROME_PATH
 // overrides), against a running server on :3000.
 const { chromium } = require('playwright-core');
+const { DESK_EMAIL, DESK_PASSWORD } = require('./helpers/desk-login');
 
 const BASE = process.env.BASE || 'http://localhost:3000';
 let pass = 0, fail = 0;
@@ -27,7 +28,7 @@ const check = (n, ok, d='') => { ok ? pass++ : fail++; console.log(`${ok?'PASS':
   try {
     await page.goto(BASE, { waitUntil: 'networkidle' });
     if (await page.locator('#email').count()) {
-      await page.fill('#email','admin@esahas.com'); await page.fill('#password','admin123');
+      await page.fill('#email',DESK_EMAIL); await page.fill('#password',DESK_PASSWORD);
       await page.click('#loginBtn');
     }
     await page.waitForSelector('.edition-row', { timeout: 25000 });

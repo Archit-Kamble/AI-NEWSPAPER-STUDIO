@@ -26,6 +26,7 @@
 // at all, and that the counts the desk reads are the ones it acts on.
 
 const { chromium } = require('playwright-core');
+const { DESK_EMAIL, DESK_PASSWORD } = require('./helpers/desk-login');
 
 const CHROME = process.env.CHROME_PATH || '/usr/bin/google-chrome';
 const BASE = process.env.BASE_URL || 'http://localhost:3000';
@@ -120,8 +121,8 @@ const say = (ok, what, detail = '') => {
   await page.goto(BASE);
   await page.waitForTimeout(900);
   if (await page.locator('#email').count()) {
-    await page.fill('#email', 'admin@esahas.com');
-    await page.fill('#password', 'admin123');
+    await page.fill('#email', DESK_EMAIL);
+    await page.fill('#password', DESK_PASSWORD);
     await page.click('#loginBtn');
   }
   await page.waitForSelector('.edition-row', { timeout: 20000 });

@@ -8,6 +8,26 @@
 // Node's fetch does not keep cookies, so the session is carried by hand.
 
 const pool = require('../../src/config/db');
+const { testOwner, removeTestOwner, sweepAbandonedTestOwners } = require('./desk-owner');
+const { assertWritableDatabase } = require('./test-database');
+
+// Checked at require time, so a suite pointed at a production database stops
+// before it writes anything rather than after.
+assertWritableDatabase();
+
+// THE TESTS SIGN IN AS THEIR OWN OWNER, NOT AS THE NEWSROOM'S.
+//
+// This defaulted to `admin@esahas.com` / `admin123` - the real administrator of
+// a real newspaper - and seven test files kept that password working by
+// OVERWRITING it on every run. See helpers/desk-owner.js for what that cost.
+//
+// The account is made on first use and removed when the file's tests finish.
+// A caller that names an email explicitly (the roles tests, which are about
+// particular roles) still gets exactly what it asked for.
+require('node:test').after(async () => {
+  await removeTestOwner();
+  await sweepAbandonedTestOwners();
+});
 
 /**
  * Signs in and returns a fetch bound to that session.
@@ -15,7 +35,12 @@ const pool = require('../../src/config/db');
  * `deskFetch(path, options)` behaves like fetch against the test server, with
  * the session cookie and a JSON content type already set.
  */
-async function signIn(port, { email = 'admin@esahas.com', password = 'admin123', role = 'admin' } = {}) {
+async function signIn(port, { email, password, role = 'admin' } = {}) {
+  if (!email) {
+    const owner = await testOwner(role);
+    email = owner.email;
+    password = owner.password;
+  }
   const base = `http://127.0.0.1:${port}`;
   const response = await fetch(`${base}/api/auth/login`, {
     method: 'POST',

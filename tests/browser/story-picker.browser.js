@@ -15,6 +15,7 @@
 //   node tests/browser/story-picker.browser.js            # defaults to 40294 / brief-two
 //   node tests/browser/story-picker.browser.js 40294 lead
 const { chromium } = require('playwright-core');
+const { DESK_EMAIL, DESK_PASSWORD } = require('./helpers/desk-login');
 
 const ED = Number(process.argv[2] || 40294);
 const KEY = process.argv[3] || 'brief-two';
@@ -40,8 +41,8 @@ const say = (ok, name, detail = '') => {
     await page.goto(BASE);
     await page.waitForTimeout(900);
     if (await page.locator('#email').count()) {
-      await page.fill('#email', 'admin@esahas.com');
-      await page.fill('#password', 'admin123');
+      await page.fill('#email', DESK_EMAIL);
+      await page.fill('#password', DESK_PASSWORD);
       await page.click('#loginBtn');
     }
     await page.waitForSelector('.edition-row', { timeout: 20000 });

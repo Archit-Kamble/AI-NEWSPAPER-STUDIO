@@ -80,7 +80,7 @@ function placedImagesMarkup(section) {
       const style = placedPictureStyle(image);
       const picture = `<span class="section-placed" style="${style.frame}" data-shape="${style.shape}">
                    <img class="section-placed-image" src="${escapeHtml(image.url)}" alt=""
-                        onerror="this.remove()" style="${style.image}" /></span>`;
+                        data-broken="remove" style="${style.image}" /></span>`;
       // A photograph in a newspaper is captioned. The caption is set under the
       // picture, in the picture's own measure, not in the story's.
       if (!image.caption) return picture;
@@ -190,7 +190,7 @@ function contentMarkup(section, view) {
       ${
         hasImage
           ? `<span class="section-image-box"><img class="section-image" src="${escapeHtml(view.imageUrl)}" alt=""
-               onerror="this.closest('.section-image-box').remove()"
+               data-broken="remove-box"
                style="object-fit:${escapeHtml(view.imageFit || "cover")};${imageTransformCss(view)}" />${
                  view.caption ? `<span class="section-caption">${escapeHtml(view.caption)}</span>` : ""
                }</span>`

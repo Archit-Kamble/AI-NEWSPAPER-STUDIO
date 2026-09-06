@@ -97,9 +97,17 @@ test('the exact-canvas capture handoff is one-use, opaque and never a public edi
 test('the editor Publish action is one confirmation, while optional PDF e-paper publishing lives in management', async () => {
   const publicationUi = await fs.readFile(path.join(epaper.PUBLIC_DIR, 'editor', 'publication.js'), 'utf8');
   const managementUi = await fs.readFile(path.join(epaper.PUBLIC_DIR, 'admin', 'epapers.js'), 'utf8');
-  assert.match(publicationUi, /id="confirmPublish"/);
-  assert.match(publicationUi, /\/publish-current/);
+  // This used to read `/id="confirmPublish"/`, which pinned the SPELLING of a
+  // hand-rolled modal's button rather than the rule the check exists for. The
+  // rule is: the editor's Publish is ONE confirmation, it goes to
+  // publish-current, and it offers none of the press path. That survives the
+  // dialog moving onto public/ui/dialog.js; the id did not.
+  assert.match(publicationUi, /askConfirm\(/, 'it asks exactly one confirmation');
+  assert.match(publicationUi, /publish-current/);
   assert.doesNotMatch(publicationUi, /scribusFile|final-files|publishEpaper|printPdf/);
+  // And it must not have grown a second dialog of its own again.
+  assert.doesNotMatch(publicationUi, /modal-backdrop|modalRoot/,
+    'the publish question uses the paper\'s own dialog, not a second implementation');
   assert.match(managementUi, /Publish from a finished PDF/);
   assert.match(managementUi, /\/epaper\/pdf/);
   assert.match(managementUi, /data-epaper-pdf-date/);

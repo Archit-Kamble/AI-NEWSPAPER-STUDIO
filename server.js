@@ -33,12 +33,52 @@ dotenv.config();
 // know the fallback and could forge a session. Only enforced when
 // NODE_ENV=production is actually set, so local dev and npm test - which
 // never set it - are unaffected.
+//
+// A GUARD THAT REJECTS ONE STRING REJECTS ONE STRING. It named "dev-secret"
+// and nothing else, so `.env.example`'s own published placeholder -
+// SESSION_SECRET=change-this-secret, a value in this repository for anyone to
+// read - walked straight past it. A deploy that copied the example and
+// changed everything except the line telling it to change that line would
+// have signed every desk's cookie with a public constant.
+//
+// So the check is on the CLASS of value, not on a list of them: anything
+// short, and anything that reads like a placeholder rather than a secret.
+// PLACEHOLDER_WORDS are matched as substrings, case-insensitively, because a
+// real secret is random and will not contain the word "secret" or "change"
+// except by an accident far less likely than a copied example.
+const MIN_SECRET_LENGTH = 32;
+const PLACEHOLDER_WORDS = [
+  "dev-secret", "change-this", "changeme", "change-me", "your-secret",
+  "placeholder", "example", "xxxxx", "todo", "sahas-secret", "secret-here",
+];
+
+// The order of these checks is the order of how USEFUL the answer is, not the
+// order they were written in. A placeholder is diagnosed before length,
+// because "change-this-secret" is both short AND a placeholder, and being
+// told to make it longer would invite a deploy to pad the placeholder rather
+// than replace it.
+function sessionSecretProblem(secret) {
+  if (!secret) return "it is not set at all";
+  const lower = secret.toLowerCase();
+  const word = PLACEHOLDER_WORDS.find((w) => lower.includes(w));
+  if (word) return `it contains the placeholder text "${word}"`;
+  if (secret.length < MIN_SECRET_LENGTH) {
+    return `it is ${secret.length} characters and must be at least ${MIN_SECRET_LENGTH}`;
+  }
+  // A secret made of one repeated character is long and carries no entropy.
+  if (new Set(secret).size < 8) return "it is made of too few distinct characters to be random";
+  return null;
+}
+
 function assertSessionSecretConfigured() {
   if (process.env.NODE_ENV !== "production") return;
-  if (process.env.SESSION_SECRET && process.env.SESSION_SECRET !== "dev-secret") return;
+  const problem = sessionSecretProblem(process.env.SESSION_SECRET);
+  if (!problem) return;
   throw new Error(
-    "SESSION_SECRET must be set to a real secret when NODE_ENV=production. " +
-    "Refusing to start with the development fallback.",
+    `SESSION_SECRET is not usable in production: ${problem}. ` +
+    "It signs every desk's login cookie, so anyone who can guess it can forge " +
+    "a session and take the paper over. Generate one with: " +
+    "node -e \"console.log(require('crypto').randomBytes(48).toString('base64url'))\"",
   );
 }
 
@@ -60,15 +100,109 @@ function createApp(options = {}) {
   // repository as NaN and answers 500 instead of "that is not an edition".
   guardIdParams(app);
 
+  // The version of Express this newsroom runs is not a fact a visitor needs,
+  // and it is the first thing an automated scan reads.
+  app.disable("x-powered-by");
+
+  // WHERE TLS IS TERMINATED DECIDES WHETHER THE COOKIE IS EVER SENT.
+  //
+  // The session cookie is `secure` under NODE_ENV=production. When TLS is
+  // terminated by a reverse proxy rather than by Node - which is how this is
+  // normally deployed - Express sees a plain HTTP connection and a secure
+  // cookie is set on a request the browser was told was insecure, so the desk
+  // cannot stay signed in. Trusting the proxy's X-Forwarded-Proto is what
+  // makes `req.secure` true and the cookie reach the browser.
+  //
+  // Off unless configured, and deliberately not defaulted on in production:
+  // trusting a forwarding header from a client that is NOT behind a proxy
+  // lets that client claim any address it likes, which would be handed
+  // straight to the login throttle - keyed on the account and the address
+  // together - and turn the throttle into a way past itself.
+  if (process.env.TRUST_PROXY) {
+    const hops = Number(process.env.TRUST_PROXY);
+    app.set("trust proxy", Number.isFinite(hops) ? hops : process.env.TRUST_PROXY);
+  }
+
+  // WHAT THIS PAGE MAY LOAD, AND FROM WHERE.
+  //
+  // Every byte this application serves is its own: one module script, a local
+  // Quill, local fonts, local uploads. So the policy is 'self' throughout and
+  // costs the product nothing - which is exactly why it is worth having, as
+  // the layer under the upload whitelist and `nosniff`. If a file ever did
+  // reach disk with a name this paper did not choose, `script-src 'self'`
+  // still refuses to run anything a THIRD party hosts, and `object-src
+  // 'none'` refuses the plugin embeds that are the usual way round a policy.
+  //
+  // Two entries are load-bearing and must not be tidied away:
+  //
+  // - 'wasm-unsafe-eval'. The compositor's shaper is HarfBuzz compiled to
+  //   WebAssembly, and Chrome refuses WebAssembly.instantiate under any
+  //   script-src that does not admit it. Without this the shaper never
+  //   becomes ready - which in Node is a thrown EXACT_SHAPER_NOT_READY and in
+  //   the browser is every block silently measured against the fallback grid,
+  //   a page composed against a font it is not set in. It is far narrower
+  //   than 'unsafe-eval': it permits WASM compilation and still refuses
+  //   eval() and new Function().
+  //
+  // - 'unsafe-inline' for STYLE ONLY. This product positions every composed
+  //   line by writing a style attribute - that is what render.js IS - so a
+  //   policy without it would leave the newspaper canvas unpositioned. It is
+  //   not extended to script-src, where it would give away the whole
+  //   protection; the palette boundary at the service is what keeps arbitrary
+  //   text out of those attributes, and that check is unchanged.
+  //
+  // img-src carries data: and blob: because a picture is cropped and previewed
+  // in the browser before it is ever uploaded.
+  const CSP = [
+    "default-src 'self'",
+    "script-src 'self' 'wasm-unsafe-eval'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "font-src 'self'",
+    "connect-src 'self'",
+    "media-src 'self' blob:",
+    "worker-src 'self' blob:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'self'",
+  ].join("; ");
+
   app.use((req, res, next) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "SAMEORIGIN");
     res.setHeader("Referrer-Policy", "same-origin");
+    res.setHeader("Content-Security-Policy", CSP);
+    // This application asks for none of these. Saying so stops an embedded
+    // third party asking on its behalf.
+    res.setHeader(
+      "Permissions-Policy",
+      "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()",
+    );
+    // HSTS only where TLS is actually terminated in front of Node. Sent on a
+    // plain-HTTP deployment it is ignored by browsers, but sending it there
+    // would still be a promise this deployment has not made.
+    if (process.env.NODE_ENV === "production") {
+      res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+    }
     next();
   });
 
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+  // A BODY IS PARSED BEFORE ANYONE HAS SIGNED IN.
+  //
+  // This was 50mb, and express.json runs ahead of every route and every
+  // guard - so an anonymous request could make this server buffer and parse
+  // fifty megabytes of JSON before anything asked who was sending it. Nothing
+  // in this product needs that: pictures and the final press files arrive as
+  // MULTIPART and are bounded by multer's own limits (10 MB an image, 50 MB a
+  // press file), which express.json never sees. The largest legitimate JSON
+  // body here is a page save or an e-paper map, both far under a megabyte.
+  //
+  // Configurable, because the ceiling belongs to a deployment rather than to
+  // this file, and generous enough that no real payload can meet it.
+  const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || "5mb";
+  app.use(express.json({ limit: JSON_BODY_LIMIT }));
+  app.use(express.urlencoded({ extended: true, limit: JSON_BODY_LIMIT }));
   // Session comes before the e-paper image gate so a signed-in desk can
   // preview a private release, while anonymous visitors remain limited to
   // the single selected public issue.

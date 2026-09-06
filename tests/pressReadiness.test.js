@@ -8,7 +8,12 @@ const { createApp } = require('../server');
 const { signIn, newEdition, removeEdition } = require('./helpers/desk');
 const bcrypt = require('bcryptjs');
 
-async function ensureAdmin() { const password = await bcrypt.hash('admin123', 4); await pool.query(`INSERT INTO users (name,email,password_hash,role) VALUES ('संपादक','admin@esahas.com',$1,'admin') ON CONFLICT (email) DO UPDATE SET password_hash=$1, role='admin'`, [password]); }
+// The desk login these tests use is created and removed by
+// tests/helpers/desk-owner.js. It used to be `admin@esahas.com`, upserted here
+// with its password REPLACED by a constant published in this repository - the
+// real administrator of a real newspaper, overwritten on every run. Nothing
+// under tests/ writes to an account somebody uses any more.
+async function ensureAdmin() { /* helpers/desk.js signs in as its own disposable owner */ }
 
 test('FULLY_COMPOSED editorial state is distinct from press approval, and edits revoke it', async () => {
   await ensureAdmin();

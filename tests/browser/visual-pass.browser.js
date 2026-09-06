@@ -13,10 +13,22 @@
 
 const fs = require('fs');
 const { chromium } = require('playwright-core');
+const { DESK_EMAIL, DESK_PASSWORD } = require('./helpers/desk-login');
 
 const CHROME = process.env.CHROME_PATH || '/usr/bin/google-chrome';
 const BASE = process.env.BASE_URL || 'http://localhost:3000';
-const SHOTS = process.env.SHOT_DIR || 'tmp-visual-pass';
+// A NET'S SCREENSHOTS ARE OUTPUT, AND OUTPUT DOES NOT GO IN THE WORKING TREE.
+//
+// This wrote straight into `tmp-visual-pass/`, where ~110 screenshots from
+// past design passes are TRACKED - so every run of this net overwrote a
+// committed file and left the repository dirty, and `git status` after a clean
+// verification run showed a modified PNG that nobody had changed on purpose.
+// A dirty tree that is dirty for no reason is a tree in which a real
+// uncommitted change is easy to miss.
+//
+// The runs directory is gitignored, so the historical shots stay exactly as
+// they are and a run leaves nothing behind. SHOT_DIR still overrides it.
+const SHOTS = process.env.SHOT_DIR || 'tmp-visual-pass/runs';
 const ED = Number(process.argv[2] || 40294);
 const KEY = process.argv[3] || 'lead';
 
@@ -44,8 +56,8 @@ const say = (ok, what, detail = '') => {
     await page.goto(BASE);
     await page.waitForTimeout(900);
     if (await page.locator('#email').count()) {
-      await page.fill('#email', 'admin@esahas.com');
-      await page.fill('#password', 'admin123');
+      await page.fill('#email', DESK_EMAIL);
+      await page.fill('#password', DESK_PASSWORD);
       await page.click('#loginBtn');
     }
     await page.waitForSelector('.edition-row', { timeout: 20000 });

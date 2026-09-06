@@ -25,6 +25,7 @@
 //   node tests/browser/desk-actions.browser.js            # defaults to 49291
 //   node tests/browser/desk-actions.browser.js 49291
 const { chromium } = require('playwright-core');
+const { DESK_EMAIL, DESK_PASSWORD } = require('./helpers/desk-login');
 
 const ED = Number(process.argv[2] || 49291);
 const BASE = process.env.SAHAS_BASE || 'http://localhost:3000';
@@ -56,8 +57,8 @@ const say = (ok, name, detail = '') => {
   try {
     await page.goto(BASE); await page.waitForTimeout(900);
     if (await page.locator('#email').count()) {
-      await page.fill('#email', 'admin@esahas.com');
-      await page.fill('#password', 'admin123');
+      await page.fill('#email', DESK_EMAIL);
+      await page.fill('#password', DESK_PASSWORD);
       await page.click('#loginBtn');
     }
     await page.waitForSelector('.edition-row', { timeout: 20000 });

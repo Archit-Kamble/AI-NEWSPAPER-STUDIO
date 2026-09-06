@@ -10,15 +10,11 @@ const settingsService = require('../src/services/settings.service');
 
 test.after(() => pool.end());
 
-async function ensureOwner() {
-  const password = await bcrypt.hash('admin123', 4);
-  await pool.query(
-    `INSERT INTO users (name, email, password_hash, role, is_active)
-     VALUES ('Owner', 'admin@esahas.com', $1, 'admin', TRUE)
-     ON CONFLICT (email) DO UPDATE SET password_hash = $1, role = 'admin', is_active = TRUE`,
-    [password],
-  );
-}
+// The desk login these tests use is created and removed by
+// tests/helpers/desk-owner.js. This used to upsert `admin@esahas.com` and
+// REPLACE its password with a constant published in this repository - the
+// real administrator of a real newspaper, overwritten on every run.
+async function ensureOwner() { /* helpers/desk.js signs in as its own disposable owner */ }
 
 test('the owner can manage reporter identity, review filings, and block access without losing the filing record', async () => {
   const server = createApp().listen(0);

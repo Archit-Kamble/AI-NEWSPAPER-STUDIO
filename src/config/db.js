@@ -32,12 +32,34 @@ types.setTypeParser(1082, (value) => value);
 // stops - no error, no message, nothing to retry - which is indistinguishable
 // from the software having crashed. Ten seconds turns that into an error the
 // catch-all handler can report as one.
+// TLS TO THE DATABASE IS A DEPLOYMENT FACT, AND IT WAS NOT EXPRESSIBLE.
+//
+// The pool carried no `ssl` at all, so every deployment connected in the
+// clear - right for a Unix socket or a machine on the newsroom's own LAN, and
+// wrong the moment PostgreSQL is a managed instance across a network this
+// paper does not own, where the whole edition and the desk's credentials
+// cross it unencrypted.
+//
+// Off unless asked for, so no existing deployment changes. `require` is the
+// ordinary setting for a managed database presenting a CA the host already
+// trusts; `no-verify` exists because a provider with a self-signed
+// certificate is otherwise a connection that cannot be made at all - it still
+// ENCRYPTS, it only declines to check who is on the other end, so it is
+// named honestly rather than hidden behind `true`.
+function sslConfig() {
+  const value = String(process.env.DB_SSL || '').trim().toLowerCase();
+  if (!value || value === 'false' || value === 'off' || value === 'disable') return false;
+  if (value === 'no-verify' || value === 'allow') return { rejectUnauthorized: false };
+  return { rejectUnauthorized: true };
+}
+
 const pool = new Pool({
   host: process.env.DB_HOST,
   port: Number(process.env.DB_PORT),
   database: process.env.DB_NAME,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
+  ssl: sslConfig(),
   max: Number(process.env.DB_POOL_MAX) || 10,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,

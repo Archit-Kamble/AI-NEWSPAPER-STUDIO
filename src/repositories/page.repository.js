@@ -432,7 +432,28 @@ async function saveSectionGeometry(pageId, sectionKey, geometry) {
 // genuinely does mean "clear it" - an editor deleting a headline must delete it.
 // Presentational columns have no meaningful empty state, so a value that was not
 // sent leaves the column alone.
+// AN OPTIMISTIC LOCK, AND IT IS OPT-IN ON PURPOSE.
+//
+// `updates.expectedRevision` is the revision the caller believes it is editing.
+// When it is given, the UPDATE only matches a row still at that revision - so
+// a second editor who loaded the same block and saved after the first one
+// matches nothing, and the caller is told rather than being answered 200 over
+// somebody else's work.
+//
+// When it is NOT given, the WHERE clause's own `IS NULL` branch makes the
+// condition vacuous and the save behaves exactly as it always has. That is
+// deliberate and it is what makes this safe to add: the AI writer, the page
+// styling pass, the newsdesk run, every script and every existing test go on
+// working untouched, and only the editor - which knows what revision it loaded
+// - opts in. A lock that broke every other caller to protect one path would
+// have cost more than the fault it fixes.
+//
+// The revision is bumped by the same statement that writes the row, so the
+// increment cannot be lost between a read and a write - which is the exact
+// class of fault the lock exists to close, and it would be absurd to
+// reintroduce it in the lock's own bookkeeping.
 async function saveSection(pageId, sectionKey, updates) {
+  const expected = Number.isInteger(updates.expectedRevision) ? updates.expectedRevision : null;
   const { rows } = await pool.query(
     `UPDATE page_sections
      SET news_item_id = $3, headline = $4, headline_font_px = COALESCE($5, headline_font_px),
@@ -492,8 +513,10 @@ async function saveSection(pageId, sectionKey, updates) {
          -- state (a plain rectangle) and a desk taking a shape back off a
          -- block has to be able to reach it.
          frame_shape = $58,
+         revision = page_sections.revision + 1,
          updated_at = CURRENT_TIMESTAMP
-     WHERE page_id = $1 AND section_key = $2 RETURNING *`,
+     WHERE page_id = $1 AND section_key = $2
+       AND ($59::int IS NULL OR page_sections.revision = $59) RETURNING *`,
     [pageId, sectionKey, updates.newsItemId || null, updates.headline || null, updates.headlineFontPx || null,
       updates.subheading || null, updates.subheadingFontPx || null, updates.body || null, updates.bodyFontPx || null,
       updates.category || null, updates.location || null, updates.tags || null, updates.reporterName || null,
@@ -541,8 +564,23 @@ async function saveSection(pageId, sectionKey, updates) {
       updates.borderInk || null,
       updates.headlineInk || null,
       Number.isFinite(updates.borderRadiusPx) ? updates.borderRadiusPx : null,
-      updates.frameShape || null]
+      updates.frameShape || null,
+      expected]
   );
+
+  // NOTHING MATCHED. Two different situations wear the same empty result, and
+  // they need different answers: a block that is not there is a 404, and a
+  // block somebody else has saved since is a 409 - so the caller is told which
+  // by being handed the row that IS there.
+  if (!rows[0]) {
+    if (expected === null) return null;
+    const current = await pool.query(
+      'SELECT * FROM page_sections WHERE page_id = $1 AND section_key = $2',
+      [pageId, sectionKey],
+    );
+    if (!current.rows[0]) return null;
+    return { conflict: true, current: current.rows[0] };
+  }
   return rows[0] || null;
 }
 

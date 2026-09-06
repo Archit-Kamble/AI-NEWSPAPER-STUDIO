@@ -57,6 +57,7 @@ import { renderPressPanel } from "./press-panel.js";
 import * as store from "./store.js";
 import * as history from "./history/history.js";
 import * as autosave from "./autosave/autosave.js";
+import * as journal from "./autosave/draft-journal.js";
 import { draftFromSection, draftFromStory, payloadFromDraft, viewOfSection } from "./section-model.js";
 import { canRenderSmartCard, smartCardText } from "./smart-cards/smart-cards.js";
 // The block a card wants when it brings its own - one catalogue, read by the
@@ -103,6 +104,20 @@ export async function leaveWorkspace() {
   } catch (error) {
     console.error('The open block could not be saved on the way out:', error);
   }
+  // AND THE VIEWS LET GO OF THE EDITION.
+  //
+  // Seven store subscriptions were added on every render and released on none,
+  // so leaving an edition left seven handlers still listening - each holding
+  // the closed edition's sections and each doing a full render when the next
+  // one published. Released here as well as at the top of subscribeViews(),
+  // because leaving is the case a re-subscribe never reaches: a desk who goes
+  // to Settings and never opens another edition would otherwise carry the last
+  // one's listeners for the rest of the session.
+  //
+  // After the flush, deliberately. A DRAFT or SAVE handler released first
+  // would leave the save indicator saying whatever it last said while the
+  // final flush was still in flight.
+  releaseViewSubscriptions();
 }
 
 // What the signed-in person may do, as the SERVER answers it. Not a copy of
@@ -191,7 +206,7 @@ export async function renderWorkspace(newspaperId) {
   // automatic repair that undoes an editorial decision is not a repair.
   //
   // The endpoint stays, for a desk who wants the corner back on purpose.
-  autosave.configure({ save: persistDraft, onStateChange: onAutosaveState });
+  autosave.configure({ save: persistDraft, capture: captureDraft, onStateChange: onAutosaveState });
   history.configure(() => {
     refreshHistoryButtons(history.canUndo(), history.canRedo());
     refreshHistoryTab();
@@ -1363,21 +1378,209 @@ function cancelEdits() {
 
 // ------------------------------------------------------------------- save ---
 
-async function persistDraft() {
+/**
+ * TWO PEOPLE EDITED ONE BLOCK, AND THE SOFTWARE DOES NOT PICK A WINNER.
+ *
+ * Before the revision check existed, the second save simply won: 200, no
+ * warning, and the first editor's work gone with nothing anywhere recording
+ * that it had ever been there. The opposite - refusing the second save and
+ * leaving the desk stuck - would be no better on press night.
+ *
+ * So the desk is shown WHAT DIFFERS, in the fields a person can see, and
+ * chooses. Both versions exist the whole time this question is open: theirs is
+ * on the server, this desk's is in the draft and in the local journal.
+ *
+ * "Keep mine" deliberately re-sends against THEIR revision rather than
+ * bypassing the check - so if a third save lands in the meantime, this asks
+ * again instead of quietly overwriting that one too.
+ */
+const COMPARED_FIELDS = [
+  ["headline", "Headline"],
+  ["subheading", "Subheading"],
+  ["kicker", "Kicker"],
+  ["body", "Story"],
+  ["caption", "Caption"],
+];
+
+function differences(mine, theirs) {
+  const out = [];
+  for (const [key, label] of COMPARED_FIELDS) {
+    const a = String(mine?.[key] ?? "").trim();
+    const b = String(theirs?.[key] ?? "").trim();
+    if (a === b) continue;
+    const short = (text) => (text ? `${text.slice(0, 70)}${text.length > 70 ? "…" : ""}` : "(empty)");
+    out.push(`${label}\n    yours:  ${short(a)}\n    theirs: ${short(b)}`);
+  }
+  return out;
+}
+
+async function resolveSaveConflict(snapshot, current) {
+  // Their work is already safe on the server; this desk's is in the journal,
+  // written before the save was attempted. Forced, because the question below
+  // is the desk's to take their time over and the tab may close first.
+  journal.remember({ ...snapshot, draft: snapshot.draft }, { force: true });
+
+  const changes = differences(snapshot.payload, current);
+  const keepMine = await askConfirm({
+    title: "Someone else saved this block while you were editing it",
+    body: [
+      changes.length
+        ? "These are the fields that differ:"
+        : "The two versions differ in fields not shown here.",
+      changes.join("\n"),
+      "Keeping yours replaces what they saved. Loading theirs replaces what is on your screen — your version stays recoverable until this block saves successfully.",
+    ].filter(Boolean).join("\n"),
+    confirm: "Keep mine, overwrite theirs",
+    cancel: "Load theirs",
+    destructive: true,
+  });
+
+  if (!keepMine) {
+    // Their row becomes the block on screen. The page is re-read whole rather
+    // than the single row being spliced in - the same checked re-read every
+    // other action in this file uses, and the only one that reports honestly
+    // when it cannot.
+    if (!await reloadPages()) return;
+    const section = store.getSection(snapshot.sectionKey);
+    if (section) {
+      // Rebuilt the way selectSection() rebuilds it, rather than through
+      // selectSection() itself: that function returns early when the block is
+      // already selected - which it is - and, worse, flushes the dirty draft
+      // on the way, which would save this desk's version over theirs at the
+      // exact moment they asked for the opposite.
+      const draft = draftFromSection(section);
+      store.setSelectedSection(snapshot.sectionKey, draft);
+      history.reset(draft, `Loaded another editor's version of ${snapshot.sectionKey}`);
+      renderSidePanels();
+      refreshSection(section, viewOfSection(section), { selected: true, dirty: false });
+    }
+    showNotice("Loaded their version. Yours is still in this browser until the next successful save.");
+    return;
+  }
+
+  // Re-sent against THEIR revision, so a third save landing in between asks
+  // again rather than being overwritten in silence.
+  const response = await fetch(`/api/pages/${snapshot.pageId}/sections/${snapshot.sectionKey}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...snapshot.payload, expectedRevision: Number(current?.revision) || undefined }),
+  });
+  if (response.status === 409) {
+    const body = await response.json().catch(() => ({}));
+    return resolveSaveConflict(snapshot, body.current);
+  }
+  if (!response.ok) {
+    return showFailure("Your version could not be saved over theirs.");
+  }
+  store.replacePage(await response.json());
+  journal.forget(snapshot.pageId, snapshot.sectionKey);
+  showNotice("Your version was saved over theirs.");
+}
+
+// WHAT A SAVE IS OF, TAKEN AT THE MOMENT THE SAVE BEGINS.
+//
+// This used to be read inside persistDraft() itself, which meant a retry 1.5
+// or 4 seconds later read it AGAIN and wrote whichever block was open by then.
+// The snapshot is taken once, by autosave, and the same snapshot is re-sent by
+// every retry of that attempt.
+//
+// `payloadFromDraft` already builds a fresh plain object, so the payload
+// cannot be mutated underneath the retry by later typing.
+function captureDraft() {
   const state = store.getState();
   const page = store.getCurrentPage();
   const draft = store.getDraft();
-  if (!page || !draft || !state.selectedSectionKey) return true;
+  if (!page || !draft || !state.selectedSectionKey) return null;
+  // WHICH VERSION OF THE ROW THIS SAVE IS BUILT ON.
+  //
+  // Read from the STORE'S OWN section row rather than held in the draft,
+  // because a revision is not copy - it is bookkeeping about the save, and
+  // putting it in the draft would mean either marking the block dirty every
+  // time the server answered, or keeping a second copy of a number the store
+  // already has. `replacePage` refreshes these rows after every successful
+  // save, so this is current by construction; when it is NOT current, that is
+  // precisely because somebody else saved, which is what the lock is for.
+  const known = store.getSelectedSection();
+  const snapshot = {
+    pageId: page.id,
+    sectionKey: state.selectedSectionKey,
+    expectedRevision: Number(known?.revision) || null,
+    // DEEP, so the snapshot is genuinely immutable. payloadFromDraft builds a
+    // fresh object but carries `tags` and `insetPanels` by reference, and a
+    // retry four seconds later must send what FAILED rather than what those
+    // arrays have become since.
+    payload: JSON.parse(JSON.stringify({
+      ...payloadFromDraft(draft),
+      // Sent as part of the payload the retry re-sends, so a retry is checked
+      // against the same base version the first attempt was - not against
+      // whatever the row has become while it was failing.
+      expectedRevision: Number(known?.revision) || undefined,
+    })),
+    // THE DRAFT, NOT THE PAYLOAD, IS WHAT THE JOURNAL KEEPS.
+    //
+    // payloadFromDraft is not a copy - it is a translation. It renames
+    // (`reporterName` from `draft.author`), and it encodes (`columnCount: 0`
+    // is the wire's word for Auto, which in a draft is not a zero at all).
+    // Restoring a payload into a draft would therefore drop the byline and
+    // pin every Auto block to an explicit column count, silently. Keeping the
+    // draft means a restore is `updateDraft(draft)` and a later save goes out
+    // through the one translation that already exists, rather than through a
+    // second, inverse copy of it - which is the drift this codebase has been
+    // bitten by twice.
+    draft: { ...draft },
+  };
+  // Written down before it is sent, so a save that never lands still leaves
+  // the words somewhere a crash cannot reach. Throttled inside the journal.
+  journal.remember(snapshot);
+  return snapshot;
+}
 
-  const response = await fetch(`/api/pages/${page.id}/sections/${state.selectedSectionKey}`, {
+async function persistDraft(snapshot) {
+  // Nothing to write. Reported as success because there is no failure here -
+  // there is simply no save - and returning false would start a retry loop
+  // over an empty selection.
+  if (!snapshot) return true;
+
+  const response = await fetch(`/api/pages/${snapshot.pageId}/sections/${snapshot.sectionKey}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payloadFromDraft(draft)),
+    body: JSON.stringify(snapshot.payload),
   });
+  // SOMEBODY ELSE SAVED THIS BLOCK WHILE IT WAS OPEN HERE.
+  //
+  // Not a failure to retry - retrying would either lose their work or lose
+  // this desk's, and neither is the software's to choose. The save stops, the
+  // desk is asked, and both versions are still intact until they answer.
+  if (response.status === 409) {
+    const body = await response.json().catch(() => ({}));
+    await resolveSaveConflict(snapshot, body.current);
+    // Reported as handled: the attempt is over either way, and returning false
+    // would start a retry loop against a revision that can never match.
+    return true;
+  }
   if (!response.ok) return false;
 
+  // The rows that come back are fresher than the ones held, and replacePage
+  // matches on the page's own id - so this is right whichever page the desk is
+  // looking at now.
   store.replacePage(await response.json());
-  history.markSaved();
+  // The database has it. The browser's copy is no longer worth anything, and
+  // leaving it would make the next open offer to restore words already saved.
+  journal.forget(snapshot.pageId, snapshot.sectionKey);
+
+  // A LATE ANSWER MAY NOT SPEAK FOR A NEWER DRAFT.
+  //
+  // `history.markSaved()` stamps the CURRENT top of the undo stack as having
+  // reached the database. If this response is for block A and the desk is now
+  // typing into block B, that stamp would be a lie about B - the timeline
+  // would show B as saved while its keystrokes are still only in the browser,
+  // which is the worst possible thing for a save indicator to be wrong about.
+  const now = store.getState();
+  const current = store.getCurrentPage();
+  const stillTheSameBlock = current
+    && current.id === snapshot.pageId
+    && now.selectedSectionKey === snapshot.sectionKey;
+  if (stillTheSameBlock) history.markSaved();
   return true;
 }
 
@@ -1707,7 +1910,8 @@ function renderShell() {
              role="dialog" aria-modal="false" aria-labelledby="storyDrawerTitle">
         <div class="sidebar-drawer-header">
           <h3 id="storyDrawerTitle">Story Explorer</h3>
-          <button class="sidebar-drawer-close" id="sidebarDrawerClose">&times;</button>
+          <button class="sidebar-drawer-close" id="sidebarDrawerClose"
+                  type="button" aria-label="Close the Story Explorer">&times;</button>
         </div>
         <div class="sidebar-panel" id="sidebarPanel"></div>
       </aside>
@@ -2030,6 +2234,88 @@ function bindPaperControls() {
   bindNotesToggle();
   window.addEventListener("resize", onWorkspaceResized);
   window.addEventListener("workspace-resized", onWorkspaceResized);
+  armUnsavedGuard();
+  offerJournalledDrafts();
+}
+
+// NOTHING WARNED A DESK THAT THEY WERE LEAVING WITH WORK IN FLIGHT.
+//
+// Autosave debounces a second and retries twice, so at any moment there can be
+// a block whose latest sentence has not reached the database - and closing the
+// tab, or a reload, took it. The reporter's own form has had this guard since
+// the Marathi pass; the workspace, which is where the paper is actually
+// written, had none.
+//
+// Two things happen here and the order matters. The snapshot is written to the
+// journal FIRST, forced past its throttle, because this is the one moment the
+// journal exists for and `beforeunload` cannot await anything - an
+// asynchronous store would be no use at all. Only then is the browser asked to
+// put its own question up.
+function onWorkspaceBeforeUnload(event) {
+  const outstanding = autosave.isOutstanding() || store.isDirty();
+  if (!outstanding) return undefined;
+  journal.remember(autosave.outstandingSnapshot() || captureDraft(), { force: true });
+  event.preventDefault();
+  // Browsers show their own sentence and ignore this one; returning it is
+  // still what arms the prompt in older engines.
+  const say = "This block has changes that have not reached the database yet.";
+  event.returnValue = say;
+  return say;
+}
+
+function armUnsavedGuard() {
+  window.removeEventListener("beforeunload", onWorkspaceBeforeUnload);
+  window.addEventListener("beforeunload", onWorkspaceBeforeUnload);
+}
+
+/**
+ * WHAT THE BROWSER STILL HOLDS THAT THE DATABASE DOES NOT.
+ *
+ * An entry only survives when a save never landed - it is removed the moment
+ * one does - so on an ordinary morning there is nothing here and the desk is
+ * asked nothing at all.
+ *
+ * It is an OFFER. The entry is this browser's copy of something the server may
+ * since have been told by somebody else, and this codebase's own rule is that
+ * software does not silently overwrite a decision a person made. So it names
+ * the blocks, a person presses it, and restoring puts the words into the DRAFT
+ * - where Ctrl+Z still reaches them and where the desk can look before saving.
+ * Nothing here writes to the database.
+ */
+async function offerJournalledDrafts() {
+  const { pages } = store.getState();
+  const waiting = journal.pendingFor((pages || []).map((page) => page.id));
+  if (!waiting.length) return;
+
+  const named = waiting.slice(0, 5).map((entry) => `· ${journal.describe(entry)}`);
+  if (waiting.length > 5) named.push(`· and ${waiting.length - 5} more`);
+
+  const restore = await askConfirm({
+    title: waiting.length === 1
+      ? "One block has copy this browser saved and the database never got"
+      : `${waiting.length} blocks have copy this browser saved and the database never got`,
+    body: [
+      "This happens when a tab closes or a connection drops before a save lands.",
+      named.join("\n"),
+      "Opening one puts its words back into the block for you to look at. Nothing is written to the database until you save.",
+    ].join("\n"),
+    confirm: "Open the first one",
+    cancel: "Discard them",
+  });
+
+  if (!restore) {
+    for (const entry of waiting) journal.forget(entry.pageId, entry.sectionKey);
+    showNotice(`Discarded ${waiting.length} unsaved ${waiting.length === 1 ? "block" : "blocks"}.`);
+    return;
+  }
+
+  const first = waiting[0];
+  const page = (pages || []).find((p) => Number(p.id) === Number(first.pageId));
+  if (!page) return;
+  if (store.getCurrentPage()?.id !== page.id) await selectPage(page.id);
+  selectSection(first.sectionKey);
+  store.updateDraft(first.draft, "journal");
+  showNotice("Restored into the block. Look it over, then Save.");
 }
 
 // Whether the settings rail shows the notes that explain its controls. Kept in
@@ -3097,41 +3383,79 @@ function bindKeyboardShortcuts() {
 
 // ------------------------------------------------------------ subscriptions ---
 
+// EVERY OPEN ADDED SEVEN MORE LISTENERS, AND NOTHING EVER TOOK ONE AWAY.
+//
+// `subscribeViews()` runs on every workspace render, and each of the seven
+// calls below passes a FRESH arrow - a new identity, so the store's Set grows
+// rather than replacing. Open five editions in one session and one page click
+// then ran five page-area renders, five side-panel renders and five guide
+// requests, each doing exactly the same work as the last. That is the measured
+// 1-2 second page switching, and it gets worse the longer a desk works.
+//
+// `store.subscribe()` has RETURNED its own unsubscribe since it was written
+// and not one caller had ever used it - the same shape as `drop_cap`,
+// `list_style` and `border_ink`: a mechanism with no surface. Using it is the
+// whole fix.
+//
+// The two window listeners beside this are deliberately NOT in the list.
+// `onWorkspaceResized` is one stable module-level function, and the DOM
+// ignores a second registration of the same (type, callback, capture) triple -
+// so those genuinely do not accumulate, and adding teardown for them would be
+// removing a leak that is not there.
+let viewSubscriptions = [];
+
+function releaseViewSubscriptions() {
+  for (const off of viewSubscriptions) {
+    try { off(); } catch { /* a topic that no longer exists is already released */ }
+  }
+  viewSubscriptions = [];
+}
+
 function subscribeViews() {
+  // Before, not after: this runs on a re-render as well as a first open, and
+  // the old handlers point at the edition that is being replaced.
+  releaseViewSubscriptions();
   // Part 14: a keystroke repaints one canvas box and the read-only parts of the
   // side panels. Nothing else re-renders.
-  store.subscribe(store.TOPICS.DRAFT, ({ source }) => {
+  viewSubscriptions.push(store.subscribe(store.TOPICS.DRAFT, ({ source }) => {
     const section = store.getSelectedSection();
     const view = currentView();
     if (!section || !view) return;
+    // The autosave debounce is a second, and a crash inside that second used
+    // to take the words with it - there was no local copy of a draft anywhere
+    // in the workspace. The journal's own throttle keeps this to one small
+    // write every two seconds of typing rather than one per keystroke, which
+    // on this path - where the compositor already runs per character - is the
+    // difference between a safety net and a tax.
+    journal.remember(captureDraft());
     refreshSection(section, view, { selected: true, dirty: store.isDirty() });
     if (source === "properties-panel") refreshColumnRules(section, view);
     refreshExternalEditor(section, view, currentStory(), source, store.getSelectedPart(), store.getSelectedImageIds());
-  });
+  }));
 
   // Which OBJECT within the block is targeted changed (a click on the
   // headline frame, the body, a picture...) - not what it says, so this
   // updates the Block Editor's selection box and the Typography panel's
   // highlighted field without touching the draft or re-fetching anything.
-  store.subscribe(store.TOPICS.SELECTION, ({ part }) => {
+  viewSubscriptions.push(store.subscribe(store.TOPICS.SELECTION, ({ part }) => {
     if (part === undefined) return; // a block (not a part) changed - selectSection() already handled it
     const section = store.getSelectedSection();
     const view = currentView();
     if (!section || !view) return;
     refreshExternalEditor(section, view, currentStory(), "selection", store.getSelectedPart(), store.getSelectedImageIds());
-  });
+  }));
 
-  store.subscribe(store.TOPICS.SAVE, () => {
+  viewSubscriptions.push(store.subscribe(store.TOPICS.SAVE, () => {
     const { saveState, saveError, dirty } = store.getState();
     refreshSaveIndicator(saveState, dirty, saveError);
     const section = store.getSelectedSection();
     const view = currentView();
     if (section && view) refreshSection(section, view, { selected: true, dirty });
-  });
+  }));
 
   // A save returns the same layout with fresher rows. Only the things a save can
   // change are touched - never the panels the editor is working in.
-  store.subscribe(store.TOPICS.PAGE_SYNC, () => {
+  viewSubscriptions.push(store.subscribe(store.TOPICS.PAGE_SYNC, () => {
     const state = store.getState();
     const page = store.getCurrentPage();
     renderPageNavigator(state.pages, page, state.newspaper, selectPage);
@@ -3160,7 +3484,7 @@ function subscribeViews() {
 
     const section = store.getSelectedSection();
     if (section) refreshDockSavedAt(section);
-  });
+  }));
 
   // The theme control follows the page, like every other panel on this screen.
   //
@@ -3169,8 +3493,8 @@ function subscribeViews() {
   // swallowed as an unhandled click-handler error - and even had it resolved,
   // selectPage is one of several ways the page changes. The store's own topic
   // is the one place that knows about all of them.
-  store.subscribe(store.TOPICS.PAGE, () => { bindPageTheme(); });
-  store.subscribe(store.TOPICS.PAGE, () => {
+  viewSubscriptions.push(store.subscribe(store.TOPICS.PAGE, () => { bindPageTheme(); }));
+  viewSubscriptions.push(store.subscribe(store.TOPICS.PAGE, () => {
     renderPageArea();
     renderSidePanels();
     renderStoryPickerPanel();
@@ -3182,12 +3506,12 @@ function subscribeViews() {
     // because the desk is still on the block they pressed it from.
     syncReuniteButton();
     selectFirstSection();
-  });
+  }));
 
-  store.subscribe(store.TOPICS.STORY_PICKER, () => {
+  viewSubscriptions.push(store.subscribe(store.TOPICS.STORY_PICKER, () => {
     const open = store.getState().storyPickerOpen;
     document.getElementById("sidebarLeft")?.classList.toggle("open", open);
     document.getElementById("sidebarBackdrop")?.classList.toggle("open", open);
     document.getElementById("tbFromReporter")?.classList.toggle("active", open);
-  });
+  }));
 }

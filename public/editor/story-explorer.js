@@ -77,14 +77,13 @@ function renderCards(reporterNews, filters, selectedId, onSelectCard) {
       const thumb = story.image_urls?.[0];
       // Most of this archive's uploads no longer exist on disk, so a thumbnail
       // that fails to load falls back to the empty style instead of showing a
-      // broken-image glyph. The 1x1 transparent GIF keeps the box its size.
-      const onError =
-        "this.classList.add('story-card-thumb-empty');" +
-        "this.src='data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';" +
-        "this.onerror=null";
+      // broken-image glyph, and a 1x1 transparent GIF keeps the box its size.
+      // That used to be an inline onerror attribute; it is `data-broken` now,
+      // handled once at the document - see public/ui/broken-image.js for why
+      // an inline handler cannot survive a policy worth having.
       return `
         <div class="story-card${story.id === selectedId ? " active" : ""}" data-story-id="${story.id}">
-          ${thumb ? `<img class="story-card-thumb" src="${escapeHtml(thumb)}" alt="" onerror="${onError}" />` : `<div class="story-card-thumb story-card-thumb-empty"></div>`}
+          ${thumb ? `<img class="story-card-thumb" src="${escapeHtml(thumb)}" alt="" data-broken="blank" />` : `<div class="story-card-thumb story-card-thumb-empty"></div>`}
           <div class="story-card-body">
             <strong>${escapeHtml(story.title)}</strong>
             <small>${escapeHtml(story.reporter_name || "Unknown reporter")} &middot; ${escapeHtml(story.category || "Uncategorised")}</small>

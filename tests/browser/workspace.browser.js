@@ -14,6 +14,7 @@
 // edition and resets the block it touches first, so it can be run repeatedly.
 
 const { chromium } = require('playwright-core');
+const { DESK_EMAIL, DESK_PASSWORD } = require('./helpers/desk-login');
 
 const BASE = process.env.SAHAS_BASE || 'http://localhost:3000';
 const ED = Number(process.argv[2] || process.env.SAHAS_EDITION || 2099);
@@ -99,8 +100,8 @@ const BODY = 'पुणे : महामेट्रोने तिसऱ्�
     await page.waitForTimeout(900);
     // The session survives a reload, so the login form is only there once.
     if (await page.locator('#email').count()) {
-      await page.fill('#email', 'admin@esahas.com');
-      await page.fill('#password', 'admin123');
+      await page.fill('#email', DESK_EMAIL);
+      await page.fill('#password', DESK_PASSWORD);
       await page.click('#loginBtn');
     }
     await page.waitForSelector('.edition-row', { timeout: 20000 });

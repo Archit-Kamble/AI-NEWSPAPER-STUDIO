@@ -36,7 +36,7 @@ function listMarkup(images) {
         .map(
           (image) => `
         <li class="picture-item" data-image-id="${image.id}">
-          <img src="${escapeText(image.url)}" alt="" onerror="this.classList.add('broken')" />
+          <img src="${escapeText(image.url)}" alt="" data-broken="mark" />
           <div class="picture-item-body">
             <strong>${escapeText(image.original_filename || "picture")}</strong>
             <small class="muted">${image.width_px} × ${image.height_px} px · wraps as ${escapeText(image.shape || "rect")}</small>

@@ -15,6 +15,7 @@
 // (CHROME_PATH overrides), against a running server on :3000.
 
 const { chromium } = require('playwright-core');
+const { DESK_EMAIL, DESK_PASSWORD } = require('./helpers/desk-login');
 const BASE = process.env.BASE || 'http://localhost:3000';
 let pass=0, fail=0;
 const check=(n,ok,d='')=>{ok?pass++:fail++;console.log(`${ok?'PASS':'FAIL'}  ${n}${d?` :: ${d}`:''}`);};
@@ -47,7 +48,7 @@ const check=(n,ok,d='')=>{ok?pass++:fail++;console.log(`${ok?'PASS':'FAIL'}  ${n
   };
   try {
     await p.goto(BASE,{waitUntil:'networkidle'});
-    if (await p.locator('#email').count()) { await p.fill('#email','admin@esahas.com'); await p.fill('#password','admin123'); await p.click('#loginBtn'); }
+    if (await p.locator('#email').count()) { await p.fill('#email',DESK_EMAIL); await p.fill('#password',DESK_PASSWORD); await p.click('#loginBtn'); }
     await p.waitForSelector('.edition-row',{timeout:25000});
 
     // Its own fixture, on a 2099 date so it can never be mistaken for real

@@ -139,8 +139,32 @@ function colourFor(hex, fallback = 'Black') {
 const extraColourTable = () => [...documentColours.values()]
   .map((entry) => `\n  <COLOR NAME="${entry.name}" CMYK="${entry.cmyk}" Spot="0" Register="0"/>`).join('');
 
+// BLACK IS 100% K, AND IT WAS DECLARED AS NO INK AT ALL.
+//
+// The CMYK attribute is four bytes, #CCMMYYKK, each 0-255 for 0-100%. That
+// byte order is not assumed - Registration below reads #ffffffff (100% of
+// every plate, which is what a registration mark is), and SahasRed reads
+// #00ffe61a = C0 M100 Y90 K10, which is the paper's own red. So the table
+// could be read with confidence, and it said:
+//
+//   Black = #00000000  ->  C0 M0 Y0 K0   ->  NO INK ON ANY PLATE
+//   White = #00000000  ->  identical
+//
+// 443 of the 465 text runs in a real press file - 95% of all type in the
+// paper - are set in TXTFILL="Black". A press file whose black is no ink is
+// a paper that prints essentially blank.
+//
+// The value is #000000ff, and this project already states the rule in as many
+// words for the PDF writer: "Black is 100% K, not four-plate black.
+// Registration on small Devanagari counters is exactly where four-plate black
+// shows as a fringe." The press file has to say what the PDF says, or the two
+// artifacts from one composition disagree about the commonest ink on the page.
+//
+// White stays #00000000 and that is correct rather than the same oversight:
+// white IS the absence of ink, it is the newsprint showing through. The two
+// being byte-identical is what made the fault visible.
 const COLOURS = `
-  <COLOR NAME="Black" CMYK="#00000000" Spot="0" Register="0"/>
+  <COLOR NAME="Black" CMYK="#000000ff" Spot="0" Register="0"/>
   <COLOR NAME="Registration" CMYK="#ffffffff" Spot="0" Register="1"/>
   <COLOR NAME="White" CMYK="#00000000" Spot="0" Register="0"/>
   <COLOR NAME="SahasRed" CMYK="#00ffe61a" Spot="0" Register="0"/>

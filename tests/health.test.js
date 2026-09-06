@@ -3,7 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { createApp } = require('../server');
-const { signIn, satisfyPublicationContent } = require('./helpers/desk');
+const { signIn, satisfyPublicationContent, removeEdition } = require('./helpers/desk');
+const { testOwner } = require('./helpers/desk-owner');
 
 test('health endpoint returns ok', async () => {
   const app = createApp();
@@ -25,15 +26,21 @@ test('reporter can save multiple images to drafts and submitted news', async () 
   const server = app.listen(0);
   const port = server.address().port;
   const createdFiles = [];
-  const testPrefix = `test-${Date.now()}`;
+  const testPrefix = `zz-test-${Date.now()}`;
+  // ITS OWN REPORTER, NOT THE NEWSROOM'S. This used to sign in as
+  // `reporter@esahas.com` with a documented password and file rows as user 2 -
+  // real filings, under a real person's byline, in the desk's live review
+  // queue. Measured across the database: 1,652 leaked `test-…` news rows, 827
+  // of the 1,399 that /api/news returns.
+  const filer = await testOwner('reporter');
   const reporter = await signIn(port, {
-    email: 'reporter@esahas.com', password: 'reporter123', role: 'reporter',
+    email: filer.email, password: filer.password, role: 'reporter',
   });
 
   const createNews = async (status) => {
     const formData = new FormData();
     formData.append('title', `${testPrefix} ${status} story`);
-    formData.append('reporterId', '2');
+    formData.append('reporterId', String(filer.id));
     formData.append('reporterName', 'Reporter');
     formData.append('status', status);
     formData.append('images', new Blob(['first image'], { type: 'image/png' }), 'first.png');
@@ -46,7 +53,10 @@ test('reporter can save multiple images to drafts and submitted news', async () 
     });
     assert.equal(response.status, 201);
     const news = await response.json();
-    assert.equal(news.created_by, 2);
+    // The session owns the byline, so this is the account that signed in -
+    // never a hardcoded row number, which only meant "the reporter" by
+    // accident of insertion order.
+    assert.equal(news.created_by, filer.id);
     assert.equal(news.image_urls.length, 2);
     createdFiles.push(...news.image_urls.map((url) => path.basename(url)));
   };
@@ -55,8 +65,8 @@ test('reporter can save multiple images to drafts and submitted news', async () 
     await createNews('draft');
     await createNews('pending');
 
-    const drafts = await reporter('/api/news?status=draft&reporterId=2').then((response) => response.json());
-    const submitted = await reporter('/api/news?status=pending&reporterId=2').then((response) => response.json());
+    const drafts = await reporter(`/api/news?status=draft&reporterId=${filer.id}`).then((response) => response.json());
+    const submitted = await reporter(`/api/news?status=pending&reporterId=${filer.id}`).then((response) => response.json());
     assert.ok(drafts.some((item) => item.title === `${testPrefix} draft story`));
     assert.ok(submitted.some((item) => item.title === `${testPrefix} pending story`));
   } finally {
@@ -70,6 +80,7 @@ test('admin workflow saves a page section and final Scribus/PDF files', async ()
   const server = app.listen(0);
   const port = server.address().port;
   const createdFiles = [];
+  let editionId = null;
   const desk = await signIn(port);
   const jsonRequest = (pathName, method, body) => desk(pathName, { method, body: JSON.stringify(body) });
 
@@ -79,6 +90,7 @@ test('admin workflow saves a page section and final Scribus/PDF files', async ()
     // PER DATE - so a test edition left on today's date becomes the edition the
     // desk is handed when it presses "Open Edition", stubs and all.
     const newspaper = await jsonRequest('/api/newspapers', 'POST', { pageCount: 1, publicationDate: '2099-01-01' }).then((response) => response.json());
+    editionId = newspaper.id;
     assert.equal(newspaper.page_width_px, 660);
     assert.equal(newspaper.page_height_px, 1060);
     assert.equal(newspaper.color_mode, 'CMYK');
@@ -107,6 +119,18 @@ test('admin workflow saves a page section and final Scribus/PDF files', async ()
     assert.equal(finalised.status, 'finalised');
     createdFiles.push(path.basename(finalised.scribusFile), path.basename(finalised.printPdf));
   } finally {
+    // THE FILES WERE CLEANED UP AND THE EDITION WAS NOT.
+    //
+    // This made one edition per run and removed none of them. Measured across
+    // the database: 273 of 474 editions were 2099-dated fixtures, 76% of all
+    // page_sections, growing by about twenty a day - and they SORT FIRST, so a
+    // desk opening Past Newspapers waded through test data before reaching a
+    // real edition. It is the fault this codebase has already recorded twice,
+    // at 116 editions and then at 221, and it had grown past both.
+    //
+    // Inside the same finally, so a check that throws above still takes its
+    // fixture with it.
+    await removeEdition(editionId);
     await Promise.all(createdFiles.map((file) => fs.unlink(path.join(__dirname, '..', 'public', 'uploads', file)).catch(() => {})));
     server.close();
   }

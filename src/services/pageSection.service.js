@@ -360,6 +360,17 @@ async function saveSection(pageId, sectionKey, body) {
     // waved through on the other is a colour the plate could still be asked
     // for.
     smartCardData: body.smartCardData ? sanitiseCardInks(body.smartCardData, palette) : null,
+    // WHICH VERSION OF THIS BLOCK THE CALLER THINKS IT IS EDITING.
+    //
+    // Passed straight through to the repository, which only applies the
+    // condition when it is an integer - so a caller that does not send one
+    // (the AI writer, the styling pass, a script) saves exactly as it always
+    // has. The editor sends the revision it loaded, and finds out rather than
+    // silently winning.
+    expectedRevision: Number.isInteger(Number(body.expectedRevision))
+      && Number(body.expectedRevision) > 0
+      ? Number(body.expectedRevision)
+      : undefined,
   };
 
   const proposed = {
@@ -372,7 +383,21 @@ async function saveSection(pageId, sectionKey, body) {
   const changed = before && PRINTABLE_FIELDS.some((field) => comparable(before[field]) !== comparable(proposed[field]));
   if (changed && ['ready', 'published'].includes(before.status)) article.status = before.ai_generated || article.aiGenerated ? 'needs_review' : 'editing';
 
-  await pageRepository.saveSection(id, sectionKey, article);
+  const written = await pageRepository.saveSection(id, sectionKey, article);
+  // SOMEBODY ELSE SAVED THIS BLOCK FIRST.
+  //
+  // Nothing is written and nothing is invalidated - the row on the server is
+  // still theirs, untouched. The caller is handed the row that IS there so it
+  // can show the two side by side and let a person decide, which is the only
+  // honest thing to do with two people's work: this software does not pick a
+  // winner, and it does not throw the loser away either.
+  if (written && written.conflict) {
+    return {
+      conflict: true,
+      current: written.current,
+      error: 'This block was saved by someone else while you were editing it.',
+    };
+  }
   if (changed) await reviewInvalidation.invalidatePage(id);
   return pageRepository.findById(id);
 }

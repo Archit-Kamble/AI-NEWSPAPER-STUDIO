@@ -33,14 +33,15 @@ async function seed(role) {
   return rows[0].id;
 }
 
+// THE OWNER THESE TESTS USE IS THEIR OWN, NOT THE NEWSPAPER'S.
+//
+// This upserted `admin@esahas.com` and REPLACED its password hash with
+// 'admin123' - a constant published in this repository, on the account that
+// runs a real newspaper - and never put back what it overwrote. It is created
+// the same way the three role fixtures beside it already are: `zz-`, a
+// reserved `@example.test` address, and removed afterwards.
 async function ensureOwner() {
-  const hash = await bcrypt.hash('admin123', 4);
-  await pool.query(
-    `INSERT INTO users (name, email, password_hash, role, is_active)
-     VALUES ('Owner', 'admin@esahas.com', $1, 'admin', TRUE)
-     ON CONFLICT (email) DO UPDATE SET password_hash = $1, role = 'admin', is_active = TRUE`,
-    [hash],
-  );
+  return seed('admin');
 }
 
 async function sessionFor(port, email, password = PASSWORD) {
@@ -99,10 +100,18 @@ test('every boundary, driven through the real routes as each role', async () => 
   let editionId = null;
   let storyId = null;
   try {
-    await ensureOwner();
+    // The owner is seeded like the other three, so `zz-…@example.test` and
+    // removed in the finally below. It used to be the newspaper's own
+    // administrator with its password overwritten.
+    const ownerId = await ensureOwner();
+    // Deliberately NOT pushed onto `made` before the three roles: the checks
+    // below address that array positionally (made[0] is the Sampadak, made[1]
+    // the editor), so putting the owner at the front would silently re-aim
+    // every one of them at a different account. It is added at the END, where
+    // only the cleanup reads it.
     for (const role of ['chief_editor', 'editor', 'reporter']) made.push(await seed(role));
 
-    const owner = await sessionFor(port, 'admin@esahas.com', 'admin123');
+    const owner = await sessionFor(port, emailFor('admin'));
     const sampadak = await sessionFor(port, emailFor('chief_editor'));
     const editor = await sessionFor(port, emailFor('editor'));
     const reporter = await sessionFor(port, emailFor('reporter'));
@@ -173,12 +182,18 @@ test('every boundary, driven through the real routes as each role', async () => 
     assert.equal(invented.status, 400, "'sampadak' is a label, not a stored role");
 
     // ---- an owner cannot lock the paper's administration away ----
-    const self = await owner('/api/staff/1/access', { method: 'PATCH', body: JSON.stringify({ active: false }) });
+    //
+    // Addressed by the seeded owner's OWN id. It used to be a literal
+    // `/api/staff/1`, which meant "self" only because the test had signed in
+    // as whichever account happened to be row one - so the check would have
+    // gone on passing while testing something else entirely the moment that
+    // stopped being true.
+    const self = await owner(`/api/staff/${ownerId}/access`, { method: 'PATCH', body: JSON.stringify({ active: false }) });
     assert.equal(self.status, 400);
     assert.match((await self.json()).error, /your own login/);
 
-    const demote = await owner('/api/staff/1', {
-      method: 'PATCH', body: JSON.stringify({ name: 'Owner', email: 'admin@esahas.com', role: 'editor' }),
+    const demote = await owner(`/api/staff/${ownerId}`, {
+      method: 'PATCH', body: JSON.stringify({ name: 'ZZ admin', email: emailFor('admin'), role: 'editor' }),
     });
     assert.equal(demote.status, 400);
     assert.match((await demote.json()).error, /only owner|your own role/);
@@ -196,8 +211,10 @@ test('every boundary, driven through the real routes as each role', async () => 
       'a demotion takes effect on the very next request, not at the next sign-in');
   } finally {
     // Removed even when a check above throws, or the next run inherits them.
+    // The LIKE sweep below covers the seeded owner too, since it carries the
+    // same zz-…SUFFIX@example.test shape as the other three.
     if (editionId) {
-      const owner = await sessionFor(port, 'admin@esahas.com', 'admin123');
+      const owner = await sessionFor(port, emailFor('admin'));
       await owner(`/api/newspapers/${editionId}`, { method: 'DELETE' });
     }
     if (storyId) await pool.query('DELETE FROM news_items WHERE id = $1', [storyId]);

@@ -21,6 +21,7 @@
 // overrides), against a running server on :3000.
 
 const { chromium } = require('playwright-core');
+const { DESK_EMAIL, DESK_PASSWORD } = require('./helpers/desk-login');
 const BASE = process.env.BASE || 'http://localhost:3000';
 const EDITION = Number(process.argv[2]) || 54470;
 let pass=0, fail=0;
@@ -32,7 +33,7 @@ const check=(n,ok,d='')=>{ok?pass++:fail++;console.log(`${ok?'PASS':'FAIL'}  ${n
   p.on('dialog', async d=>{ await d.accept(); });
   try {
     await p.goto(BASE,{waitUntil:'networkidle'});
-    if (await p.locator('#email').count()) { await p.fill('#email','admin@esahas.com'); await p.fill('#password','admin123'); await p.click('#loginBtn'); }
+    if (await p.locator('#email').count()) { await p.fill('#email',DESK_EMAIL); await p.fill('#password',DESK_PASSWORD); await p.click('#loginBtn'); }
     await p.waitForSelector('.edition-row',{timeout:25000});
     // The list shows the twelve most recent editions and searches the DATE,
     // never the id, so the edition is looked up first.

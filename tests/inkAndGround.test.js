@@ -238,3 +238,45 @@ test('the brief says which parts to write, and the length rules follow', async (
   // drop is guaranteed rather than hoped for.
   assert.match(bare, /for the desk's reference only/);
 });
+
+// THE PRESS FILE'S OWN COLOUR TABLE, WHICH IS WHAT DECIDES HOW MUCH INK GOES
+// DOWN. 95% of the type in a real press file is set in TXTFILL="Black", so
+// this one row is the most consequential value in the document. It was
+// declared #00000000 - no ink on any of the four plates - which is a paper
+// that prints essentially blank.
+//
+// The attribute is four bytes, #CCMMYYKK, 0-255 for 0-100%. Nothing here
+// assumes that: Registration is asserted at #ffffffff (100% of every plate,
+// which is what a registration mark IS) and SahasRed at its own known
+// separation, so the byte order is proved by the table rather than taken on
+// faith, and only then is Black read.
+test('black is 100% K in the press file, not four-plate black and not no ink', async () => {
+  const sla = await scribus.buildDocument(
+    { id: 1, publication_date: '2099-01-01', page_width_mm: 330, page_height_mm: 530 },
+    [],
+  );
+
+  const colourOf = (name) => {
+    const found = sla.match(new RegExp(`<COLOR NAME="${name}" CMYK="#([0-9a-f]{8})"`));
+    assert.ok(found, `the table names ${name}`);
+    const [c, m, y, k] = found[1].match(/../g).map((b) => parseInt(b, 16));
+    return { c, m, y, k };
+  };
+
+  // The byte order, established from the table itself before it is relied on.
+  assert.deepEqual(colourOf('Registration'), { c: 255, m: 255, y: 255, k: 255 },
+    'a registration mark is 100% of every plate, which fixes the byte scale at 0-255');
+  assert.deepEqual(colourOf('SahasRed'), { c: 0, m: 255, y: 230, k: 26 },
+    "and the paper's own red fixes the ORDER as C, M, Y, K");
+
+  // Now the row that matters.
+  const black = colourOf('Black');
+  assert.equal(black.k, 255, 'black is 100% K');
+  assert.deepEqual([black.c, black.m, black.y], [0, 0, 0],
+    'and carries no C, M or Y - four-plate black fringes on small Devanagari counters');
+
+  // White is the paper showing through, so no ink is CORRECT there. The two
+  // being byte-identical is what made the fault visible in the first place.
+  assert.deepEqual(colourOf('White'), { c: 0, m: 0, y: 0, k: 0 },
+    'white is the absence of ink, and stays so');
+});

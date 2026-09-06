@@ -33,7 +33,7 @@ const FOOT_STRIP_PX = 20;
 const { identityFor, dateLine, devanagari } = require('../../layout/identity');
 const { strip } = require('../../layout/plain-text');
 const { captionBox, PLACED_CAPTION_METRICS } = require('../../../public/editor/layout/caption-geometry');
-const { borderEdges, borderWidthPx, isDouble, isBoxed, borderRadiusPx } = require('../../../public/editor/layout/borders');
+const { borderEdges, borderWidthPx, borderOffsetsPx, isBoxed, borderRadiusPx } = require('../../../public/editor/layout/borders');
 const { panelsOf, panelLayout, panelStyle } = require('../../../public/editor/layout/inset-panels');
 const { overlaysOf } = require('../../../public/editor/layout/page-overlays');
 const { smartCardLines } = require('./smart-card-lines');
@@ -230,7 +230,7 @@ async function blockItems(section, { mono = false } = {}) {
   const headlineBand = bands.headline;
   const headlineSegments = headlineBand
     ? accent.headlineSegments(headlineBand.lines.map((line) => line.text),
-      { accentStyle: section.headline_style === 'accent' })
+      { accentStyle: modules.inks?.accentedHeadline(section.headline_style) })
     : null;
 
   // A reversed headline is white type out of a solid panel, and the panel is
@@ -279,13 +279,29 @@ async function blockItems(section, { mono = false } = {}) {
     }
   }
 
+  // Paint-only display furniture. `headlineFurniture()` returns the exact
+  // compositor-owned rectangles used on the canvas; conversion to millimetres
+  // is the only work this press model does.
+  if (modules.inks?.headlineFurniture) {
+    for (const piece of modules.inks.headlineFurniture(section.headline_style, composition)) {
+      items.push({
+        kind: piece.kind,
+        x: x0 + mm(piece.x), y: y0 + mm(piece.y),
+        width: mm(piece.width), height: mm(piece.height),
+        ink: piece.ink === 'screen'
+          ? modules.inks.screenOf(section.accent_color || ACCENT_INK)
+          : (section.accent_color || ACCENT_INK),
+      });
+    }
+  }
+
   for (const [key, band] of Object.entries(bands)) {
     if (!band?.lines?.length) continue;
     band.lines.forEach((line, index) => {
       const runs = key === 'headline' && headlineSegments
         ? (headlineSegments[index] || []).map((segment) => run(segment.text, {
           family: line.family, weight: line.weight, fontPx: line.fontPx,
-          ink: segment.accent ? ACCENT_INK : bandInk(section, key, reversed),
+          ink: segment.accent ? (section.accent_color || ACCENT_INK) : bandInk(section, key, reversed),
         }))
         : richText.styledRuns(line.text, line.at || 0, band.marks || [], line.fontPx)
           .map((piece) => run(piece.text, {
@@ -318,8 +334,9 @@ async function blockItems(section, { mono = false } = {}) {
   }
 
   if (section.body) {
-    const { marks } = richText.textWithMarks(section.body);
+    const { marks: authoredMarks } = richText.textWithMarks(section.body);
     const prefixLength = textFlow.datelineText(section).length;
+    const marks = textFlow.marksWithDateline(authoredMarks, prefixLength);
     for (const line of composition.bodyLines) {
       const at = (line.at || 0) - prefixLength;
       const runs = richText.styledRuns(line.text, at, marks, line.fontPx).map((piece) => run(
@@ -548,8 +565,9 @@ function blockDecorations(section, composition) {
       items.push(textItem(
         { x: px + mm(line.x), y: py + mm(line.y), width: mm(line.width), height: mm(line.fontPx * solved.lineHeight) },
         [run(line.text, {
-          family: panelFace,
+          family: line.family || panelFace,
           weight: line.bold ? 700 : 400, bold: line.bold, fontPx: line.fontPx,
+          ink: line.ink === 'accent' ? (section.accent_color || ACCENT_INK) : null,
         })],
         line.align === 1 ? 'center' : 'left',
       ));
@@ -1377,7 +1395,7 @@ function blockRules(section) {
   const ink = section.border_ink || RULE_INK;
   const shapeKey = section.frame_shape;
   const out = [];
-  for (const offset of isDouble(section.border_style) ? [0, weight * 2] : [0]) {
+  for (const offset of borderOffsetsPx(section.border_style, weight)) {
     const o = mm(offset);
     if (shapeKey) {
       // A cut corner traced as one stroked polygon, in the block's own

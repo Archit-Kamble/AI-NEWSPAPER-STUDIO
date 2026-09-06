@@ -16,6 +16,14 @@
 import { escapeHtml } from "../format.js";
 import { TINTS, INKS, HEADLINE_STYLES as HEADLINE_STYLE_TABLE } from "../layout/inks.js";
 import { BLOCK_SHAPES } from "../layout/block-shapes.js";
+import {
+  BLOCK_DESIGN_CATEGORIES,
+  availableBlockDesigns,
+  blockDesignPatch,
+  blockDesignPreviewMarkup,
+  matchingBlockDesign,
+  recommendedBlockDesigns,
+} from "../layout/block-design-presets.js";
 import { composeSection, measureColumns, maxLegibleColumns } from "../compose/section-adapter.js";
 import { PART_LABEL } from "./typography-panel.js";
 import { statusOf, statusLabel } from "../status/section-status.js";
@@ -55,7 +63,7 @@ const SHAPES = [
 import "../layout/borders.js";
 const { BORDER_STYLES, BORDER_WIDTHS, BORDER_RADII, isRuled, canRound, borderWidthPx, borderRadiusPx } = globalThis.SahasBorders;
 import "../layout/inset-panels.js";
-const { INSET_PANEL_KINDS, INSET_PANEL_MARKERS, INSET_PANEL_MIN_PX, panelsOf } = globalThis.SahasInsetPanels;
+const { INSET_PANEL_KINDS, INSET_PANEL_MARKERS, panelsOf, defaultPanelFor } = globalThis.SahasInsetPanels;
 
 // The tints come from the ONE colour catalogue (layout/inks.js), the same one
 // the ink marks and the press file read. A palette written out a second time
@@ -301,7 +309,34 @@ function blockPropertiesMarkup(section, view, page) {
   const rawColumns = view.columnCount ?? section.column_count ?? null;
   const columns = Number.isInteger(Number(rawColumns)) && Number(rawColumns) >= 1 ? Number(rawColumns) : null;
   const dropCapLines = Math.max(0, Number(view.dropCapLines ?? section.drop_cap_lines ?? 0) || 0);
+  const designs = availableBlockDesigns(section, view);
+  const matchingDesign = matchingBlockDesign(view);
+  const recommended = new Set(recommendedBlockDesigns(section, view));
+  const initialDesign = matchingDesign || designs.find((entry) => recommended.has(entry.key)) || designs[0] || null;
   return `
+    <div class="prop-section prop-design-section">
+      <h5 class="prop-heading">Block design</h5>
+      <p class="muted ext-note">Original SAHAS newspaper treatments, assembled from the same print-tested rules, inks and screens used by every export. Choose first; nothing changes until Apply.</p>
+      ${designs.length ? `
+        <label for="propBlockDesign">Design</label>
+        <select id="propBlockDesign" data-prop-design>
+          ${BLOCK_DESIGN_CATEGORIES.map((category) => {
+            const choices = designs.filter((entry) => entry.category === category);
+            if (!choices.length) return "";
+            return `<optgroup label="${escapeHtml(category)}">${choices.map((entry) => `
+              <option value="${escapeHtml(entry.key)}"${initialDesign?.key === entry.key ? " selected" : ""}>${
+                recommended.has(entry.key) ? "★ " : ""}${escapeHtml(entry.marathi)} · ${escapeHtml(entry.label)}</option>`).join("")}</optgroup>`;
+          }).join("")}
+        </select>
+        <div class="block-design-choice" id="propBlockDesignChoice">
+          ${blockDesignChoiceMarkup(initialDesign, matchingDesign)}
+        </div>
+        <p class="block-design-guard" id="propBlockDesignGuard" role="status" aria-live="polite"></p>
+        <button type="button" class="layout-btn" data-prop-design-apply${matchingDesign?.key === initialDesign?.key ? " disabled" : ""}>Apply design</button>
+      ` : `<p class="muted">Design presets stay off advertisements and Smart Cards because those blocks own their complete printed treatment.</p>`}
+      <p class="muted ext-note">A design changes appearance only. It never changes the block's position or size, copy, pictures, font sizes, margins or columns.${initialDesign?.insetRisk ? " A boxed design insets copy; check the Layout meter after applying it." : ""}</p>
+    </div>
+
     <div class="field-grid">
       ${purposeMarkup(section, view)}
       <!-- DERIVED, like every other surface that says this. view.status is
@@ -387,7 +422,7 @@ function blockPropertiesMarkup(section, view, page) {
           ).join("")}
         </div>
       </div>` : ""}
-      <p class="muted ext-note">Nothing is ruled unless you rule it. A rule is specified in points, the way a printer specifies one. A box sets the copy in a little way from its own line, the way a printed panel does, and the page draws no hairline in the gutter beside a block that already has a box.${canRound(border) ? " A rounded or pill corner is a printed feature page's own device - a front or city page keeps its corners square, so a page's theme sets this on purpose and you can still set it by hand." : " Only a full box can take a corner - a single rule has nothing to round."}</p>
+      <p class="muted ext-note">Nothing is ruled unless you rule it. A rule is specified in points, the way a printer specifies one. Open frames attach a note to neighbouring coverage; corner rules mark direction without making a card. A full box sets the copy in from its own line, and the page draws no duplicate gutter hairline beside it.${canRound(border) ? " A rounded or pill corner is a printed feature page's own device - a front or city page keeps its corners square, so a page's theme sets this on purpose and you can still set it by hand." : " Only a full box can take a rounded corner."}</p>
     </div>
 
     <div class="prop-section">
@@ -405,15 +440,15 @@ function blockPropertiesMarkup(section, view, page) {
           ).join("")}
         </div>
       </div>
-      <p class="muted ext-note">A cut corner is an obstacle to the compositor, exactly like a photograph - the story is composed clear of it, never printed through it. Two cuts on one edge (a chevron, an octagon) are set shallower than one, so they can never meet.</p>
+      <p class="muted ext-note">A notch, diagonal or bevel is an obstacle to the compositor, exactly like a photograph - the story is composed clear of it, never printed through it. Two cuts on one edge are set shallower than one, so they can never meet.</p>
     </div>
 
     <div class="prop-section">
       <h5 class="prop-heading">Panel inside the block</h5>
       <p class="muted ext-note">The चौकट a printed paper sets a fact box or a pull quote in. The story runs round it exactly as it runs round a photograph &mdash; it is a rectangle to the compositor and nothing more.</p>
       <div id="propPanels">${panelsMarkup(section, view)}</div>
-      <div class="segmented" data-prop-panel-add>
-        ${INSET_PANEL_KINDS.filter((kind) => kind.key !== "chart")
+      <div class="segmented segmented-grid" data-prop-panel-add>
+        ${INSET_PANEL_KINDS.filter((kind) => kind.key !== "chart" && kind.key !== "table")
           .map((kind) => `<button type="button" class="segment" data-panel-add="${kind.key}" title="${escapeHtml(kind.note)}">+ ${escapeHtml(kind.label)}</button>`).join("")}
       </div>
     </div>
@@ -471,13 +506,13 @@ function blockPropertiesMarkup(section, view, page) {
     <div class="prop-section">
       <h5 class="prop-heading">Headline treatment</h5>
       <div class="form-group">
-        <div class="segmented" data-prop-headline-style>
+        <div class="segmented segmented-grid" data-prop-headline-style>
           ${HEADLINE_STYLES.map(
             ([key, label]) => `<button type="button" class="segment${headlineStyle === key ? " active" : ""}" data-headline-style="${key}">${label}</button>`,
           ).join("")}
         </div>
       </div>
-      <p class="muted ext-note">Reversed sets the headline in white out of a solid band, in the block's accent colour. The band is drawn behind type that has already been placed, so it never changes where a line breaks.</p>
+      <p class="muted ext-note">Every treatment is paint around already-composed type: reversed and screened bands, full, short, centred, heavy or double rules in real gaps, section tabs and rails, or stepped bands behind individual headline lines. None changes where a line breaks.</p>
       <!-- HEADLINE COLOUR - the same mechanism-with-no-surface gap Rule
            colour was. headline_ink has been read since render.js's own
            headlineLineHtml existed (the headline AND the kicker's own text
@@ -516,6 +551,21 @@ function blockPropertiesMarkup(section, view, page) {
       <p class="muted ext-note">Accent colour is the fill behind a reversed or screened headline, and the colour of the accent word under the Accent treatment - not the running headline text.</p>
     </div>
   `;
+}
+
+function blockDesignChoiceMarkup(entry, matching = null) {
+  if (!entry) return "";
+  const current = matching?.key === entry.key;
+  const panelNames = (entry.companionPanels || [])
+    .map((key) => INSET_PANEL_KINDS.find((kind) => kind.key === key)?.label)
+    .filter(Boolean);
+  return `${blockDesignPreviewMarkup(entry)}
+    <div class="block-design-copy">
+      <strong>${escapeHtml(entry.marathi)} <span>${escapeHtml(entry.label)}</span></strong>
+      <p>${escapeHtml(entry.description)}</p>
+      ${panelNames.length ? `<p class="block-design-companion"><b>Works with:</b> ${escapeHtml(panelNames.join(" · "))}</p>` : ""}
+      <small>${current ? "Current design" : entry.insetRisk ? "Uses an inset box · check Layout after applying" : "Open treatment · no box inset"}</small>
+    </div>`;
 }
 
 // Headline, subheading and body have no independent x/y/width/height in the
@@ -723,19 +773,21 @@ function bindLayerButtons(handlers) {
 function panelsMarkup(section, view) {
   const panels = panelsOf({ ...section, inset_panels: view.insetPanels ?? section.inset_panels });
   if (!panels.length) return `<p class="muted">No panel on this block.</p>`;
-  return panels.map((panel) => `
+  return panels.map((panel) => {
+    const meta = INSET_PANEL_KINDS.find((kind) => kind.key === panel.kind) || {};
+    const cardPanel = panel.kind === "chart" || panel.kind === "table";
+    return `
     <div class="prop-panel" data-panel-id="${escapeHtml(panel.id)}">
       <div class="prop-panel-head">
-        <strong>${escapeHtml(INSET_PANEL_KINDS.find((k) => k.key === panel.kind)?.label || panel.kind)}</strong>
+        <strong>${escapeHtml(meta.label || panel.kind)}</strong>
         <button type="button" class="btn-ghost" data-panel-remove="${escapeHtml(panel.id)}">Remove</button>
       </div>
-      ${panel.kind === "chart"
-        ? `<p class="muted ext-note">${escapeHtml(`${panel.card?.items?.length || 0} readings, set as ${panel.card?.chartType || "bars"}.`)}
-             Its data and its ink are edited with the Chart button on the editor; its size and position are below.</p>
+      ${cardPanel
+        ? `<p class="muted ext-note">Structured ${escapeHtml(meta.label || panel.kind)} data is edited with its editor button; its size and position are below.</p>
            <input type="hidden" data-panel-field="title" value="">
            <input type="hidden" data-panel-field="lines" value="">`
-        : `<label>Heading<input type="text" data-panel-field="title" value="${escapeHtml(panel.title)}"></label>
-           <label>Lines, one per row<textarea rows="3" data-panel-field="lines">${escapeHtml(panel.lines.join("\n"))}</textarea></label>`}
+        : `<label>${escapeHtml(meta.titleLabel || "Heading")}<input type="text" data-panel-field="title" value="${escapeHtml(panel.title)}"></label>
+           <label>${escapeHtml(meta.linesLabel || "Lines, one per printed row")}<textarea rows="4" data-panel-field="lines">${escapeHtml(panel.lines.join("\n"))}</textarea></label>`}
       <div class="prop-panel-geometry">
         ${["x", "y", "width", "height"].map((field) => `<label>${field}<input type="number" data-panel-field="${field}" value="${Math.round(panel[field])}"></label>`).join("")}
       </div>
@@ -749,7 +801,8 @@ function panelsMarkup(section, view) {
           ${TINTS.map((tint) => `<option value="${tint.hex || ""}"${(panel.tint || "") === (tint.hex || "") ? " selected" : ""}>${escapeHtml(tint.label)}</option>`).join("")}
         </select>
       </label>
-    </div>`).join("");
+    </div>`;
+  }).join("");
 }
 
 /**
@@ -790,36 +843,10 @@ function bindPanelControls(handlers, section, view) {
   document.querySelectorAll("[data-prop-panel-add] [data-panel-add]").forEach((button) => {
     button.addEventListener("click", () => {
       const kind = button.dataset.panelAdd;
-      const blockW = Number(section.width_px) || 200;
-      const blockH = Number(section.height_px) || 200;
-
-      // A CROSS-HEAD SPANS THE MEASURE and is one band deep - that is what
-      // makes it a cross-head rather than a box beside the story. Everything
-      // else is placed in the lower right at a bit under half the width, which
-      // is where a printed चौकट usually sits and is never over the headline.
-      const crosshead = kind === "crosshead";
-      const w = crosshead
-        ? Math.max(INSET_PANEL_MIN_PX, blockW - 4)
-        : Math.max(INSET_PANEL_MIN_PX, Math.round(blockW * 0.45));
-      const h = crosshead
-        ? Math.max(INSET_PANEL_MIN_PX, Math.round((Number(view?.bodyFontPx) || 6.4) * 1.45 * 2))
-        : Math.max(INSET_PANEL_MIN_PX, Math.round(blockH * 0.3));
-
-      send([...panelsFromDom(section, view), {
-        id: `panel-${Date.now().toString(36)}`,
-        kind,
-        x: crosshead ? 2 : Math.max(0, blockW - w - 2),
-        y: Math.round(blockH * 0.45),
-        width: w, height: h,
-        title: kind === "quote" ? "" : crosshead ? "पुढील टप्पा" : "ठळक मुद्दे",
-        // NOT a bullet. Measured: the publication serif and sans both lack
-        // U+2022, so every panel this button made was born holding a glyph
-        // that resolves to .notdef - a hollow box on screen and in the press
-        // file. The marker is the panel's own `marker` setting, which draws
-        // U+25AA (the mark the dateline already uses); a line's own text is
-        // just text, so it starts as a placeholder a desk types over.
-        lines: crosshead ? [] : [kind === "quote" ? "इथे अवतरण लिहा" : "इथे मजकूर लिहा"],
-      }]);
+      send([...panelsFromDom(section, view), defaultPanelFor(kind, {
+        width: Number(section.width_px) || 200,
+        height: Number(section.height_px) || 200,
+      }, Number(view?.bodyFontPx) || 6.4)]);
     });
   });
 
@@ -920,6 +947,49 @@ function bindHeadlineStyleButtons(handlers) {
   });
 }
 
+function bindDesignPreset(handlers, section, view) {
+  const select = document.querySelector("[data-prop-design]");
+  const apply = document.querySelector("[data-prop-design-apply]");
+  const host = document.getElementById("propBlockDesignChoice");
+  const guard = document.getElementById("propBlockDesignGuard");
+  if (!select || !apply || !host) return;
+  const matching = matchingBlockDesign(view);
+  const designs = availableBlockDesigns(section, view);
+  const refresh = () => {
+    const entry = designs.find((item) => item.key === select.value) || null;
+    host.innerHTML = blockDesignChoiceMarkup(entry, matching);
+    if (guard) guard.textContent = "";
+    apply.disabled = !entry || matching?.key === entry.key;
+    apply.title = entry?.insetRisk
+      ? "Apply this design, then check the Layout meter because a box insets the copy"
+      : "Apply this appearance to the selected block";
+  };
+  select.addEventListener("change", refresh);
+  apply.addEventListener("click", () => {
+    const patch = blockDesignPatch(select.value);
+    if (!patch) return;
+    // A box and a rounded corner consume real measure. Test the exact current
+    // words in the exact current frame at CLICK time, not while drawing 24
+    // thumbnails. A design may repair an already-overset custom treatment,
+    // but it may never turn a block that fits into one that loses copy.
+    try {
+      const before = composeSection(section, view);
+      const after = composeSection(section, { ...view, ...patch });
+      const failed = (result) => result.fitState === "OVERSET" || result.fitState === "NO_ROOM";
+      if (!failed(before) && failed(after)) {
+        if (guard) guard.textContent = "Not applied: this treatment would push copy out of the block. Choose an open design or shorten the story first.";
+        return;
+      }
+    } catch {
+      // The exact shaper can still be loading during the first instant of the
+      // editor. The ordinary Layout panel will recompose on the resulting
+      // draft; do not make a temporary asset-loading state disable the desk.
+    }
+    handlers.onPatch?.(patch, "block-design-preset");
+  });
+  refresh();
+}
+
 function bindImageControls() {
   if (!boundHandlers) return;
   bindGeometryFields(boundHandlers);
@@ -971,6 +1041,7 @@ function bindBlockControls() {
   bindRateDisclosure();
   bindPurposeControls(boundHandlers);
   if (!boundHandlers) return;
+  bindDesignPreset(boundHandlers, boundSection, boundView);
   bindBorderButtons(boundHandlers);
   bindPanelControls(boundHandlers, boundSection, boundView);
   bindTintButtons(boundHandlers);

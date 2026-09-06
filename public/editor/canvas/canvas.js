@@ -21,7 +21,7 @@ import { bindPanelDrag, panelDragLayerMarkup, refreshPanelDragLayer } from "./pa
 import { viewOfSection } from "../section-model.js";
 import { computeMetrics } from "../layout/layout-metrics.js";
 import { rulerMarkup, rebuildRulers, bindRulers } from "./ruler.js";
-const { isRuled, borderWidthPx, borderRadiusPx, canRound } = globalThis.SahasBorders;
+const { isRuled, borderLineCount, borderWidthPx, borderRadiusPx, canRound } = globalThis.SahasBorders;
 const { overlaysOf } = globalThis.SahasPageOverlays;
 import { guideLayerMarkup, renderGuides, bindGuideInteractions, setGuidesVisible } from "./page-guides.js";
 
@@ -340,8 +340,10 @@ function blockRuleCss(view, section) {
   const clip = shapeClipPath(view, section);
   const clipCss = clip ? `clip-path:${clip};` : '';
   if (!isRuled(view.borderStyle)) return clipCss;
-  if (view.frameShape) return clipCss + 'border:none;';
   const radius = canRound(view.borderStyle) ? borderRadiusPx(view.borderRadiusPx) : 0;
+  if (view.frameShape || borderLineCount(view.borderStyle) > 2) {
+    return clipCss + 'border:none;' + (!view.frameShape && radius ? `--block-radius:${radius}px;` : '');
+  }
   return clipCss + `--block-rule:${borderWidthPx(view.borderWidthPx)}px;`
     + (view.borderInk ? `--block-ink:${view.borderInk};` : '')
     + (radius ? `--block-radius:${radius}px;` : '');
@@ -358,7 +360,7 @@ function applyBlockRule(element, view, section) {
     element.style.removeProperty('--block-radius');
     return;
   }
-  if (view.frameShape) {
+  if (view.frameShape || borderLineCount(view.borderStyle) > 2) {
     // The SVG overlay is the only border ink now; the CSS shorthand would
     // otherwise fall back to its own default (0.71px solid #111) the moment
     // the custom properties below it are cleared, which is a border nobody
@@ -366,7 +368,9 @@ function applyBlockRule(element, view, section) {
     element.style.setProperty('border', 'none');
     element.style.removeProperty('--block-rule');
     element.style.removeProperty('--block-ink');
-    element.style.removeProperty('--block-radius');
+    const radius = !view.frameShape && canRound(view.borderStyle) ? borderRadiusPx(view.borderRadiusPx) : 0;
+    if (radius) element.style.setProperty('--block-radius', `${radius}px`);
+    else element.style.removeProperty('--block-radius');
     return;
   }
   element.style.removeProperty('border');

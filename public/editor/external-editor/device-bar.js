@@ -31,7 +31,7 @@ import { TINTS } from "../layout/inks.js";
 
 const { BORDER_STYLES } = globalThis.SahasBorders;
 const { TYPEFACES } = globalThis.SahasTypefaces;
-const { INSET_PANEL_KINDS, INSET_PANEL_MIN_PX, INSET_PANEL_ORNAMENTS } = globalThis.SahasInsetPanels;
+const { INSET_PANEL_KINDS, INSET_PANEL_ORNAMENTS, defaultPanelFor } = globalThis.SahasInsetPanels;
 
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => (
   { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -267,22 +267,10 @@ function showMenu(device, anchor, current, view) {
  * no server-side id to address.
  */
 function panelFor(kind, section, view) {
-  const blockW = Number(section?.width_px) || 200;
-  const blockH = Number(section?.height_px) || 200;
-  const crosshead = kind === "crosshead";
-  const w = crosshead ? Math.max(INSET_PANEL_MIN_PX, blockW - 4)
-    : Math.max(INSET_PANEL_MIN_PX, Math.round(blockW * 0.45));
-  const h = crosshead ? Math.max(INSET_PANEL_MIN_PX, Math.round((Number(view?.bodyFontPx) || 6.4) * 1.45 * 2))
-    : Math.max(INSET_PANEL_MIN_PX, Math.round(blockH * 0.3));
-  return {
-    id: `panel-${Date.now().toString(36)}`,
-    kind,
-    x: crosshead ? 2 : Math.max(0, blockW - w - 2),
-    y: Math.round(blockH * 0.45),
-    width: w, height: h,
-    title: kind === "quote" ? "" : crosshead ? "पुढील टप्पा" : "ठळक मुद्दे",
-    lines: crosshead ? [] : [kind === "quote" ? "इथे अवतरण लिहा" : "इथे मजकूर लिहा"],
-  };
+  return defaultPanelFor(kind, {
+    width: Number(section?.width_px) || 200,
+    height: Number(section?.height_px) || 200,
+  }, Number(view?.bodyFontPx) || 6.4);
 }
 
 

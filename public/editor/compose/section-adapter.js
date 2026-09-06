@@ -440,6 +440,27 @@ export function composeSection(section = {}, view = {}) {
     start: mark.start + prefix.length,
     end: mark.end + prefix.length,
   }));
+  // THE DATELINE IS SET BOLD, SO IT IS MEASURED BOLD.
+  //
+  // The comment above ("the dateline prefix has no marks of its own") stopped
+  // being true when the dateline became furniture the three PAINT surfaces set
+  // in a real bold face - render.js, print-model.js and scribus.service.js all
+  // add it through `marksWithDateline()`. Nothing added it here, which is the
+  // measuring side, so the compositor reserved the width of the dateline's own
+  // regular-weight ghost: measured through the shaper at the running 6.4px
+  // body, a real dateline sets **2.4-3.4px wider than that**, 6.5-6.9%.
+  //
+  // On a justified first line that is an overhang into a 6px gutter, and it is
+  // exactly the fault this file's own neighbours already record - "a bold
+  // phrase is reserved the width of its own regular-weight ghost"
+  // (measurePieceWidth), and "a weight the solver did not measure is a second
+  // geometry" (the almanac's 600-weight cell, 7.6%).
+  //
+  // The mark is stated in the ADAPTER's own coordinates, which put the prefix
+  // at [0, prefix.length) - deliberately not `marksWithDateline()`, whose
+  // negative range belongs to the paint surfaces' convention, where authored
+  // marks keep their stored offsets. The two spaces differ; the ink does not.
+  if (prefix.length) bodyMarks.unshift({ tag: 'b', start: 0, end: prefix.length });
 
   const expectsCopy = blockExpectsCopy(section.block_type ?? section.blockType ?? view.blockType);
   const preferredColumns = measureColumns(section, view, width);

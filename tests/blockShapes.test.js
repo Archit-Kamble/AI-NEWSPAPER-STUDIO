@@ -22,8 +22,8 @@ test.before(async () => {
 
 // ------------------------------------------------------------- geometry ---
 
-test('eight shapes, and a rectangle is the plain, un-cut state', () => {
-  assert.strictEqual(shapes.BLOCK_SHAPES.length, 8);
+test('twelve shapes, and a rectangle is the plain, un-cut state', () => {
+  assert.strictEqual(shapes.BLOCK_SHAPES.length, 12);
   assert.strictEqual(shapes.blockShapeOf('rectangle').corners.length, 0);
   const pts = shapes.shapedRectPoints('rectangle', 200, 100);
   assert.deepEqual(pts, [[0, 0], [200, 0], [200, 100], [0, 100]]);
@@ -42,6 +42,9 @@ test('a single-corner shape gives 5 points, two corners give 6, four give 8', ()
   assert.strictEqual(shapes.shapedRectPoints('notch-tr', 200, 100).length, 5);
   assert.strictEqual(shapes.shapedRectPoints('chevron', 200, 100).length, 6);
   assert.strictEqual(shapes.shapedRectPoints('octagon', 200, 100).length, 8);
+  for (const key of ['bevel-top', 'bevel-bottom', 'bevel-left', 'bevel-right']) {
+    assert.strictEqual(shapes.shapedRectPoints(key, 200, 100).length, 6, key);
+  }
 });
 
 // TWO CUTS ON ONE EDGE MUST NEVER MEET. If they did, the "excluded triangle"
@@ -49,7 +52,7 @@ test('a single-corner shape gives 5 points, two corners give 6, four give 8', ()
 // describe a shape that is not a simple corner cut any more - the one
 // geometric case this file's own cutPx() exists to prevent.
 test('cuts sharing an edge never meet, at any block size down to a sliver', () => {
-  for (const key of ['chevron', 'chevron-alt', 'octagon']) {
+  for (const key of ['chevron', 'chevron-alt', 'bevel-top', 'bevel-bottom', 'bevel-left', 'bevel-right', 'octagon']) {
     const shape = shapes.blockShapeOf(key);
     for (const [w, h] of [[200, 100], [100, 100], [40, 40], [10, 10], [4, 4], [400, 20]]) {
       const d = shapes.cutPx(shape, w, h);
@@ -76,7 +79,7 @@ test('the clip-path and the obstacle boxes read the SAME cut depth - they cannot
   // shape/width/height, which is the whole argument for keeping this in one
   // file rather than two. Pinned here as a literal equality, not an
   // assumption: the corner obstacle's own width/height IS the cut depth.
-  for (const key of ['notch-tr', 'notch-bl', 'chevron', 'octagon']) {
+  for (const key of ['notch-tr', 'notch-bl', 'chevron', 'bevel-top', 'bevel-right', 'octagon']) {
     const shape = shapes.blockShapeOf(key);
     const d = shapes.cutPx(shape, 220, 260);
     const obstacles = shapes.cornerObstacles(key, 500, 300, 220, 260);

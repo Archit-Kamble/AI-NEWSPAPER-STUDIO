@@ -16,11 +16,12 @@ import { escapeHtml } from '../format.js';
 import { textWithMarks, plainText } from '../layout/rich-text.js';
 // Which display bands a treatment lays a ground behind, and what a screen of
 // an ink looks like - one catalogue, shared with the press model.
-import { groundedBands, screenOf } from '../layout/inks.js';
+import { accentedHeadline, groundedBands, headlineFurniture, screenOf } from '../layout/inks.js';
 import { presentationRanges, renderPresentation } from '../layout/editorial-presentation.js';
 import { publicationFamily } from './font-metrics.js';
 import { headlineSegments } from './accent.js';
 import { setSpaces } from './graphemes.js';
+import { marksWithDateline } from '../layout/text-flow.js';
 
 // The measured font, painted. Every line now carries the family/weight
 // compose.js actually measured it in (see compose.js); this turns that back
@@ -106,7 +107,7 @@ function lineHtml(line, { marks, semantic, offset }) {
 // last word of every line instead of the headline's true last word under
 // `headlineStyle: 'accent'`.
 function headlineBandSegments(lines, view) {
-  return headlineSegments(lines.map((line) => line.text), { accentStyle: view.headlineStyle === 'accent' });
+  return headlineSegments(lines.map((line) => line.text), { accentStyle: accentedHeadline(view.headlineStyle) });
 }
 
 function headlineLineHtml(line, view, segments, marks) {
@@ -245,6 +246,21 @@ export function composedMarkup(composition, view, { datelinePrefix = '' } = {}) 
     );
   }
 
+  // Rules and tabs use the compositor's final band/line rectangles. They are
+  // furniture, not flow: painting one cannot change the line breaks or steal
+  // a row from the story. The exact same rectangles are consumed by the
+  // neutral print model and Scribus.
+  for (const item of headlineFurniture(view.headlineStyle, composition)) {
+    const ink = item.ink === 'screen'
+      ? screenOf(view.accentColor || '#c8102e')
+      : (view.accentColor || '#c8102e');
+    pieces.push(
+      `<i class="section-headline-furniture is-${item.kind}" style="left:${item.x.toFixed(2)}px;`
+      + `top:${item.y.toFixed(2)}px;width:${item.width.toFixed(2)}px;height:${item.height.toFixed(2)}px;`
+      + `background:${escapeHtml(ink)}"></i>`,
+    );
+  }
+
   for (const [key, band] of Object.entries(composition.bands || {})) {
     const className = BAND_CLASS[key] || 'section-flowed-band';
     const headlineSegments = key === 'headline' ? headlineBandSegments(band.lines, view) : null;
@@ -295,7 +311,8 @@ export function composedMarkup(composition, view, { datelinePrefix = '' } = {}) 
     });
   }
 
-  const { text: bodyText, marks } = textWithMarks(view.body);
+  const { text: bodyText, marks: authoredMarks } = textWithMarks(view.body);
+  const marks = marksWithDateline(authoredMarks, datelinePrefix.length);
   const semantic = presentationRanges(bodyText, view.editorialPresentation, 'body');
 
   // THE INITIAL LETTER. Painted, not composed - it is one glyph in its own

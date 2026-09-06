@@ -4929,6 +4929,45 @@ body.print-view .section-diagnostic {
   border-left: var(--block-rule, 0.71px) solid var(--block-ink, #111);
   border-right: var(--block-rule, 0.71px) solid var(--block-ink, #111);
 }
+/* Open frames and corner rules use the same physical rule as every existing
+   edge. They are listed explicitly because CSS has no edge-set primitive;
+   the shared border catalogue remains the source of truth for export. */
+.newspaper-section.ruled-frame-open-bottom {
+  border-top: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-right: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-left: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+}
+.newspaper-section.ruled-frame-open-top {
+  border-right: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-bottom: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-left: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+}
+.newspaper-section.ruled-frame-open-right {
+  border-top: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-bottom: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-left: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+}
+.newspaper-section.ruled-frame-open-left {
+  border-top: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-right: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-bottom: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+}
+.newspaper-section.ruled-corner-top-left {
+  border-top: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-left: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+}
+.newspaper-section.ruled-corner-top-right {
+  border-top: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-right: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+}
+.newspaper-section.ruled-corner-bottom-left {
+  border-bottom: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-left: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+}
+.newspaper-section.ruled-corner-bottom-right {
+  border-right: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-bottom: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+}
 /* A double rule is two lines with a gap of the same weight between them.
    CSS `border-style: double` divides the declared width into exactly that -
    line, gap, line - so the declared width is three times the chosen rule,
@@ -4975,11 +5014,10 @@ body.print-view .section-diagnostic {
    block of colour and the two disagree at every corner. */
 .newspaper-section { border-radius: var(--block-radius, 0); }
 
-/* THE SHAPE-TRACED BORDER, drawn by section-thumb.js's shapeBorderMarkup()
-   for a block that carries both a cut corner and a rule - the CSS `border`
-   shorthand cannot follow a clip-path's new diagonal edge, so this SVG
-   polygon is the sole border ink there (canvas.js's applyBlockRule() sets
-   the CSS one to `none` in that case). Above ordinary content, below the
+/* THE SHAPE/MULTI-RULE BORDER, drawn by section-thumb.js's shared overlay.
+   CSS cannot follow a clip-path's diagonal edge and has no triple-border
+   primitive, so this SVG is the sole border ink in those cases (canvas.js's
+   applyBlockRule() sets the CSS one to `none`). Above ordinary content, below the
    selection handles and hover toolbar, and never a click target of its own. */
 .section-shape-border {
   position: absolute;
@@ -5048,6 +5086,42 @@ body.print-view .newspaper-section.ruled-rule-sides {
   border-left: var(--block-rule, 0.71px) solid var(--block-ink, #111);
   border-right: var(--block-rule, 0.71px) solid var(--block-ink, #111);
 }
+body.print-view .newspaper-section.ruled-frame-open-bottom {
+  border-top: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-right: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-left: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+}
+body.print-view .newspaper-section.ruled-frame-open-top {
+  border-right: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-bottom: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-left: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+}
+body.print-view .newspaper-section.ruled-frame-open-right {
+  border-top: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-bottom: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-left: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+}
+body.print-view .newspaper-section.ruled-frame-open-left {
+  border-top: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-right: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-bottom: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+}
+body.print-view .newspaper-section.ruled-corner-top-left {
+  border-top: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-left: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+}
+body.print-view .newspaper-section.ruled-corner-top-right {
+  border-top: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-right: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+}
+body.print-view .newspaper-section.ruled-corner-bottom-left {
+  border-bottom: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-left: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+}
+body.print-view .newspaper-section.ruled-corner-bottom-right {
+  border-right: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+  border-bottom: var(--block-rule, 0.71px) solid var(--block-ink, #111);
+}
 body.print-view .newspaper-section.ruled-rule-double {
   border-bottom: max(3px, calc(var(--block-rule, 0.71px) * 3)) double var(--block-ink, #111);
 }
@@ -5114,6 +5188,15 @@ body.print-view .newspaper-canvas {
   position: absolute;
   display: block;
   z-index: 0;
+}
+/* Headline rules and the compact section tab are paint-only furniture. Their
+   rectangles come from the exact composition, inline; CSS owns only stacking.
+   Pointer events stay off so a rule can never obstruct selecting the story. */
+.section-headline-furniture {
+  position: absolute;
+  display: block;
+  z-index: 0;
+  pointer-events: none;
 }
 
 /* Caption under a placed photograph. */
@@ -7604,12 +7687,24 @@ body.print-view .page-imprint {
 .section-inset-panel {
   position: absolute;
   box-sizing: border-box;
-  background: #fff;
-  border: 0.71px solid #111;
+  background: transparent;
+  border: none;
   overflow: hidden;
   font-family: "Sahas Sans", "Noto Sans Devanagari", Arial, sans-serif;
   color: #111;
   z-index: 3;
+}
+.section-inset-key-number .role-figure {
+  letter-spacing: -0.035em;
+}
+.section-inset-reaction .role-statement {
+  letter-spacing: -0.012em;
+}
+.section-inset-timeline .role-event,
+.section-inset-explainer .role-point,
+.section-inset-related .role-related {
+  padding-left: 1px;
+  box-sizing: border-box;
 }
 .section-inset-panel > span {
   position: absolute;
@@ -9497,3 +9592,204 @@ body.print-view #printViewBtn {
   white-space: normal;
 }
 .segmented { flex-wrap: wrap; }
+
+/* ===========================================================================
+   BLOCK DESIGN PRESETS
+
+   This is an INSPECTOR THUMBNAIL, never the printable block. The actual page
+   still draws through compose/render.js and the shared export model after the
+   preset writes ordinary, already-supported block fields. Keeping the mockup
+   deliberately diagrammatic prevents a second mini renderer from drifting
+   into a false promise about exact line breaks.
+   =========================================================================== */
+.prop-design-section select {
+  width: 100%;
+  margin-top: 4px;
+}
+.block-design-choice {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 11px;
+  align-items: center;
+  margin: 9px 0;
+  padding: 9px;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 7px;
+  background: #fafafa;
+}
+.block-design-preview {
+  position: relative;
+  box-sizing: border-box;
+  width: 112px;
+  height: 88px;
+  padding: 7px;
+  overflow: hidden;
+  border-radius: var(--preset-radius);
+  background: var(--preset-ground);
+}
+.block-design-preview.has-top { border-top: var(--preset-rule-width) solid var(--preset-rule); }
+.block-design-preview.has-right { border-right: var(--preset-rule-width) solid var(--preset-rule); }
+.block-design-preview.has-bottom { border-bottom: var(--preset-rule-width) solid var(--preset-rule); }
+.block-design-preview.has-left { border-left: var(--preset-rule-width) solid var(--preset-rule); }
+.block-design-preview.is-double.has-top { border-top-style: double; border-top-width: calc(var(--preset-rule-width) * 3); }
+.block-design-preview.is-double.has-right { border-right-style: double; border-right-width: calc(var(--preset-rule-width) * 3); }
+.block-design-preview.is-double.has-bottom { border-bottom-style: double; border-bottom-width: calc(var(--preset-rule-width) * 3); }
+.block-design-preview.is-double.has-left { border-left-style: double; border-left-width: calc(var(--preset-rule-width) * 3); }
+.block-design-preview span,
+.block-design-preview i {
+  display: block;
+  box-sizing: border-box;
+}
+.block-design-preview-kicker {
+  width: 34%;
+  height: 3px;
+  margin-bottom: 4px;
+  background: var(--preset-rule);
+}
+.block-design-preview.has-kicker-tab .block-design-preview-kicker {
+  width: 42%;
+  height: 7px;
+  padding-left: 2px;
+  background: var(--preset-accent-screen);
+  border-left: 2px solid var(--preset-accent);
+}
+.block-design-preview.has-kicker-rail .block-design-preview-kicker {
+  position: relative;
+}
+.block-design-preview.has-kicker-rail .block-design-preview-kicker::after {
+  content: "";
+  position: absolute;
+  left: calc(100% + 4px);
+  top: 3px;
+  width: 128%;
+  height: 1px;
+  background: var(--preset-accent);
+}
+.block-design-preview-head {
+  width: 94%;
+  height: 7px;
+  margin: 0 0 3px;
+  padding: 1px 2px;
+  background: var(--preset-head-ground);
+  border-bottom: 4px solid var(--preset-head);
+}
+.block-design-preview.is-reverse .block-design-preview-head {
+  border-bottom-color: #fff;
+}
+.block-design-preview-head.short { width: 68%; }
+.block-design-preview.has-accent-word .block-design-preview-head.short {
+  position: relative;
+}
+.block-design-preview.has-accent-word .block-design-preview-head.short::before {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: -4px;
+  width: 25%;
+  height: 4px;
+  background: var(--preset-accent);
+}
+.block-design-preview.has-stepped-lines .block-design-preview-head {
+  background: var(--preset-accent-screen);
+  border-left: 2px solid var(--preset-accent);
+  border-bottom-width: 0;
+}
+.block-design-preview.has-headline-rule .block-design-preview-head.short,
+.block-design-preview.has-display-rule .block-design-preview-deck {
+  position: relative;
+  margin-bottom: 6px;
+}
+.block-design-preview.has-headline-rule .block-design-preview-head.short::after,
+.block-design-preview.has-display-rule .block-design-preview-deck::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: calc(100% + 2px);
+  width: 146%;
+  height: 1px;
+  background: var(--preset-accent);
+}
+.block-design-preview.has-short-rule .block-design-preview-head.short::after {
+  width: 50%;
+}
+.block-design-preview.has-centred-rule .block-design-preview-head.short::after {
+  left: 48%;
+  width: 50%;
+}
+.block-design-preview.has-heavy-rule .block-design-preview-head.short::after {
+  height: 2px;
+}
+.block-design-preview.has-double-rule .block-design-preview-deck::after {
+  box-shadow: 0 3px 0 var(--preset-accent);
+}
+.block-design-preview-shape {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+}
+.block-design-preview-deck {
+  width: 88%;
+  height: 7px;
+  margin: 5px 0;
+  background: var(--preset-deck-ground);
+  border-bottom: 2px solid #5f5f65;
+}
+.block-design-preview > i {
+  width: 100%;
+  height: 1px;
+  margin-top: 4px;
+  background: #8a8a90;
+}
+.block-design-preview > i.short { width: 72%; }
+.block-design-copy strong {
+  display: block;
+  color: #202026;
+  font-size: 0.82rem;
+  line-height: 1.3;
+}
+.block-design-copy strong span {
+  color: var(--secondary, #666);
+  font-weight: 600;
+}
+.block-design-copy p {
+  margin: 3px 0;
+  color: #4f4f58;
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+.block-design-copy .block-design-companion {
+  color: #54505a;
+  font-size: 0.69rem;
+}
+.block-design-copy .block-design-companion b {
+  color: #24222a;
+  font-weight: 750;
+}
+.block-design-copy small {
+  color: #777780;
+  font-size: 0.68rem;
+  line-height: 1.25;
+}
+.prop-design-section [data-prop-design-apply] {
+  width: 100%;
+  justify-content: center;
+}
+.prop-design-section [data-prop-design-apply]:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.block-design-guard {
+  min-height: 1.25em;
+  margin: 0 0 5px;
+  color: #a42335;
+  font-size: 0.72rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+@media (max-width: 1280px) {
+  .block-design-choice { grid-template-columns: 92px minmax(0, 1fr); }
+  .block-design-preview { width: 92px; }
+}

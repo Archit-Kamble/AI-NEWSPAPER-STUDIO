@@ -135,6 +135,105 @@ const say = (ok, name, detail = '') => {
     await choose('2');
     say(await isOn('columns'), 'Columns → 2');
 
+    // ---- the rule's own decisions, and the headline's dress ----------------
+    //
+    // Seven devices that were reachable only by scrolling Properties in the
+    // settings rail. The desk asked for them by name - "heading background
+    // color or border width" - and the point of each check is not that a class
+    // toggled but that the BLOCK ON THE CANVAS moved, which is the only thing
+    // that separates a real control from one that draws and does nothing.
+    const canvasStyle = (prop) => page.evaluate(([k, p]) => {
+      const b = document.querySelector(`.newspaper-section[data-section-key="${k}"]`);
+      return b ? getComputedStyle(b)[p] : null;
+    }, [KEY, prop]);
+    const disabled = (device) => page.locator(`#edDeviceBar [data-device="${device}"]`)
+      .evaluate((el) => el.disabled);
+
+    // The block is boxed from the Border check above, so all three are live.
+    say(await disabled('rule-width') === false, 'a ruled block offers Rule width');
+    await press('rule-width');
+    await choose(String((await page.locator('#edDeviceMenu [data-device-choice]').last()
+      .getAttribute('data-device-choice'))));
+    const heavy = parseFloat(await canvasStyle('borderTopWidth'));
+    say(heavy > 0, 'Rule width → the heaviest rung thickens the rule on the canvas', `${heavy}px`);
+
+    await press('corner');
+    await choose(String(await page.locator('#edDeviceMenu [data-device-choice]').nth(2)
+      .getAttribute('data-device-choice')));
+    const radius = parseFloat(await canvasStyle('borderTopLeftRadius'));
+    say(radius > 0, 'Corner → the block on the canvas is rounded', `${radius}px`);
+
+    await press('rule-ink');
+    const ink = await page.locator('#edDeviceMenu [data-device-choice^="#"]').first()
+      .getAttribute('data-device-choice');
+    await choose(ink);
+    say(await isOn('rule-ink'), 'Rule ink → the rule takes a colour from the palette', ink);
+
+    // "HEADING BACKGROUND COLOUR" - the desk's own words. `reverse` is white
+    // type out of a solid panel, and the panel is what this checks: it must
+    // have a REAL HEIGHT. A reversed headline whose panel collapses is white
+    // type on white paper, which is exactly the fault reported on edition
+    // 40082 and fixed in render.js - so this is that bug's UI-side net.
+    await press('head-style');
+    await choose('reverse');
+    say(await isOn('head-style'), 'Head band → Reversed');
+    const panel = await page.evaluate((k) => {
+      const el = document.querySelector(`.newspaper-section[data-section-key="${k}"] .section-headline-reverse`);
+      if (!el) return null;
+      const box = el.getBoundingClientRect();
+      return { h: Math.round(box.height), bg: getComputedStyle(el).backgroundColor };
+    }, KEY);
+    say(Boolean(panel) && panel.h > 4,
+      'and the panel behind the headline has a real height, not a collapsed one',
+      panel ? `${panel.h}px ${panel.bg}` : 'NO PANEL DRAWN');
+
+    await press('accent');
+    const accent = await page.locator('#edDeviceMenu [data-device-choice^="#"]').nth(1)
+      .getAttribute('data-device-choice');
+    await choose(accent);
+    const panelFill = await page.evaluate((k) => {
+      const el = document.querySelector(`.newspaper-section[data-section-key="${k}"] .section-headline-reverse`);
+      return el ? getComputedStyle(el).backgroundColor : null;
+    }, KEY);
+    say(Boolean(panelFill) && panelFill !== 'rgba(0, 0, 0, 0)',
+      'Accent → the ink that fills that panel', `${accent} drew ${panelFill}`);
+
+    // Back to plain, so Head ink acts on the headline's own running text
+    // rather than being overridden by the reverse band - which is right, and
+    // is why the two are separate controls.
+    await press('head-style');
+    await choose('plain');
+    await press('head-ink');
+    const headInk = await page.locator('#edDeviceMenu [data-device-choice^="#"]').first()
+      .getAttribute('data-device-choice');
+    await choose(headInk);
+    say(await isOn('head-ink'), 'Head ink → the headline takes its own colour', headInk);
+    await press('head-ink');
+    await choose('');
+    say(await isOn('head-ink') === false, 'and Black clears it back to the paper\'s own');
+
+    await press('shape');
+    await choose('notch-tr');
+    const clipped = await canvasStyle('clipPath');
+    say(Boolean(clipped) && clipped !== 'none', 'Shape → a corner is cut off the block', clipped);
+    await press('shape');
+    await choose('rectangle');
+
+    // AND A CONTROL THAT CANNOT ACT IS NOT OFFERED. With no rule on the block
+    // there is no width and no colour to set, and no corner to round - so the
+    // three buttons are disabled rather than opening menus that would write a
+    // value nothing draws.
+    await press('border');
+    await choose('none');
+    say(await disabled('rule-width'), 'an unruled block disables Rule width');
+    say(await disabled('rule-ink'), 'and Rule ink');
+    say(await disabled('corner'), 'and Corner');
+    const why = await page.locator('#edDeviceBar [data-device="rule-width"]').getAttribute('title');
+    say(Boolean(why) && /rule/i.test(why), 'and each says WHY it cannot act', why);
+    await press('border');
+    await choose('box');
+    say(await disabled('rule-width') === false, 'ruling it again gives the controls back');
+
     // ---- the type ----------------------------------------------------------
     await press('font');
     await choose('mukta');
@@ -434,6 +533,14 @@ const say = (ok, name, detail = '') => {
             location: row.location || '', reporterName: row.reporter_name || '',
             headlineFontPx: row.headline_font_px, subheadingFontPx: row.subheading_font_px,
             bodyFontPx: row.body_font_px,
+            // Added when the bar grew the rule's own decisions and the
+            // headline's dress. Same rule as the line above: a restore that
+            // does not mention a column leaves this run's value behind, and
+            // the next run then reads its own leftovers as the block's state.
+            borderWidthPx: row.border_width_px, borderRadiusPx: row.border_radius_px,
+            borderInk: row.border_ink, headlineStyle: row.headline_style,
+            headlineInk: row.headline_ink, accentColor: row.accent_color,
+            frameShape: row.frame_shape || '',
           }),
         });
       }, [restore.pageId, KEY, s]).catch(() => {});

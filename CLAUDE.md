@@ -1189,6 +1189,53 @@ picture.
 `tests/browser/device-bar.browser.js` presses all thirteen and checks which
 thing moved.
 
+**Seven more, and the desk asked for them by name**: *"add button on editor
+like heading background color or border width so easy to navigate"*. Every one
+was already built, stored, rendered and exported — and reachable only by
+scrolling Properties in the settings rail, which is this bar's own founding
+fault arriving a second time:
+
+| | field | catalogue |
+|---|---|---|
+| **Head band** | `headline_style` | `HEADLINE_STYLES` — reversed, the three screens, the rules, the section tabs |
+| **Rule width** | `border_width_px` | `BORDER_WIDTHS`, named Small → Extra large |
+| **Rule ink** | `border_ink` | `INKS`, Black clears |
+| **Corner** | `border_radius_px` | `BORDER_RADII` |
+| **Head ink** | `headline_ink` | `INKS`, Black clears |
+| **Accent** | `accent_color` | `INKS`, and **no clear entry** |
+| **Shape** | `frame_shape` | `BLOCK_SHAPES` |
+
+"Heading background colour" is **Head band** — one field, so one menu: `reverse`
+is white type out of a solid panel and the `band` treatments lay a screen behind
+the headline, the deck or both.
+
+Three decisions, each one a rule this file already states:
+
+- **Rule width, Rule ink and Corner are DISABLED when they cannot act** — an
+  unruled block has no width or colour to set, and `canRound()` is the
+  catalogue's own answer for a corner. Disabled rather than hidden, because a
+  button that came and went as the block changed would move every button beside
+  it under the pointer, which is what the scroll-don't-wrap rule exists to
+  prevent. Each says why in its title, and the button's own title is kept in
+  `dataset.baseTitle` — refresh runs many times between renders, so a control
+  disabled once would otherwise carry the explanation for the session.
+- **Accent offers no clear entry.** `accent_color` is NOT NULL with a real
+  default, so an empty value would reach the repository's own `COALESCE` and do
+  nothing — the other documented shape of a dead control.
+- **Head ink and Accent stay separate**, because they are different objects: one
+  is the headline's running text, the other fills the band behind it.
+
+Measured on a real block: **24 buttons, one row, 39 px**, the rail scrolling —
+the bar gained no height, which is the constraint that matters (a toolbar row
+costs the page 34 px and the page has none to give).
+
+The net presses all seven and asks what moved **on the canvas**, not whether a
+class toggled — including that a reversed headline's panel has a real height,
+which is this bar's side of the white-on-white fault above. **80/80**, from 65.
+Its restore gained the seven new columns first: this file already records that a
+restore which does not mention a column leaves the run's value in the fixture,
+and the next run then reads its own leftovers as the block's state.
+
 ### A picture laid across two stories can now be PLACED
 
 `moveOverlay()` has existed since overlays did, and nothing in the product

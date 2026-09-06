@@ -27,9 +27,10 @@
 import "../layout/borders.js";
 import "../layout/inset-panels.js";
 import "../layout/typefaces.js";
-import { TINTS } from "../layout/inks.js";
+import { TINTS, INKS, HEADLINE_STYLES } from "../layout/inks.js";
+import { BLOCK_SHAPES } from "../layout/block-shapes.js";
 
-const { BORDER_STYLES } = globalThis.SahasBorders;
+const { BORDER_STYLES, BORDER_WIDTHS, BORDER_RADII, canRound, isRuled } = globalThis.SahasBorders;
 const { TYPEFACES } = globalThis.SahasTypefaces;
 const { INSET_PANEL_KINDS, INSET_PANEL_ORNAMENTS, defaultPanelFor } = globalThis.SahasInsetPanels;
 
@@ -68,6 +69,38 @@ const CHARTS = Object.freeze([
 // there is nothing to remove, so the desk can see that the way out exists.
 const MENUS = {
   border: () => BORDER_STYLES.map((s) => ({ value: s.key, label: s.label })),
+  // THE RULE'S OWN THREE DECISIONS, beside the rule itself. Each was reachable
+  // only by scrolling Properties in the settings rail, which is the fault this
+  // whole file exists to fix, one catalogue at a time. All three read the same
+  // shared tables the panel does, so the bar cannot grow a second vocabulary.
+  //
+  // Weight is NAMED, not stated in points - the desk asked for it that way -
+  // while what is STORED is still the printer's unit, which is what the .sla,
+  // the PDF and the IDML all read.
+  "rule-width": () => BORDER_WIDTHS.map((w) => ({ value: String(w.px), label: w.label })),
+  // A corner can only be rounded where a rule meets a rule, so a block that is
+  // not boxed offers this button disabled rather than a menu that would draw
+  // nothing - `canRound()` is the catalogue's own answer, not a second copy.
+  corner: () => BORDER_RADII.map((r) => ({ value: String(r.px), label: r.label })),
+  // Black carries no hex in the palette - choosing it CLEARS, which is the
+  // difference between a choice and a state, and is exactly how the marks
+  // toolbar's own ink picker and Properties already behave. The stored NULL is
+  // the state `--block-ink`'s CSS fallback already paints, so an "Auto" entry
+  // beside it would offer the same thing twice.
+  "rule-ink": () => INKS.map((i) => ({ value: i.hex || "", label: i.label, swatch: i.hex })),
+  // "HEADING BACKGROUND COLOUR", which is what the desk asked for: `reverse` is
+  // white type out of a solid panel and the `band` treatments lay a screen
+  // behind the headline, the deck, or both. It is one field, so it is one menu.
+  "head-style": () => HEADLINE_STYLES.map((h) => ({ value: h.key, label: h.label })),
+  "head-ink": () => INKS.map((i) => ({ value: i.hex || "", label: i.label, swatch: i.hex })),
+  // ACCENT IS A DIFFERENT OBJECT and must not be merged into the one above: it
+  // fills a reversed or screened band and colours the accent word, never the
+  // headline's own running text. `accent_color` is NOT NULL with a real
+  // default, so there is no unset state to clear back to - offering Black here
+  // would send an empty value into the repository's own COALESCE and do
+  // nothing, which is the other documented shape of a dead control.
+  accent: () => INKS.filter((i) => i.hex).map((i) => ({ value: i.hex, label: i.label, swatch: i.hex })),
+  shape: () => BLOCK_SHAPES.map((b) => ({ value: b.key, label: b.label })),
   ground: () => [{ value: "", label: "White (paper)" },
     ...TINTS.filter((t) => t.hex).map((t) => ({ value: t.hex, label: t.label, swatch: t.hex }))],
   columns: () => [{ value: "", label: "Auto" }, { value: "1", label: "1 column" },
@@ -188,6 +221,27 @@ export function deviceBarMarkup() {
         ${button("border", "▣", "Border", "How this block is ruled — none, a box, a rule above or below")}
         ${button("ground", "▤", "Tint", "A light ground behind the whole block, from the paper's own palette")}
         ${button("columns", "▥", "Columns", "How many columns the copy is set in — Auto works it out from the width")}
+        ${button("shape", "◇", "Shape", "Cut a corner off the block — the compositor sets the copy clear of it")}
+      </span>
+      <!-- THE RULE'S OWN DECISIONS. Each of these was set only by scrolling
+           Properties in the settings rail, and each is a decision a desk makes
+           while looking at the block, not at a panel. Rule width and rule ink
+           are disabled while the block carries no rule, and Corner while its
+           rule has no two edges to meet - a control that cannot act is not
+           offered, which is this file's own rule. -->
+      <span class="dev-group">
+        ${button("rule-width", "═", "Rule width", "How heavy the block's rule is — Small to Extra large, stored in the printer's points", { wide: true })}
+        ${button("corner", "◜", "Corner", "Round the corners of a boxed block")}
+        ${button("rule-ink", "▭", "Rule ink", "The colour of the block's rule, from the paper's own inks", { wide: true })}
+      </span>
+      <!-- HOW THE HEADLINE IS DRESSED. "Head band" is the desk's own request -
+           a background behind the heading - and it is one field: reversed is
+           white type out of a solid panel, the screens lay a light ground
+           behind the headline, the deck or both. -->
+      <span class="dev-group">
+        ${button("head-style", "▬", "Head band", "A panel or a screen behind the headline — reversed, screened, ruled or a section tab", { wide: true })}
+        ${button("head-ink", "A", "Head ink", "The headline's own colour — Black clears it back to the paper's default", { wide: true })}
+        ${button("accent", "◆", "Accent", "The ink that fills a reversed or screened band, and colours the accent word")}
       </span>
       <!-- THE THREE TYPE SIZES. On the bar rather than in a panel, because a
            desk changing a headline is looking at the headline. -->
@@ -402,6 +456,13 @@ export function bindDeviceBar(handlers) {
 function currentOf(device, view) {
   switch (device) {
     case "border": return view.borderStyle || "none";
+    case "rule-width": return view.borderWidthPx == null ? "" : String(view.borderWidthPx);
+    case "corner": return String(Number(view.borderRadiusPx) || 0);
+    case "rule-ink": return view.borderInk || "";
+    case "head-style": return view.headlineStyle || "plain";
+    case "head-ink": return view.headlineInk || "";
+    case "accent": return view.accentColor || "";
+    case "shape": return view.frameShape || "rectangle";
     case "ground": return view.backgroundColor || "";
     case "columns": return view.columnCount == null ? "" : String(view.columnCount);
     case "font": return view.fontFamily || "serif";
@@ -423,6 +484,15 @@ function applyChoice(device, value, handlers, patch) {
   const section = handlers.getSection?.() || {};
   switch (device) {
     case "border": return patch({ borderStyle: value });
+    case "rule-width": return patch({ borderWidthPx: Number(value) });
+    case "corner": return patch({ borderRadiusPx: Number(value) });
+    // An empty value is Black, which carries no hex and therefore CLEARS.
+    case "rule-ink": return patch({ borderInk: value || null });
+    case "head-style": return patch({ headlineStyle: value });
+    case "head-ink": return patch({ headlineInk: value || null });
+    case "accent": return patch({ accentColor: value });
+    // `rectangle` is the absence of a cut, and the column's own empty state.
+    case "shape": return patch({ frameShape: value === "rectangle" ? "" : value });
     case "ground": return patch({ backgroundColor: value || null });
     case "columns": return patch({ columnCount: value === "" ? null : Number(value) });
     case "font": return patch({ fontFamily: value });
@@ -536,9 +606,38 @@ export function refreshDeviceBar(view = {}, composition = null) {
     // is the one button on the bar that starts on.
     dateline: view.showDateline !== false,
     display: Boolean(view.displayFamily),
+    shape: Boolean(view.frameShape),
+    "rule-width": view.borderWidthPx != null,
+    corner: Number(view.borderRadiusPx) > 0,
+    "rule-ink": Boolean(view.borderInk),
+    // Lit when the headline is dressed at all - plain is the ordinary state.
+    "head-style": (view.headlineStyle || "plain") !== "plain",
+    "head-ink": Boolean(view.headlineInk),
+    // `accent` is deliberately NOT here: accent_color is NOT NULL with a real
+    // default, so every block has one and a permanently lit button says
+    // nothing. It is the warning-that-is-always-on fault, in miniature.
+  };
+  // A CONTROL THAT CANNOT ACT IS NOT OFFERED, and on a fixed row that means
+  // disabled rather than removed - a button that came and went as the block
+  // changed would move every button beside it under the desk's pointer, which
+  // is the fault the bar's own scroll-don't-wrap rule exists to prevent. The
+  // title says why, because a disabled control with no reason is a dead end.
+  const border = view.borderStyle || "none";
+  const off = {
+    "rule-width": !isRuled(border) && "Rule this block first — a block with no rule has no width to set",
+    "rule-ink": !isRuled(border) && "Rule this block first — a block with no rule has no colour to set",
+    corner: !canRound(border) && "Box this block first — a corner needs a rule on both of its edges to round",
   };
   bar.querySelectorAll("[data-device]").forEach((element) => {
-    element.classList.toggle("is-on", Boolean(on[element.dataset.device]));
+    const key = element.dataset.device;
+    element.classList.toggle("is-on", Boolean(on[key]));
+    const why = off[key];
+    // The button's own title is kept, or a control that was disabled once
+    // would carry the explanation for the rest of the session - refresh runs
+    // many times between renders.
+    if (element.dataset.baseTitle === undefined) element.dataset.baseTitle = element.title;
+    element.disabled = Boolean(why);
+    element.title = why || element.dataset.baseTitle;
   });
   // The two face buttons say WHICH face, because "Aa" alone cannot: a desk
   // choosing between four Marathi text faces needs to see the one in force.

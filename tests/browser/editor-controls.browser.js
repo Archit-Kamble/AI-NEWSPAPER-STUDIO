@@ -242,7 +242,16 @@ const BODY = 'सातारा : नगरपालिकेच्या स�
     await focusPart(name);
     await page.waitForTimeout(300);
     const before = await draft();
-    const target = name === 'headline' ? '28' : name === 'subheading' ? '18' : '12';
+    const preferred = name === 'headline' ? 28 : name === 'subheading' ? 18 : 12;
+    // The menu is bounded by this block's geometry. A fixture whose headline
+    // ceiling is below 28 must still exercise the control, not wait forever
+    // for an option that correctly does not exist.
+    const choices = await page.locator('#edStorySize option').evaluateAll(
+      (options) => options.map((option) => option.value).filter((value) => value && Number.isFinite(Number(value))),
+    );
+    const target = choices.filter((value) => Number(value) !== Number(before[SIZE_FIELD[name]]))
+      .sort((a, b) => Math.abs(Number(a) - preferred) - Math.abs(Number(b) - preferred))[0];
+    if (!target) throw new Error(`No alternative ${name} size offered for this block`);
     await page.selectOption('#edStorySize', target);
     await page.waitForTimeout(600);
     const after = await draft();

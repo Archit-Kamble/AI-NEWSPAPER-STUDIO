@@ -177,14 +177,37 @@ const check = (name, ok, detail = '') => {
     const heldBefore = await page.evaluate(() => document.activeElement?.id);
     check('the caret starts in the headline field', heldBefore === 'edStoryHeadline', String(heldBefore));
 
-    // Re-selecting the block is what mounts it again and runs the body load.
+    // Re-selecting the block mounts it again and runs the body load.
+    //
+    // THIS GESTURE CHANGED MEANING UNDER THIS CHECK, AND THE CHECK DID NOT
+    // NOTICE. When it was written, clicking a block that was already open
+    // returned early and did nothing, so the mount ran with the desk still on
+    // the headline and the caret had to survive it. `selectSection()` now
+    // treats that click as "select the BLOCK itself" - the documented way back
+    // to Border, Ground and Columns once the caret has been in the body - so
+    // the desk really has moved to a different object and the caret leaving
+    // the headline field is CORRECT. Asserting it stayed was asserting the old
+    // product, which is how a net outlives the mechanism it was pinned to.
+    //
+    // What must still hold is this check's own name: the load may not pull the
+    // caret INTO THE STORY. Focus landing nowhere in particular is the honest
+    // answer to "a layout object is selected"; focus landing in the copy is
+    // the bug, and it is the one measured across eight delays below.
     await page.evaluate((k) => document.querySelector(`.newspaper-section[data-section-key="${k}"]`)?.click(), first);
     await page.waitForTimeout(1200);
     const heldAfter = await page.evaluate(() => document.activeElement?.id
       || document.activeElement?.className?.toString?.().slice(0, 24));
-    check('and a body load does not take it into the story', heldAfter === 'edStoryHeadline', String(heldAfter));
+    const inTheStory = await page.evaluate(() => {
+      const active = document.activeElement;
+      const root = document.querySelector('.ql-editor');
+      return Boolean(root && active && (active === root || root.contains(active)));
+    });
+    check('and a body load does not take it into the story', !inTheStory, String(heldAfter));
 
-    // Typing now must reach the headline, not the copy.
+    // Back on the headline - the object unchanged this time - the keystrokes
+    // must reach it and not the copy.
+    await page.locator('#edStoryHeadline').click();
+    await page.waitForTimeout(400);
     await page.keyboard.type('QQ');
     await page.waitForTimeout(600);
     const landed = await page.evaluate(() => ({

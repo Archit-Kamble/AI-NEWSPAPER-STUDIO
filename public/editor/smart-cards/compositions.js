@@ -94,10 +94,103 @@ function dinvishesh(design,data,frame,api){
   return k.finish({key:'dinvishesh',design,geometry:{composition:'date-badges'}});
 }
 
-function rashi(design,data,frame,api){
-  if(design!=='zodiac-capsules')return null; const k=kit(frame,api), signs=(data.signs||[]).slice(0,12), cols=k.W>220?3:2,gap=4,cw=(k.W-gap*(cols-1))/cols,rh=k.H/Math.ceil(signs.length/cols);
-  signs.forEach((s,i)=>{const c=i%cols,r=Math.floor(i/cols),x=c*(cw+gap),y=r*rh;k.bar(x,y,cw-1,rh-3,i%2?'#fbf4f5':'#fff');k.bar(x,y,2,rh-3,RED);const icon=Math.min(28,rh*.32);k.image(api.rashiArtwork?.(s),x+cw/2-icon/2,y+4,icon,icon);k.text(s.name,x+3,y+icon+5,cw-6,9,{bold:true,align:1,ink:RED});k.text(`शुभ अंक ${s.luckyNumber??''} · शुभ रंग ${s.luckyColour??''}`,x+3,y+icon+17,cw-6,6.5,{bold:true,align:1,family:'sans'});k.text(s.text,x+5,y+icon+27,cw-10,7,{align:1});});
-  return k.finish({key:'rashi',design,geometry:{composition:'logo-top',columns:cols}});
+function rashi(design, data, frame, api) {
+  if (design !== 'zodiac-capsules') return null;
+  const signs = (data.signs || []).filter((sign) => sign?.name).slice(0, 12);
+  if (!signs.length) return null;
+
+  // Rashi-bhavishya is a standing newspaper feature, not a miniature app
+  // dashboard. Each sign gets its own small printed "reading" with the real
+  // zodiac artwork above the name, the auspicious facts in a quiet line, and
+  // the editorial reading below. The single-sign shape turns into a proper
+  // hero card instead of an empty one-cell grid.
+  const composeAt = (bodyFontPx) => {
+    const k = kit(frame, api);
+    const count = signs.length;
+    // Three narrow columns make a three-sign selection look busy and force
+    // Marathi readings down to poster-caption type. Two wider readings are
+    // more useful until the card carries a genuinely full zodiac board.
+    const columns = count === 1 ? 1 : (k.W >= 220 && count > 5 ? 3 : 2);
+    const rows = Math.ceil(count / columns);
+    const headerHeight = count === 1 ? 46 : 33;
+    const gridTop = headerHeight + 4;
+    const gutter = 5;
+    const cellWidth = (k.W - gutter * (columns - 1)) / columns;
+    const cellHeight = Math.max(1, (k.H - gridTop - 1) / rows);
+    let cellOverset = cellHeight < (count === 1 ? 116 : 48);
+
+    // A dark masthead gives every placement a recognisable newspaper identity.
+    k.bar(0, 0, k.W, headerHeight, INK);
+    k.bar(0, headerHeight - 2, k.W, 2, RED);
+    k.text('राशीभविष्य', 6, count === 1 ? 6 : 4, k.W - 12, count === 1 ? 19 : 14, {
+      bold: true, align: 1, ink: '#fff', family: 'serif',
+    });
+    k.text(count === 1 ? 'आजचा वैयक्तिक मार्गदर्शक' : 'आजचे राशिचक्र', 6, count === 1 ? 28 : 20, k.W - 12, 6.5, {
+      bold: true, align: 1, ink: '#f2d7da', family: 'sans',
+    });
+
+    signs.forEach((sign, index) => {
+      const column = index % columns;
+      const row = Math.floor(index / columns);
+      const wideClosingReading = columns === 2 && count % 2 === 1 && index === count - 1;
+      const panelWidth = wideClosingReading ? k.W : cellWidth;
+      const x = wideClosingReading ? 0 : column * (cellWidth + gutter);
+      const y = gridTop + row * cellHeight;
+      const panelHeight = cellHeight - 3;
+      const hero = count === 1;
+      const iconSize = Math.max(16, Math.min(hero ? 58 : 42, panelHeight * (hero ? 0.27 : 0.26), panelWidth * 0.42));
+      const nameFont = hero ? 18 : Math.max(8, Math.min(11, bodyFontPx + 2));
+      const factFont = hero ? 8.5 : Math.max(5.8, bodyFontPx - 0.7);
+      const readingLines = api.wrap(String(sign.text || ''), {
+        width: Math.max(1, panelWidth - 12), fontPx: bodyFontPx, family: 'serif', weight: 400,
+      }).lines.length;
+      const readingHeight = readingLines * api.lineHeight(bodyFontPx, 'serif', 400);
+      const clusterHeight = iconSize
+        + 3 + api.lineHeight(nameFont, 'serif', 700)
+        + 1 + api.lineHeight(factFont, 'sans', 700)
+        + (hero ? 7 : 4) + readingHeight;
+      // A three-sign feature is a broad, deliberate reading panel. Centre its
+      // content rather than leaving a web-card-like void underneath. Dense
+      // full-zodiac editions retain the compact top-to-bottom newspaper grid.
+      const panelInset = rows === 1 ? Math.max(6, (panelHeight - clusterHeight) / 2) : (hero ? 10 : 5);
+      const iconY = y + panelInset;
+      const nameY = iconY + iconSize + (hero ? 5 : 3);
+      const factsY = nameY + api.lineHeight(nameFont, 'serif', 700) + 1;
+      const bodyY = factsY + api.lineHeight(factFont, 'sans', 700) + (hero ? 7 : 4);
+      const bodyHeight = Math.max(1, y + panelHeight - bodyY - 4);
+      const fill = index % 2 ? '#fcf7f4' : '#f8eeef';
+
+      // A light paper ground and a single red top rule deliberately replace
+      // the former UI-like tile borders.
+      k.bar(x, y, panelWidth, panelHeight, fill);
+      k.bar(x, y, panelWidth, 1.3, RED);
+      k.image(api.rashiArtwork?.(sign), x + (panelWidth - iconSize) / 2, iconY, iconSize, iconSize);
+      k.text(sign.name, x + 4, nameY, panelWidth - 8, nameFont, { bold: true, align: 1, ink: RED });
+
+      const facts = [
+        sign.luckyNumber == null || sign.luckyNumber === '' ? '' : `शुभ अंक ${sign.luckyNumber}`,
+        sign.luckyColour ? `शुभ रंग ${sign.luckyColour}` : '',
+      ].filter(Boolean).join('  ·  ');
+      if (facts) k.text(facts, x + 4, factsY, panelWidth - 8, factFont, { bold: true, align: 1, family: 'sans', ink: '#614c50' });
+      const reading = k.text(sign.text || '', x + 6, bodyY, panelWidth - 12, bodyFontPx, { align: 1, family: 'serif' });
+      cellOverset ||= reading.height > bodyHeight + 0.1;
+    });
+
+    const result = k.finish({
+      key: 'rashi', design, geometry: { composition: count === 1 ? 'rashi-hero-reading' : 'zodiac-reading-grid', columns, rows },
+    });
+    if (cellOverset) result.fitState = 'OVERSET';
+    return result;
+  };
+
+  const preferred = signs.length === 1 ? [12, 11, 10, 9, 8, 7, 6] : [8, 7.5, 7, 6.5, 6, 5.5];
+  let fallback = null;
+  for (const candidate of preferred) {
+    const result = composeAt(candidate);
+    fallback = result;
+    if (result.fitState === 'FITS') return result;
+  }
+  return fallback;
 }
 
 function havaman(design,data,frame,api){

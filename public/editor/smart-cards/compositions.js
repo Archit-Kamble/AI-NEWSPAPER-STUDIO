@@ -357,7 +357,10 @@ function rashiLedger(data, frame, api) {
         x: k.p + imageRailX, width: spec.imageRailWidth,
         imageX: k.p + imageX, imageWidth: spec.iconSize,
       });
-      k.text(spec.sign.name, metaX, metaY, spec.metaWidth, spec.nameFontPx, { bold: true, ink: RED });
+      // The sign name is the small row heading, so it sits on the centre of
+      // its own facts column; the longer forecast remains a readable left-
+      // aligned measure beside it.
+      k.text(spec.sign.name, metaX, metaY, spec.metaWidth, spec.nameFontPx, { bold: true, align: 1, ink: RED });
       if (spec.facts) {
         k.text(spec.facts, metaX, metaY + spec.nameHeight + 2, spec.metaWidth, spec.factsFontPx, {
           bold: true, family: 'sans', ink: '#624d50',

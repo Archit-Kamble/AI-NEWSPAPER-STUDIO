@@ -140,7 +140,9 @@ test('Rashi ledger is a distinct, complete print-safe horoscope column', () => {
       'each selected sign keeps its downloaded artwork');
 
     for (const sign of source.signs) {
-      assert.ok(ledger.primitives.some((item) => item.kind === 'text' && item.text.includes(sign.name)), sign.name);
+      const signName = ledger.primitives.find((item) => item.kind === 'text' && item.text.includes(sign.name));
+      assert.ok(signName, sign.name);
+      assert.equal(signName.align, 1, `${sign.name} is centred in its own facts column`);
       assert.ok(ledger.primitives.some((item) => item.kind === 'text' && item.text.join(' ') === sign.text), sign.text);
       assert.ok(ledger.primitives.some((item) => item.kind === 'text' && item.text.join(' ').includes(String(sign.luckyNumber))), 'lucky number retained');
       assert.ok(ledger.primitives.some((item) => item.kind === 'text' && item.text.join(' ').includes(sign.luckyColour)), 'lucky colour retained');

@@ -6236,6 +6236,21 @@ body.story-fullscreen { overflow: hidden; }
 /* Smart Cards are small enough to scan, but always make their provenance and
    review state visible before the card replaces anything in the draft. */
 .smart-card-panel { display: grid; gap: 12px; }
+.card-design-picker { min-width: 0; margin: 0; padding: 14px; border: 1px solid #d9d4ce; border-radius: 8px; }
+.card-design-picker legend { padding: 0 6px; font-weight: 700; }
+.card-design-picker > p { margin: 0 0 12px; color: #59534e; font-size: 12px; }
+.card-design-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr)); gap: 12px; }
+.card-design-choice { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px 6px; border: 1px solid #c9c3bd; border-radius: 6px; background: #f7f5f2; color: #292321; cursor: pointer; font: inherit; }
+.card-design-choice:hover { border-color: #8a1428; background: #fff; }
+.card-design-choice[aria-pressed="true"] { outline: 2px solid #8a1428; outline-offset: -2px; background: #fff; }
+.card-design-choice:focus-visible { outline: 3px solid #245fa6; outline-offset: 3px; }
+.card-design-choice small { font-size: 11px; line-height: 1.4; text-align: center; }
+.card-design-fit { margin-top: auto; font-size: 10px; color: #325747; }
+.card-design-fit.is-overset { color: #9a3b12; }
+.card-design-action { display: block; padding: 5px 12px; border: 1px solid #b6aaa1; border-radius: 4px; font-size: 11px; font-weight: 700; }
+.card-design-choice[aria-pressed="true"] .card-design-action { background: #8a1428; border-color: #8a1428; color: white; }
+.card-design-preview { position: relative; display: block; flex: none; overflow: hidden; background: white; pointer-events: none; }
+.card-design-preview > .advert-style-sheet { max-width: none; max-height: none; }
 .smart-card-intro { margin: 0; color: #62626c; font-size: .78rem; line-height: 1.45; }
 .smart-card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .smart-card-choice { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 3px 8px; min-width: 0; min-height: 64px; padding: 8px; border: 1px solid #e4e4ea; border-radius: 8px; background: white; color: #292930; cursor: pointer; text-align: left; }

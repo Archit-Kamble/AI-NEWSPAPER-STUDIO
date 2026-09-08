@@ -162,6 +162,19 @@ function smartCardLines(key, data, frame, cardLayout) {
     });
   }
 
+  if (layout.primitives?.length) {
+    for (const item of layout.primitives) {
+      if (item.kind === 'text') {
+        (item.text || []).forEach((text, index) => out.push({
+          text, x: item.x, y: item.y + index * item.lineHeightPx, width: item.width,
+          height: item.lineHeightPx, fontPx: item.fontPx, lineHeightPx: item.lineHeightPx,
+          align: item.align || 0, bold: Boolean(item.bold), ink: item.ink, family: item.family || face,
+        }));
+      } else out.push({ ...item });
+    }
+    return out;
+  }
+
   // AN ENTRY'S BOX IS ITS OWN TYPE'S, not the card's body line.
   //
   // This handed every entry `layout.geometry.lineHeightPx` - the card's body

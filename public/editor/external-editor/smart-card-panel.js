@@ -12,6 +12,45 @@ import { escapeHtml } from "../format.js";
 import { busyButton } from "../../ui/busy.js";
 import { smartCardMarkup, canRenderSmartCard, smartCardFitState, SMART_CARD_OVERSET_NOTE } from "../smart-cards/smart-cards.js";
 import { ADVERT_STYLES, ADVERT_SAMPLE, ADVERT_DESIGN_REQUEST } from "../smart-cards/advert-styles.js";
+import { designsForCard, cardDesign, supportsCardDesign } from "../smart-cards/designs.js";
+import { getDraft, getSelectedSection } from "../store.js";
+import { smartCardFrame } from "../canvas/section-thumb.js";
+
+export function cardDesignPicker(view, frame) {
+  if (!view?.smartCardData || !supportsCardDesign(view.smartCardKey) || !frame?.width || !frame?.height) return '';
+  const selected = cardDesign(view.smartCardKey, view.smartCardData.design);
+  const scale = Math.min(180 / frame.width, 220 / frame.height, 1);
+  return `<fieldset class="card-design-picker"><legend>Card design · रचना</legend>
+    <p>Choose a composition for this card. Your source data and block position stay unchanged. Classic restores the original layout.</p>
+    <div class="card-design-options">${designsForCard(view.smartCardKey).map((design) => {
+      const data = { ...view.smartCardData, design: design.key };
+      const fits = smartCardFitState(view.smartCardKey, data, frame) !== 'OVERSET';
+      return `<button type="button" class="card-design-choice" data-card-design="${design.key}" aria-pressed="${selected === design.key}">
+        <span class="card-design-preview" aria-hidden="true" style="width:${frame.width * scale}px;height:${frame.height * scale}px">
+          <span class="advert-style-sheet" style="width:${frame.width}px;height:${frame.height}px;transform:scale(${scale})">${smartCardMarkup(view.smartCardKey, data, frame) || ''}</span>
+        </span><strong>${escapeHtml(design.label)}</strong><small>${escapeHtml(design.detail)}</small>
+        <span class="card-design-fit${fits ? '' : ' is-overset'}">${fits ? 'Fits this block' : 'Needs more space — review before print'}</span>
+        <span class="card-design-action">${selected === design.key ? 'Selected' : 'Use this layout'}</span>
+      </button>`;
+    }).join('')}</div></fieldset>`;
+}
+
+export function refreshCardDesignPicker(section, view) {
+  const host = document.getElementById('cardDesignHost');
+  if (!host) return;
+  if (!section || !view?.smartCardData || !supportsCardDesign(view.smartCardKey)) {
+    host.replaceChildren();
+    delete host.dataset.signature;
+    return;
+  }
+  const frame = smartCardFrame(section, view);
+  const signature = JSON.stringify([view.smartCardKey, view.smartCardData, frame]);
+  if (host.dataset.signature === signature) return;
+  const focused = host.contains(document.activeElement) ? document.activeElement?.dataset.cardDesign : null;
+  host.innerHTML = cardDesignPicker(view, frame);
+  host.dataset.signature = signature;
+  if (focused) host.querySelector(`[data-card-design="${cardDesign(view.smartCardKey, focused)}"]`)?.focus();
+}
 
 const CARDS = [
   { key: "panchang", icon: "☀", label: "पंचांग", detail: "सूर्योदय, सूर्यास्त, राहुकाळ", source: "Calculated" },
@@ -109,8 +148,10 @@ function placedMarkup(view) {
 }
 
 export function smartCardMarkupPanel(view) {
+  const section = getSelectedSection();
   return `<div class="smart-card-panel">
     ${placedMarkup(view)}
+    <div id="cardDesignHost">${section && view?.smartCardData ? cardDesignPicker(view, smartCardFrame(section, view)) : ''}</div>
     <p class="smart-card-intro">Generate a recurring daily feature for this exact block. You review it before it changes the story.</p>
     <div class="smart-card-grid" role="group" aria-label="Smart Card type">${CARDS.map((card, i) => choice(card, i === 0)).join("")}</div>
     <fieldset class="smart-card-rashi-options" id="smartCardRashiOptions" hidden>
@@ -212,6 +253,24 @@ function proposalMarkup(result) {
 }
 
 export function bindSmartCard(requestCard, onPatch, onNotify, onPlaceInNewBlock) {
+  document.getElementById('cardDesignHost')?.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-card-design]');
+      if (!button) return;
+      // Read at click time: never replace newer feed/editor data with a preview snapshot.
+      const draft = getDraft();
+      if (!draft?.smartCardData || !supportsCardDesign(draft.smartCardKey)) return;
+      const design = cardDesign(draft.smartCardKey, button.dataset.cardDesign);
+      onPatch({ smartCardData: { ...draft.smartCardData, design } }, 'smart-card');
+      document.querySelectorAll('[data-card-design]').forEach((choice) => {
+        choice.setAttribute('aria-pressed', String(choice.dataset.cardDesign === design));
+      });
+      const section = getSelectedSection();
+      const oversized = section && smartCardFitState(draft.smartCardKey,
+        { ...draft.smartCardData, design }, smartCardFrame(section, draft)) === 'OVERSET';
+      onNotify(`${designsForCard(draft.smartCardKey).find((item) => item.key === design).label} layout applied. ${oversized
+        ? 'This composition needs more space; review it before printing.'
+        : 'Source data and block size are unchanged.'}`);
+  });
   let key = "panchang";
   let variant = "auto";
   // THE DEFAULT IS "you decide". A desk that wants a particular shape says so;

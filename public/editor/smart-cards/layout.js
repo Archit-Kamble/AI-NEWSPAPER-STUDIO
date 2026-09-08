@@ -86,6 +86,8 @@ function headStrokeInLineBox(fontPx, lineHeightPx, weight = 700) {
 // The shapes a display advertisement comes in. One catalogue, read by this
 // solver, by the renderer, by the press walk and by the generate panel.
 import { advertStyle, advertBlockSize } from './advert-styles.js';
+import { cardDesign } from './designs.js';
+import { composeSmartCard } from './compositions.js';
 import { shapeWidthPx, isShaperReady } from '../compose/shaper.js';
 import { breakPieces, trimEndClusters } from '../compose/graphemes.js';
 // The paper's own inks. A chart may be printed in any of them - see chartInk().
@@ -2743,6 +2745,28 @@ export function layoutSmartCard(key, data, frame) {
 function solveCard(normalKey, fn, data, frame, chosenFamily) {
 
   const clamped = clampFrame(frame);
+  const selectedDesign = cardDesign(normalKey, data?.design);
+  const composed = composeSmartCard(normalKey, selectedDesign, data, clamped, {
+    wrap: wrapSmartText,
+    lineHeight: lineHeightFor,
+    rashiArtwork: rashiArtworkFile,
+  });
+  if (composed) {
+    return {
+      ...composed,
+      contentBox: { x: 0, y: 0, width: clamped.width, height: clamped.height },
+      borderBox: cardRuleFor(normalKey) ? { x: 0, y: 0, width: clamped.width, height: clamped.height } : null,
+      artwork: null,
+      headRule: null,
+      design: selectedDesign,
+      designMarks: [],
+      family: chosenFamily && chosenFamily !== 'serif' ? chosenFamily : null,
+      familyCss: chosenFamily && chosenFamily !== 'serif'
+        ? (globalThis.SahasTypefaces?.publicationFamily(chosenFamily)?.css || null) : null,
+      exactShaping: isShaperReady(),
+      violations: composed.fitState === 'OVERSET' ? ['SMART_CARD_OVERSET'] : [],
+    };
+  }
   const { artwork, content, band, borderBox, headRule: markRule } = cardArtworkFor(normalKey, clamped);
   const frameFor = (width) => ({
     width,
@@ -2936,6 +2960,8 @@ function solveCard(normalKey, fn, data, frame, chosenFamily) {
     // whatever furniture the card puts inside itself. Null when the card is
     // unruled, and then nothing is drawn.
     borderBox: borderBox || null,
+    design: cardDesign(normalKey, data?.design),
+    designMarks: [],
     subtitle,
     fitState,
     exactShaping: isShaperReady(),

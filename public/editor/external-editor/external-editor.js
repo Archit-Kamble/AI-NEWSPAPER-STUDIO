@@ -50,7 +50,7 @@ import { aiPanelMarkup, bindAiPanel, refreshAiPanel } from "./ai-panel.js";
 import { historyPanelMarkup, bindHistoryPanel, refreshHistoryPanel } from "./history-panel.js";
 import { pageMapMarkup, bindPageMap } from "./page-map.js";
 import { storyEditorMarkup, bindStoryEditor, refreshStoryEditor, refreshStoryCount, refreshStoryStats, selectPictureFrame } from "./story-editor.js";
-import { smartCardMarkup, bindSmartCard } from "./smart-card-panel.js";
+import { smartCardMarkup, bindSmartCard, refreshCardDesignPicker } from "./smart-card-panel.js";
 import { storyDetailsMarkup, bindStoryDetails, refreshStoryDetails } from "./story-details-panel.js";
 import { assistDockMarkup, bindAssistDock, applyAssistTab, releaseDockedPanels, revealPicturePanel } from "./assist-dock.js";
 
@@ -435,6 +435,7 @@ export function focusGroup(groupKey) {
 // positions and the caret survive every keystroke.
 export function refreshExternalEditor(section, view, story, source, selectedPart, selectedImageIds = []) {
   const images = activeCallbacks?.getImages?.() || [];
+  refreshCardDesignPicker(section, view);
 
   const badge = document.getElementById("edStatusBadge");
   if (badge) {

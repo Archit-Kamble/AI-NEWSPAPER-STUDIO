@@ -732,7 +732,14 @@ export function smartCardMarkup(key, data, frame) {
   if (!render || !data) return null;
 
   const layout = layoutSmartCard(key, data, frame);
-  const inside = render(data, layout);
+  const inside = layout.primitives?.length ? layout.primitives.map((item) => {
+    if (item.kind === 'bar') return `<i style="position:absolute;left:${item.x}px;top:${item.y}px;width:${item.width}px;height:${item.height}px;background:${item.ink}"></i>`;
+    if (item.kind === 'image') return `<img src="/${escapeHtml(item.file)}" alt="" style="position:absolute;object-fit:contain;left:${item.x}px;top:${item.y}px;width:${item.width}px;height:${item.height}px">`;
+    if (item.kind === 'poly') return `<svg aria-hidden="true" style="position:absolute;left:0;top:0;width:100%;height:100%;overflow:visible"><polyline points="${item.points.map(([x,y])=>`${x},${y}`).join(' ')}" fill="none" stroke="${item.ink}" stroke-width="${item.strokeWidth || 1}"></polyline></svg>`;
+    const align = item.align === 1 ? 'center' : item.align === 2 ? 'right' : 'left';
+    const family = globalThis.SahasTypefaces?.publicationFamily(layout.family || item.family)?.css || 'serif';
+    return (item.text || []).map((line, index) => `<span style="position:absolute;overflow:hidden;white-space:nowrap;left:${item.x}px;top:${item.y + index * item.lineHeightPx}px;width:${item.width}px;height:${item.lineHeightPx}px;font-family:${family};font-size:${item.fontPx}px;line-height:${item.lineHeightPx}px;font-weight:${item.bold ? 700 : 400};text-align:${align};color:${item.ink}">${escapeHtml(line)}</span>`).join('');
+  }).join('') : render(data, layout);
   if (!inside) return null;
 
   // The subtitle's own resolved lines - layoutSmartCard() already measured
@@ -762,7 +769,9 @@ export function smartCardMarkup(key, data, frame) {
   // TWO rules 2px apart - which on the right and the bottom of a clipped card
   // read as one thick smudged edge. A card's rule is ink at its frame's edge
   // and both surfaces now read cardRuleFor() for it.
-  const ring = layout.borderBox ? cardRuleFor(key) : null;
+  const ring = layout.borderBox && !layout.designMarks?.length ? cardRuleFor(key) : null;
+  const designMarks = (layout.designMarks || []).map((mark) =>
+    `<i aria-hidden="true" style="position:absolute;pointer-events:none;left:${mark.x}px;top:${mark.y}px;width:${mark.width}px;height:${mark.height}px;background:${mark.ink}"></i>`).join('');
   const rule = ring
     ? `<i class="smart-card-rule" style="left:${layout.borderBox.x}px;top:${layout.borderBox.y}px;width:${layout.borderBox.width}px;height:${layout.borderBox.height}px;box-shadow:inset 0 0 0 ${ring.weightPx}px ${ring.ink}"></i>`
     : "";
@@ -778,7 +787,7 @@ export function smartCardMarkup(key, data, frame) {
   // measure it was never fitted to - which is the fault this file exists to
   // prevent. Absent unless the desk chose a face, so no stored card moves.
   const face = layout.familyCss ? `font-family:${layout.familyCss};` : "";
-  return `<div class="${cls}" style="${face}" data-fit-state="${escapeHtml(layout.fitState)}">${rule}${headRule}${titleRules}${artwork}<div class="smart-card-content" style="${contentStyle}">${subtitle}${inside}</div></div>`;
+  return `<div class="${cls}" style="${face}" data-design="${layout.design || 'classic'}" data-fit-state="${escapeHtml(layout.fitState)}">${rule}${designMarks}${headRule}${titleRules}${artwork}<div class="smart-card-content" style="${contentStyle}">${subtitle}${inside}</div></div>`;
 }
 
 /**

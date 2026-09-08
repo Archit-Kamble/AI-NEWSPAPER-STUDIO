@@ -131,6 +131,26 @@ test('a Smart Card accepted into a block survives the save and the reload', asyn
   assert.equal(lead.smart_card_data.difficulty, built.card.difficulty);
 });
 
+test('a selected card composition survives save/reload without changing supplied rates', async (t) => {
+  const { desk, page } = await withPage(t, 'ZZ smart card composition');
+  const card = {
+    design: 'lead-index', title: 'बाजार', asOf: '2099-01-01',
+    items: [{ label: 'निफ्टी', value: '२४,०००', change: '+०.५%', direction: 'up' }],
+    source: 'isolated regression fixture', note: 'Editorial source note',
+  };
+  const response = await desk(`/api/pages/${page.id}/sections/lead`, {
+    method: 'PUT', body: JSON.stringify({ smartCardKey: 'market', smartCardData: card, body: 'Unchanged fallback copy' }),
+  });
+  assert.equal(response.ok, true);
+  const [reloaded] = await desk.json(`/api/newspapers/${page.newspaper_id}/pages`);
+  const lead = reloaded.sections.find((section) => section.section_key === 'lead');
+  assert.equal(lead.smart_card_data.design, 'lead-index');
+  assert.deepEqual(lead.smart_card_data.items, card.items);
+  assert.equal(lead.smart_card_data.source, card.source);
+  assert.equal(lead.smart_card_data.note, card.note);
+  assert.equal(lead.body, 'Unchanged fallback copy');
+});
+
 test('discarding a card clears both halves, never one', async (t) => {
   const { desk, page } = await withPage(t, 'ZZ smart card discard');
   const built = await panchang.build(DATE);

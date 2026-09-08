@@ -363,7 +363,7 @@ function rashiLedger(data, frame, api) {
       k.text(spec.sign.name, metaX, metaY, spec.metaWidth, spec.nameFontPx, { bold: true, align: 1, ink: RED });
       if (spec.facts) {
         k.text(spec.facts, metaX, metaY + spec.nameHeight + 2, spec.metaWidth, spec.factsFontPx, {
-          bold: true, family: 'sans', ink: '#624d50',
+          bold: true, align: 1, family: 'sans', ink: '#624d50',
         });
       }
       k.text(spec.sign.text || '', readingX, readingY, spec.readingWidth, bodyFontPx, { family: 'serif' });

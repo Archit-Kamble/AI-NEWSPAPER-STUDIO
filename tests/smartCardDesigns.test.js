@@ -143,6 +143,10 @@ test('Rashi ledger is a distinct, complete print-safe horoscope column', () => {
       const signName = ledger.primitives.find((item) => item.kind === 'text' && item.text.includes(sign.name));
       assert.ok(signName, sign.name);
       assert.equal(signName.align, 1, `${sign.name} is centred in its own facts column`);
+      const signFacts = ledger.primitives.find((item) => item.kind === 'text'
+        && item.text.join(' ').includes(`शुभ अंक ${sign.luckyNumber}`));
+      assert.ok(signFacts, `${sign.name} lucky details are present`);
+      assert.equal(signFacts.align, 1, `${sign.name} lucky details are centred in their own facts column`);
       assert.ok(ledger.primitives.some((item) => item.kind === 'text' && item.text.join(' ') === sign.text), sign.text);
       assert.ok(ledger.primitives.some((item) => item.kind === 'text' && item.text.join(' ').includes(String(sign.luckyNumber))), 'lucky number retained');
       assert.ok(ledger.primitives.some((item) => item.kind === 'text' && item.text.join(' ').includes(sign.luckyColour)), 'lucky colour retained');

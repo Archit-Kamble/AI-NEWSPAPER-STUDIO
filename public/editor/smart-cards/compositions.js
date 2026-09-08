@@ -207,26 +207,41 @@ function rashiLedger(data, frame, api) {
   const signs = (data.signs || []).filter((sign) => sign?.name).slice(0, 12);
   if (!signs.length) return null;
 
-  const chooseColumns = (width, height, count) => {
-    if (count === 1) return 1;
-    if (count <= 4 && height >= 220) return 1;
-    if (count <= 6 && height >= 390) return 1;
-    // Two ledger columns retain a useful reading measure for a full zodiac
-    // edition. A third column would turn Marathi forecasts into captions.
-    return width >= 120 ? 2 : 1;
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+  // This is a responsive composition, not a fixed 2-column skin.  A ledger
+  // first tries to retain one generous reading measure; when the actual frame
+  // cannot hold that, it tries two and then three columns.  The real wrapped
+  // copy decides the answer, so a resize cannot leave a technically fitting
+  // card with an unnecessarily tiny type size or a stale row structure.
+  const columnChoices = (width, count) => {
+    if (count === 1) return [1];
+    const gap = 5;
+    // Below this width a third part of a ledger row is only a caption.  Let
+    // preflight call a genuinely narrow frame OVERSET rather than pretending
+    // that a few pixels are a readable Marathi forecast.
+    const maximum = Math.max(1, Math.min(3, Math.floor((width + gap) / 113)));
+    return Array.from({ length: Math.min(count, maximum) }, (_, index) => index + 1);
   };
 
-  const composeAt = (bodyFontPx) => {
+  const composeAt = (bodyFontPx, requestedColumns) => {
     const k = kit(frame, api);
     const count = signs.length;
-    const columns = chooseColumns(k.W, k.H, count);
+    const columns = Math.max(1, Math.min(count, requestedColumns));
     const rows = Math.ceil(count / columns);
-    const headerHeight = count === 1 ? 48 : 39;
-    const top = headerHeight + 5;
-    const horizontalGap = columns === 2 ? 5 : 0;
-    const verticalGap = 4;
+    const titleFontPx = clamp(k.W / (count === 1 ? 15 : 19), count === 1 ? 11.5 : 10.5, count === 1 ? 22 : 17);
+    const descriptorFontPx = clamp(titleFontPx * 0.47, 6.5, 9.5);
+    const headerHeight = clamp(
+      titleFontPx * 1.45 + descriptorFontPx + 13,
+      count === 1 ? 45 : 37,
+      count === 1 ? 72 : 56,
+    );
+    const top = headerHeight + clamp(k.H * 0.008, 4, 7);
+    const horizontalGap = columns > 1 ? clamp(k.W * 0.018, 4, 8) : 0;
+    const verticalGap = clamp(k.H * 0.007, 3, 6);
     const panelWidth = (k.W - horizontalGap * (columns - 1)) / columns;
     const availableHeight = Math.max(1, k.H - top);
+    const rowAllowance = Math.max(1, (availableHeight - verticalGap * Math.max(0, rows - 1)) / rows);
     let hardOverset = false;
 
     const factsFor = (sign) => [
@@ -235,11 +250,24 @@ function rashiLedger(data, frame, api) {
     ].filter(Boolean).join(' · ');
 
     const specFor = (sign, lead) => {
-      const padY = lead ? 8 : 6;
-      const iconSize = Math.max(18, Math.min(lead ? 52 : 32, panelWidth * (lead ? 0.19 : 0.18)));
-      const iconWidth = iconSize + (lead ? 17 : 12);
-      const metaWidth = Math.max(47, Math.min(lead ? 82 : 64, panelWidth * (lead ? 0.26 : 0.27)));
-      const readingWidth = panelWidth - iconWidth - metaWidth - 12;
+      const stripeWidth = lead ? 4 : 2;
+      const columnGap = clamp(panelWidth * 0.04, 3.5, 7);
+      const horizontalPad = clamp(panelWidth * 0.035, 3.5, 7);
+      const iconCeiling = lead ? 64 : 42;
+      const iconFloor = Math.min(iconCeiling, Math.max(12, bodyFontPx * (lead ? 2.35 : 1.9)));
+      const iconSize = Math.max(iconFloor, Math.min(
+        iconCeiling,
+        panelWidth * (lead ? 0.22 : 0.20),
+        rowAllowance * (lead ? 0.54 : 0.44),
+      ));
+      // `imageRail` is an explicit column.  Centering against it—not against
+      // the whole row or a guessed left inset—keeps every downloaded rashi
+      // emblem horizontally centred as a panel widens or narrows.
+      const imageRailWidth = Math.max(iconSize + horizontalPad * 2, panelWidth * (lead ? 0.24 : 0.22));
+      const metaMinimum = Math.min(panelWidth * 0.30, Math.max(36, bodyFontPx * (lead ? 5.4 : 5.1)));
+      const metaMaximum = Math.max(metaMinimum, Math.min(lead ? 96 : 74, panelWidth * 0.32));
+      const metaWidth = clamp(panelWidth * (lead ? 0.28 : 0.29), metaMinimum, metaMaximum);
+      const readingWidth = panelWidth - stripeWidth - imageRailWidth - metaWidth - columnGap * 2;
       const nameFontPx = Math.max(7.5, bodyFontPx + (lead ? 3.5 : 1.5));
       const factsFontPx = Math.max(5.5, bodyFontPx - 0.5);
       const name = api.wrap(String(sign.name || ''), { width: Math.max(1, metaWidth), fontPx: nameFontPx, family: 'serif', weight: 700 });
@@ -250,12 +278,13 @@ function rashiLedger(data, frame, api) {
       const factsHeight = factLines.lines.length * api.lineHeight(factsFontPx, 'sans', 700);
       const metaHeight = nameHeight + (factLines.lines.length ? 2 + factsHeight : 0);
       const readingHeight = reading.lines.length * api.lineHeight(bodyFontPx, 'serif', 400);
+      const padY = clamp(rowAllowance * 0.08, lead ? 7 : 5, lead ? 14 : 10);
       const needed = Math.max(iconSize, metaHeight, readingHeight) + padY * 2;
       return {
-        sign, lead, padY, iconSize, iconWidth, metaWidth, readingWidth,
+        sign, lead, stripeWidth, columnGap, imageRailWidth, padY, iconSize, metaWidth, readingWidth,
         nameFontPx, factsFontPx, facts, nameHeight, factsHeight, metaHeight,
         readingHeight, needed,
-        hard: name.hardOverset || factLines.hardOverset || reading.hardOverset || readingWidth < 30,
+        hard: name.hardOverset || factLines.hardOverset || reading.hardOverset || readingWidth < 34,
       };
     };
 
@@ -285,16 +314,21 @@ function rashiLedger(data, frame, api) {
 
     // The masthead is intentionally calm: ink, an accent rule and one small
     // descriptor. The entries—not an app-like title treatment—carry the page.
+    const accentWidth = clamp(k.W * 0.018, 4, 7);
+    const titleX = accentWidth + 6;
+    const titleY = Math.max(4, (headerHeight - (titleFontPx * 1.45 + descriptorFontPx + 4)) / 2);
+    const descriptorY = titleY + titleFontPx * 1.35;
     k.bar(0, 0, k.W, headerHeight, INK);
-    k.bar(0, 0, 5, headerHeight, RED);
-    k.bar(5, headerHeight - 2, k.W - 5, 2, RED);
-    k.text('राशीभविष्य', 11, count === 1 ? 7 : 5, k.W - 18, count === 1 ? 20 : 16, {
+    k.bar(0, 0, accentWidth, headerHeight, RED);
+    k.bar(accentWidth, headerHeight - 2, k.W - accentWidth, 2, RED);
+    k.text('राशीभविष्य', titleX, titleY, k.W - titleX - 7, titleFontPx, {
       bold: true, align: 0, ink: '#fff', family: 'serif',
     });
-    k.text(count === 1 ? 'आजचे वैयक्तिक मार्गदर्शन' : 'आजचे राशिचक्र · दैनिक वाचन', 11, count === 1 ? 30 : 23, k.W - 18, 6.5, {
+    k.text(count === 1 ? 'आजचे वैयक्तिक मार्गदर्शन' : 'आजचे राशिचक्र · दैनिक वाचन', titleX, descriptorY, k.W - titleX - 7, descriptorFontPx, {
       bold: true, align: 0, ink: '#ead7d8', family: 'sans',
     });
 
+    const imageRails = [];
     specs.forEach((spec, index) => {
       const column = index % columns;
       const row = Math.floor(index / columns);
@@ -307,17 +341,22 @@ function rashiLedger(data, frame, api) {
       const imageY = vertical + (innerHeight - spec.iconSize) / 2;
       const metaY = vertical + (innerHeight - spec.metaHeight) / 2;
       const readingY = vertical + (innerHeight - spec.readingHeight) / 2;
-      const iconX = x + 6;
-      const metaX = x + spec.iconWidth;
-      const readingX = metaX + spec.metaWidth + 6;
+      const imageRailX = x + spec.stripeWidth;
+      const imageX = imageRailX + (spec.imageRailWidth - spec.iconSize) / 2;
+      const metaX = imageRailX + spec.imageRailWidth + spec.columnGap;
+      const readingX = metaX + spec.metaWidth + spec.columnGap;
       const imageFile = api.rashiArtwork?.(spec.sign);
 
       k.bar(x, y, panelWidth, height, leadGround);
-      k.bar(x, y, spec.lead ? 4 : 2, height, RED);
+      k.bar(x, y, spec.stripeWidth, height, RED);
       k.bar(x, y + height - 0.7, panelWidth, 0.7, '#d4c1c2');
-      k.bar(metaX - 4, y + 5, 0.55, Math.max(1, height - 10), '#d9c9ca');
-      k.bar(readingX - 4, y + 5, 0.55, Math.max(1, height - 10), '#e0d2d1');
-      k.image(imageFile, iconX + (spec.iconWidth - 6 - spec.iconSize) / 2, imageY, spec.iconSize, spec.iconSize);
+      k.bar(metaX - spec.columnGap / 2, y + 5, 0.55, Math.max(1, height - 10), '#d9c9ca');
+      k.bar(readingX - spec.columnGap / 2, y + 5, 0.55, Math.max(1, height - 10), '#e0d2d1');
+      k.image(imageFile, imageX, imageY, spec.iconSize, spec.iconSize);
+      imageRails.push({
+        x: k.p + imageRailX, width: spec.imageRailWidth,
+        imageX: k.p + imageX, imageWidth: spec.iconSize,
+      });
       k.text(spec.sign.name, metaX, metaY, spec.metaWidth, spec.nameFontPx, { bold: true, ink: RED });
       if (spec.facts) {
         k.text(spec.facts, metaX, metaY + spec.nameHeight + 2, spec.metaWidth, spec.factsFontPx, {
@@ -329,18 +368,32 @@ function rashiLedger(data, frame, api) {
 
     const result = k.finish({
       key: 'rashi', design: 'zodiac-ledger',
-      geometry: { composition: columns === 1 ? 'horoscope-ledger' : 'two-column-horoscope-ledger', columns, rows },
+      geometry: {
+        composition: columns === 1 ? 'horoscope-ledger' : `${columns}-column-horoscope-ledger`,
+        columns, rows, imageRails,
+      },
     });
     if (hardOverset) result.fitState = 'OVERSET';
     return result;
   };
 
-  const candidates = signs.length <= 3 ? [11, 10, 9, 8, 7, 6, 5.5] : [8.5, 8, 7.5, 7, 6.5, 6, 5.5];
+  // The upper rungs let a tall or wide desk block genuinely use the extra
+  // room. The old fixed 8.5px ceiling is why a resized ledger looked almost
+  // identical at several sizes even though its frame had changed.
+  const candidates = signs.length <= 3
+    ? [16, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5.5]
+    : [12, 11, 10, 9, 8.5, 8, 7.5, 7, 6.5, 6, 5.5];
+  // Match kit()'s actual type measure. A card with a larger frame padding
+  // must not be offered a column count that only fits in the padding it lost.
+  const framePadding = Math.max(3, Number(frame?.padding) || 3);
+  const innerWidth = Math.max(1, (Number(frame?.width) || 1) - framePadding * 2);
   let fallback = null;
   for (const fontPx of candidates) {
-    const result = composeAt(fontPx);
-    fallback = result;
-    if (result.fitState === 'FITS') return result;
+    for (const columns of columnChoices(innerWidth, signs.length)) {
+      const result = composeAt(fontPx, columns);
+      fallback = result;
+      if (result.fitState === 'FITS') return result;
+    }
   }
   return fallback;
 }

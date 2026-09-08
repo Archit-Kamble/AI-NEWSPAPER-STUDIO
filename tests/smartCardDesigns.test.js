@@ -155,6 +155,43 @@ test('Rashi ledger is a distinct, complete print-safe horoscope column', () => {
   }
 });
 
+test('Rashi ledger reflows from the real card frame and centres every zodiac emblem in its rail', () => {
+  const keys = ['mesh', 'vrishabh', 'mithun', 'kark', 'sinh', 'kanya', 'tula', 'vrishchik', 'dhanu', 'makar', 'kumbh', 'meen'];
+  const signs = keys.map((key, index) => ({
+    key, name: `राशी ${index + 1}`,
+    text: 'आज कामात यश मिळेल. आत्मविश्वासाने पुढे जा.',
+    luckyNumber: index + 1, luckyColour: 'लाल',
+  }));
+  const payload = { design: 'zodiac-ledger', signs };
+  const standard = layout.layoutSmartCard('rashi', clone(payload), { width: 307, height: 620, padding: 1 });
+  const tall = layout.layoutSmartCard('rashi', clone(payload), { width: 307, height: 920, padding: 1 });
+  const wideAndShort = layout.layoutSmartCard('rashi', clone(payload), { width: 520, height: 360, padding: 1 });
+
+  assert.equal(standard.fitState, 'FITS');
+  assert.equal(tall.fitState, 'FITS');
+  assert.equal(wideAndShort.fitState, 'FITS');
+  assert.equal(standard.geometry.columns, 2, 'the everyday block uses two readable ledger columns');
+  assert.equal(tall.geometry.columns, 1, 'extra height gives each forecast its full-width reading measure');
+  assert.equal(wideAndShort.geometry.columns, 3, 'a wide but short block reflows into more rows, rather than clipping');
+
+  const bodyFont = (result) => result.primitives.find((item) => item.kind === 'text' && item.text.join(' ').includes('आज कामात'))?.fontPx;
+  assert.ok(bodyFont(tall) > bodyFont(standard), 'the taller frame earns larger actual reading type');
+
+  for (const result of [standard, tall, wideAndShort]) {
+    const images = result.primitives.filter((item) => item.kind === 'image');
+    const rails = result.geometry.imageRails;
+    assert.equal(images.length, signs.length);
+    assert.equal(rails.length, signs.length);
+    rails.forEach((rail, index) => {
+      const image = images[index];
+      assert.ok(Math.abs((image.x + image.width / 2) - (rail.x + rail.width / 2)) < 0.01,
+        `zodiac image ${index + 1} is centred in its own image rail`);
+      assert.equal(image.x, rail.imageX);
+      assert.equal(image.width, rail.imageWidth);
+    });
+  }
+});
+
 const standingSamples = {
   suvichar: { text: 'प्रयत्न हीच यशाची किल्ली आहे; प्रत्येक दिवस नवी संधी घेऊन येतो.', attribution: 'संपादकीय' },
   panchang: { items: [{ label: 'सूर्योदय', text: '०६:२१' }, { label: 'सूर्यास्त', text: '१८:४२' }, { label: 'दिनमान', text: '१२ तास २१ मिनिटे' }, { label: 'राहुकाळ', text: '१०:३० ते १२:००' }, { label: 'तिथी', text: 'शुक्ल पक्ष पंचमी' }, { label: 'शके', text: '१९४८' }] },

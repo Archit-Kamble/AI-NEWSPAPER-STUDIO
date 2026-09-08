@@ -22,6 +22,7 @@ const CATALOGUE = Object.freeze({
   rashi: Object.freeze([
     { key: 'classic', label: 'Traditional राशिभविष्य', detail: 'The established zodiac grid' },
     { key: 'zodiac-capsules', label: 'Zodiac capsules', detail: 'Each sign becomes a distinct reading module' },
+    { key: 'zodiac-ledger', label: 'Rashi ledger', detail: 'A ruled horoscope column with a lead reading' },
   ]),
   havaman: Object.freeze([
     { key: 'classic', label: 'Forecast', detail: 'The established sourced weather card' },

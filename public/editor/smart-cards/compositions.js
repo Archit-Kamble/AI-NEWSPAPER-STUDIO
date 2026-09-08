@@ -95,6 +95,7 @@ function dinvishesh(design,data,frame,api){
 }
 
 function rashi(design, data, frame, api) {
+  if (design === 'zodiac-ledger') return rashiLedger(data, frame, api);
   if (design !== 'zodiac-capsules') return null;
   const signs = (data.signs || []).filter((sign) => sign?.name).slice(0, 12);
   if (!signs.length) return null;
@@ -187,6 +188,157 @@ function rashi(design, data, frame, api) {
   let fallback = null;
   for (const candidate of preferred) {
     const result = composeAt(candidate);
+    fallback = result;
+    if (result.fitState === 'FITS') return result;
+  }
+  return fallback;
+}
+
+/**
+ * A second, deliberately unlike Rashi-bhavishya composition.
+ *
+ * The capsule design is a collection of centred readings. This one is a
+ * newspaper horoscope ledger: an ink masthead, ruled horizontal entries and
+ * a wide forecast measure. It is a useful distinction for a page designer,
+ * not another border treatment. The same neutral primitives go to canvas and
+ * every print writer.
+ */
+function rashiLedger(data, frame, api) {
+  const signs = (data.signs || []).filter((sign) => sign?.name).slice(0, 12);
+  if (!signs.length) return null;
+
+  const chooseColumns = (width, height, count) => {
+    if (count === 1) return 1;
+    if (count <= 4 && height >= 220) return 1;
+    if (count <= 6 && height >= 390) return 1;
+    // Two ledger columns retain a useful reading measure for a full zodiac
+    // edition. A third column would turn Marathi forecasts into captions.
+    return width >= 120 ? 2 : 1;
+  };
+
+  const composeAt = (bodyFontPx) => {
+    const k = kit(frame, api);
+    const count = signs.length;
+    const columns = chooseColumns(k.W, k.H, count);
+    const rows = Math.ceil(count / columns);
+    const headerHeight = count === 1 ? 48 : 39;
+    const top = headerHeight + 5;
+    const horizontalGap = columns === 2 ? 5 : 0;
+    const verticalGap = 4;
+    const panelWidth = (k.W - horizontalGap * (columns - 1)) / columns;
+    const availableHeight = Math.max(1, k.H - top);
+    let hardOverset = false;
+
+    const factsFor = (sign) => [
+      sign.luckyNumber == null || sign.luckyNumber === '' ? '' : `शुभ अंक ${sign.luckyNumber}`,
+      sign.luckyColour ? `शुभ रंग ${sign.luckyColour}` : '',
+    ].filter(Boolean).join(' · ');
+
+    const specFor = (sign, lead) => {
+      const padY = lead ? 8 : 6;
+      const iconSize = Math.max(18, Math.min(lead ? 52 : 32, panelWidth * (lead ? 0.19 : 0.18)));
+      const iconWidth = iconSize + (lead ? 17 : 12);
+      const metaWidth = Math.max(47, Math.min(lead ? 82 : 64, panelWidth * (lead ? 0.26 : 0.27)));
+      const readingWidth = panelWidth - iconWidth - metaWidth - 12;
+      const nameFontPx = Math.max(7.5, bodyFontPx + (lead ? 3.5 : 1.5));
+      const factsFontPx = Math.max(5.5, bodyFontPx - 0.5);
+      const name = api.wrap(String(sign.name || ''), { width: Math.max(1, metaWidth), fontPx: nameFontPx, family: 'serif', weight: 700 });
+      const facts = factsFor(sign);
+      const factLines = facts ? api.wrap(facts, { width: Math.max(1, metaWidth), fontPx: factsFontPx, family: 'sans', weight: 700 }) : { lines: [], hardOverset: false };
+      const reading = api.wrap(String(sign.text || ''), { width: Math.max(1, readingWidth), fontPx: bodyFontPx, family: 'serif', weight: 400 });
+      const nameHeight = name.lines.length * api.lineHeight(nameFontPx, 'serif', 700);
+      const factsHeight = factLines.lines.length * api.lineHeight(factsFontPx, 'sans', 700);
+      const metaHeight = nameHeight + (factLines.lines.length ? 2 + factsHeight : 0);
+      const readingHeight = reading.lines.length * api.lineHeight(bodyFontPx, 'serif', 400);
+      const needed = Math.max(iconSize, metaHeight, readingHeight) + padY * 2;
+      return {
+        sign, lead, padY, iconSize, iconWidth, metaWidth, readingWidth,
+        nameFontPx, factsFontPx, facts, nameHeight, factsHeight, metaHeight,
+        readingHeight, needed,
+        hard: name.hardOverset || factLines.hardOverset || reading.hardOverset || readingWidth < 30,
+      };
+    };
+
+    // The first horoscope becomes a lead only in a true one-column column.
+    // In two columns all entries remain equal ledger rows, avoiding an
+    // asymmetrical grid that would leave a dangerous narrow final row.
+    const specs = signs.map((sign, index) => specFor(sign, columns === 1 && index === 0));
+    hardOverset ||= specs.some((spec) => spec.hard);
+
+    let rowNeeds;
+    if (columns === 1) {
+      rowNeeds = specs.map((spec) => spec.needed);
+    } else {
+      rowNeeds = Array.from({ length: rows }, (_, row) => Math.max(
+        ...specs.filter((_, index) => Math.floor(index / columns) === row).map((spec) => spec.needed),
+      ));
+    }
+    const requiredHeight = rowNeeds.reduce((sum, value) => sum + value, 0) + verticalGap * Math.max(0, rows - 1);
+    hardOverset ||= requiredHeight > availableHeight + 0.1;
+    const remaining = Math.max(0, availableHeight - requiredHeight);
+    const weights = rowNeeds.map((need, index) => columns === 1 && index === 0 ? 1.35 : 1);
+    const totalWeight = weights.reduce((sum, value) => sum + value, 0) || 1;
+    const rowHeights = rowNeeds.map((need, index) => need + remaining * weights[index] / totalWeight);
+    const rowY = [];
+    let cursor = top;
+    rowHeights.forEach((height, index) => { rowY[index] = cursor; cursor += height + (index < rowHeights.length - 1 ? verticalGap : 0); });
+
+    // The masthead is intentionally calm: ink, an accent rule and one small
+    // descriptor. The entries—not an app-like title treatment—carry the page.
+    k.bar(0, 0, k.W, headerHeight, INK);
+    k.bar(0, 0, 5, headerHeight, RED);
+    k.bar(5, headerHeight - 2, k.W - 5, 2, RED);
+    k.text('राशीभविष्य', 11, count === 1 ? 7 : 5, k.W - 18, count === 1 ? 20 : 16, {
+      bold: true, align: 0, ink: '#fff', family: 'serif',
+    });
+    k.text(count === 1 ? 'आजचे वैयक्तिक मार्गदर्शन' : 'आजचे राशिचक्र · दैनिक वाचन', 11, count === 1 ? 30 : 23, k.W - 18, 6.5, {
+      bold: true, align: 0, ink: '#ead7d8', family: 'sans',
+    });
+
+    specs.forEach((spec, index) => {
+      const column = index % columns;
+      const row = Math.floor(index / columns);
+      const x = column * (panelWidth + horizontalGap);
+      const y = rowY[row];
+      const height = rowHeights[row];
+      const leadGround = spec.lead ? '#f2e7e2' : (index % 2 ? '#fbf7f3' : '#f8eeee');
+      const innerHeight = Math.max(spec.iconSize, spec.metaHeight, spec.readingHeight);
+      const vertical = y + Math.max(spec.padY, (height - innerHeight) / 2);
+      const imageY = vertical + (innerHeight - spec.iconSize) / 2;
+      const metaY = vertical + (innerHeight - spec.metaHeight) / 2;
+      const readingY = vertical + (innerHeight - spec.readingHeight) / 2;
+      const iconX = x + 6;
+      const metaX = x + spec.iconWidth;
+      const readingX = metaX + spec.metaWidth + 6;
+      const imageFile = api.rashiArtwork?.(spec.sign);
+
+      k.bar(x, y, panelWidth, height, leadGround);
+      k.bar(x, y, spec.lead ? 4 : 2, height, RED);
+      k.bar(x, y + height - 0.7, panelWidth, 0.7, '#d4c1c2');
+      k.bar(metaX - 4, y + 5, 0.55, Math.max(1, height - 10), '#d9c9ca');
+      k.bar(readingX - 4, y + 5, 0.55, Math.max(1, height - 10), '#e0d2d1');
+      k.image(imageFile, iconX + (spec.iconWidth - 6 - spec.iconSize) / 2, imageY, spec.iconSize, spec.iconSize);
+      k.text(spec.sign.name, metaX, metaY, spec.metaWidth, spec.nameFontPx, { bold: true, ink: RED });
+      if (spec.facts) {
+        k.text(spec.facts, metaX, metaY + spec.nameHeight + 2, spec.metaWidth, spec.factsFontPx, {
+          bold: true, family: 'sans', ink: '#624d50',
+        });
+      }
+      k.text(spec.sign.text || '', readingX, readingY, spec.readingWidth, bodyFontPx, { family: 'serif' });
+    });
+
+    const result = k.finish({
+      key: 'rashi', design: 'zodiac-ledger',
+      geometry: { composition: columns === 1 ? 'horoscope-ledger' : 'two-column-horoscope-ledger', columns, rows },
+    });
+    if (hardOverset) result.fitState = 'OVERSET';
+    return result;
+  };
+
+  const candidates = signs.length <= 3 ? [11, 10, 9, 8, 7, 6, 5.5] : [8.5, 8, 7.5, 7, 6.5, 6, 5.5];
+  let fallback = null;
+  for (const fontPx of candidates) {
+    const result = composeAt(fontPx);
     fallback = result;
     if (result.fitState === 'FITS') return result;
   }

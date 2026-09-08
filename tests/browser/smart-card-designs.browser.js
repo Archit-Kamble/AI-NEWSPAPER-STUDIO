@@ -75,7 +75,7 @@ async function assertVisibleTextIsContained(page, selector) {
       document.getElementById('cardDesignHost').innerHTML=cardDesignPicker(view,frame);
       bindSmartCard(null,(patch,source)=>{updateDraft(patch,source);refreshCardDesignPicker(section,getDraft());},message=>document.getElementById('notice').textContent=message);
       document.getElementById('gallery').innerHTML=designsForCard('market').map(design=>'<div class="sample"><h3>'+design.label+'</h3>'+smartCardMarkup('market',{...data,design:design.key},frame)+'</div>').join('');
-      document.getElementById('standing').innerHTML='<div class="standing-card"><h2>आजचा सुविचार</h2>'+smartCardMarkup('suvichar',{...quote,design:"quote-led"},{width:260,height:300,padding:1})+'</div><div class="standing-card"><h2>आजचे पंचांग</h2>'+smartCardMarkup('panchang',{...panchang,design:"calendar-led"},{width:260,height:300,padding:1})+'</div><div class="standing-card"><h2>आजचे राशिभविष्य</h2>'+smartCardMarkup('rashi',{...rashi,design:"zodiac-capsules"},{width:260,height:300,padding:1})+'</div>';
+      document.getElementById('standing').innerHTML='<div class="standing-card"><h2>आजचा सुविचार</h2>'+smartCardMarkup('suvichar',{...quote,design:"quote-led"},{width:260,height:300,padding:1})+'</div><div class="standing-card"><h2>आजचे पंचांग</h2>'+smartCardMarkup('panchang',{...panchang,design:"calendar-led"},{width:260,height:300,padding:1})+'</div><div class="standing-card"><h2>आजचे राशिभविष्य</h2>'+smartCardMarkup('rashi',{...rashi,design:"zodiac-ledger"},{width:260,height:300,padding:1})+'</div>';
       window.designProof={getDraft,section,data}; document.documentElement.dataset.ready='true';
     </script></body></html>`));
   app.use(express.static(path.join(__dirname, '../../public')));
@@ -92,8 +92,8 @@ async function assertVisibleTextIsContained(page, selector) {
       'the chart bulletin, and only the chart bulletin, renders the sourced market trend');
     assert.equal(await page.locator('#standing .smart-card[data-design="quote-led"]').count(), 1, 'full quote is present beside the panchang');
     assert.equal(await page.locator('#standing .smart-card[data-design="calendar-led"]').count(), 1, 'full panchang is present beside the quote');
-    assert.equal(await page.locator('#standing .smart-card[data-design="zodiac-capsules"] img').count(), 3,
-      'the Rashi feature uses the three real zodiac artworks, not generic icons');
+    assert.equal(await page.locator('#standing .smart-card[data-design="zodiac-ledger"] img').count(), 3,
+      'the Rashi ledger uses the three real zodiac artworks, not generic icons');
     // Classic is intentionally the pre-existing renderer and is covered by its
     // own regression net. This check guards the NEW opt-in compositions only.
     await assertVisibleTextIsContained(page, '#gallery > .sample > .smart-card[data-design]:not([data-design="classic"]), #standing .smart-card[data-design]:not([data-design="classic"])');

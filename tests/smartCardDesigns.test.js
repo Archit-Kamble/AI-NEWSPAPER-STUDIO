@@ -85,6 +85,76 @@ test('picker is an accessible, interactive market composition chooser', () => {
   assert.equal(panel.cardDesignPicker({ smartCardKey: 'tender', smartCardData: {} }, frame), '');
 });
 
+test('Rashi ledger is a distinct, complete print-safe horoscope column', () => {
+  const allSigns = [
+    ['mesh', 'मेष', 'आज कामात यश मिळेल. आत्मविश्वासाने पुढे जा.', 9, 'लाल'],
+    ['vrishabh', 'वृषभ', 'आर्थिक निर्णयात विचारपूर्वक पाऊल टाका.', 6, 'पांढरा'],
+    ['mithun', 'मिथुन', 'संवादातून नवे मार्ग सापडतील.', 5, 'हिरवा'],
+    ['kark', 'कर्क', 'घरातील वातावरण आनंदी राहील.', 2, 'चंदेरी'],
+    ['sinh', 'सिंह', 'नवीन संधीचा योग्य लाभ घ्या.', 1, 'सोनेरी'],
+    ['kanya', 'कन्या', 'कामाचे नियोजन तुम्हाला लाभदायक ठरेल.', 3, 'हिरवा'],
+    ['tula', 'तुळ', 'भागीदारीत समतोल ठेवा.', 7, 'निळा'],
+    ['vrishchik', 'वृश्चिक', 'सावध संवादाने प्रश्न सुटतील.', 4, 'लाल'],
+    ['dhanu', 'धनु', 'प्रवासाचा योग अनुकूल आहे.', 8, 'पिवळा'],
+    ['makar', 'मकर', 'शिस्तीत केलेले प्रयत्न यश देतील.', 5, 'करडा'],
+    ['kumbh', 'कुंभ', 'नव्या कल्पनांना आकार द्या.', 6, 'निळा'],
+    ['meen', 'मीन', 'मन प्रसन्न ठेवणारी बातमी मिळेल.', 9, 'पांढरा'],
+  ].map(([key, name, text, luckyNumber, luckyColour]) => ({ key, name, text, luckyNumber, luckyColour }));
+
+  assert.deepEqual(designs.designsForCard('rashi').map(({ key }) => key),
+    ['classic', 'zodiac-capsules', 'zodiac-ledger']);
+
+  const rashiPicker = panel.cardDesignPicker({
+    smartCardKey: 'rashi', smartCardData: { signs: clone(allSigns.slice(0, 3)), design: 'zodiac-ledger' },
+  }, { width: 260, height: 300, padding: 1 });
+  assert.equal((rashiPicker.match(/data-card-design=/g) || []).length, 3, 'the desk can choose all three Rashi compositions');
+  assert.ok(rashiPicker.includes('data-card-design="zodiac-ledger" aria-pressed="true"'));
+
+  const classicSource = { signs: clone(allSigns.slice(0, 1)) };
+  const classicFrame = { width: 260, height: 300, padding: 1 };
+  assert.deepEqual(
+    layout.layoutSmartCard('rashi', classicSource, classicFrame),
+    layout.layoutSmartCard('rashi', { ...classicSource, design: 'classic' }, classicFrame),
+    'existing Rashi cards keep their exact classic result',
+  );
+  assert.deepEqual(
+    layout.layoutSmartCard('rashi', classicSource, classicFrame),
+    layout.layoutSmartCard('rashi', { ...classicSource, design: 'not-a-design' }, classicFrame),
+    'an invalid saved design safely falls back to classic',
+  );
+
+  for (const count of [1, 3, 12]) {
+    const source = { signs: clone(allSigns.slice(0, count)) };
+    const rashiFrame = count === 12 ? { width: 307, height: 620, padding: 1 } : { width: 260, height: 300, padding: 1 };
+    const ledger = layout.layoutSmartCard('rashi', { ...clone(source), design: 'zodiac-ledger' }, rashiFrame);
+    const capsules = layout.layoutSmartCard('rashi', { ...clone(source), design: 'zodiac-capsules' }, rashiFrame);
+    const press = smartCardLines('rashi', { ...clone(source), design: 'zodiac-ledger' }, rashiFrame, layout);
+
+    assert.deepEqual(source.signs, allSigns.slice(0, count), 'the card never mutates sign data');
+    assert.equal(ledger.fitState, 'FITS', `${count} ordinary readings fit their intended ledger frame`);
+    assert.equal(ledger.design, 'zodiac-ledger');
+    assert.match(ledger.geometry.composition, /horoscope-ledger/);
+    assert.notDeepEqual(semanticGeometry(ledger.primitives), semanticGeometry(capsules.primitives),
+      'ledger is a horizontal reading column, not another capsule grid');
+    assert.equal(ledger.primitives.filter((item) => item.kind === 'image').length, count,
+      'each selected sign keeps its downloaded artwork');
+
+    for (const sign of source.signs) {
+      assert.ok(ledger.primitives.some((item) => item.kind === 'text' && item.text.includes(sign.name)), sign.name);
+      assert.ok(ledger.primitives.some((item) => item.kind === 'text' && item.text.join(' ') === sign.text), sign.text);
+      assert.ok(ledger.primitives.some((item) => item.kind === 'text' && item.text.join(' ').includes(String(sign.luckyNumber))), 'lucky number retained');
+      assert.ok(ledger.primitives.some((item) => item.kind === 'text' && item.text.join(' ').includes(sign.luckyColour)), 'lucky colour retained');
+    }
+
+    for (const primitive of ledger.primitives) {
+      assert.ok(primitive.x >= 0 && primitive.y >= 0);
+      assert.ok(primitive.x + primitive.width <= rashiFrame.width + 0.1);
+      assert.ok(primitive.y + primitive.height <= rashiFrame.height + 0.1);
+    }
+    assert.ok(press.length > 0, 'the resolved ledger has a press representation');
+  }
+});
+
 const standingSamples = {
   suvichar: { text: 'प्रयत्न हीच यशाची किल्ली आहे; प्रत्येक दिवस नवी संधी घेऊन येतो.', attribution: 'संपादकीय' },
   panchang: { items: [{ label: 'सूर्योदय', text: '०६:२१' }, { label: 'सूर्यास्त', text: '१८:४२' }, { label: 'दिनमान', text: '१२ तास २१ मिनिटे' }, { label: 'राहुकाळ', text: '१०:३० ते १२:००' }, { label: 'तिथी', text: 'शुक्ल पक्ष पंचमी' }, { label: 'शके', text: '१९४८' }] },

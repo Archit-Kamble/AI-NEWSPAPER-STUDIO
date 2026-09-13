@@ -79,6 +79,22 @@
       files: { 400: `${DIR}Khand-Regular.ttf`, 700: `${DIR}Khand-Bold.ttf` },
     },
     {
+      // THE SAME CONDENSED CUT, AT ITS BOOK WEIGHT - for headlines. Headlines
+      // are set at 700 by the compositor, and a printed Marathi daily sets many
+      // of its headlines light: measured on the reference broadsheet, a banner
+      // or a second-rank head has a stroke of 0.06-0.08 em against the lead's
+      // 0.12. Khand Bold measures 0.115 and Khand Regular 0.055, so this key
+      // maps BOTH weights to the regular cut, the way a one-weight face already
+      // maps its 700 to its 400 - a light headline without a weight column.
+      key: 'khand-light',
+      label: 'Khand Light',
+      short: 'Khand L',
+      note: 'Khand at its book weight, for a light display head.',
+      role: 'display',
+      css: "'Khand Light', 'Khand', 'Sahas Sans', Arial, sans-serif",
+      files: { 400: `${DIR}Khand-Regular.ttf`, 700: `${DIR}Khand-Regular.ttf` },
+    },
+    {
       key: 'rozha',
       label: 'Rozha One',
       short: 'Rozha',

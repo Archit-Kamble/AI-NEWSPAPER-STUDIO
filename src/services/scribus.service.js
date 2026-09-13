@@ -872,6 +872,9 @@ function displayBandFrames(composition, section, accent, richText, render, inks,
       if ((reversed && key === 'headline') || (key === 'kicker' && section.headline_style === 'kicker-chip-rule')) {
         runs.forEach((run) => { if (!run.colour) run.colour = 'White'; });
       }
+      if (key === 'kicker' && section.headline_style === 'kicker-label') {
+        runs.forEach((run) => { if (!run.colour) run.colour = colourFor(section.accent_color || ACCENT_HEX); });
+      }
       // `line.measure` is the band's own gap; `line.width` is what was
       // actually drawn there. A one-word headline wider than the whole
       // measure is set anyway (compose.js will not invent a hyphen inside a

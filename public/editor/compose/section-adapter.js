@@ -23,7 +23,7 @@ import { blockExpectsCopy } from '../layout/block-kinds.js';
 // Which headline treatments lay a coloured panel down - the same lookup
 // render.js and print-model.js use to decide whether to draw one, reached
 // here to decide whether the block needs to give that panel room.
-import { groundedBands } from '../layout/inks.js';
+import { groundedBands, headlineTreatment } from '../layout/inks.js';
 // A side-effect module shared with Scribus, so it installs onto globalThis
 // rather than exporting - the canvas and the print path must use one caption
 // geometry, and that predates this engine.
@@ -522,6 +522,9 @@ export function composeSection(section = {}, view = {}) {
     // the headline was the thing selected. Left empty when the desk has never
     // said - compose.js then sets them the paper's own way.
     headlineAlign: pick(section, view, 'headlineAlign', 'headline_align', '') || '',
+    // A treatment may set the kicker larger than the body (a separator chip, a
+    // section label). Absent is the compositor's own 1.05, byte for byte.
+    kickerScale: Number(headlineTreatment(headlineStyle)?.kickerScale) || null,
     subheadingAlign: pick(section, view, 'subheadingAlign', 'subheading_align', '') || '',
     // The persisted paragraph gap (schema.sql: paragraph_spacing_px, default
     // 8) - previously read by nothing in this engine, the same class of gap

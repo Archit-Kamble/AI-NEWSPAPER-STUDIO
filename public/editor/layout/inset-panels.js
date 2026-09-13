@@ -255,6 +255,11 @@
     };
   }
 
+  const sizeOf = (value) => {
+    const n = Number(value);
+    return Number.isFinite(n) && n >= 4 && n <= 40 ? Math.round(n * 10) / 10 : null;
+  };
+
   /** One stored panel, sanitised. Returns null for anything unusable. */
   function panelOf(raw, frame = {}) {
     if (!raw || typeof raw !== 'object') return null;
@@ -305,6 +310,12 @@
       width, height,
       standOffPx: Math.max(0, Number(raw.standOffPx ?? DEFAULT_STAND_OFF_PX)),
       tint, marker, title, lines, card,
+      // A panel MAY state its own type sizes, in block pixels, where the page it
+      // was measured from sets a sidebar's heading larger than the default
+      // ratio of the body. Absent means the ratio, as before; bounded to what
+      // the size ladder allows, so stored data can never ask for poster type.
+      ...(sizeOf(raw.titlePx) ? { titlePx: sizeOf(raw.titlePx) } : {}),
+      ...(sizeOf(raw.linePx) ? { linePx: sizeOf(raw.linePx) } : {}),
     };
   }
 
@@ -409,8 +420,8 @@
         : panel.kind === 'quote' ? 1.5
           : panel.kind === 'crosshead' ? 1.3 : 1.15;
     const lineScale = panel.kind === 'quote' || panel.kind === 'reaction' ? 1.15 : 0.95;
-    const titlePx = Math.max(5, bodyFontPx * titleScale);
-    const linePx = Math.max(4.5, bodyFontPx * lineScale);
+    const titlePx = panel.titlePx || Math.max(5, bodyFontPx * titleScale);
+    const linePx = panel.linePx || Math.max(4.5, bodyFontPx * lineScale);
     const lineHeight = 1.45;
     const out = [];
     let y = inset;

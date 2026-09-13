@@ -833,6 +833,10 @@ function panelsFromDom(section, view) {
       // so without this line panelOf() would reject it as empty and the chart
       // would vanish the moment a desk touched any OTHER panel on the block.
       card: was?.card || null,
+      // Stated sizes are not on the form either; dropping them here would reset
+      // a measured sidebar to the default ratio whenever any panel is edited.
+      ...(was?.titlePx ? { titlePx: was.titlePx } : {}),
+      ...(was?.linePx ? { linePx: was.linePx } : {}),
     };
   });
 }

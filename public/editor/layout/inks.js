@@ -245,7 +245,11 @@ export const HEADLINE_STYLES = [
   // type. The rule takes the block's RULE ink (border_ink), the chip its accent,
   // so the two can be the two different inks the reference uses. The kicker is
   // centred by the compositor like any centred display flow; nothing moves.
-  { key: 'kicker-chip-rule', label: 'Chip on a rule (separator)', grounds: [], kickerChip: true },
+  { key: 'kicker-chip-rule', label: 'Chip on a rule (separator)', grounds: [], kickerChip: true, kickerScale: 1.45 },
+  // A SECTION LABEL over a column of shorts - the large accent-coloured word
+  // the reference sets above its rail ("quick update", "shorts"). The kicker is
+  // set at 2.4x the body and in the accent; nothing is drawn behind it.
+  { key: 'kicker-label', label: 'Large section label', grounds: [], kickerScale: 2.4, kickerAccent: true },
   // More display hierarchy without stealing one pixel from the story. The
   // rule variants differ in length, position and rhythm, but they are all
   // painted into gaps the compositor has already proved are empty.

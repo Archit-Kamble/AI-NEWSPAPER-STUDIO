@@ -436,44 +436,23 @@ const templates = {
   'broadsheet-front': {
     key: 'broadsheet-front',
     name: 'Broadsheet front (reference)',
-    description: 'A banner package, a left service rail, a heavy lead, a right-hand pair, two reports and a feature strip over the foot.',
-    sections: (() => {
-      const [banner] = rows(MASTHEAD_BOTTOM, [152]);
-      const bandTop = banner.end + GAP;
-      const [lead, reports] = rows(bandTop, [360, 120]);
-      const [rail, shorts] = rows(bandTop, [160, lead.end - (bandTop + 160 + GAP)]);
-      const [rightTop] = rows(bandTop, [224]);
-      const rightLowTop = rightTop.end + GAP;
-      const footTop = reports.end + GAP;
-      const foot = FRONT_REGIONS.content.bottom - footTop;
-      return [
-        block('banner-package', 0, 12, banner.y, banner.height,
-          { story: 'LEAD', priority: 4 }),
-        block('banner-advert', 12, 4, banner.y, banner.height,
-          { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
-
-        block('service-rail', 0, 2, rail.y, rail.height,
-          { type: 'briefs', story: 'BRIEF', priority: 2 }),
-        block('shorts', 0, 2, shorts.y, shorts.height,
-          { type: 'briefs', story: 'BRIEF', priority: 2 }),
-        block('lead', 2, 10, lead.y, lead.height,
-          { story: 'LEAD', priority: 5 }),
-        block('right-top', 12, 4, rightTop.y, rightTop.height,
-          { story: 'SECONDARY', priority: 4 }),
-        block('right-low', 12, 4, rightLowTop, reports.end - rightLowTop,
-          { story: 'SECONDARY', priority: 3 }),
-
-        block('report-one', 0, 7, reports.y, reports.height,
-          { story: 'STANDARD', priority: 3 }),
-        block('report-two', 7, 5, reports.y, reports.height,
-          { story: 'STANDARD', priority: 3 }),
-
-        block('feature-strip', 0, 12, footTop, foot,
-          { story: 'ANALYSIS', priority: 3, headline: 'kicker-tab-rule' }),
-        block('foot-advert', 12, 4, footTop, foot,
-          { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
-      ];
-    })(),
+    grid: REFERENCE_GRID,
+    description: 'A five-column opening package with the corner advert, a market rail and news shorts, a four-column picture lead, a right-hand pair, two reports, a separator-led feature with its chart, and a display advert.',
+    // MEASURED off the reference scan onto its own seven-column grid, tops on
+    // the baseline and closed to the one 8 px gap. Generated, so literals.
+    sections: [
+      frame('package', 0, 5, 144, 152, { story: 'LEAD', priority: 4 }),
+      frame('corner-advert', 5, 2, 144, 152, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
+      frame('rail-markets', 0, 1, 304, 160, { type: 'briefs', story: 'BRIEF', priority: 2 }),
+      frame('rail-shorts', 0, 1, 472, 216, { type: 'briefs', story: 'BRIEF', priority: 2 }),
+      frame('lead', 1, 4, 304, 384, { story: 'LEAD', priority: 5 }),
+      frame('right-top', 5, 2, 304, 224, { story: 'SECONDARY', priority: 4 }),
+      frame('right-foot', 5, 2, 536, 272, { story: 'SECONDARY', priority: 3 }),
+      frame('report-left', 0, 3, 696, 112, { story: 'STANDARD', priority: 3 }),
+      frame('report-right', 3, 2, 696, 112, { story: 'STANDARD', priority: 3 }),
+      frame('feature-strip', 0, 5, 816, 192, { story: 'ANALYSIS', priority: 3 }),
+      frame('foot-advert', 5, 2, 816, 192, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
+    ],
   },
 
   'broadsheet-sport': {

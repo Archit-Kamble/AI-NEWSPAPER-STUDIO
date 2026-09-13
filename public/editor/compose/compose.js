@@ -2882,7 +2882,7 @@ export function composeBlock(input = {}) {
     : { text: String(value || ''), marks: null });
 
   const flows = [
-    { key: 'kicker', ...flowOf(input.kicker), px: Math.round(bodyPx * 1.05), min: MIN_LEGIBLE_PX, maxLines: 2, locked: true, align: headlineAlign, ...displayTypography('kicker', input.displayFamily) },
+    { key: 'kicker', ...flowOf(input.kicker), px: Math.round(bodyPx * (Number(input.kickerScale) > 0 ? Number(input.kickerScale) : 1.05)), min: MIN_LEGIBLE_PX, maxLines: 2, locked: true, align: headlineAlign, ...displayTypography('kicker', input.displayFamily) },
     { key: 'headline', ...flowOf(input.headline), px: num(input.headlineFontPx, 34), min: Math.max(MIN_LEGIBLE_PX, bodyPx * 1.1), maxLines: num(input.headlineMaxLines, 4), preferLines: HEADLINE_MAX_LINES, locked: Boolean(input.headlineLocked), align: headlineAlign, ...displayTypography('headline', input.displayFamily) },
     { key: 'deck', ...flowOf(input.subheading), px: num(input.subheadingFontPx, 20), min: Math.max(MIN_LEGIBLE_PX, bodyPx), maxLines: num(input.deckMaxLines, 3), preferLines: 1, locked: Boolean(input.subheadingLocked), align: deckAlign, ...displayTypography('deck', input.displayFamily) },
   ].filter((flow) => flow.text.trim());

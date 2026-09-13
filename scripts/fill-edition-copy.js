@@ -468,6 +468,9 @@ function bodyFor(compose, section, images, view, seed) {
     // only its story is written to fit. That is how a page is compared against
     // a reference - its own headlines set, its column filled to the foot.
     const keep = KEEP_DISPLAY && String(section.headline || '').trim();
+    // A block whose copy is already set (a market table typed for comparison)
+    // is left exactly as it is.
+    if (keep && String(section.body || '').trim()) { skipped += 1; continue; }
     const subheading = keep ? (section.subheading || '') : (section.height_px > 240 ? pick(DECKS, editionSeed + index * 3) : '');
     const location = keep ? (section.location || '') : pick(LOCATIONS, editionSeed + index);
     const reporter = keep ? (section.reporter_name || '') : pick(REPORTERS, editionSeed + index * 5);

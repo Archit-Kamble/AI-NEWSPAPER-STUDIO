@@ -74,46 +74,58 @@ const ADS = {
 };
 
 const RECIPES = {
+  // MEASURED off the reference scan: sizes from each head's shirorekha, body at
+  // the reference's own em and pitch, its colours, its picture and panel boxes.
   'broadsheet-front': {
-    'banner-package': {
-      style: { displayFamily: 'mukta', headlineFontPx: 28, headlineLocked: true, bodyFontPx: 7, columnCount: 3 },
-      panels: [{ kind: 'sidebar', marker: 'number', x: 334, y: 34, width: 130, height: 118, title: PLACEHOLDER, lines: points(3) }],
-      pictures: [{ file: 'person1.jpg', x: 267, y: 34, width: 61, height: 118 }],
+    'package': {
+      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 19.0, headlineLocked: true, bodyFontPx: 5.8, lineHeight: 1.328, columnCount: 5, textAlign: 'justify' },
+      pictures: [{ file: 'reference-lokmat/front-package.jpg', x: 269, y: 38, width: 76, height: 114 }],
+      panels: [{ kind: 'sidebar', x: 180, y: 37, width: 82, height: 115, titlePx: 8.6, linePx: 5.8, title: PLACEHOLDER, lines: points(6) }, { kind: 'sidebar', marker: 'number', x: 354, y: 38, width: 86, height: 114, titlePx: 8.6, linePx: 5.8, title: PLACEHOLDER, lines: points(3) }],
     },
-    'banner-advert': ADS.gold,
-    'service-rail': { style: rail(13, { borderStyle: 'rule' }) },
-    shorts: {
-      style: rail(12, { headlineInk: ORANGE }),
-      pictures: [{ file: 'scene2.jpg', x: 0, y: 24, width: 72, height: 86 }],
+    'corner-advert': ADS.gold,
+    'rail-markets': {
+      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 8.5, headlineLocked: true, bodyFontPx: 5.4, lineHeight: 1.333, columnCount: 1, textAlign: 'justify' },
+      pictures: [],
+      panels: [],
     },
-    lead: {
-      style: lead(35, 4),
-      panels: [
-        { kind: 'sidebar', marker: 'none', tint: CREAM, x: 97, y: 218, width: 93, height: 117, title: PLACEHOLDER, lines: points(2) },
-        { kind: 'sidebar', marker: 'number', x: 196, y: 218, width: 77, height: 142, title: PLACEHOLDER, lines: points(3) },
-      ],
-      pictures: [{ file: 'crowd1.jpg', x: 73, y: 107, width: 300, height: 58 }],
+    'rail-shorts': {
+      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 8.0, headlineLocked: true, bodyFontPx: 5.4, lineHeight: 1.375, columnCount: 1, textAlign: 'justify', headlineStyle: 'kicker-label', accentColor: '#fb9f0b' },
+      fixtureKicker: 'शॉर्ट्स',
+      pictures: [{ file: 'reference-lokmat/front-shorts.jpg', x: 0, y: 38, width: 81, height: 93 }],
+      panels: [],
+    },
+    'lead': {
+      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 26.5, headlineLocked: true, bodyFontPx: 5.8, lineHeight: 1.328, columnCount: 4, textAlign: 'justify', subheadingFontPx: 11.5, subheadingLocked: true },
+      pictures: [{ file: 'reference-lokmat/front-lead1.jpg', x: 90, y: 113, width: 260, height: 62 }, { file: 'reference-lokmat/front-lead2.jpg', x: 269, y: 218, width: 81, height: 62 }],
+      panels: [{ kind: 'sidebar', tint: '#f4e4dc', x: 95, y: 223, width: 69, height: 150, titlePx: 8.6, linePx: 5.8, title: PLACEHOLDER, lines: points(6) }, { kind: 'sidebar', marker: 'number', x: 179, y: 217, width: 81, height: 164, titlePx: 8.6, linePx: 5.8, title: PLACEHOLDER, lines: points(3) }, { kind: 'sidebar', x: 269, y: 284, width: 81, height: 96, titlePx: 8.6, linePx: 5.8, title: PLACEHOLDER, lines: points(5) }],
     },
     'right-top': {
-      style: story('mukta', 22, { subheadingFontPx: 11, columnCount: 2 }),
-      panels: [{ kind: 'quote', x: 76, y: 130, width: 74, height: 60, lines: [PLACEHOLDER] }],
+      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 16.0, headlineLocked: true, bodyFontPx: 5.8, lineHeight: 1.328, columnCount: 2, textAlign: 'justify' },
+      pictures: [],
+      panels: [],
     },
-    'right-low': {
-      style: story('mukta', 22, { columnCount: 2 }),
-      pictures: [{ file: 'scene1.jpg', x: 76, y: 40, width: 72, height: 46 }],
+    'right-foot': {
+      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 14.0, headlineLocked: true, bodyFontPx: 5.8, lineHeight: 1.328, columnCount: 2, textAlign: 'justify' },
+      pictures: [{ file: 'reference-lokmat/front-rightfoot.jpg', x: 101, y: 50, width: 70, height: 37 }],
+      panels: [],
     },
-    'report-one': { style: story('khand', 20, { subheadingFontPx: 11, columnCount: 4 }) },
-    'report-two': { style: story('mukta', 17, { subheadingFontPx: 10, columnCount: 3 }) },
+    'report-left': {
+      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 17.0, headlineLocked: true, bodyFontPx: 5.8, lineHeight: 1.328, columnCount: 3, textAlign: 'justify', subheadingFontPx: 8.5, subheadingLocked: true },
+      pictures: [],
+      panels: [],
+    },
+    'report-right': {
+      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 13.5, headlineLocked: true, bodyFontPx: 5.8, lineHeight: 1.328, columnCount: 2, textAlign: 'justify', subheadingFontPx: 8.5, subheadingLocked: true },
+      pictures: [],
+      panels: [],
+    },
     'feature-strip': {
-      style: strip(22, 4),
-      fixtureKicker: 'विशेष',
-      panels: [{
-        kind: 'chart', x: 178, y: 75, width: 84, height: 133,
-        card: { chartType: 'stat', unit: '%', items: [{ label: PLACEHOLDER, value: 74 }, { label: PLACEHOLDER, value: 65 }, { label: PLACEHOLDER, value: 48 }] },
-      }],
-      pictures: [{ file: 'person1.jpg', x: 87, y: 75, width: 84, height: 133 }],
+      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 19.0, headlineLocked: true, bodyFontPx: 5.8, lineHeight: 1.328, columnCount: 4, textAlign: 'justify', headlineStyle: 'kicker-chip-rule', accentColor: '#e42424', borderInk: '#fb9f0b', headlineAlign: 'center' },
+      fixtureKicker: 'जरूर वाचा',
+      pictures: [{ file: 'reference-lokmat/front-feature.jpg', x: 90, y: 71, width: 79, height: 121 }],
+      panels: [{ kind: 'chart', card: {'chartType': 'stat', 'unit': '%', 'items': [{'label': 'इथे मजकूर लिहा १', 'value': 74}, {'label': 'इथे मजकूर लिहा २', 'value': 69}, {'label': 'इथे मजकूर लिहा ३', 'value': 48}]}, x: 180, y: 71, width: 80, height: 120, titlePx: 8.6, linePx: 5.8 }, { kind: 'sidebar', x: 269, y: 70, width: 79, height: 121, titlePx: 8.6, linePx: 5.8, title: PLACEHOLDER, lines: points(6) }, { kind: 'sidebar', x: 358, y: 70, width: 82, height: 122, titlePx: 8.6, linePx: 5.8, title: PLACEHOLDER, lines: points(6) }],
     },
-    'foot-advert': ADS.pharma,
+    'foot-advert': ADS.insurance,
   },
 
   // MEASURED off the reference sport page: display sizes from each headline's
@@ -149,28 +161,28 @@ const RECIPES = {
     'lead': {
       style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 27.5, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 4, textAlign: 'justify', subheadingFontPx: 11.5, subheadingLocked: true },
       pictures: [{ file: 'reference-lokmat/sport-lead1.jpg', x: 90, y: 101, width: 139, height: 348 }, { file: 'reference-lokmat/sport-lead2.jpg', x: 229, y: 299, width: 121, height: 150 }],
-      panels: [{ kind: 'sidebar', marker: 'none', tint: '#c9e7f3', x: 234, y: 106, width: 116, height: 188, title: PLACEHOLDER, lines: points(6) }],
+      panels: [{ kind: 'sidebar', marker: 'none', tint: '#c9e7f3', x: 234, y: 106, width: 116, height: 188, titlePx: 8.9, linePx: 6, title: PLACEHOLDER, lines: points(6) }],
     },
     'second': {
       style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 19.5, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 2, textAlign: 'justify', subheadingFontPx: 9.0, subheadingLocked: true },
       pictures: [{ file: 'reference-lokmat/sport-second.jpg', x: 83, y: 58, width: 87, height: 165 }],
-      panels: [{ kind: 'sidebar', marker: 'none', x: 83, y: 224, width: 88, height: 69, title: PLACEHOLDER, lines: points(4) }],
+      panels: [{ kind: 'sidebar', marker: 'none', x: 83, y: 224, width: 88, height: 69, titlePx: 8.9, linePx: 6, title: PLACEHOLDER, lines: points(4) }],
     },
     'report-left': {
       style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 19.5, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 2, textAlign: 'justify', subheadingFontPx: 8.0, subheadingLocked: true },
       pictures: [{ file: 'reference-lokmat/sport-misbah.jpg', x: 90, y: 57, width: 80, height: 53 }],
-      panels: [{ kind: 'sidebar', marker: 'none', x: 90, y: 113, width: 80, height: 158, title: PLACEHOLDER, lines: points(6) }],
+      panels: [{ kind: 'sidebar', marker: 'none', x: 90, y: 113, width: 80, height: 158, titlePx: 8.9, linePx: 6, title: PLACEHOLDER, lines: points(6) }],
     },
     'report-right': {
       style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 20.5, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 4, textAlign: 'justify', subheadingFontPx: 8.5, subheadingLocked: true },
       pictures: [{ file: 'reference-lokmat/sport-carlos.jpg', x: 90, y: 33, width: 261, height: 127 }, { file: 'reference-lokmat/sport-stan.jpg', x: 238, y: 198, width: 39, height: 47 }],
-      panels: [{ kind: 'sidebar', marker: 'none', x: 235, y: 170, width: 116, height: 27, title: PLACEHOLDER, lines: points(1) }, { kind: 'sidebar', marker: 'none', x: 178, y: 165, width: 56, height: 106, title: PLACEHOLDER, lines: points(4) }],
+      panels: [{ kind: 'sidebar', marker: 'none', x: 235, y: 170, width: 116, height: 27, titlePx: 8.9, linePx: 6, title: PLACEHOLDER, lines: points(1) }, { kind: 'sidebar', marker: 'none', x: 178, y: 165, width: 56, height: 106, titlePx: 8.9, linePx: 6, title: PLACEHOLDER, lines: points(4) }],
     },
     'feature-strip': {
       style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 16.5, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 4, textAlign: 'justify', subheadingFontPx: 8.5, subheadingLocked: true, headlineStyle: 'kicker-chip-rule', accentColor: '#e42424', borderInk: '#fb9f0b', headlineAlign: 'center' },
       fixtureKicker: 'जरूर वाचा',
       pictures: [{ file: 'reference-lokmat/sport-bottom.jpg', x: 183, y: 90, width: 130, height: 106 }],
-      panels: [{ kind: 'sidebar', marker: 'none', tint: '#e7c9e7', x: 178, y: 47, width: 172, height: 42, title: PLACEHOLDER, lines: points(3) }],
+      panels: [{ kind: 'sidebar', marker: 'none', tint: '#e7c9e7', x: 178, y: 47, width: 172, height: 42, titlePx: 8.9, linePx: 6, title: PLACEHOLDER, lines: points(3) }],
     },
     'squad-box': {
       style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 15.5, headlineLocked: true, bodyFontPx: 5.4, lineHeight: 1.391, columnCount: 2, textAlign: 'justify', headlineAlign: 'center', backgroundColor: '#eaeaea', borderRadiusPx: 6 },

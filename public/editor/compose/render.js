@@ -321,7 +321,9 @@ export function composedMarkup(composition, view, { datelinePrefix = '' } = {}) 
         ? `color:${escapeHtml(view.headlineInk)};` : '';
       // A kicker reversed out of its chip is white for the same reason.
       const chipped = key === 'kicker' && view.headlineStyle === 'kicker-chip-rule';
-      const reverseInk = (reversed && key === 'headline') || chipped ? 'color:#fff;' : displayInk;
+      const labelled = key === 'kicker' && view.headlineStyle === 'kicker-label';
+      const reverseInk = (reversed && key === 'headline') || chipped ? 'color:#fff;'
+        : labelled ? `color:${escapeHtml(view.accentColor || '#c8102e')};` : displayInk;
       pieces.push(
         `<span class="section-composed ${className}" style="left:${line.x.toFixed(2)}px;top:${line.y.toFixed(2)}px;`
         + `width:${line.measure.toFixed(2)}px;height:${line.height.toFixed(2)}px;`

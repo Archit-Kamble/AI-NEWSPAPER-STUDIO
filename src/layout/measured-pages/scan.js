@@ -26,7 +26,10 @@ const MATTER = { left: 20, right: 640, bottom: 1008 };
 
 function scaler(scan, top) {
   const sx = (MATTER.right - MATTER.left) / (scan.x1 - scan.x0);
-  const sy = (MATTER.bottom - top) / (scan.y1 - scan.y0);
+  // `uniform` keeps the scan's own proportions: the page is scaled by its
+  // width alone and set up from the foot, so what is left above it is the
+  // reference's own header depth.
+  const sy = scan.uniform ? sx : (MATTER.bottom - top) / (scan.y1 - scan.y0);
   const ex = (x) => MATTER.left + (x - scan.x0) * sx;
   const ey = (y) => top + (y - scan.y0) * sy;
   return { sx, sy, ex, ey };
@@ -35,7 +38,10 @@ function scaler(scan, top) {
 const round = (value) => Math.round(value);
 
 function buildMeasuredPage(spec) {
-  const { ex, ey } = scaler(spec.scan, spec.scan.top);
+  const top = spec.scan.uniform
+    ? MATTER.bottom - (spec.scan.y1 - spec.scan.y0) * ((MATTER.right - MATTER.left) / (spec.scan.x1 - spec.scan.x0))
+    : spec.scan.top;
+  const { ex, ey } = scaler(spec.scan, top);
   const rect = ([x0, y0, x1, y1]) => {
     const x = round(ex(x0));
     const y = round(ey(y0));

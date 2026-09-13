@@ -235,7 +235,7 @@ const MASTHEAD_ADVERT = {
 // scan's own rectangles scaled onto this page, not spans of a column grid, so
 // the frame is block()'s with the measured x, width and height put back.
 const { buildMeasuredPage } = require('./measured-pages/scan');
-const MEASURED_PAGES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state', 'broadsheet-local', 'broadsheet-opinion']
+const MEASURED_PAGES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state', 'broadsheet-local', 'broadsheet-opinion', 'broadsheet-advertorial']
   .map((key) => [key, buildMeasuredPage(require(`./measured-pages/${key}`))]));
 function measuredTemplate(key) {
   const { template } = MEASURED_PAGES[key];
@@ -511,17 +511,7 @@ const templates = {
 
   'broadsheet-opinion': measuredTemplate('broadsheet-opinion'),
 
-  'broadsheet-advertorial': {
-    key: 'broadsheet-advertorial',
-    name: 'Broadsheet advertorial (reference)',
-    grid: REFERENCE_GRID,
-    description: 'A whole page sold as one advertisement.',
-    // MEASURED off the reference scan onto its own seven-column grid, tops on
-    // the baseline and closed to the one 8 px gap. Generated, so literals.
-    sections: [
-      frame('page-advert', 0, 7, 56, 952, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
-    ],
-  },
+  'broadsheet-advertorial': measuredTemplate('broadsheet-advertorial'),
 
   'broadsheet-local-sport': {
     key: 'broadsheet-local-sport',

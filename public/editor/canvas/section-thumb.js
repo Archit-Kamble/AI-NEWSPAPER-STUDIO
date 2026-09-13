@@ -21,6 +21,15 @@ import { presentationRanges, renderPresentation } from "../layout/editorial-pres
 import { composeSection } from "../compose/section-adapter.js";
 import { composedMarkup, diagnosticMarkup } from "../compose/render.js";
 import { fontsReady, measureWidth } from "../compose/font-metrics.js";
+import { isShaperReady, shapeWidthPx } from "../compose/shaper.js";
+
+// A panel's lines are wrapped at the width they PRINT at: shaped, where the
+// shaper is in. hmtx alone overstates a Devanagari conjunct by up to 80%, so a
+// sidebar wrapped against it broke its lines a word or two early.
+const panelMeasure = (text, px, family, weight) => {
+  const shaped = isShaperReady() ? shapeWidthPx(text, px, family, weight) : null;
+  return shaped !== null ? shaped : measureWidth(text, px, family, weight);
+};
 import { shapedRectPoints } from "../layout/block-shapes.js";
 import "../layout/borders.js";
 const { borderEdges, borderOffsetsPx, borderRadiusPx, canRound, isRuled, borderWidthPx } = globalThis.SahasBorders;
@@ -620,7 +629,7 @@ export function insetPanelsMarkup(section, view) {
     }
     // Measured only once the faces are in - before that the old placement
     // stands, rather than a wrap computed against the fallback widths.
-    const solved = panelLayout(panel, bodyPx, fontsReady() ? measureWidth : null);
+    const solved = panelLayout(panel, bodyPx, fontsReady() ? panelMeasure : null);
     // A panel set by the page's own measurements names its faces by key; the
     // two kind defaults keep their literal stacks, so no stored panel moves.
     const faceCss = (family) => (family === 'sans' ? "'Sahas Sans', 'Noto Sans Devanagari', Arial, sans-serif"
@@ -634,7 +643,8 @@ export function insetPanelsMarkup(section, view) {
       + `${line.align === 1 ? "text-align:center;" : line.align === 2 ? "text-align:right;" : ""}`
       + `${line.bold ? "font-weight:700;" : ""}`
       + `${line.family ? `font-family:${faceCss(line.family)};` : ''}`
-      + `${line.ink === 'accent' ? `color:${accent};` : /^#[0-9a-f]{6}$/i.test(line.ink || '') ? `color:${line.ink};` : ''}">${escapeHtml(line.text)}</span>`).join("")
+      + `${line.ink === 'accent' ? `color:${accent};` : /^#[0-9a-f]{6}$/i.test(line.ink || '') ? `color:${line.ink};` : ''}">${
+        line.runs ? line.runs.map((r) => (r.bold ? `<b>${escapeHtml(r.text)}</b>` : escapeHtml(r.text))).join('') : escapeHtml(line.text)}</span>`).join("")
       + (solved.discs || []).map((disc) => `<span class="panel-disc" style="left:${disc.x}px;top:${disc.y}px;width:${disc.d}px;height:${disc.d}px;`
         + `line-height:${disc.d}px;font-size:${disc.fontPx}px;border-radius:50%;background:#111;color:#fff;text-align:center;font-weight:700;`
         + `font-family:'Sahas Sans', 'Noto Sans Devanagari', Arial, sans-serif;">${escapeHtml(disc.text)}</span>`).join("");

@@ -363,6 +363,11 @@ async function saveSection(pageId, sectionKey, body) {
     borderRadiusPx: supplied(body.borderRadiusPx) ? borderRadius(body.borderRadiusPx) : undefined,
     frameShape: supplied(body.frameShape) ? (String(body.frameShape).trim() || null) : undefined,
     datelineStyle: supplied(body.datelineStyle) ? (String(body.datelineStyle).trim() || null) : undefined,
+    // Display leading: a printed head is set anywhere from 0.95 to 1.4 of its
+    // own size. Outside that it is a mistake, not a style, and is dropped.
+    paragraphPolicy: ['auto', 'as-written'].includes(body.paragraphPolicy) ? body.paragraphPolicy : undefined,
+    displayLineHeight: Number(body.displayLineHeight) >= 0.9 && Number(body.displayLineHeight) <= 1.6
+      ? Math.round(Number(body.displayLineHeight) * 100) / 100 : undefined,
     headlineStyle: body.headlineStyle,
     accentColor,
     // What structured card is placed in this block, and its payload. Never

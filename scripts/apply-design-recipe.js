@@ -74,7 +74,11 @@ async function main() {
 
   const { rows: pages } = await pool.query(
     'SELECT id, page_number, template_key FROM pages WHERE newspaper_id = $1 ORDER BY page_number', [ED]);
+  // Given pages to assign, only those pages are dressed - dressing the rest
+  // again would blank the copy on every other page of the fixture.
+  const only = new Set(assignments.map((a) => a.pageNumber));
   for (const page of pages) {
+    if (only.size && !only.has(page.page_number)) continue;
     const recipe = recipeFor(page.template_key);
     if (!recipe) continue;
     // The section the folio names - the theme column alone, never the styler.
@@ -111,7 +115,8 @@ async function main() {
       for (const picture of (entry.pictures || []).map(place)) {
         const added = await imageService.add(page.id, sectionKey, {
           url: `/uploads/${picture.file}`, x: picture.x, y: picture.y,
-          width: picture.width, height: picture.height, fitMode: 'cover',
+          width: picture.width, height: picture.height, fitMode: picture.fitMode || 'cover',
+          ...(picture.standOffPx !== undefined ? { standOffPx: picture.standOffPx } : {}),
         });
         if (!added || added.error) throw new Error(`p${page.page_number} ${sectionKey}: picture refused ${added?.error || ''}`);
       }

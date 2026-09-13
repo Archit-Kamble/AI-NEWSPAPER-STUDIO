@@ -869,6 +869,12 @@ ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS show_dateline BOOLEAN NOT NUL
 -- HOW THE DATELINE IS SET: NULL/'square' is "■ सातारा ", 'colon' is
 -- "सातारा : ". NULL on every existing row, so nothing composes differently.
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS dateline_style VARCHAR(16);
+-- THE DISPLAY FLOWS' OWN LEADING, in ems. NULL is the engine's own (the body's
+-- leading less 0.15), which is every existing row.
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS display_line_height NUMERIC(4,2);
+-- 'as-written' sets the reporter's paragraphs exactly; NULL/'auto' lets the
+-- compositor merge and split them (paragraph-policy.js).
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS paragraph_policy VARCHAR(12);
 
 -- DOES THE DESK'S CHOSEN DISPLAY SIZE WIN?
 --

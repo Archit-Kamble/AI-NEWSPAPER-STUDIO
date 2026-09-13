@@ -101,28 +101,59 @@
     // shape but the wrong width breaks every headline at a different word.
     // scripts/reference-layout/fontmatch.py is the tool. As with khand-light,
     // a key that names one weight maps both of its weights to that cut.
+    //
+    // The three Mukta cuts are MuktaDisplay-*: the same outlines with the
+    // line box set to the ink (ascent 0.96, descent 0.15 em). Mukta's own
+    // 1.13 + 0.53 em box sits a head's first baseline a fifth of an em low,
+    // and the compositor keeps a head clear of whatever is under it by the
+    // face's descent - the design box's, which is half again the ink's, so a
+    // deck or a picture set as tight under a head as a printed page sets it
+    // pushed the head into a corridor. A vowel sign below the line (ु) still
+    // prints; it is only no longer reserved room for.
+    {
+      key: 'mukta-medium',
+      label: 'Mukta Medium',
+      short: 'Mukta M',
+      note: 'Mukta at 500, for a banner that is not the lead.',
+      role: 'display',
+      css: "'Mukta Medium', 'Mukta', 'Sahas Sans', Arial, sans-serif",
+      files: { 400: `${DIR}MuktaDisplay-Medium.ttf`, 700: `${DIR}MuktaDisplay-Medium.ttf` },
+    },
     {
       key: 'mukta-semibold',
       label: 'Mukta SemiBold',
       short: 'Mukta SB',
-      note: 'Mukta at 600, for a banner or a feature head that is not the lead.',
+      note: 'Mukta at 600, for a report head.',
       role: 'display',
       css: "'Mukta SemiBold', 'Mukta', 'Sahas Sans', Arial, sans-serif",
-      files: { 400: `${DIR}Mukta-SemiBold.ttf`, 700: `${DIR}Mukta-SemiBold.ttf` },
+      files: { 400: `${DIR}MuktaDisplay-SemiBold.ttf`, 700: `${DIR}MuktaDisplay-SemiBold.ttf` },
     },
     {
+      // The lead: its HEAD at 800 and its DECK at the book weight. A block's
+      // display face is one field for the headline (set at 700) and the deck
+      // (set at 400), so the pairing is the key's own.
       key: 'mukta-heavy',
       label: 'Mukta ExtraBold',
       short: 'Mukta XB',
-      note: 'Mukta at 800, for the lead head that shouts loudest on the page.',
+      note: 'A lead head in Mukta at 800, over a deck in Mukta at its book weight.',
       role: 'display',
-      css: "'Mukta ExtraBold', 'Mukta', 'Sahas Sans', Arial, sans-serif",
-      files: { 400: `${DIR}Mukta-ExtraBold.ttf`, 700: `${DIR}Mukta-ExtraBold.ttf` },
+      css: "'Mukta Heavy', 'Mukta', 'Sahas Sans', Arial, sans-serif",
+      files: { 400: `${DIR}MuktaDisplay-Regular.ttf`, 700: `${DIR}MuktaDisplay-ExtraBold.ttf` },
+    },
+    {
+      key: 'mukta-book',
+      label: 'Mukta Book',
+      short: 'Mukta Bk',
+      note: 'Mukta at its book weight for a light head - the feature head a front page sets quietly.',
+      role: 'display',
+      css: "'Mukta Book', 'Sahas Sans', Arial, sans-serif",
+      files: { 400: `${DIR}MuktaDisplay-Regular.ttf`, 700: `${DIR}MuktaDisplay-Regular.ttf` },
     },
     {
       // Noto Sans Devanagari's own variable font, instanced at 80% width -
-      // the condensed second-rank head. 400 is the medium weight, 700 the
-      // semibold, which is as heavy as that head is set.
+      // the condensed second-rank head - with the line box set to the ink
+      // (0.90 / 0.15 em), for the reason the Mukta display cuts are. 400 is
+      // the medium weight, 700 the semibold, as heavy as that head is set.
       key: 'noto-condensed',
       label: 'Noto Sans Condensed',
       short: 'Noto C',
@@ -130,6 +161,17 @@
       role: 'display',
       css: "'Noto Sans Condensed', 'Sahas Sans', Arial, sans-serif",
       files: { 400: `${DIR}NotoSansDevanagariCondensed-Medium.ttf`, 700: `${DIR}NotoSansDevanagariCondensed-SemiBold.ttf` },
+    },
+    {
+      // The same condensed cut at its medium weight throughout, for a light
+      // second head (a head is set at 700, which the key above maps to 600).
+      key: 'noto-condensed-light',
+      label: 'Noto Sans Condensed Light',
+      short: 'Noto CL',
+      note: 'Noto Sans Devanagari at 80% width and its medium weight, for a light condensed head.',
+      role: 'display',
+      css: "'Noto Sans Condensed Light', 'Sahas Sans', Arial, sans-serif",
+      files: { 400: `${DIR}NotoSansDevanagariCondensed-Medium.ttf`, 700: `${DIR}NotoSansDevanagariCondensed-Medium.ttf` },
     },
     {
       key: 'rajdhani',

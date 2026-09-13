@@ -7338,14 +7338,38 @@ body.print-view .page-imprint {
   font-display: block;
 }
 @font-face {
+  font-family: "Mukta Medium";
+  src: url("/assets/fonts/MuktaDisplay-Medium.ttf") format("truetype");
+  font-weight: 400;
+  font-display: block;
+}
+@font-face {
+  font-family: "Mukta Medium";
+  src: url("/assets/fonts/MuktaDisplay-Medium.ttf") format("truetype");
+  font-weight: 700;
+  font-display: block;
+}
+@font-face {
   font-family: "Mukta SemiBold";
-  src: url("/assets/fonts/Mukta-SemiBold.ttf") format("truetype");
+  src: url("/assets/fonts/MuktaDisplay-SemiBold.ttf") format("truetype");
   font-weight: 400 700;
   font-display: block;
 }
 @font-face {
-  font-family: "Mukta ExtraBold";
-  src: url("/assets/fonts/Mukta-ExtraBold.ttf") format("truetype");
+  font-family: "Mukta Heavy";
+  src: url("/assets/fonts/MuktaDisplay-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-display: block;
+}
+@font-face {
+  font-family: "Mukta Heavy";
+  src: url("/assets/fonts/MuktaDisplay-ExtraBold.ttf") format("truetype");
+  font-weight: 700;
+  font-display: block;
+}
+@font-face {
+  font-family: "Mukta Book";
+  src: url("/assets/fonts/MuktaDisplay-Regular.ttf") format("truetype");
   font-weight: 400 700;
   font-display: block;
 }
@@ -7359,6 +7383,12 @@ body.print-view .page-imprint {
   font-family: "Noto Sans Condensed";
   src: url("/assets/fonts/NotoSansDevanagariCondensed-SemiBold.ttf") format("truetype");
   font-weight: 700;
+  font-display: block;
+}
+@font-face {
+  font-family: "Noto Sans Condensed Light";
+  src: url("/assets/fonts/NotoSansDevanagariCondensed-Medium.ttf") format("truetype");
+  font-weight: 400 700;
   font-display: block;
 }
 @font-face {

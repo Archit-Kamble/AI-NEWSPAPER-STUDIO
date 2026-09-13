@@ -49,3 +49,12 @@ test('a face key or edge of the wrong shape is dropped', () => {
   assert.equal(panel.lineInk, undefined);
   assert.equal(panel.lineHeight, undefined);
 });
+
+test('a *starred* run inside an entry is set bold, and measured bold', () => {
+  const panel = panelOf({ kind: 'sidebar', x: 0, y: 0, width: 300, height: 100, lines: ['*वडीगोद्री :* मराठा आरक्षणाच्या'] }, frame);
+  const [line] = panelLayout(panel, 6.4, measure).lines;
+  assert.equal(line.text, 'वडीगोद्री : मराठा आरक्षणाच्या');
+  assert.deepEqual(line.runs, [{ text: 'वडीगोद्री :', bold: true }, { text: ' मराठा आरक्षणाच्या', bold: false }]);
+  const plain = panelOf({ kind: 'sidebar', x: 0, y: 0, width: 300, height: 100, lines: ['साधी ओळ'] }, frame);
+  assert.equal(panelLayout(plain, 6.4, measure).lines[0].runs, undefined);
+});

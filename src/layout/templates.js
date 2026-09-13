@@ -231,6 +231,25 @@ const MASTHEAD_ADVERT = {
   height: FRONT_REGIONS.content.top - GAP - up(G.marginYPx),
 };
 
+// PAGES MEASURED EXACTLY OFF A SCAN - measured-pages/. Their blocks are the
+// scan's own rectangles scaled onto this page, not spans of a column grid, so
+// the frame is block()'s with the measured x, width and height put back.
+const { buildMeasuredPage } = require('./measured-pages/scan');
+const MEASURED_PAGES = Object.fromEntries(['broadsheet-front']
+  .map((key) => [key, buildMeasuredPage(require(`./measured-pages/${key}`))]));
+function measuredTemplate(key) {
+  const { template } = MEASURED_PAGES[key];
+  return {
+    key: template.key,
+    name: template.name,
+    description: template.description,
+    measured: true,
+    sections: template.sections.map(({ key: sectionKey, x, y, width, height, options }) => ({
+      ...block(sectionKey, 0, 1, y, height, options), x, y, width, height,
+    })),
+  };
+}
+
 const templates = {
   // Page one, laid out the way a Marathi broadsheet daily lays out page one:
   // a lead package across the top under the nameplate with its own picture
@@ -433,27 +452,7 @@ const templates = {
   // The styles each frame wears (faces, locked sizes, grounds, rules, panels)
   // are not a template's business. They live in design-recipes.js beside this
   // file and are applied to a page's blocks, like any desk decision.
-  'broadsheet-front': {
-    key: 'broadsheet-front',
-    name: 'Broadsheet front (reference)',
-    grid: REFERENCE_GRID,
-    description: 'A five-column opening package with the corner advert, a market rail and news shorts, a four-column picture lead, a right-hand pair, two reports, a separator-led feature with its chart, and a display advert.',
-    // MEASURED off the reference scan onto its own seven-column grid, tops on
-    // the baseline and closed to the one 8 px gap. Generated, so literals.
-    sections: [
-      frame('package', 0, 5, 144, 152, { story: 'LEAD', priority: 4 }),
-      frame('corner-advert', 5, 2, 144, 152, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
-      frame('rail-markets', 0, 1, 304, 160, { type: 'briefs', story: 'BRIEF', priority: 2 }),
-      frame('rail-shorts', 0, 1, 472, 216, { type: 'briefs', story: 'BRIEF', priority: 2 }),
-      frame('lead', 1, 4, 304, 384, { story: 'LEAD', priority: 5 }),
-      frame('right-top', 5, 2, 304, 224, { story: 'SECONDARY', priority: 4 }),
-      frame('right-foot', 5, 2, 536, 272, { story: 'SECONDARY', priority: 3 }),
-      frame('report-left', 0, 3, 696, 112, { story: 'STANDARD', priority: 3 }),
-      frame('report-right', 3, 2, 696, 112, { story: 'STANDARD', priority: 3 }),
-      frame('feature-strip', 0, 5, 816, 192, { story: 'ANALYSIS', priority: 3 }),
-      frame('foot-advert', 5, 2, 816, 192, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
-    ],
-  },
+  'broadsheet-front': measuredTemplate('broadsheet-front'),
 
   'broadsheet-sport': {
     key: 'broadsheet-sport',
@@ -788,6 +787,7 @@ function comparePageGeometryToTemplate(pageSections = [], template = {}) {
 }
 
 module.exports = {
+  MEASURED_PAGES,
   PAGE_WIDTH,
   PAGE_HEIGHT,
   GRID_COLUMNS: DEFAULTS.gridColumns,

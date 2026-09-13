@@ -68,9 +68,28 @@ test('every template block covers whole columns and stays inside the matter box'
       : G;
     for (const section of template.sections) {
       const asRow = { x_px: section.x, y_px: section.y, width_px: section.width, height_px: section.height };
+      // A page measured EXACTLY off a scan (measured-pages/) keeps that page's
+      // own unequal columns, so it answers to the matter box and to not
+      // overlapping itself - held in the test below - rather than to a grid.
+      if (template.measured) {
+        assert.ok(insideMatter(asRow), `${template.key}/${section.key} escapes the matter box`);
+        continue;
+      }
       const columns = grid.snapLeftPx.includes(asRow.x_px) && grid.snapRightPx.includes(asRow.x_px + asRow.width_px);
       assert.ok(columns, `${template.key}/${section.key} is off the column grid`);
       assert.ok(insideMatter(asRow), `${template.key}/${section.key} escapes the matter box`);
+    }
+  }
+});
+
+test('a page measured off a scan never overlaps itself', () => {
+  for (const template of Object.values(templates).filter((t) => t.measured)) {
+    for (const a of template.sections) {
+      for (const b of template.sections) {
+        if (a === b) continue;
+        const overlap = a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+        assert.ok(!overlap, `${template.key}: ${a.key} overlaps ${b.key}`);
+      }
     }
   }
 });
@@ -315,7 +334,8 @@ test('every layout uses exactly one vertical gap between blocks', () => {
   const expected = geometryOf({}).baselinePx;
 
   const offenders = [];
-  for (const template of Object.values(templates)) {
+  // A measured page's white is the scan's own, not one typed measure.
+  for (const template of Object.values(templates).filter((t) => !t.measured)) {
     const found = new Set();
     for (const a of template.sections) {
       for (const b of template.sections) {
@@ -355,7 +375,7 @@ test('content starts on the baseline, so bands divide into the page exactly', ()
   const g = geometryOf({});
   const bottom = g.marginYPx + g.matterHeightPx;
 
-  for (const template of Object.values(templates)) {
+  for (const template of Object.values(templates).filter((t) => !t.measured)) {
     const top = Math.min(...template.sections.map((s) => s.y));
     assert.equal(
       (bottom - top) % g.baselinePx, 0,

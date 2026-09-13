@@ -2899,11 +2899,14 @@ export function composeBlock(input = {}) {
   // for byte as before.
   const deckFlow = flows.find((flow) => flow.key === 'deck');
   const deckReserve = deckFlow && !deckFlow.locked
-    ? Math.max(deckFlow.min, bodyPx * DECK_MIN_OF_BODY) * Math.max(1.1, lineHeight - 0.15)
+    ? Math.max(deckFlow.min, bodyPx * DECK_MIN_OF_BODY) * (Number(input.displayLineHeight) > 0 ? Number(input.displayLineHeight) : Math.max(1.1, lineHeight - 0.15))
     : 0;
 
   for (const flow of flows) {
-    const displayLineHeight = Math.max(1.1, lineHeight - 0.15);
+    // A block may state its display leading - a page measured off a scan sets
+    // a lead head at 1.12 of its size and a condensed second head at 1.27.
+    const displayLineHeight = Number(input.displayLineHeight) > 0
+      ? Number(input.displayLineHeight) : Math.max(1.1, lineHeight - 0.15);
     const headlinePx = Number(result.bands.headline?.resolvedPx) || 0;
     const effectivePx = flow.key === 'deck' && headlinePx > 0 && !flow.locked
       ? Math.max(flow.min, Math.min(flow.px, Math.round(headlinePx * DECK_MAX_HEADLINE_RATIO * 10) / 10))
@@ -3171,7 +3174,10 @@ export function composeBlock(input = {}) {
   // one-line paragraph ON PURPOSE, and it is numbered: merging two items would
   // silently print three undertakings as two, and splitting one would print
   // four where the reporter wrote three. The desk's own breaks are the list.
-  if (!setsList && mayNeedPolicy(bodyPlainText, body.paragraphStarts, body.paragraphDepths)) {
+  // A block may ask for its paragraphs AS WRITTEN - a page measured off a scan
+  // prints five-sentence paragraphs, and splitting them re-breaks every line.
+  if (!setsList && input.paragraphPolicy !== 'as-written'
+    && mayNeedPolicy(bodyPlainText, body.paragraphStarts, body.paragraphDepths)) {
     paragraphPlan = planParagraphs({
       text: bodyPlainText,
       starts: body.paragraphStarts,

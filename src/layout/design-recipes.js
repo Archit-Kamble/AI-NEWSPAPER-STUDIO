@@ -73,61 +73,16 @@ const ADS = {
   whole: ad('poster', 'राज्य पर्यटन विकास', 'निसर्ग पर्यटनाचे नवे केंद्र', 'अभयारण्ये, पक्षी विहार आणि जलसफारी', ['१६ हजार चौ. किमी वनक्षेत्र', '११ वन्यजीव अभयारण्ये', '२४ पक्षी विहार', 'पर्यावरणपूरक सुविधा'], 'काम दमदार', '१८०० २२० ३३४'),
 };
 
+// A page measured exactly off a scan carries its recipe in its own spec
+// (measured-pages/), beside the rectangles it was measured with.
+const { buildMeasuredPage } = require('./measured-pages/scan');
+const MEASURED_RECIPES = Object.fromEntries(['broadsheet-front']
+  .map((key) => [key, buildMeasuredPage(require(`./measured-pages/${key}`)).recipe]));
+
 const RECIPES = {
+  ...MEASURED_RECIPES,
   // MEASURED off the reference scan: sizes from each head's shirorekha, body at
   // the reference's own em and pitch, its colours, its picture and panel boxes.
-  'broadsheet-front': {
-    'package': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 19.0, headlineLocked: true, bodyFontPx: 5.8, lineHeight: 1.328, columnCount: 5, textAlign: 'justify' },
-      pictures: [{ file: 'reference-lokmat/front-package.jpg', x: 269, y: 38, width: 76, height: 114 }],
-      panels: [{ kind: 'sidebar', x: 180, y: 37, width: 82, height: 115, titlePx: 8.6, linePx: 5.8, title: PLACEHOLDER, lines: points(6) }, { kind: 'sidebar', marker: 'number', x: 354, y: 38, width: 86, height: 114, titlePx: 8.6, linePx: 5.8, title: PLACEHOLDER, lines: points(3) }],
-    },
-    'corner-advert': ADS.gold,
-    'rail-markets': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 8.5, headlineLocked: true, bodyFontPx: 5.4, lineHeight: 1.333, columnCount: 1, textAlign: 'justify' },
-      pictures: [],
-      panels: [],
-    },
-    'rail-shorts': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 8.0, headlineLocked: true, bodyFontPx: 5.4, lineHeight: 1.375, columnCount: 1, textAlign: 'justify', headlineStyle: 'kicker-label', accentColor: '#fb9f0b' },
-      fixtureKicker: 'शॉर्ट्स',
-      pictures: [{ file: 'reference-lokmat/front-shorts.jpg', x: 0, y: 38, width: 81, height: 93 }],
-      panels: [],
-    },
-    'lead': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 26.5, headlineLocked: true, bodyFontPx: 5.8, lineHeight: 1.328, columnCount: 4, textAlign: 'justify', subheadingFontPx: 11.5, subheadingLocked: true },
-      pictures: [{ file: 'reference-lokmat/front-lead1.jpg', x: 90, y: 113, width: 260, height: 62 }, { file: 'reference-lokmat/front-lead2.jpg', x: 269, y: 218, width: 81, height: 62 }],
-      panels: [{ kind: 'sidebar', tint: '#f4e4dc', x: 95, y: 223, width: 69, height: 150, titlePx: 8.6, linePx: 5.8, title: PLACEHOLDER, lines: points(6) }, { kind: 'sidebar', marker: 'number', x: 179, y: 217, width: 81, height: 164, titlePx: 8.6, linePx: 5.8, title: PLACEHOLDER, lines: points(3) }, { kind: 'sidebar', x: 269, y: 284, width: 81, height: 96, titlePx: 8.6, linePx: 5.8, title: PLACEHOLDER, lines: points(5) }],
-    },
-    'right-top': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 16.0, headlineLocked: true, bodyFontPx: 5.8, lineHeight: 1.328, columnCount: 2, textAlign: 'justify' },
-      pictures: [],
-      panels: [],
-    },
-    'right-foot': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 14.0, headlineLocked: true, bodyFontPx: 5.8, lineHeight: 1.328, columnCount: 2, textAlign: 'justify' },
-      pictures: [{ file: 'reference-lokmat/front-rightfoot.jpg', x: 101, y: 50, width: 70, height: 37 }],
-      panels: [],
-    },
-    'report-left': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 17.0, headlineLocked: true, bodyFontPx: 5.8, lineHeight: 1.328, columnCount: 3, textAlign: 'justify', subheadingFontPx: 8.5, subheadingLocked: true },
-      pictures: [],
-      panels: [],
-    },
-    'report-right': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 13.5, headlineLocked: true, bodyFontPx: 5.8, lineHeight: 1.328, columnCount: 2, textAlign: 'justify', subheadingFontPx: 8.5, subheadingLocked: true },
-      pictures: [],
-      panels: [],
-    },
-    'feature-strip': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 19.0, headlineLocked: true, bodyFontPx: 5.8, lineHeight: 1.328, columnCount: 4, textAlign: 'justify', headlineStyle: 'kicker-chip-rule', accentColor: '#e42424', borderInk: '#fb9f0b', headlineAlign: 'center' },
-      fixtureKicker: 'जरूर वाचा',
-      pictures: [{ file: 'reference-lokmat/front-feature.jpg', x: 90, y: 71, width: 79, height: 121 }],
-      panels: [{ kind: 'chart', card: {'chartType': 'stat', 'unit': '%', 'items': [{'label': 'इथे मजकूर लिहा १', 'value': 74}, {'label': 'इथे मजकूर लिहा २', 'value': 69}, {'label': 'इथे मजकूर लिहा ३', 'value': 48}]}, x: 180, y: 71, width: 80, height: 120, titlePx: 8.6, linePx: 5.8 }, { kind: 'sidebar', x: 269, y: 70, width: 79, height: 121, titlePx: 8.6, linePx: 5.8, title: PLACEHOLDER, lines: points(6) }, { kind: 'sidebar', x: 358, y: 70, width: 82, height: 122, titlePx: 8.6, linePx: 5.8, title: PLACEHOLDER, lines: points(6) }],
-    },
-    'foot-advert': ADS.insurance,
-  },
-
   // MEASURED off the reference sport page: display sizes from each headline's
   // shirorekha height, body at the reference's own em and line pitch, the
   // reference's colours, and picture and panel rectangles off the scan.

@@ -565,15 +565,21 @@ function blockDecorations(section, composition) {
       right: { x: px + mm(panel.width) - rule, y: py, width: rule, height: mm(panel.height) },
     };
     for (const edge of edges) items.push({ kind: 'rule', ...BOX[edge], ink: panel.ruleInk || RULE_INK });
-    const solved = panelLayout(panel, Number(section.body_font_px) || 6.4, modules?.metrics?.measureWidth || null);
+    const shapedMeasure = modules?.shaper && modules?.metrics
+      ? (text, px, family, weight) => {
+        const shaped = modules.shaper.isShaperReady() ? modules.shaper.shapeWidthPx(text, px, family, weight) : null;
+        return shaped !== null ? shaped : modules.metrics.measureWidth(text, px, family, weight);
+      }
+      : null;
+    const solved = panelLayout(panel, Number(section.body_font_px) || 6.4, shapedMeasure);
     for (const line of solved.lines) {
       items.push(textItem(
         { x: px + mm(line.x), y: py + mm(line.y), width: mm(line.width), height: mm(line.fontPx * (line.lineHeight || solved.lineHeight)) },
-        [run(line.text, {
+        (line.runs || [{ text: line.text, bold: line.bold }]).map((segment) => run(segment.text, {
           family: line.family || panelFace,
-          weight: line.bold ? 700 : 400, bold: line.bold, fontPx: line.fontPx,
+          weight: segment.bold ? 700 : 400, bold: segment.bold, fontPx: line.fontPx,
           ink: line.ink === 'accent' ? (section.accent_color || ACCENT_INK) : (/^#[0-9a-f]{6}$/i.test(line.ink || '') ? line.ink : null),
-        })],
+        })),
         line.align === 1 ? 'center' : line.align === 2 ? 'right' : 'left',
       ));
     }

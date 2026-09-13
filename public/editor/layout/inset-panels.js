@@ -201,6 +201,11 @@
   ]);
 
   const MIN_PX = 24;             // below this nothing legible fits
+  // What a STORED panel may be, which is less than what the editor's handles
+  // will size one to: a byline and the rule under it is one line of small
+  // type, 9 px deep on a measured page, and clamping it to MIN_PX laid a white
+  // ground 15 px down over the copy under it.
+  const STORED_MIN_PX = 6;
   const DEFAULT_STAND_OFF_PX = 4;
 
   const clean = (value) => String(value == null ? '' : value).replace(/<[^>]*>/g, '').trim();
@@ -306,8 +311,8 @@
   function panelOf(raw, frame = {}) {
     if (!raw || typeof raw !== 'object') return null;
     const kind = KINDS.some((k) => k.key === raw.kind) ? raw.kind : 'note';
-    const width = Math.max(MIN_PX, Number(raw.width) || 0);
-    const height = Math.max(MIN_PX, Number(raw.height) || 0);
+    const width = Math.max(STORED_MIN_PX, Number(raw.width) || 0);
+    const height = Math.max(STORED_MIN_PX, Number(raw.height) || 0);
     if (!(width > 0 && height > 0)) return null;
     const maxX = Math.max(0, (Number(frame.width) || width) - width);
     const maxY = Math.max(0, (Number(frame.height) || height) - height);
@@ -449,6 +454,45 @@
 
   // wrapToWidth() for a measure that changes line by line - the lines beside a
   // numbered disc are set short of it. `indentOf(n)` is line n's indent.
+  // A RUN OF BOLD INSIDE AN ENTRY, written *like this* - how a printed sidebar
+  // sets its dateline ("वडीगोद्री (जि. जालना) :") or its figure ("८७%") in
+  // the same line as the words after it. Words carry their own weight through
+  // the wrap, so a line is measured at the width it prints at. An entry with no
+  // asterisk is one plain run, exactly as before.
+  function wordsOf(text, bold) {
+    const out = [];
+    let on = false;
+    for (const part of String(text).split('*')) {
+      for (const word of part.split(/\s+/).filter(Boolean)) out.push({ word, bold: bold || on });
+      on = !on;
+    }
+    return out;
+  }
+  const hasMarks = (text) => /\*[^*]+\*/.test(String(text));
+  const plainOf = (text) => String(text).replace(/\*/g, '');
+
+  // Lines of words for a changing measure; `indentOf(n)` is line n's indent.
+  function wrapWords(words, width, fontPx, family, measure, indentOf) {
+    if (!measure || !(width > 0)) return [words];
+    const widthOf = (list) => list.reduce((sum, w, i) => sum + measure(w.word, fontPx, family, w.bold ? 700 : 400)
+      + (i ? measure(' ', fontPx, family, 400) : 0), 0);
+    const out = [];
+    let line = [];
+    for (const word of words) {
+      const room = width - indentOf(out.length);
+      if (line.length && widthOf([...line, word]) > room) { out.push(line); line = [word]; } else line.push(word);
+    }
+    if (line.length) out.push(line);
+    return out.length ? out : [[]];
+  }
+  // Consecutive words of one weight, joined, for a renderer to set as runs.
+  const runsOf = (words) => words.reduce((runs, w, i) => {
+    const text = (i ? ' ' : '') + w.word;
+    const last = runs[runs.length - 1];
+    if (last && last.bold === w.bold) last.text += text; else runs.push({ text, bold: w.bold });
+    return runs;
+  }, []);
+
   function wrapBeside(text, width, fontPx, family, bold, measure, indentOf) {
     if (!measure || !(width > 0)) return [text];
     const words = String(text).split(/\s+/).filter(Boolean);
@@ -534,9 +578,15 @@
       const disc = panel.marker === 'circle'
         ? { x: inset, y, d: Math.round(actualLinePx * lineHeight * 1.5 * 10) / 10 } : null;
       const indentFor = (lineTop) => (disc && lineTop < disc.y + disc.d - 0.5 ? disc.d + actualLinePx * 0.35 : 0);
-      const pieces = disc
-        ? wrapBeside(marked, panel.width - inset * 2, actualLinePx, setFamily, lineBold, measure, (n) => indentFor(y + n * actualLinePx * lineHeight))
-        : wrapToWidth(marked, panel.width - inset * 2, actualLinePx, setFamily, lineBold, measure);
+      const marks = hasMarks(marked);
+      const wordLines = marks
+        ? wrapWords(wordsOf(marked, lineBold), panel.width - inset * 2, actualLinePx, setFamily, measure,
+          (n) => (disc ? indentFor(y + n * actualLinePx * lineHeight) : 0))
+        : null;
+      const pieces = marks ? wordLines.map((words) => words.map((w) => w.word).join(' '))
+        : disc
+          ? wrapBeside(marked, panel.width - inset * 2, actualLinePx, setFamily, lineBold, measure, (n) => indentFor(y + n * actualLinePx * lineHeight))
+          : wrapToWidth(marked, panel.width - inset * 2, actualLinePx, setFamily, lineBold, measure);
       if (disc) {
         discs.push({ ...disc, text: devanagari(index + 1), fontPx: Math.round(disc.d * 0.62 * 10) / 10 });
       }
@@ -546,6 +596,7 @@
       out.push({
         text: piece, x: inset + indent, y, width: panel.width - inset * 2 - indent, fontPx: actualLinePx,
         lineHeight,
+        ...(marks ? { runs: runsOf(wordLines[pieceIndex]) } : {}),
         ...(panel.lineInk ? { ink: panel.lineInk } : {}),
         bold: lineBold || panel.kind === 'qa' ? (lineBold || index % 2 === 0)
           : panel.kind === 'reaction' ? index === panel.lines.length - 1

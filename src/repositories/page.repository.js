@@ -517,6 +517,11 @@ async function saveSection(pageId, sectionKey, updates) {
          -- is "सातारा : ". Coalesced - a payload that does not mention it
          -- leaves it alone, and 'square' is how a desk goes back.
          dateline_style = COALESCE($60, dateline_style),
+         -- The leading of the display flows, in ems of their own size. NULL is
+         -- the engine's own (body leading less 0.15); coalesced like the rest.
+         display_line_height = COALESCE($61, display_line_height),
+         -- 'as-written' or 'auto' (NULL means auto); coalesced.
+         paragraph_policy = COALESCE($62, paragraph_policy),
          revision = page_sections.revision + 1,
          updated_at = CURRENT_TIMESTAMP
      WHERE page_id = $1 AND section_key = $2
@@ -570,7 +575,9 @@ async function saveSection(pageId, sectionKey, updates) {
       Number.isFinite(updates.borderRadiusPx) ? updates.borderRadiusPx : null,
       updates.frameShape || null,
       expected,
-      updates.datelineStyle || null]
+      updates.datelineStyle || null,
+      Number.isFinite(updates.displayLineHeight) ? updates.displayLineHeight : null,
+      updates.paragraphPolicy || null]
   );
 
   // NOTHING MATCHED. Two different situations wear the same empty result, and

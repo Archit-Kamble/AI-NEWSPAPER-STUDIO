@@ -75,6 +75,11 @@ export const DRAFT_FIELDS = [
   "showDateline",
   // "■ सातारा " or "सातारा : " - see DATELINE_STYLES in text-flow.js.
   "datelineStyle",
+  // The display flows' own leading, when a measured page states it.
+  "displayLineHeight",
+  // 'as-written' keeps the reporter's paragraphs; 'auto' lets the compositor
+  // merge and split them (paragraph-policy.js).
+  "paragraphPolicy",
   // Does the desk's chosen headline / deck size WIN over the compositor's own
   // fit? See schema.sql: the fit is what makes a page look composed, and it is
   // also why a size a desk typed could appear to do nothing.
@@ -192,6 +197,8 @@ export function draftFromSection(section) {
     // today - so nothing composes differently until a desk turns one off.
     showDateline: section.show_dateline !== false,
     datelineStyle: section.dateline_style || null,
+    displayLineHeight: section.display_line_height == null ? null : Number(section.display_line_height),
+    paragraphPolicy: section.paragraph_policy || null,
     headlineLocked: section.headline_locked === true,
     subheadingLocked: section.subheading_locked === true,
     borderStyle: section.border_style || "none",
@@ -317,6 +324,8 @@ export function payloadFromDraft(draft) {
     insetPanels: Array.isArray(draft.insetPanels) ? draft.insetPanels : [],
     showDateline: draft.showDateline !== false,
     datelineStyle: draft.datelineStyle || null,
+    displayLineHeight: draft.displayLineHeight == null ? undefined : Number(draft.displayLineHeight),
+    paragraphPolicy: draft.paragraphPolicy || undefined,
     headlineLocked: draft.headlineLocked === true,
     subheadingLocked: draft.subheadingLocked === true,
     borderStyle: draft.borderStyle,

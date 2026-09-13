@@ -546,10 +546,16 @@ export function composeSection(section = {}, view = {}) {
     // every existing block carries, so nothing recomposes on the strength of
     // this existing.
     listStyle: pick(section, view, 'listStyle', 'list_style', 'none') || 'none',
+    // 'as-written' keeps the reporter's paragraphs exactly; NULL is the
+    // compositor's own merging and splitting (paragraph-policy.js).
+    paragraphPolicy: pick(section, view, 'paragraphPolicy', 'paragraph_policy', null),
     // How many lines the display type may take. Left at the engine's own
     // defaults unless a caller states them - `headline-reserve.js` does, so
     // that the reservation and the real block are measured the same way.
     headlineMaxLines: pick(section, view, 'headlineMaxLines', 'headline_max_lines', undefined),
+    // The display flows' leading when the block states one (a page measured
+    // off a scan does); absent is the engine's own, so nothing else moves.
+    displayLineHeight: Number(pick(section, view, 'displayLineHeight', 'display_line_height', 0)) || undefined,
     // Whether the headline may be set LARGER than asked in order to fill its
     // measure (compose.js's HEADLINE_FILL_TARGET). Left undefined - and so
     // on - unless a caller states otherwise; the two that do are the engine's

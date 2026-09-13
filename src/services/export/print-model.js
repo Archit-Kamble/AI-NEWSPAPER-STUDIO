@@ -34,7 +34,7 @@ const { identityFor, dateLine, devanagari } = require('../../layout/identity');
 const { strip } = require('../../layout/plain-text');
 const { captionBox, PLACED_CAPTION_METRICS } = require('../../../public/editor/layout/caption-geometry');
 const { borderEdges, borderWidthPx, borderOffsetsPx, isBoxed, borderRadiusPx } = require('../../../public/editor/layout/borders');
-const { panelsOf, panelLayout, panelStyle, panelEdges } = require('../../../public/editor/layout/inset-panels');
+const { panelsOf, panelLayout, panelStyle, panelEdges, ruleTicks } = require('../../../public/editor/layout/inset-panels');
 const { overlaysOf } = require('../../../public/editor/layout/page-overlays');
 const { smartCardLines } = require('./smart-card-lines');
 
@@ -564,7 +564,13 @@ function blockDecorations(section, composition) {
       left: { x: px, y: py, width: rule, height: mm(panel.height) },
       right: { x: px + mm(panel.width) - rule, y: py, width: rule, height: mm(panel.height) },
     };
-    for (const edge of edges) items.push({ kind: 'rule', ...BOX[edge], ink: panel.ruleInk || RULE_INK });
+    if (panel.ruleStyle === 'ticks') {
+      for (const [x, w] of ruleTicks(panel.width)) {
+        items.push({ kind: 'rule', x: px + mm(x), y: py, width: mm(w), height: rule, ink: panel.ruleInk || RULE_INK });
+      }
+    } else {
+      for (const edge of edges) items.push({ kind: 'rule', ...BOX[edge], ink: panel.ruleInk || RULE_INK });
+    }
     const shapedMeasure = modules?.shaper && modules?.metrics
       ? (text, px, family, weight) => {
         const shaped = modules.shaper.isShaperReady() ? modules.shaper.shapeWidthPx(text, px, family, weight) : null;

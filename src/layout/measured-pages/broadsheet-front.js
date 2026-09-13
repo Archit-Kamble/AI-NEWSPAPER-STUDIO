@@ -35,7 +35,7 @@ const cell = (box, family, px, { bold = false, align = 'left', ink, lineHeight =
   lineAlign: align, lineHeight, insetPx: 0, standOffPx: 0.5, ...(ink ? { lineInk: ink } : {}), ...(knockout ? { knockout } : {}),
 });
 // A HAIRLINE ACROSS A TABLE, or - given a weight - a solid band.
-const rule = (box, weightPx = 0.5) => ({ kind: 'ornament', box, rules: ['top'], ruleWidthPx: weightPx, standOffPx: 0.5 });
+const rule = (box, weightPx = 0.5, extra = {}) => ({ kind: 'ornament', box, rules: ['top'], ruleWidthPx: weightPx, standOffPx: 0.5, ...extra });
 
 // Heads read off a scan by their INK top; a condensed head's line box starts
 // a hair above it.
@@ -141,7 +141,7 @@ module.exports = {
         inset([835, 2148, 1182, 2863], 2, { tint: '#f4e4dc', insetPx: 5, titlePx: 9.0, boldLines: [1], lineGapPx: 5 }),
         inset([1224, 2149 - INK, 1572, 2872], 2, { marker: 'circle', boldLines: [1], lineGapPx: 4 }),
         inset([1611, 2445 - INK, 2011, 2872], 1),
-        { kind: 'ornament', box: [446, 2891, 2013, 2909], rules: ['bottom'], ruleWidthPx: 0.5, standOffPx: 0.5 },
+        rule([446, 2891, 2013, 2909], 4, { ruleStyle: 'ticks' }),
       ],
     },
     {
@@ -152,7 +152,7 @@ module.exports = {
         subhead([2057, 1386 - INK, 2381, 1480], 7.9),
         byline(2057, 2381, 1483, 1523),
         inset([2411, 1386 - INK, 2744, 1822], 6, { titlePx: 9.2 }),
-        { kind: 'sidebar', box: [2411, 1831, 2744, 2185], title: '“', lines: lines(4), titleFamily: 'mukta-heavy', titlePx: 16, titleLineHeight: 0.9, lineFamily: 'sans', linePx: 5.75, lineHeight: 1.24, insetPx: 0, standOffPx: 0.5 },
+        { kind: 'sidebar', box: [2411, 1831, 2744, 2185], title: '“', lines: lines(4), titleFamily: 'mukta-heavy', titlePx: 40, titleLineHeight: 0.62, lineFamily: 'sans', linePx: 5.75, lineHeight: 1.24, insetPx: 0, standOffPx: 0.5 },
       ],
     },
     {
@@ -184,14 +184,26 @@ module.exports = {
       ],
     },
     {
-      key: 'feature-strip', box: [56, 3451, 2010, 4296], story: 'ANALYSIS', priority: 3,
-      style: { ...BODY, ...HEAD('mukta-book', 21.7, { displayLineHeight: 1.19, headlineAlign: 'left', headlineStyle: 'kicker-chip-rule', accentColor: '#e42424', borderInk: '#fb9f0b' }), columnCount: 5, kicker: undefined },
-      pictures: [{ file: 'reference-lokmat/front-feature.jpg', box: [448, 3760, 792, 4296], standOffPx: 1 }],
+      // THE MUST-READ SEPARATOR: a marigold rule broken by a mark and a red chip.
+      key: 'must-read', box: [56, 3451, 2010, 3512], type: 'photo', story: 'ANALYSIS', priority: 1,
+      style: { ...BODY, showDateline: false },
+      pictures: [{ file: 'reference-lokmat/front-mustread-mark.jpg', box: [900, 3451, 972, 3512], standOffPx: 1 }],
       panels: [
-        byline(57, 407, 3760, 3800),
-        { kind: 'chart', box: [835, 3758, 1190, 4296], card: { chartType: 'stat', unit: '%', items: [{ label: `${PLACEHOLDER} १`, value: 74 }, { label: `${PLACEHOLDER} २`, value: 65 }, { label: `${PLACEHOLDER} ३`, value: 48 }] }, standOffPx: 0.5 },
-        inset([1222, 3758 - INK, 1563, 4296], 1, { titlePx: 9.3 }),
-        inset([1610, 3758 - INK, 2010, 4296], 4, { titlePx: 9.3, lineGapPx: 8 }),
+        rule([59, 3476, 890, 3489], 3, { ruleInk: '#fb9f0b' }),
+        rule([1178, 3476, 2010, 3489], 3, { ruleInk: '#fb9f0b' }),
+        rule([982, 3452, 1166, 3510], 13, { ruleInk: '#e42424' }),
+        cell([982, 3462, 1166, 3500], 'noto-condensed', 8.6, { bold: true, align: 'center', knockout: true, lineHeight: 1.2 }),
+      ],
+    },
+    {
+      key: 'feature-strip', box: [56, 3520, 2010, 4296], story: 'ANALYSIS', priority: 3,
+      style: { ...BODY, ...HEAD('mukta-book', 21.7, { displayLineHeight: 1.19, headlineAlign: 'left' }), columnCount: 5 },
+      pictures: [{ file: 'reference-lokmat/front-feature.jpg', box: [448, 3764, 792, 4296], standOffPx: 1 }],
+      panels: [
+        byline(57, 407, 3764, 3800),
+        { kind: 'chart', box: [835, 3764, 1190, 4296], card: { chartType: 'stat', unit: '%', items: [{ label: `${PLACEHOLDER} १`, value: 74 }, { label: `${PLACEHOLDER} २`, value: 65 }, { label: `${PLACEHOLDER} ३`, value: 48 }] }, standOffPx: 0.5 },
+        inset([1222, 3765 - INK, 1563, 4296], 1, { titlePx: 9.3 }),
+        inset([1610, 3765 - INK, 2010, 4296], 4, { titlePx: 9.3, lineGapPx: 8 }),
       ],
     },
     {

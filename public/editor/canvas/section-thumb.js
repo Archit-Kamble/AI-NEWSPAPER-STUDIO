@@ -15,7 +15,7 @@ import { computeMetrics } from "../layout/layout-metrics.js";
 import { imageTransformCss } from "../image/image-manager.js";
 import { buildFlowMap, CELL, flowRuns, bandBox, pourIntoRuns, flowImageFromRow, datelineText, captionBox } from "../layout/text-flow.js";
 import "../layout/inset-panels.js";
-const { panelsOf, panelLayout, panelStyle, panelEdges } = globalThis.SahasInsetPanels;
+const { panelsOf, panelLayout, panelStyle, panelEdges, INSET_PANEL_TICK_PITCH_PX } = globalThis.SahasInsetPanels;
 import { textWithMarks, markRun, plainText } from "../layout/rich-text.js";
 import { presentationRanges, renderPresentation } from "../layout/editorial-presentation.js";
 import { composeSection } from "../compose/section-adapter.js";
@@ -601,7 +601,8 @@ export function insetPanelsMarkup(section, view) {
   const accent = escapeHtml(view?.accentColor || section?.accent_color || '#c8102e');
   const surface = (panel) => {
     const style = panelStyle(panel.kind);
-    const edges = new Set(panelEdges(panel));
+    // A ticked rule is drawn as its own ground (see below), not as a border.
+    const edges = new Set(panel.ruleStyle === 'ticks' ? [] : panelEdges(panel));
     const rule = `${Number(panel.ruleWidthPx) || 0.71}px solid ${panel.ruleInk || '#111'}`;
     return [
       `border-top:${edges.has('top') ? rule : 'none'}`,
@@ -648,9 +649,13 @@ export function insetPanelsMarkup(section, view) {
       + (solved.discs || []).map((disc) => `<span class="panel-disc" style="left:${disc.x}px;top:${disc.y}px;width:${disc.d}px;height:${disc.d}px;`
         + `line-height:${disc.d}px;font-size:${disc.fontPx}px;border-radius:50%;background:#111;color:#fff;text-align:center;font-weight:700;`
         + `font-family:'Sahas Sans', 'Noto Sans Devanagari', Arial, sans-serif;">${escapeHtml(disc.text)}</span>`).join("");
+    const ticks = panel.ruleStyle === 'ticks'
+      ? `<span class="panel-ticks" style="left:0;top:0;width:100%;height:${Number(panel.ruleWidthPx) || 0.71}px;`
+        + `background:repeating-linear-gradient(90deg, ${panel.ruleInk || '#111'} 0 0.45px, transparent 0.45px ${INSET_PANEL_TICK_PITCH_PX}px);"></span>`
+      : '';
     return `<span class="section-inset-panel section-inset-${escapeHtml(panel.kind)}"
                   data-panel-id="${escapeHtml(panel.id)}"
-                  style="left:${panel.x}px;top:${panel.y}px;width:${panel.width}px;height:${panel.height}px;${surface(panel)}">${lines}</span>`;
+                  style="left:${panel.x}px;top:${panel.y}px;width:${panel.width}px;height:${panel.height}px;${surface(panel)}">${ticks}${lines}</span>`;
   }).join("");
 }
 

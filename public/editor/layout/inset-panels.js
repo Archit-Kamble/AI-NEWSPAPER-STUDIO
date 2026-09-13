@@ -123,6 +123,12 @@
   // Which edges a panel is ruled on: its own `rules` when it states them,
   // else its kind's.
   const panelEdges = (panel) => (Array.isArray(panel?.rules) ? panel.rules : (panelStyle(panel?.kind).edges || []));
+  // The ticks of a ticked rule across `width`, as [x, tickWidth] in the panel's
+  // own pixels - one list, so the canvas and the plate draw the same ticks.
+  const TICK_PITCH_PX = 1.45;
+  const TICK_WIDTH_PX = 0.45;
+  const ruleTicks = (width) => Array.from({ length: Math.max(0, Math.floor(width / TICK_PITCH_PX)) },
+    (_, i) => [Math.round(i * TICK_PITCH_PX * 100) / 100, TICK_WIDTH_PX]);
 
   // How a panel's lines are marked. The numbered form is the device the Lokmat
   // reference block uses for its two undertakings, and a fact box is where a
@@ -290,6 +296,9 @@
     // White type knocked out of whatever is laid under it (a rule set as a
     // solid band) - white is the paper, so it is not an ink to name.
     if (raw.knockout === true) out.knockout = true;
+    // A rule drawn as a run of fine upright ticks - the "barcode" rule a
+    // Marathi broadsheet closes a package with.
+    if (raw.ruleStyle === 'ticks') out.ruleStyle = 'ticks';
     for (const key of ['titleAlign', 'lineAlign']) if (ALIGNS.includes(raw[key])) out[key] = raw[key];
     for (const key of ['titleInk', 'lineInk', 'ruleInk']) if (HEX.test(String(raw[key] || ''))) out[key] = String(raw[key]).toLowerCase();
     const lineHeight = numberIn(raw.lineHeight, 1, 2.2); if (lineHeight !== null) out.lineHeight = lineHeight;
@@ -297,7 +306,7 @@
     const titleGapPx = numberIn(raw.titleGapPx, 0, 40); if (titleGapPx !== null) out.titleGapPx = titleGapPx;
     const lineGapPx = numberIn(raw.lineGapPx, 0, 20); if (lineGapPx !== null) out.lineGapPx = lineGapPx;
     const insetPx = numberIn(raw.insetPx, 0, 12); if (insetPx !== null) out.insetPx = insetPx;
-    const ruleWidthPx = numberIn(raw.ruleWidthPx, 0.3, 12); if (ruleWidthPx !== null) out.ruleWidthPx = ruleWidthPx;
+    const ruleWidthPx = numberIn(raw.ruleWidthPx, 0.3, 16); if (ruleWidthPx !== null) out.ruleWidthPx = ruleWidthPx;
     if (Array.isArray(raw.rules)) out.rules = EDGES.filter((edge) => raw.rules.includes(edge));
     if (Array.isArray(raw.boldLines)) {
       out.boldLines = raw.boldLines.map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n < 100);
@@ -634,7 +643,8 @@
     INSET_PANEL_STYLES: STYLES,
     INSET_PANEL_BULLET: BULLET,
     INSET_PANEL_ORNAMENTS: ORNAMENTS,
-    panelOf, panelsOf, defaultPanelFor, obstacleFromPanel, panelLayout, panelStyle, markerText, panelEdges,
+    panelOf, panelsOf, defaultPanelFor, obstacleFromPanel, panelLayout, panelStyle, markerText, panelEdges, ruleTicks,
+    INSET_PANEL_TICK_PITCH_PX: TICK_PITCH_PX,
   });
   root.SahasInsetPanels = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

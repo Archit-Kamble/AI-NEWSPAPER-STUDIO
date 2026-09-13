@@ -578,7 +578,7 @@ function blockDecorations(section, composition) {
         (line.runs || [{ text: line.text, bold: line.bold }]).map((segment) => run(segment.text, {
           family: line.family || panelFace,
           weight: segment.bold ? 700 : 400, bold: segment.bold, fontPx: line.fontPx,
-          ink: line.ink === 'accent' ? (section.accent_color || ACCENT_INK) : (/^#[0-9a-f]{6}$/i.test(line.ink || '') ? line.ink : null),
+          ink: line.ink === 'knockout' ? '#ffffff' : line.ink === 'accent' ? (section.accent_color || ACCENT_INK) : (/^#[0-9a-f]{6}$/i.test(line.ink || '') ? line.ink : null),
         })),
         line.align === 1 ? 'center' : line.align === 2 ? 'right' : 'left',
       ));

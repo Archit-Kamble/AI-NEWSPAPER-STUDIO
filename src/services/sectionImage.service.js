@@ -164,8 +164,10 @@ function clampToBlock(section, placement) {
   // reaches Postgres as "invalid input syntax for type integer" instead of a
   // resized picture. x/y were already rounded here; width/height never had
   // to be, because every existing caller already sent whole pixels.
-  const width = Math.max(20, Math.min(Math.round(Number(placement.width)) || 120, maxW));
-  const height = Math.max(20, Math.min(Math.round(Number(placement.height)) || 90, maxH));
+  // 8 px (4 mm) is the smallest mark a page carries - a market table's rupee
+  // or bull sets at 16 px, and a 20 px floor printed each one a quarter large.
+  const width = Math.max(8, Math.min(Math.round(Number(placement.width)) || 120, maxW));
+  const height = Math.max(8, Math.min(Math.round(Number(placement.height)) || 90, maxH));
   return {
     ...placement,
     width,

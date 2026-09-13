@@ -287,6 +287,9 @@
     const out = {};
     for (const key of ['titleFamily', 'lineFamily']) if (FACE_KEY.test(String(raw[key] || ''))) out[key] = String(raw[key]);
     for (const key of ['titleBold', 'lineBold']) if (typeof raw[key] === 'boolean') out[key] = raw[key];
+    // White type knocked out of whatever is laid under it (a rule set as a
+    // solid band) - white is the paper, so it is not an ink to name.
+    if (raw.knockout === true) out.knockout = true;
     for (const key of ['titleAlign', 'lineAlign']) if (ALIGNS.includes(raw[key])) out[key] = raw[key];
     for (const key of ['titleInk', 'lineInk', 'ruleInk']) if (HEX.test(String(raw[key] || ''))) out[key] = String(raw[key]).toLowerCase();
     const lineHeight = numberIn(raw.lineHeight, 1, 2.2); if (lineHeight !== null) out.lineHeight = lineHeight;
@@ -294,7 +297,7 @@
     const titleGapPx = numberIn(raw.titleGapPx, 0, 40); if (titleGapPx !== null) out.titleGapPx = titleGapPx;
     const lineGapPx = numberIn(raw.lineGapPx, 0, 20); if (lineGapPx !== null) out.lineGapPx = lineGapPx;
     const insetPx = numberIn(raw.insetPx, 0, 12); if (insetPx !== null) out.insetPx = insetPx;
-    const ruleWidthPx = numberIn(raw.ruleWidthPx, 0.3, 6); if (ruleWidthPx !== null) out.ruleWidthPx = ruleWidthPx;
+    const ruleWidthPx = numberIn(raw.ruleWidthPx, 0.3, 12); if (ruleWidthPx !== null) out.ruleWidthPx = ruleWidthPx;
     if (Array.isArray(raw.rules)) out.rules = EDGES.filter((edge) => raw.rules.includes(edge));
     if (Array.isArray(raw.boldLines)) {
       out.boldLines = raw.boldLines.map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n < 100);
@@ -544,7 +547,7 @@
           role: panel.kind === 'key-number' ? 'figure'
             : panel.kind === 'reaction' ? 'statement' : 'title',
           family: titleFamily,
-          ink: panel.titleInk || (['key-number', 'related', 'document'].includes(panel.kind) ? 'accent' : null),
+          ink: panel.knockout ? 'knockout' : panel.titleInk || (['key-number', 'related', 'document'].includes(panel.kind) ? 'accent' : null),
           lineHeight: titleLineHeight,
         });
         y += titlePx * titleLineHeight;
@@ -598,6 +601,7 @@
         lineHeight,
         ...(marks ? { runs: runsOf(wordLines[pieceIndex]) } : {}),
         ...(panel.lineInk ? { ink: panel.lineInk } : {}),
+        ...(panel.knockout ? { ink: 'knockout' } : {}),
         bold: lineBold || panel.kind === 'qa' ? (lineBold || index % 2 === 0)
           : panel.kind === 'reaction' ? index === panel.lines.length - 1
             : panel.kind === 'comparison' ? index % 2 === 1

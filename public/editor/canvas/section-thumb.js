@@ -643,7 +643,7 @@ export function insetPanelsMarkup(section, view) {
       + `${line.align === 1 ? "text-align:center;" : line.align === 2 ? "text-align:right;" : ""}`
       + `${line.bold ? "font-weight:700;" : ""}`
       + `${line.family ? `font-family:${faceCss(line.family)};` : ''}`
-      + `${line.ink === 'accent' ? `color:${accent};` : /^#[0-9a-f]{6}$/i.test(line.ink || '') ? `color:${line.ink};` : ''}">${
+      + `${line.ink === 'knockout' ? 'color:#fff;' : line.ink === 'accent' ? `color:${accent};` : /^#[0-9a-f]{6}$/i.test(line.ink || '') ? `color:${line.ink};` : ''}">${
         line.runs ? line.runs.map((r) => (r.bold ? `<b>${escapeHtml(r.text)}</b>` : escapeHtml(r.text))).join('') : escapeHtml(line.text)}</span>`).join("")
       + (solved.discs || []).map((disc) => `<span class="panel-disc" style="left:${disc.x}px;top:${disc.y}px;width:${disc.d}px;height:${disc.d}px;`
         + `line-height:${disc.d}px;font-size:${disc.fontPx}px;border-radius:50%;background:#111;color:#fff;text-align:center;font-weight:700;`

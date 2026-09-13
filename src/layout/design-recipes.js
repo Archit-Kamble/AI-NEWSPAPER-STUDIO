@@ -313,8 +313,29 @@ const RECIPES = {
   },
 };
 
+// THE SECTION A PAGE NAMES IN ITS FOLIO. The reference carries its section in
+// every inside page's head - आपला महाराष्ट्र, आपले मैदान, आपला पैसा - and this
+// paper's folio already draws a section name from the page's theme
+// (page-styles.js). Only the theme COLUMN is set: dressing the page through the
+// styler would re-dress every block the recipe has just dressed. A layout the
+// catalogue has no section for (opinion, notices, the jacket) names none, which
+// is better than naming a wrong one.
+const PAGE_THEME = {
+  'broadsheet-city': 'city',
+  'broadsheet-local': 'city',
+  'broadsheet-state': 'state',
+  'broadsheet-business': 'business',
+  'broadsheet-sport': 'sport',
+  'broadsheet-local-sport': 'sport',
+  'broadsheet-world': 'world',
+};
+
+function pageThemeFor(templateKey) {
+  return PAGE_THEME[templateKey] || null;
+}
+
 function recipeFor(templateKey) {
   return RECIPES[templateKey] || null;
 }
 
-module.exports = { RECIPES, recipeFor };
+module.exports = { RECIPES, recipeFor, PAGE_THEME, pageThemeFor };

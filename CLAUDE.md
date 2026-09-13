@@ -8326,8 +8326,14 @@ set that way, and boxing them read as an advertisement inside the story. It is
 one catalogue entry - the canvas and the press model both read a panel's edges
 from `panelStyle()`.
 
-**Still not matched:** the reference's section band in each folio
-(`आपला महाराष्ट्र →`); its weather and market rail as cards at a 72 px measure;
+**Each inside page names its section in the folio**, from `PAGE_THEME` in the
+recipe file: the script sets the `style_theme` COLUMN alone through
+`setStyleTheme`, never the styler, which would re-dress every block the recipe
+has just dressed. The name is the catalogue's own (क्रीडा, राज्य, विश्वसंचार), never
+the reference's; a layout with no matching section names none.
+
+**Still not matched:** the reference's own folio treatment (its section name
+set large and centred with an arrow); its weather and market rail as cards at a 72 px measure;
 the jacket's nameplate (only page one draws one); dense tender tables; and the
 fixture pictures are stand-ins, so a portrait sits where the reference has a
 cricketer. The filler flags five blocks OVERSET whose headline, deck and body

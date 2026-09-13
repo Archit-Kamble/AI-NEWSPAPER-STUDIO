@@ -22,7 +22,8 @@ const pool = require('../src/config/db');
 const pageService = require('../src/services/page.service');
 const sectionService = require('../src/services/pageSection.service');
 const imageService = require('../src/services/sectionImage.service');
-const { recipeFor } = require('../src/layout/design-recipes');
+const { recipeFor, pageThemeFor } = require('../src/layout/design-recipes');
+const pageRepository = require('../src/repositories/page.repository');
 const { syncTemplates } = require('../src/layout/syncTemplates');
 
 const ED = Number(process.argv[2]);
@@ -69,6 +70,8 @@ async function main() {
   for (const page of pages) {
     const recipe = recipeFor(page.template_key);
     if (!recipe) continue;
+    // The section the folio names - the theme column alone, never the styler.
+    await pageRepository.setStyleTheme(page.id, pageThemeFor(page.template_key));
     const { rows: sizes } = await pool.query(
       'SELECT section_key, width_px, height_px FROM page_sections WHERE page_id = $1', [page.id]);
     const sizeOf = new Map(sizes.map((row) => [row.section_key, row]));

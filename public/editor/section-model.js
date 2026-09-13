@@ -8,7 +8,7 @@
 // records for the duplicated template catalog.
 
 import { isExplicit } from "./status/section-status.js";
-import { DEFAULT_BODY_FONT_PX, MIN_LINE_HEIGHT } from "./layout/text-flow.js";
+import { DEFAULT_BODY_FONT_PX, MIN_LINE_HEIGHT, MIN_MEASURED_LINE_HEIGHT } from "./layout/text-flow.js";
 import { normalizeEditorialPriority, resolveStoryType } from "./layout/story-types.js";
 import { sanitiseInk, sanitiseTint } from "./layout/inks.js";
 
@@ -171,7 +171,16 @@ export function draftFromSection(section) {
     // block used to default to 1.25 instead, so a block reported as "98%
     // used" against the grid's assumption could still finish visibly short
     // of the bottom of the box once rendered at the shorter line height.
-    lineHeight: Math.max(MIN_LINE_HEIGHT, Number(section.line_height) || 1.25),
+    // Unset reads as the conservative floor, as before. A stored value is floored
+    // at the tightest MEASURED face instead of 1.45, because the compositor
+    // floors every block again at its own face's ink (font-metrics.js) - so a
+    // serif block reads 1.305 here and still sets at 1.555, exactly as it did,
+    // while a sans block can now set at the 1.305 its matras actually need.
+    // The canvas and the server must receive the same number, which is why
+    // this clamp and the compositor's have to agree.
+    lineHeight: section.line_height == null
+      ? MIN_LINE_HEIGHT
+      : Math.max(MIN_MEASURED_LINE_HEIGHT, Number(section.line_height) || 1.25),
     letterSpacingPx: Number(section.letter_spacing_px) || 0,
     paragraphSpacingPx: Number.isFinite(Number(section.paragraph_spacing_px)) ? Number(section.paragraph_spacing_px) : 8,
     listStyle: section.list_style || "none",

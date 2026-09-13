@@ -268,7 +268,9 @@ export function composedMarkup(composition, view, { datelinePrefix = '' } = {}) 
   for (const item of headlineFurniture(view.headlineStyle, composition)) {
     const ink = item.ink === 'screen'
       ? screenOf(view.accentColor || '#c8102e')
-      : (view.accentColor || '#c8102e');
+      : item.ink === 'rule'
+        ? (view.borderInk || view.accentColor || '#c8102e')
+        : (view.accentColor || '#c8102e');
     pieces.push(
       `<i class="section-headline-furniture is-${item.kind}" style="left:${item.x.toFixed(2)}px;`
       + `top:${item.y.toFixed(2)}px;width:${item.width.toFixed(2)}px;height:${item.height.toFixed(2)}px;`
@@ -317,7 +319,9 @@ export function composedMarkup(composition, view, { datelinePrefix = '' } = {}) 
       // because that span carries its colour further down the cascade.
       const displayInk = !reversed && view.headlineInk && (key === 'headline' || key === 'kicker')
         ? `color:${escapeHtml(view.headlineInk)};` : '';
-      const reverseInk = reversed && key === 'headline' ? 'color:#fff;' : displayInk;
+      // A kicker reversed out of its chip is white for the same reason.
+      const chipped = key === 'kicker' && view.headlineStyle === 'kicker-chip-rule';
+      const reverseInk = (reversed && key === 'headline') || chipped ? 'color:#fff;' : displayInk;
       pieces.push(
         `<span class="section-composed ${className}" style="left:${line.x.toFixed(2)}px;top:${line.y.toFixed(2)}px;`
         + `width:${line.measure.toFixed(2)}px;height:${line.height.toFixed(2)}px;`

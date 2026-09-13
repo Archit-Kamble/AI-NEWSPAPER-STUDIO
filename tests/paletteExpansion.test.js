@@ -29,13 +29,15 @@ const luma = (hex) => {
   return 0.2126 * parseInt(h.slice(0, 2), 16) + 0.7152 * parseInt(h.slice(2, 4), 16) + 0.0722 * parseInt(h.slice(4, 6), 16);
 };
 
-test('the palette holds 20 inks and 39 tints, every one named and separated', () => {
-  assert.strictEqual(inks.INKS.length, 20);
+test('the palette holds 23 inks and 44 tints, every one named and separated', () => {
+  // 20 designed inks + 3 measured off the reference broadsheet.
+  assert.strictEqual(inks.INKS.length, 23);
   // 21 pale originals + 18 "vivid" variants - the measured-from-a-real-page
   // ground page-styles.js's automatic theming reaches for. See
   // 'the palette theme system's tints stay contrast-safe for black type'
   // below for why these have their own, looser luma floor.
-  assert.strictEqual(inks.TINTS.length, 39);
+  // + 5 grounds measured off the reference broadsheet (`reference: true`).
+  assert.strictEqual(inks.TINTS.length, 44);
   const scribus = require('fs').readFileSync('src/services/scribus.service.js', 'utf8');
   for (const entry of [...inks.INKS, ...inks.TINTS]) {
     assert.ok(entry.scribus, `${entry.key} has no separation`);
@@ -55,10 +57,11 @@ test('the palette holds 20 inks and 39 tints, every one named and separated', ()
 test('every ink is dark enough and every pale tint light enough to read', () => {
   for (const ink of inks.INKS) {
     if (!ink.hex) continue; // Black carries none, deliberately.
+    if (ink.rule) continue; // A rule ink never sets type - held by the next test.
     assert.ok(luma(ink.hex) < 120, `${ink.key} (${ink.hex}) is too light for an ink: luma ${luma(ink.hex).toFixed(0)}`);
   }
   for (const tint of inks.TINTS) {
-    if (!tint.hex || tint.key.startsWith('vivid-')) continue; // White carries none; vivid tints are checked below.
+    if (!tint.hex || tint.key.startsWith('vivid-') || tint.reference) continue; // White carries none; vivid tints are checked below.
     assert.ok(luma(tint.hex) > 228, `${tint.key} (${tint.hex}) is too dark for a tint: luma ${luma(tint.hex).toFixed(0)}`);
   }
 });
@@ -80,6 +83,25 @@ test("the palette theme system's tints stay contrast-safe for black type", () =>
   for (const tint of vivid) {
     const ratio = contrastOfBlackOn(tint.hex);
     assert.ok(ratio >= 15, `${tint.key} (${tint.hex}) only gives black type ${ratio.toFixed(1)}:1 contrast`);
+  }
+});
+
+test('a rule ink is never offered for type, and measured grounds keep black type readable', () => {
+  const fs = require('fs');
+  for (const file of ['public/editor/external-editor/block-frame.js', 'public/editor/external-editor/device-bar.js']) {
+    const source = fs.readFileSync(file, 'utf8');
+    assert.ok(/INKS\.filter\(\(\w+\) => !\w+\.rule\)/.test(source), `${file} offers rule inks for type`);
+  }
+  const panel = fs.readFileSync('public/editor/external-editor/properties-panel.js', 'utf8');
+  const headlineColour = panel.slice(panel.indexOf('<label>Headline colour</label>'), panel.indexOf('<label>Accent colour</label>'));
+  assert.ok(headlineColour.includes('INKS.filter((ink) => !ink.rule)'), 'the headline colour picker offers rule inks');
+  const contrastOfBlackOn = (hex) => {
+    const h = hex.replace('#', '');
+    const L = (0.2126 * parseInt(h.slice(0, 2), 16) + 0.7152 * parseInt(h.slice(2, 4), 16) + 0.0722 * parseInt(h.slice(4, 6), 16)) / 255;
+    return (L + 0.05) / 0.05;
+  };
+  for (const tint of inks.TINTS.filter((t) => t.reference)) {
+    assert.ok(contrastOfBlackOn(tint.hex) >= 15, `${tint.key} (${tint.hex}) is too dark for black type`);
   }
 });
 

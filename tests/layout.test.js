@@ -61,9 +61,15 @@ test('the editor pixel scale is exactly 2 px per mm of the printed page', () => 
 
 test('every template block covers whole columns and stays inside the matter box', () => {
   for (const template of Object.values(templates)) {
+    // A layout measured off a printed page declares the grid it was measured
+    // on; its blocks must cover whole columns of THAT grid.
+    const grid = template.grid
+      ? geometryOf({ grid_columns: template.grid.columns, grid_gutter_mm: template.grid.gutterMm })
+      : G;
     for (const section of template.sections) {
       const asRow = { x_px: section.x, y_px: section.y, width_px: section.width, height_px: section.height };
-      assert.ok(onGrid(asRow), `${template.key}/${section.key} is off the column grid`);
+      const columns = grid.snapLeftPx.includes(asRow.x_px) && grid.snapRightPx.includes(asRow.x_px + asRow.width_px);
+      assert.ok(columns, `${template.key}/${section.key} is off the column grid`);
       assert.ok(insideMatter(asRow), `${template.key}/${section.key} escapes the matter box`);
     }
   }

@@ -371,7 +371,29 @@
    * renderer so the canvas, the Block Editor and all four exports place the
    * same lines - the caption's lesson, one file earlier.
    */
-  function panelLayout(panel, bodyFontPx = 6.4) {
+  // A PANEL ENTRY IS A SENTENCE, AND A SENTENCE IS SET IN AS MANY LINES AS IT
+  // NEEDS. The layout used to place one entry per line and leave the browser to
+  // wrap a long one - which it did, INTO the next entry's line: a fact box a
+  // desk typed a real sentence into printed its lines on top of each other.
+  // Given a measure (the publication faces' own widths), every entry is broken
+  // at word spaces into lines that fit, and each is placed on its own line. A
+  // single word wider than the panel stays whole; without a measure the old
+  // one-entry-per-line placement is kept, so nothing that cannot measure moves.
+  function wrapToWidth(text, width, fontPx, family, bold, measure) {
+    if (!measure || !(width > 0)) return [text];
+    const words = String(text).split(/\s+/).filter(Boolean);
+    const out = [];
+    let line = '';
+    for (const word of words) {
+      const candidate = line ? `${line} ${word}` : word;
+      if (line && measure(candidate, fontPx, family, bold ? 700 : 400) > width) { out.push(line); line = word; }
+      else line = candidate;
+    }
+    if (line) out.push(line);
+    return out.length ? out : [''];
+  }
+
+  function panelLayout(panel, bodyFontPx = 6.4, measure = null) {
     // A chart or table panel has no lines of its own - the card fills the
     // rectangle and solves its own type against it, exactly as it does in a
     // whole block.
@@ -393,16 +415,20 @@
     const out = [];
     let y = inset;
     if (panel.title) {
-      out.push({
-        text: panel.title, x: inset, y, width: panel.width - inset * 2,
-        fontPx: titlePx, bold: true,
-        align: panel.kind === 'key-number' ? 1 : 0,
-        role: panel.kind === 'key-number' ? 'figure'
-          : panel.kind === 'reaction' ? 'statement' : 'title',
-        family: panel.kind === 'reaction' ? 'serif' : 'sans',
-        ink: ['key-number', 'related', 'document'].includes(panel.kind) ? 'accent' : null,
-      });
-      y += titlePx * lineHeight;
+      const titleFamily = panel.kind === 'reaction' ? 'serif' : 'sans';
+      for (const piece of wrapToWidth(panel.title, panel.width - inset * 2, titlePx, titleFamily, true, measure)) {
+        if (out.length && y + titlePx * lineHeight > panel.height - inset) break;
+        out.push({
+          text: piece, x: inset, y, width: panel.width - inset * 2,
+          fontPx: titlePx, bold: true,
+          align: panel.kind === 'key-number' ? 1 : 0,
+          role: panel.kind === 'key-number' ? 'figure'
+            : panel.kind === 'reaction' ? 'statement' : 'title',
+          family: titleFamily,
+          ink: ['key-number', 'related', 'document'].includes(panel.kind) ? 'accent' : null,
+        });
+        y += titlePx * lineHeight;
+      }
     }
     panel.lines.forEach((text, index) => {
       const sourceLine = panel.kind === 'document' && index === panel.lines.length - 1;
@@ -420,8 +446,14 @@
                 : panel.kind === 'qa' ? (index % 2 === 0 ? 'प्र.' : 'उ.') : '';
       const mark = automaticMarker || markerText(panel.marker, index);
       const marked = mark ? `${mark} ${text}` : text;
+      const lineFamily = panel.kind === 'qa' ? (index % 2 === 0 ? 'sans' : 'serif')
+        : panel.kind === 'reaction' && index === panel.lines.length - 1 ? 'sans'
+          : panel.kind === 'document' ? (sourceLine ? 'sans' : 'serif') : (panelStyle(panel.kind).family || 'sans');
+      const pieces = wrapToWidth(marked, panel.width - inset * 2, actualLinePx, lineFamily, false, measure);
+      pieces.forEach((piece, pieceIndex) => {
+      if (pieceIndex > 0 && y + actualLinePx * lineHeight > panel.height - inset) return;
       out.push({
-        text: marked, x: inset, y, width: panel.width - inset * 2, fontPx: actualLinePx,
+        text: piece, x: inset, y, width: panel.width - inset * 2, fontPx: actualLinePx,
         bold: panel.kind === 'qa' ? index % 2 === 0
           : panel.kind === 'reaction' ? index === panel.lines.length - 1
             : panel.kind === 'comparison' ? index % 2 === 1
@@ -442,6 +474,7 @@
         align: panel.kind === 'ornament' || panel.kind === 'key-number' ? 1 : 0,
       });
       y += actualLinePx * lineHeight;
+      });
     });
     return { inset, titlePx, linePx, lineHeight, lines: out, usedHeight: y + inset };
   }

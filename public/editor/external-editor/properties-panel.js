@@ -523,7 +523,7 @@ function blockPropertiesMarkup(section, view, page) {
       <div class="form-group">
         <label>Headline colour</label>
         <div class="tint-swatches" data-prop-headline-ink>
-          ${INKS.map(
+          ${INKS.filter((ink) => !ink.rule).map(
             (ink) => `<button type="button" class="tint-swatch${(headInk || null) === ink.hex ? " active" : ""}"
               data-headline-ink="${ink.hex || ""}" title="${escapeHtml(ink.label)}"
               style="--tint:${ink.hex || "#111111"}">${ink.hex ? "<i></i>" : "<i class=\"tint-swatch-none\"></i>"}</button>`,

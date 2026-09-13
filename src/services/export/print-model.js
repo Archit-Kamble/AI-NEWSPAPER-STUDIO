@@ -164,6 +164,7 @@ const ACCENT_INK = '#c8102e';
  */
 function bandInk(section, key, reversed) {
   if (reversed && key === 'headline') return '#ffffff';
+  if (key === 'kicker' && section?.headline_style === 'kicker-chip-rule') return '#ffffff';
   if (section?.headline_ink && (key === 'headline' || key === 'kicker')) return section.headline_ink;
   return null;
 }
@@ -290,7 +291,9 @@ async function blockItems(section, { mono = false } = {}) {
         width: mm(piece.width), height: mm(piece.height),
         ink: piece.ink === 'screen'
           ? modules.inks.screenOf(section.accent_color || ACCENT_INK)
-          : (section.accent_color || ACCENT_INK),
+          : piece.ink === 'rule'
+            ? (section.border_ink || section.accent_color || ACCENT_INK)
+            : (section.accent_color || ACCENT_INK),
       });
     }
   }
@@ -560,7 +563,7 @@ function blockDecorations(section, composition) {
       right: { x: px + mm(panel.width) - rule, y: py, width: rule, height: mm(panel.height) },
     };
     for (const edge of edges) items.push({ kind: 'rule', ...BOX[edge], ink: RULE_INK });
-    const solved = panelLayout(panel, Number(section.body_font_px) || 6.4);
+    const solved = panelLayout(panel, Number(section.body_font_px) || 6.4, modules?.metrics?.measureWidth || null);
     for (const line of solved.lines) {
       items.push(textItem(
         { x: px + mm(line.x), y: py + mm(line.y), width: mm(line.width), height: mm(line.fontPx * solved.lineHeight) },

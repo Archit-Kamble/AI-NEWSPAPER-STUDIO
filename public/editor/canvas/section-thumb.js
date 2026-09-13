@@ -20,7 +20,7 @@ import { textWithMarks, markRun, plainText } from "../layout/rich-text.js";
 import { presentationRanges, renderPresentation } from "../layout/editorial-presentation.js";
 import { composeSection } from "../compose/section-adapter.js";
 import { composedMarkup, diagnosticMarkup } from "../compose/render.js";
-import { fontsReady } from "../compose/font-metrics.js";
+import { fontsReady, measureWidth } from "../compose/font-metrics.js";
 import { shapedRectPoints } from "../layout/block-shapes.js";
 import "../layout/borders.js";
 const { borderEdges, borderOffsetsPx, borderRadiusPx, canRound, isRuled, borderWidthPx } = globalThis.SahasBorders;
@@ -617,7 +617,9 @@ export function insetPanelsMarkup(section, view) {
                     data-panel-id="${escapeHtml(panel.id)}"
                     style="left:${panel.x}px;top:${panel.y}px;width:${panel.width}px;height:${panel.height}px;${surface(panel)}">${card || ""}</span>`;
     }
-    const solved = panelLayout(panel, bodyPx);
+    // Measured only once the faces are in - before that the old placement
+    // stands, rather than a wrap computed against the fallback widths.
+    const solved = panelLayout(panel, bodyPx, fontsReady() ? measureWidth : null);
     const lines = solved.lines.map((line) => `<span class="panel-line role-${escapeHtml(line.role || 'line')}" style="left:${line.x}px;top:${line.y}px;width:${line.width}px;`
       + `font-size:${line.fontPx}px;line-height:${solved.lineHeight};`
       // An ornament's mark is centred on its own rule; everything else sets

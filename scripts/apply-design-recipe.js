@@ -49,6 +49,13 @@ async function main() {
     if (!page) throw new Error(`edition ${ED} has no page ${pageNumber}`);
     if (!recipeFor(templateKey)) throw new Error(`no recipe for layout ${templateKey}`);
     await pageService.updatePage(page.id, { templateKey });
+    // A layout measured on its own column grid needs the edition on that grid,
+    // or a desk dragging a block snaps it back onto sixteen columns.
+    const layout = require('../src/layout/templates').templates[templateKey];
+    if (layout.grid) {
+      await pool.query('UPDATE newspapers SET grid_columns = $2, grid_gutter_mm = $3 WHERE id = $1',
+        [ED, layout.grid.columns, layout.grid.gutterMm]);
+    }
     // A layout change keeps any block that carries content - right for a desk,
     // and on a fixture it leaves the previous layout's carried adverts
     // overlapping the new frames. This script only runs on 2099 fixtures, so

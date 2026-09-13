@@ -25,8 +25,12 @@ test('a block section-model.js resolves floors line height at the Devanagari-saf
   assert.equal(draftFromSection({ line_height: null }).lineHeight, MIN_LINE_HEIGHT);
   assert.equal(draftFromSection({}).lineHeight, MIN_LINE_HEIGHT);
   // Even an explicit value below the floor is floored - this is a property of
-  // the script, not a taste setting (text-flow.js's own words for it).
-  assert.equal(draftFromSection({ line_height: 1.0 }).lineHeight, MIN_LINE_HEIGHT);
+  // the script, not a taste setting (text-flow.js's own words for it). The
+  // draft floors at the tightest MEASURED face (Noto Sans Devanagari's ink box,
+  // 1.305 em); the compositor then floors every block again at its own face's
+  // ink, which the test below holds for the serif.
+  const { MIN_MEASURED_LINE_HEIGHT } = await import('../public/editor/layout/text-flow.js');
+  assert.equal(draftFromSection({ line_height: 1.0 }).lineHeight, MIN_MEASURED_LINE_HEIGHT);
   // A value above the floor is left alone.
   assert.equal(draftFromSection({ line_height: 1.8 }).lineHeight, 1.8);
 });
@@ -72,4 +76,20 @@ test('the reported fit no longer falsely claims overflow for a block that visibl
   assert.equal(view.body.length, 436, 'the fixture body is the exact 436-character sample that was measured live');
   assert.ok(!fit.overflowing, `budget grew to ${map.bodyCharBudget}; 436 characters no longer reads as overflowing it`);
   assert.ok(fit.ratio < 1, 'the ratio itself should read under 100%, not clamped there by an undercounted budget');
+});
+
+// Last in this file on purpose: it loads the real fonts, and the planner tests
+// above assert the numbers of the path used BEFORE fonts have loaded.
+test('a serif block asking for the sans floor still sets at the serif\'s own ink box, and a sans block at its own', async () => {
+  const metrics = await import('../public/editor/compose/font-metrics.js');
+  const shaper = await import('../public/editor/compose/shaper.js');
+  await Promise.all([metrics.ensureFontsLoaded(), shaper.ensureShaperReady()]);
+  // The serif has always been floored at its hhea box; lowering the draft's
+  // clamp must not move it by a hair.
+  assert.equal(metrics.minLineHeightFor('serif', 400), 1.5550000000000002);
+  // Noto Sans Devanagari's measured ink is 1.305 em - no matra of it reaches
+  // past that - so that, and not the serif's 1.45, is its floor.
+  assert.equal(metrics.minLineHeightFor('sans', 400), 1.305);
+  // A face nobody has measured keeps the conservative floor.
+  assert.ok(metrics.minLineHeightFor('tiro', 400) >= 1.45);
 });

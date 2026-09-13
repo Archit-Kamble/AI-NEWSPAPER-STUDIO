@@ -320,10 +320,29 @@ export function measureWidth(text, fontPx, family = 'serif', weight = 400) {
 // only Noto Serif in play the reported 1.555 was the largest number anyway.
 const DEVANAGARI_INK_EM = 1.45;
 
+// MEASURED, per face, and the reason a face can be set tighter than 1.45.
+//
+// The 1.45 above was measured on the serif, and applied to every face because
+// nothing else had been measured - a guard against a face whose hhea claims
+// less than its ink. Measured the same way (Chrome's own rasteriser, every
+// consonant with every vowel sign above and below, and the deep conjuncts
+// ड़्रु, ङ्क्षु, र्ह्यु; tmp-visual-pass/runs/ink-box.js), each face's real ink box is:
+//
+//   serif 1.475 · sans 1.305 · tiro 1.511 · mukta 1.575 · khand 1.336
+//
+// So Noto Sans Devanagari genuinely needs 1.305 em and no more - its matras
+// are shallower - and a floor of 1.45 on it was 11% of every column spent on
+// air. That is the whole gap to a printed Marathi daily set at ~1.25-1.3 em.
+// A face with a measurement is floored at its OWN ink (never below its hhea);
+// a face without one keeps the conservative 1.45. No stored block carried a
+// sans body when this changed, so nothing already made up recomposes.
+const MEASURED_INK_EM = { sans: 1.305 };
+
 export function minLineHeightFor(family = 'serif', weight = 400) {
   const face = faceMetrics(family, weight);
-  if (!face) return DEVANAGARI_INK_EM;
-  return Math.max(DEVANAGARI_INK_EM, face.ascent + face.descent);
+  const measured = MEASURED_INK_EM[family];
+  if (!face) return measured ?? DEVANAGARI_INK_EM;
+  return Math.max(measured ?? DEVANAGARI_INK_EM, face.ascent + face.descent);
 }
 
 export function faceAscent(family = 'serif', weight = 400) {

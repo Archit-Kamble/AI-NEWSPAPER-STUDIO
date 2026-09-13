@@ -49,6 +49,11 @@ import { plainText } from "./rich-text.js";
 import "./caption-geometry.js";
 
 export const MIN_LINE_HEIGHT = 1.45;
+// The lowest line height ANY face may be set at: the tightest measured ink box
+// (Noto Sans Devanagari, 1.305 em - see font-metrics.js). A block may ask for
+// this; the compositor still floors it at its own face's need, so asking for
+// it on the serif sets the serif exactly as before.
+export const MIN_MEASURED_LINE_HEIGHT = 1.305;
 export const { PLACED_CAPTION_METRICS, captionBox } = globalThis.SahasCaptionGeometry;
 
 // The paper's own byline, used when a story has no reporter to name.

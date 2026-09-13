@@ -176,6 +176,23 @@ function block(key, col, span, y, height, options = {}) {
   };
 }
 
+// A LAYOUT MEASURED OFF A PRINTED PAGE KEEPS THAT PAGE'S OWN COLUMN GRID.
+//
+// The reference broadsheet is seven columns with a 4.5 mm gutter - measured off
+// the scan: 349 px columns and 38 px gutters across a 2678 px matter, which at
+// this page's scale is 81 px and 9 px. No span of the default 16 columns lands
+// on it (the nearest are out by up to 20 px, and a column 20 px short sets a
+// different line on every line). A newspaper already carries its own grid
+// (`newspapers.grid_columns`, `grid_gutter_mm`) and geometry.js already derives
+// every snap point from it, so the template simply declares the grid it was
+// measured on and places blocks on THAT grid's own snap points.
+const REFERENCE_GRID = Object.freeze({ columns: 7, gutterMm: 4.5 });
+const REF_GEOMETRY = geometryOf({ grid_columns: REFERENCE_GRID.columns, grid_gutter_mm: REFERENCE_GRID.gutterMm });
+function frame(key, col, span, y, height, options = {}) {
+  const x = REF_GEOMETRY.snapLeftPx[col];
+  return { ...block(key, 0, 1, y, height, options), x, width: REF_GEOMETRY.snapRightPx[col + span - 1] - x };
+}
+
 // Baseline-snap a raw pixel value upward. Used only for the masthead advert's
 // own corner, which sits inside the header band rather than the content
 // region the region model governs.
@@ -462,41 +479,25 @@ const templates = {
   'broadsheet-sport': {
     key: 'broadsheet-sport',
     name: 'Broadsheet sport (reference)',
-    description: 'A narrow rail of five items, a picture-led lead beside a tall second story, a report pair and a feature strip.',
-    sections: (() => {
-      const [upper, middle] = rows(INSIDE_TOP, [504, 248]);
-      const footTop = middle.end + GAP;
-      const foot = INSIDE_BOTTOM - footTop;
-      const [today, update] = rows(INSIDE_TOP, [64, 200]);
-      const railThreeTop = update.end + GAP;
-      return [
-        block('rail-today', 0, 2, today.y, today.height,
-          { type: 'briefs', story: 'BRIEF', priority: 2 }),
-        block('rail-update', 0, 2, update.y, update.height,
-          { type: 'briefs', story: 'BRIEF', priority: 2 }),
-        block('rail-three', 0, 2, railThreeTop, upper.end - railThreeTop,
-          { story: 'BRIEF', priority: 2 }),
-        block('rail-four', 0, 2, middle.y, middle.height,
-          { story: 'BRIEF', priority: 2 }),
-        block('rail-five', 0, 2, footTop, foot,
-          { story: 'BRIEF', priority: 2 }),
-
-        block('lead', 2, 9, upper.y, upper.height,
-          { story: 'LEAD', priority: 5 }),
-        block('second', 11, 5, upper.y, upper.height,
-          { story: 'SECONDARY', priority: 4 }),
-
-        block('report-left', 2, 5, middle.y, middle.height,
-          { story: 'STANDARD', priority: 3 }),
-        block('report-right', 7, 9, middle.y, middle.height,
-          { story: 'SECONDARY', priority: 4 }),
-
-        block('feature-strip', 2, 9, footTop, foot,
-          { story: 'ANALYSIS', priority: 3, headline: 'kicker-tab-rule' }),
-        block('squad-box', 11, 5, footTop, foot,
-          { story: 'SIDEBAR', priority: 2 }),
-      ];
-    })(),
+    grid: REFERENCE_GRID,
+    description: 'A one-column rail of five items, a four-column picture lead, a two-column second story, two reports, a separator-led feature and a ruled team box.',
+    // MEASURED EXACTLY, not snapped to the 16 columns: the reference's seven
+    // columns at this page's scale (81 px, 9 px gutters), every block edge read
+    // off the scan, tops on the baseline and closed to the one 8 px gap.
+    // Generated from the reference spec, so the numbers are literals on purpose.
+    sections: [
+      frame('rail-today', 0, 1, 56, 72, { type: 'briefs', story: 'BRIEF', priority: 2 }),
+      frame('rail-update', 0, 1, 136, 216, { type: 'briefs', story: 'BRIEF', priority: 2 }),
+      frame('rail-three', 0, 1, 360, 208, { story: 'BRIEF', priority: 2 }),
+      frame('rail-four', 0, 1, 576, 224, { story: 'BRIEF', priority: 2 }),
+      frame('rail-five', 0, 1, 808, 200, { story: 'BRIEF', priority: 2 }),
+      frame('lead', 1, 4, 56, 464, { story: 'LEAD', priority: 5 }),
+      frame('second', 5, 2, 56, 464, { story: 'SECONDARY', priority: 4 }),
+      frame('report-left', 1, 2, 528, 272, { story: 'STANDARD', priority: 3 }),
+      frame('report-right', 3, 4, 528, 272, { story: 'SECONDARY', priority: 4 }),
+      frame('feature-strip', 1, 4, 808, 200, { story: 'ANALYSIS', priority: 3 }),
+      frame('squad-box', 5, 2, 808, 200, { story: 'SIDEBAR', priority: 2 }),
+    ],
   },
 
   // THE REST OF THE REFERENCE PAPER, measured the same way as the two above:

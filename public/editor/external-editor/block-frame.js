@@ -185,7 +185,7 @@ export function blockFrameMarkup() {
              colour a desk mixed in a browser is an ink no press can lay
              down. Black is the absence of a mark, so it CLEARS. -->
         <span class="ql-formats ed-quill-ink-group" id="edQuillInk">
-          ${INKS.map((ink) => `<button type="button" class="ed-quill-ink-btn${ink.hex ? "" : " is-none"}"
+          ${INKS.filter((ink) => !ink.rule).map((ink) => `<button type="button" class="ed-quill-ink-btn${ink.hex ? "" : " is-none"}"
               data-ink="${ink.hex || ""}" title="${ink.label}"
               style="${ink.hex ? `--ink:${ink.hex}` : ""}"><i></i></button>`).join("")}
         </span>

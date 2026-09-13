@@ -67,6 +67,14 @@ export const INKS = [
   { key: 'violet', label: 'Violet', hex: '#43308f', scribus: 'SahasViolet' },
   { key: 'slate', label: 'Slate', hex: '#3f4a56', scribus: 'SahasSlate' },
   { key: 'pine', label: 'Pine', hex: '#0f5c4f', scribus: 'SahasPine' },
+  // MEASURED OFF A PRINTED MARATHI BROADSHEET (the reference page scans), not
+  // chosen: the scarlet of its labels and chips, the cyan its section tabs are
+  // reversed out of, and the marigold of its separator rules. Marigold is far
+  // too light to hold small Devanagari on newsprint, so it is marked `rule` -
+  // offered for rules, bands and accents, never for type.
+  { key: 'scarlet', label: 'Scarlet', hex: '#e42424', scribus: 'SahasScarlet' },
+  { key: 'cyan', label: 'Cyan', hex: '#0b8bd3', scribus: 'SahasCyan' },
+  { key: 'marigold', label: 'Marigold', hex: '#fb9f0b', scribus: 'SahasMarigold', rule: true },
 ];
 
 /**
@@ -151,6 +159,15 @@ export const TINTS = [
   { key: 'vivid-plum', label: 'Vivid Plum', hex: '#e8dae2', scribus: 'SahasTintVividPlum' },
   { key: 'vivid-violet', label: 'Vivid Violet', hex: '#dfdcec', scribus: 'SahasTintVividViolet' },
   { key: 'vivid-pine', label: 'Vivid Pine', hex: '#d6e3e1', scribus: 'SahasTintVividPine' },
+  // Grounds MEASURED off the same reference scans - the powder blue behind a
+  // sidebar, the orchid of a feature panel, the blush and peach of tinted
+  // boxes, the silver of a ruled team box. Deeper than the pale family, so they
+  // are held to the vivid family's contrast rule rather than its luma floor.
+  { key: 'powder', label: 'Powder', hex: '#c9e7f3', scribus: 'SahasTintPowder', reference: true },
+  { key: 'orchid', label: 'Orchid', hex: '#e7c9e7', scribus: 'SahasTintOrchid', reference: true },
+  { key: 'blush', label: 'Blush', hex: '#f4e4dc', scribus: 'SahasTintBlush', reference: true },
+  { key: 'peach', label: 'Peach', hex: '#fce4cc', scribus: 'SahasTintPeach', reference: true },
+  { key: 'silver', label: 'Silver', hex: '#eaeaea', scribus: 'SahasTintSilver', reference: true },
 ];
 
 // A colour that has been through the DOM comes back as `rgb(200, 16, 46)`,
@@ -221,6 +238,14 @@ export const HEADLINE_STYLES = [
   { key: 'display-rule', label: 'Rule below display', grounds: [], ruleAfter: 'display' },
   { key: 'kicker-tab', label: 'Section tab', grounds: [], kickerTab: true },
   { key: 'kicker-tab-rule', label: 'Section tab + rule', grounds: [], kickerTab: true, ruleAfter: 'display' },
+  // A PAGE-LEVEL SEPARATOR set on a story's own kicker: a rule across the whole
+  // measure through the kicker's middle, and the kicker reversed out of a chip
+  // in the accent, centred on it. Measured off the reference broadsheet, which
+  // opens its "must read" group this way - marigold rule, scarlet chip, white
+  // type. The rule takes the block's RULE ink (border_ink), the chip its accent,
+  // so the two can be the two different inks the reference uses. The kicker is
+  // centred by the compositor like any centred display flow; nothing moves.
+  { key: 'kicker-chip-rule', label: 'Chip on a rule (separator)', grounds: [], kickerChip: true },
   // More display hierarchy without stealing one pixel from the story. The
   // rule variants differ in length, position and rhythm, but they are all
   // painted into gaps the compositor has already proved are empty.
@@ -290,6 +315,19 @@ export function headlineFurniture(style, composition) {
         accentRule(railX, top + Math.max(0, (bottom - top - 1) / 2), railWidth, 1);
       }
     }
+  }
+
+  if (treatment.kickerChip && bands.kicker?.lines?.length) {
+    const kicker = bands.kicker;
+    const line = kicker.lines[0];
+    const top = kicker.top;
+    const height = kicker.height;
+    const pad = Math.max(3, height * 0.35);
+    const left = Math.max(content.left, (Number(line.x) || content.left) - pad);
+    const right = Math.min(content.right, (Number(line.x) || content.left) + (Number(line.width) || 0) + pad);
+    // Rule first, then the chip over it: the chip must interrupt the rule.
+    pieces.push({ kind: 'rule', x: content.left, y: top + height / 2 - 0.75, width: content.measure, height: 1.5, ink: 'rule' });
+    if (right > left) pieces.push({ kind: 'fill', x: left, y: top, width: right - left, height, ink: 'accent' });
   }
 
   if (treatment.steppedLines && bands.headline?.lines?.length) {

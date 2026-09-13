@@ -24,7 +24,7 @@
 // space and convert to mm at export time; the conversion stays explicit, per
 // CLAUDE.md's rule about never mixing the two silently.
 
-import { MIN_LINE_HEIGHT } from "../layout/text-flow.js";
+import { MIN_MEASURED_LINE_HEIGHT } from "../layout/text-flow.js";
 import { escapeHtml as escapeText } from "../format.js";
 import { DEFAULT_DISPLAY_ALIGN } from "../compose/compose.js";
 
@@ -161,7 +161,7 @@ const NUMBER_FIELDS = [
   // signs crop against the next line (text-flow.js's MIN_LINE_HEIGHT). What
   // this input offers has to match what section-model.js actually stores, or
   // a desk could type 1.0 here and watch it render at 1.45 anyway.
-  { id: "tyLineHeight", field: "lineHeight", label: "Line spacing", min: MIN_LINE_HEIGHT, max: 3, step: 0.05 },
+  { id: "tyLineHeight", field: "lineHeight", label: "Line spacing", min: MIN_MEASURED_LINE_HEIGHT, max: 3, step: 0.05 },
   // LETTER SPACING IS NOT OFFERED, and this is the third instance of the fault
   // that took drop_cap BOOLEAN and list_style: a control that persisted, that
   // this panel's own PREVIEW paragraph drew, and that no renderer of the real

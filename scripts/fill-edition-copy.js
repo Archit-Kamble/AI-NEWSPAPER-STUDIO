@@ -27,6 +27,7 @@ const path = require('node:path');
 const pool = require('../src/config/db');
 
 const ED = Number(process.argv[2]);
+const KEEP_DISPLAY = process.argv.includes('--keep-display');
 
 // ------------------------------------------------------------- the copy ---
 //
@@ -463,14 +464,18 @@ function bodyFor(compose, section, images, view, seed) {
     HEADLINES = topic ? topic.headlines : CIVIC_HEADLINES;
     DECKS = topic ? topic.decks : CIVIC_DECKS;
 
-    const subheading = section.height_px > 240 ? pick(DECKS, editionSeed + index * 3) : '';
-    const location = pick(LOCATIONS, editionSeed + index);
-    const reporter = pick(REPORTERS, editionSeed + index * 5);
+    // --keep-display: a block that already carries display type keeps it, and
+    // only its story is written to fit. That is how a page is compared against
+    // a reference - its own headlines set, its column filled to the foot.
+    const keep = KEEP_DISPLAY && String(section.headline || '').trim();
+    const subheading = keep ? (section.subheading || '') : (section.height_px > 240 ? pick(DECKS, editionSeed + index * 3) : '');
+    const location = keep ? (section.location || '') : pick(LOCATIONS, editionSeed + index);
+    const reporter = keep ? (section.reporter_name || '') : pick(REPORTERS, editionSeed + index * 5);
     const placed = imagesBySection.get(section.id) || [];
 
     // The headline is chosen AFTER the pictures are known, because the measure
     // it has to fill is what is left beside them.
-    const headline = headlineFor(
+    const headline = keep ? section.headline : headlineFor(
       compose, section, placed,
       { subheading, location, author: reporter },
       editionSeed + index * 7 + section.page_number,

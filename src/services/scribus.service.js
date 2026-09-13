@@ -229,6 +229,14 @@ const COLOURS = `
   <COLOR NAME="SahasTintVividPlum" CMYK="#000f0717" Spot="0" Register="0"/>
   <COLOR NAME="SahasTintVividViolet" CMYK="#0e110013" Spot="0" Register="0"/>
   <COLOR NAME="SahasTintVividPine" CMYK="#0f00021c" Spot="0" Register="0"/>
+  <COLOR NAME="SahasScarlet" CMYK="#00d7d71b" Spot="0" Register="0"/>
+  <COLOR NAME="SahasCyan" CMYK="#f257002c" Spot="0" Register="0"/>
+  <COLOR NAME="SahasMarigold" CMYK="#005df404" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintPowder" CMYK="#2c0d000c" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintOrchid" CMYK="#00210018" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintBlush" CMYK="#0011190b" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintPeach" CMYK="#00183103" Spot="0" Register="0"/>
+  <COLOR NAME="SahasTintSilver" CMYK="#00000015" Spot="0" Register="0"/>
   <COLOR NAME="None" CMYK="#00000000" Spot="0" Register="0"/>`;
 
 // The four faces the publication actually ships (public/assets/fonts/, the
@@ -834,7 +842,9 @@ function displayBandFrames(composition, section, accent, richText, render, inks,
   for (const piece of inks.headlineFurniture(section.headline_style, composition)) {
     const hex = piece.ink === 'screen'
       ? inks.screenOf(section.accent_color || ACCENT_HEX)
-      : (section.accent_color || ACCENT_HEX);
+      : piece.ink === 'rule'
+        ? (section.border_ink || section.accent_color || ACCENT_HEX)
+        : (section.accent_color || ACCENT_HEX);
     parts.push(fillFrame({
       xMm: xBaseMm + mm(piece.x), yMm: yBaseMm + mm(piece.y) + pageOffsetMm,
       widthMm: mm(piece.width), heightMm: mm(piece.height),
@@ -859,7 +869,7 @@ function displayBandFrames(composition, section, accent, richText, render, inks,
       }
       // Out of the panel above. A desk's own ink mark inside the headline
       // still wins, the same way it does in the browser.
-      if (reversed && key === 'headline') {
+      if ((reversed && key === 'headline') || (key === 'kicker' && section.headline_style === 'kicker-chip-rule')) {
         runs.forEach((run) => { if (!run.colour) run.colour = 'White'; });
       }
       // `line.measure` is the band's own gap; `line.width` is what was

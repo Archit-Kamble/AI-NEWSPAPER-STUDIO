@@ -92,7 +92,8 @@ const MENUS = {
   // white type out of a solid panel and the `band` treatments lay a screen
   // behind the headline, the deck, or both. It is one field, so it is one menu.
   "head-style": () => HEADLINE_STYLES.map((h) => ({ value: h.key, label: h.label })),
-  "head-ink": () => INKS.map((i) => ({ value: i.hex || "", label: i.label, swatch: i.hex })),
+  // A rule ink (too light to hold type) is offered for rules and grounds only.
+  "head-ink": () => INKS.filter((i) => !i.rule).map((i) => ({ value: i.hex || "", label: i.label, swatch: i.hex })),
   // ACCENT IS A DIFFERENT OBJECT and must not be merged into the one above: it
   // fills a reversed or screened band and colours the accent word, never the
   // headline's own running text. `accent_color` is NOT NULL with a real

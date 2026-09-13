@@ -235,7 +235,7 @@ const MASTHEAD_ADVERT = {
 // scan's own rectangles scaled onto this page, not spans of a column grid, so
 // the frame is block()'s with the measured x, width and height put back.
 const { buildMeasuredPage } = require('./measured-pages/scan');
-const MEASURED_PAGES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state', 'broadsheet-local', 'broadsheet-opinion', 'broadsheet-advertorial', 'broadsheet-local-sport']
+const MEASURED_PAGES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state', 'broadsheet-local', 'broadsheet-opinion', 'broadsheet-advertorial', 'broadsheet-local-sport', 'broadsheet-miscellany']
   .map((key) => [key, buildMeasuredPage(require(`./measured-pages/${key}`))]));
 function measuredTemplate(key) {
   const { template } = MEASURED_PAGES[key];
@@ -515,28 +515,7 @@ const templates = {
 
   'broadsheet-local-sport': measuredTemplate('broadsheet-local-sport'),
 
-  'broadsheet-miscellany': {
-    key: 'broadsheet-miscellany',
-    name: 'Broadsheet miscellany (reference)',
-    grid: REFERENCE_GRID,
-    description: 'A ruled profile feature, a national lead with sidebars, a world brief, cabinet and court reports, recruitment adverts, a strip advert, a world report and a separator-led feature.',
-    // MEASURED off the reference scan onto its own seven-column grid, tops on
-    // the baseline and closed to the one 8 px gap. Generated, so literals.
-    sections: [
-      frame('profile-feature', 0, 3, 56, 504, { story: 'PHOTO_FEATURE', priority: 4 }),
-      frame('lead', 3, 2, 56, 200, { story: 'LEAD', priority: 5 }),
-      frame('world-brief', 5, 2, 56, 200, { story: 'BRIEF', priority: 2 }),
-      frame('cabinet-report', 3, 2, 264, 96, { story: 'STANDARD', priority: 3 }),
-      frame('tender-advert', 5, 2, 264, 96, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
-      frame('court-report', 3, 1, 368, 280, { story: 'BRIEF', priority: 2 }),
-      frame('recruit-advert-left', 4, 1, 368, 344, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
-      frame('recruit-advert-right', 5, 2, 368, 344, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
-      frame('strip-advert', 0, 3, 568, 80, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
-      frame('world-report', 0, 4, 656, 144, { story: 'STANDARD', priority: 3 }),
-      frame('bank-advert', 4, 3, 720, 288, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
-      frame('feature-strip', 0, 4, 808, 200, { story: 'ANALYSIS', priority: 3 }),
-    ],
-  },
+  'broadsheet-miscellany': measuredTemplate('broadsheet-miscellany'),
 
   'broadsheet-business': {
     key: 'broadsheet-business',

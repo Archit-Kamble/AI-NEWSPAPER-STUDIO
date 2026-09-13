@@ -76,7 +76,7 @@ const ADS = {
 // A page measured exactly off a scan carries its recipe in its own spec
 // (measured-pages/), beside the rectangles it was measured with.
 const { buildMeasuredPage } = require('./measured-pages/scan');
-const MEASURED_RECIPES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state', 'broadsheet-local', 'broadsheet-opinion', 'broadsheet-advertorial', 'broadsheet-local-sport']
+const MEASURED_RECIPES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state', 'broadsheet-local', 'broadsheet-opinion', 'broadsheet-advertorial', 'broadsheet-local-sport', 'broadsheet-miscellany']
   .map((key) => [key, buildMeasuredPage(require(`./measured-pages/${key}`)).recipe]));
 
 const RECIPES = {
@@ -178,51 +178,6 @@ const RECIPES = {
 
   // MEASURED off the reference scan: sizes from each head's shirorekha, body at
   // the reference's own em and pitch, its colours, its picture and panel boxes.
-  'broadsheet-miscellany': {
-    'profile-feature': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 12.0, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 2, textAlign: 'justify', headlineStyle: 'kicker-accent', accentColor: '#e42424', borderInk: '#b06a08', borderStyle: 'box' },
-      fixtureKicker: 'रत्नमाला',
-      pictures: [{ file: 'reference-lokmat/broadsheet-miscellany-profile-feature-0.jpg', x: 98, y: 53, width: 35, height: 35 }, { file: 'reference-lokmat/broadsheet-miscellany-profile-feature-1.jpg', x: 90, y: 116, width: 50, height: 50 }],
-      panels: [{ kind: 'sidebar', tint: '#fce4cc', x: 0, y: 245, width: 216, height: 254, titlePx: 8.8, linePx: 6.0, title: PLACEHOLDER, lines: points(10) }],
-    },
-    'lead': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 21.0, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 3, textAlign: 'justify', subheadingFontPx: 9.0, subheadingLocked: true },
-      pictures: [],
-      panels: [{ kind: 'sidebar', x: 69, y: 82, width: 61, height: 117, titlePx: 8.8, linePx: 6.0, title: PLACEHOLDER, lines: points(5) }, { kind: 'sidebar', x: 134, y: 82, width: 36, height: 117, titlePx: 8.8, linePx: 6.0, title: PLACEHOLDER, lines: points(5) }],
-    },
-    'world-brief': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 14.5, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 2, textAlign: 'justify' },
-      pictures: [],
-      panels: [],
-    },
-    'cabinet-report': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 17.0, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 3, textAlign: 'justify' },
-      pictures: [],
-      panels: [],
-    },
-    'tender-advert': ADS.gold,
-    'recruit-advert-left': ADS.insurance,
-    'recruit-advert-right': ADS.family,
-    'strip-advert': ADS.ayurveda,
-    'bank-advert': ADS.masala,
-    'court-report': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 14.5, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 1, textAlign: 'justify' },
-      pictures: [],
-      panels: [],
-    },
-    'world-report': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 14.5, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 3, textAlign: 'justify' },
-      pictures: [],
-      panels: [{ kind: 'sidebar', x: 170, y: 23, width: 140, height: 121, titlePx: 8.8, linePx: 6.0, title: PLACEHOLDER, lines: points(6) }],
-    },
-    'feature-strip': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 21.5, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 3, textAlign: 'justify', headlineStyle: 'kicker-chip-rule', accentColor: '#e42424', borderInk: '#fb9f0b', headlineAlign: 'center' },
-      fixtureKicker: 'जरूर वाचा',
-      pictures: [],
-      panels: [{ kind: 'sidebar', marker: 'number', x: 107, y: 73, width: 78, height: 127, titlePx: 8.8, linePx: 6.0, title: PLACEHOLDER, lines: points(3) }, { kind: 'sidebar', x: 194, y: 73, width: 116, height: 127, titlePx: 8.8, linePx: 6.0, title: PLACEHOLDER, lines: points(5) }],
-    },
-  },
-
   // MEASURED off the reference scan: sizes from each head's shirorekha, body at
   // the reference's own em and pitch, its colours, its picture and panel boxes.
   'broadsheet-business': {

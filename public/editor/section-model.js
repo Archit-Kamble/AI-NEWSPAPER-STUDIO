@@ -80,6 +80,8 @@ export const DRAFT_FIELDS = [
   // 'as-written' keeps the reporter's paragraphs; 'auto' lets the compositor
   // merge and split them (paragraph-policy.js).
   "paragraphPolicy",
+  // How far a display flow may stand into the stand-off of what is under it.
+  "displayOverlapPx",
   // Does the desk's chosen headline / deck size WIN over the compositor's own
   // fit? See schema.sql: the fit is what makes a page look composed, and it is
   // also why a size a desk typed could appear to do nothing.
@@ -199,6 +201,7 @@ export function draftFromSection(section) {
     datelineStyle: section.dateline_style || null,
     displayLineHeight: section.display_line_height == null ? null : Number(section.display_line_height),
     paragraphPolicy: section.paragraph_policy || null,
+    displayOverlapPx: section.display_overlap_px == null ? null : Number(section.display_overlap_px),
     headlineLocked: section.headline_locked === true,
     subheadingLocked: section.subheading_locked === true,
     borderStyle: section.border_style || "none",
@@ -326,6 +329,7 @@ export function payloadFromDraft(draft) {
     datelineStyle: draft.datelineStyle || null,
     displayLineHeight: draft.displayLineHeight == null ? undefined : Number(draft.displayLineHeight),
     paragraphPolicy: draft.paragraphPolicy || undefined,
+    displayOverlapPx: draft.displayOverlapPx == null ? undefined : Number(draft.displayOverlapPx),
     headlineLocked: draft.headlineLocked === true,
     subheadingLocked: draft.subheadingLocked === true,
     borderStyle: draft.borderStyle,

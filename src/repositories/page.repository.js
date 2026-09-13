@@ -522,6 +522,7 @@ async function saveSection(pageId, sectionKey, updates) {
          display_line_height = COALESCE($61, display_line_height),
          -- 'as-written' or 'auto' (NULL means auto); coalesced.
          paragraph_policy = COALESCE($62, paragraph_policy),
+         display_overlap_px = COALESCE($63, display_overlap_px),
          revision = page_sections.revision + 1,
          updated_at = CURRENT_TIMESTAMP
      WHERE page_id = $1 AND section_key = $2
@@ -577,7 +578,8 @@ async function saveSection(pageId, sectionKey, updates) {
       expected,
       updates.datelineStyle || null,
       Number.isFinite(updates.displayLineHeight) ? updates.displayLineHeight : null,
-      updates.paragraphPolicy || null]
+      updates.paragraphPolicy || null,
+      Number.isFinite(updates.displayOverlapPx) ? updates.displayOverlapPx : null]
   );
 
   // NOTHING MATCHED. Two different situations wear the same empty result, and

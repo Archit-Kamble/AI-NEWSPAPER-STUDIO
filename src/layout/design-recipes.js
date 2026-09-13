@@ -76,7 +76,7 @@ const ADS = {
 // A page measured exactly off a scan carries its recipe in its own spec
 // (measured-pages/), beside the rectangles it was measured with.
 const { buildMeasuredPage } = require('./measured-pages/scan');
-const MEASURED_RECIPES = Object.fromEntries(['broadsheet-front', 'broadsheet-city']
+const MEASURED_RECIPES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state']
   .map((key) => [key, buildMeasuredPage(require(`./measured-pages/${key}`)).recipe]));
 
 const RECIPES = {
@@ -172,88 +172,6 @@ const RECIPES = {
     'weather-column': {
       style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 13.0, headlineLocked: true, bodyFontPx: 6.3, lineHeight: 1.328, columnCount: 1, textAlign: 'justify' },
       pictures: [{ file: 'reference-lokmat/broadsheet-jacket-weather-column-5.jpg', x: 0, y: 7, width: 46, height: 47 }, { file: 'reference-lokmat/broadsheet-jacket-weather-column-8.jpg', x: 62, y: 276, width: 19, height: 47 }],
-      panels: [],
-    },
-  },
-
-  // MEASURED off the reference scan: sizes from each head's shirorekha, body at
-  // the reference's own em and pitch, its colours, its picture and panel boxes.
-  'broadsheet-state': {
-    'rail-one': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 8.5, headlineLocked: true, bodyFontPx: 5.6, lineHeight: 1.375, columnCount: 1, textAlign: 'justify', headlineStyle: 'kicker-label', accentColor: '#fb9f0b' },
-      fixtureKicker: 'अपडेट',
-      pictures: [{ file: 'reference-lokmat/broadsheet-state-rail-one-1.jpg', x: 0, y: 40, width: 81, height: 71 }],
-      panels: [],
-    },
-    'rail-two': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 8.5, headlineLocked: true, bodyFontPx: 5.6, lineHeight: 1.375, columnCount: 1, textAlign: 'justify' },
-      pictures: [],
-      panels: [],
-    },
-    'rail-three': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 8.5, headlineLocked: true, bodyFontPx: 5.6, lineHeight: 1.375, columnCount: 1, textAlign: 'justify' },
-      pictures: [{ file: 'reference-lokmat/broadsheet-state-rail-three-5.jpg', x: 0, y: 154, width: 81, height: 75 }],
-      panels: [],
-    },
-    'rail-four': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 8.5, headlineLocked: true, bodyFontPx: 5.6, lineHeight: 1.375, columnCount: 1, textAlign: 'justify' },
-      pictures: [],
-      panels: [],
-    },
-    'rail-five': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 8.5, headlineLocked: true, bodyFontPx: 5.6, lineHeight: 1.375, columnCount: 1, textAlign: 'justify' },
-      pictures: [],
-      panels: [],
-    },
-    'top-story': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 18.0, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 5, textAlign: 'justify' },
-      pictures: [{ file: 'reference-lokmat/broadsheet-state-top-story-0.jpg', x: 91, y: 34, width: 349, height: 158 }, { file: 'reference-lokmat/broadsheet-state-top-story-2.jpg', x: 100, y: 166, width: 68, height: 66 }],
-      panels: [],
-    },
-    'top-side': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 10.5, headlineLocked: true, bodyFontPx: 5.6, lineHeight: 1.375, columnCount: 1, textAlign: 'justify' },
-      pictures: [],
-      panels: [],
-    },
-    'lead': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 22.0, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 4, textAlign: 'justify', subheadingFontPx: 10.5, subheadingLocked: true },
-      pictures: [{ file: 'reference-lokmat/broadsheet-state-lead-4.jpg', x: 91, y: 105, width: 170, height: 140 }],
-      panels: [{ kind: 'sidebar', tint: '#f4e4dc', x: 80, y: 226, width: 166, height: 78, titlePx: 8.8, linePx: 6.0, title: PLACEHOLDER, lines: points(3) }, { kind: 'sidebar', x: 249, y: 86, width: 100, height: 218, titlePx: 8.8, linePx: 6.0, title: PLACEHOLDER, lines: points(6) }],
-    },
-    'right': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 22.0, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 2, textAlign: 'justify' },
-      pictures: [{ file: 'reference-lokmat/broadsheet-state-right-3.jpg', x: 90, y: 79, width: 81, height: 63 }],
-      panels: [{ kind: 'quote', x: 0, y: 220, width: 84, height: 72, titlePx: 8.8, linePx: 6.0, title: PLACEHOLDER, lines: points(3) }],
-    },
-    'report-one': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 17.0, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 2, textAlign: 'justify' },
-      pictures: [{ file: 'reference-lokmat/broadsheet-state-report-one-7.jpg', x: 0, y: 95, width: 39, height: 37 }],
-      panels: [],
-    },
-    'report-two': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 14.5, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 1, textAlign: 'justify' },
-      pictures: [],
-      panels: [],
-    },
-    'report-picture': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 14.5, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 2, textAlign: 'justify' },
-      pictures: [{ file: 'reference-lokmat/broadsheet-state-report-picture-6.jpg', x: 1, y: 50, width: 170, height: 110 }],
-      panels: [],
-    },
-    'report-side': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 14.5, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 1, textAlign: 'justify' },
-      pictures: [],
-      panels: [],
-    },
-    'feature-strip': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 18.0, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 4, textAlign: 'justify', headlineStyle: 'kicker-chip-rule', accentColor: '#e42424', borderInk: '#fb9f0b', headlineAlign: 'center' },
-      fixtureKicker: 'जरूर वाचा',
-      pictures: [{ file: 'reference-lokmat/broadsheet-state-feature-strip-9.jpg', x: 91, y: 113, width: 39, height: 45 }],
-      panels: [{ kind: 'sidebar', marker: 'number', x: 165, y: 53, width: 84, height: 179, titlePx: 8.8, linePx: 6.0, title: PLACEHOLDER, lines: points(3) }, { kind: 'sidebar', x: 252, y: 53, width: 97, height: 179, titlePx: 8.8, linePx: 6.0, title: PLACEHOLDER, lines: points(5) }],
-    },
-    'right-foot': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 17.0, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 2, textAlign: 'justify' },
-      pictures: [{ file: 'reference-lokmat/broadsheet-state-right-foot-8.jpg', x: 90, y: 93, width: 81, height: 52 }],
       panels: [],
     },
   },

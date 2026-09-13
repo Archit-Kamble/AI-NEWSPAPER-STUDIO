@@ -8,7 +8,7 @@ const { PLACEHOLDER } = require('./scan');
 
 function kit({ sy = 0.2267 } = {}) {
   // Body at 5.9 px on a 34-scan-pixel pitch, which is the reference's own.
-  const BODY = { fontFamily: 'sans', bodyFontPx: 5.9, lineHeight: Math.round((34 * sy / 5.9) * 1000) / 1000, textAlign: 'justify-all', marginPx: 1, datelineStyle: 'colon', paragraphPolicy: 'as-written' };
+  const BODY = { fontFamily: 'sans', bodyFontPx: 5.9, lineHeight: Math.round((34 * sy / 5.9) * 1000) / 1000, textAlign: 'justify-all', marginPx: 1, datelineStyle: 'colon', paragraphPolicy: 'as-written', displayOverlapPx: 12 };
   const HEAD = (displayFamily, headlineFontPx, extra = {}) => ({ displayFamily, headlineFontPx, headlineLocked: true, ...extra });
   // A stand-off of 0 is not "none" to the compositor - it is the default 0.6 em -
   // so a panel set tight against what it sits under states half a pixel.

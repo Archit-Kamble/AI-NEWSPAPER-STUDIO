@@ -235,7 +235,7 @@ const MASTHEAD_ADVERT = {
 // scan's own rectangles scaled onto this page, not spans of a column grid, so
 // the frame is block()'s with the measured x, width and height put back.
 const { buildMeasuredPage } = require('./measured-pages/scan');
-const MEASURED_PAGES = Object.fromEntries(['broadsheet-front', 'broadsheet-city']
+const MEASURED_PAGES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state']
   .map((key) => [key, buildMeasuredPage(require(`./measured-pages/${key}`))]));
 function measuredTemplate(key) {
   const { template } = MEASURED_PAGES[key];
@@ -505,31 +505,7 @@ const templates = {
 
   'broadsheet-city': measuredTemplate('broadsheet-city'),
 
-  'broadsheet-state': {
-    key: 'broadsheet-state',
-    name: 'Broadsheet state (reference)',
-    grid: REFERENCE_GRID,
-    description: 'A long rail of briefs, a picture-led top story beside a narrow column, a drugs-campaign lead with a tinted panel, a right story with a quote, four reports and a separator-led feature.',
-    // MEASURED off the reference scan onto its own seven-column grid, tops on
-    // the baseline and closed to the one 8 px gap. Generated, so literals.
-    sections: [
-      frame('rail-one', 0, 1, 56, 232, { type: 'briefs', story: 'BRIEF', priority: 2 }),
-      frame('rail-two', 0, 1, 296, 96, { story: 'BRIEF', priority: 2 }),
-      frame('rail-three', 0, 1, 400, 232, { story: 'BRIEF', priority: 2 }),
-      frame('rail-four', 0, 1, 640, 128, { story: 'BRIEF', priority: 2 }),
-      frame('rail-five', 0, 1, 776, 232, { story: 'BRIEF', priority: 2 }),
-      frame('top-story', 1, 5, 56, 232, { story: 'LEAD', priority: 4 }),
-      frame('top-side', 6, 1, 56, 232, { story: 'BRIEF', priority: 2 }),
-      frame('lead', 1, 4, 296, 304, { story: 'LEAD', priority: 5 }),
-      frame('right', 5, 2, 296, 304, { story: 'SECONDARY', priority: 4 }),
-      frame('report-one', 1, 2, 608, 160, { story: 'STANDARD', priority: 3 }),
-      frame('report-two', 3, 1, 608, 160, { story: 'BRIEF', priority: 2 }),
-      frame('report-picture', 4, 2, 608, 160, { story: 'PHOTO_FEATURE', priority: 3 }),
-      frame('report-side', 6, 1, 608, 160, { story: 'BRIEF', priority: 2 }),
-      frame('feature-strip', 1, 4, 776, 232, { story: 'ANALYSIS', priority: 3 }),
-      frame('right-foot', 5, 2, 776, 232, { story: 'STANDARD', priority: 3 }),
-    ],
-  },
+  'broadsheet-state': measuredTemplate('broadsheet-state'),
 
   'broadsheet-local': {
     key: 'broadsheet-local',

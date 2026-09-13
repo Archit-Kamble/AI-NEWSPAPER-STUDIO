@@ -2902,6 +2902,18 @@ export function composeBlock(input = {}) {
     ? Math.max(deckFlow.min, bodyPx * DECK_MIN_OF_BODY) * (Number(input.displayLineHeight) > 0 ? Number(input.displayLineHeight) : Math.max(1.1, lineHeight - 0.15))
     : 0;
 
+  // THE DISPLAY TYPE MAY STAND CLOSER TO WHAT IS UNDER IT than a stand-off
+  // allows. A printed page sets a head a hair above the photograph or panel
+  // below it; kept clear by its line box and a stand-off, the head is pushed
+  // into the corridor beside the picture instead. A block that states
+  // `displayOverlapPx` sets its display flows against obstacles whose tops are
+  // that much lower. Rectangles only; absent is exactly as before.
+  const overlap = Math.max(0, Number(input.displayOverlapPx) || 0);
+  const displayImages = overlap
+    ? images.map((image) => (image && !image.mask && (image.shape || 'rect') === 'rect' && Number(image.height) > overlap
+      ? { ...image, y: Number(image.y) + overlap, height: Number(image.height) - overlap, standOffPx: 0.01 }
+      : image))
+    : images;
   for (const flow of flows) {
     // A block may state its display leading - a page measured off a scan sets
     // a lead head at 1.12 of its size and a condensed second head at 1.27.
@@ -2944,7 +2956,7 @@ export function composeBlock(input = {}) {
         y + room * share,
       ),
       column: { start: content.left, end: content.right },
-      images,
+      images: displayImages,
       fontPx: effectivePx,
       lineHeight: displayLineHeight,
       family: flow.family,

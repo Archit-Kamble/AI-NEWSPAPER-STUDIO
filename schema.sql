@@ -875,6 +875,8 @@ ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS display_line_height NUMERIC(4
 -- 'as-written' sets the reporter's paragraphs exactly; NULL/'auto' lets the
 -- compositor merge and split them (paragraph-policy.js).
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS paragraph_policy VARCHAR(12);
+-- How far (block px) display type may stand into what is under it. NULL = 0.
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS display_overlap_px NUMERIC(4,1);
 
 -- DOES THE DESK'S CHOSEN DISPLAY SIZE WIN?
 --

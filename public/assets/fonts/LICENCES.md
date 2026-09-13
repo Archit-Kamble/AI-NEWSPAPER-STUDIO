@@ -12,6 +12,9 @@ printed newspaper and in the PDFs this system embeds them into.
 | `Mukta-Regular.ttf`, `-Bold.ttf` | Mukta | Ek Type | OFL 1.1 |
 | `Khand-Regular.ttf`, `-Bold.ttf` | Khand | Indian Type Foundry | OFL 1.1 |
 | `RozhaOne-Regular.ttf` | Rozha One | Indian Type Foundry | OFL 1.1 |
+| `Mukta-SemiBold.ttf`, `Mukta-ExtraBold.ttf` | Mukta | Ek Type | OFL 1.1 |
+| `Rajdhani-SemiBold.ttf`, `-Bold.ttf` | Rajdhani | Indian Type Foundry | OFL 1.1 |
+| `NotoSansDevanagariCondensed-Medium.ttf`, `-SemiBold.ttf` | Noto Sans Devanagari, static instances of the variable font at wdth 80, wght 500 / 600 (fontTools `varLib.instancer`) | Google Noto | OFL 1.1 |
 
 Taken from the Google Fonts repository (`github.com/google/fonts/ofl/...`),
 which is the upstream distribution for all six.

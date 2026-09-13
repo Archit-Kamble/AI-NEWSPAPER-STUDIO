@@ -94,6 +94,52 @@
       css: "'Khand Light', 'Khand', 'Sahas Sans', Arial, sans-serif",
       files: { 400: `${DIR}Khand-Regular.ttf`, 700: `${DIR}Khand-Regular.ttf` },
     },
+    // FOUR FACES MEASURED OFF A PRINTED MARATHI BROADSHEET. Each was chosen by
+    // setting the reference page's own words in some fifty OFL Devanagari cuts
+    // and correlating the result against the scan at matched ink height,
+    // requiring the width to agree within 3.5% - a face that is the right
+    // shape but the wrong width breaks every headline at a different word.
+    // scripts/reference-layout/fontmatch.py is the tool. As with khand-light,
+    // a key that names one weight maps both of its weights to that cut.
+    {
+      key: 'mukta-semibold',
+      label: 'Mukta SemiBold',
+      short: 'Mukta SB',
+      note: 'Mukta at 600, for a banner or a feature head that is not the lead.',
+      role: 'display',
+      css: "'Mukta SemiBold', 'Mukta', 'Sahas Sans', Arial, sans-serif",
+      files: { 400: `${DIR}Mukta-SemiBold.ttf`, 700: `${DIR}Mukta-SemiBold.ttf` },
+    },
+    {
+      key: 'mukta-heavy',
+      label: 'Mukta ExtraBold',
+      short: 'Mukta XB',
+      note: 'Mukta at 800, for the lead head that shouts loudest on the page.',
+      role: 'display',
+      css: "'Mukta ExtraBold', 'Mukta', 'Sahas Sans', Arial, sans-serif",
+      files: { 400: `${DIR}Mukta-ExtraBold.ttf`, 700: `${DIR}Mukta-ExtraBold.ttf` },
+    },
+    {
+      // Noto Sans Devanagari's own variable font, instanced at 80% width -
+      // the condensed second-rank head. 400 is the medium weight, 700 the
+      // semibold, which is as heavy as that head is set.
+      key: 'noto-condensed',
+      label: 'Noto Sans Condensed',
+      short: 'Noto C',
+      note: 'Noto Sans Devanagari at 80% width, for a condensed second-rank head.',
+      role: 'display',
+      css: "'Noto Sans Condensed', 'Sahas Sans', Arial, sans-serif",
+      files: { 400: `${DIR}NotoSansDevanagariCondensed-Medium.ttf`, 700: `${DIR}NotoSansDevanagariCondensed-SemiBold.ttf` },
+    },
+    {
+      key: 'rajdhani',
+      label: 'Rajdhani',
+      short: 'Rajdhani',
+      note: 'A square condensed sans, for decks, sub-heads and panel headings.',
+      role: 'display',
+      css: "'Rajdhani', 'Sahas Sans', Arial, sans-serif",
+      files: { 400: `${DIR}Rajdhani-SemiBold.ttf`, 700: `${DIR}Rajdhani-Bold.ttf` },
+    },
     {
       key: 'rozha',
       label: 'Rozha One',

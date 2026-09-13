@@ -34,7 +34,7 @@ const { identityFor, dateLine, devanagari } = require('../../layout/identity');
 const { strip } = require('../../layout/plain-text');
 const { captionBox, PLACED_CAPTION_METRICS } = require('../../../public/editor/layout/caption-geometry');
 const { borderEdges, borderWidthPx, borderOffsetsPx, isBoxed, borderRadiusPx } = require('../../../public/editor/layout/borders');
-const { panelsOf, panelLayout, panelStyle } = require('../../../public/editor/layout/inset-panels');
+const { panelsOf, panelLayout, panelStyle, panelEdges } = require('../../../public/editor/layout/inset-panels');
 const { overlaysOf } = require('../../../public/editor/layout/page-overlays');
 const { smartCardLines } = require('./smart-card-lines');
 
@@ -536,8 +536,9 @@ function blockDecorations(section, composition) {
   for (const panel of panelsOf(section)) {
     const px = x0 + mm(panel.x);
     const py = y0 + mm(panel.y);
-    const rule = mm(0.71);
-    const { edges, family: panelFace, ground } = panelStyle(panel.kind);
+    const rule = mm(Number(panel.ruleWidthPx) || 0.71);
+    const { family: panelFace, ground } = panelStyle(panel.kind);
+    const edges = panelEdges(panel);
     // A CHART OR TABLE PANEL DRAWS A CARD. The same walk a whole-block one goes
     // through, given the panel's own rectangle - so either in a panel and
     // either in a block reach the plate as the same items in the same ink.
@@ -563,17 +564,31 @@ function blockDecorations(section, composition) {
       left: { x: px, y: py, width: rule, height: mm(panel.height) },
       right: { x: px + mm(panel.width) - rule, y: py, width: rule, height: mm(panel.height) },
     };
-    for (const edge of edges) items.push({ kind: 'rule', ...BOX[edge], ink: RULE_INK });
+    for (const edge of edges) items.push({ kind: 'rule', ...BOX[edge], ink: panel.ruleInk || RULE_INK });
     const solved = panelLayout(panel, Number(section.body_font_px) || 6.4, modules?.metrics?.measureWidth || null);
     for (const line of solved.lines) {
       items.push(textItem(
-        { x: px + mm(line.x), y: py + mm(line.y), width: mm(line.width), height: mm(line.fontPx * solved.lineHeight) },
+        { x: px + mm(line.x), y: py + mm(line.y), width: mm(line.width), height: mm(line.fontPx * (line.lineHeight || solved.lineHeight)) },
         [run(line.text, {
           family: line.family || panelFace,
           weight: line.bold ? 700 : 400, bold: line.bold, fontPx: line.fontPx,
-          ink: line.ink === 'accent' ? (section.accent_color || ACCENT_INK) : null,
+          ink: line.ink === 'accent' ? (section.accent_color || ACCENT_INK) : (/^#[0-9a-f]{6}$/i.test(line.ink || '') ? line.ink : null),
         })],
-        line.align === 1 ? 'center' : 'left',
+        line.align === 1 ? 'center' : line.align === 2 ? 'right' : 'left',
+      ));
+    }
+    // A NUMBERED DISC: a black circle, and its numeral knocked out in white -
+    // the circle as the same point list a pie slice is drawn with.
+    for (const disc of solved.discs || []) {
+      const r = mm(disc.d / 2);
+      const cx = px + mm(disc.x) + r;
+      const cy = py + mm(disc.y) + r;
+      const points = modules.smartCardLayout.arcPoints(cx, cy, r, 0, 1, { centre: false }).map((p) => (Array.isArray(p) ? p : [p.x, p.y]));
+      items.push({ kind: 'poly', close: true, ink: RULE_INK, strokeWidth: 0, x: cx - r, y: cy - r, width: r * 2, height: r * 2, points });
+      items.push(textItem(
+        { x: cx - r, y: cy - r, width: r * 2, height: r * 2 },
+        [run(disc.text, { family: 'sans', weight: 700, bold: true, fontPx: disc.fontPx, ink: '#ffffff' })],
+        'center',
       ));
     }
   }

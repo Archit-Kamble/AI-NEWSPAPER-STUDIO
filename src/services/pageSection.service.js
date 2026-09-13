@@ -330,6 +330,13 @@ async function saveSection(pageId, sectionKey, body) {
         // one of the paper's tints is refused.
         .map((panel) => ({
           ...panel,
+          // A panel's own faces and inks, when it states them, go through the
+          // same two catalogues a block's do - a key or a hex that is the right
+          // shape but not the paper's is dropped, never drawn.
+          ...Object.fromEntries(['titleFamily', 'lineFamily'].filter((key) => panel[key])
+            .map((key) => [key, TYPEFACES.some((face) => face.key === panel[key]) ? panel[key] : undefined])),
+          ...Object.fromEntries(['titleInk', 'lineInk', 'ruleInk'].filter((key) => panel[key])
+            .map((key) => [key, palette.sanitiseInk(panel[key]) || undefined])),
           tint: panel.tint ? palette.sanitiseTint(panel.tint) : null,
           ...(panel.card ? { card: sanitiseCardInks(panel.card, palette) } : {}),
         })),

@@ -15,7 +15,7 @@ import { computeMetrics } from "../layout/layout-metrics.js";
 import { imageTransformCss } from "../image/image-manager.js";
 import { buildFlowMap, CELL, flowRuns, bandBox, pourIntoRuns, flowImageFromRow, datelineText, captionBox } from "../layout/text-flow.js";
 import "../layout/inset-panels.js";
-const { panelsOf, panelLayout, panelStyle } = globalThis.SahasInsetPanels;
+const { panelsOf, panelLayout, panelStyle, panelEdges } = globalThis.SahasInsetPanels;
 import { textWithMarks, markRun, plainText } from "../layout/rich-text.js";
 import { presentationRanges, renderPresentation } from "../layout/editorial-presentation.js";
 import { composeSection } from "../compose/section-adapter.js";
@@ -592,12 +592,13 @@ export function insetPanelsMarkup(section, view) {
   const accent = escapeHtml(view?.accentColor || section?.accent_color || '#c8102e');
   const surface = (panel) => {
     const style = panelStyle(panel.kind);
-    const edges = new Set(style.edges || []);
+    const edges = new Set(panelEdges(panel));
+    const rule = `${Number(panel.ruleWidthPx) || 0.71}px solid ${panel.ruleInk || '#111'}`;
     return [
-      `border-top:${edges.has('top') ? '0.71px solid #111' : 'none'}`,
-      `border-right:${edges.has('right') ? '0.71px solid #111' : 'none'}`,
-      `border-bottom:${edges.has('bottom') ? '0.71px solid #111' : 'none'}`,
-      `border-left:${edges.has('left') ? '0.71px solid #111' : 'none'}`,
+      `border-top:${edges.has('top') ? rule : 'none'}`,
+      `border-right:${edges.has('right') ? rule : 'none'}`,
+      `border-bottom:${edges.has('bottom') ? rule : 'none'}`,
+      `border-left:${edges.has('left') ? rule : 'none'}`,
       `background:${panel.tint || (style.ground ? '#fff' : 'transparent')}`,
       `font-family:${style.family === 'serif' ? "'Sahas Serif', 'Noto Serif Devanagari', Georgia, serif" : "'Sahas Sans', 'Noto Sans Devanagari', Arial, sans-serif"}`,
     ].join(';');
@@ -620,16 +621,23 @@ export function insetPanelsMarkup(section, view) {
     // Measured only once the faces are in - before that the old placement
     // stands, rather than a wrap computed against the fallback widths.
     const solved = panelLayout(panel, bodyPx, fontsReady() ? measureWidth : null);
+    // A panel set by the page's own measurements names its faces by key; the
+    // two kind defaults keep their literal stacks, so no stored panel moves.
+    const faceCss = (family) => (family === 'sans' ? "'Sahas Sans', 'Noto Sans Devanagari', Arial, sans-serif"
+      : family === 'serif' ? "'Sahas Serif', 'Noto Serif Devanagari', Georgia, serif"
+        : family ? globalThis.SahasTypefaces.publicationFamily(family).css : '');
     const lines = solved.lines.map((line) => `<span class="panel-line role-${escapeHtml(line.role || 'line')}" style="left:${line.x}px;top:${line.y}px;width:${line.width}px;`
-      + `font-size:${line.fontPx}px;line-height:${solved.lineHeight};`
+      + `font-size:${line.fontPx}px;line-height:${line.lineHeight || solved.lineHeight};`
       // An ornament's mark is centred on its own rule; everything else sets
       // flush left, as copy does. The one solve decides it, so the canvas and
       // all four exports cannot disagree.
-      + `${line.align === 1 ? "text-align:center;" : ""}`
+      + `${line.align === 1 ? "text-align:center;" : line.align === 2 ? "text-align:right;" : ""}`
       + `${line.bold ? "font-weight:700;" : ""}`
-      + `${line.family === 'sans' ? "font-family:'Sahas Sans', 'Noto Sans Devanagari', Arial, sans-serif;" : ''}`
-      + `${line.family === 'serif' ? "font-family:'Sahas Serif', 'Noto Serif Devanagari', Georgia, serif;" : ''}`
-      + `${line.ink === 'accent' ? `color:${accent};` : ''}">${escapeHtml(line.text)}</span>`).join("");
+      + `${line.family ? `font-family:${faceCss(line.family)};` : ''}`
+      + `${line.ink === 'accent' ? `color:${accent};` : /^#[0-9a-f]{6}$/i.test(line.ink || '') ? `color:${line.ink};` : ''}">${escapeHtml(line.text)}</span>`).join("")
+      + (solved.discs || []).map((disc) => `<span class="panel-disc" style="left:${disc.x}px;top:${disc.y}px;width:${disc.d}px;height:${disc.d}px;`
+        + `line-height:${disc.d}px;font-size:${disc.fontPx}px;border-radius:50%;background:#111;color:#fff;text-align:center;font-weight:700;`
+        + `font-family:'Sahas Sans', 'Noto Sans Devanagari', Arial, sans-serif;">${escapeHtml(disc.text)}</span>`).join("");
     return `<span class="section-inset-panel section-inset-${escapeHtml(panel.kind)}"
                   data-panel-id="${escapeHtml(panel.id)}"
                   style="left:${panel.x}px;top:${panel.y}px;width:${panel.width}px;height:${panel.height}px;${surface(panel)}">${lines}</span>`;

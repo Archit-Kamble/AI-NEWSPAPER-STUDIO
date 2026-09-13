@@ -120,6 +120,9 @@
     table: { edges: [], family: 'sans', ground: false },
   });
   const panelStyle = (kind) => STYLES[kind] || STYLES.note;
+  // Which edges a panel is ruled on: its own `rules` when it states them,
+  // else its kind's.
+  const panelEdges = (panel) => (Array.isArray(panel?.rules) ? panel.rules : (panelStyle(panel?.kind).edges || []));
 
   // How a panel's lines are marked. The numbered form is the device the Lokmat
   // reference block uses for its two undertakings, and a fact box is where a
@@ -135,6 +138,11 @@
     { key: 'none', label: 'Plain' },
     { key: 'bullet', label: 'Bulleted' },
     { key: 'number', label: 'Numbered' },
+    // A NUMERAL KNOCKED OUT OF A BLACK DISC - how a Marathi broadsheet numbers
+    // the points of a sidebar. The disc stands at the head of the entry and
+    // the entry's first lines are set beside it; lines below the disc return
+    // to the full measure.
+    { key: 'circle', label: 'Numbered discs' },
   ]);
   const DEVANAGARI_DIGITS = ['०', '१', '२', '३', '४', '५', '६', '७', '८', '९'];
   const devanagari = (n) => String(n).replace(/\d/g, (d) => DEVANAGARI_DIGITS[Number(d)]);
@@ -157,6 +165,8 @@
    */
   function markerText(marker, index) {
     if (marker === 'number') return `${devanagari(Number(index) + 1)}.`;
+    // A disc's numeral is drawn inside the disc, not set into the line.
+    if (marker === 'circle') return '';
     if (marker === 'bullet') return BULLET;
     return '';
   }
@@ -255,6 +265,38 @@
     };
   }
 
+  // HOW A PANEL'S OWN TYPE IS SET, when the page it was measured from sets it
+  // differently from the kind's defaults. Every field is optional and absent
+  // means exactly what it meant before this existed, so no stored panel moves.
+  // Shape only, for the reason given at cardOf(): a face key and a hex are
+  // checked against their catalogues at the service.
+  const FACE_KEY = /^[a-z][a-z-]{1,23}$/;
+  const HEX = /^#[0-9a-f]{6}$/i;
+  const ALIGNS = ['left', 'center', 'right'];
+  const EDGES = ['top', 'right', 'bottom', 'left'];
+  const numberIn = (value, min, max) => {
+    const n = Number(value);
+    return value !== null && value !== undefined && value !== '' && Number.isFinite(n) && n >= min && n <= max ? Math.round(n * 100) / 100 : null;
+  };
+  function typographyOf(raw) {
+    const out = {};
+    for (const key of ['titleFamily', 'lineFamily']) if (FACE_KEY.test(String(raw[key] || ''))) out[key] = String(raw[key]);
+    for (const key of ['titleBold', 'lineBold']) if (typeof raw[key] === 'boolean') out[key] = raw[key];
+    for (const key of ['titleAlign', 'lineAlign']) if (ALIGNS.includes(raw[key])) out[key] = raw[key];
+    for (const key of ['titleInk', 'lineInk', 'ruleInk']) if (HEX.test(String(raw[key] || ''))) out[key] = String(raw[key]).toLowerCase();
+    const lineHeight = numberIn(raw.lineHeight, 1, 2.2); if (lineHeight !== null) out.lineHeight = lineHeight;
+    const titleLineHeight = numberIn(raw.titleLineHeight, 0.9, 2.2); if (titleLineHeight !== null) out.titleLineHeight = titleLineHeight;
+    const titleGapPx = numberIn(raw.titleGapPx, 0, 40); if (titleGapPx !== null) out.titleGapPx = titleGapPx;
+    const lineGapPx = numberIn(raw.lineGapPx, 0, 20); if (lineGapPx !== null) out.lineGapPx = lineGapPx;
+    const insetPx = numberIn(raw.insetPx, 0, 12); if (insetPx !== null) out.insetPx = insetPx;
+    const ruleWidthPx = numberIn(raw.ruleWidthPx, 0.3, 6); if (ruleWidthPx !== null) out.ruleWidthPx = ruleWidthPx;
+    if (Array.isArray(raw.rules)) out.rules = EDGES.filter((edge) => raw.rules.includes(edge));
+    if (Array.isArray(raw.boldLines)) {
+      out.boldLines = raw.boldLines.map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n < 100);
+    }
+    return out;
+  }
+
   const sizeOf = (value) => {
     const n = Number(value);
     return Number.isFinite(n) && n >= 4 && n <= 40 ? Math.round(n * 10) / 10 : null;
@@ -316,6 +358,7 @@
       // the size ladder allows, so stored data can never ask for poster type.
       ...(sizeOf(raw.titlePx) ? { titlePx: sizeOf(raw.titlePx) } : {}),
       ...(sizeOf(raw.linePx) ? { linePx: sizeOf(raw.linePx) } : {}),
+      ...typographyOf(raw),
     };
   }
 
@@ -404,6 +447,23 @@
     return out.length ? out : [''];
   }
 
+  // wrapToWidth() for a measure that changes line by line - the lines beside a
+  // numbered disc are set short of it. `indentOf(n)` is line n's indent.
+  function wrapBeside(text, width, fontPx, family, bold, measure, indentOf) {
+    if (!measure || !(width > 0)) return [text];
+    const words = String(text).split(/\s+/).filter(Boolean);
+    const out = [];
+    let line = '';
+    for (const word of words) {
+      const candidate = line ? `${line} ${word}` : word;
+      const room = width - indentOf(out.length);
+      if (line && measure(candidate, fontPx, family, bold ? 700 : 400) > room) { out.push(line); line = word; }
+      else line = candidate;
+    }
+    if (line) out.push(line);
+    return out.length ? out : [''];
+  }
+
   function panelLayout(panel, bodyFontPx = 6.4, measure = null) {
     // A chart or table panel has no lines of its own - the card fills the
     // rectangle and solves its own type against it, exactly as it does in a
@@ -414,7 +474,7 @@
     // A cross-head's type sits ON the measure, not inside a box, so it takes
     // only the hair of air that keeps it off its own rule - the same 0.5 mm
     // the block's own inset is, and for the same reason.
-    const inset = panel.kind === 'crosshead' || panel.kind === 'ornament' ? 1 : 3;
+    const inset = panel.insetPx ?? (panel.kind === 'crosshead' || panel.kind === 'ornament' ? 1 : 3);
     const titleScale = panel.kind === 'key-number' ? 2.8
       : panel.kind === 'reaction' ? 1.65
         : panel.kind === 'quote' ? 1.5
@@ -422,24 +482,30 @@
     const lineScale = panel.kind === 'quote' || panel.kind === 'reaction' ? 1.15 : 0.95;
     const titlePx = panel.titlePx || Math.max(5, bodyFontPx * titleScale);
     const linePx = panel.linePx || Math.max(4.5, bodyFontPx * lineScale);
-    const lineHeight = 1.45;
+    const lineHeight = panel.lineHeight || 1.45;
+    const titleLineHeight = panel.titleLineHeight || lineHeight;
+    const ALIGN_CODE = { left: 0, center: 1, right: 2 };
     const out = [];
+    const discs = [];
     let y = inset;
     if (panel.title) {
-      const titleFamily = panel.kind === 'reaction' ? 'serif' : 'sans';
-      for (const piece of wrapToWidth(panel.title, panel.width - inset * 2, titlePx, titleFamily, true, measure)) {
-        if (out.length && y + titlePx * lineHeight > panel.height - inset) break;
+      const titleFamily = panel.titleFamily || (panel.kind === 'reaction' ? 'serif' : 'sans');
+      const titleBold = panel.titleBold ?? true;
+      for (const piece of wrapToWidth(panel.title, panel.width - inset * 2, titlePx, titleFamily, titleBold, measure)) {
+        if (out.length && y + titlePx * titleLineHeight > panel.height - inset) break;
         out.push({
           text: piece, x: inset, y, width: panel.width - inset * 2,
-          fontPx: titlePx, bold: true,
-          align: panel.kind === 'key-number' ? 1 : 0,
+          fontPx: titlePx, bold: titleBold,
+          align: panel.titleAlign ? ALIGN_CODE[panel.titleAlign] : panel.kind === 'key-number' ? 1 : 0,
           role: panel.kind === 'key-number' ? 'figure'
             : panel.kind === 'reaction' ? 'statement' : 'title',
           family: titleFamily,
-          ink: ['key-number', 'related', 'document'].includes(panel.kind) ? 'accent' : null,
+          ink: panel.titleInk || (['key-number', 'related', 'document'].includes(panel.kind) ? 'accent' : null),
+          lineHeight: titleLineHeight,
         });
-        y += titlePx * lineHeight;
+        y += titlePx * titleLineHeight;
       }
+      if (panel.titleGapPx) y += panel.titleGapPx;
     }
     panel.lines.forEach((text, index) => {
       const sourceLine = panel.kind === 'document' && index === panel.lines.length - 1;
@@ -457,15 +523,31 @@
                 : panel.kind === 'qa' ? (index % 2 === 0 ? 'प्र.' : 'उ.') : '';
       const mark = automaticMarker || markerText(panel.marker, index);
       const marked = mark ? `${mark} ${text}` : text;
+      if (index > 0 && panel.lineGapPx) y += panel.lineGapPx;
       const lineFamily = panel.kind === 'qa' ? (index % 2 === 0 ? 'sans' : 'serif')
         : panel.kind === 'reaction' && index === panel.lines.length - 1 ? 'sans'
           : panel.kind === 'document' ? (sourceLine ? 'sans' : 'serif') : (panelStyle(panel.kind).family || 'sans');
-      const pieces = wrapToWidth(marked, panel.width - inset * 2, actualLinePx, lineFamily, false, measure);
+      const setFamily = panel.lineFamily || lineFamily;
+      const lineBold = (panel.boldLines && panel.boldLines.includes(index)) || (panel.lineBold ?? false);
+      // A NUMBERED DISC takes the head of its entry; the lines it stands beside
+      // are set short of it, and the lines below it take the whole measure.
+      const disc = panel.marker === 'circle'
+        ? { x: inset, y, d: Math.round(actualLinePx * lineHeight * 1.5 * 10) / 10 } : null;
+      const indentFor = (lineTop) => (disc && lineTop < disc.y + disc.d - 0.5 ? disc.d + actualLinePx * 0.35 : 0);
+      const pieces = disc
+        ? wrapBeside(marked, panel.width - inset * 2, actualLinePx, setFamily, lineBold, measure, (n) => indentFor(y + n * actualLinePx * lineHeight))
+        : wrapToWidth(marked, panel.width - inset * 2, actualLinePx, setFamily, lineBold, measure);
+      if (disc) {
+        discs.push({ ...disc, text: devanagari(index + 1), fontPx: Math.round(disc.d * 0.62 * 10) / 10 });
+      }
       pieces.forEach((piece, pieceIndex) => {
       if (pieceIndex > 0 && y + actualLinePx * lineHeight > panel.height - inset) return;
+      const indent = indentFor(y);
       out.push({
-        text: piece, x: inset, y, width: panel.width - inset * 2, fontPx: actualLinePx,
-        bold: panel.kind === 'qa' ? index % 2 === 0
+        text: piece, x: inset + indent, y, width: panel.width - inset * 2 - indent, fontPx: actualLinePx,
+        lineHeight,
+        ...(panel.lineInk ? { ink: panel.lineInk } : {}),
+        bold: lineBold || panel.kind === 'qa' ? (lineBold || index % 2 === 0)
           : panel.kind === 'reaction' ? index === panel.lines.length - 1
             : panel.kind === 'comparison' ? index % 2 === 1
               : sourceLine,
@@ -477,17 +559,19 @@
                   : panel.kind === 'follow-up' ? 'update'
                     : panel.kind === 'comparison' ? (index % 2 === 0 ? 'before' : 'now')
                       : panel.kind === 'document' ? (sourceLine ? 'source' : 'excerpt') : 'line',
-        family: panel.kind === 'qa' ? (index % 2 === 0 ? 'sans' : 'serif')
+        family: panel.lineFamily || (panel.kind === 'qa' ? (index % 2 === 0 ? 'sans' : 'serif')
           : panel.kind === 'reaction' && index === panel.lines.length - 1 ? 'sans'
-            : panel.kind === 'document' ? (sourceLine ? 'sans' : 'serif') : null,
+            : panel.kind === 'document' ? (sourceLine ? 'sans' : 'serif') : null),
         // An ornament's mark sits on the centre line of its own rule; every
         // other kind sets flush left, as copy does.
-        align: panel.kind === 'ornament' || panel.kind === 'key-number' ? 1 : 0,
+        align: panel.lineAlign ? ALIGN_CODE[panel.lineAlign] : panel.kind === 'ornament' || panel.kind === 'key-number' ? 1 : 0,
       });
       y += actualLinePx * lineHeight;
       });
+      // The next entry starts below this one's disc, however short the entry.
+      if (disc) y = Math.max(y, disc.y + disc.d + actualLinePx * 0.2);
     });
-    return { inset, titlePx, linePx, lineHeight, lines: out, usedHeight: y + inset };
+    return { inset, titlePx, linePx, lineHeight, lines: out, discs, usedHeight: y + inset };
   }
 
   const api = Object.freeze({
@@ -495,7 +579,7 @@
     INSET_PANEL_STYLES: STYLES,
     INSET_PANEL_BULLET: BULLET,
     INSET_PANEL_ORNAMENTS: ORNAMENTS,
-    panelOf, panelsOf, defaultPanelFor, obstacleFromPanel, panelLayout, panelStyle, markerText,
+    panelOf, panelsOf, defaultPanelFor, obstacleFromPanel, panelLayout, panelStyle, markerText, panelEdges,
   });
   root.SahasInsetPanels = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

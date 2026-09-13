@@ -8267,6 +8267,58 @@ full-screen layer and capture that (`tmp-visual-pass/runs/shoot-recipe.js`), and
 judge tints on the full-resolution PNG: a downscaled JPEG washes a `vivid-*`
 ground out to white.
 
+### Measured, not eyeballed: the second pass
+
+The desk's verdict on the first pass was *"many things not looking same"* -
+colours, gaps, a 6-column look, the must-read separator, far less news,
+headlines that break differently, photos not aligned. Every one of those was
+measured off the scan and fixed at its cause.
+
+**Tooling** (`scripts/reference-layout/`): `photos.py` finds photographs
+(continuous tone), `typesize.py` reads each line's shirorekha height and stroke,
+`colours.py` samples grounds and inks, `measure.py` finds rules; a spec in
+`specs/` holds rectangles in scan pixels and measured sizes, `gen.py` turns it
+into a template on the reference grid plus a recipe plus local photo crops, and
+`write.py` puts both into the catalogues. Reference photos go to
+`public/uploads/reference-lokmat/` (gitignored) and reference headlines live in
+`tmp-visual-pass/runs/reference/*-content.js` (gitignored): a reference paper's
+words and pictures are for local calibration and are never committed.
+
+What the measurements found, each worth knowing for the next paper:
+
+| | reference | ours before | fix |
+|---|---|---|---|
+| column grid | 7 cols, 4.5 mm gutter | 16-col spans | a template declares `grid`; `frame()` places on it; the edition's grid is set to match |
+| body line pitch | 1.31 em (7.99 px) | 1.555 em floor | Noto Sans Devanagari floored at its measured ink (1.305 em); body in sans; 8.00 px |
+| headline width at matched x-height | Khand within 5% | Mukta +8-12% | Khand for heads - two-line heads had been breaking into four |
+| light heads | stroke 0.06-0.08 em | always bold | `khand-light` face key |
+| separator chip, section labels | 1.45x / large accent | kicker fixed at 1.05x | `kickerScale` on a headline treatment; `kicker-chip-rule`, `kicker-label`, `kicker-accent` |
+| sidebar heading | ~9 px | body x 1.15 | panel `titlePx`/`linePx` in its JSON |
+| colours | scarlet, cyan, marigold; powder, orchid, blush, peach, silver | nearest palette entry | measured palette entries; marigold is `rule`-only |
+
+**A panel entry is wrapped to the panel now.** It placed one entry per line and
+let the browser wrap a long one onto the next entry - a sidebar with real
+sentences printed its lines on top of each other. That was a product bug, found
+only because the reference's sidebars carry paragraphs.
+
+**A photo or panel that starts right under the reference's headline sits inside
+our 4 px stand-off of that headline's last line**, which then sets in the narrow
+corridor beside it - the opening banner went to three lines. The generator
+places such objects clear of the stand-off (`CLEAR` in a spec).
+
+**Two generator faults worth remembering:** a Python loop variable named `end`
+overwrote the slice index and duplicated 500 lines of templates.js; and a
+JavaScript object literal keeps the LAST duplicate key, so a recipe written
+twice silently used the stale copy. `write.py` now refuses a duplicate entry.
+
+**Not matched, and why:** Lokmat's typefaces are its own licensed faces (ours
+are matched by width and weight, not identical); its section logos
+("#क्विक Update") are artwork, set here as large accent labels; its byline line
+("लोकमत न्यूज नेटवर्क") and colon dateline (`मुंबई :`) need a dateline-style
+column (note.txt asks for it too); its adverts are artwork, ours are fictional
+advert cards; and the masthead band is this paper's own, so content starts a
+little lower and every page is vertically ~6% more compressed than the scan.
+
 ### The whole paper: twelve layouts, one edition to judge them on
 
 Branch `lokmat-reference-pages`. All twelve pages of the reference file are

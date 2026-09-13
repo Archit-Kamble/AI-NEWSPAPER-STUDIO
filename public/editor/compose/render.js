@@ -16,7 +16,7 @@ import { escapeHtml } from '../format.js';
 import { textWithMarks, plainText } from '../layout/rich-text.js';
 // Which display bands a treatment lays a ground behind, and what a screen of
 // an ink looks like - one catalogue, shared with the press model.
-import { accentedHeadline, groundedBands, headlineFurniture, screenOf } from '../layout/inks.js';
+import { accentedHeadline, groundedBands, headlineFurniture, headlineTreatment, screenOf } from '../layout/inks.js';
 import { presentationRanges, renderPresentation } from '../layout/editorial-presentation.js';
 import { publicationFamily } from './font-metrics.js';
 import { headlineSegments } from './accent.js';
@@ -321,7 +321,7 @@ export function composedMarkup(composition, view, { datelinePrefix = '' } = {}) 
         ? `color:${escapeHtml(view.headlineInk)};` : '';
       // A kicker reversed out of its chip is white for the same reason.
       const chipped = key === 'kicker' && view.headlineStyle === 'kicker-chip-rule';
-      const labelled = key === 'kicker' && view.headlineStyle === 'kicker-label';
+      const labelled = key === 'kicker' && Boolean(headlineTreatment(view.headlineStyle)?.kickerAccent);
       const reverseInk = (reversed && key === 'headline') || chipped ? 'color:#fff;'
         : labelled ? `color:${escapeHtml(view.accentColor || '#c8102e')};` : displayInk;
       pieces.push(

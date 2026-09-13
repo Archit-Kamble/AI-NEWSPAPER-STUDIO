@@ -250,6 +250,9 @@ export const HEADLINE_STYLES = [
   // the reference sets above its rail ("quick update", "shorts"). The kicker is
   // set at 2.4x the body and in the accent; nothing is drawn behind it.
   { key: 'kicker-label', label: 'Large section label', grounds: [], kickerScale: 2.4, kickerAccent: true },
+  // The small scarlet column label an opinion page sets over each piece: the
+  // kicker a little larger than the body, in the accent, nothing behind it.
+  { key: 'kicker-accent', label: 'Coloured column label', grounds: [], kickerScale: 1.3, kickerAccent: true },
   // More display hierarchy without stealing one pixel from the story. The
   // rule variants differ in length, position and rhythm, but they are all
   // painted into gaps the compositor has already proved are empty.

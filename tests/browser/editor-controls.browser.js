@@ -476,7 +476,9 @@ const BODY = 'सातारा : नगरपालिकेच्या स�
     // more colours - so the test failed on a change it was never written to
     // guard. What it exists to hold is that the toolbar offers the paper's own
     // inks and NOTHING ELSE, which is a question about both lists.
-    const inkCount = await page.evaluate(async () => (await import('/editor/layout/inks.js')).INKS.length);
+    // A RULE ink (marigold - too light to hold type) is never offered for
+    // words; the toolbar carries every ink that may set type, and only those.
+    const inkCount = await page.evaluate(async () => (await import('/editor/layout/inks.js')).INKS.filter((ink) => !ink.rule).length);
     say(await page.locator('.ed-quill-ink-btn').count() === inkCount,
       'the toolbar carries the paper\'s inks and no more', `${inkCount} in the catalogue`);
 

@@ -872,7 +872,7 @@ function displayBandFrames(composition, section, accent, richText, render, inks,
       if ((reversed && key === 'headline') || (key === 'kicker' && section.headline_style === 'kicker-chip-rule')) {
         runs.forEach((run) => { if (!run.colour) run.colour = 'White'; });
       }
-      if (key === 'kicker' && section.headline_style === 'kicker-label') {
+      if (key === 'kicker' && inks.headlineTreatment(section.headline_style)?.kickerAccent) {
         runs.forEach((run) => { if (!run.colour) run.colour = colourFor(section.accent_color || ACCENT_HEX); });
       }
       // `line.measure` is the band's own gap; `line.width` is what was

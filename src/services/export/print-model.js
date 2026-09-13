@@ -165,7 +165,7 @@ const ACCENT_INK = '#c8102e';
 function bandInk(section, key, reversed) {
   if (reversed && key === 'headline') return '#ffffff';
   if (key === 'kicker' && section?.headline_style === 'kicker-chip-rule') return '#ffffff';
-  if (key === 'kicker' && section?.headline_style === 'kicker-label') return section.accent_color || ACCENT_INK;
+  if (key === 'kicker' && modules?.inks?.headlineTreatment(section?.headline_style)?.kickerAccent) return section.accent_color || ACCENT_INK;
   if (section?.headline_ink && (key === 'headline' || key === 'kicker')) return section.headline_ink;
   return null;
 }

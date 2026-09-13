@@ -1316,9 +1316,15 @@ export function columnGutterPx(bodyPx) {
   return Math.round((Number(bodyPx) || 16) * 0.9);
 }
 
-function columnsOf(content, count, gutter) {
+function columnsOf(content, count, gutter, fixedWidth = 0) {
   const n = Math.max(1, Math.round(count));
-  const width = (content.right - content.left - gutter * (n - 1)) / n;
+  // A page measured off a scan states its column width: the columns are laid
+  // from the left at that width, and any measure left over at the right is
+  // the scan's own (a sidebar column, set as a panel). Never wider than the
+  // columns the block can actually hold.
+  const even = (content.right - content.left - gutter * (n - 1)) / n;
+  // A single column is the block's whole measure, whatever width is stated.
+  const width = fixedWidth > 0 && n > 1 ? Math.min(fixedWidth, even) : even;
   if (width <= 0) return [{ start: content.left, end: content.right }];
   return Array.from({ length: n }, (unused, i) => ({
     start: content.left + i * (width + gutter),
@@ -2910,9 +2916,12 @@ export function composeBlock(input = {}) {
   // that much lower. Rectangles only; absent is exactly as before.
   const overlap = Math.max(0, Number(input.displayOverlapPx) || 0);
   const displayImages = overlap
-    ? images.map((image) => (image && !image.mask && (image.shape || 'rect') === 'rect' && Number(image.height) > overlap
-      ? { ...image, y: Number(image.y) + overlap, height: Number(image.height) - overlap, standOffPx: 0.01 }
-      : image))
+    ? images.flatMap((image) => {
+      if (!(image && !image.mask && (image.shape || 'rect') === 'rect')) return [image];
+      // An obstacle no deeper than the overlap is not in the display's way at all.
+      if (Number(image.height) <= overlap) return [];
+      return [{ ...image, y: Number(image.y) + overlap, height: Number(image.height) - overlap, standOffPx: 0.01 }];
+    })
     : images;
   for (const flow of flows) {
     // A block may state its display leading - a page measured off a scan sets
@@ -3109,7 +3118,7 @@ export function composeBlock(input = {}) {
   const columnCount = Number.isFinite(requestedColumns) && requestedColumns >= 1
     ? requestedColumns
     : Math.max(1, Math.min(4, Math.floor(Math.max(0, measureAvail - 2 * (Number(input.marginPx) || 12)) / 150)));
-  const columns = columnsOf(content, columnCount, gutter);
+  const columns = columnsOf(content, columnCount, gutter, Number(input.columnWidthPx) || 0);
   result.columns = columns;
 
   const bodyInput = input.body && typeof input.body === 'object' ? input.body : String(input.body || '');

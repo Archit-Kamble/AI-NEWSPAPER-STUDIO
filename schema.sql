@@ -877,6 +877,9 @@ ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS display_line_height NUMERIC(4
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS paragraph_policy VARCHAR(12);
 -- How far (block px) display type may stand into what is under it. NULL = 0.
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS display_overlap_px NUMERIC(4,1);
+-- A measured page's own column width and gutter (block px). NULL = the engine's.
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS column_width_px NUMERIC(5,1);
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS column_gutter_px NUMERIC(4,1);
 
 -- DOES THE DESK'S CHOSEN DISPLAY SIZE WIN?
 --

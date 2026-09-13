@@ -82,6 +82,9 @@ export const DRAFT_FIELDS = [
   "paragraphPolicy",
   // How far a display flow may stand into the stand-off of what is under it.
   "displayOverlapPx",
+  // A measured page's own column width and gutter.
+  "columnWidthPx",
+  "columnGutterPx",
   // Does the desk's chosen headline / deck size WIN over the compositor's own
   // fit? See schema.sql: the fit is what makes a page look composed, and it is
   // also why a size a desk typed could appear to do nothing.
@@ -202,6 +205,8 @@ export function draftFromSection(section) {
     displayLineHeight: section.display_line_height == null ? null : Number(section.display_line_height),
     paragraphPolicy: section.paragraph_policy || null,
     displayOverlapPx: section.display_overlap_px == null ? null : Number(section.display_overlap_px),
+    columnWidthPx: section.column_width_px == null ? null : Number(section.column_width_px),
+    columnGutterPx: section.column_gutter_px == null ? null : Number(section.column_gutter_px),
     headlineLocked: section.headline_locked === true,
     subheadingLocked: section.subheading_locked === true,
     borderStyle: section.border_style || "none",
@@ -330,6 +335,8 @@ export function payloadFromDraft(draft) {
     displayLineHeight: draft.displayLineHeight == null ? undefined : Number(draft.displayLineHeight),
     paragraphPolicy: draft.paragraphPolicy || undefined,
     displayOverlapPx: draft.displayOverlapPx == null ? undefined : Number(draft.displayOverlapPx),
+    columnWidthPx: draft.columnWidthPx == null ? undefined : Number(draft.columnWidthPx),
+    columnGutterPx: draft.columnGutterPx == null ? undefined : Number(draft.columnGutterPx),
     headlineLocked: draft.headlineLocked === true,
     subheadingLocked: draft.subheadingLocked === true,
     borderStyle: draft.borderStyle,

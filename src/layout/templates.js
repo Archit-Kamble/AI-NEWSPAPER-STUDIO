@@ -235,7 +235,7 @@ const MASTHEAD_ADVERT = {
 // scan's own rectangles scaled onto this page, not spans of a column grid, so
 // the frame is block()'s with the measured x, width and height put back.
 const { buildMeasuredPage } = require('./measured-pages/scan');
-const MEASURED_PAGES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state']
+const MEASURED_PAGES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state', 'broadsheet-local']
   .map((key) => [key, buildMeasuredPage(require(`./measured-pages/${key}`))]));
 function measuredTemplate(key) {
   const { template } = MEASURED_PAGES[key];
@@ -507,26 +507,7 @@ const templates = {
 
   'broadsheet-state': measuredTemplate('broadsheet-state'),
 
-  'broadsheet-local': {
-    key: 'broadsheet-local',
-    name: 'Broadsheet local (reference)',
-    grid: REFERENCE_GRID,
-    description: 'A narrow column, a three-column picture lead with sidebars, a short story beside a corner advert, a wide report, a report with a tinted box, a photo story, a half-page advert and a separator-led feature.',
-    // MEASURED off the reference scan onto its own seven-column grid, tops on
-    // the baseline and closed to the one 8 px gap. Generated, so literals.
-    sections: [
-      frame('left-column', 0, 1, 56, 336, { story: 'STANDARD', priority: 3 }),
-      frame('lead', 1, 3, 56, 336, { story: 'LEAD', priority: 5 }),
-      frame('short-story', 4, 1, 56, 152, { story: 'BRIEF', priority: 2 }),
-      frame('corner-advert', 5, 2, 56, 152, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
-      frame('wide-report', 4, 3, 216, 176, { story: 'SECONDARY', priority: 4 }),
-      frame('report-panel', 0, 4, 400, 200, { story: 'SECONDARY', priority: 4 }),
-      frame('photo-story', 0, 2, 608, 152, { story: 'PHOTO_FEATURE', priority: 3 }),
-      frame('report-small', 2, 2, 608, 152, { story: 'STANDARD', priority: 3 }),
-      frame('half-advert', 4, 3, 400, 608, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
-      frame('feature-strip', 0, 4, 768, 240, { story: 'ANALYSIS', priority: 3 }),
-    ],
-  },
+  'broadsheet-local': measuredTemplate('broadsheet-local'),
 
   'broadsheet-opinion': {
     key: 'broadsheet-opinion',

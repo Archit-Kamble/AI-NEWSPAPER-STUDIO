@@ -557,6 +557,10 @@ export function composeSection(section = {}, view = {}) {
     // off a scan does); absent is the engine's own, so nothing else moves.
     displayLineHeight: Number(pick(section, view, 'displayLineHeight', 'display_line_height', 0)) || undefined,
     displayOverlapPx: Number(pick(section, view, 'displayOverlapPx', 'display_overlap_px', 0)) || undefined,
+    // A measured page's own column width and gutter; absent is the engine's.
+    columnWidthPx: Number(pick(section, view, 'columnWidthPx', 'column_width_px', 0)) || undefined,
+    ...(Number(pick(section, view, 'columnGutterPx', 'column_gutter_px', 0)) > 0
+      ? { gutterPx: Number(pick(section, view, 'columnGutterPx', 'column_gutter_px', 0)) } : {}),
     // Whether the headline may be set LARGER than asked in order to fill its
     // measure (compose.js's HEADLINE_FILL_TARGET). Left undefined - and so
     // on - unless a caller states otherwise; the two that do are the engine's

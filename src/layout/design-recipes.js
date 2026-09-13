@@ -76,7 +76,7 @@ const ADS = {
 // A page measured exactly off a scan carries its recipe in its own spec
 // (measured-pages/), beside the rectangles it was measured with.
 const { buildMeasuredPage } = require('./measured-pages/scan');
-const MEASURED_RECIPES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state']
+const MEASURED_RECIPES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state', 'broadsheet-local']
   .map((key) => [key, buildMeasuredPage(require(`./measured-pages/${key}`)).recipe]));
 
 const RECIPES = {
@@ -173,54 +173,6 @@ const RECIPES = {
       style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 13.0, headlineLocked: true, bodyFontPx: 6.3, lineHeight: 1.328, columnCount: 1, textAlign: 'justify' },
       pictures: [{ file: 'reference-lokmat/broadsheet-jacket-weather-column-5.jpg', x: 0, y: 7, width: 46, height: 47 }, { file: 'reference-lokmat/broadsheet-jacket-weather-column-8.jpg', x: 62, y: 276, width: 19, height: 47 }],
       panels: [],
-    },
-  },
-
-  // MEASURED off the reference scan: sizes from each head's shirorekha, body at
-  // the reference's own em and pitch, its colours, its picture and panel boxes.
-  'broadsheet-local': {
-    'left-column': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 14.0, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 1, textAlign: 'justify' },
-      pictures: [],
-      panels: [],
-    },
-    'lead': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 24.0, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 3, textAlign: 'justify', subheadingFontPx: 10.5, subheadingLocked: true },
-      pictures: [{ file: 'reference-lokmat/broadsheet-local-lead-0.jpg', x: 91, y: 97, width: 79, height: 99 }],
-      panels: [{ kind: 'sidebar', x: 162, y: 82, width: 97, height: 176, titlePx: 8.8, linePx: 6.0, title: PLACEHOLDER, lines: points(6) }, { kind: 'sidebar', x: 162, y: 261, width: 97, height: 75, titlePx: 8.8, linePx: 6.0, title: PLACEHOLDER, lines: points(3) }],
-    },
-    'short-story': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 12.0, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 1, textAlign: 'justify' },
-      pictures: [],
-      panels: [],
-    },
-    'corner-advert': ADS.gold,
-    'wide-report': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 17.0, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 3, textAlign: 'justify' },
-      pictures: [],
-      panels: [],
-    },
-    'report-panel': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 17.0, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 3, textAlign: 'justify' },
-      pictures: [],
-      panels: [{ kind: 'quote', x: 170, y: 18, width: 127, height: 52, titlePx: 8.8, linePx: 6.0, title: PLACEHOLDER, lines: points(2) }, { kind: 'sidebar', tint: '#f4e4dc', x: 170, y: 77, width: 127, height: 85, titlePx: 8.8, linePx: 6.0, title: PLACEHOLDER, lines: points(4) }],
-    },
-    'photo-story': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 10.5, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 2, textAlign: 'justify' },
-      pictures: [{ file: 'reference-lokmat/broadsheet-local-photo-story-2.jpg', x: 0, y: 11, width: 158, height: 141 }],
-      panels: [],
-    },
-    'report-small': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 14.5, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 2, textAlign: 'justify' },
-      pictures: [],
-      panels: [],
-    },
-    'half-advert': ADS.insurance,
-    'feature-strip': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 18.0, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 3, textAlign: 'justify', headlineStyle: 'kicker-chip-rule', accentColor: '#e42424', borderInk: '#fb9f0b', headlineAlign: 'center' },
-      fixtureKicker: 'जरूर वाचा',
-      pictures: [],
-      panels: [{ kind: 'sidebar', x: 170, y: 100, width: 140, height: 65, titlePx: 8.8, linePx: 6.0, title: PLACEHOLDER, lines: points(3) }, { kind: 'sidebar', x: 170, y: 172, width: 140, height: 68, titlePx: 8.8, linePx: 6.0, title: PLACEHOLDER, lines: points(3) }],
     },
   },
 

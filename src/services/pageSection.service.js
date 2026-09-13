@@ -365,6 +365,10 @@ async function saveSection(pageId, sectionKey, body) {
     datelineStyle: supplied(body.datelineStyle) ? (String(body.datelineStyle).trim() || null) : undefined,
     // Display leading: a printed head is set anywhere from 0.95 to 1.4 of its
     // own size. Outside that it is a mistake, not a style, and is dropped.
+    columnWidthPx: Number(body.columnWidthPx) >= 20 && Number(body.columnWidthPx) <= 640
+      ? Math.round(Number(body.columnWidthPx) * 10) / 10 : undefined,
+    columnGutterPx: Number(body.columnGutterPx) >= 1 && Number(body.columnGutterPx) <= 40
+      ? Math.round(Number(body.columnGutterPx) * 10) / 10 : undefined,
     displayOverlapPx: Number(body.displayOverlapPx) >= 0 && Number(body.displayOverlapPx) <= 40
       ? Math.round(Number(body.displayOverlapPx) * 10) / 10 : undefined,
     paragraphPolicy: ['auto', 'as-written'].includes(body.paragraphPolicy) ? body.paragraphPolicy : undefined,

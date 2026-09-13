@@ -8209,6 +8209,70 @@ owner; the DPI test depended on an ignored upload left in one checkout and
 would have failed on a fresh clone as a missing file rather than as a DPI
 check. All four use disposable fixtures now.
 
+## Copying a reference paper's page — a TEMPLATE plus a RECIPE
+
+The desk's request: supply 20-25 printed newspapers and have SAHAS carry each
+page's layout, block styles, faces and colours across "95% as it is", with only
+the words coming from the writer. Pilot: two pages of a Pune broadsheet
+(`~/Downloads/Lokmat_Pune Main_20260902.pdf`, pages 3 and 11).
+
+**It is two catalogue entries, because a page is two decisions.**
+`src/layout/templates.js` gains the layout (`broadsheet-front`,
+`broadsheet-sport`) and `src/layout/design-recipes.js` holds what each of its
+frames WEARS: display face, locked sizes, columns, grounds, rules, headline
+treatment, inset panels and picture rectangles. A template has never said how a
+block is dressed, and must not start - that is a per-block desk decision, and a
+recipe is that decision written down once.
+
+`scripts/apply-design-recipe.js <editionId> [page=templateKey ...]` puts pages on
+those layouts and dresses them through `saveSection` and `sectionImage.add` -
+the paths a desk's own edits take, so the palette boundary, the panel clamp and
+the corridor snap all apply. **2099 fixtures only**: a section save is a full
+replace for the fields it covers, so dress first and fill copy AFTER
+(`scripts/fill-edition-copy.js`).
+
+**What the source PDFs actually are - check before measuring.** Lokmat, Pudhari
+and Sakal e-paper PDFs carry no fonts, text or vectors: each page is one JPEG,
+so every number is read off pixels. Loksatta, Saamana and Navarashtra carry real
+fonts and vectors and could be read exactly. And a PDF from an e-paper *clip*
+viewer is not the printed page: every story is wrapped in a logo above and a
+"Page No. / Powered by" line below that were never on the newsprint, so its
+spacing is fiction. Use a real page scan (crop marks, colour bars) - that is what
+the pilot file is.
+
+**How a page is measured.** The scan is gridded, each block's edges read off it,
+scaled into this page (x by 0.646, y by 0.626 for this paper) and snapped onto
+the 16-column grid, so frames sit where the reference's do to within one grid
+step and the gutters are this page's own. Sizes are LOCKED: the reference's
+look is its hierarchy, and the auto-fit growing or shrinking a headline is
+exactly what would stop the copy looking like the page it was measured from.
+
+**What is never carried.** The reference's nameplate, section labels, folio
+text, disclaimers, photographs and words. Keys and layout names are neutral -
+another paper's name is not something this product prints in its own picker.
+Panel lines and kickers in a recipe are placeholders (`इथे मजकूर लिहा`); pictures
+are stand-ins from `public/uploads`.
+
+**Two things measured wrong and fixed, both worth knowing for the next page:**
+a picture placed at the top of a report block sat in the headline's band and
+squeezed the headline into the corridor beside it - in the reference the
+picture is under the headline; and the pale tints were invisible against a
+printed page's screens, which are the `vivid-*` family.
+
+**Judging it: photograph the SHEET, not the workspace.** An element screenshot
+of `.newspaper-canvas` inside the workspace captures whatever sticky chrome lies
+over it and loses the part its height-capped host has scrolled away - three
+captures were wrong before this was understood. Clone the rendered sheet into a
+full-screen layer and capture that (`tmp-visual-pass/runs/shoot-recipe.js`), and
+judge tints on the full-resolution PNG: a downscaled JPEG washes a `vivid-*`
+ground out to white.
+
+**Known gaps on the pilot, not yet addressed:** an inset `note` is always boxed
+where the reference's numbered sidebars carry no rule (needs an unruled panel
+style in `inset-panels.js`); the reference's weather/market rail has no card at
+a 72 px measure; `rail-update` on the sport page oversets by a line; the folio
+does not carry the reference's section band.
+
 ## Engineering rules
 
 - **The overflow diagnosis started from desk-selected baseline `52c9556`.** Fix

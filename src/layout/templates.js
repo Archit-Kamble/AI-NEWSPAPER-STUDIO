@@ -398,6 +398,107 @@ const templates = {
   // because the puzzle is), and Properties -> Standing feature turns any block
   // into one and fills it. So the cards did not lose a way in; they lost a
   // frame that was there whether or not they were wanted.
+  // MEASURED FROM A REFERENCE BROADSHEET, not designed here. The desk supplied
+  // a printed Marathi daily's own page as a 300 ppi scan and asked for its
+  // layout to be carried across with only the words changed. Every rectangle
+  // below was read off that scan, scaled into this page (x by 0.646, y by
+  // 0.626) and then snapped onto the 16-column grid - so the frames sit where
+  // the reference's do, to within one grid step, and the gutters are this
+  // page's own rather than the scan's.
+  //
+  // Keys are neutral on purpose. The layout is borrowed; another paper's name
+  // is not something this product may print in its own layout picker.
+  //
+  // No `masthead-advert`: the reference's front page sells no ear, so the
+  // nameplate takes the whole measure - which is also the desk's own request
+  // for a nameplate set as large as the reference's.
+  //
+  // The styles each frame wears (faces, locked sizes, grounds, rules, panels)
+  // are not a template's business. They live in design-recipes.js beside this
+  // file and are applied to a page's blocks, like any desk decision.
+  'broadsheet-front': {
+    key: 'broadsheet-front',
+    name: 'Broadsheet front (reference)',
+    description: 'A banner package, a left service rail, a heavy lead, a right-hand pair, two reports and a feature strip over the foot.',
+    sections: (() => {
+      const [banner] = rows(MASTHEAD_BOTTOM, [152]);
+      const bandTop = banner.end + GAP;
+      const [lead, reports] = rows(bandTop, [360, 120]);
+      const [rail, shorts] = rows(bandTop, [160, lead.end - (bandTop + 160 + GAP)]);
+      const [rightTop] = rows(bandTop, [224]);
+      const rightLowTop = rightTop.end + GAP;
+      const footTop = reports.end + GAP;
+      const foot = FRONT_REGIONS.content.bottom - footTop;
+      return [
+        block('banner-package', 0, 12, banner.y, banner.height,
+          { story: 'LEAD', priority: 4 }),
+        block('banner-advert', 12, 4, banner.y, banner.height,
+          { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
+
+        block('service-rail', 0, 2, rail.y, rail.height,
+          { type: 'briefs', story: 'BRIEF', priority: 2 }),
+        block('shorts', 0, 2, shorts.y, shorts.height,
+          { type: 'briefs', story: 'BRIEF', priority: 2 }),
+        block('lead', 2, 10, lead.y, lead.height,
+          { story: 'LEAD', priority: 5 }),
+        block('right-top', 12, 4, rightTop.y, rightTop.height,
+          { story: 'SECONDARY', priority: 4 }),
+        block('right-low', 12, 4, rightLowTop, reports.end - rightLowTop,
+          { story: 'SECONDARY', priority: 3 }),
+
+        block('report-one', 0, 7, reports.y, reports.height,
+          { story: 'STANDARD', priority: 3 }),
+        block('report-two', 7, 5, reports.y, reports.height,
+          { story: 'STANDARD', priority: 3 }),
+
+        block('feature-strip', 0, 12, footTop, foot,
+          { story: 'ANALYSIS', priority: 3, headline: 'kicker-tab-rule' }),
+        block('foot-advert', 12, 4, footTop, foot,
+          { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
+      ];
+    })(),
+  },
+
+  'broadsheet-sport': {
+    key: 'broadsheet-sport',
+    name: 'Broadsheet sport (reference)',
+    description: 'A narrow rail of five items, a picture-led lead beside a tall second story, a report pair and a feature strip.',
+    sections: (() => {
+      const [upper, middle] = rows(INSIDE_TOP, [504, 248]);
+      const footTop = middle.end + GAP;
+      const foot = INSIDE_BOTTOM - footTop;
+      const [today, update] = rows(INSIDE_TOP, [64, 200]);
+      const railThreeTop = update.end + GAP;
+      return [
+        block('rail-today', 0, 2, today.y, today.height,
+          { type: 'briefs', story: 'BRIEF', priority: 2 }),
+        block('rail-update', 0, 2, update.y, update.height,
+          { type: 'briefs', story: 'BRIEF', priority: 2 }),
+        block('rail-three', 0, 2, railThreeTop, upper.end - railThreeTop,
+          { story: 'BRIEF', priority: 2 }),
+        block('rail-four', 0, 2, middle.y, middle.height,
+          { story: 'BRIEF', priority: 2 }),
+        block('rail-five', 0, 2, footTop, foot,
+          { story: 'BRIEF', priority: 2 }),
+
+        block('lead', 2, 9, upper.y, upper.height,
+          { story: 'LEAD', priority: 5 }),
+        block('second', 11, 5, upper.y, upper.height,
+          { story: 'SECONDARY', priority: 4 }),
+
+        block('report-left', 2, 5, middle.y, middle.height,
+          { story: 'STANDARD', priority: 3 }),
+        block('report-right', 7, 9, middle.y, middle.height,
+          { story: 'SECONDARY', priority: 4 }),
+
+        block('feature-strip', 2, 9, footTop, foot,
+          { story: 'ANALYSIS', priority: 3, headline: 'kicker-tab-rule' }),
+        block('squad-box', 11, 5, footTop, foot,
+          { story: 'SIDEBAR', priority: 2 }),
+      ];
+    })(),
+  },
+
   features: {
     key: 'features',
     name: 'Feature Page',

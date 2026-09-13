@@ -76,7 +76,7 @@ const ADS = {
 // A page measured exactly off a scan carries its recipe in its own spec
 // (measured-pages/), beside the rectangles it was measured with.
 const { buildMeasuredPage } = require('./measured-pages/scan');
-const MEASURED_RECIPES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state', 'broadsheet-local', 'broadsheet-opinion', 'broadsheet-advertorial']
+const MEASURED_RECIPES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state', 'broadsheet-local', 'broadsheet-opinion', 'broadsheet-advertorial', 'broadsheet-local-sport']
   .map((key) => [key, buildMeasuredPage(require(`./measured-pages/${key}`)).recipe]));
 
 const RECIPES = {
@@ -172,51 +172,6 @@ const RECIPES = {
     'weather-column': {
       style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 13.0, headlineLocked: true, bodyFontPx: 6.3, lineHeight: 1.328, columnCount: 1, textAlign: 'justify' },
       pictures: [{ file: 'reference-lokmat/broadsheet-jacket-weather-column-5.jpg', x: 0, y: 7, width: 46, height: 47 }, { file: 'reference-lokmat/broadsheet-jacket-weather-column-8.jpg', x: 62, y: 276, width: 19, height: 47 }],
-      panels: [],
-    },
-  },
-
-  // MEASURED off the reference scan: sizes from each head's shirorekha, body at
-  // the reference's own em and pitch, its colours, its picture and panel boxes.
-  'broadsheet-local-sport': {
-    'sport-left': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 15.5, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 2, textAlign: 'justify', subheadingFontPx: 9.0, subheadingLocked: true },
-      pictures: [{ file: 'reference-lokmat/broadsheet-local-sport-sport-left-0.jpg', x: 90, y: 61, width: 71, height: 42 }],
-      panels: [],
-    },
-    'sport-lead': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 26.0, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 3, textAlign: 'justify', subheadingFontPx: 10.5, subheadingLocked: true },
-      pictures: [{ file: 'reference-lokmat/broadsheet-local-sport-sport-lead-2.jpg', x: 89, y: 84, width: 48, height: 45 }, { file: 'reference-lokmat/broadsheet-local-sport-sport-lead-3.jpg', x: 143, y: 84, width: 46, height: 52 }, { file: 'reference-lokmat/broadsheet-local-sport-sport-lead-4.jpg', x: 89, y: 146, width: 48, height: 50 }, { file: 'reference-lokmat/broadsheet-local-sport-sport-lead-5.jpg', x: 143, y: 146, width: 46, height: 43 }],
-      panels: [],
-    },
-    'sport-right': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 17.0, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 2, textAlign: 'justify', subheadingFontPx: 9.0, subheadingLocked: true },
-      pictures: [{ file: 'reference-lokmat/broadsheet-local-sport-sport-right-1.jpg', x: 90, y: 66, width: 81, height: 81 }],
-      panels: [],
-    },
-    'notice-left': ADS.gold,
-    'notice-mid': ADS.insurance,
-    'notice-right': ADS.family,
-    'notice-foot': ADS.ayurveda,
-    'notice-foot-right': ADS.masala,
-    'sport-report': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 16.5, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 3, textAlign: 'justify', subheadingFontPx: 8.5, subheadingLocked: true },
-      pictures: [{ file: 'reference-lokmat/broadsheet-local-sport-sport-report-6.jpg', x: 38, y: 42, width: 30, height: 29 }, { file: 'reference-lokmat/broadsheet-local-sport-sport-report-7.jpg', x: 71, y: 42, width: 30, height: 31 }],
-      panels: [],
-    },
-    'scorecard': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 10.5, headlineLocked: true, bodyFontPx: 5.6, lineHeight: 1.375, columnCount: 1, textAlign: 'justify' },
-      pictures: [],
-      panels: [],
-    },
-    'sport-brief': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 14.5, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 1, textAlign: 'justify' },
-      pictures: [],
-      panels: [],
-    },
-    'result-box': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 10.5, headlineLocked: true, bodyFontPx: 5.6, lineHeight: 1.375, columnCount: 1, textAlign: 'justify', backgroundColor: '#f4e4dc', borderRadiusPx: 0 },
-      pictures: [],
       panels: [],
     },
   },

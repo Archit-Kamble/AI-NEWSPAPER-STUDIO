@@ -235,7 +235,7 @@ const MASTHEAD_ADVERT = {
 // scan's own rectangles scaled onto this page, not spans of a column grid, so
 // the frame is block()'s with the measured x, width and height put back.
 const { buildMeasuredPage } = require('./measured-pages/scan');
-const MEASURED_PAGES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state', 'broadsheet-local', 'broadsheet-opinion', 'broadsheet-advertorial']
+const MEASURED_PAGES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state', 'broadsheet-local', 'broadsheet-opinion', 'broadsheet-advertorial', 'broadsheet-local-sport']
   .map((key) => [key, buildMeasuredPage(require(`./measured-pages/${key}`))]));
 function measuredTemplate(key) {
   const { template } = MEASURED_PAGES[key];
@@ -513,28 +513,7 @@ const templates = {
 
   'broadsheet-advertorial': measuredTemplate('broadsheet-advertorial'),
 
-  'broadsheet-local-sport': {
-    key: 'broadsheet-local-sport',
-    name: 'Broadsheet local sport and notices (reference)',
-    grid: REFERENCE_GRID,
-    description: 'Three sport stories over a column of public notices, a sport report, a scorecard rail and a result box.',
-    // MEASURED off the reference scan onto its own seven-column grid, tops on
-    // the baseline and closed to the one 8 px gap. Generated, so literals.
-    sections: [
-      frame('sport-left', 0, 2, 56, 272, { story: 'STANDARD', priority: 3 }),
-      frame('sport-lead', 2, 3, 56, 320, { story: 'LEAD', priority: 5 }),
-      frame('sport-right', 5, 2, 56, 320, { story: 'SECONDARY', priority: 4 }),
-      frame('notice-left', 0, 2, 336, 464, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
-      frame('notice-mid', 2, 2, 384, 416, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
-      frame('sport-report', 4, 2, 384, 168, { story: 'STANDARD', priority: 3 }),
-      frame('scorecard', 6, 1, 384, 168, { type: 'briefs', story: 'BRIEF', priority: 2 }),
-      frame('notice-right', 4, 2, 560, 240, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
-      frame('sport-brief', 6, 1, 560, 280, { story: 'BRIEF', priority: 2 }),
-      frame('notice-foot', 0, 4, 808, 200, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
-      frame('notice-foot-right', 4, 2, 808, 200, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
-      frame('result-box', 6, 1, 848, 160, { type: 'briefs', story: 'BRIEF', priority: 2 }),
-    ],
-  },
+  'broadsheet-local-sport': measuredTemplate('broadsheet-local-sport'),
 
   'broadsheet-miscellany': {
     key: 'broadsheet-miscellany',

@@ -73,6 +73,8 @@ export const DRAFT_FIELDS = [
   // printed, and the only way to say no was to clear the location itself -
   // which also loses it from the story's own record.
   "showDateline",
+  // "■ सातारा " or "सातारा : " - see DATELINE_STYLES in text-flow.js.
+  "datelineStyle",
   // Does the desk's chosen headline / deck size WIN over the compositor's own
   // fit? See schema.sql: the fit is what makes a page look composed, and it is
   // also why a size a desk typed could appear to do nothing.
@@ -189,6 +191,7 @@ export function draftFromSection(section) {
     // TRUE for every row that predates the column, which is what they all do
     // today - so nothing composes differently until a desk turns one off.
     showDateline: section.show_dateline !== false,
+    datelineStyle: section.dateline_style || null,
     headlineLocked: section.headline_locked === true,
     subheadingLocked: section.subheading_locked === true,
     borderStyle: section.border_style || "none",
@@ -313,6 +316,7 @@ export function payloadFromDraft(draft) {
     // exactly as it was.
     insetPanels: Array.isArray(draft.insetPanels) ? draft.insetPanels : [],
     showDateline: draft.showDateline !== false,
+    datelineStyle: draft.datelineStyle || null,
     headlineLocked: draft.headlineLocked === true,
     subheadingLocked: draft.subheadingLocked === true,
     borderStyle: draft.borderStyle,

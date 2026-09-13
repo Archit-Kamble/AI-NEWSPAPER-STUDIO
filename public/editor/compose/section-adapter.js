@@ -424,6 +424,7 @@ export function composeSection(section = {}, view = {}) {
     // and it has to be carried into this literal, because datelineText() can
     // only decline a dateline for an object that tells it it may.
     showDateline: pick(section, view, 'showDateline', 'show_dateline', true) !== false,
+    datelineStyle: pick(section, view, 'datelineStyle', 'dateline_style', null),
   });
 
   // Bold/italic/underline runs, not flattened away before composition sees

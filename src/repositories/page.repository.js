@@ -513,6 +513,10 @@ async function saveSection(pageId, sectionKey, updates) {
          -- state (a plain rectangle) and a desk taking a shape back off a
          -- block has to be able to reach it.
          frame_shape = $58,
+         -- How the dateline is set: NULL and 'square' are "■ सातारा ", 'colon'
+         -- is "सातारा : ". Coalesced - a payload that does not mention it
+         -- leaves it alone, and 'square' is how a desk goes back.
+         dateline_style = COALESCE($60, dateline_style),
          revision = page_sections.revision + 1,
          updated_at = CURRENT_TIMESTAMP
      WHERE page_id = $1 AND section_key = $2
@@ -565,7 +569,8 @@ async function saveSection(pageId, sectionKey, updates) {
       updates.headlineInk || null,
       Number.isFinite(updates.borderRadiusPx) ? updates.borderRadiusPx : null,
       updates.frameShape || null,
-      expected]
+      expected,
+      updates.datelineStyle || null]
   );
 
   // NOTHING MATCHED. Two different situations wear the same empty result, and

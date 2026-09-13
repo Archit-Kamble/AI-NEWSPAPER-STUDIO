@@ -89,8 +89,17 @@ export function datelineText(view = {}) {
   if (view.showDateline === false || view.show_dateline === false) return '';
   const parts = [view.location, view.author ?? view.reporterName ?? view.reporter_name]
     .map((part) => String(part || '').trim()).filter(Boolean);
-  return parts.length ? `■ ${parts.join(', ')} ` : '';
+  if (!parts.length) return '';
+  const style = view.datelineStyle ?? view.dateline_style;
+  return style === 'colon' ? `${parts.join(', ')} : ` : `■ ${parts.join(', ')} `;
 }
+
+// HOW A DATELINE IS SET. A Marathi daily either opens the story with a square
+// and the place ("■ सातारा ") or sets the place and a colon ("सातारा : ") - the
+// second is how the reference broadsheet sets every story. Both are the one
+// prefix datelineText() returns, so every surface that measures or draws a
+// dateline agrees on it without knowing there are two.
+export const DATELINE_STYLES = Object.freeze(['square', 'colon']);
 
 /**
  * The dateline/byline is newspaper furniture, not reporter-authored body
@@ -131,6 +140,7 @@ export function flowViewFromSection(section = {}, overrides = {}) {
     // Carried, or every capacity number this grid quotes for a block with no
     // dateline is one dateline's worth of characters short of the truth.
     showDateline: flowValue(section, overrides, "showDateline", "show_dateline", true) !== false,
+    datelineStyle: flowValue(section, overrides, "datelineStyle", "dateline_style", null),
     marginPx: numeric(flowValue(section, overrides, "marginPx", "margin_px", 12), 12),
     columnCount: numeric(flowValue(section, overrides, "columnCount", "column_count", 1), 1),
     lineHeight: Math.max(MIN_LINE_HEIGHT, numeric(flowValue(section, overrides, "lineHeight", "line_height", MIN_LINE_HEIGHT), MIN_LINE_HEIGHT)),

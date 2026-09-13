@@ -11,6 +11,9 @@ const { BLOCK_SHAPE_KEYS } = require('../../public/editor/layout/block-shapes');
 const { panelOf } = require('../../public/editor/layout/inset-panels');
 const { TYPEFACES } = require('../../public/editor/layout/typefaces');
 const { BLOCK_KINDS } = require('../../public/editor/layout/block-kinds');
+// text-flow.js's DATELINE_STYLES, restated because that module is ESM and this
+// check is synchronous. tests/datelineStyle.test.js holds the two equal.
+const DATELINE_STYLES = Object.freeze(['square', 'colon']);
 const features = require('../features');
 const editionFeatures = require('./editionFeatures.service');
 
@@ -228,6 +231,9 @@ async function saveSection(pageId, sectionKey, body) {
   if (supplied(body.frameShape) && String(body.frameShape).trim() && !BLOCK_SHAPE_KEYS.includes(body.frameShape)) {
     return { error: `The block shape must be one of ${BLOCK_SHAPE_KEYS.join(', ')}.` };
   }
+  if (supplied(body.datelineStyle) && String(body.datelineStyle).trim() && !DATELINE_STYLES.includes(body.datelineStyle)) {
+    return { error: `The dateline style must be one of ${DATELINE_STYLES.join(', ')}.` };
+  }
   if (supplied(body.borderStyle) && !BORDER_KEYS.includes(body.borderStyle)) {
     return { error: `The border style must be one of ${BORDER_KEYS.join(', ')}.` };
   }
@@ -356,6 +362,7 @@ async function saveSection(pageId, sectionKey, body) {
     headlineInk,
     borderRadiusPx: supplied(body.borderRadiusPx) ? borderRadius(body.borderRadiusPx) : undefined,
     frameShape: supplied(body.frameShape) ? (String(body.frameShape).trim() || null) : undefined,
+    datelineStyle: supplied(body.datelineStyle) ? (String(body.datelineStyle).trim() || null) : undefined,
     headlineStyle: body.headlineStyle,
     accentColor,
     // What structured card is placed in this block, and its payload. Never
@@ -476,4 +483,5 @@ async function setPurpose(pageId, sectionKey, body = {}) {
 }
 
 module.exports = {
+  DATELINE_STYLES,
   setPurpose, saveSection, createSection, deleteSection, moveSection, snapGeometry, rateFor };

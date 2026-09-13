@@ -866,6 +866,9 @@ ALTER TABLE newspapers ADD COLUMN IF NOT EXISTS column_rules BOOLEAN NOT NULL DE
 -- short of clearing the location itself - which also loses it from the story's
 -- own record. TRUE is what every existing row already does.
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS show_dateline BOOLEAN NOT NULL DEFAULT TRUE;
+-- HOW THE DATELINE IS SET: NULL/'square' is "■ सातारा ", 'colon' is
+-- "सातारा : ". NULL on every existing row, so nothing composes differently.
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS dateline_style VARCHAR(16);
 
 -- DOES THE DESK'S CHOSEN DISPLAY SIZE WIN?
 --

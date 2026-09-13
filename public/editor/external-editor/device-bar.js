@@ -266,6 +266,7 @@ export function deviceBarMarkup() {
         ${button("justify", "▤", "Justify", "Set the copy flush to BOTH edges of the column, closing each line as far as is decent")}
         ${button("justify-all", "▥", "Justify lines", "Force EVERY line but a paragraph's last to reach both edges — wider word gaps where it takes them", { wide: true })}
         ${button("dateline", "■", "Dateline", "Open the story with ■ location, reporter — or don't")}
+        ${button("dateline-colon", ":", "Place :", "Set the dateline as सातारा : rather than ■ सातारा")}
       </span>
       <span class="dev-group">
         ${button("insert", "❏", "Insert", "A fact box, pull quote, cross-head, separator — or a picture laid across two blocks")}
@@ -445,6 +446,10 @@ export function bindDeviceBar(handlers) {
       patch({ showDateline: view.showDateline === false });
       return;
     }
+    if (device === "dateline-colon") {
+      patch({ datelineStyle: view.datelineStyle === "colon" ? "square" : "colon" });
+      return;
+    }
     if (device === "caption") { live?.onFocusCaption?.(); return; }
     if (device === "ai-picture") { live?.onProposePicture?.(); return; }
   });
@@ -606,6 +611,7 @@ export function refreshDeviceBar(view = {}, composition = null) {
     // Lit means the dateline IS printed, which is the ordinary state - so this
     // is the one button on the bar that starts on.
     dateline: view.showDateline !== false,
+    "dateline-colon": view.datelineStyle === "colon",
     display: Boolean(view.displayFamily),
     shape: Boolean(view.frameShape),
     "rule-width": view.borderWidthPx != null,

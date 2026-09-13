@@ -9,8 +9,10 @@
 // scaled onto this page's matter box, and only the scaling is shared.
 //
 // A spec states, in SCAN pixels:
-//   scan:   { x0, x1, y0, y1, top }  - the scan's matter box, and where its
-//                                      first block starts on this page
+//   scan:   { x0, x1, y0, y1, top, bottom } - the scan's matter box, and where
+//                                      its blocks start and end on this page
+//                                      (bottom defaults to the matter's foot;
+//                                      page two stops above the imprint)
 //   blocks: [{ key, box, type, story, priority, style, pictures, panels }]
 //
 // and every type size in EDITOR pixels, because a size is decided by matching
@@ -25,11 +27,12 @@ const PLACEHOLDER = 'इथे मजकूर लिहा';
 const MATTER = { left: 20, right: 640, bottom: 1008 };
 
 function scaler(scan, top) {
+  const bottom = scan.bottom || MATTER.bottom;
   const sx = (MATTER.right - MATTER.left) / (scan.x1 - scan.x0);
   // `uniform` keeps the scan's own proportions: the page is scaled by its
   // width alone and set up from the foot, so what is left above it is the
   // reference's own header depth.
-  const sy = scan.uniform ? sx : (MATTER.bottom - top) / (scan.y1 - scan.y0);
+  const sy = scan.uniform ? sx : (bottom - top) / (scan.y1 - scan.y0);
   const ex = (x) => MATTER.left + (x - scan.x0) * sx;
   const ey = (y) => top + (y - scan.y0) * sy;
   return { sx, sy, ex, ey };
@@ -39,7 +42,7 @@ const round = (value) => Math.round(value);
 
 function buildMeasuredPage(spec) {
   const top = spec.scan.uniform
-    ? MATTER.bottom - (spec.scan.y1 - spec.scan.y0) * ((MATTER.right - MATTER.left) / (spec.scan.x1 - spec.scan.x0))
+    ? (spec.scan.bottom || MATTER.bottom) - (spec.scan.y1 - spec.scan.y0) * ((MATTER.right - MATTER.left) / (spec.scan.x1 - spec.scan.x0))
     : spec.scan.top;
   const { ex, ey } = scaler(spec.scan, top);
   const rect = ([x0, y0, x1, y1]) => {

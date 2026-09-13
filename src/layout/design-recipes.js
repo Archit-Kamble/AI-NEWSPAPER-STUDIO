@@ -76,7 +76,7 @@ const ADS = {
 // A page measured exactly off a scan carries its recipe in its own spec
 // (measured-pages/), beside the rectangles it was measured with.
 const { buildMeasuredPage } = require('./measured-pages/scan');
-const MEASURED_RECIPES = Object.fromEntries(['broadsheet-front']
+const MEASURED_RECIPES = Object.fromEntries(['broadsheet-front', 'broadsheet-city']
   .map((key) => [key, buildMeasuredPage(require(`./measured-pages/${key}`)).recipe]));
 
 const RECIPES = {
@@ -172,53 +172,6 @@ const RECIPES = {
     'weather-column': {
       style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 13.0, headlineLocked: true, bodyFontPx: 6.3, lineHeight: 1.328, columnCount: 1, textAlign: 'justify' },
       pictures: [{ file: 'reference-lokmat/broadsheet-jacket-weather-column-5.jpg', x: 0, y: 7, width: 46, height: 47 }, { file: 'reference-lokmat/broadsheet-jacket-weather-column-8.jpg', x: 62, y: 276, width: 19, height: 47 }],
-      panels: [],
-    },
-  },
-
-  // MEASURED off the reference scan: sizes from each head's shirorekha, body at
-  // the reference's own em and pitch, its colours, its picture and panel boxes.
-  'broadsheet-city': {
-    'rail-update': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 8.5, headlineLocked: true, bodyFontPx: 5.7, lineHeight: 1.375, columnCount: 1, textAlign: 'justify', headlineStyle: 'kicker-label', accentColor: '#fb9f0b' },
-      fixtureKicker: 'अपडेट',
-      pictures: [],
-      panels: [],
-    },
-    'rail-two': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 8.5, headlineLocked: true, bodyFontPx: 5.7, lineHeight: 1.375, columnCount: 1, textAlign: 'justify' },
-      pictures: [],
-      panels: [],
-    },
-    'lead': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 28.0, headlineLocked: true, bodyFontPx: 6.1, lineHeight: 1.328, columnCount: 4, textAlign: 'justify', subheadingFontPx: 10.5, subheadingLocked: true },
-      pictures: [{ file: 'reference-lokmat/broadsheet-city-lead-1.jpg', x: 91, y: 98, width: 79, height: 93 }, { file: 'reference-lokmat/broadsheet-city-lead-2.jpg', x: 137, y: 119, width: 33, height: 72 }],
-      panels: [{ kind: 'sidebar', x: 180, y: 92, width: 86, height: 111, titlePx: 9.0, linePx: 6.1, title: PLACEHOLDER, lines: points(4) }, { kind: 'sidebar', x: 269, y: 92, width: 81, height: 152, titlePx: 9.0, linePx: 6.1, title: PLACEHOLDER, lines: points(6) }, { kind: 'sidebar', x: 180, y: 252, width: 170, height: 67, titlePx: 9.0, linePx: 6.1, title: PLACEHOLDER, lines: points(3) }],
-    },
-    'right-top': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 20.0, headlineLocked: true, bodyFontPx: 6.1, lineHeight: 1.328, columnCount: 2, textAlign: 'justify' },
-      pictures: [{ file: 'reference-lokmat/broadsheet-city-right-top-0.jpg', x: 1, y: 1, width: 169, height: 82 }],
-      panels: [],
-    },
-    'banner-report': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 17.0, headlineLocked: true, bodyFontPx: 6.1, lineHeight: 1.328, columnCount: 5, textAlign: 'justify' },
-      pictures: [],
-      panels: [],
-    },
-    'half-advert': ADS.gold,
-    'report-wide': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 20.0, headlineLocked: true, bodyFontPx: 6.1, lineHeight: 1.328, columnCount: 3, textAlign: 'justify' },
-      pictures: [],
-      panels: [{ kind: 'sidebar', marker: 'number', x: 89, y: 51, width: 83, height: 189, titlePx: 9.0, linePx: 6.1, title: PLACEHOLDER, lines: points(3) }, { kind: 'quote', x: 175, y: 51, width: 86, height: 189, titlePx: 9.0, linePx: 6.1, title: PLACEHOLDER, lines: points(3) }],
-    },
-    'report-narrow': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 14.5, headlineLocked: true, bodyFontPx: 6.1, lineHeight: 1.328, columnCount: 2, textAlign: 'justify' },
-      pictures: [],
-      panels: [],
-    },
-    'report-picture': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 17.5, headlineLocked: true, bodyFontPx: 6.1, lineHeight: 1.328, columnCount: 2, textAlign: 'justify' },
-      pictures: [{ file: 'reference-lokmat/broadsheet-city-report-picture-4.jpg', x: 89, y: 51, width: 81, height: 44 }],
       panels: [],
     },
   },

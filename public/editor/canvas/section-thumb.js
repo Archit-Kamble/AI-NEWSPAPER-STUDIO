@@ -650,7 +650,7 @@ export function insetPanelsMarkup(section, view) {
         + `line-height:${disc.d}px;font-size:${disc.fontPx}px;border-radius:50%;background:#111;color:#fff;text-align:center;font-weight:700;`
         + `font-family:'Sahas Sans', 'Noto Sans Devanagari', Arial, sans-serif;">${escapeHtml(disc.text)}</span>`).join("");
     const ticks = panel.ruleStyle === 'ticks'
-      ? `<span class="panel-ticks" style="left:0;top:0;width:100%;height:${Number(panel.ruleWidthPx) || 0.71}px;`
+      ? `<span class="panel-ticks" style="left:0;${(panel.rules || []).includes('bottom') ? 'bottom' : 'top'}:0;width:100%;height:${Number(panel.ruleWidthPx) || 0.71}px;`
         + `background:repeating-linear-gradient(90deg, ${panel.ruleInk || '#111'} 0 0.45px, transparent 0.45px ${INSET_PANEL_TICK_PITCH_PX}px);"></span>`
       : '';
     return `<span class="section-inset-panel section-inset-${escapeHtml(panel.kind)}"

@@ -7374,6 +7374,18 @@ body.print-view .page-imprint {
   font-display: block;
 }
 @font-face {
+  font-family: "Mukta Text";
+  src: url("/assets/fonts/MuktaDisplay-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-display: block;
+}
+@font-face {
+  font-family: "Mukta Text";
+  src: url("/assets/fonts/MuktaDisplay-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-display: block;
+}
+@font-face {
   font-family: "Noto Sans Condensed";
   src: url("/assets/fonts/NotoSansDevanagariCondensed-Medium.ttf") format("truetype");
   font-weight: 400;

@@ -235,7 +235,7 @@ const MASTHEAD_ADVERT = {
 // scan's own rectangles scaled onto this page, not spans of a column grid, so
 // the frame is block()'s with the measured x, width and height put back.
 const { buildMeasuredPage } = require('./measured-pages/scan');
-const MEASURED_PAGES = Object.fromEntries(['broadsheet-front']
+const MEASURED_PAGES = Object.fromEntries(['broadsheet-front', 'broadsheet-city']
   .map((key) => [key, buildMeasuredPage(require(`./measured-pages/${key}`))]));
 function measuredTemplate(key) {
   const { template } = MEASURED_PAGES[key];
@@ -503,25 +503,7 @@ const templates = {
     ],
   },
 
-  'broadsheet-city': {
-    key: 'broadsheet-city',
-    name: 'Broadsheet city front (reference)',
-    grid: REFERENCE_GRID,
-    description: 'A quick-update rail, a four-column picture lead with sidebars, a picture-topped right story, a banner report, a half-page advert and three reports.',
-    // MEASURED off the reference scan onto its own seven-column grid, tops on
-    // the baseline and closed to the one 8 px gap. Generated, so literals.
-    sections: [
-      frame('rail-update', 0, 1, 56, 200, { type: 'briefs', story: 'BRIEF', priority: 2 }),
-      frame('rail-two', 0, 1, 264, 128, { story: 'BRIEF', priority: 2 }),
-      frame('lead', 1, 4, 56, 336, { story: 'LEAD', priority: 5 }),
-      frame('right-top', 5, 2, 56, 440, { story: 'SECONDARY', priority: 4 }),
-      frame('banner-report', 0, 5, 400, 96, { story: 'SECONDARY', priority: 4 }),
-      frame('half-advert', 0, 4, 504, 504, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
-      frame('report-wide', 4, 3, 504, 240, { story: 'SECONDARY', priority: 4 }),
-      frame('report-narrow', 4, 1, 752, 256, { story: 'STANDARD', priority: 3 }),
-      frame('report-picture', 5, 2, 752, 256, { story: 'STANDARD', priority: 3 }),
-    ],
-  },
+  'broadsheet-city': measuredTemplate('broadsheet-city'),
 
   'broadsheet-state': {
     key: 'broadsheet-state',

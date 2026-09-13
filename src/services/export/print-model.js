@@ -566,7 +566,8 @@ function blockDecorations(section, composition) {
     };
     if (panel.ruleStyle === 'ticks') {
       for (const [x, w] of ruleTicks(panel.width)) {
-        items.push({ kind: 'rule', x: px + mm(x), y: py, width: mm(w), height: rule, ink: panel.ruleInk || RULE_INK });
+        const tickY = (panel.rules || []).includes('bottom') ? py + mm(panel.height) - rule : py;
+        items.push({ kind: 'rule', x: px + mm(x), y: tickY, width: mm(w), height: rule, ink: panel.ruleInk || RULE_INK });
       }
     } else {
       for (const edge of edges) items.push({ kind: 'rule', ...BOX[edge], ink: panel.ruleInk || RULE_INK });

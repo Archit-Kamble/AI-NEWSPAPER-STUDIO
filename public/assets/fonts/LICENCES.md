@@ -12,7 +12,7 @@ printed newspaper and in the PDFs this system embeds them into.
 | `Mukta-Regular.ttf`, `-Bold.ttf` | Mukta | Ek Type | OFL 1.1 |
 | `Khand-Regular.ttf`, `-Bold.ttf` | Khand | Indian Type Foundry | OFL 1.1 |
 | `RozhaOne-Regular.ttf` | Rozha One | Indian Type Foundry | OFL 1.1 |
-| `MuktaDisplay-Regular.ttf`, `-Medium.ttf`, `-SemiBold.ttf`, `-ExtraBold.ttf` | Mukta, with the vertical metrics (hhea, OS/2 typo and win) set to 0.96 / 0.15 em - outlines unchanged | Ek Type | OFL 1.1 (modified; Mukta declares no Reserved Font Name) |
+| `MuktaDisplay-Regular.ttf`, `-Medium.ttf`, `-SemiBold.ttf`, `-Bold.ttf`, `-ExtraBold.ttf` | Mukta, with the vertical metrics (hhea, OS/2 typo and win) set to 0.96 / 0.15 em - outlines unchanged | Ek Type | OFL 1.1 (modified; Mukta declares no Reserved Font Name) |
 | `Rajdhani-SemiBold.ttf`, `-Bold.ttf` | Rajdhani | Indian Type Foundry | OFL 1.1 |
 | `NotoSansDevanagariCondensed-Medium.ttf`, `-SemiBold.ttf` | Noto Sans Devanagari, static instances of the variable font at wdth 80, wght 500 / 600 (fontTools `varLib.instancer`), vertical metrics set to 0.90 / 0.15 em | Google Noto | OFL 1.1 |
 

@@ -150,6 +150,18 @@
       files: { 400: `${DIR}MuktaDisplay-Regular.ttf`, 700: `${DIR}MuktaDisplay-Regular.ttf` },
     },
     {
+      // Mukta as RUNNING COPY on a tight pitch - a rail or a sidebar. The
+      // display cuts' line box, so a 1.25 em pitch is not floored at Mukta's
+      // own 1.66 em box; and a real bold, for a dateline or a lead-in word.
+      key: 'mukta-text',
+      label: 'Mukta Text',
+      short: 'Mukta T',
+      note: 'Mukta for a rail or a sidebar set on a tight pitch, with its bold.',
+      role: 'text',
+      css: "'Mukta Text', 'Mukta', 'Sahas Sans', Arial, sans-serif",
+      files: { 400: `${DIR}MuktaDisplay-Regular.ttf`, 700: `${DIR}MuktaDisplay-Bold.ttf` },
+    },
+    {
       // Noto Sans Devanagari's own variable font, instanced at 80% width -
       // the condensed second-rank head - with the line box set to the ink
       // (0.90 / 0.15 em), for the reason the Mukta display cuts are. 400 is

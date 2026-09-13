@@ -8267,11 +8267,72 @@ full-screen layer and capture that (`tmp-visual-pass/runs/shoot-recipe.js`), and
 judge tints on the full-resolution PNG: a downscaled JPEG washes a `vivid-*`
 ground out to white.
 
-**Known gaps on the pilot, not yet addressed:** an inset `note` is always boxed
-where the reference's numbered sidebars carry no rule (needs an unruled panel
-style in `inset-panels.js`); the reference's weather/market rail has no card at
-a 72 px measure; `rail-update` on the sport page oversets by a line; the folio
-does not carry the reference's section band.
+### The whole paper: twelve layouts, one edition to judge them on
+
+Branch `lokmat-reference-pages`. All twelve pages of the reference file are
+layouts now (`broadsheet-front`, `-city`, `-state`, `-local`, `-opinion`,
+`-advertorial`, `-local-sport`, `-miscellany`, `-business`, `-sport`, `-world`,
+`-jacket`) with a recipe for every block, and edition **2099-10-03** carries
+them in the reference's own page order (the jacket last - it is a nameplate
+page and only page one draws a nameplate):
+
+```bash
+node scripts/apply-design-recipe.js <ed> 1=broadsheet-front 2=broadsheet-city 3=broadsheet-state 4=broadsheet-local 5=broadsheet-opinion 6=broadsheet-advertorial 7=broadsheet-local-sport 8=broadsheet-miscellany 9=broadsheet-business 10=broadsheet-sport 11=broadsheet-world 12=broadsheet-jacket
+node scripts/fill-edition-copy.js <ed>
+node tmp-visual-pass/runs/shoot-recipe.js <ed> 1,2,3,4,5,6,7,8,9,10,11,12
+```
+
+**No AI call anywhere in it.** Copy comes from the filler's pools, and a page
+whose layout names a topic draws hand-written sport, opinion, business and
+entertainment, or national and world copy (`scripts/fixture-copy-topics.js`) -
+a sport page set in civic prose about drains does not read as a sport page
+however right its frames are. Adverts are fictional local businesses written
+into the paper's own advert card, so an advert slot has the weight of an
+advert rather than being a white rectangle.
+
+**Ten pages measured at once needed a converter, and the converter needed the
+layout tests.** Rectangles are read off a gridded 1000-wide view, turned into
+grid columns and baseline rows, and every block is started exactly one GAP
+below the lowest block above it in shared columns. The first pass failed three
+`tests/layout.test.js` rules and all three were right: gaps of 16/32/56/64 px
+from independent rounding, three one-line strips too shallow for a word, and
+the new layouts missing from the `templates` table (the server syncs at boot;
+`apply-design-recipe.js` now syncs before assigning). The one-gap test was
+loosened in one respect only: a whole page sold as one advert has no gap at all,
+and "no gap" is not a second gap measure.
+
+Findings from driving it, each worth knowing for the next paper:
+
+- **A picture above the headline's band squeezes the headline** into the
+  corridor beside it. In the reference the photograph is under the headline;
+  a recipe must place it there.
+- **A block cannot carry the same stored picture twice.** `section_images` is
+  unique per media asset, so the second placement of one file silently
+  replaces the first.
+- **The ladder puts inside pages on a one-colour forme**, and the canvas previews
+  them grey. A reference printed in colour cannot be compared against that, so
+  the recipe script sets every assigned page to colour.
+- **A photograph can take so much of a small frame that no headline size sets
+  at all** - measured, not guessed: step the locked size down and compose.
+- **The panel marker key is `number`**, not `numbered`; an unknown marker is
+  silently `none`, which is how the pilot's numbered sidebars lost their numbers.
+- **A notice set by the advert card inflates to poster type** when it has few
+  lines, because the card fills its frame. A real notice is dense small print,
+  so it is given the lines a notice carries.
+
+**An unruled sidebar is now a panel kind** (`sidebar` in `inset-panels.js`):
+no edges, a ground. The reference's numbered undertakings and tinted asides are
+set that way, and boxing them read as an advertisement inside the story. It is
+one catalogue entry - the canvas and the press model both read a panel's edges
+from `panelStyle()`.
+
+**Still not matched:** the reference's section band in each folio
+(`आपला महाराष्ट्र →`); its weather and market rail as cards at a 72 px measure;
+the jacket's nameplate (only page one draws one); dense tender tables; and the
+fixture pictures are stand-ins, so a portrait sits where the reference has a
+cricketer. The filler flags five blocks OVERSET whose headline, deck and body
+all compose clean from the row - its label is stricter than what prints.
+
 
 ## Engineering rules
 

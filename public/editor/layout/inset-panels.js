@@ -47,6 +47,11 @@
     // whole number of bands deep, the copy closes above it and resumes on the
     // grid below it, which is what a cross-head IS. The engine gains nothing
     // and learns nothing.
+    // AN UNRULED SIDEBAR - a heading and a few lines on the column, or on a
+    // light ground, with no rule round it. That is how the reference paper
+    // sets its numbered undertakings and its tinted asides; boxing them made
+    // every such panel read as a separate advertisement inside the story.
+    { key: 'sidebar', label: 'Sidebar', titleLabel: 'Heading', linesLabel: 'Lines', note: 'A heading and lines set on the column or a light ground, with no rule.' },
     { key: 'crosshead', label: 'Cross-head', note: 'A ruled sub-head across the measure, between two parts of the story.' },
     // A DECORATIVE SEPARATOR - the ornamented rule a printed Marathi paper
     // sets between two parts of a page. Same argument as the cross-head: it is
@@ -103,6 +108,7 @@
     // A cross-head carries one rule, above it, and no ground. The rule is what
     // says "a new part of this story starts here"; a box would say "this is a
     // different story", which is the opposite.
+    sidebar: { edges: [], family: 'sans', ground: true },
     crosshead: { edges: ['top'], family: 'sans', ground: false },
     // Ruled above AND below with the mark centred between them - which is what
     // makes it read as an ornament rather than as another cross-head.

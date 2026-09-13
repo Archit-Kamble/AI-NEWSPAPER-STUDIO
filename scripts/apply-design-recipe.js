@@ -48,6 +48,19 @@ async function main() {
     if (!page) throw new Error(`edition ${ED} has no page ${pageNumber}`);
     if (!recipeFor(templateKey)) throw new Error(`no recipe for layout ${templateKey}`);
     await pageService.updatePage(page.id, { templateKey });
+    // A layout change keeps any block that carries content - right for a desk,
+    // and on a fixture it leaves the previous layout's carried adverts
+    // overlapping the new frames. This script only runs on 2099 fixtures, so
+    // what the new layout does not name goes.
+    const { templates } = require('../src/layout/templates');
+    const wanted = new Set(templates[templateKey].sections.map((section) => section.key));
+    const { rows: present } = await pool.query('SELECT section_key FROM page_sections WHERE page_id = $1', [page.id]);
+    for (const { section_key: key } of present) {
+      if (!wanted.has(key)) { await sectionService.deleteSection(page.id, key); console.log(`page ${pageNumber}: removed ${key}, not in ${templateKey}`); }
+    }
+    // The reference is printed in colour on every page; a fixture page left on
+    // the ladder's one-colour forme previews grey and cannot be compared.
+    await pageService.setColour(page.id, true);
     console.log(`page ${pageNumber} -> ${templateKey}`);
   }
 
@@ -56,10 +69,27 @@ async function main() {
   for (const page of pages) {
     const recipe = recipeFor(page.template_key);
     if (!recipe) continue;
+    const { rows: sizes } = await pool.query(
+      'SELECT section_key, width_px, height_px FROM page_sections WHERE page_id = $1', [page.id]);
+    const sizeOf = new Map(sizes.map((row) => [row.section_key, row]));
     for (const [sectionKey, entry] of Object.entries(recipe)) {
+      const size = sizeOf.get(sectionKey);
+      if (!size) { console.log(`p${page.page_number} ${sectionKey}: not on this page, skipped`); continue; }
+      // `at: [x, y, width, height]` is a share of the block - how the later
+      // pages are written - resolved here against the block the page really
+      // has, so a recipe survives a block being a grid step wider or narrower.
+      const place = (item) => {
+        if (!Array.isArray(item.at)) return item;
+        const [fx, fy, fw, fh] = item.at;
+        const { at, ...rest } = item;
+        const w = Number(size.width_px), h = Number(size.height_px);
+        return { ...rest, x: Math.round(fx * w), y: Math.round(fy * h), width: Math.round(fw * w), height: Math.round(fh * h) };
+      };
       const saved = await sectionService.saveSection(page.id, sectionKey, {
         ...entry.style,
-        insetPanels: entry.panels || [],
+        insetPanels: (entry.panels || []).map(place),
+        // A hand-written advertisement, set by the paper's own advert card.
+        ...(entry.advert ? { smartCardKey: 'advert', smartCardData: entry.advert } : {}),
         // A placeholder kicker, only so a kicker-tab treatment has a tab to
         // draw on a fixture; the writer replaces it with the story's own.
         ...(entry.fixtureKicker ? { kicker: entry.fixtureKicker } : {}),
@@ -68,7 +98,7 @@ async function main() {
 
       const existing = (await imageService.list(page.id, sectionKey)) || [];
       for (const image of existing) await imageService.remove(page.id, sectionKey, image.id);
-      for (const picture of entry.pictures || []) {
+      for (const picture of (entry.pictures || []).map(place)) {
         const added = await imageService.add(page.id, sectionKey, {
           url: `/uploads/${picture.file}`, x: picture.x, y: picture.y,
           width: picture.width, height: picture.height, fitMode: 'cover',

@@ -35,7 +35,7 @@ const ED = Number(process.argv[2]);
 // consonants, some conjunct-heavy - because a block of uniform copy would not
 // exercise the width measurement the engine is being looked at for.
 
-const SENTENCES = [
+const CIVIC_SENTENCES = [
   'सातारा जिल्ह्यातील ग्रामीण भागात पाणीपुरवठा योजनेचे काम अंतिम टप्प्यात आले आहे.',
   'महापालिकेने शहरातील रस्त्यांच्या दुरुस्तीसाठी स्वतंत्र निधी मंजूर केला आहे.',
   'शिक्षण विभागाने विद्यार्थ्यांसाठी मोफत पुस्तक वाटपाचा कार्यक्रम जाहीर केला.',
@@ -77,7 +77,7 @@ const SENTENCES = [
 // Headlines are short, because short headlines are good journalism - and
 // because a bank of long ones would quietly hide the dynamic-band behaviour
 // that a one-line headline is supposed to demonstrate.
-const HEADLINES = [
+const CIVIC_HEADLINES = [
   'पाणीपुरवठा योजना अंतिम टप्प्यात',
   'रस्ते दुरुस्तीसाठी निधी मंजूर',
   'विद्यार्थ्यांना मोफत पुस्तके',
@@ -203,12 +203,19 @@ const HEADLINES = [
   'नळजोडण्या मंजूर झाल्या',
 ];
 
-const DECKS = [
+const CIVIC_DECKS = [
   'प्रशासनाकडून कार्यवाही सुरू',
   'नागरिकांना दिलासा',
   'पुढील आठवड्यात अंमलबजावणी',
   'संबंधित विभागाची माहिती',
 ];
+
+// The pools a block is filled from. Civic by default; a page whose layout
+// names a topic swaps in that topic's (scripts/fixture-copy-topics.js).
+const { TOPICS, TOPIC_BY_TEMPLATE } = require('./fixture-copy-topics');
+let SENTENCES = CIVIC_SENTENCES;
+let HEADLINES = CIVIC_HEADLINES;
+let DECKS = CIVIC_DECKS;
 
 const LOCATIONS = ['सातारा', 'कऱ्हाड', 'वाई', 'फलटण', 'पाटण'];
 // The paper signs its own filler copy, the same way the writer does
@@ -409,7 +416,7 @@ function bodyFor(compose, section, images, view, seed) {
   shaper.requireShaperReady();
 
   const { rows: sections } = await pool.query(
-    `SELECT ps.*, p.page_number
+    `SELECT ps.*, p.page_number, p.template_key
        FROM page_sections ps JOIN pages p ON p.id = ps.page_id
       WHERE p.newspaper_id = $1
       ORDER BY p.page_number, ps.y_px, ps.x_px`,
@@ -448,6 +455,13 @@ function bodyFor(compose, section, images, view, seed) {
     // for the edition's own date. Neither is a reporter's to write into.
     if (section.block_type === 'advert' || section.feature_key || section.smart_card_key) { skipped += 1; continue; }
     if (!['article', 'briefs', 'photo'].includes(String(section.block_type))) { skipped += 1; continue; }
+
+    // A page measured from a reference reads as its own section - sport copy on
+    // the sport page - so its topic's pools stand in for the civic ones.
+    const topic = TOPICS[TOPIC_BY_TEMPLATE[section.template_key]];
+    SENTENCES = topic ? topic.sentences : CIVIC_SENTENCES;
+    HEADLINES = topic ? topic.headlines : CIVIC_HEADLINES;
+    DECKS = topic ? topic.decks : CIVIC_DECKS;
 
     const subheading = section.height_px > 240 ? pick(DECKS, editionSeed + index * 3) : '';
     const location = pick(LOCATIONS, editionSeed + index);

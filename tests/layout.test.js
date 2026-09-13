@@ -322,7 +322,10 @@ test('every layout uses exactly one vertical gap between blocks', () => {
       }
     }
     const gaps = [...found].sort((x, y) => x - y);
-    if (gaps.length !== 1 || gaps[0] !== expected) {
+    // A layout with nothing stacked at all - a whole page sold as one advert -
+    // has no gap to get wrong, so it cannot break the rule this holds; what it
+    // forbids is a SECOND gap measure, or one that is not the baseline.
+    if (gaps.length > 1 || (gaps.length === 1 && gaps[0] !== expected)) {
       offenders.push(`${template.key}: ${gaps.join(', ') || 'none'}`);
     }
   }

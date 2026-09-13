@@ -499,6 +499,188 @@ const templates = {
     })(),
   },
 
+  // THE REST OF THE REFERENCE PAPER, measured the same way as the two above:
+  // each rectangle read off the scan, scaled into this page and snapped onto the
+  // 16-column grid and the 8 px baseline, with every vertical gap closed to the
+  // one GAP. Rows are literal numbers here rather than rows() stacks because
+  // they are MEASUREMENTS - a stack would re-derive positions the reference
+  // already decided.
+  'broadsheet-jacket': {
+    key: 'broadsheet-jacket',
+    name: 'Broadsheet jacket (reference)',
+    description: 'Nameplate page wrapped in adverts: a rail advert, a lead with a numbered panel, a weather column and two stacked display adverts.',
+    sections: [
+      block('rail-advert', 0, 2, 144, 248, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
+      block('top-brief', 2, 6, 144, 96, { story: 'BRIEF', priority: 3 }),
+      block('advert-top', 8, 8, 144, 424, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
+      block('lead', 2, 6, 248, 368, { story: 'LEAD', priority: 5 }),
+      block('rail-shorts', 0, 2, 400, 216, { type: 'briefs', story: 'BRIEF', priority: 2 }),
+      block('advert-foot', 8, 8, 576, 432, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
+      block('advert-left', 0, 6, 624, 384, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
+      block('weather-column', 6, 2, 624, 384, { story: 'BRIEF', priority: 2 }),
+    ],
+  },
+
+  'broadsheet-city': {
+    key: 'broadsheet-city',
+    name: 'Broadsheet city front (reference)',
+    description: 'City front: a quick-update rail, a picture-led lead, a right-hand picture story, a banner report, a half-page advert and three reports.',
+    sections: [
+      block('rail-update', 0, 2, 56, 352, { type: 'briefs', story: 'BRIEF', priority: 2 }),
+      block('lead', 2, 9, 56, 352, { story: 'LEAD', priority: 5 }),
+      block('right-top', 11, 5, 56, 280, { story: 'SECONDARY', priority: 4 }),
+      block('right-low', 11, 5, 344, 168, { story: 'STANDARD', priority: 3 }),
+      block('banner-report', 0, 11, 416, 96, { story: 'SECONDARY', priority: 4 }),
+      block('half-advert', 0, 8, 520, 488, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
+      block('report-wide', 8, 8, 520, 232, { story: 'SECONDARY', priority: 4 }),
+      block('report-narrow', 8, 3, 760, 248, { story: 'STANDARD', priority: 3 }),
+      block('report-picture', 11, 5, 760, 248, { story: 'STANDARD', priority: 3 }),
+    ],
+  },
+
+  'broadsheet-state': {
+    key: 'broadsheet-state',
+    name: 'Broadsheet state (reference)',
+    description: 'State page: a long rail of briefs, a photograph-led top story, a drugs-campaign lead with a tinted panel, four reports and a feature strip.',
+    sections: [
+      block('rail-one', 0, 2, 56, 248, { type: 'briefs', story: 'BRIEF', priority: 2 }),
+      block('top-story', 2, 12, 56, 248, { story: 'LEAD', priority: 5 }),
+      block('top-side', 14, 2, 56, 248, { story: 'BRIEF', priority: 2 }),
+      block('rail-two', 0, 2, 312, 320, { story: 'BRIEF', priority: 2 }),
+      block('lead', 2, 9, 312, 320, { story: 'SECONDARY', priority: 4 }),
+      block('right', 11, 5, 312, 320, { story: 'SECONDARY', priority: 4 }),
+      block('rail-three', 0, 2, 640, 200, { story: 'BRIEF', priority: 2 }),
+      block('report-one', 2, 5, 640, 168, { story: 'STANDARD', priority: 3 }),
+      block('report-two', 7, 2, 640, 168, { story: 'BRIEF', priority: 2 }),
+      block('report-picture', 9, 5, 640, 168, { story: 'PHOTO_FEATURE', priority: 3 }),
+      block('report-side', 14, 2, 640, 168, { story: 'BRIEF', priority: 2 }),
+      block('feature-strip', 2, 9, 816, 192, { story: 'ANALYSIS', priority: 3 }),
+      block('right-foot', 11, 5, 816, 192, { story: 'STANDARD', priority: 3 }),
+      block('rail-four', 0, 2, 848, 160, { story: 'BRIEF', priority: 2 }),
+    ],
+  },
+
+  'broadsheet-local': {
+    key: 'broadsheet-local',
+    name: 'Broadsheet local (reference)',
+    description: 'Local page: a narrow column, a picture lead, a corner advert beside a short story, a four-column report, a picture feature and a half-page advert.',
+    sections: [
+      block('left-column', 0, 2, 56, 328, { story: 'STANDARD', priority: 3 }),
+      block('lead', 2, 7, 56, 328, { story: 'LEAD', priority: 5 }),
+      block('short-story', 9, 3, 56, 152, { story: 'BRIEF', priority: 2 }),
+      block('corner-advert', 12, 4, 56, 152, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
+      block('wide-report', 9, 7, 216, 168, { story: 'SECONDARY', priority: 4 }),
+      block('report-panel', 0, 8, 392, 208, { story: 'SECONDARY', priority: 4 }),
+      block('half-advert', 8, 8, 392, 616, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
+      block('photo-story', 0, 4, 608, 176, { story: 'PHOTO_FEATURE', priority: 3 }),
+      block('report-small', 4, 4, 608, 176, { story: 'STANDARD', priority: 3 }),
+      block('feature-strip', 0, 8, 792, 216, { story: 'ANALYSIS', priority: 3 }),
+    ],
+  },
+
+  'broadsheet-opinion': {
+    key: 'broadsheet-opinion',
+    name: 'Broadsheet opinion (reference)',
+    description: 'Opinion page: the editorial column, two signed articles across the measure, a column, a commentary and a cartoon.',
+    sections: [
+      block('editorial', 0, 4, 56, 520, { story: 'OPINION', priority: 5 }),
+      block('opinion-lead', 4, 12, 56, 280, { story: 'OPINION', priority: 4 }),
+      block('opinion-two', 4, 12, 344, 232, { story: 'OPINION', priority: 4 }),
+      block('column', 0, 12, 584, 176, { story: 'ANALYSIS', priority: 3 }),
+      block('commentary', 12, 4, 584, 256, { story: 'OPINION', priority: 3 }),
+      block('opinion-three', 0, 12, 768, 240, { story: 'OPINION', priority: 3 }),
+      block('cartoon', 12, 4, 848, 160, { story: 'PHOTO_FEATURE', priority: 2 }),
+    ],
+  },
+
+  'broadsheet-advertorial': {
+    key: 'broadsheet-advertorial',
+    name: 'Broadsheet advertorial (reference)',
+    description: 'A whole page sold as one advertisement.',
+    sections: [
+      block('page-advert', 0, 16, 56, 952, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
+    ],
+  },
+
+  'broadsheet-local-sport': {
+    key: 'broadsheet-local-sport',
+    name: 'Broadsheet local sport and notices (reference)',
+    description: 'Local sport and notices: three sport stories over a column of tenders, a sport report, a scorecard rail and a result box.',
+    sections: [
+      block('sport-left', 0, 5, 56, 280, { story: 'STANDARD', priority: 3 }),
+      block('sport-lead', 5, 6, 56, 320, { story: 'LEAD', priority: 5 }),
+      block('sport-right', 11, 5, 56, 320, { story: 'SECONDARY', priority: 4 }),
+      block('notice-left', 0, 5, 344, 456, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
+      block('notice-mid', 5, 3, 384, 416, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
+      block('sport-report', 8, 6, 384, 168, { story: 'STANDARD', priority: 3 }),
+      block('scorecard', 14, 2, 384, 168, { type: 'briefs', story: 'BRIEF', priority: 2 }),
+      block('notice-right', 8, 6, 560, 240, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
+      block('sport-brief', 14, 2, 560, 280, { story: 'BRIEF', priority: 2 }),
+      block('notice-foot', 0, 8, 808, 200, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
+      block('notice-foot-right', 8, 6, 808, 200, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
+      block('result-box', 14, 2, 848, 160, { type: 'briefs', story: 'BRIEF', priority: 2 }),
+    ],
+  },
+
+  'broadsheet-miscellany': {
+    key: 'broadsheet-miscellany',
+    name: 'Broadsheet miscellany (reference)',
+    description: 'Miscellany: a tinted profile feature, a national lead, a world brief, cabinet and court reports, a wall of recruitment adverts and a feature strip.',
+    sections: [
+      block('profile-feature', 0, 6, 56, 496, { story: 'PHOTO_FEATURE', priority: 4 }),
+      block('lead', 6, 8, 56, 200, { story: 'LEAD', priority: 5 }),
+      block('world-brief', 14, 2, 56, 200, { story: 'BRIEF', priority: 2 }),
+      block('cabinet-report', 6, 5, 264, 96, { story: 'STANDARD', priority: 3 }),
+      block('tender-advert', 12, 4, 264, 96, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
+      block('court-report', 6, 2, 368, 280, { story: 'BRIEF', priority: 2 }),
+      block('recruit-advert-left', 8, 4, 368, 344, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
+      block('recruit-advert-right', 12, 4, 368, 344, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
+      block('strip-advert', 0, 6, 560, 88, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
+      block('world-report', 0, 8, 656, 144, { story: 'STANDARD', priority: 3 }),
+      block('bank-advert', 8, 8, 720, 288, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
+      block('feature-strip', 0, 8, 808, 200, { story: 'ANALYSIS', priority: 3 }),
+    ],
+  },
+
+  'broadsheet-business': {
+    key: 'broadsheet-business',
+    name: 'Broadsheet business and entertainment (reference)',
+    description: 'Business and entertainment: a charted lead, a digital-payments story with a chart, three reports, a film panel, a reversed poster story and three jump stories.',
+    sections: [
+      block('lead', 0, 11, 56, 264, { story: 'LEAD', priority: 5 }),
+      block('right-chart', 11, 5, 56, 456, { story: 'DATA', priority: 4 }),
+      block('brief', 0, 2, 328, 184, { story: 'BRIEF', priority: 2 }),
+      block('report', 2, 7, 328, 184, { story: 'SECONDARY', priority: 3 }),
+      block('report-side', 9, 2, 328, 184, { story: 'BRIEF', priority: 2 }),
+      block('film-panel', 0, 6, 520, 320, { story: 'PHOTO_FEATURE', priority: 3 }),
+      block('poster-story', 6, 3, 520, 488, { story: 'PHOTO_FEATURE', priority: 3 }),
+      block('jump-one', 9, 7, 520, 240, { story: 'STANDARD', priority: 3 }),
+      block('jump-two', 9, 7, 768, 128, { story: 'STANDARD', priority: 3 }),
+      block('film-story', 0, 6, 848, 160, { story: 'STANDARD', priority: 3 }),
+      block('jump-three', 9, 7, 904, 104, { story: 'STANDARD', priority: 3 }),
+    ],
+  },
+
+  'broadsheet-world': {
+    key: 'broadsheet-world',
+    name: 'Broadsheet national and world (reference)',
+    description: 'National and world: a fact-check rail, a picture-led top story, a lead with a photo pair, a right-hand story, two reports, a strip, an advert and a feature strip.',
+    sections: [
+      block('rail-one', 0, 2, 56, 232, { type: 'briefs', story: 'BRIEF', priority: 2 }),
+      block('top-story', 2, 14, 56, 144, { story: 'SECONDARY', priority: 4 }),
+      block('lead', 2, 9, 208, 328, { story: 'LEAD', priority: 5 }),
+      block('right', 11, 5, 208, 328, { story: 'SECONDARY', priority: 4 }),
+      block('rail-two', 0, 2, 296, 216, { story: 'BRIEF', priority: 2 }),
+      block('rail-three', 0, 2, 520, 136, { story: 'BRIEF', priority: 2 }),
+      block('report-panel', 2, 5, 544, 240, { story: 'STANDARD', priority: 3 }),
+      block('report-narrow', 7, 3, 544, 240, { story: 'STANDARD', priority: 3 }),
+      block('strip', 10, 6, 544, 112, { story: 'BRIEF', priority: 2 }),
+      block('rail-four', 0, 2, 664, 120, { story: 'BRIEF', priority: 2 }),
+      block('advert', 10, 6, 664, 344, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
+      block('feature-strip', 0, 10, 792, 216, { story: 'ANALYSIS', priority: 3 }),
+    ],
+  },
+
   features: {
     key: 'features',
     name: 'Feature Page',

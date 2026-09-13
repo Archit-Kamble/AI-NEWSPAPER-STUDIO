@@ -76,7 +76,7 @@ const ADS = {
 // A page measured exactly off a scan carries its recipe in its own spec
 // (measured-pages/), beside the rectangles it was measured with.
 const { buildMeasuredPage } = require('./measured-pages/scan');
-const MEASURED_RECIPES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state', 'broadsheet-local']
+const MEASURED_RECIPES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state', 'broadsheet-local', 'broadsheet-opinion']
   .map((key) => [key, buildMeasuredPage(require(`./measured-pages/${key}`)).recipe]));
 
 const RECIPES = {
@@ -172,52 +172,6 @@ const RECIPES = {
     'weather-column': {
       style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 13.0, headlineLocked: true, bodyFontPx: 6.3, lineHeight: 1.328, columnCount: 1, textAlign: 'justify' },
       pictures: [{ file: 'reference-lokmat/broadsheet-jacket-weather-column-5.jpg', x: 0, y: 7, width: 46, height: 47 }, { file: 'reference-lokmat/broadsheet-jacket-weather-column-8.jpg', x: 62, y: 276, width: 19, height: 47 }],
-      panels: [],
-    },
-  },
-
-  // MEASURED off the reference scan: sizes from each head's shirorekha, body at
-  // the reference's own em and pitch, its colours, its picture and panel boxes.
-  'broadsheet-opinion': {
-    'editorial': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 14.5, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 2, textAlign: 'justify', headlineStyle: 'kicker-accent', accentColor: '#e42424' },
-      fixtureKicker: 'संपादकीय',
-      pictures: [],
-      panels: [],
-    },
-    'opinion-lead': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 19.0, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 4, textAlign: 'justify', subheadingFontPx: 10.0, subheadingLocked: true, headlineAlign: 'center' },
-      pictures: [{ file: 'reference-lokmat/broadsheet-opinion-opinion-lead-0.jpg', x: 246, y: 49, width: 78, height: 61 }, { file: 'reference-lokmat/broadsheet-opinion-opinion-lead-1.jpg', x: 16, y: 79, width: 83, height: 27 }],
-      panels: [{ kind: 'sidebar', tint: '#fce4cc', x: 0, y: 80, width: 113, height: 25, titlePx: 8.8, linePx: 6.0, title: PLACEHOLDER, lines: points(2) }],
-    },
-    'opinion-two': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 19.5, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 4, textAlign: 'justify', subheadingFontPx: 10.5, subheadingLocked: true, headlineStyle: 'kicker-accent', accentColor: '#e42424' },
-      fixtureKicker: 'कामगारनामा',
-      pictures: [{ file: 'reference-lokmat/broadsheet-opinion-opinion-two-2.jpg', x: 0, y: 68, width: 105, height: 39 }],
-      panels: [{ kind: 'sidebar', tint: '#fce4cc', x: 0, y: 41, width: 113, height: 39, titlePx: 8.8, linePx: 6.0, title: PLACEHOLDER, lines: points(2) }],
-    },
-    'column': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 14.0, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 4, textAlign: 'justify', headlineStyle: 'kicker-accent', accentColor: '#e42424' },
-      fixtureKicker: 'जगभर',
-      pictures: [{ file: 'reference-lokmat/broadsheet-opinion-column-3.jpg', x: 229, y: 32, width: 105, height: 57 }],
-      panels: [],
-    },
-    'commentary': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 12.0, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 1, textAlign: 'justify', headlineStyle: 'kicker-accent', accentColor: '#e42424' },
-      fixtureKicker: 'जनमन',
-      pictures: [{ file: 'reference-lokmat/broadsheet-opinion-commentary-4.jpg', x: 94, y: 45, width: 78, height: 42 }],
-      panels: [],
-    },
-    'opinion-three': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 19.5, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 4, textAlign: 'justify', subheadingFontPx: 10.5, subheadingLocked: true, headlineStyle: 'kicker-accent', accentColor: '#e42424' },
-      fixtureKicker: 'सज्जनशक्ती',
-      pictures: [{ file: 'reference-lokmat/broadsheet-opinion-opinion-three-5.jpg', x: 229, y: 45, width: 105, height: 59 }, { file: 'reference-lokmat/broadsheet-opinion-opinion-three-6.jpg', x: 0, y: 78, width: 105, height: 26 }],
-      panels: [{ kind: 'sidebar', tint: '#fce4cc', x: 0, y: 85, width: 116, height: 33, titlePx: 8.8, linePx: 6.0, title: PLACEHOLDER, lines: points(2) }],
-    },
-    'cartoon': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 10.5, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 1, textAlign: 'justify', headlineStyle: 'kicker-accent', accentColor: '#e42424' },
-      fixtureKicker: 'तिरकस आणि चौकस',
-      pictures: [{ file: 'reference-lokmat/broadsheet-opinion-cartoon-7.jpg', x: 68, y: 15, width: 103, height: 106 }, { file: 'reference-lokmat/broadsheet-opinion-cartoon-8.jpg', x: 33, y: 62, width: 42, height: 60 }],
       panels: [],
     },
   },

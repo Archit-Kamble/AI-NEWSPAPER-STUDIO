@@ -235,7 +235,7 @@ const MASTHEAD_ADVERT = {
 // scan's own rectangles scaled onto this page, not spans of a column grid, so
 // the frame is block()'s with the measured x, width and height put back.
 const { buildMeasuredPage } = require('./measured-pages/scan');
-const MEASURED_PAGES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state', 'broadsheet-local']
+const MEASURED_PAGES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state', 'broadsheet-local', 'broadsheet-opinion']
   .map((key) => [key, buildMeasuredPage(require(`./measured-pages/${key}`))]));
 function measuredTemplate(key) {
   const { template } = MEASURED_PAGES[key];
@@ -509,23 +509,7 @@ const templates = {
 
   'broadsheet-local': measuredTemplate('broadsheet-local'),
 
-  'broadsheet-opinion': {
-    key: 'broadsheet-opinion',
-    name: 'Broadsheet opinion (reference)',
-    grid: REFERENCE_GRID,
-    description: 'The editorial column, two signed articles across the measure, a column, a commentary and a cartoon.',
-    // MEASURED off the reference scan onto its own seven-column grid, tops on
-    // the baseline and closed to the one 8 px gap. Generated, so literals.
-    sections: [
-      frame('editorial', 0, 2, 56, 520, { story: 'OPINION', priority: 5 }),
-      frame('opinion-lead', 2, 5, 56, 280, { story: 'OPINION', priority: 4 }),
-      frame('opinion-two', 2, 5, 344, 232, { story: 'OPINION', priority: 4 }),
-      frame('column', 0, 5, 584, 184, { story: 'ANALYSIS', priority: 3 }),
-      frame('commentary', 5, 2, 584, 256, { story: 'OPINION', priority: 3 }),
-      frame('opinion-three', 0, 5, 776, 232, { story: 'OPINION', priority: 3 }),
-      frame('cartoon', 5, 2, 848, 160, { story: 'PHOTO_FEATURE', priority: 2 }),
-    ],
-  },
+  'broadsheet-opinion': measuredTemplate('broadsheet-opinion'),
 
   'broadsheet-advertorial': {
     key: 'broadsheet-advertorial',

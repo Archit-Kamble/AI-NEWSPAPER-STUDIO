@@ -26,3 +26,6 @@ npm-debug.log*
 # are the record of past design passes and stay; what a RUN writes goes in
 # runs/ so a verification pass leaves the working tree clean.
 tmp-visual-pass/runs/
+
+# Python bytecode from the reference-layout tooling.
+__pycache__/

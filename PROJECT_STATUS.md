@@ -4,6 +4,20 @@ Reflects repository state as of this commit. Most entries are implementation pas
 
 ---
 
+## Reference pages measured exactly (2026-09-14, branch lokmat-reference-pages)
+
+All twelve pages of the reference broadsheet are layouts measured straight off
+the scan (`src/layout/measured-pages/`): every block, picture and panel rectangle
+scaled onto the page, no column snap, and sizes matched to the scan's own ink.
+Each page was compared side by side with its scan, block by block. The
+grid-snapped helpers they replaced were removed. Detail in CLAUDE.md, "Measured
+EXACTLY". `npm test` **1231/1231**; browser nets **21/21**.
+
+Still open: the jacket's weather head breaks at the hyphen in "३-४", and the
+faces are close matches, not the reference paper's own licensed ones.
+
+---
+
 ## 0. Forward-looking audit: what will break (2026-08-28)
 
 Not "what is broken" but "what will break". Held by `tests/hardening.test.js`

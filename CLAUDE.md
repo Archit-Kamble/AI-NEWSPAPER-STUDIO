@@ -8391,6 +8391,63 @@ fixture pictures are stand-ins, so a portrait sits where the reference has a
 cricketer. The filler flags five blocks OVERSET whose headline, deck and body
 all compose clean from the row - its label is stricter than what prints.
 
+### Measured EXACTLY: no grid, the scan's own rectangles
+
+The desk's verdict on the grid-snapped pass was that nothing lined up, and it
+was right: a printed broadsheet's columns are not equal, a rail is narrower than
+a story column, and a picture sits where the page put it. So all twelve layouts
+were measured again, one page at a time and block by block, and **the
+seven-column snap is gone** (`frame()`, `REFERENCE_GRID` and the hand-written
+recipe builders had no caller left and were deleted).
+
+`src/layout/measured-pages/<key>.js` is one spec per page: every block, picture
+and panel as a rectangle in **scan pixels**, and every type size in **editor
+pixels**. `scan.js`'s `buildMeasuredPage()` scales the rectangles onto the page's
+matter box (x 20-640, top to 1008; `uniform` keeps the scan's proportions and
+sets the page up from the foot) and returns an ordinary template and recipe, so
+nothing downstream knows a scan was involved. `kit.js` holds the shared pieces
+(body, heads, bylines, insets). A measured template carries `measured: true`:
+`tests/layout.test.js` exempts it from the grid and one-gap rules and still
+requires no overlap, bounds inside the matter, and copy room in every article.
+
+**A size is matched, never scaled.** A face is chosen by correlating the scan's
+ink against the paper's own OFL faces, the size by fitting the rendered width to
+the scan's at that face, and the leading from the line pitch between shirorekha
+peaks (`lineHeight = pitch × SY / px`). Body is sans 5.75 px on a 34 scan-px
+pitch, `justify-all`, colon dateline, 80.8 px columns on a 9.1 px gutter.
+
+What the product gained for it, all additive, NULL meaning "as before":
+
+| | |
+|---|---|
+| faces | `mukta-medium`, `mukta-semibold`, `mukta-heavy`, `mukta-book`, `mukta-text`, `noto-condensed(-light)`, `rajdhani` - display cuts carry tightened vertical metrics, because Mukta's tall hhea box pushed heads into corridors |
+| columns | `dateline_style` (`colon`), `display_line_height`, `paragraph_policy` (`as-written`), `display_overlap_px`, `column_width_px`, `column_gutter_px` - in `schema.sql`, applied by hand |
+| panels | per-part faces, weights, aligns and inks, line heights and gaps, rule width and `ticks`, `boldLines`, knockout, `circle` markers, `*bold*` runs - canvas, `section-thumb.js` and `print-model.js` together |
+| pictures | minimum 8 px (a logo strip is smaller than 20), integer `standOffPx` |
+
+Traps met on the way, each cost a round:
+
+- **A panel with no title and no lines is DROPPED** by `panelOf()`, which shifts
+  every later panel's index. A pure tint or blank holding strip is an
+  `ornament` with `rules: []`.
+- **Panels draw above pictures** (z-index 3), so a tinted panel over a picture
+  hides it; the picture covers the ground and the panel carries the same tint.
+- A fixed column width only applies at two columns or more - a one-column block
+  set to a fixed width lost its measure.
+- `standOffPx: 0` means the default 0.6 em, not zero; use 0.5 on a panel and 1
+  on a picture (the picture column is an integer).
+- Tints must be palette hexes, or the save is a 400 - the boundary working.
+
+Local calibration only, never committed: `tmp-visual-pass/runs/reference/pN-content.js`
+(the reference's words) and `set-content.js` (merges them in by panel index),
+and `scripts/reference-layout/crop-pictures.js` crops each spec's picture boxes
+from the scan into `public/uploads/reference-lokmat/`. Judge each page side by
+side with its scan at the same scale.
+
+**Still not matched:** the weather story on the jacket breaks its head at the
+hyphen in "३-४" (Mukta has no non-breaking hyphen); faces are matched, not the
+reference's licensed ones.
+
 
 ## Engineering rules
 

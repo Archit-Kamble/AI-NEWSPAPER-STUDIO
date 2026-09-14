@@ -76,7 +76,7 @@ const ADS = {
 // A page measured exactly off a scan carries its recipe in its own spec
 // (measured-pages/), beside the rectangles it was measured with.
 const { buildMeasuredPage } = require('./measured-pages/scan');
-const MEASURED_RECIPES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state', 'broadsheet-local', 'broadsheet-opinion', 'broadsheet-advertorial', 'broadsheet-local-sport', 'broadsheet-miscellany', 'broadsheet-business', 'broadsheet-sport']
+const MEASURED_RECIPES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state', 'broadsheet-local', 'broadsheet-opinion', 'broadsheet-advertorial', 'broadsheet-local-sport', 'broadsheet-miscellany', 'broadsheet-business', 'broadsheet-sport', 'broadsheet-world']
   .map((key) => [key, buildMeasuredPage(require(`./measured-pages/${key}`)).recipe]));
 
 const RECIPES = {
@@ -119,69 +119,6 @@ const RECIPES = {
   // the reference's own em and pitch, its colours, its picture and panel boxes.
   // MEASURED off the reference scan: sizes from each head's shirorekha, body at
   // the reference's own em and pitch, its colours, its picture and panel boxes.
-  'broadsheet-world': {
-    'rail-one': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 8.5, headlineLocked: true, bodyFontPx: 5.6, lineHeight: 1.375, columnCount: 1, textAlign: 'justify', headlineStyle: 'kicker-label', accentColor: '#0b8bd3' },
-      fixtureKicker: 'फॅक्ट चेक',
-      pictures: [{ file: 'reference-lokmat/broadsheet-world-rail-one-1.jpg', x: 0, y: 51, width: 78, height: 63 }],
-      panels: [],
-    },
-    'rail-two': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 8.5, headlineLocked: true, bodyFontPx: 5.6, lineHeight: 1.375, columnCount: 1, textAlign: 'justify', headlineStyle: 'kicker-label', accentColor: '#0b8bd3' },
-      fixtureKicker: 'सोशल व्हायरल',
-      pictures: [{ file: 'reference-lokmat/broadsheet-world-rail-two-5.jpg', x: 0, y: 27, width: 81, height: 58 }],
-      panels: [],
-    },
-    'rail-three': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 8.5, headlineLocked: true, bodyFontPx: 5.6, lineHeight: 1.375, columnCount: 1, textAlign: 'justify', headlineStyle: 'kicker-label', accentColor: '#0b8bd3' },
-      fixtureKicker: 'ट्रेंडिंग',
-      pictures: [],
-      panels: [],
-    },
-    'rail-four': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 8.5, headlineLocked: true, bodyFontPx: 5.6, lineHeight: 1.375, columnCount: 1, textAlign: 'justify' },
-      pictures: [],
-      panels: [],
-    },
-    'top-story': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 15.5, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 5, textAlign: 'justify' },
-      pictures: [{ file: 'reference-lokmat/broadsheet-world-top-story-0.jpg', x: 91, y: 34, width: 170, height: 76 }],
-      panels: [{ kind: 'sidebar', x: 249, y: 29, width: 139, height: 115, titlePx: 8.8, linePx: 6.0, title: PLACEHOLDER, lines: points(8) }, { kind: 'sidebar', x: 391, y: 29, width: 139, height: 115, titlePx: 8.8, linePx: 6.0, title: PLACEHOLDER, lines: points(8) }],
-    },
-    'lead': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 22.0, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 4, textAlign: 'justify', subheadingFontPx: 10.5, subheadingLocked: true },
-      pictures: [{ file: 'reference-lokmat/broadsheet-world-lead-4.jpg', x: 91, y: 98, width: 170, height: 84 }, { file: 'reference-lokmat/broadsheet-world-lead-6.jpg', x: 91, y: 195, width: 170, height: 80 }],
-      panels: [{ kind: 'sidebar', x: 249, y: 85, width: 74, height: 229, titlePx: 8.8, linePx: 6.0, title: PLACEHOLDER, lines: points(10) }],
-    },
-    'right': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 19.5, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 2, textAlign: 'justify', subheadingFontPx: 9.0, subheadingLocked: true },
-      pictures: [{ file: 'reference-lokmat/broadsheet-world-right-2.jpg', x: 90, y: 71, width: 81, height: 57 }, { file: 'reference-lokmat/broadsheet-world-right-3.jpg', x: 143, y: 71, width: 28, height: 26 }],
-      panels: [{ kind: 'sidebar', marker: 'number', x: 87, y: 132, width: 84, height: 85, titlePx: 8.8, linePx: 6.0, title: PLACEHOLDER, lines: points(3) }],
-    },
-    'report-panel': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 16.5, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 2, textAlign: 'justify', subheadingFontPx: 8.5, subheadingLocked: true },
-      pictures: [],
-      panels: [{ kind: 'sidebar', tint: '#f4e4dc', x: 80, y: 55, width: 76, height: 160, titlePx: 8.8, linePx: 6.0, title: PLACEHOLDER, lines: points(8) }],
-    },
-    'report-narrow': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 17.0, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 2, textAlign: 'justify' },
-      pictures: [],
-      panels: [],
-    },
-    'strip': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 10.5, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 3, textAlign: 'justify' },
-      pictures: [],
-      panels: [],
-    },
-    'advert': ADS.gold,
-    'feature-strip': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 21.5, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 4, textAlign: 'justify', headlineStyle: 'kicker-chip-rule', accentColor: '#e42424', borderInk: '#fb9f0b', headlineAlign: 'center' },
-      fixtureKicker: 'जरूर वाचा',
-      pictures: [{ file: 'reference-lokmat/broadsheet-world-feature-strip-14.jpg', x: 103, y: 82, width: 92, height: 67 }],
-      panels: [{ kind: 'sidebar', x: 181, y: 74, width: 97, height: 134, titlePx: 8.8, linePx: 6.0, title: PLACEHOLDER, lines: points(6) }, { kind: 'sidebar', marker: 'number', x: 284, y: 74, width: 66, height: 134, titlePx: 8.8, linePx: 6.0, title: PLACEHOLDER, lines: points(3) }],
-    },
-  },
-
 };
 
 // THE SECTION A PAGE NAMES IN ITS FOLIO. The reference carries its section in

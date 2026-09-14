@@ -235,7 +235,7 @@ const MASTHEAD_ADVERT = {
 // scan's own rectangles scaled onto this page, not spans of a column grid, so
 // the frame is block()'s with the measured x, width and height put back.
 const { buildMeasuredPage } = require('./measured-pages/scan');
-const MEASURED_PAGES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state', 'broadsheet-local', 'broadsheet-opinion', 'broadsheet-advertorial', 'broadsheet-local-sport', 'broadsheet-miscellany', 'broadsheet-business', 'broadsheet-sport']
+const MEASURED_PAGES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state', 'broadsheet-local', 'broadsheet-opinion', 'broadsheet-advertorial', 'broadsheet-local-sport', 'broadsheet-miscellany', 'broadsheet-business', 'broadsheet-sport', 'broadsheet-world']
   .map((key) => [key, buildMeasuredPage(require(`./measured-pages/${key}`))]));
 function measuredTemplate(key) {
   const { template } = MEASURED_PAGES[key];
@@ -497,53 +497,8 @@ const templates = {
 
   'broadsheet-business': measuredTemplate('broadsheet-business'),
 
-  'broadsheet-world': {
-    key: 'broadsheet-world',
-    name: 'Broadsheet national and world (reference)',
-    grid: REFERENCE_GRID,
-    description: 'A four-item rail, a picture-led Q&A top story, a lead with a photo pair and sidebars, a right story with a numbered box, two reports, a strip, an advert and a separator-led feature.',
-    // MEASURED off the reference scan onto its own seven-column grid, tops on
-    // the baseline and closed to the one 8 px gap. Generated, so literals.
-    sections: [
-      frame('rail-one', 0, 1, 56, 224, { type: 'briefs', story: 'BRIEF', priority: 2 }),
-      frame('rail-two', 0, 1, 288, 232, { story: 'BRIEF', priority: 2 }),
-      frame('rail-three', 0, 1, 528, 120, { story: 'BRIEF', priority: 2 }),
-      frame('rail-four', 0, 1, 656, 136, { story: 'BRIEF', priority: 2 }),
-      frame('top-story', 1, 6, 56, 144, { story: 'SECONDARY', priority: 4 }),
-      frame('lead', 1, 4, 208, 320, { story: 'LEAD', priority: 5 }),
-      frame('right', 5, 2, 208, 320, { story: 'SECONDARY', priority: 4 }),
-      frame('report-panel', 1, 2, 536, 256, { story: 'STANDARD', priority: 3 }),
-      frame('report-narrow', 3, 1, 536, 256, { story: 'STANDARD', priority: 3 }),
-      frame('strip', 4, 3, 536, 88, { story: 'BRIEF', priority: 2 }),
-      frame('advert', 4, 3, 632, 376, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
-      frame('feature-strip', 0, 4, 800, 208, { story: 'ANALYSIS', priority: 3 }),
-    ],
-  },
+  'broadsheet-world': measuredTemplate('broadsheet-world'),
 
-  features: {
-    key: 'features',
-    name: 'Feature Page',
-    description: 'A tall picture feature, briefs, a photograph and a sidebar.',
-    sections: (() => {
-      const [briefRow, photoRow, supportRow, advertRow] = rows(INSIDE_TOP, [176, 336, 160, 248]);
-      const lowerLeftTop = advertRow.y - 56;
-      return [
-        block('feature-lead', 0, 8, INSIDE_TOP, 632,
-          { story: 'PHOTO_FEATURE', priority: 4, headline: 'accent' }),
-        block('brief-one', 8, 8, briefRow.y, briefRow.height,
-          { story: 'BRIEF', priority: 2 }),
-        block('feature-photo', 8, 8, photoRow.y, photoRow.height,
-          { type: 'photo', story: 'PHOTO_FEATURE', priority: 3, purpose: 'IMAGE_COMPANION', requirement: 'REQUIRED_CONTENT' }),
-        block('feature-sidebar', 8, 8, supportRow.y, supportRow.height,
-          { story: 'SIDEBAR', priority: 2 }),
-
-        block('feature-two', 0, 4, lowerLeftTop, INSIDE_BOTTOM - lowerLeftTop, { story: 'OPINION', priority: 3 }),
-        block('feature-three', 4, 4, lowerLeftTop, INSIDE_BOTTOM - lowerLeftTop, { story: 'DATA', priority: 3 }),
-        block('feature-advert', 8, 8, advertRow.y, advertRow.height,
-          { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
-      ];
-    })(),
-  },
 };
 
 function getTemplate(templateKey) {

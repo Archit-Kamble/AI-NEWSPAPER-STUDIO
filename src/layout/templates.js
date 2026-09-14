@@ -499,6 +499,30 @@ const templates = {
 
   'broadsheet-world': measuredTemplate('broadsheet-world'),
 
+  features: {
+    key: 'features',
+    name: 'Feature Page',
+    description: 'A tall picture feature, briefs, a photograph and a sidebar.',
+    sections: (() => {
+      const [briefRow, photoRow, supportRow, advertRow] = rows(INSIDE_TOP, [176, 336, 160, 248]);
+      const lowerLeftTop = advertRow.y - 56;
+      return [
+        block('feature-lead', 0, 8, INSIDE_TOP, 632,
+          { story: 'PHOTO_FEATURE', priority: 4, headline: 'accent' }),
+        block('brief-one', 8, 8, briefRow.y, briefRow.height,
+          { story: 'BRIEF', priority: 2 }),
+        block('feature-photo', 8, 8, photoRow.y, photoRow.height,
+          { type: 'photo', story: 'PHOTO_FEATURE', priority: 3, purpose: 'IMAGE_COMPANION', requirement: 'REQUIRED_CONTENT' }),
+        block('feature-sidebar', 8, 8, supportRow.y, supportRow.height,
+          { story: 'SIDEBAR', priority: 2 }),
+
+        block('feature-two', 0, 4, lowerLeftTop, INSIDE_BOTTOM - lowerLeftTop, { story: 'OPINION', priority: 3 }),
+        block('feature-three', 4, 4, lowerLeftTop, INSIDE_BOTTOM - lowerLeftTop, { story: 'DATA', priority: 3 }),
+        block('feature-advert', 8, 8, advertRow.y, advertRow.height,
+          { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
+      ];
+    })(),
+  },
 };
 
 function getTemplate(templateKey) {

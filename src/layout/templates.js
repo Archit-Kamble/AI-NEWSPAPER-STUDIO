@@ -176,23 +176,6 @@ function block(key, col, span, y, height, options = {}) {
   };
 }
 
-// A LAYOUT MEASURED OFF A PRINTED PAGE KEEPS THAT PAGE'S OWN COLUMN GRID.
-//
-// The reference broadsheet is seven columns with a 4.5 mm gutter - measured off
-// the scan: 349 px columns and 38 px gutters across a 2678 px matter, which at
-// this page's scale is 81 px and 9 px. No span of the default 16 columns lands
-// on it (the nearest are out by up to 20 px, and a column 20 px short sets a
-// different line on every line). A newspaper already carries its own grid
-// (`newspapers.grid_columns`, `grid_gutter_mm`) and geometry.js already derives
-// every snap point from it, so the template simply declares the grid it was
-// measured on and places blocks on THAT grid's own snap points.
-const REFERENCE_GRID = Object.freeze({ columns: 7, gutterMm: 4.5 });
-const REF_GEOMETRY = geometryOf({ grid_columns: REFERENCE_GRID.columns, grid_gutter_mm: REFERENCE_GRID.gutterMm });
-function frame(key, col, span, y, height, options = {}) {
-  const x = REF_GEOMETRY.snapLeftPx[col];
-  return { ...block(key, 0, 1, y, height, options), x, width: REF_GEOMETRY.snapRightPx[col + span - 1] - x };
-}
-
 // Baseline-snap a raw pixel value upward. Used only for the masthead advert's
 // own corner, which sits inside the header band rather than the content
 // region the region model governs.
@@ -235,7 +218,7 @@ const MASTHEAD_ADVERT = {
 // scan's own rectangles scaled onto this page, not spans of a column grid, so
 // the frame is block()'s with the measured x, width and height put back.
 const { buildMeasuredPage } = require('./measured-pages/scan');
-const MEASURED_PAGES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state', 'broadsheet-local', 'broadsheet-opinion', 'broadsheet-advertorial', 'broadsheet-local-sport', 'broadsheet-miscellany', 'broadsheet-business', 'broadsheet-sport', 'broadsheet-world']
+const MEASURED_PAGES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state', 'broadsheet-local', 'broadsheet-opinion', 'broadsheet-advertorial', 'broadsheet-local-sport', 'broadsheet-miscellany', 'broadsheet-business', 'broadsheet-sport', 'broadsheet-world', 'broadsheet-jacket']
   .map((key) => [key, buildMeasuredPage(require(`./measured-pages/${key}`))]));
 function measuredTemplate(key) {
   const { template } = MEASURED_PAGES[key];
@@ -435,51 +418,21 @@ const templates = {
   // into one and fills it. So the cards did not lose a way in; they lost a
   // frame that was there whether or not they were wanted.
   // MEASURED FROM A REFERENCE BROADSHEET, not designed here. The desk supplied
-  // a printed Marathi daily's own page as a 300 ppi scan and asked for its
-  // layout to be carried across with only the words changed. Every rectangle
-  // below was read off that scan, scaled into this page (x by 0.646, y by
-  // 0.626) and then snapped onto the 16-column grid - so the frames sit where
-  // the reference's do, to within one grid step, and the gutters are this
-  // page's own rather than the scan's.
+  // a printed Marathi daily's twelve pages as a 300 ppi scan and asked for the
+  // layouts to be carried across with only the words changed. Every rectangle
+  // is read off that scan and scaled onto this page's matter box exactly - no
+  // column grid - by measured-pages/scan.js.
   //
   // Keys are neutral on purpose. The layout is borrowed; another paper's name
   // is not something this product may print in its own layout picker.
   //
-  // No `masthead-advert`: the reference's front page sells no ear, so the
-  // nameplate takes the whole measure - which is also the desk's own request
-  // for a nameplate set as large as the reference's.
-  //
-  // The styles each frame wears (faces, locked sizes, grounds, rules, panels)
-  // are not a template's business. They live in design-recipes.js beside this
-  // file and are applied to a page's blocks, like any desk decision.
+  // The styles each frame wears are not a template's business. They live in
+  // design-recipes.js and are applied to a page's blocks, like any desk decision.
   'broadsheet-front': measuredTemplate('broadsheet-front'),
 
   'broadsheet-sport': measuredTemplate('broadsheet-sport'),
 
-  // THE REST OF THE REFERENCE PAPER, measured the same way as the two above:
-  // each rectangle read off the scan, scaled into this page and snapped onto the
-  // 16-column grid and the 8 px baseline, with every vertical gap closed to the
-  // one GAP. Rows are literal numbers here rather than rows() stacks because
-  // they are MEASUREMENTS - a stack would re-derive positions the reference
-  // already decided.
-  'broadsheet-jacket': {
-    key: 'broadsheet-jacket',
-    name: 'Broadsheet jacket (reference)',
-    grid: REFERENCE_GRID,
-    description: 'A page wrapped in adverts: a rail advert, a lead with a numbered panel, a shorts rail, two stacked display adverts, a tall advert and a weather column.',
-    // MEASURED off the reference scan onto its own seven-column grid, tops on
-    // the baseline and closed to the one 8 px gap. Generated, so literals.
-    sections: [
-      frame('rail-advert', 0, 1, 56, 280, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
-      frame('top-brief', 1, 2, 56, 88, { story: 'BRIEF', priority: 3 }),
-      frame('lead', 1, 2, 152, 432, { story: 'LEAD', priority: 5 }),
-      frame('rail-shorts', 0, 1, 344, 240, { type: 'briefs', story: 'BRIEF', priority: 2 }),
-      frame('advert-top', 3, 4, 56, 472, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
-      frame('advert-foot', 3, 4, 536, 472, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
-      frame('advert-left', 0, 2, 592, 416, { type: 'advert', story: 'ADVERTISEMENT', priority: 1 }),
-      frame('weather-column', 2, 1, 592, 416, { story: 'BRIEF', priority: 2 }),
-    ],
-  },
+  'broadsheet-jacket': measuredTemplate('broadsheet-jacket'),
 
   'broadsheet-city': measuredTemplate('broadsheet-city'),
 

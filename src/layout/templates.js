@@ -235,7 +235,7 @@ const MASTHEAD_ADVERT = {
 // scan's own rectangles scaled onto this page, not spans of a column grid, so
 // the frame is block()'s with the measured x, width and height put back.
 const { buildMeasuredPage } = require('./measured-pages/scan');
-const MEASURED_PAGES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state', 'broadsheet-local', 'broadsheet-opinion', 'broadsheet-advertorial', 'broadsheet-local-sport', 'broadsheet-miscellany', 'broadsheet-business']
+const MEASURED_PAGES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state', 'broadsheet-local', 'broadsheet-opinion', 'broadsheet-advertorial', 'broadsheet-local-sport', 'broadsheet-miscellany', 'broadsheet-business', 'broadsheet-sport']
   .map((key) => [key, buildMeasuredPage(require(`./measured-pages/${key}`))]));
 function measuredTemplate(key) {
   const { template } = MEASURED_PAGES[key];
@@ -454,29 +454,7 @@ const templates = {
   // file and are applied to a page's blocks, like any desk decision.
   'broadsheet-front': measuredTemplate('broadsheet-front'),
 
-  'broadsheet-sport': {
-    key: 'broadsheet-sport',
-    name: 'Broadsheet sport (reference)',
-    grid: REFERENCE_GRID,
-    description: 'A one-column rail of five items, a four-column picture lead, a two-column second story, two reports, a separator-led feature and a ruled team box.',
-    // MEASURED EXACTLY, not snapped to the 16 columns: the reference's seven
-    // columns at this page's scale (81 px, 9 px gutters), every block edge read
-    // off the scan, tops on the baseline and closed to the one 8 px gap.
-    // Generated from the reference spec, so the numbers are literals on purpose.
-    sections: [
-      frame('rail-today', 0, 1, 56, 72, { type: 'briefs', story: 'BRIEF', priority: 2 }),
-      frame('rail-update', 0, 1, 136, 216, { type: 'briefs', story: 'BRIEF', priority: 2 }),
-      frame('rail-three', 0, 1, 360, 208, { story: 'BRIEF', priority: 2 }),
-      frame('rail-four', 0, 1, 576, 224, { story: 'BRIEF', priority: 2 }),
-      frame('rail-five', 0, 1, 808, 200, { story: 'BRIEF', priority: 2 }),
-      frame('lead', 1, 4, 56, 464, { story: 'LEAD', priority: 5 }),
-      frame('second', 5, 2, 56, 464, { story: 'SECONDARY', priority: 4 }),
-      frame('report-left', 1, 2, 528, 272, { story: 'STANDARD', priority: 3 }),
-      frame('report-right', 3, 4, 528, 272, { story: 'SECONDARY', priority: 4 }),
-      frame('feature-strip', 1, 4, 808, 200, { story: 'ANALYSIS', priority: 3 }),
-      frame('squad-box', 5, 2, 808, 200, { story: 'SIDEBAR', priority: 2 }),
-    ],
-  },
+  'broadsheet-sport': measuredTemplate('broadsheet-sport'),
 
   // THE REST OF THE REFERENCE PAPER, measured the same way as the two above:
   // each rectangle read off the scan, scaled into this page and snapped onto the

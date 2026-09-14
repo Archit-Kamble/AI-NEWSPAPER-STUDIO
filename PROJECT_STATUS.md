@@ -16,6 +16,13 @@ EXACTLY". `npm test` **1231/1231**; browser nets **21/21**.
 Still open: the jacket's weather head breaks at the hyphen in "३-४", and the
 faces are close matches, not the reference paper's own licensed ones.
 
+**Line gap fixed the same day.** 23 of 89 measured blocks set looser than the
+scan's pitch: the Mukta text cut floored at 1.45 em (now its own 1.11 em line
+box), and vertical justification opened short columns up to 12% (new
+`page_sections.leading_policy`, `'fixed'` on every measured page, NULL keeps the
+fill). 88 of 89 now exact; the serif opinion editorial keeps the house serif's
+floor. `npm test` 1234/1234.
+
 ---
 
 ## 0. Forward-looking audit: what will break (2026-08-28)

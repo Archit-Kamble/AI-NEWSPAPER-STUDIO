@@ -4268,6 +4268,15 @@ ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEF
 -- ALTER (Postgres cannot add NOT NULL to a non-empty table without one) and is
 -- deliberately not what production carries, where the column has no default.
 ALTER TABLE newspapers ADD COLUMN IF NOT EXISTS template VARCHAR(100) NOT NULL DEFAULT 'front';
+
+-- A MEASURED PAGE'S OWN SETTING (see "Measured EXACTLY"). NULL everywhere else.
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS dateline_style VARCHAR(16);
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS display_line_height NUMERIC(4,2);
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS paragraph_policy VARCHAR(12);
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS leading_policy VARCHAR(12);
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS display_overlap_px NUMERIC(4,1);
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS column_width_px NUMERIC(5,1);
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS column_gutter_px NUMERIC(4,1);
 ```
 
 **The session table is deliberately NOT in this list.** `user_sessions` is
@@ -8444,8 +8453,39 @@ and `scripts/reference-layout/crop-pictures.js` crops each spec's picture boxes
 from the scan into `public/uploads/reference-lokmat/`. Judge each page side by
 side with its scan at the same scale.
 
+### The gap between two lines is the SCAN's, not the compositor's
+
+The desk's report was the gap between lines. Read out of the compositor for all
+89 measured text blocks, 23 were set looser than the pitch measured off the
+scan, rails by 7-11%. Two causes, both invisible in any single screenshot:
+
+- **The Mukta text cut had no floor of its own.** `minLineHeightFor()` knew an
+  ink measurement for Noto Sans alone, so `mukta-text` fell back to the 1.45 em
+  unmeasured-face floor and a rail measured at 1.19-1.28 em set at 1.45. Its
+  catalogue entry now states `pitchFloorEm: 1.11` (its own line box), read by
+  the compositor and by `section-model.js`'s draft clamp. No other face carries
+  one, so every serif and sans block floors exactly as before. The cut's
+  worst-case ink is 1.575 em; the printed page sets tighter than that, and so
+  may a rail.
+- **Vertical justification opened the leading of every short column** by up to
+  12% to bottom it out. Right for a page this paper makes up; wrong for a page
+  copied from print, whose copy fills its own column and whose pitch is fixed.
+  `page_sections.leading_policy` - `'fixed'` keeps the stated leading and leaves
+  the rest at the foot; NULL is the fill, which is every existing row. Every
+  measured page sets `'fixed'` (kit.js's `BODY`, and each page's `RAIL`).
+
+After: 88 of 89 blocks at exactly their stated pitch. `tests/pitchFloor.test.js`
+holds both halves, and fails without the guard.
+
+**Measure pitch from the composition, not the render.** Autocorrelating a 2x
+render against the scan was out by +/-7% from pixel rounding alone and pointed
+at the wrong blocks; composing each row (`page.service.js`'s `listPages` into
+`composeSection`) and reading `bodyLines[].y` gave the answer exactly.
+
 **Still not matched:** the weather story on the jacket breaks its head at the
-hyphen in "३-४" (Mukta has no non-breaking hyphen); faces are matched, not the
+hyphen in "३-४" (Mukta has no non-breaking hyphen); the opinion editorial is set
+in the house serif, which floors at its 1.555 em box against the scan's 1.42 -
+that floor is every serif block's, so it stays; faces are matched, not the
 reference's licensed ones.
 
 

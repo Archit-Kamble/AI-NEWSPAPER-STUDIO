@@ -76,7 +76,7 @@ const ADS = {
 // A page measured exactly off a scan carries its recipe in its own spec
 // (measured-pages/), beside the rectangles it was measured with.
 const { buildMeasuredPage } = require('./measured-pages/scan');
-const MEASURED_RECIPES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state', 'broadsheet-local', 'broadsheet-opinion', 'broadsheet-advertorial', 'broadsheet-local-sport', 'broadsheet-miscellany']
+const MEASURED_RECIPES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state', 'broadsheet-local', 'broadsheet-opinion', 'broadsheet-advertorial', 'broadsheet-local-sport', 'broadsheet-miscellany', 'broadsheet-business']
   .map((key) => [key, buildMeasuredPage(require(`./measured-pages/${key}`)).recipe]));
 
 const RECIPES = {
@@ -180,65 +180,6 @@ const RECIPES = {
   // the reference's own em and pitch, its colours, its picture and panel boxes.
   // MEASURED off the reference scan: sizes from each head's shirorekha, body at
   // the reference's own em and pitch, its colours, its picture and panel boxes.
-  'broadsheet-business': {
-    'lead': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 22.0, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 4, textAlign: 'justify', subheadingFontPx: 9.0, subheadingLocked: true },
-      pictures: [{ file: 'reference-lokmat/broadsheet-business-lead-0.jpg', x: 107, y: 190, width: 28, height: 58 }, { file: 'reference-lokmat/broadsheet-business-lead-1.jpg', x: 262, y: 192, width: 103, height: 72 }],
-      panels: [{ kind: 'chart', card: {'chartType': 'bar', 'unit': '', 'items': [{'label': 'इथे मजकूर लिहा 1', 'value': 2877}, {'label': 'इथे मजकूर लिहा 2', 'value': 2814}, {'label': 'इथे मजकूर लिहा 3', 'value': 2701}, {'label': 'इथे मजकूर लिहा 4', 'value': 2596}]}, x: 84, y: 85, width: 168, height: 52, titlePx: 8.8, linePx: 6.0 }, { kind: 'chart', card: {'chartType': 'line', 'unit': '', 'items': [{'label': 'इथे मजकूर लिहा 1', 'value': 113}, {'label': 'इथे मजकूर लिहा 2', 'value': 196}, {'label': 'इथे मजकूर लिहा 3', 'value': 184}, {'label': 'इथे मजकूर लिहा 4', 'value': 197}, {'label': 'इथे मजकूर लिहा 5', 'value': 132}, {'label': 'इथे मजकूर लिहा 6', 'value': 128}]}, x: 84, y: 140, width: 168, height: 117, titlePx: 8.8, linePx: 6.0 }, { kind: 'sidebar', tint: '#f4e4dc', x: 258, y: 82, width: 81, height: 176, titlePx: 8.8, linePx: 6.0, title: PLACEHOLDER, lines: points(6) }, { kind: 'sidebar', x: 342, y: 82, width: 97, height: 176, titlePx: 8.8, linePx: 6.0, title: PLACEHOLDER, lines: points(8) }],
-    },
-    'right-chart': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 17.0, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 2, textAlign: 'justify', subheadingFontPx: 9.0, subheadingLocked: true },
-      pictures: [{ file: 'reference-lokmat/broadsheet-business-right-chart-2.jpg', x: 99, y: 202, width: 72, height: 151 }],
-      panels: [{ kind: 'chart', card: {'chartType': 'line', 'unit': '', 'items': [{'label': 'इथे मजकूर लिहा 1', 'value': 2320}, {'label': 'इथे मजकूर लिहा 2', 'value': 2272}, {'label': 'इथे मजकूर लिहा 3', 'value': 2366}, {'label': 'इथे मजकूर लिहा 4', 'value': 2451}]}, x: 0, y: 98, width: 171, height: 88, titlePx: 8.8, linePx: 6.0 }, { kind: 'sidebar', marker: 'number', x: 0, y: 355, width: 87, height: 101, titlePx: 8.8, linePx: 6.0, title: PLACEHOLDER, lines: points(3) }, { kind: 'sidebar', x: 87, y: 355, width: 84, height: 101, titlePx: 8.8, linePx: 6.0, title: PLACEHOLDER, lines: points(4) }],
-    },
-    'brief': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 12.0, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 1, textAlign: 'justify' },
-      pictures: [],
-      panels: [],
-    },
-    'report': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 16.5, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 3, textAlign: 'justify' },
-      pictures: [{ file: 'reference-lokmat/broadsheet-business-report-3.jpg', x: 89, y: 40, width: 81, height: 65 }],
-      panels: [{ kind: 'sidebar', x: 168, y: 40, width: 92, height: 144, titlePx: 8.8, linePx: 6.0, title: PLACEHOLDER, lines: points(6) }],
-    },
-    'report-side': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 12.0, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 1, textAlign: 'justify' },
-      pictures: [],
-      panels: [],
-    },
-    'film-panel': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 16.5, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 1, textAlign: 'justify', headlineStyle: 'kicker-accent', accentColor: '#e42424', backgroundColor: '#f2dce4', borderRadiusPx: 0 },
-      fixtureKicker: 'मनोरंजन',
-      pictures: [{ file: 'reference-lokmat/broadsheet-business-film-panel-4.jpg', x: 0, y: 10, width: 151, height: 296 }, { file: 'reference-lokmat/broadsheet-business-film-panel-5.jpg', x: 131, y: 21, width: 113, height: 47 }],
-      panels: [],
-    },
-    'poster-story': {
-      style: { displayFamily: 'khand', fontFamily: 'sans', headlineFontPx: 16.5, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 1, textAlign: 'justify', headlineStyle: 'reverse', accentColor: '#3f4a56' },
-      pictures: [{ file: 'reference-lokmat/broadsheet-business-poster-story-6.jpg', x: 0, y: 233, width: 80, height: 255 }],
-      panels: [],
-    },
-    'film-story': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 17.0, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 2, textAlign: 'justify' },
-      pictures: [{ file: 'reference-lokmat/broadsheet-business-film-story-7.jpg', x: 120, y: 16, width: 125, height: 141 }],
-      panels: [],
-    },
-    'jump-one': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 14.5, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 3, textAlign: 'justify' },
-      pictures: [],
-      panels: [],
-    },
-    'jump-two': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 14.5, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 3, textAlign: 'justify' },
-      pictures: [],
-      panels: [],
-    },
-    'jump-three': {
-      style: { displayFamily: 'khand-light', fontFamily: 'sans', headlineFontPx: 14.5, headlineLocked: true, bodyFontPx: 6.0, lineHeight: 1.328, columnCount: 3, textAlign: 'justify' },
-      pictures: [],
-      panels: [],
-    },
-  },
-
   // MEASURED off the reference scan: sizes from each head's shirorekha, body at
   // the reference's own em and pitch, its colours, its picture and panel boxes.
   'broadsheet-world': {

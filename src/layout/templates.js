@@ -235,7 +235,7 @@ const MASTHEAD_ADVERT = {
 // scan's own rectangles scaled onto this page, not spans of a column grid, so
 // the frame is block()'s with the measured x, width and height put back.
 const { buildMeasuredPage } = require('./measured-pages/scan');
-const MEASURED_PAGES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state', 'broadsheet-local', 'broadsheet-opinion', 'broadsheet-advertorial', 'broadsheet-local-sport', 'broadsheet-miscellany']
+const MEASURED_PAGES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state', 'broadsheet-local', 'broadsheet-opinion', 'broadsheet-advertorial', 'broadsheet-local-sport', 'broadsheet-miscellany', 'broadsheet-business']
   .map((key) => [key, buildMeasuredPage(require(`./measured-pages/${key}`))]));
 function measuredTemplate(key) {
   const { template } = MEASURED_PAGES[key];
@@ -517,27 +517,7 @@ const templates = {
 
   'broadsheet-miscellany': measuredTemplate('broadsheet-miscellany'),
 
-  'broadsheet-business': {
-    key: 'broadsheet-business',
-    name: 'Broadsheet business and entertainment (reference)',
-    grid: REFERENCE_GRID,
-    description: 'A charted money lead with a tinted panel, a digital-payments story with its own chart, three reports, an entertainment panel, a reversed poster story and three jump stories.',
-    // MEASURED off the reference scan onto its own seven-column grid, tops on
-    // the baseline and closed to the one 8 px gap. Generated, so literals.
-    sections: [
-      frame('lead', 0, 5, 56, 264, { story: 'LEAD', priority: 5 }),
-      frame('right-chart', 5, 2, 56, 456, { story: 'DATA', priority: 4 }),
-      frame('brief', 0, 1, 328, 184, { story: 'BRIEF', priority: 2 }),
-      frame('report', 1, 3, 328, 184, { story: 'SECONDARY', priority: 3 }),
-      frame('report-side', 4, 1, 328, 184, { story: 'BRIEF', priority: 2 }),
-      frame('film-panel', 0, 3, 520, 320, { story: 'PHOTO_FEATURE', priority: 3 }),
-      frame('poster-story', 3, 1, 520, 488, { story: 'PHOTO_FEATURE', priority: 3 }),
-      frame('film-story', 0, 3, 848, 160, { story: 'STANDARD', priority: 3 }),
-      frame('jump-one', 4, 3, 520, 184, { story: 'STANDARD', priority: 3 }),
-      frame('jump-two', 4, 3, 712, 184, { story: 'STANDARD', priority: 3 }),
-      frame('jump-three', 4, 3, 904, 104, { story: 'STANDARD', priority: 3 }),
-    ],
-  },
+  'broadsheet-business': measuredTemplate('broadsheet-business'),
 
   'broadsheet-world': {
     key: 'broadsheet-world',

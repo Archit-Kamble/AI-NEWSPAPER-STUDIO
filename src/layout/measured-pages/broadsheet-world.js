@@ -20,7 +20,7 @@ const deck = (box, px, pitch) => ({
   kind: 'sidebar', box, title: PLACEHOLDER, lines: [], titleFamily: 'mukta-heavy', titlePx: px,
   titleLineHeight: lh(pitch, px), insetPx: 0, standOffPx: 0.5,
 });
-const RAIL = { fontFamily: 'mukta-text', bodyFontPx: 6.0, lineHeight: lh(32, 6.0), textAlign: 'justify' };
+const RAIL = { fontFamily: 'mukta-text', bodyFontPx: 6.0, lineHeight: lh(32, 6.0), textAlign: 'justify', leadingPolicy: 'fixed' };
 const photo = (key, box, pictures, panels = []) => ({
   key, box, type: 'photo', story: 'BRIEF', priority: 1, style: { ...BODY, showDateline: false }, pictures, panels,
 });

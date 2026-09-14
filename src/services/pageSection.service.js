@@ -372,6 +372,7 @@ async function saveSection(pageId, sectionKey, body) {
     displayOverlapPx: Number(body.displayOverlapPx) >= 0 && Number(body.displayOverlapPx) <= 40
       ? Math.round(Number(body.displayOverlapPx) * 10) / 10 : undefined,
     paragraphPolicy: ['auto', 'as-written'].includes(body.paragraphPolicy) ? body.paragraphPolicy : undefined,
+    leadingPolicy: ['fill', 'fixed'].includes(body.leadingPolicy) ? body.leadingPolicy : undefined,
     displayLineHeight: Number(body.displayLineHeight) >= 0.9 && Number(body.displayLineHeight) <= 1.6
       ? Math.round(Number(body.displayLineHeight) * 100) / 100 : undefined,
     headlineStyle: body.headlineStyle,

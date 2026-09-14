@@ -80,6 +80,9 @@ export const DRAFT_FIELDS = [
   // 'as-written' keeps the reporter's paragraphs; 'auto' lets the compositor
   // merge and split them (paragraph-policy.js).
   "paragraphPolicy",
+  // 'fixed' sets the body at exactly its leading; 'fill' lets the compositor
+  // open it a little to bottom the column out (vertical justification).
+  "leadingPolicy",
   // How far a display flow may stand into the stand-off of what is under it.
   "displayOverlapPx",
   // A measured page's own column width and gutter.
@@ -192,7 +195,10 @@ export function draftFromSection(section) {
     // this clamp and the compositor's have to agree.
     lineHeight: section.line_height == null
       ? MIN_LINE_HEIGHT
-      : Math.max(MIN_MEASURED_LINE_HEIGHT, Number(section.line_height) || 1.25),
+      : Math.max(
+        Math.min(MIN_MEASURED_LINE_HEIGHT, globalThis.SahasTypefaces?.typefaceOf(section.font_family)?.pitchFloorEm || MIN_MEASURED_LINE_HEIGHT),
+        Number(section.line_height) || 1.25,
+      ),
     letterSpacingPx: Number(section.letter_spacing_px) || 0,
     paragraphSpacingPx: Number.isFinite(Number(section.paragraph_spacing_px)) ? Number(section.paragraph_spacing_px) : 8,
     listStyle: section.list_style || "none",
@@ -204,6 +210,7 @@ export function draftFromSection(section) {
     datelineStyle: section.dateline_style || null,
     displayLineHeight: section.display_line_height == null ? null : Number(section.display_line_height),
     paragraphPolicy: section.paragraph_policy || null,
+    leadingPolicy: section.leading_policy || null,
     displayOverlapPx: section.display_overlap_px == null ? null : Number(section.display_overlap_px),
     columnWidthPx: section.column_width_px == null ? null : Number(section.column_width_px),
     columnGutterPx: section.column_gutter_px == null ? null : Number(section.column_gutter_px),
@@ -334,6 +341,7 @@ export function payloadFromDraft(draft) {
     datelineStyle: draft.datelineStyle || null,
     displayLineHeight: draft.displayLineHeight == null ? undefined : Number(draft.displayLineHeight),
     paragraphPolicy: draft.paragraphPolicy || undefined,
+    leadingPolicy: draft.leadingPolicy || undefined,
     displayOverlapPx: draft.displayOverlapPx == null ? undefined : Number(draft.displayOverlapPx),
     columnWidthPx: draft.columnWidthPx == null ? undefined : Number(draft.columnWidthPx),
     columnGutterPx: draft.columnGutterPx == null ? undefined : Number(draft.columnGutterPx),

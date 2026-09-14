@@ -549,6 +549,9 @@ export function composeSection(section = {}, view = {}) {
     // 'as-written' keeps the reporter's paragraphs exactly; NULL is the
     // compositor's own merging and splitting (paragraph-policy.js).
     paragraphPolicy: pick(section, view, 'paragraphPolicy', 'paragraph_policy', null),
+    // 'fixed' keeps the body at its stated leading; NULL is the compositor's
+    // own vertical justification.
+    leadingPolicy: pick(section, view, 'leadingPolicy', 'leading_policy', null),
     // How many lines the display type may take. Left at the engine's own
     // defaults unless a caller states them - `headline-reserve.js` does, so
     // that the reservation and the real block are measured the same way.

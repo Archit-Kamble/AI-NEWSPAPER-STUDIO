@@ -525,6 +525,8 @@ async function saveSection(pageId, sectionKey, updates) {
          display_overlap_px = COALESCE($63, display_overlap_px),
          column_width_px = COALESCE($64, column_width_px),
          column_gutter_px = COALESCE($65, column_gutter_px),
+         -- 'fixed' or 'fill' (NULL means fill); coalesced.
+         leading_policy = COALESCE($66, leading_policy),
          revision = page_sections.revision + 1,
          updated_at = CURRENT_TIMESTAMP
      WHERE page_id = $1 AND section_key = $2
@@ -583,7 +585,8 @@ async function saveSection(pageId, sectionKey, updates) {
       updates.paragraphPolicy || null,
       Number.isFinite(updates.displayOverlapPx) ? updates.displayOverlapPx : null,
       Number.isFinite(updates.columnWidthPx) ? updates.columnWidthPx : null,
-      Number.isFinite(updates.columnGutterPx) ? updates.columnGutterPx : null]
+      Number.isFinite(updates.columnGutterPx) ? updates.columnGutterPx : null,
+      updates.leadingPolicy || null]
   );
 
   // NOTHING MATCHED. Two different situations wear the same empty result, and

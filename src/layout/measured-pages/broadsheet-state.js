@@ -11,7 +11,7 @@ const { BODY, HEAD, lines, byline, cell, rule, INK, inset, PLACEHOLDER } = kit({
 // Leading from a pitch read off the scan (shirorekha to shirorekha, scan px).
 const lh = (pitch, px) => Math.round((pitch * SY / px) * 100) / 100;
 const TEXT = (px, pitch = 32) => ({ lineFamily: 'mukta-text', linePx: px, lineHeight: lh(pitch, px) });
-const RAIL = { fontFamily: 'mukta-text', bodyFontPx: 5.85, lineHeight: lh(32, 5.85), textAlign: 'left' };
+const RAIL = { fontFamily: 'mukta-text', bodyFontPx: 5.85, lineHeight: lh(32, 5.85), textAlign: 'left', leadingPolicy: 'fixed' };
 const side = (box, n, extra = {}) => inset(box, n, {
   titleFamily: 'noto-condensed', titlePx: 9.3, titleLineHeight: lh(51, 9.3), titleGapPx: 4, ...TEXT(6.2), ...extra,
 });

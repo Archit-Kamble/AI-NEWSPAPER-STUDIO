@@ -875,6 +875,10 @@ ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS display_line_height NUMERIC(4
 -- 'as-written' sets the reporter's paragraphs exactly; NULL/'auto' lets the
 -- compositor merge and split them (paragraph-policy.js).
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS paragraph_policy VARCHAR(12);
+-- 'fixed' sets the body at exactly its stated leading; NULL/'fill' lets the
+-- compositor open the leading a little to bottom the column out level
+-- (vertical justification, compose.js). NULL on every existing row.
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS leading_policy VARCHAR(12);
 -- How far (block px) display type may stand into what is under it. NULL = 0.
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS display_overlap_px NUMERIC(4,1);
 -- A measured page's own column width and gutter (block px). NULL = the engine's.

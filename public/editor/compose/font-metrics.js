@@ -339,6 +339,10 @@ const DEVANAGARI_INK_EM = 1.45;
 const MEASURED_INK_EM = { sans: 1.305 };
 
 export function minLineHeightFor(family = 'serif', weight = 400) {
+  // A cut made for a tight pitch says so in the catalogue (typefaces.js's
+  // pitchFloorEm), and that is its floor. No other face carries one.
+  const pitch = globalThis.SahasTypefaces.typefaceOf(family)?.pitchFloorEm;
+  if (pitch) return pitch;
   const face = faceMetrics(family, weight);
   const measured = MEASURED_INK_EM[family];
   if (!face) return measured ?? DEVANAGARI_INK_EM;

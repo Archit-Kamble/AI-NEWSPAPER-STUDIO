@@ -9,7 +9,7 @@ const { PLACEHOLDER } = require('./scan');
 function kit({ sy = 0.2267 } = {}) {
   // Body at 5.75 px (fitted to the tightest justified lines) on the reference's own
   // 34-scan-pixel pitch.
-  const BODY = { fontFamily: 'sans', bodyFontPx: 5.75, lineHeight: Math.round((34 * sy / 5.75) * 1000) / 1000, textAlign: 'justify-all', marginPx: 1, datelineStyle: 'colon', paragraphPolicy: 'as-written', displayOverlapPx: 12,
+  const BODY = { fontFamily: 'sans', bodyFontPx: 5.75, lineHeight: Math.round((34 * sy / 5.75) * 1000) / 1000, textAlign: 'justify-all', marginPx: 1, datelineStyle: 'colon', paragraphPolicy: 'as-written', leadingPolicy: 'fixed', displayOverlapPx: 12,
     // The scan's own columns: 350 scan px wide on a 389.7 px pitch.
     columnWidthPx: 80.8, columnGutterPx: 9.1 };
   const HEAD = (displayFamily, headlineFontPx, extra = {}) => ({ displayFamily, headlineFontPx, headlineLocked: true, ...extra });

@@ -158,6 +158,12 @@
       short: 'Mukta T',
       note: 'Mukta for a rail or a sidebar set on a tight pitch, with its bold.',
       role: 'text',
+      // The leading this cut may be set at: its own line box. Without it the
+      // compositor fell back to the unmeasured-face floor (1.45 em), so every
+      // rail measured off the scan at 1.19-1.28 em set a fifth looser than the
+      // printed page. Its worst-case ink is 1.575 em (ड़्रु under कँ); the
+      // reference sets these rails tighter than that, and so may this cut.
+      pitchFloorEm: 1.11,
       css: "'Mukta Text', 'Mukta', 'Sahas Sans', Arial, sans-serif",
       files: { 400: `${DIR}MuktaDisplay-Regular.ttf`, 700: `${DIR}MuktaDisplay-Bold.ttf` },
     },

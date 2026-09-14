@@ -3306,7 +3306,10 @@ export function composeBlock(input = {}) {
   const MAX_LEADING_STRETCH = 0.12;
   const MAX_ABSORBED_BANDS = 1;
   let absorbedPx = 0;
-  if (body.lines.length > 1 && !body.overset) {
+  // A block that states its leading exactly - a page measured off a printed
+  // scan sets every rail at the pitch the scan was measured at - keeps it,
+  // and whatever is left stays at the foot, as it does on that page.
+  if (body.lines.length > 1 && !body.overset && input.leadingPolicy !== 'fixed') {
     const rowTops = [...new Set(body.lines.map((line) => Number(line.y.toFixed(3))))].sort((x, y) => x - y);
     const gaps = rowTops.length - 1;
     const lastLineBottom = Math.max(...body.lines.map((line) => line.y + line.height));

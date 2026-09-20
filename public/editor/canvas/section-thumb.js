@@ -15,7 +15,7 @@ import { computeMetrics } from "../layout/layout-metrics.js";
 import { imageTransformCss } from "../image/image-manager.js";
 import { buildFlowMap, CELL, flowRuns, bandBox, pourIntoRuns, flowImageFromRow, datelineText, captionBox } from "../layout/text-flow.js";
 import "../layout/inset-panels.js";
-const { panelsOf, panelLayout, panelStyle, panelEdges, INSET_PANEL_TICK_PITCH_PX } = globalThis.SahasInsetPanels;
+const { panelsOf, panelLayout, panelStyle, panelEdges, panelTop, INSET_PANEL_TICK_PITCH_PX } = globalThis.SahasInsetPanels;
 import { textWithMarks, markRun, plainText } from "../layout/rich-text.js";
 import { presentationRanges, renderPresentation } from "../layout/editorial-presentation.js";
 import { composeSection } from "../compose/section-adapter.js";
@@ -599,6 +599,11 @@ export function insetPanelsMarkup(section, view) {
   if (!panels.length) return "";
   const bodyPx = Number(view?.bodyFontPx) || 6.4;
   const accent = escapeHtml(view?.accentColor || section?.accent_color || '#c8102e');
+  // A panel that follows the display type is placed from the block's own
+  // composition - composed only when such a panel is there, so every other
+  // block costs nothing more.
+  const composition = panels.some((panel) => panel.followDisplay) ? sectionComposition(section, view) : null;
+  const topOf = (panel) => panelTop(panel, composition);
   const surface = (panel) => {
     const style = panelStyle(panel.kind);
     // A ticked rule is drawn as its own ground (see below), not as a border.
@@ -626,7 +631,7 @@ export function insetPanelsMarkup(section, view) {
       const card = smartCardMarkup(panel.kind, panel.card, { width: panel.width, height: panel.height, padding: 0 });
       return `<span class="section-inset-panel section-inset-${escapeHtml(panel.kind)}"
                     data-panel-id="${escapeHtml(panel.id)}"
-                    style="left:${panel.x}px;top:${panel.y}px;width:${panel.width}px;height:${panel.height}px;${surface(panel)}">${card || ""}</span>`;
+                    style="left:${panel.x}px;top:${topOf(panel)}px;width:${panel.width}px;height:${panel.height}px;${surface(panel)}">${card || ""}</span>`;
     }
     // Measured only once the faces are in - before that the old placement
     // stands, rather than a wrap computed against the fallback widths.
@@ -645,7 +650,7 @@ export function insetPanelsMarkup(section, view) {
       + `${line.bold ? "font-weight:700;" : ""}`
       + `${line.family ? `font-family:${faceCss(line.family)};` : ''}`
       + `${line.ink === 'knockout' ? 'color:#fff;' : line.ink === 'accent' ? `color:${accent};` : /^#[0-9a-f]{6}$/i.test(line.ink || '') ? `color:${line.ink};` : ''}">${
-        line.runs ? line.runs.map((r) => (r.bold ? `<b>${escapeHtml(r.text)}</b>` : escapeHtml(r.text))).join('') : escapeHtml(line.text)}</span>`).join("")
+        line.runs ? line.runs.map((r) => (r.bold ? `<b${r.family ? ` style="font-family:${faceCss(r.family)}"` : ''}>${escapeHtml(r.text)}</b>` : escapeHtml(r.text))).join('') : escapeHtml(line.text)}</span>`).join("")
       + (solved.discs || []).map((disc) => `<span class="panel-disc" style="left:${disc.x}px;top:${disc.y}px;width:${disc.d}px;height:${disc.d}px;`
         + `line-height:${disc.d}px;font-size:${disc.fontPx}px;border-radius:50%;background:#111;color:#fff;text-align:center;font-weight:700;`
         + `font-family:'Sahas Sans', 'Noto Sans Devanagari', Arial, sans-serif;">${escapeHtml(disc.text)}</span>`).join("");
@@ -655,7 +660,7 @@ export function insetPanelsMarkup(section, view) {
       : '';
     return `<span class="section-inset-panel section-inset-${escapeHtml(panel.kind)}"
                   data-panel-id="${escapeHtml(panel.id)}"
-                  style="left:${panel.x}px;top:${panel.y}px;width:${panel.width}px;height:${panel.height}px;${surface(panel)}">${ticks}${lines}</span>`;
+                  style="left:${panel.x}px;top:${topOf(panel)}px;width:${panel.width}px;height:${panel.height}px;${surface(panel)}">${ticks}${lines}</span>`;
   }).join("");
 }
 

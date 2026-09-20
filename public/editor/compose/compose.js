@@ -1611,7 +1611,7 @@ function pourBody(bodyInput, {
   paragraphSpacingPx = 0, letterSpacingPx = 0,
   italic = false, underline = false, firstLineIndentPx = 0,
   paragraphStarts = null, dropCapLines = 0, dropCapChars = 1,
-  listStyle = 'none', datelineLength = 0,
+  listStyle = 'none', datelineLength = 0, lineBreaking = null,
 }) {
   let align = requestedAlign;
   const text = typeof bodyInput === 'object' && bodyInput ? String(bodyInput.text || '') : String(bodyInput || '');
@@ -1886,7 +1886,15 @@ function pourBody(bodyInput, {
           const piece = pieces[cursorIndex];
           const at = paragraphOffset + cursorOffset;
           const pieceWidth = measurePieceWidth(piece, at, fontPx, family, weight, marks, letterSpacingPx);
-          if (line && width + pieceWidth > measureWidthPx + 0.5) break;
+          // A piece carries its trailing space, and the space after a line's
+          // LAST word is trimmed before it is drawn - so a word fits when the
+          // WORD fits. The balancer re-breaks on trimmed widths anyway, which is
+          // why the default pour can ask for the space too; a block set
+          // greedily keeps these lines, so here the test has to be the true one.
+          const fitWidth = lineBreaking === 'greedy' && trimEndClusters(piece) !== piece
+            ? measurePieceWidth(trimEndClusters(piece), at, fontPx, family, weight, marks, letterSpacingPx)
+            : pieceWidth;
+          if (line && width + fitWidth > measureWidthPx + 0.5) break;
           if (!line && pieceWidth > measureWidthPx + 0.5) {
             // Wider than this gap. If some other gap anywhere could hold it,
             // wait rather than cutting a word in half; if nothing anywhere
@@ -2423,8 +2431,10 @@ function pourBody(bodyInput, {
     }
 
     // Every line of this paragraph is placed and its real measures are known,
-    // so the paragraph can now be broken PROPERLY rather than greedily.
-    if (index >= pieces.length) {
+    // so the paragraph can now be broken PROPERLY rather than greedily - unless
+    // the block states that it is set greedily, as a page copied from print
+    // was: its lines are then the ones the reference itself broke.
+    if (index >= pieces.length && lineBreaking !== 'greedy') {
       balanceParagraph(lines, pieces, paragraphSlots, paragraphOffset);
     }
 
@@ -2915,14 +2925,17 @@ export function composeBlock(input = {}) {
   // `displayOverlapPx` sets its display flows against obstacles whose tops are
   // that much lower. Rectangles only; absent is exactly as before.
   const overlap = Math.max(0, Number(input.displayOverlapPx) || 0);
+  // A panel that FOLLOWS the display type is defined by where that type ends,
+  // so the display flows do not set round it - it is placed below them.
+  const fixedImages = images.filter((image) => image.follow === undefined);
   const displayImages = overlap
-    ? images.flatMap((image) => {
+    ? fixedImages.flatMap((image) => {
       if (!(image && !image.mask && (image.shape || 'rect') === 'rect')) return [image];
       // An obstacle no deeper than the overlap is not in the display's way at all.
       if (Number(image.height) <= overlap) return [];
       return [{ ...image, y: Number(image.y) + overlap, height: Number(image.height) - overlap, standOffPx: 0.01 }];
     })
-    : images;
+    : fixedImages;
   for (const flow of flows) {
     // A block may state its display leading - a page measured off a scan sets
     // a lead head at 1.12 of its size and a condensed second head at 1.27.
@@ -3108,6 +3121,14 @@ export function composeBlock(input = {}) {
     }) - bodyPx * faceAscent(bodyFamily, bodyWeight))
     : content.top;
   result.bodyTop = bodyTop;
+  // Every following panel is now placed where it belongs - its gap below the
+  // point the copy starts - and the copy runs round it THERE. The resolved
+  // rectangles are what the result reports, so a card solved against them
+  // avoids the same places the pour did.
+  const bodyImages = images.some((image) => image.follow !== undefined)
+    ? images.map((image) => (image.follow === undefined ? image : { ...image, y: bodyTop + image.follow }))
+    : images;
+  result.obstacles = bodyImages;
 
   const gutter = num(input.gutterPx, columnGutterPx(bodyPx));
   // An explicit column count means exactly that count, including 1 - a
@@ -3123,10 +3144,11 @@ export function composeBlock(input = {}) {
 
   const bodyInput = input.body && typeof input.body === 'object' ? input.body : String(input.body || '');
   const pourOptions = {
+    lineBreaking: input.lineBreaking || null,
     top: bodyTop,
     bottom: content.bottom,
     columns,
-    images,
+    images: bodyImages,
     fontPx: bodyPx,
     lineHeight,
     family: bodyFamily,

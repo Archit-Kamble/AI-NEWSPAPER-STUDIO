@@ -1576,7 +1576,7 @@ export function renderPanelFrames() {
     // comes up, exactly as it does for a picture.
     if (!frame.classList.contains("is-dragging")) {
       frame.setAttribute("style", `position:absolute;left:${(Number(panel.x) || 0) / scale}px;`
-        + `top:${(Number(panel.y) || 0) / scale}px;width:${(Number(panel.width) || 0) / scale}px;`
+        + `top:${(panel.followDisplay && Number.isFinite(state.composition?.bodyTop) ? state.composition.bodyTop + (Number(panel.followGapPx) || 0) : (Number(panel.y) || 0)) / scale}px;width:${(Number(panel.width) || 0) / scale}px;`
         + `height:${(Number(panel.height) || 0) / scale}px`);
     }
     frame.classList.toggle("is-selected", state.selectedPanelId === id);

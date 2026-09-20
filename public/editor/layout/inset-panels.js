@@ -292,6 +292,21 @@
   function typographyOf(raw) {
     const out = {};
     for (const key of ['titleFamily', 'lineFamily']) if (FACE_KEY.test(String(raw[key] || ''))) out[key] = String(raw[key]);
+    // THE FACE A PANEL'S BOLD IS SET IN, when it is not the line face's own
+    // bold - a printed sidebar's bold dateline or bold paragraph is often a
+    // narrower cut than the regular face's bold, and measured wider it breaks
+    // every line early and drops copy off the foot.
+    if (FACE_KEY.test(String(raw.boldFamily || ''))) out.boldFamily = String(raw.boldFamily);
+    // A PANEL THAT FOLLOWS THE DISPLAY TYPE. A byline under a deck, a picture
+    // strip under a head: on a printed page they sit a fixed distance under
+    // whatever the display type ends up as, not at a fixed height in the
+    // block. Set at a fixed y, a shorter deck left the body's first lines
+    // standing ABOVE the byline. `followGapPx` is the distance from where the
+    // body would start (the composition's bodyTop) to the panel's top.
+    if (raw.followDisplay === true) {
+      out.followDisplay = true;
+      out.followGapPx = numberIn(raw.followGapPx, -60, 400) ?? 0;
+    }
     for (const key of ['titleBold', 'lineBold']) if (typeof raw[key] === 'boolean') out[key] = raw[key];
     // White type knocked out of whatever is laid under it (a rule set as a
     // solid band) - white is the paper, so it is not an ink to name.
@@ -435,7 +450,21 @@
   const obstacleFromPanel = (panel) => ({
     x: panel.x, y: panel.y, width: panel.width, height: panel.height,
     shape: 'rect', rotation: 0, standOffPx: panel.standOffPx, mask: null,
+    // The compositor places a following panel itself, once it knows where
+    // the display type ends (compose.js); `follow` is the gap it needs.
+    ...(panel.followDisplay ? { follow: panel.followGapPx || 0 } : {}),
   });
+
+  /**
+   * Where a panel's top IS, on every surface that draws it: its stored y, or -
+   * for a panel that follows the display type - the composition's own bodyTop
+   * plus its gap. One rule, so the canvas, the Block Editor and the exports
+   * put it where the compositor ran the copy round it.
+   */
+  function panelTop(panel, composition) {
+    if (!panel.followDisplay || !composition || !Number.isFinite(composition.bodyTop)) return panel.y;
+    return composition.bodyTop + (panel.followGapPx || 0);
+  }
 
   /**
    * How the panel's own type is set inside it. Solved here rather than in a
@@ -450,17 +479,31 @@
   // at word spaces into lines that fit, and each is placed on its own line. A
   // single word wider than the panel stays whole; without a measure the old
   // one-entry-per-line placement is kept, so nothing that cannot measure moves.
+  // A HARD HYPHEN IS A PLACE TO BREAK. "सार्वजनिक-खासगी" is one word to a reader
+  // and two to a compositor: a printed line may end on "सार्वजनिक-" and carry
+  // "खासगी" to the next. Each token says whether it GLUES to the one before it
+  // (no space between) - true for the part after a hyphen. A dash standing
+  // between spaces is a word of its own and is not split.
+  function tokensOf(text) {
+    const out = [];
+    for (const word of String(text).split(/\s+/).filter(Boolean)) {
+      word.split(/(?<=[^\s-]-)(?=[^\s-])/).forEach((part, i) => out.push({ word: part, glue: i > 0 }));
+    }
+    return out;
+  }
+  const joinTokens = (tokens) => tokens.reduce((line, t, i) => (i === 0 ? t.word : line + (t.glue ? '' : ' ') + t.word), '');
+
   function wrapToWidth(text, width, fontPx, family, bold, measure) {
     if (!measure || !(width > 0)) return [text];
-    const words = String(text).split(/\s+/).filter(Boolean);
     const out = [];
-    let line = '';
-    for (const word of words) {
-      const candidate = line ? `${line} ${word}` : word;
-      if (line && measure(candidate, fontPx, family, bold ? 700 : 400) > width) { out.push(line); line = word; }
-      else line = candidate;
+    let line = [];
+    for (const token of tokensOf(text)) {
+      if (line.length && measure(joinTokens([...line, token]), fontPx, family, bold ? 700 : 400) > width) {
+        out.push(joinTokens(line));
+        line = [{ ...token, glue: false }];
+      } else line.push(token);
     }
-    if (line) out.push(line);
+    if (line.length) out.push(joinTokens(line));
     return out.length ? out : [''];
   }
 
@@ -475,7 +518,7 @@
     const out = [];
     let on = false;
     for (const part of String(text).split('*')) {
-      for (const word of part.split(/\s+/).filter(Boolean)) out.push({ word, bold: bold || on });
+      for (const token of tokensOf(part)) out.push({ ...token, bold: bold || on });
       on = !on;
     }
     return out;
@@ -484,39 +527,40 @@
   const plainOf = (text) => String(text).replace(/\*/g, '');
 
   // Lines of words for a changing measure; `indentOf(n)` is line n's indent.
-  function wrapWords(words, width, fontPx, family, measure, indentOf) {
+  function wrapWords(words, width, fontPx, family, measure, indentOf, boldFamily = null) {
     if (!measure || !(width > 0)) return [words];
-    const widthOf = (list) => list.reduce((sum, w, i) => sum + measure(w.word, fontPx, family, w.bold ? 700 : 400)
-      + (i ? measure(' ', fontPx, family, 400) : 0), 0);
+    const widthOf = (list) => list.reduce((sum, w, i) => sum + measure(w.word, fontPx, w.bold && boldFamily ? boldFamily : family, w.bold ? 700 : 400)
+      + (i && !w.glue ? measure(' ', fontPx, family, 400) : 0), 0);
     const out = [];
     let line = [];
     for (const word of words) {
       const room = width - indentOf(out.length);
-      if (line.length && widthOf([...line, word]) > room) { out.push(line); line = [word]; } else line.push(word);
+      if (line.length && widthOf([...line, word]) > room) { out.push(line); line = [{ ...word, glue: false }]; } else line.push(word);
     }
     if (line.length) out.push(line);
     return out.length ? out : [[]];
   }
   // Consecutive words of one weight, joined, for a renderer to set as runs.
-  const runsOf = (words) => words.reduce((runs, w, i) => {
-    const text = (i ? ' ' : '') + w.word;
+  const runsOf = (words, boldFamily = null) => words.reduce((runs, w, i) => {
+    const text = (i && !w.glue ? ' ' : '') + w.word;
     const last = runs[runs.length - 1];
-    if (last && last.bold === w.bold) last.text += text; else runs.push({ text, bold: w.bold });
+    if (last && last.bold === w.bold) last.text += text;
+    else runs.push({ text, bold: w.bold, ...(w.bold && boldFamily ? { family: boldFamily } : {}) });
     return runs;
   }, []);
 
   function wrapBeside(text, width, fontPx, family, bold, measure, indentOf) {
     if (!measure || !(width > 0)) return [text];
-    const words = String(text).split(/\s+/).filter(Boolean);
     const out = [];
-    let line = '';
-    for (const word of words) {
-      const candidate = line ? `${line} ${word}` : word;
+    let line = [];
+    for (const token of tokensOf(text)) {
       const room = width - indentOf(out.length);
-      if (line && measure(candidate, fontPx, family, bold ? 700 : 400) > room) { out.push(line); line = word; }
-      else line = candidate;
+      if (line.length && measure(joinTokens([...line, token]), fontPx, family, bold ? 700 : 400) > room) {
+        out.push(joinTokens(line));
+        line = [{ ...token, glue: false }];
+      } else line.push(token);
     }
-    if (line) out.push(line);
+    if (line.length) out.push(joinTokens(line));
     return out.length ? out : [''];
   }
 
@@ -583,8 +627,8 @@
       const lineFamily = panel.kind === 'qa' ? (index % 2 === 0 ? 'sans' : 'serif')
         : panel.kind === 'reaction' && index === panel.lines.length - 1 ? 'sans'
           : panel.kind === 'document' ? (sourceLine ? 'sans' : 'serif') : (panelStyle(panel.kind).family || 'sans');
-      const setFamily = panel.lineFamily || lineFamily;
       const lineBold = (panel.boldLines && panel.boldLines.includes(index)) || (panel.lineBold ?? false);
+      const setFamily = (lineBold && panel.boldFamily) || panel.lineFamily || lineFamily;
       // A NUMBERED DISC takes the head of its entry; the lines it stands beside
       // are set short of it, and the lines below it take the whole measure.
       const disc = panel.marker === 'circle'
@@ -592,10 +636,10 @@
       const indentFor = (lineTop) => (disc && lineTop < disc.y + disc.d - 0.5 ? disc.d + actualLinePx * 0.35 : 0);
       const marks = hasMarks(marked);
       const wordLines = marks
-        ? wrapWords(wordsOf(marked, lineBold), panel.width - inset * 2, actualLinePx, setFamily, measure,
-          (n) => (disc ? indentFor(y + n * actualLinePx * lineHeight) : 0))
+        ? wrapWords(wordsOf(marked, lineBold), panel.width - inset * 2, actualLinePx, panel.lineFamily || lineFamily, measure,
+          (n) => (disc ? indentFor(y + n * actualLinePx * lineHeight) : 0), panel.boldFamily)
         : null;
-      const pieces = marks ? wordLines.map((words) => words.map((w) => w.word).join(' '))
+      const pieces = marks ? wordLines.map((words) => joinTokens(words))
         : disc
           ? wrapBeside(marked, panel.width - inset * 2, actualLinePx, setFamily, lineBold, measure, (n) => indentFor(y + n * actualLinePx * lineHeight))
           : wrapToWidth(marked, panel.width - inset * 2, actualLinePx, setFamily, lineBold, measure);
@@ -608,7 +652,7 @@
       out.push({
         text: piece, x: inset + indent, y, width: panel.width - inset * 2 - indent, fontPx: actualLinePx,
         lineHeight,
-        ...(marks ? { runs: runsOf(wordLines[pieceIndex]) } : {}),
+        ...(marks ? { runs: runsOf(wordLines[pieceIndex], panel.boldFamily) } : {}),
         ...(panel.lineInk ? { ink: panel.lineInk } : {}),
         ...(panel.knockout ? { ink: 'knockout' } : {}),
         bold: lineBold || panel.kind === 'qa' ? (lineBold || index % 2 === 0)
@@ -623,7 +667,7 @@
                   : panel.kind === 'follow-up' ? 'update'
                     : panel.kind === 'comparison' ? (index % 2 === 0 ? 'before' : 'now')
                       : panel.kind === 'document' ? (sourceLine ? 'source' : 'excerpt') : 'line',
-        family: panel.lineFamily || (panel.kind === 'qa' ? (index % 2 === 0 ? 'sans' : 'serif')
+        family: (lineBold && panel.boldFamily) || panel.lineFamily || (panel.kind === 'qa' ? (index % 2 === 0 ? 'sans' : 'serif')
           : panel.kind === 'reaction' && index === panel.lines.length - 1 ? 'sans'
             : panel.kind === 'document' ? (sourceLine ? 'sans' : 'serif') : null),
         // An ornament's mark sits on the centre line of its own rule; every
@@ -643,7 +687,7 @@
     INSET_PANEL_STYLES: STYLES,
     INSET_PANEL_BULLET: BULLET,
     INSET_PANEL_ORNAMENTS: ORNAMENTS,
-    panelOf, panelsOf, defaultPanelFor, obstacleFromPanel, panelLayout, panelStyle, markerText, panelEdges, ruleTicks,
+    panelOf, panelsOf, defaultPanelFor, obstacleFromPanel, panelTop, panelLayout, panelStyle, markerText, panelEdges, ruleTicks,
     INSET_PANEL_TICK_PITCH_PX: TICK_PITCH_PX,
   });
   root.SahasInsetPanels = api;

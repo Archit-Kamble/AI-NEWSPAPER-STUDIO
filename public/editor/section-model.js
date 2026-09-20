@@ -83,6 +83,8 @@ export const DRAFT_FIELDS = [
   // 'fixed' sets the body at exactly its leading; 'fill' lets the compositor
   // open it a little to bottom the column out (vertical justification).
   "leadingPolicy",
+  // 'greedy' breaks body lines as poured; 'balanced' re-breaks each paragraph.
+  "lineBreaking",
   // How far a display flow may stand into the stand-off of what is under it.
   "displayOverlapPx",
   // A measured page's own column width and gutter.
@@ -211,6 +213,7 @@ export function draftFromSection(section) {
     displayLineHeight: section.display_line_height == null ? null : Number(section.display_line_height),
     paragraphPolicy: section.paragraph_policy || null,
     leadingPolicy: section.leading_policy || null,
+    lineBreaking: section.line_breaking || null,
     displayOverlapPx: section.display_overlap_px == null ? null : Number(section.display_overlap_px),
     columnWidthPx: section.column_width_px == null ? null : Number(section.column_width_px),
     columnGutterPx: section.column_gutter_px == null ? null : Number(section.column_gutter_px),
@@ -342,6 +345,7 @@ export function payloadFromDraft(draft) {
     displayLineHeight: draft.displayLineHeight == null ? undefined : Number(draft.displayLineHeight),
     paragraphPolicy: draft.paragraphPolicy || undefined,
     leadingPolicy: draft.leadingPolicy || undefined,
+    lineBreaking: draft.lineBreaking || undefined,
     displayOverlapPx: draft.displayOverlapPx == null ? undefined : Number(draft.displayOverlapPx),
     columnWidthPx: draft.columnWidthPx == null ? undefined : Number(draft.columnWidthPx),
     columnGutterPx: draft.columnGutterPx == null ? undefined : Number(draft.columnGutterPx),

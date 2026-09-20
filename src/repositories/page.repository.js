@@ -527,6 +527,8 @@ async function saveSection(pageId, sectionKey, updates) {
          column_gutter_px = COALESCE($65, column_gutter_px),
          -- 'fixed' or 'fill' (NULL means fill); coalesced.
          leading_policy = COALESCE($66, leading_policy),
+         -- 'greedy' or 'balanced' (NULL means balanced); coalesced.
+         line_breaking = COALESCE($67, line_breaking),
          revision = page_sections.revision + 1,
          updated_at = CURRENT_TIMESTAMP
      WHERE page_id = $1 AND section_key = $2
@@ -586,7 +588,8 @@ async function saveSection(pageId, sectionKey, updates) {
       Number.isFinite(updates.displayOverlapPx) ? updates.displayOverlapPx : null,
       Number.isFinite(updates.columnWidthPx) ? updates.columnWidthPx : null,
       Number.isFinite(updates.columnGutterPx) ? updates.columnGutterPx : null,
-      updates.leadingPolicy || null]
+      updates.leadingPolicy || null,
+      updates.lineBreaking || null]
   );
 
   // NOTHING MATCHED. Two different situations wear the same empty result, and

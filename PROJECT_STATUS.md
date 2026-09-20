@@ -23,6 +23,39 @@ box), and vertical justification opened short columns up to 12% (new
 fill). 88 of 89 now exact; the serif opinion editorial keeps the house serif's
 floor. `npm test` 1234/1234.
 
+### One story package through three acceptance checks (2026-09-20)
+
+The front page's `lead` package - locked headline, deck, byline, two
+photographs, a caption, three sidebars, four columns - taken through
+reference→canvas, fresh copy, and canvas→press. `docs/REFERENCE-PAGES.md` is
+the standing record: reference identity, the one declared transform, the faces
+and their evidence, and the differences that remain with a cause for each.
+
+Four setting rules the reference needed, each found by measuring where its
+lines first part company with ours: greedy line breaking
+(`page_sections.line_breaking`, NULL = balanced, which is every existing
+block), a hard hyphen as a break opportunity, a panel's own bold face
+(`boldFamily` - Mukta Bold reproduces 8 of 8 of the reference's bold breaks
+against the sans at 700's 6), and a byline that follows the display type
+(`followDisplay`). Body column one now parts company at line 21 of 33 rather
+than line 5; two panels agree line for line.
+
+**And the press file set every headline out of place.** `compose.js` states a
+line's baseline as the face's box ascent from the band's top; the browser
+centres that box in the line box, so display type - whose leading is wider than
+its face's box - was painted half the leading lower on the canvas than the
+plate drew it. Measured on the 28px lead headline: 3.08px on the page, **13px
+at 220 dpi**, on every export since display leading became settable. The rule
+now lives in `render.js` (`paintedBaseline()`), which is the module that knows
+how the browser paints a line, and the compositor's own baseline is untouched -
+body lines, drop caps and list markers are unchanged to the decimal. Ink
+agreement over the package 66.0% → 77.9% exact, 89% → 97.8% within half a page
+pixel.
+
+`tests/paintedBaseline.test.js` (4) and `tests/panelSetting.test.js` (8) hold
+all of it. The grid-snapped `gen.py`/`write.py`/`specs/` path was deleted - the
+measured pages replaced it. `npm test` **1246/1246**.
+
 ---
 
 ## 0. Forward-looking audit: what will break (2026-08-28)

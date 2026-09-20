@@ -552,6 +552,8 @@ export function composeSection(section = {}, view = {}) {
     // 'fixed' keeps the body at its stated leading; NULL is the compositor's
     // own vertical justification.
     leadingPolicy: pick(section, view, 'leadingPolicy', 'leading_policy', null),
+    // 'greedy' keeps the lines as poured; NULL is the compositor's balancing.
+    lineBreaking: pick(section, view, 'lineBreaking', 'line_breaking', null),
     // How many lines the display type may take. Left at the engine's own
     // defaults unless a caller states them - `headline-reserve.js` does, so
     // that the reservation and the real block are measured the same way.

@@ -97,12 +97,16 @@ module.exports = {
         { file: 'reference-lokmat/front-lead2.jpg', box: [1611, 2152, 2011, 2424], standOffPx: 1 },
       ],
       panels: [
-        byline(446, 797, 1687, 1727),
-        { kind: 'sidebar', box: [835, 1978 - INK, 2013, 2130], title: PLACEHOLDER, lines: lines(3), titleFamily: 'noto-condensed', titlePx: 9.3, titleLineHeight: 1.25, titleGapPx: 3, lineFamily: 'sans', linePx: 5.75, lineHeight: 1.24, insetPx: 0, standOffPx: 0.5 },
-        inset([835, 2148, 1182, 2863], 2, { tint: '#f4e4dc', insetPx: 5, titlePx: 9.0, boldLines: [1], lineGapPx: 5 }),
-        inset([1224, 2149 - INK, 1572, 2872], 2, { marker: 'circle', boldLines: [1], lineGapPx: 4 }),
-        inset([1611, 2445 - INK, 2011, 2872], 1),
-        rule([446, 2891, 2013, 2909], 4, { ruleStyle: 'ticks' }),
+        // The byline FOLLOWS the deck: 3.8 px below where the copy would start,
+        // measured off the calibration composition - so a deck one line
+        // shorter than the reference's moves it up rather than leaving the
+        // story's first lines standing above it.
+        { ...byline(446, 797, 1687, 1727), id: 'lead-byline', followDisplay: true, followGapPx: 3.8 },
+        { id: 'lead-caption', kind: 'sidebar', box: [835, 1978 - INK, 2013, 2146], title: PLACEHOLDER, lines: lines(3), titleFamily: 'noto-condensed', titlePx: 9.3, titleLineHeight: 1.25, titleGapPx: 3, lineFamily: 'sans', linePx: 5.75, lineHeight: 1.24, insetPx: 0, standOffPx: 0.5 },
+        inset([835, 2148, 1182, 2886], 2, { id: 'lead-scholarship', boldFamily: 'mukta-text', tint: '#f4e4dc', insetPx: 5, titlePx: 9.0, boldLines: [1], lineGapPx: 5 }),
+        inset([1224, 2149 - INK, 1572, 2886], 2, { id: 'lead-numbered', boldFamily: 'mukta-text', marker: 'circle', boldLines: [1], lineGapPx: 0.4 }),
+        inset([1611, 2445 - INK, 2011, 2886], 1, { id: 'lead-jarange', boldFamily: 'mukta-text' }),
+        rule([446, 2891, 2013, 2909], 4, { id: 'lead-foot-rule', ruleStyle: 'ticks' }),
       ],
     },
     {

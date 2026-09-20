@@ -18,7 +18,7 @@ import { textWithMarks, plainText } from '../layout/rich-text.js';
 // an ink looks like - one catalogue, shared with the press model.
 import { accentedHeadline, groundedBands, headlineFurniture, headlineTreatment, screenOf } from '../layout/inks.js';
 import { presentationRanges, renderPresentation } from '../layout/editorial-presentation.js';
-import { publicationFamily } from './font-metrics.js';
+import { publicationFamily, faceAscent, faceDescent } from './font-metrics.js';
 import { headlineSegments } from './accent.js';
 import { setSpaces } from './graphemes.js';
 import { marksWithDateline } from '../layout/text-flow.js';
@@ -183,6 +183,39 @@ function roomBelow(composition, afterKey) {
   const firstBody = composition.bodyLines?.[0];
   if (firstBody) return firstBody.y;
   return composition.content.bottom;
+}
+
+/**
+ * WHERE THE BASELINE OF A PAINTED LINE ACTUALLY LANDS.
+ *
+ * Every line here is drawn as one span at `top: line.y` with
+ * `line-height: line.height`, and a browser centres the face's own box in that
+ * line box: half the difference between the box and the line goes above the
+ * type, half below. So the ink sits `(height - fontPx x (ascent + descent))/2`
+ * BELOW the top of the band, and `line.baseline` - which compose.js states as
+ * `y + fontPx x faceAscent()`, the box's ascent from the band's top - is not
+ * that number whenever a flow's leading is wider than its face's box.
+ *
+ * On body copy the two are within a fraction of a pixel, because the leading
+ * is floored at the face's own box. On DISPLAY type they are not: measured on
+ * the front page's 28px lead headline at `displayLineHeight` 1.33, the face's
+ * box is 1.11 em and the half-leading is 3.08px - so the canvas set the
+ * headline 3.08px lower than the press file did, and the deck 1.25px lower.
+ * Photographed side by side at 220 dpi, that is 13px of a headline standing
+ * in a different place on the sheet from the page the desk approved.
+ *
+ * The canvas is the authority: it is the page a desk passes, and the measured
+ * pages are calibrated against it. So every writer places type HERE, and the
+ * compositor's own `baseline` stays exactly as it is - it is what
+ * `baselineAfter()` specifies the next flow's position against, and moving it
+ * would move every band on every page in the database.
+ */
+export function paintedBaseline(line) {
+  const fontPx = Number(line?.fontPx) || 0;
+  const box = Number(line?.lineBoxPx) > 0 ? Number(line.lineBoxPx) : Number(line?.height) || 0;
+  const ascent = faceAscent(line?.family, line?.weight);
+  const descent = faceDescent(line?.family, line?.weight);
+  return (Number(line?.y) || 0) + (box - fontPx * (ascent + descent)) / 2 + fontPx * ascent;
 }
 
 /**

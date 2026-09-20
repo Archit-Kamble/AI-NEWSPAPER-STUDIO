@@ -373,6 +373,7 @@ async function saveSection(pageId, sectionKey, body) {
       ? Math.round(Number(body.displayOverlapPx) * 10) / 10 : undefined,
     paragraphPolicy: ['auto', 'as-written'].includes(body.paragraphPolicy) ? body.paragraphPolicy : undefined,
     leadingPolicy: ['fill', 'fixed'].includes(body.leadingPolicy) ? body.leadingPolicy : undefined,
+    lineBreaking: ['balanced', 'greedy'].includes(body.lineBreaking) ? body.lineBreaking : undefined,
     displayLineHeight: Number(body.displayLineHeight) >= 0.9 && Number(body.displayLineHeight) <= 1.6
       ? Math.round(Number(body.displayLineHeight) * 100) / 100 : undefined,
     headlineStyle: body.headlineStyle,

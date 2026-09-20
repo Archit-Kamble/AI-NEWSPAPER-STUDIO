@@ -13,7 +13,7 @@ const { BODY, HEAD, lines, byline, cell, rule, INK, inset } = kit({ sy: SY });
 // 31-32 scan pixel pitch.
 // Leading from a pitch read off the scan (shirorekha to shirorekha, scan px).
 const lh = (pitch, px) => Math.round((pitch * SY / px) * 100) / 100;
-const RAIL = { fontFamily: 'mukta-text', bodyFontPx: 5.75, lineHeight: lh(31, 5.75), textAlign: 'left', leadingPolicy: 'fixed' };
+const RAIL = { fontFamily: 'mukta-text', bodyFontPx: 5.75, lineHeight: lh(31, 5.75), textAlign: 'left', leadingPolicy: 'fixed', lineBreaking: 'greedy' };
 const side = (box, n, extra = {}) => inset(box, n, {
   titleFamily: 'noto-condensed', titlePx: 9.2, titleLineHeight: lh(51, 9.2), titleGapPx: 4,
   lineFamily: 'mukta-text', linePx: 6.0, lineHeight: lh(32, 6.0), ...extra,

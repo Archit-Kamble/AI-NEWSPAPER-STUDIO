@@ -879,6 +879,11 @@ ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS paragraph_policy VARCHAR(12);
 -- compositor open the leading a little to bottom the column out level
 -- (vertical justification, compose.js). NULL on every existing row.
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS leading_policy VARCHAR(12);
+-- 'greedy' breaks the body's lines as they are poured, each line taking every
+-- word that fits - how a page copied from print was set; NULL/'balanced' lets
+-- the compositor re-break each paragraph for an even edge (balanceParagraph).
+-- NULL on every existing row.
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS line_breaking VARCHAR(12);
 -- How far (block px) display type may stand into what is under it. NULL = 0.
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS display_overlap_px NUMERIC(4,1);
 -- A measured page's own column width and gutter (block px). NULL = the engine's.

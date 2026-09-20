@@ -34,7 +34,7 @@ const { identityFor, dateLine, devanagari } = require('../../layout/identity');
 const { strip } = require('../../layout/plain-text');
 const { captionBox, PLACED_CAPTION_METRICS } = require('../../../public/editor/layout/caption-geometry');
 const { borderEdges, borderWidthPx, borderOffsetsPx, isBoxed, borderRadiusPx } = require('../../../public/editor/layout/borders');
-const { panelsOf, panelLayout, panelStyle, panelEdges, ruleTicks } = require('../../../public/editor/layout/inset-panels');
+const { panelsOf, panelLayout, panelStyle, panelEdges, panelTop, ruleTicks } = require('../../../public/editor/layout/inset-panels');
 const { overlaysOf } = require('../../../public/editor/layout/page-overlays');
 const { smartCardLines } = require('./smart-card-lines');
 
@@ -320,7 +320,7 @@ async function blockItems(section, { mono = false } = {}) {
         // actually drawn there. A one-word headline wider than the measure is
         // set anyway and spills, so the frame must be at least as wide.
         width: mm(Math.max(line.width || 0, line.measure)), height: mm(line.height),
-      }, y0 + mm(line.baseline), runs, 'left', line));
+      }, y0 + mm(modules.render.paintedBaseline(line)), runs, 'left', line));
     });
   }
 
@@ -356,7 +356,7 @@ async function blockItems(section, { mono = false } = {}) {
       items.push(lineItem({
         x: x0 + mm(line.x), y: y0 + mm(line.y),
         width: mm(Math.max(line.width || 0, line.measure) + 1), height: mm(line.height),
-      }, y0 + mm(line.baseline), runs, 'left', line));
+      }, y0 + mm(modules.render.paintedBaseline(line)), runs, 'left', line));
     }
   }
 
@@ -504,10 +504,11 @@ function blockDecorations(section, composition) {
   if (cap && cap.text) {
     items.push(lineItem(
       { x: x0 + mm(cap.x), y: y0 + mm(cap.y), width: mm(cap.width) + 1, height: mm(cap.height) },
-      // The compositor's own baseline - the last body line the cap spans. The
-      // browser never needed it said out loud because CSS derives it from
+      // Where the browser paints that baseline - the cap is drawn in a line
+      // box of its own (`lineBoxPx`), and CSS centres the face in it. The
+      // browser never needed it said out loud because it derives it from
       // `line-height`; a PDF has to be told.
-      y0 + mm(cap.baseline),
+      y0 + mm(modules.render.paintedBaseline(cap)),
       [run(cap.text, { family: cap.family || 'serif', weight: cap.weight || 400, fontPx: cap.fontPx })],
     ));
   }
@@ -518,7 +519,7 @@ function blockDecorations(section, composition) {
   for (const marker of composition?.listMarkers || []) {
     items.push(lineItem(
       { x: x0 + mm(marker.x), y: y0 + mm(marker.y), width: mm(marker.width) + 1, height: mm(marker.height) },
-      y0 + mm(marker.baseline),
+      y0 + mm(modules.render.paintedBaseline(marker)),
       [run(marker.text, { family: marker.family || 'serif', weight: marker.weight || 400, fontPx: marker.fontPx })],
     ));
   }
@@ -535,7 +536,7 @@ function blockDecorations(section, composition) {
   // stacking, found by rendering a page that had both and looking at it.
   for (const panel of panelsOf(section)) {
     const px = x0 + mm(panel.x);
-    const py = y0 + mm(panel.y);
+    const py = y0 + mm(panelTop(panel, composition));
     const rule = mm(Number(panel.ruleWidthPx) || 0.71);
     const { family: panelFace, ground } = panelStyle(panel.kind);
     const edges = panelEdges(panel);
@@ -583,7 +584,7 @@ function blockDecorations(section, composition) {
       items.push(textItem(
         { x: px + mm(line.x), y: py + mm(line.y), width: mm(line.width), height: mm(line.fontPx * (line.lineHeight || solved.lineHeight)) },
         (line.runs || [{ text: line.text, bold: line.bold }]).map((segment) => run(segment.text, {
-          family: line.family || panelFace,
+          family: segment.family || line.family || panelFace,
           weight: segment.bold ? 700 : 400, bold: segment.bold, fontPx: line.fontPx,
           ink: line.ink === 'knockout' ? '#ffffff' : line.ink === 'accent' ? (section.accent_color || ACCENT_INK) : (/^#[0-9a-f]{6}$/i.test(line.ink || '') ? line.ink : null),
         })),

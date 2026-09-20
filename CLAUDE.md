@@ -4277,6 +4277,12 @@ ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS leading_policy VARCHAR(12);
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS display_overlap_px NUMERIC(4,1);
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS column_width_px NUMERIC(5,1);
 ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS column_gutter_px NUMERIC(4,1);
+
+-- HOW A BLOCK'S LINES ARE BROKEN. NULL is the balanced paragraph this
+-- compositor has always set, which is every block in the database; 'greedy'
+-- is what a page copied from print needs, because that is how the printed
+-- page broke. See "One package, through three checks".
+ALTER TABLE page_sections ADD COLUMN IF NOT EXISTS line_breaking VARCHAR(12);
 ```
 
 **The session table is deliberately NOT in this list.** `user_sessions` is
@@ -8285,13 +8291,16 @@ measured off the scan and fixed at its cause.
 
 **Tooling** (`scripts/reference-layout/`): `photos.py` finds photographs
 (continuous tone), `typesize.py` reads each line's shirorekha height and stroke,
-`colours.py` samples grounds and inks, `measure.py` finds rules; a spec in
-`specs/` holds rectangles in scan pixels and measured sizes, `gen.py` turns it
-into a template on the reference grid plus a recipe plus local photo crops, and
-`write.py` puts both into the catalogues. Reference photos go to
-`public/uploads/reference-lokmat/` (gitignored) and reference headlines live in
-`tmp-visual-pass/runs/reference/*-content.js` (gitignored): a reference paper's
-words and pictures are for local calibration and are never committed.
+`colours.py` samples grounds and inks, `measure.py` finds rules, and
+`crop-pictures.js` cuts a measured page's own picture boxes out of the scan.
+A spec is now `src/layout/measured-pages/<key>.js` and `scan.js` turns it into
+a template and a recipe - `gen.py`, `write.py` and `specs/` were the
+grid-snapped path those replaced and are **deleted**: they placed every block
+on a seven-column grid, which is the fault the measured pages exist to fix.
+Reference photos go to `public/uploads/reference-lokmat/` (gitignored) and
+reference headlines live in `tmp-visual-pass/runs/reference/*-content.js`
+(gitignored): a reference paper's words and pictures are for local calibration
+and are never committed.
 
 What the measurements found, each worth knowing for the next paper:
 
@@ -8315,10 +8324,11 @@ our 4 px stand-off of that headline's last line**, which then sets in the narrow
 corridor beside it - the opening banner went to three lines. The generator
 places such objects clear of the stand-off (`CLEAR` in a spec).
 
-**Two generator faults worth remembering:** a Python loop variable named `end`
-overwrote the slice index and duplicated 500 lines of templates.js; and a
-JavaScript object literal keeps the LAST duplicate key, so a recipe written
-twice silently used the stale copy. `write.py` now refuses a duplicate entry.
+**Two generator faults worth remembering**, from the tooling that wrote these
+catalogues: a Python loop variable named `end` overwrote the slice index and
+duplicated 500 lines of templates.js; and a JavaScript object literal keeps the
+LAST duplicate key, so a recipe written twice silently used the stale copy -
+which no parser and no test will tell you about.
 
 **Not matched, and why:** Lokmat's typefaces are its own licensed faces (ours
 are matched by width and weight, not identical); its section logos
@@ -8487,6 +8497,88 @@ hyphen in "३-४" (Mukta has no non-breaking hyphen); the opinion editorial is
 in the house serif, which floors at its 1.555 em box against the scan's 1.42 -
 that floor is every serif block's, so it stays; faces are matched, not the
 reference's licensed ones.
+
+### One package, through three checks - and the plate set its headline 13px out
+
+A page is not finished because it looks close in a screenshot. `docs/
+REFERENCE-PAGES.md` is the standing record: one entry per measured page, with
+the reference's identity, the ONE declared transform, the faces and the
+evidence for each, and - the part that matters on the next pass - the
+differences that are still there, each with a cause and what to do about it.
+
+The front page's `lead` package was taken through all three, and each check
+found something the other two could not see.
+
+**Reference → canvas** (`divergence.mjs`) reports the FIRST line that breaks
+elsewhere, and whether the reference's own line fits our measure - which tells
+our face apart from our breaker. It found four things, all fixed:
+
+| | |
+|---|---|
+| the reference sets its body GREEDILY | `page_sections.line_breaking` - `'greedy'` takes words until the next will not fit, NULL (every existing block) balances the paragraph as before. A page copied from print has to break where that page broke; a page this paper makes up should still balance |
+| a hard hyphen is a break opportunity | `सार्वजनिक-/खासगी` - a wrapper that breaks only at spaces held the pair together and lost a line at the panel's foot |
+| a bold entry is set in ITS OWN face | `boldFamily` on a panel. Over the scholarship panel's bold paragraph, Mukta Bold reproduces 8 of 8 of the reference's breaks and the sans at 700 reproduces 6 - it sets ~9% wide, which is a word a line |
+| a byline FOLLOWS the display type | `followDisplay` / `followGapPx`, placed at the composition's own `bodyTop` - so a deck one line shorter than the reference's moves it up rather than leaving the story's first lines standing above it |
+
+Body column one went from parting company at line 5 to line 21 of 33; the
+caption and the Jarange panel agree line for line; the two remaining
+divergences are the face, which is not ours to license.
+
+**Fresh copy** (`fresh-copy.mjs`) then sets the same package with OTHER news in
+it - short, typical and long, from the invented pools, never the reference's
+words - and reports what oversets rather than shrinking anything. That is the
+check calibration cannot make: a design that only holds the words it was
+measured from is a photograph, not a layout.
+
+**Canvas → press** (`export-check.mjs`) found the real bug, and nothing else
+could have. **`compose.js` states a line's `baseline` as `y + fontPx x
+faceAscent()`** - the face's box ascent from the band's top. The BROWSER centres
+that box in the line box, so the ink sits half the leading lower. Those are the
+same number on body copy, whose leading is floored at the face's own box, and
+they are not on DISPLAY type: measured on the 28px lead headline at
+`displayLineHeight` 1.33 in Mukta (box 1.11 em), **3.08px on the page - 13px at
+220 dpi.** The canvas and the plate set that headline in two different places,
+and every export has done it since display leading became settable.
+
+- **`render.js` owns the rule** (`paintedBaseline()`), because render.js is the
+  module that knows how the browser paints a line - the same argument that put
+  `panelRect()` there and has both the plate and the canvas read it.
+- **The compositor's own `baseline` is left exactly as it is.** It is what
+  `baselineAfter()` specifies the next flow's position against, so moving it
+  would move every band on every page in the database. Held: a body line, a
+  drop cap and a list marker are painted where they were already stated, to the
+  decimal, and only display type moves.
+- Ink agreement over the package went **66.0% → 77.9% exact, 89% → 97.8%**
+  within half a page pixel.
+- **This is the PDF's and the IDML's half.** The `.sla` places a text FRAME at
+  the line's own `y` and lets Scribus set the first baseline inside it, so it
+  never read `line.baseline` and nothing here changes it - which also means the
+  check above says nothing about Scribus. Its own walk is deliberately separate
+  (see "Scribus shares the FURNITURE, not the block walk").
+
+**An exact-pixel overlap is the wrong instrument for type**, which is why the
+check reports a tolerance figure beside it: at 220 dpi a 6px Devanagari body
+sets strokes two or three pixels wide, so half a pixel of sub-pixel positioning
+halves the overlap on a line that is in exactly the right place. And the plate
+is rasterised from DeviceCMYK - **poppler renders 93% K as RGB 50,46,47** and
+100% K as 35,31,32 - so a numbered disc drawn in the block's own `#111` looks
+grey beside the canvas's. Only the GEOMETRY of the ink can be compared between
+the two surfaces; how dark it is cannot. An hour went into that disc before it
+was measured rather than looked at.
+
+```bash
+node scripts/reference-layout/divergence.mjs  <ed> <page> <local reference lines>
+node scripts/reference-layout/fresh-copy.mjs  <ed> <page> <block> [topic]
+node scripts/reference-layout/export-check.mjs <ed> <page> <canvas.png> <out> [dpr] [box]
+node scripts/reference-layout/shoot.js <ed> <page> <out.png> [full|structure|typography] [dpr]
+```
+
+`shoot.js` photographs the SHEET rather than the workspace - it clones the
+rendered canvas into a full-screen layer, because an element screenshot inside
+the workspace captures whatever sticky chrome lies over it and loses what its
+height-capped host has scrolled away. Its `structure` and `typography` views
+drop the text and the pictures respectively, so a difference in the frames can
+be seen without the copy arguing about it.
 
 
 ## Engineering rules

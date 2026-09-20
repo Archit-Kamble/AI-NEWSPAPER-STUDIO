@@ -621,6 +621,38 @@ function chartMarkup(data, layout) {
     </div>${source}`;
   }
 
+  // COLUMNS WITH CALLOUTS. The columns stand on the plot's foot and each
+  // reading's figure and caption sit beside its own column, joined by a
+  // leader - the same point list the export walk draws as a `poly`, so the
+  // plate and the sheet cannot disagree about where a leader goes.
+  if (g.chartType === "column") {
+    // The size the solver MEASURED this card at, which is capped below the
+    // size it would otherwise have grown to (a panel of readings is not a
+    // poster). Drawing at `layout.fontPx` instead would set the captions
+    // larger than the box they were wrapped for.
+    const px = g.columnPx || layout.fontPx;
+    const bars = layout.items.map((item) => `<i style="position:absolute;left:${item.x.toFixed(2)}px;`
+      + `top:${item.barTop.toFixed(2)}px;width:${g.barWidth.toFixed(2)}px;height:${item.barHeight.toFixed(2)}px;`
+      + `background:${item.ink}"></i>`).join("");
+    const leaders = layout.items.map((item) => {
+      const [[x1, y1], [x2, y2]] = item.leader;
+      return `<polyline points="${x1.toFixed(2)},${y1.toFixed(2)} ${x2.toFixed(2)},${y1.toFixed(2)} ${x2.toFixed(2)},${y2.toFixed(2)}"`
+        + ` fill="none" stroke="${item.ink}" stroke-width="${g.lineWidth}"/>`
+        + `<circle cx="${x1.toFixed(2)}" cy="${y1.toFixed(2)}" r="${g.dotRadius}" fill="${item.ink}"/>`;
+    }).join("");
+    const callouts = layout.items.map((item) => `
+      <div class="smart-chart-callout" style="position:absolute;left:${g.calloutX.toFixed(2)}px;top:${item.top.toFixed(2)}px;width:${g.calloutWidth.toFixed(2)}px">
+        <b style="display:block;font-size:${g.figurePx}px;line-height:${g.figureLine}px;color:${item.ink}">${escapeHtml(item.valueText)}</b>
+        <span style="display:block;font-size:${px}px;line-height:${g.lineHeightPx}px">${linesMarkup(item.captionLines)}</span>
+      </div>`).join("");
+    const height = Math.max(g.plotHeight, ...layout.items.map((item) => item.top + item.height));
+    const columnSource = g.source
+      ? `<p class="smart-chart-source" style="font-size:${(px * 0.85).toFixed(2)}px">${escapeHtml(g.source)}</p>`
+      : "";
+    return `<div class="smart-chart smart-chart-columns" style="--chart-ink:${g.ink};position:relative;height:${height.toFixed(2)}px">`
+      + `${bars}<svg style="position:absolute;left:0;top:0;overflow:visible" width="${g.calloutX.toFixed(2)}" height="${g.plotHeight.toFixed(2)}">${leaders}</svg>${callouts}</div>${columnSource}`;
+  }
+
   const rows = layout.items.map((item) => `
     <div class="smart-chart-row" style="height:${g.rowHeight}px;font-size:${layout.fontPx}px;line-height:${g.lineHeightPx}px">
       <span class="smart-chart-label" style="width:${g.labelWidth}px">${escapeHtml(item.label)}</span>

@@ -919,7 +919,28 @@ const CHART_VALUE_GAP_PX = 4;
 // How many straight segments one whole turn of an arc is drawn with. 64 puts a
 // quarter turn inside a third of a press pixel at 300 dpi.
 const ARC_SEGMENTS = 64;
-const CHART_KINDS = new Set(['bar', 'stat', 'pie', 'line', 'dots']);
+const CHART_KINDS = new Set(['bar', 'stat', 'pie', 'line', 'dots', 'column']);
+
+// A COLUMN CHART WITH CALLOUTS - the shape a printed feature panel uses when
+// its readings each need a sentence: the columns stand together on the left,
+// and each one's figure and caption sit beside it, level with its own top,
+// joined by a leader. A bar chart cannot carry the sentence and a stat panel
+// cannot carry the columns; this is the one that carries both.
+//
+// Measured off the reference's own feature panel: the columns take about a
+// third of the width, and the figure is set about twice the caption's size.
+const COLUMN_PLOT_SHARE = 0.32;
+const COLUMN_FIGURE_SCALE = 1.8;
+// Between one callout and the next. A printed panel sets these close - the
+// figure above a caption is already a break, and a full line between them cost
+// the reference's own three readings more room than the panel has.
+const COLUMN_BLOCK_GAP = 0.35;
+// AND A CAPTION IS NEWSPAPER TYPE, NOT A POSTER. solveFont() takes the largest
+// size that fits, which is right for a pull quote and wrong for a panel of
+// readings: three short captions leave so much room that the figures inflated
+// until they collided with the caption under them. The same ceiling the
+// almanac's entries carry, against the paper's own running body.
+const COLUMN_MAX_OF_BODY = 1.0;
 
 // THE PAPER'S ACCENT, AND THE TINTS A PIE'S SLICES ARE PRINTED IN.
 //
@@ -1149,6 +1170,75 @@ function layoutChart(data, frame) {
       };
     }
 
+    // COLUMNS WITH CALLOUTS. The columns are anchored to the plot's foot and
+    // ordered as given; each callout is placed level with its own column's
+    // top and pushed down only as far as the one above it forces, so the
+    // stagger a reader follows down the page survives whatever the values do.
+    if (kind === 'column') {
+      // Capped here rather than by refusing the size, so a card that cannot
+      // reach the ceiling still sets at whatever does fit.
+      const px = Math.min(fontPx, RUNNING_BODY_PX * COLUMN_MAX_OF_BODY);
+      const lineHeightPx = lineHeightFor(px, 'sans', 400);
+      const plotWidth = Math.max(px, frame.innerWidth * COLUMN_PLOT_SHARE);
+      const calloutX = plotWidth + GAP_PX * 2;
+      const calloutWidth = Math.max(0, frame.innerWidth - calloutX);
+      const figurePx = px * COLUMN_FIGURE_SCALE;
+      const figureLine = lineHeightFor(figurePx, 'sans', 700);
+      const gap = Math.max(1, px * 0.25);
+      const barWidth = Math.max(1, (plotWidth - gap * (rows.length - 1)) / rows.length);
+      let hardOverset = calloutWidth <= px * 3 || barWidth <= 1;
+      const blocks = rows.map((item, index) => {
+        const caption = wrapSmartText(String(item.label), { width: calloutWidth, fontPx: px, family: 'sans', weight: 400 });
+        if (caption.hardOverset) hardOverset = true;
+        return {
+          label: String(item.label),
+          value: Number(item.value),
+          valueText: valueText(item),
+          ink: rowInk(item, index, ink, 'column'),
+          captionLines: caption.lines.map((l) => l.text),
+          height: figureLine + caption.lines.length * lineHeightPx,
+          share: Math.abs(Number(item.value)) / peak,
+        };
+      });
+      // The plot is as deep as what is left once every callout is stacked, so
+      // a column's own top is a real position rather than a share of a box
+      // nothing measured.
+      const blockGap = lineHeightPx * COLUMN_BLOCK_GAP;
+      const stacked = blocks.reduce((total, block) => total + block.height + blockGap, 0) - blockGap;
+      // The plot is the whole box less the source line: the columns stand on
+      // its foot and the callouts are placed inside it, so nothing can be
+      // pushed past the card's own edge.
+      const plotHeight = Math.max(px * 2, frame.innerHeight - sourceHeight);
+      let cursor = 0;
+      const items = blocks.map((block, index) => {
+        const barHeight = Math.max(1, block.share * plotHeight);
+        const barTop = plotHeight - barHeight;
+        const top = Math.max(barTop, cursor);
+        cursor = top + block.height + blockGap;
+        return {
+          ...block,
+          x: index * (barWidth + gap),
+          barWidth,
+          barHeight,
+          barTop,
+          top,
+          // Where the leader starts and ends: the column's own top edge, and
+          // the figure's middle.
+          leader: [
+            [index * (barWidth + gap) + barWidth / 2, barTop],
+            [calloutX - GAP_PX, top + figureLine / 2],
+          ],
+        };
+      });
+      if (cursor - blockGap > frame.innerHeight - sourceHeight) hardOverset = true;
+      return {
+        height: Math.max(plotHeight, cursor - blockGap) + sourceHeight, hardOverset, items, kind,
+        plotWidth, plotHeight, calloutX, calloutWidth, figurePx, figureLine, barWidth, columnPx: px,
+        lineWidth: Math.max(0.5, px * 0.08), dotRadius: Math.max(1, px * 0.2),
+        lineHeightPx, sourceHeight, source, peak,
+      };
+    }
+
     const labelCap = frame.innerWidth * 0.42;
     const widest = rows.reduce((max, item) => Math.max(max, measure(String(item.label), fontPx, 'sans', 400)), 0);
     const labelWidth = Math.min(labelCap, widest + GAP_PX);
@@ -1209,6 +1299,14 @@ function layoutChart(data, frame) {
       low: solved.low ?? 0, high: solved.high ?? 0, span: solved.span || 1,
       dotRadius: solved.dotRadius || 0, lineWidth: solved.lineWidth || 0,
       inset: solved.inset || 0, plotWidth: solved.plotWidth || 0,
+      // The column chart's own. Its items carry their x, their column's top
+      // and their leader's two points; these are the numbers shared by every
+      // reading - see the `column` branch above.
+      calloutX: solved.calloutX || 0, calloutWidth: solved.calloutWidth || 0, barWidth: solved.barWidth || 0,
+      // The size its captions were WRAPPED at, which is capped below the size
+      // the solver would otherwise have grown to. Drawing at the card's own
+      // fontPx sets them larger than the box they were measured for.
+      columnPx: solved.columnPx || 0,
     },
     items: solved.items,
     violations: solved.fitState === 'OVERSET' ? ['SMART_CARD_OVERSET'] : [],

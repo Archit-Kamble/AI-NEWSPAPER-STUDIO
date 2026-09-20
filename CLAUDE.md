@@ -1713,6 +1713,33 @@ unmeasured: `carryOver()` measures both blocks before it writes either.
   a reader turning the page has to know what they are picking up — and is
   omitted for a same-page continuation, which is the printed convention.
 
+### A column chart carries the sentence a reading needs
+
+`chartType: 'column'` is the sixth chart kind, and it exists because a printed
+feature panel routinely needs both halves of what the other five give: the
+columns stand together on the left, and each reading's figure and its caption
+sit beside its own column, joined by a leader. A **bar** chart carries the
+columns and cannot carry the sentence; a **stat** panel carries the sentence
+and not the columns. The reference broadsheet's own feature panel is this
+shape, and this page was setting it as bare percentages.
+
+- **A panel of readings is not a poster.** `solveFont()` takes the largest
+  size that fits, which is right for a pull quote and wrong here - three short
+  captions leave so much room that the figures inflated until they collided
+  with the caption under them. `COLUMN_MAX_OF_BODY` is the same ceiling the
+  almanac's entries carry, against the paper's own running body.
+- **And the size it was MEASURED at is the size it is DRAWN at.** The cap was
+  applied in the solver and both renderers went on drawing at the size the
+  solver would have grown to, so the captions were set larger than the box they
+  were wrapped for - the canvas set them *bigger than the figures*, and the
+  plate printed the source line straight across the columns. `columnPx` is the
+  measured size, stated in the geometry and read by both.
+  `tests/columnChart.test.js` holds it, and the plate-draws-the-same-chart
+  check with it.
+- **The geometry is a whitelist**, so a new kind's fields have to be named
+  there or they arrive at the renderers as `undefined` - which is how the
+  captions came to be drawn at the uncapped size in the first place.
+
 ### A chart of the story's own figures, from the call that writes it
 
 The numbers a chart plots are the numbers the story is about, so asking for them

@@ -166,15 +166,17 @@ module.exports = {
       pictures: [{ file: 'reference-lokmat/front-feature.jpg', box: [448, 3764, 792, 4296], standOffPx: 1 }],
       panels: [
         byline(57, 407, 3764, 3800),
-        // BARS, because the reference's own feature carries a bar chart - the
-        // figures set as large percentages was this page's most visible
-        // remaining difference from it. The bars run ACROSS (smart-cards read
-        // a long Marathi category label, which a vertical bar would have to
-        // set sideways or abbreviate), and a printed chart carries its source.
+        // COLUMNS WITH CALLOUTS, which is what the reference's own feature
+        // panel carries: three columns standing together on the left, each
+        // joined by a leader to its figure and a caption beside it. The
+        // figures set as bare percentages was this page's most visible
+        // remaining difference from it, and a bar chart was the near miss -
+        // it carries the columns and cannot carry the sentence. A printed
+        // chart carries its source.
         {
           kind: 'chart', box: [835, 3764, 1190, 4296], standOffPx: 0.5,
           card: {
-            chartType: 'bar',
+            chartType: 'column',
             unit: '%',
             source: PLACEHOLDER,
             // SHORT stand-ins, because a chart label is short. The panel's

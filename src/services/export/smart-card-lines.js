@@ -263,6 +263,24 @@ function smartCardLines(key, data, frame, cardLayout) {
           line(text, x, top + g.figureLine + i * g.lineHeightPx, g.columnWidth, layout.fontPx, 1));
       });
       y += Math.ceil(layout.items.length / perBand) * g.bandHeight;
+    } else if (g.chartType === 'column') {
+      // The size the solver measured at - see the canvas's own note.
+      const columnPx = g.columnPx || layout.fontPx;
+      // COLUMNS WITH CALLOUTS, from the same solved geometry the canvas draws:
+      // the column's own rectangle, the leader as the point list the solver
+      // stated, and the figure over its caption beside it.
+      layout.items.forEach((item, index) => {
+        const ink = inkOf(item, index);
+        bar(item.x, y + item.barTop, g.barWidth, item.barHeight, ink);
+        const [[x1, y1], [x2, y2]] = item.leader;
+        poly([[x1, y + y1], [x2, y + y1], [x2, y + y2]], ink, { close: false, strokeWidth: g.lineWidth });
+        poly(cardLayout.arcPoints(x1, y + y1, g.dotRadius, 0, 1, { centre: false }), ink, { close: true });
+        line(item.valueText, g.calloutX, y + item.top, g.calloutWidth, g.figurePx, 0, g.figureLine, { ink, bold: true });
+        (item.captionLines || []).forEach((text, i) =>
+          line(text, g.calloutX, y + item.top + g.figureLine + i * g.lineHeightPx,
+            g.calloutWidth, columnPx, 0, g.lineHeightPx));
+      });
+      y += Math.max(g.plotHeight, ...layout.items.map((item) => item.top + item.height));
     } else if (g.chartType === 'pie') {
       // The wheel on the left, the legend on the right. Marathi labels do not
       // fit inside a slice and a newspaper does not set them at an angle.
@@ -307,7 +325,10 @@ function smartCardLines(key, data, frame, cardLayout) {
         y += g.rowHeight;
       });
     }
-    if (g.source) line(g.source, 0, y, contentWidth, layout.fontPx * 0.85, 0);
+    // In the size the card was MEASURED at. A column chart caps its own type
+    // below the size the solver would otherwise have grown to, and its source
+    // line set at the uncapped size printed right across the columns.
+    if (g.source) line(g.source, 0, y, contentWidth, (g.columnPx || layout.fontPx) * 0.85, 0);
     return out;
   }
 

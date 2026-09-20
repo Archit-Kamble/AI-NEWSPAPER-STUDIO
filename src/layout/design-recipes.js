@@ -26,9 +26,10 @@
 
 // A page measured exactly off a scan carries its recipe in its own spec
 // (measured-pages/), beside the rectangles it was measured with.
-const { buildMeasuredPage } = require('./measured-pages/scan');
-const MEASURED_RECIPES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state', 'broadsheet-local', 'broadsheet-opinion', 'broadsheet-advertorial', 'broadsheet-local-sport', 'broadsheet-miscellany', 'broadsheet-business', 'broadsheet-sport', 'broadsheet-world', 'broadsheet-jacket']
-  .map((key) => [key, buildMeasuredPage(require(`./measured-pages/${key}`)).recipe]));
+// From the one list, like the templates - see measured-pages/index.js.
+const MEASURED_RECIPES = Object.fromEntries(
+  Object.entries(require('./measured-pages').measuredPages()).map(([key, built]) => [key, built.recipe]),
+);
 
 const RECIPES = {
   ...MEASURED_RECIPES,

@@ -217,9 +217,10 @@ const MASTHEAD_ADVERT = {
 // PAGES MEASURED EXACTLY OFF A SCAN - measured-pages/. Their blocks are the
 // scan's own rectangles scaled onto this page, not spans of a column grid, so
 // the frame is block()'s with the measured x, width and height put back.
-const { buildMeasuredPage } = require('./measured-pages/scan');
-const MEASURED_PAGES = Object.fromEntries(['broadsheet-front', 'broadsheet-city', 'broadsheet-state', 'broadsheet-local', 'broadsheet-opinion', 'broadsheet-advertorial', 'broadsheet-local-sport', 'broadsheet-miscellany', 'broadsheet-business', 'broadsheet-sport', 'broadsheet-world', 'broadsheet-jacket']
-  .map((key) => [key, buildMeasuredPage(require(`./measured-pages/${key}`))]));
+// The list of them is measured-pages/index.js's, never a second copy here:
+// a page named in one catalogue and not the other has a layout with no
+// dressing and nothing says so.
+const MEASURED_PAGES = require('./measured-pages').measuredPages();
 function measuredTemplate(key) {
   const { template } = MEASURED_PAGES[key];
   return {

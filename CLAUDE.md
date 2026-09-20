@@ -11,6 +11,22 @@ SAHAS is a complete AI-assisted **newspaper production system**, built for a rea
 
 Every architectural decision assumes this software prints and distributes real newspapers. Never build demo architecture, temporary hacks, or optimize only for speed — optimize for long-term maintainability.
 
+## Two people build this, with two Claudes
+
+Archit works on the Lokmat reference pages, the compositor and the product;
+**Om** copies the Sakal broadsheet the same way. Neither can see the other's
+screen, so two files coordinate them and **both must be read at the start of a
+session**:
+
+| | |
+|---|---|
+| `ARCHITClaude.md` | the shared logbook. Append an entry every session; read the other side's before editing anything. `SHARED:` entries name files the other side just changed - pull before touching those. `BLOCKED:` needs an answer the same day. `FINDING:` is what Archit relays to Astra. |
+| `OMClaude.md` | Om's own instructions - his setup, his branch rules, and the page-copying workflow. Read it before answering a question about what he is allowed to do. |
+
+Branches: `main` is the trunk and nobody commits to it directly except when
+merging a green branch; Om's branches start with `sakal/`, Archit's with
+`lokmat/`. Never touch the other side's branch, and never force-push.
+
 ## Production pipeline this system supports
 
 ```
@@ -8690,7 +8706,9 @@ The dev database is full of test fixtures — 221 editions across 13 dates, name
 
 ### Housekeeping every session
 
-- Read the `.md` files first (`VISION.md`, this file, `PROJECT_STATUS.md`) and **write the changes back into them** when the work lands. The drift warning that used to sit in "Current reality" is what happens when the code moves and the doc does not.
+- **Read `ARCHITClaude.md` first** and append an entry to it before you finish -
+  the other side cannot see anything that is not written there or pushed.
+- Read the `.md` files (`VISION.md`, this file, `PROJECT_STATUS.md`) and **write the changes back into them** when the work lands. The drift warning that used to sit in "Current reality" is what happens when the code moves and the doc does not.
 - Commit in small steps, so a bad change can be walked back.
 - Stop the dev server before finishing, and **kill it by the port it holds**:
 

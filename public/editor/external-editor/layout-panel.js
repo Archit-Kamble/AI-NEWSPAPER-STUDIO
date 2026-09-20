@@ -13,8 +13,36 @@ import { snapPictureToLegalCorridor, leavesNoLegalColumn } from "../layout/corri
 import { blockExpectsCopy } from "../layout/block-kinds.js";
 import { MIN_CORRIDOR_EM } from "../compose/intervals.js";
 import "../layout/headline-reserve.js";
+import "../layout/inset-panels.js";
+import { measureTextPx as measurePanelText } from "../compose/shaper.js";
 
 const { reservationCandidates } = globalThis.SahasHeadlineReserve;
+const { panelsOf, panelLayout } = globalThis.SahasInsetPanels;
+
+/**
+ * WHAT THE BLOCK'S PANELS COULD NOT HOLD.
+ *
+ * A panel is a fixed rectangle and the copy in it is not, so `panelLayout()`
+ * stops setting when the box fills. It reports what it dropped; nothing read
+ * that report, so a desk saw a finished-looking fact box with its last
+ * sentence simply absent from the page - and no other surface can notice,
+ * because to the compositor a panel is only a rectangle to set copy clear of.
+ *
+ * Measured against the LIVE draft (`view.insetPanels ?? section.inset_panels`),
+ * like everything else on this panel: a box a desk has just typed into is the
+ * one they need told about, not the row as it was last saved.
+ */
+function panelOverflows(section, view) {
+  const panels = panelsOf({
+    ...section,
+    inset_panels: view?.insetPanels ?? section?.inset_panels,
+  });
+  if (!panels.length) return [];
+  const bodyPx = Number(view?.bodyFontPx) || Number(section?.body_font_px) || 6.4;
+  return panels
+    .map((panel) => panelLayout(panel, bodyPx, measurePanelText).overflow)
+    .filter(Boolean);
+}
 
 // The block as it will be once it has a headline - or null when it already
 // has one (or is not the kind of block that gets one), in which case the
@@ -256,6 +284,19 @@ export function layoutWarnings(metrics) {
         : `Only ${Math.round(ratio * 100)}% of the block is used - ${Math.round(metrics.remainingHeightPx)} px of whitespace will print.`,
     });
   }
+  // A PANEL THAT COULD NOT HOLD ITS COPY. An error, not a warning: unlike a
+  // block that oversets - where the copy is on the page and too long for it -
+  // the words here are simply NOT on the page, and the panel looks finished
+  // without them. It names the panel and quotes the first words that went, so
+  // a desk can find them without counting boxes.
+  for (const lost of metrics.panelOverflows || []) {
+    const name = lost.id ? `"${lost.id}"` : `the ${lost.kind}`;
+    const quoted = lost.text.length > 40 ? `${lost.text.slice(0, 40)}...` : lost.text;
+    warnings.push({
+      level: "error",
+      text: `${name} could not hold ${lost.chars} characters - they are NOT on the page: "${quoted}" Cut the panel's copy, or make the panel taller.`,
+    });
+  }
   if (isEmpty) warnings.push({ level: "info", text: "Block is empty." });
   return [...engine, ...warnings];
 }
@@ -305,6 +346,7 @@ export function spacePanelMarkup(section, view, images = []) {
     ...m,
     reservedComposition: reservedComposed,
     placementRepair: placementRepair(section, view, images),
+    panelOverflows: panelOverflows(section, view),
   });
 
   let ratio;

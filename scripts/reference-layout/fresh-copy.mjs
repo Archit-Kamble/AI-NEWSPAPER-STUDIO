@@ -82,10 +82,17 @@ function capacity() {
   const designDeckLines = adapter.composeSection(section, {}).bands?.deck?.lines?.length || 0;
   const headOk = heads.filter((h) => (adapter.composeSection(section, { headline: h }).bands?.headline?.lines?.length || 0) <= designHeadLines);
   const deckOk = decks.filter((d) => (adapter.composeSection(section, { subheading: d }).bands?.deck?.lines?.length || 0) <= designDeckLines);
-  console.log(`CONTENT REQUIREMENTS (the design as measured):`);
-  console.log(`  body: up to ~${lo} characters (the calibration copy is ${referenceChars})`);
-  console.log(`  headline: ${designHeadLines} line(s) at its locked size - pool headlines up to ${Math.max(...headOk.map((h) => h.length), 0)} characters keep it`);
-  console.log(`  deck: ${designDeckLines} line(s) - pool decks up to ${Math.max(...deckOk.map((d) => d.length), 0)} characters keep it`);
+  // ESTIMATES, and they have to be labelled as such. The body figure is found
+  // by bisection over copy assembled in whole SENTENCES, so its resolution is
+  // one sentence, not one character; and a character count is the wrong unit
+  // for Marathi anyway - the same block holds 30-46% more or fewer characters
+  // depending only on how conjunct-heavy the words are (CLAUDE.md, "The
+  // character budget is a range"). Use them to size a brief, never as a
+  // promise: what decides is the compositor, after the words exist.
+  console.log(`CONTENT REQUIREMENTS - ESTIMATES, to about one sentence:`);
+  console.log(`  body: about ${lo} characters (the calibration copy is ${referenceChars})`);
+  console.log(`  headline: ${designHeadLines} line(s) at its locked size - pool headlines up to about ${Math.max(...headOk.map((h) => h.length), 0)} characters kept it`);
+  console.log(`  deck: ${designDeckLines} line(s) - pool decks up to about ${Math.max(...deckOk.map((d) => d.length), 0)} characters kept it`);
   panels.forEach((panel, i) => {
     if (!isCopy(panel)) return;
     let a = 0.2; let b = 3;
@@ -97,19 +104,105 @@ function capacity() {
     };
     while (b - a > 0.02) { const m = (a + b) / 2; if (holds(m)) a = m; else b = m; }
     const own = panel.lines.join(' ').length;
-    console.log(`  panel ${panel.id}: ${panel.lines.length} entr${panel.lines.length === 1 ? 'y' : 'ies'}, up to ~${Math.round(own * a)} characters (calibration ${own})`);
+    console.log(`  panel ${panel.id}: ${panel.lines.length} entr${panel.lines.length === 1 ? 'y' : 'ies'}, about ${Math.round(own * a)} characters (calibration ${own})`);
   });
   console.log('');
 }
 capacity();
 
+// EVERY COMBINATION SEPARATELY, because a package fails in combinations. A
+// long headline with a short body and a short headline with a long deck put
+// pressure on different parts of the design, and a package that holds
+// "typical" copy can still break on either - the display band and the body
+// share one block, so what one takes the other loses.
+//
+// `expect` says what the variant is FOR, because the two are different
+// questions. A variant of ordinary length must fit completely - if it does
+// not, the design has no room for anything but the words it was measured
+// from. A deliberately over-long one must OVERSET and say so: overflow is the
+// correct answer there, and the fault would be absorbing it silently by
+// re-fitting locked type. Marking them all "must fit" would condemn a design
+// for doing the right thing; marking them all "must report" would let a
+// design that fits nothing at all pass.
+const mid = (list) => list[Math.floor(list.length / 2)];
 const VARIANTS = {
-  short: { headline: heads[0], subheading: decks[0], body: bodyOf(referenceChars * 0.55), panelShare: 0.6 },
-  typical: { headline: heads[Math.floor(heads.length / 2)], subheading: decks[Math.floor(decks.length / 2)], body: bodyOf(referenceChars, 3), panelShare: 1 },
-  long: { headline: heads[heads.length - 1], subheading: decks[decks.length - 1], body: bodyOf(referenceChars * 1.35, 7), panelShare: 1.4 },
+  short: { expect: 'fits', headline: heads[0], subheading: decks[0], body: bodyOf(referenceChars * 0.55), panelShare: 0.6 },
+  typical: { expect: 'fits', headline: mid(heads), subheading: mid(decks), body: bodyOf(referenceChars, 3), panelShare: 1 },
+  long: { expect: 'reports', headline: heads[heads.length - 1], subheading: decks[decks.length - 1], body: bodyOf(referenceChars * 1.35, 7), panelShare: 1.4 },
+  'long head, short body': { expect: 'fits', headline: heads[heads.length - 1], subheading: mid(decks), body: bodyOf(referenceChars * 0.5, 11), panelShare: 1 },
+  'short head, long deck': { expect: 'fits', headline: heads[0], subheading: decks[decks.length - 1], body: bodyOf(referenceChars, 13), panelShare: 1 },
+  'no deck': { expect: 'fits', headline: mid(heads), subheading: '', body: bodyOf(referenceChars, 17), panelShare: 1 },
+  'long sidebar': { expect: 'reports', headline: mid(heads), subheading: mid(decks), body: bodyOf(referenceChars, 19), panelShare: 1.8 },
 };
 
-console.log(`${KEY}: reference body ${referenceChars} characters; ${panels.length} panels; topic ${TOPIC}\n`);
+// WHAT "IT HOLDS" MEANS, and it is not a line count. A clipped headline can
+// set an acceptable number of lines, so counting them proves nothing; and a
+// design that survives by having its locked type quietly re-fitted is not the
+// design that was measured. Five conditions, each one failable on its own:
+//
+//   1. every character given to the block is SET - body, display and panels;
+//   2. nothing display oversets;
+//   3. a locked size is still the size it was locked at;
+//   4. every panel is inside the block and clear of its neighbours;
+//   5. the body does not overset.
+//
+// Anything that fails is REPORTED for an editorial decision - cut it, carry it
+// over, choose another picture - and never repaired by shrinking the type.
+const LOCKED = {
+  headline: { locked: section.headline_locked, px: Number(section.headline_font_px) || 0, band: 'headline' },
+  deck: { locked: section.subheading_locked, px: Number(section.subheading_font_px) || 0, band: 'deck' },
+};
+
+function displayOverset(composition) {
+  const leftover = composition?.overset || {};
+  if (String(leftover.headline || '') || String(leftover.deck || '') || String(leftover.kicker || '')) return true;
+  return (composition?.violations || []).some((v) => /^(HEADLINE|DECK|KICKER)_/.test(v.code || ''));
+}
+
+function lockedSizeFaults(composition) {
+  return Object.entries(LOCKED).flatMap(([role, { locked, px, band }]) => {
+    if (!locked || !px) return [];
+    const set = composition?.bands?.[band]?.lines?.[0]?.fontPx;
+    if (set === undefined || Math.abs(set - px) < 0.05) return [];
+    return [`the ${role} is locked at ${px}px and set at ${set}px`];
+  });
+}
+
+// A panel must be where it was put: inside the block, and not over another
+// panel. panelOf() clamps a panel into its frame, so a rectangle that comes
+// back changed is one the design could not honour at this size.
+function placementFaults(placed, notes) {
+  const faults = [];
+  const width = Number(section.width_px) || 0;
+  const height = Number(section.height_px) || 0;
+  placed.forEach((panel, i) => {
+    if (panel.x < -0.01 || panel.y < -0.01 || panel.x + panel.width > width + 0.01 || panel.y + panel.height > height + 0.01) {
+      faults.push(`${panel.id || `panel ${i}`} is outside the block`);
+    }
+    placed.slice(i + 1).forEach((other) => {
+      const clear = panel.x + panel.width <= other.x + 0.01 || other.x + other.width <= panel.x + 0.01
+        || panel.y + panel.height <= other.y + 0.01 || other.y + other.height <= panel.y + 0.01;
+      if (clear) return;
+      // TWO BOXES OF WORDS ON TOP OF EACH OTHER is always wrong. An overlap
+      // with an ORNAMENT is not the same thing: a separator is a rule with air
+      // round it, its band is furniture rather than copy, and the measured
+      // page's foot rule shares two pixels with the sidebars above it because
+      // the two rectangles were read off the scan independently. Reported, so
+      // it can be looked at, but it does not condemn the design.
+      const furniture = panel.kind === 'ornament' || other.kind === 'ornament';
+      const note = `${panel.id || `panel ${i}`} overlaps ${other.id || 'another panel'}`;
+      if (furniture) notes.push(`${note} (a separator's band, not copy)`);
+      else faults.push(note);
+    });
+  });
+  return faults;
+}
+
+console.log(`${KEY}: reference body ${referenceChars} characters; ${panels.length} panels; topic ${TOPIC}`);
+console.log('A variant PASSES only when every character is set, nothing oversets,');
+console.log('every locked size is untouched and every panel is legally placed.\n');
+
+let failed = 0;
 for (const [name, v] of Object.entries(VARIANTS)) {
   // Every text panel gets pool sentences of the same share of its own copy.
   const insetPanels = panels.map((panel, i) => (isCopy(panel) ? replaced(panel, i, v.panelShare) : panel));
@@ -121,17 +214,48 @@ for (const [name, v] of Object.entries(VARIANTS)) {
   const lines = head?.lines?.length || 0;
   const px = head?.lines?.[0]?.fontPx;
   const warnings = [...(c.violations || []), ...(c.warnings || [])].map((w) => w.code).filter(Boolean);
+
+  const faults = [];
+  const notes = [];
+  const reported = [];
+  if (over > 0) (v.expect === 'reports' ? reported : faults).push(`the body oversets by ${over} characters`);
+  if (displayOverset(c)) (v.expect === 'reports' ? reported : faults).push('display type oversets');
+  // Never conditional: a locked size that moved, or a panel outside its block,
+  // is a fault whatever the copy was doing.
+  faults.push(...lockedSizeFaults(c));
+  faults.push(...placementFaults(insetPanels, notes));
+
   console.log(`[${name}] headline ${v.headline.length} ch -> ${lines} line(s) at ${px}px; deck ${v.subheading.length} ch -> ${c.bands?.deck?.lines?.length || 0} line(s)`);
   console.log(`  body ${v.body.length} ch: ${over > 0 ? `OVERSET by ${over} characters - for the desk: cut them, or carry the story over (never shrink the type)` : 'all set'}; ${Math.round((fill.fillRatio ?? fill.ratio ?? 0) * 100)}% of the body's lines set`);
   for (const p of insetPanels) {
     if (!isCopy(p)) continue;
+    // The panel compositor's own report, not a character count taken from
+    // outside it: it names what it dropped and from which entry.
     const solved = panelLayout(p, Number(section.body_font_px) || 6.4, measure);
-    const want = [p.title, ...p.lines].filter(Boolean).join(' ').replace(/\s/g, '').length;
-    const got = solved.lines.map((l) => l.text).join('').replace(/\s/g, '').length;
     const room = p.height - solved.usedHeight;
-    console.log(`  panel ${p.id}: ${got < want ? `DROPS ${want - got} characters at its foot` : `holds its copy, ${room.toFixed(1)}px spare`}`);
+    if (solved.overflow) {
+      (v.expect === 'reports' ? reported : faults).push(`${p.id || 'a panel'} drops ${solved.overflow.chars} characters`);
+      console.log(`  panel ${p.id}: DROPS ${solved.overflow.chars} characters at its foot - "${solved.overflow.text.slice(0, 50)}"`);
+    } else {
+      console.log(`  panel ${p.id}: holds its copy, ${room.toFixed(1)}px spare`);
+    }
   }
   if (warnings.length) console.log(`  engine: ${[...new Set(warnings)].join(', ')}`);
+  for (const note of notes) console.log(`  note: ${note}`);
+  if (faults.length) {
+    failed += 1;
+    console.log(`  FAILS: ${faults.join('; ')}`);
+  } else if (v.expect === 'reports') {
+    console.log(reported.length
+      ? `  PASSES: too long on purpose, and REPORTED rather than absorbed - ${reported.join('; ')}`
+      : '  PASSES: it all fitted, which is a bonus - locked sizes held, panels legal');
+  } else {
+    console.log('  PASSES: every character set, nothing overset, locked sizes held, panels legal');
+  }
   console.log('');
 }
-process.exit(0);
+
+console.log(failed
+  ? `${failed} of ${Object.keys(VARIANTS).length} variants fail. The design does not yet hold other news - see each FAILS line.`
+  : `All ${Object.keys(VARIANTS).length} variants hold. The design is reusable with other news.`);
+process.exit(failed ? 1 : 0);

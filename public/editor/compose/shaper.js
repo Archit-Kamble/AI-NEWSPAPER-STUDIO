@@ -1,4 +1,7 @@
 import { readFontFile } from './font-bytes.js';
+// The fallback for measureTextPx() below - the font's own advances, for the
+// moment before the shaper is in. font-metrics.js imports nothing from here.
+import { measureWidth } from './font-metrics.js';
 // Real Devanagari shaping. This is the exact authority font-metrics.js
 // claimed to be and was not.
 //
@@ -195,4 +198,24 @@ export function shapeRun(text, { family = 'serif', weight = 400, fontPx = 16 } =
   });
 
   return { width, glyphs, ready: true };
+}
+
+/**
+ * A width as it will PRINT, whatever is loaded yet.
+ *
+ * The shaper's own number when the WASM and the faces are in, and the font's
+ * raw advances when they are not - which is a real momentary state in the
+ * browser, before the four faces download. Every surface that measures text
+ * outside the compositor wants exactly this pair and used to write it out
+ * again: the canvas's panels, the Space panel, the smart-card solver and the
+ * press model each carried their own copy of the same three lines.
+ *
+ * It matters which one answers. hmtx alone overstates a Devanagari conjunct by
+ * up to 80% (see this file's own measurements), so a sidebar wrapped against
+ * it breaks its lines a word or two early - which is a different panel from
+ * the one that prints.
+ */
+export function measureTextPx(text, fontPx, family = 'serif', weight = 400) {
+  const shaped = isShaperReady() ? shapeWidthPx(text, fontPx, family, weight) : null;
+  return shaped !== null ? shaped : measureWidth(text, fontPx, family, weight);
 }

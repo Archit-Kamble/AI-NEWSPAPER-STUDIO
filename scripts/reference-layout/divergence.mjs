@@ -39,6 +39,28 @@ if (!ED || !PAGE || !FILE) {
 const reference = require(new URL(FILE, `file://${process.cwd()}/`).pathname);
 const measure = (text, px, family, weight) => shaper.shapeWidthPx(text, px, family, weight) ?? metrics.measureWidth(text, px, family, weight);
 const norm = (s) => String(s).replace(/\*/g, '').replace(/\s+/g, ' ').trim();
+// The marks kept, so a mixed-face line can be measured run by run.
+const tidy = (s) => String(s).replace(/\s+/g, ' ').trim();
+
+/**
+ * A LINE MEASURED IN THE FACES IT IS ACTUALLY SET IN.
+ *
+ * A panel's bold entries and its `*marked*` runs are set in the panel's own
+ * `boldFamily`, which is a different cut at a different width - measured over
+ * the scholarship panel, Mukta Bold against the sans at 700 is about 9%, which
+ * is a word a line. Measuring the whole line in one family therefore makes
+ * this tool's explanation unreliable exactly where the panel is mixed, and it
+ * is the explanation ("our face sets wider" against "our breaker broke
+ * elsewhere") that the next fix is chosen from.
+ */
+function measureMixed(text, fontPx, faceFor) {
+  const parts = String(text).split(/(\*[^*]+\*)/).filter(Boolean);
+  return parts.reduce((total, part) => {
+    const bold = part.startsWith('*') && part.endsWith('*') && part.length > 2;
+    const face = faceFor(bold);
+    return total + measure(bold ? part.slice(1, -1) : part, fontPx, face.family, face.weight);
+  }, 0);
+}
 
 function report(label, refLines, ours) {
   const n = Math.max(refLines.length, ours.length);
@@ -52,6 +74,8 @@ function report(label, refLines, ours) {
     const line = ours[i] || ours[ours.length - 1];
     if (r !== undefined && line) {
       const w = measure(r, line.fontPx, line.family, line.weight);
+      // (a mixed-face line is bracketed run by run below; this single-face
+      // number is the whole line in the face its FIRST run is set in)
       const room = line.measure;
       console.log(`  reference line shaped in ours: ${w.toFixed(2)} px against our measure ${room.toFixed(2)} px (${line.family} ${line.weight} ${line.fontPx}px) -> ${
         w > room + 0.01 ? 'OUR FACE/SIZE SETS WIDER' : 'IT FITS: our breaker broke elsewhere'}`);
@@ -85,14 +109,19 @@ function bracket(label, refLines, paragraphs, style, roomOf) {
   const pairs = [];
   let j = 0; // the line's index within its own paragraph
   const weightAt = (i) => (style.weightOf ? style.weightOf(i) : style.weight);
+  // The faces this line is really set in: the entry's own weight, and the
+  // panel's bold cut for a marked run inside it.
+  const faceAt = (i) => (bold) => (bold && style.boldFamily
+    ? { family: style.boldFamily, weight: 700 }
+    : { family: style.family, weight: weightAt(i) });
   refLines.forEach((line, i) => {
-    const w = measure(norm(line), style.fontPx, style.family, weightAt(i));
+    const w = measureMixed(tidy(line), style.fontPx, faceAt(i));
     const r = roomAt(i, j);
     j = ends.has(i) ? 0 : j + 1;
     if (ends.has(i) || i === refLines.length - 1) { pairs.push({ lo: w, hi: Infinity, r }); return; }
-    const next = norm(refLines[i + 1]).split(' ')[0];
-    const joined = norm(line).endsWith('-') ? `${norm(line)}${next}` : `${norm(line)} ${next}`;
-    pairs.push({ lo: w, hi: measure(joined, style.fontPx, style.family, weightAt(i)), r });
+    const next = tidy(refLines[i + 1]).split(' ')[0];
+    const joined = tidy(line).endsWith('-') ? `${tidy(line)}${next}` : `${tidy(line)} ${next}`;
+    pairs.push({ lo: w, hi: measureMixed(joined, style.fontPx, faceAt(i)), r });
   });
   let best = null;
   for (let s = 0.88; s <= 1.1201; s += 0.005) {
@@ -155,7 +184,7 @@ for (const [key, ref] of Object.entries(reference)) {
           : full;
         const bold = new Set(panel.boldLines || []);
         const entries = panel.lines;
-        const style = { fontPx: body.fontPx, family: body.family, weight: 400 };
+        const style = { fontPx: body.fontPx, family: body.family, weight: 400, boldFamily: panel.boldFamily };
         style.weightOf = (i) => (panel.lineBold || bold.has(style.entryOf?.[i]) ? 700 : 400);
         bracket(key, lines.slice(titleCount), entries, style, roomOf);
         // COPY THAT NEVER REACHED THE PAGE. The layout drops what its box cannot

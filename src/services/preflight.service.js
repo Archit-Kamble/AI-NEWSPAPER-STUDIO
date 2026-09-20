@@ -21,7 +21,7 @@ const pool = require('../config/db');
 const { geometryOf, pxToMm } = require('../layout/geometry');
 const { getTemplate } = require('../layout/templates');
 const { resolveFramePurpose } = require('../layout/frame-purpose');
-const { panelsOf } = require('../../public/editor/layout/inset-panels.js');
+const { panelsOf, panelLayout } = require('../../public/editor/layout/inset-panels.js');
 
 // Below this, a photograph visibly breaks up on newsprint. 300 dpi is the
 // target; 150 is the point at which a picture editor would reject it.
@@ -59,6 +59,37 @@ function evidenceSourceFindings(section = {}) {
     findings.push({
       level: 'warning', check: 'unsourced-data-card',
       message: `${cardKey === 'chart' ? 'Chart' : 'Table'} block has no source. Add the provider and reference date before press.`,
+    });
+  }
+  return findings;
+}
+
+/**
+ * A PANEL THAT DOES NOT PRINT ALL OF ITS COPY.
+ *
+ * `panelLayout()` sets a panel until its box is full and then stops. That is
+ * the right behaviour - a rectangle measured off a printed page may not grow
+ * to swallow whatever is typed into it - but the words it did not set are not
+ * anywhere on the sheet, and until this check nothing told anybody: the panel
+ * draws, it looks finished, and the last sentence is gone. The compositor
+ * cannot see it either, because to the compositor a panel is a rectangle to
+ * set copy CLEAR of, not copy of its own.
+ *
+ * An error rather than a warning, and it is the one distinction that matters
+ * here: an overset block has its copy on the page and too long for it, where
+ * this has copy that reaches no page at all.
+ */
+function panelOversetFindings(section = {}, measure = null) {
+  const findings = [];
+  const bodyPx = Number(section.body_font_px) || 6.4;
+  for (const panel of panelsOf(section)) {
+    const { overflow } = panelLayout(panel, bodyPx, measure);
+    if (!overflow) continue;
+    const name = overflow.id ? `“${overflow.id}”` : `the ${overflow.kind} inset`;
+    const quoted = overflow.text.length > 60 ? `${overflow.text.slice(0, 60)}…` : overflow.text;
+    findings.push({
+      level: 'error', check: 'panel-overset',
+      message: `${name} does not print ${overflow.chars} characters of its own copy: “${quoted}”. Cut the panel's text or make the panel taller.`,
     });
   }
   return findings;
@@ -310,6 +341,12 @@ async function checkPage(page, newspaper, totalPages) {
     for (const finding of evidenceSourceFindings(section)) {
       findings.push({ ...finding, ...at(section) });
     }
+    // Measured with the shaper, like every other width here: wrapped against
+    // raw advances a panel breaks its lines early, so it would be reported as
+    // dropping copy it really sets.
+    for (const finding of panelOversetFindings(section, shaperModule ? shaperModule.measureTextPx : null)) {
+      findings.push({ ...finding, ...at(section) });
+    }
 
     // --- photograph/caption against printable copy ------------------------
     // The canonical flow map is also what the renderer uses. If a title band
@@ -552,5 +589,6 @@ async function validatePageLayout(page, newspaper) {
 module.exports = {
   checkEdition, checkPage, validatePageLayout, effectiveDpi,
   evidenceSourceFindings,
+  panelOversetFindings,
   MIN_EFFECTIVE_DPI, IDEAL_EFFECTIVE_DPI, MIN_BODY_PT,
 };

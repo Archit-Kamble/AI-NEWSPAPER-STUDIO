@@ -166,7 +166,29 @@ module.exports = {
       pictures: [{ file: 'reference-lokmat/front-feature.jpg', box: [448, 3764, 792, 4296], standOffPx: 1 }],
       panels: [
         byline(57, 407, 3764, 3800),
-        { kind: 'chart', box: [835, 3764, 1190, 4296], card: { chartType: 'stat', unit: '%', items: [{ label: `${PLACEHOLDER} १`, value: 74 }, { label: `${PLACEHOLDER} २`, value: 65 }, { label: `${PLACEHOLDER} ३`, value: 48 }] }, standOffPx: 0.5 },
+        // BARS, because the reference's own feature carries a bar chart - the
+        // figures set as large percentages was this page's most visible
+        // remaining difference from it. The bars run ACROSS (smart-cards read
+        // a long Marathi category label, which a vertical bar would have to
+        // set sideways or abbreviate), and a printed chart carries its source.
+        {
+          kind: 'chart', box: [835, 3764, 1190, 4296], standOffPx: 0.5,
+          card: {
+            chartType: 'bar',
+            unit: '%',
+            source: PLACEHOLDER,
+            // SHORT stand-ins, because a chart label is short. The panel's
+            // usual placeholder is a sentence, and three sentences beside
+            // three bars and three figures cannot set in an 82px column at a
+            // legible size - the card composed OVERSET and the canvas drew the
+            // dashed marker that says so on an otherwise finished page.
+            items: [
+              { label: 'एक', value: 74 },
+              { label: 'दोन', value: 65 },
+              { label: 'तीन', value: 48 },
+            ],
+          },
+        },
         inset([1222, 3765 - INK, 1563, 4296], 1, { titlePx: 9.3 }),
         inset([1610, 3765 - INK, 2010, 4296], 4, { titlePx: 9.3, lineGapPx: 8 }),
       ],

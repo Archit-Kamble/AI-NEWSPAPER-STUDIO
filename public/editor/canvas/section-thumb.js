@@ -20,16 +20,11 @@ import { textWithMarks, markRun, plainText } from "../layout/rich-text.js";
 import { presentationRanges, renderPresentation } from "../layout/editorial-presentation.js";
 import { composeSection } from "../compose/section-adapter.js";
 import { composedMarkup, diagnosticMarkup } from "../compose/render.js";
-import { fontsReady, measureWidth } from "../compose/font-metrics.js";
-import { isShaperReady, shapeWidthPx } from "../compose/shaper.js";
-
-// A panel's lines are wrapped at the width they PRINT at: shaped, where the
-// shaper is in. hmtx alone overstates a Devanagari conjunct by up to 80%, so a
-// sidebar wrapped against it broke its lines a word or two early.
-const panelMeasure = (text, px, family, weight) => {
-  const shaped = isShaperReady() ? shapeWidthPx(text, px, family, weight) : null;
-  return shaped !== null ? shaped : measureWidth(text, px, family, weight);
-};
+import { fontsReady } from "../compose/font-metrics.js";
+// A panel's lines are wrapped at the width they PRINT at - shaped where the
+// shaper is in, the font's own advances before it. One helper, shared with
+// the Space panel, so the box a desk is warned about is the box that prints.
+import { measureTextPx as panelMeasure } from "../compose/shaper.js";
 import { shapedRectPoints } from "../layout/block-shapes.js";
 import "../layout/borders.js";
 const { borderEdges, borderOffsetsPx, borderRadiusPx, canRound, isRuled, borderWidthPx } = globalThis.SahasBorders;
@@ -604,6 +599,19 @@ export function insetPanelsMarkup(section, view) {
   // block costs nothing more.
   const composition = panels.some((panel) => panel.followDisplay) ? sectionComposition(section, view) : null;
   const topOf = (panel) => panelTop(panel, composition);
+  // A SUB-PIXEL RULE IS AS THIN AS THIS BROWSER WILL DRAW IT, and that is a
+  // measured limit rather than a choice. A panel measured off a printed page
+  // states a 0.5px (0.25 mm) rule; the plate draws exactly that, and Chrome
+  // snaps it to about one CSS pixel - 1.87x the weight, measured at dpr 4.33.
+  //
+  // Every way of asking was tried and they are all the same number: a border,
+  // a span of that height, a span with a border-top, and a background gradient
+  // sized to it all painted 1.87x, and the gradient painted NOTHING at a
+  // fractional offset. So there is no technique here that fixes it, and the
+  // one that looked cleanest (a span) silently stopped drawing the rule at
+  // all in print view. The canvas is therefore left drawing a border, and the
+  // difference is declared in docs/REFERENCE-PAGES.md instead of hidden behind
+  // a hack that costs the rule entirely.
   const surface = (panel) => {
     const style = panelStyle(panel.kind);
     // A ticked rule is drawn as its own ground (see below), not as a border.

@@ -90,15 +90,45 @@ from the compositor rather than stated: body up to ~1000 characters, headline 2
 lines (up to ~62 characters at its locked size), deck 2 lines, caption ≤360,
 scholarship ≤448, numbered ≤510, Jarange ≤377.
 
+### What a check can and cannot see
+
+Three of these were added after a review pointed out that the first round of
+numbers said less than it appeared to.
+
+**A score for the whole block is a photograph score with a rounding error in
+it.** The lead package reads 97.8% of its ink agreeing within half a page
+pixel; scored region by region, the same package runs from 100% on the
+headline to 45% on the byline panel. A picture is thousands of pixels of
+continuous tone and a deck is two hundred pixels of thin strokes, so an
+aggregate is dominated by whichever region has the most ink.
+`export-check.mjs <ed> <page> <canvas.png> <out> <dpr> <blockKey>` scores each
+region separately, in both directions, from the composition's own rectangles.
+
+**"It fits" is not a line count.** A clipped headline can set an acceptable
+number of lines. `fresh-copy.mjs` now passes a variant only when every
+character given to the block is set, nothing display-oversets, every locked
+size is still the size it was locked at, and every panel is inside the block
+and clear of its neighbours. Variants that are deliberately over-long are held
+to the opposite standard: they must REPORT the overflow rather than absorb it
+by re-fitting locked type.
+
+**A character capacity is an estimate, to about one sentence.** The body
+figure comes from bisection over copy assembled in whole sentences, and a
+character count is the wrong unit for Marathi anyway - the same block holds
+30-46% more or fewer characters depending only on how conjunct-heavy the words
+are. Use them to size a brief, never as a promise.
+
 ### What still differs, and why
 
 | # | where | expected | actual | cause | next step |
 |---|---|---|---|---|---|
-| 1 | body line 21 | the reference breaks before `होते.` | we carry it up | the reference's own licensed face sets a shade wider than Noto Sans at the same size; the line fits our measure, so our breaker is right and the face is not theirs | none available - the face is not ours to license. Accept, and hold the line count |
+| 1 | body line 21 | the reference breaks before `होते.` | we carry it up | most likely the face: the reference's own licensed cut sets a shade wider than Noto Sans at the same size, and the line fits our measure, so our breaker is not obviously wrong. A HYPOTHESIS, not a proven fact about Lokmat's compositor | none available - the face is not ours to license. Accept, and hold the line count |
 | 2 | scholarship line 7, numbered line 8 | as printed | one word later | same as 1 | as 1 |
 | 3 | front feature strip | a bar chart | our block shows the same figures as large percentages | the strip was measured as type, not reconstructed as a chart | rebuild it as a chart card - the figures are already in the block |
 | 4 | masthead | - | this paper's own nameplate | deliberate: a registered nameplate is never copied | none; declared |
 | 5 | whole page | the scan's proportions | 1.7% shorter vertically | our nameplate band is deeper (see the transform above) | declared. `uniform: true` is the alternative and costs a short foot |
+| 6 | every sub-pixel rule | 0.5px (0.25 mm), as the plate draws it | the canvas draws it about 1.87x too heavy | **the browser, not this code.** Chrome snaps a sub-pixel rule to about one CSS pixel. Measured at dpr 4.33, a border, a span of that height, a span with a border-top and a background gradient sized to it all painted 1.87x - and the gradient painted nothing at all at a fractional offset | declared. There is no technique that fixes it, and the one that looked cleanest silently stopped drawing the rule in print view. The plate is right; judge a rule's weight there |
+| 7 | the design's slack | other news of the same length fits | two of the four sidebars drop 5-10 characters | a rectangle measured off a printed page is sized to the words that were in it. The panels hold the reference's own copy exactly and have almost no room beyond it | the desk is now TOLD (the Space panel and preflight both name the panel and quote what went). Growing a panel would depart from the measured page, so it is an editorial choice, not an automatic one |
 
 ---
 

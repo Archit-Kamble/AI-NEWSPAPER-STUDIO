@@ -91,6 +91,73 @@ test('a panel with no bold face of its own is unchanged', () => {
   assert.equal(solved.lines[0].bold, true);
 });
 
+// WHAT THE BOX COULD NOT HOLD. A panel sets until its rectangle is full and
+// then stops - and the words it did not set are on no page at all, which is a
+// worse state than an overset block (whose copy IS on the page, too long for
+// it). Nothing read that until this: the panel drew, it looked finished, and
+// the last sentence was gone.
+test('a panel that cannot hold its copy says exactly what it dropped', () => {
+  const panel = panelOf({
+    id: 'fact-box', kind: 'sidebar', x: 0, y: 0, width: 60, height: 26,
+    lines: ['एक दोन तीन चार पाच सहा सात आठ नऊ दहा अकरा बारा'],
+  }, frame);
+  const solved = panelLayout(panel, 6.4, measure);
+  assert.ok(solved.overflow, 'the drop must be reported');
+  assert.equal(solved.overflow.id, 'fact-box');
+  assert.equal(solved.overflow.kind, 'sidebar');
+  assert.equal(solved.overflow.text, 'दहा अकरा बारा');
+  assert.equal(solved.overflow.chars, 'दहा अकरा बारा'.length);
+  assert.equal(solved.overflow.entries[0].role, 'tail', 'the tail of an entry, not the whole entry');
+  // And what it DID set is still set - reporting the loss changes nothing.
+  assert.equal(solved.lines.map((line) => line.text).join(' '), 'एक दोन तीन चार पाच सहा सात आठ नऊ');
+});
+
+test('a whole entry that never starts is reported as the entry, not a tail', () => {
+  const panel = panelOf({
+    id: 'two-points', kind: 'sidebar', x: 0, y: 0, width: 120, height: 24,
+    lines: ['पहिला मुद्दा', 'दुसरा मुद्दा', 'तिसरा मुद्दा'],
+  }, frame);
+  const { overflow } = panelLayout(panel, 6.4, measure);
+  assert.ok(overflow);
+  assert.ok(overflow.entries.every((entry) => entry.role === 'entry'));
+  // The box holds two; the third never starts, and is named whole.
+  assert.deepEqual(overflow.entries.map((entry) => entry.text), ['तिसरा मुद्दा']);
+  assert.equal(overflow.entries[0].index, 2, 'named by its place in the panel');
+});
+
+test('a panel that holds everything reports nothing at all', () => {
+  const panel = panelOf({ id: 'roomy', kind: 'sidebar', x: 0, y: 0, width: 200, height: 200, title: 'शीर्षक', lines: ['एक दोन'] }, frame);
+  const solved = panelLayout(panel, 6.4, measure);
+  assert.equal(solved.overflow, null);
+  // A chart panel solves its own type against the rectangle and has no lines
+  // of its own, so it can never be in this state.
+  const chart = panelOf({
+    id: 'c', kind: 'chart', x: 0, y: 0, width: 100, height: 60,
+    card: { items: [{ label: 'सातारा', value: 12 }] },
+  }, frame);
+  assert.ok(chart, 'the fixture must actually be a panel');
+  assert.equal(panelLayout(chart, 6.4, measure).overflow, null);
+});
+
+test('preflight fails a page for it, and passes a panel that fits', () => {
+  const { panelOversetFindings } = require('../src/services/preflight.service.js');
+  const drops = {
+    body_font_px: 6.4,
+    inset_panels: [{ id: 'quote', kind: 'sidebar', x: 0, y: 0, width: 60, height: 26, lines: ['एक दोन तीन चार पाच सहा सात आठ नऊ दहा अकरा बारा'] }],
+  };
+  const holds = {
+    body_font_px: 6.4,
+    inset_panels: [{ id: 'quote', kind: 'sidebar', x: 0, y: 0, width: 200, height: 200, lines: ['एक दोन'] }],
+  };
+  const found = panelOversetFindings(drops, measure);
+  assert.equal(found.length, 1);
+  assert.equal(found[0].level, 'error', 'the copy reaches no page at all - that is an error, not a warning');
+  assert.equal(found[0].check, 'panel-overset');
+  assert.match(found[0].message, /quote/);
+  assert.match(found[0].message, /दहा अकरा बारा/);
+  assert.deepEqual(panelOversetFindings(holds, measure), []);
+});
+
 test('a following panel sits under where the copy starts, not at its own y', () => {
   const panel = panelOf({
     kind: 'sidebar', x: 0, y: 0, width: 120, height: 40, lines: ['लोकमत न्यूज नेटवर्क'],

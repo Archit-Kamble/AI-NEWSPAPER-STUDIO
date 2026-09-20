@@ -569,7 +569,7 @@
     // rectangle and solves its own type against it, exactly as it does in a
     // whole block.
     if (panel.kind === 'chart' || panel.kind === 'table') {
-      return { inset: 0, titlePx: 0, linePx: 0, lineHeight: 1, lines: [], usedHeight: panel.height };
+      return { inset: 0, titlePx: 0, linePx: 0, lineHeight: 1, lines: [], usedHeight: panel.height, overflow: null };
     }
     // A cross-head's type sits ON the measure, not inside a box, so it takes
     // only the hair of air that keeps it off its own rule - the same 0.5 mm
@@ -587,12 +587,28 @@
     const ALIGN_CODE = { left: 0, center: 1, right: 2 };
     const out = [];
     const discs = [];
+    // WHAT THE BOX COULD NOT HOLD. A panel is a fixed rectangle and the copy
+    // in it is not, so text that does not fit is dropped at three points
+    // below - a title piece, a whole entry, or the tail of an entry. It was
+    // dropped SILENTLY: the editor drew a panel that looked finished, and the
+    // words were simply not on the page. Nothing else can notice, because the
+    // compositor only ever sees a panel as a rectangle to set copy clear of.
+    //
+    // So the omissions are collected and handed back. `layout-panel.js` turns
+    // them into a warning the desk reads, and preflight fails a page for them
+    // - "every overflow reported" has to mean reported to the newsroom, not
+    // printed in a terminal by whoever happened to run a script.
+    const omitted = [];
     let y = inset;
     if (panel.title) {
       const titleFamily = panel.titleFamily || (panel.kind === 'reaction' ? 'serif' : 'sans');
       const titleBold = panel.titleBold ?? true;
-      for (const piece of wrapToWidth(panel.title, panel.width - inset * 2, titlePx, titleFamily, titleBold, measure)) {
-        if (out.length && y + titlePx * titleLineHeight > panel.height - inset) break;
+      const titlePieces = wrapToWidth(panel.title, panel.width - inset * 2, titlePx, titleFamily, titleBold, measure);
+      for (const piece of titlePieces) {
+        if (out.length && y + titlePx * titleLineHeight > panel.height - inset) {
+          omitted.push({ role: 'title', index: -1, text: titlePieces.slice(titlePieces.indexOf(piece)).join(' ') });
+          break;
+        }
         out.push({
           text: piece, x: inset, y, width: panel.width - inset * 2,
           fontPx: titlePx, bold: titleBold,
@@ -610,7 +626,10 @@
     panel.lines.forEach((text, index) => {
       const sourceLine = panel.kind === 'document' && index === panel.lines.length - 1;
       const actualLinePx = sourceLine ? Math.max(4.5, bodyFontPx * 0.78) : linePx;
-      if (y + actualLinePx * lineHeight > panel.height - inset) return;
+      if (y + actualLinePx * lineHeight > panel.height - inset) {
+        omitted.push({ role: 'entry', index, text: String(text || '') });
+        return;
+      }
       // The marker is set into the line rather than hung in its own column.
       // A hanging indent needs the line broken against a narrower measure for
       // every line after the first, which is what the compositor does for
@@ -647,7 +666,14 @@
         discs.push({ ...disc, text: devanagari(index + 1), fontPx: Math.round(disc.d * 0.62 * 10) / 10 });
       }
       pieces.forEach((piece, pieceIndex) => {
-      if (pieceIndex > 0 && y + actualLinePx * lineHeight > panel.height - inset) return;
+      if (pieceIndex > 0 && y + actualLinePx * lineHeight > panel.height - inset) {
+        // Only the FIRST piece to fall off records the tail - the ones after
+        // it are already inside that same string.
+        if (!omitted.some((entry) => entry.role === 'tail' && entry.index === index)) {
+          omitted.push({ role: 'tail', index, text: pieces.slice(pieceIndex).join(' ') });
+        }
+        return;
+      }
       const indent = indentFor(y);
       out.push({
         text: piece, x: inset + indent, y, width: panel.width - inset * 2 - indent, fontPx: actualLinePx,
@@ -679,7 +705,19 @@
       // The next entry starts below this one's disc, however short the entry.
       if (disc) y = Math.max(y, disc.y + disc.d + actualLinePx * 0.2);
     });
-    return { inset, titlePx, linePx, lineHeight, lines: out, discs, usedHeight: y + inset };
+    const lost = omitted.filter((entry) => String(entry.text || '').trim());
+    return {
+      inset, titlePx, linePx, lineHeight, lines: out, discs, usedHeight: y + inset,
+      // Null when everything was set - so a caller can ask `if (solved.overflow)`
+      // and a panel that holds its copy costs nothing.
+      overflow: lost.length ? {
+        id: panel.id || null,
+        kind: panel.kind,
+        entries: lost,
+        text: lost.map((entry) => entry.text.trim()).join(' '),
+        chars: lost.reduce((total, entry) => total + entry.text.trim().length, 0),
+      } : null,
+    };
   }
 
   const api = Object.freeze({

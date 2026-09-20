@@ -8531,14 +8531,19 @@ our face apart from our breaker. It found four things, all fixed:
 
 | | |
 |---|---|
-| the reference sets its body GREEDILY | `page_sections.line_breaking` - `'greedy'` takes words until the next will not fit, NULL (every existing block) balances the paragraph as before. A page copied from print has to break where that page broke; a page this paper makes up should still balance |
+| the reference's body is best matched by GREEDY breaking | `page_sections.line_breaking` - `'greedy'` takes words until the next will not fit, NULL (every existing block) balances the paragraph as before. **The best match found for this fixture, not a proven fact about the other paper's compositor**: 28 of 33 of its breaks are greedy-consistent at our size and none of the five remaining is explained by it |
 | a hard hyphen is a break opportunity | `सार्वजनिक-/खासगी` - a wrapper that breaks only at spaces held the pair together and lost a line at the panel's foot |
 | a bold entry is set in ITS OWN face | `boldFamily` on a panel. Over the scholarship panel's bold paragraph, Mukta Bold reproduces 8 of 8 of the reference's breaks and the sans at 700 reproduces 6 - it sets ~9% wide, which is a word a line |
 | a byline FOLLOWS the display type | `followDisplay` / `followGapPx`, placed at the composition's own `bodyTop` - so a deck one line shorter than the reference's moves it up rather than leaving the story's first lines standing above it |
 
 Body column one went from parting company at line 5 to line 21 of 33; the
-caption and the Jarange panel agree line for line; the two remaining
-divergences are the face, which is not ours to license.
+caption and the Jarange panel agree line for line. The remaining divergences
+are **probably** the face - the reference's own cut is not ours to license, and
+the lines in question fit our measure - but that is a hypothesis held against
+the evidence, not a verdict. The tool measures a mixed-face panel run by run
+now (a bold entry in the panel's own `boldFamily`, a `*marked*` run in it too);
+measuring a whole line in one family was making its explanation least reliable
+exactly where a panel mixes faces.
 
 **Fresh copy** (`fresh-copy.mjs`) then sets the same package with OTHER news in
 it - short, typical and long, from the invented pools, never the reference's
@@ -8582,10 +8587,54 @@ grey beside the canvas's. Only the GEOMETRY of the ink can be compared between
 the two surfaces; how dark it is cannot. An hour went into that disc before it
 was measured rather than looked at.
 
+#### What the checks could not see, until they were made stricter
+
+A review of the first round found that the numbers claimed more than they
+measured. Three corrections, each of which changed a verdict:
+
+- **A panel that could not hold its copy said nothing.** `panelLayout()` sets
+  until the box is full and stops; the words it did not set are on NO page, and
+  the panel draws looking finished without them. Nothing could notice - to the
+  compositor a panel is a rectangle to set copy *clear of*, not copy of its
+  own. It reports what it dropped now, and both surfaces a desk reads act on
+  it: the Space panel names the panel and quotes the first words that went, and
+  preflight fails the page with `panel-overset`. Measured on the fixture
+  edition: **49 panels were silently dropping copy**, one of them a quote
+  panel losing its own speaker; the calibrated lead package reports none, so
+  it is not a false alarm either.
+- **"It fits" was a line count**, and a clipped headline can still set an
+  acceptable number of lines. `fresh-copy.mjs` now passes a variant only when
+  every character is set, nothing display-oversets, every locked size is
+  untouched and every panel is legally placed - and it tests the combinations
+  separately (long head with short body, short head with long deck, no deck, a
+  long sidebar), because a package fails in combinations. On the same package
+  that previously read as reusable: **3 of 7 pass**. The failures are real -
+  two sidebars have so little slack that other words of the same length drop
+  five characters, and a 71-character headline at the locked size takes three
+  lines and pushes the deck into overset.
+- **One score for a region is a photograph score.** 97.8% of the lead package's
+  ink agrees within half a page pixel; scored region by region it runs from
+  **100% on the headline to 45% on the byline panel**. `export-check.mjs` takes
+  a block key and scores every band, panel, rule and picture separately, in
+  both directions, from the composition's own rectangles - and it now REFUSES a
+  page-size mismatch over 2px instead of resizing it away, because absorbing
+  that produces a confident number about nothing.
+
+**A sub-pixel rule is as thin as the browser will draw it.** The byline panel
+scored worst of all, and it was not type: the canvas drew its 0.5px (0.25 mm)
+rule at **1.87x** the weight the plate drew. Four ways of asking were measured
+at dpr 4.33 - a border, a span of that height, a span carrying a border-top,
+and a background gradient sized to it - and **all four painted 1.87x**, with
+the gradient painting nothing at a fractional offset. So Chrome snaps a
+sub-pixel rule to about one CSS pixel and no technique here fixes it; the
+change that looked cleanest silently stopped drawing the rule at all in print
+view, and was reverted. It is a declared difference in
+`docs/REFERENCE-PAGES.md`, and a rule's weight is judged on the plate.
+
 ```bash
 node scripts/reference-layout/divergence.mjs  <ed> <page> <local reference lines>
 node scripts/reference-layout/fresh-copy.mjs  <ed> <page> <block> [topic]
-node scripts/reference-layout/export-check.mjs <ed> <page> <canvas.png> <out> [dpr] [box]
+node scripts/reference-layout/export-check.mjs <ed> <page> <canvas.png> <out> [dpr] [box|blockKey]
 node scripts/reference-layout/shoot.js <ed> <page> <out.png> [full|structure|typography] [dpr]
 ```
 
